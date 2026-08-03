@@ -87,13 +87,17 @@ _CHALLENGE_FIELDS = frozenset({
     "prior_chain_digest",
 })
 _ACK_FIELDS = frozenset({"schema_version", "protocol", "type", "challenge_sha256"})
+_AUTHORIZATION_PROOF_FIELDS = frozenset({
+    "schema_version", "protocol", "type", "challenge_sha256",
+    "authority_assertion",
+})
 _RESULT_FIELDS = frozenset({
     "schema_version", "protocol", "operation_family", "substrate_authority",
     "outcome", "exit_code", "request_body_sha256", "response_sha256",
     "response_length", "part_count", "models", "selected_model", "provider",
     "scope", "sequence", "issued_at", "completed_at", "challenge_sha256",
-    "authority_assertion_sha256", "result_signer_sha256", "cleanup", "signature",
-    "prior_chain_digest",
+    "authority_assertion_sha256", "result_signer_sha256",
+    "cleanup", "signature", "prior_chain_digest",
 })
 _STATUS_FIELDS = frozenset({
     "schema_version", "protocol", "production_ready", "fixture_domain",
@@ -101,8 +105,12 @@ _STATUS_FIELDS = frozenset({
 })
 _EXCHANGE_FIELDS = frozenset({
     "schema_version", "protocol", "state", "request", "request_body_sha256",
-    "challenge", "consent_ack", "result", "safe_error", "consumed",
-    "network_attempted", "response_retrievable",
+    "challenge", "consent_ack", "authorization_proof", "result", "safe_error",
+    "consumed", "network_attempted", "response_retrievable",
+})
+_SAFE_ERROR_CONTROL_FIELDS = frozenset({
+    "schema_version", "protocol", "type", "code", "exit_code", "consumed",
+    "network_attempted",
 })
 _CLEANUP_FIELDS = frozenset({"reservation", "connection", "content_buffer"})
 _FIXTURE_ENVELOPE_FIELDS = frozenset({"kind", "domain", "value"})
@@ -119,7 +127,8 @@ FROZEN_EXCHANGE = {
     "request_header": "u32be-canonical-json",
     "request_parts": "ordered-u64be-exact-utf8",
     "server_control": "u32be-canonical-json",
-    "response_content": "u64be-raw-bytes",
+    "authorization_proof": "u32be-canonical-json-before-provider-content",
+    "response_content": "u64be-raw-bytes-after-authorization-proof",
     "terminal": "u32be-canonical-signed-json",
     "safe_error": "u32be-canonical-json-no-content",
     "ancillary_descriptors": "reject",
@@ -133,6 +142,29 @@ FROZEN_EXCHANGE = {
     },
     "stdout": "one-content-free-terminal-json",
     "client_response_buffer_bytes": MAX_RESPONSE_BYTES,
+}
+
+SAFE_ERROR_EXITS = {
+    "disclosure_declined": EXIT_DISCLOSURE_DECLINED,
+    "authorization_declined": EXIT_AUTHORIZATION_DECLINED,
+    "authorization_expired": EXIT_AUTHORIZATION_DECLINED,
+    "authorization_replayed": EXIT_AUTHORIZATION_DECLINED,
+    "consent_connection_invalid": EXIT_AUTHORIZATION_DECLINED,
+    "authority_unavailable": EXIT_AUTHORITY_UNAVAILABLE,
+    "provider_failure": EXIT_PROVIDER_FAILURE,
+    "provider_result_unknown": EXIT_UNKNOWN,
+    "result_verification_failed": EXIT_RESULT_VERIFICATION,
+}
+SAFE_ERROR_NETWORK_ATTEMPTED = {
+    "disclosure_declined": False,
+    "authorization_declined": False,
+    "authorization_expired": False,
+    "authorization_replayed": False,
+    "consent_connection_invalid": False,
+    "authority_unavailable": False,
+    "provider_failure": True,
+    "provider_result_unknown": True,
+    "result_verification_failed": True,
 }
 
 FROZEN_TRUST_CHAIN = {
@@ -417,7 +449,8 @@ def validate_challenge(document: Any) -> dict[str, Any]:
     for field in ("transaction_id", "nonce", "boot_id", "session_id"):
         _string(challenge[field])
     _result_signer(challenge["result_signer"])
-    _authority_assertion(challenge["authority_assertion"])
+    if challenge["authority_assertion"] is not None:
+        _fail("terminal_binding_invalid")
     for field in ("destination", "method", "path"):
         _plain_string(challenge[field])
     for field in ("connection_nonce_sha256", "request_body_sha256", "daemon_build_sha256", "scanner_build_sha256", "policy_sha256", "prior_chain_digest"):
@@ -442,6 +475,33 @@ def validate_consent_ack(document: Any) -> dict[str, Any]:
         _fail("consent_connection_invalid")
     _digest(ack["challenge_sha256"])
     return ack
+
+
+def validate_authorization_proof(document: Any) -> dict[str, Any]:
+    proof = _object(document, _AUTHORIZATION_PROOF_FIELDS)
+    _fixed(proof)
+    if proof["type"] != "authorization_proof":
+        _fail("terminal_binding_invalid")
+    _digest(proof["challenge_sha256"])
+    _authority_assertion(proof["authority_assertion"])
+    return proof
+
+
+def validate_safe_error_control(document: Any) -> dict[str, Any]:
+    control = _object(document, _SAFE_ERROR_CONTROL_FIELDS)
+    _fixed(control)
+    if control["type"] != "safe_error" or control["code"] not in SAFE_ERROR_EXITS:
+        _fail()
+    if control["exit_code"] != SAFE_ERROR_EXITS[control["code"]]:
+        _fail("terminal_binding_invalid")
+    for field in ("consumed", "network_attempted"):
+        if type(control[field]) is not bool:
+            _fail()
+    if not control["consumed"]:
+        _fail("terminal_binding_invalid")
+    if control["network_attempted"] is not SAFE_ERROR_NETWORK_ATTEMPTED[control["code"]]:
+        _fail("terminal_binding_invalid")
+    return control
 
 
 def validate_result(document: Any) -> dict[str, Any]:
@@ -504,6 +564,8 @@ def validate_exchange(document: Any) -> dict[str, Any]:
         validate_challenge(exchange["challenge"])
     if exchange["consent_ack"] is not None:
         validate_consent_ack(exchange["consent_ack"])
+    if exchange["authorization_proof"] is not None:
+        validate_authorization_proof(exchange["authorization_proof"])
     if exchange["result"] is not None:
         validate_result(exchange["result"])
     if exchange["safe_error"] is not None and exchange["safe_error"] not in ERROR_CODES:
@@ -515,17 +577,18 @@ def validate_exchange(document: Any) -> dict[str, Any]:
         _fail("exchange_state_invalid")
     state = exchange["state"]
     combinations = {
-        "reserved": (False, False, False, False, False, False),
-        "challenged": (True, False, False, False, False, False),
-        "authorized": (True, True, False, False, False, False),
-        "sent": (True, True, False, False, False, True),
-        "terminal": (True, True, True, False, True, True),
-        "tombstone": (exchange["challenge"] is not None, exchange["consent_ack"] is not None, False, True, True, exchange["network_attempted"]),
+        "reserved": (False, False, False, False, False, False, False),
+        "challenged": (True, False, False, False, False, False, False),
+        "authorized": (True, True, True, False, False, False, False),
+        "sent": (True, True, True, False, False, False, True),
+        "terminal": (True, True, True, True, False, True, True),
+        "tombstone": (exchange["challenge"] is not None, exchange["consent_ack"] is not None, exchange["authorization_proof"] is not None, False, True, True, exchange["network_attempted"]),
     }
     actual = (
         exchange["challenge"] is not None, exchange["consent_ack"] is not None,
-        exchange["result"] is not None, exchange["safe_error"] is not None,
-        exchange["consumed"], exchange["network_attempted"],
+        exchange["authorization_proof"] is not None, exchange["result"] is not None,
+        exchange["safe_error"] is not None, exchange["consumed"],
+        exchange["network_attempted"],
     )
     if actual != combinations[state]:
         _fail("exchange_state_invalid")
@@ -548,15 +611,26 @@ def validate_exchange(document: Any) -> dict[str, Any]:
         )
         if not all(repeated):
             _fail("terminal_binding_invalid")
+        if exchange["consent_ack"] is not None and exchange["consent_ack"]["challenge_sha256"] != sha256(canonical_json(challenge)):
+            _fail("consent_connection_invalid")
+        proof = exchange["authorization_proof"]
+        if proof is not None and proof["challenge_sha256"] != sha256(canonical_json(challenge)):
+            _fail("terminal_binding_invalid")
     result = exchange["result"]
     if result is not None:
+        proof = exchange["authorization_proof"]
         if challenge is None or not all((
+            proof is not None,
             exchange["request_body_sha256"] == result["request_body_sha256"],
             challenge["request_body_sha256"] == result["request_body_sha256"],
             request["models"] == result["models"], request["scope"] == result["scope"],
             request["authority"]["sequence"] == result["sequence"],
             request["authority"]["prior_chain_digest"] == result["prior_chain_digest"],
             request["authority"]["issued_at"] == result["issued_at"],
+            result["challenge_sha256"] == sha256(canonical_json(challenge)),
+            proof["challenge_sha256"] == sha256(canonical_json(challenge)),
+            result["authority_assertion_sha256"] == sha256(canonical_json(proof["authority_assertion"])),
+            result["result_signer_sha256"] == sha256(canonical_json(challenge["result_signer"])),
             result["selected_model"] in request["models"], result["provider"] == "openrouter",
         )):
             _fail("terminal_binding_invalid")
@@ -573,6 +647,20 @@ def frame64(payload: bytes, *, limit: int = MAX_RESPONSE_BYTES) -> bytes:
     if type(payload) is not bytes or len(payload) > limit:
         _fail("frame_too_large")
     return struct.pack(">Q", len(payload)) + payload
+
+
+def encode_safe_error_control(document: Mapping[str, Any]) -> bytes:
+    validate_safe_error_control(document)
+    return frame32(canonical_json(document))
+
+
+def decode_safe_error_control(wire: bytes) -> dict[str, Any]:
+    if type(wire) is not bytes or len(wire) < 4:
+        _fail("frame_too_large")
+    length = struct.unpack(">I", wire[:4])[0]
+    if length > MAX_FRAME_BYTES or len(wire) != 4 + length:
+        _fail("exchange_trailing_data" if len(wire) > 4 + length else "frame_too_large")
+    return validate_safe_error_control(parse_canonical_json(wire[4:]))
 
 
 def encode_request(request: Mapping[str, Any], part_bytes: Sequence[bytes]) -> bytes:
@@ -614,15 +702,20 @@ def decode_request(wire: bytes) -> tuple[dict[str, Any], tuple[bytes, ...]]:
 def decode_response(
     wire: bytes, request: Mapping[str, Any], challenge: Mapping[str, Any],
     *, fixture_trust: bool = False, production_verifier=None,
-) -> tuple[bytes, dict[str, Any]]:
+) -> tuple[dict[str, Any], bytes, dict[str, Any]]:
     """Buffer and verify one response/terminal pair before any fd-3 release."""
-    if type(wire) is not bytes or len(wire) < 12:
+    if type(wire) is not bytes or len(wire) < 16:
         _fail("part_frame_mismatch")
-    content_length = struct.unpack(">Q", wire[:8])[0]
-    if content_length > MAX_RESPONSE_BYTES or 8 + content_length + 4 > len(wire):
+    proof_length = struct.unpack(">I", wire[:4])[0]
+    proof_end = 4 + proof_length
+    if proof_length > MAX_FRAME_BYTES or proof_end + 12 > len(wire):
         _fail("frame_too_large")
-    content_end = 8 + content_length
-    content = wire[8:content_end]
+    proof = validate_authorization_proof(parse_canonical_json(wire[4:proof_end]))
+    content_length = struct.unpack(">Q", wire[proof_end:proof_end + 8])[0]
+    if content_length > MAX_RESPONSE_BYTES or proof_end + 8 + content_length + 4 > len(wire):
+        _fail("frame_too_large")
+    content_end = proof_end + 8 + content_length
+    content = wire[proof_end + 8:content_end]
     terminal_length = struct.unpack(">I", wire[content_end:content_end + 4])[0]
     terminal_end = content_end + 4 + terminal_length
     if terminal_length > MAX_FRAME_BYTES or terminal_end > len(wire):
@@ -631,10 +724,10 @@ def decode_response(
         _fail("exchange_trailing_data")
     terminal = parse_canonical_json(wire[content_end + 4:terminal_end])
     verify_terminal_result(
-        request, challenge, content, terminal, fixture_trust=fixture_trust,
+        request, challenge, proof, content, terminal, fixture_trust=fixture_trust,
         production_verifier=production_verifier,
     )
-    return content, terminal
+    return proof, content, terminal
 
 
 def validate_fd3(fd: int, used_descriptors: set[int]) -> None:
@@ -656,15 +749,15 @@ def deliver_verified_fd3(
 ) -> dict[str, Any]:
     """Buffer, verify, and write content exactly once to inherited fd 3."""
     validate_fd3(fd, used_descriptors)
-    content, terminal = decode_response(
+    _proof, content, terminal = decode_response(
         response_wire, request, challenge, fixture_trust=fixture_trust,
         production_verifier=production_verifier,
     )
+    used_descriptors.add(fd)
     try:
         written = os.write(fd, content)
     except OSError:
         _fail("result_verification_failed")
-    used_descriptors.add(fd)
     if written != len(content):
         _fail("result_verification_failed")
     return terminal
@@ -674,7 +767,7 @@ def signature_input(kind: str, document: Mapping[str, Any]) -> bytes:
     """Freeze Go-compatible domain-separated inputs; no auth-mode selector exists."""
     if kind == "challenge":
         validate_challenge(document)
-        projection = {key: value for key, value in document.items() if key != "authority_assertion"}
+        projection = dict(document)
     elif kind == "terminal":
         validate_result(document)
         projection = {key: value for key, value in document.items() if key != "signature"}
@@ -697,9 +790,11 @@ def _fixture_verify(public_key: str, signature: str, payload: bytes) -> bool:
         return False
 
 
-def verify_fixture_assertion(challenge: Mapping[str, Any]) -> None:
+def verify_fixture_assertion(
+    challenge: Mapping[str, Any], assertion: Mapping[str, Any],
+) -> None:
     validate_challenge(challenge)
-    assertion = challenge["authority_assertion"]
+    _authority_assertion(assertion)
     if assertion["kind"] != "fixture-rsa-sha256-v1":
         _fail("terminal_binding_invalid")
     if not _fixture_verify(
@@ -741,12 +836,14 @@ def validate_authority_binding(
 
 def verify_terminal_result(
     request: Mapping[str, Any], challenge: Mapping[str, Any],
-    response: bytes, result: Mapping[str, Any], *, fixture_trust: bool = False,
+    authorization_proof: Mapping[str, Any], response: bytes,
+    result: Mapping[str, Any], *, fixture_trust: bool = False,
     production_verifier=None,
 ) -> None:
     """Verify content-free terminal binding before fd-3 delivery."""
     validate_request(request)
     validate_challenge(challenge)
+    proof = validate_authorization_proof(authorization_proof)
     validate_result(result)
     if type(response) is not bytes or len(response) > MAX_RESPONSE_BYTES:
         _fail("frame_too_large")
@@ -760,20 +857,22 @@ def verify_terminal_result(
         result["sequence"] == request["authority"]["sequence"],
         result["challenge_sha256"] == sha256(canonical_json(challenge)),
         result["result_signer_sha256"] == sha256(canonical_json(challenge["result_signer"])),
-        result["authority_assertion_sha256"] == sha256(canonical_json(challenge["authority_assertion"])),
+        proof["challenge_sha256"] == sha256(canonical_json(challenge)),
+        result["authority_assertion_sha256"] == sha256(canonical_json(proof["authority_assertion"])),
         result["prior_chain_digest"] == request["authority"]["prior_chain_digest"],
         result["selected_model"] in request["models"],
         result["provider"] == "openrouter",
     )
     if not all(checks):
         _fail("terminal_binding_invalid")
-    assertion_kind = challenge["authority_assertion"]["kind"]
+    assertion = proof["authority_assertion"]
+    assertion_kind = assertion["kind"]
     signer_kind = challenge["result_signer"]["kind"]
     signature_kind = result["signature"]["kind"]
     if assertion_kind == "fixture-rsa-sha256-v1":
         if not fixture_trust or signer_kind != assertion_kind or signature_kind != assertion_kind:
             _fail("terminal_binding_invalid")
-        verify_fixture_assertion(challenge)
+        verify_fixture_assertion(challenge, assertion)
         if not _fixture_verify(
             challenge["result_signer"]["public_key"], result["signature"]["value"],
             signature_input("terminal", result),
@@ -786,7 +885,7 @@ def verify_terminal_result(
             _fail("authority_unavailable")
         try:
             verified = production_verifier(
-                signature_input("challenge", challenge), challenge["authority_assertion"],
+                signature_input("challenge", challenge), assertion,
                 signature_input("terminal", result), challenge["result_signer"],
                 result["signature"],
             )
@@ -814,6 +913,7 @@ class _Reservation:
     network_attempted: bool = False
     safe_error: str | None = None
     consent_ack: Mapping[str, Any] | None = None
+    authorization_proof: Mapping[str, Any] | None = None
     result: Mapping[str, Any] | None = None
 
 
@@ -916,7 +1016,7 @@ class FakeBroker:
 
     def acknowledge(
         self, transaction_id: str, connection_id: str,
-        consent_ack: Mapping[str, Any], now: str, *, approved: bool = True,
+        consent_ack: Mapping[str, Any], now: str,
     ) -> None:
         reservation = self._owned(transaction_id, connection_id)
         _string(now, pattern=_TIME)
@@ -928,18 +1028,35 @@ class FakeBroker:
         validate_authority_binding(
             reservation.request, reservation.body, reservation.challenge, consent_ack,
         )
-        verify_fixture_assertion(reservation.challenge)
+        reservation.consent_ack = consent_ack
+        reservation.state = "consented"
+
+    def authorize(
+        self, transaction_id: str, connection_id: str,
+        authorization_proof: Mapping[str, Any], *, approved: bool = True,
+    ) -> None:
+        reservation = self._owned(transaction_id, connection_id)
+        if reservation.state != "consented":
+            _fail("exchange_state_invalid")
         self.fido_attempts += 1
         if not approved:
             self._tombstone(reservation, "authorization_declined")
             _fail("authorization_declined")
-        reservation.consent_ack = consent_ack
+        proof = validate_authorization_proof(authorization_proof)
+        if proof["challenge_sha256"] != sha256(canonical_json(reservation.challenge)):
+            _fail("terminal_binding_invalid")
+        verify_fixture_assertion(
+            reservation.challenge, proof["authority_assertion"],
+        )
+        reservation.authorization_proof = proof
         reservation.state = "authorized"
 
     def mark_sent(self, transaction_id: str, connection_id: str) -> None:
         reservation = self._owned(transaction_id, connection_id)
         if reservation.state != "authorized":
             _fail("exchange_state_invalid")
+        if reservation.authorization_proof is None:
+            _fail("authority_unavailable")
         reservation.state = "sent"
         reservation.network_attempted = True
         self.network_attempts += 1
@@ -954,7 +1071,9 @@ class FakeBroker:
         if type(response) is not bytes or len(response) > MAX_RESPONSE_BYTES:
             _fail("frame_too_large")
         verify_terminal_result(
-            reservation.request, reservation.challenge, response, result,
+            reservation.request, reservation.challenge,
+            reservation.authorization_proof,
+            response, result,
             fixture_trust=True,
         )
         self.response_allocations += 1
@@ -995,7 +1114,8 @@ class FakeBroker:
     def complete_exchange(
         self, request: Mapping[str, Any], parts: Sequence[bytes],
         challenge: Mapping[str, Any], consent_ack: Mapping[str, Any],
-        response: bytes, result: Mapping[str, Any],
+        authorization_proof: Mapping[str, Any], response: bytes,
+        result: Mapping[str, Any],
     ) -> bytes:
         """Run the deterministic lifecycle and return its byte transcript."""
         body = build_openrouter_body(request, parts)
@@ -1007,12 +1127,16 @@ class FakeBroker:
             transaction_id, "fixture-connection", consent_ack,
             challenge["issued_at"],
         )
+        self.authorize(
+            transaction_id, "fixture-connection", authorization_proof,
+        )
         self.mark_sent(transaction_id, "fixture-connection")
         self.finish(transaction_id, "fixture-connection", response, result)
         return (
             encode_request(request, parts)
             + frame32(canonical_json(challenge))
             + frame32(canonical_json(consent_ack))
+            + frame32(canonical_json(authorization_proof))
             + frame64(response)
             + frame32(canonical_json(result))
         )
