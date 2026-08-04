@@ -410,7 +410,7 @@ or transmit a payload. An API key or caller authorization variable does not
 change this state.
 
 Resolve the coherent installed Pipeline bundle through workflow-kernel with
-`--plugin pipeline --minimum-version 1.36.0 --required-asset
+`--plugin pipeline --minimum-version 1.36.1 --required-asset
 references/openrouter-authorization-contract.md --active-host <claude|codex>`
 and read that contract from the selected root. It defines the current disabled
 mode and future broker re-enablement boundary. Never read a target-repository

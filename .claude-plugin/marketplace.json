@@ -350,7 +350,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.36.0",
+      "version": "1.36.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -375,7 +375,7 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.6.1",
+      "version": "0.7.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -398,7 +398,7 @@
     {
       "name": "airlift",
       "source": "./plugins/airlift",
-      "version": "1.3.2",
+      "version": "1.3.3",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

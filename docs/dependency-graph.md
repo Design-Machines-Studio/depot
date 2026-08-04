@@ -48,7 +48,7 @@ graph LR
 
 | Consumer | Dependency | Type | Required floor |
 |---|---|---|---|
-| airlift | openrouter | optional | `>=1.7.0` |
+| airlift | openrouter | optional | `>=1.8.0` |
 | airlift | workflow-kernel | optional | `>=0.5.0` |
 | assembly | workflow-kernel | required | `>=0.6.1` |
 | assembly | council | optional | `>=1.5.0` |
@@ -68,7 +68,7 @@ graph LR
 | ned | superpowers | optional | `>=1.0.0` |
 | pipeline | dm-review | required | `>=1.48.0` |
 | pipeline | ned | required | `>=1.4.0` |
-| pipeline | workflow-kernel | required | `>=0.6.1` |
+| pipeline | workflow-kernel | required | `>=0.7.0` |
 | pipeline | design-machines | optional | `>=1.3.0` |
 | pipeline | assembly | optional | `>=3.9.1` |
 | pipeline | live-wires | optional | `>=1.8.0` |

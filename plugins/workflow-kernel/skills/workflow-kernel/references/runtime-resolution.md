@@ -77,7 +77,8 @@ root plus durable cache class, version, and reason.
 - Version compatibility is semantic: same-major versions at or above the
   consuming workflow's declared floor. Existing inspection, retry, and
   behavioral-contract consumers may declare `>=0.5.0`; repository verification
-  planning/execution consumers require `>=0.6.1`.
+  planning/execution consumers require `>=0.6.1`; provider-dispatch consumers
+  require `>=0.7.0`.
   Candidates are ordered by their parsed semver
   path segment, newest first, and the plugin manifest's declared name and
   version must match. Reject symlink escapes, project-cwd/PATH discovery,

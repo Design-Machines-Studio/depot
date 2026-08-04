@@ -50,7 +50,7 @@ assessment fallback. API-key presence and caller authorization variables are
 non-authoritative.
 
 Resolve the coherent installed Pipeline bundle with `--plugin pipeline
---minimum-version 1.36.0 --required-asset
+--minimum-version 1.36.1 --required-asset
 references/openrouter-authorization-contract.md --active-host <claude|codex>`
 and read the current-mode contract from that selected root. Never use a
 target-repository copy. Automated assessment does not emit `PAYLOAD APPROVAL

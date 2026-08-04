@@ -155,7 +155,7 @@ references.
 
 Do not report "Skill tool unavailable" in Codex when this adapter can run. That message is only valid if the session lacks both nested skill invocation and enough local access to execute the dm-review inline protocol.
 
-**Repository verification adapter:** Resolve Workflow Kernel `>=0.6.1` once
+**Repository verification adapter:** Resolve Workflow Kernel `>=0.7.0` once
 and use its `plan-verification` and `run-verification` subcommands whenever the
 target repository supplies `.dm/verification.json`.
 
