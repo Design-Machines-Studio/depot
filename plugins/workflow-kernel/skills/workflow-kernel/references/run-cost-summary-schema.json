@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/workflow-kernel/run-cost-summary-v1.json",
+  "title": "Workflow kernel run cost summary",
+  "description": "Canonical, deterministic per-run cost artifact emitted alongside authoritative receipts. Observation only — never gates, waives, selects, or alters any lane, phase, or review outcome.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "run_identity", "versions", "invocation", "phases", "lanes", "totals", "measurement_coverage", "volatile_fields", "digest"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "run_identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["run_id", "workflow_class", "repository_commit", "dirty_state"],
+      "properties": {
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 256},
+        "workflow_class": {"type": ["string", "null"]},
+        "repository_commit": {"type": ["string", "null"]},
+        "dirty_state": {"type": "boolean"}
+      }
+    },
+    "versions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kernel_version"],
+      "properties": {
+        "kernel_version": {"type": "string", "minLength": 1, "maxLength": 64},
+        "plugin_versions": {
+          "type": "object",
+          "additionalProperties": {"type": "string"},
+          "maxProperties": 64
+        }
+      }
+    },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["emitted_at", "first_event_at", "last_event_at"],
+      "properties": {
+        "emitted_at": {"type": "string", "minLength": 1, "maxLength": 64},
+        "first_event_at": {"type": ["string", "null"]},
+        "last_event_at": {"type": ["string", "null"]}
+      }
+    },
+    "phases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["phase", "requested_provider", "attempted_provider", "implemented_by", "provider", "model", "host", "duration_seconds", "wait_category", "usage_count", "input_usage_count", "output_usage_count", "cache_read_usage_count", "cache_write_usage_count", "reasoning_usage_count", "cost_usd", "measurement_source", "usage_estimated"],
+        "properties": {
+          "phase": {"type": "string", "minLength": 1, "maxLength": 256},
+          "requested_provider": {"type": ["string", "null"]},
+          "attempted_provider": {"type": ["string", "null"]},
+          "implemented_by": {"type": ["string", "null"]},
+          "provider": {"type": ["string", "null"]},
+          "model": {"type": ["string", "null"]},
+          "host": {"type": ["string", "null"]},
+          "duration_seconds": {"type": ["number", "null"]},
+          "wait_category": {"type": ["string", "null"]},
+          "usage_count": {"type": ["integer", "null"]},
+          "input_usage_count": {"type": ["integer", "null"]},
+          "output_usage_count": {"type": ["integer", "null"]},
+          "cache_read_usage_count": {"type": ["integer", "null"]},
+          "cache_write_usage_count": {"type": ["integer", "null"]},
+          "reasoning_usage_count": {"type": ["integer", "null"]},
+          "cost_usd": {"type": ["number", "null"]},
+          "measurement_source": {"type": "string", "minLength": 1, "maxLength": 256},
+          "usage_estimated": {"type": "boolean"}
+        }
+      }
+    },
+    "lanes": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["lane", "chunk_id", "attempt", "requested_provider", "attempted_provider", "implemented_by", "provider", "model", "host", "duration_seconds", "wait_category", "usage_count", "input_usage_count", "output_usage_count", "cache_read_usage_count", "cache_write_usage_count", "reasoning_usage_count", "cost_usd", "measurement_source", "usage_estimated"],
+        "properties": {
+          "lane": {"type": "string", "minLength": 1, "maxLength": 256},
+          "chunk_id": {"type": ["string", "null"]},
+          "attempt": {"type": ["integer", "null"]},
+          "requested_provider": {"type": ["string", "null"]},
+          "attempted_provider": {"type": ["string", "null"]},
+          "implemented_by": {"type": ["string", "null"]},
+          "provider": {"type": ["string", "null"]},
+          "model": {"type": ["string", "null"]},
+          "host": {"type": ["string", "null"]},
+          "duration_seconds": {"type": ["number", "null"]},
+          "wait_category": {"type": ["string", "null"]},
+          "usage_count": {"type": ["integer", "null"]},
+          "input_usage_count": {"type": ["integer", "null"]},
+          "output_usage_count": {"type": ["integer", "null"]},
+          "cache_read_usage_count": {"type": ["integer", "null"]},
+          "cache_write_usage_count": {"type": ["integer", "null"]},
+          "reasoning_usage_count": {"type": ["integer", "null"]},
+          "cost_usd": {"type": ["number", "null"]},
+          "measurement_source": {"type": "string", "minLength": 1, "maxLength": 256},
+          "usage_estimated": {"type": "boolean"}
+        }
+      }
+    },
+    "totals": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["usage_count", "input_usage_count", "output_usage_count", "cache_read_usage_count", "cache_write_usage_count", "reasoning_usage_count", "cost_usd", "usage_provenance", "cost_provenance"],
+      "properties": {
+        "usage_count": {"type": ["integer", "null"]},
+        "input_usage_count": {"type": ["integer", "null"]},
+        "output_usage_count": {"type": ["integer", "null"]},
+        "cache_read_usage_count": {"type": ["integer", "null"]},
+        "cache_write_usage_count": {"type": ["integer", "null"]},
+        "reasoning_usage_count": {"type": ["integer", "null"]},
+        "cost_usd": {"type": ["number", "null"]},
+        "usage_provenance": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["usage_count", "input_usage_count", "output_usage_count", "cache_read_usage_count", "cache_write_usage_count", "reasoning_usage_count"],
+          "properties": {
+            "usage_count": {"type": ["string", "null"]},
+            "input_usage_count": {"type": ["string", "null"]},
+            "output_usage_count": {"type": ["string", "null"]},
+            "cache_read_usage_count": {"type": ["string", "null"]},
+            "cache_write_usage_count": {"type": ["string", "null"]},
+            "reasoning_usage_count": {"type": ["string", "null"]}
+          }
+        },
+        "cost_provenance": {"type": ["string", "null"]}
+      }
+    },
+    "measurement_coverage": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["usage", "cost"],
+      "properties": {
+        "usage": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["expected", "measured", "estimated", "missing", "overlap", "unassigned"],
+          "properties": {
+            "expected": {"type": "integer"},
+            "measured": {"type": "integer"},
+            "estimated": {"type": "integer"},
+            "missing": {"type": "integer"},
+            "overlap": {"type": "integer"},
+            "unassigned": {"type": "integer"}
+          }
+        },
+        "cost": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["expected", "measured", "estimated", "missing", "overlap", "unassigned"],
+          "properties": {
+            "expected": {"type": "integer"},
+            "measured": {"type": "integer"},
+            "estimated": {"type": "integer"},
+            "missing": {"type": "integer"},
+            "overlap": {"type": "integer"},
+            "unassigned": {"type": "integer"}
+          }
+        }
+      }
+    },
+    "volatile_fields": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1, "maxLength": 256},
+      "uniqueItems": true
+    },
+    "digest": {"type": ["string", "null"]}
+  }
+}

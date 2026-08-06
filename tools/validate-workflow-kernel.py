@@ -70,6 +70,7 @@ SCHEMA_DOCUMENTS = frozenset({
     "repository-verification-profile-schema.json",
     "repository-verification-receipts-schema.json",
     "resource-registry-schema.json",
+    "run-cost-summary-schema.json",
     "verification-profile-schema.json",
     "workflow-classes-schema.json",
     "workflow-policy-schema.json",
@@ -93,6 +94,7 @@ BEHAVIORAL_CLI_CASES = {
     "export-review-contributions": ("--request", "<missing>", "--decisions", "<missing>", "--raw-findings", "<missing>", "--lane-receipts", "<missing>", "--raw-lane-outputs", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>", "--output", "<output>"),
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
     "metrics": ("--events", "<missing>", "--output", "<output>"),
+    "run-cost-summary": ("--events", "<missing>", "--output", "<output>"),
     "approve-verification-profile": (
         "--repository-root", "<state>", "--profile", "<missing>",
         "--trusted-base-commit", "0" * 40,
@@ -451,7 +453,7 @@ def check_cli(context):
         "authorize-verification-contract-revision",
         "bind-verification-contract", "revise-verification-contract",
         "observe-pipeline", "observe-review", "export-review-contributions",
-        "compare", "metrics", "approve-verification-profile",
+        "compare", "metrics", "run-cost-summary", "approve-verification-profile",
         "plan-verification", "run-verification",
         "record-verification-result",
         "plan-create", "plan-compose", "record-create", "plan-cleanup",
@@ -695,6 +697,10 @@ def check_cli(context):
         successful(
             "metrics", "--events", RECEIPTS / "pipeline-codex.json",
             "--output", root / "metrics.json",
+        )
+        successful(
+            "run-cost-summary", "--events", RECEIPTS / "pipeline-codex.json",
+            "--output", root / "run-cost-summary.json",
         )
 
         from tests.test_runtime_cli import verification_contract

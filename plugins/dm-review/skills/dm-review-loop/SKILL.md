@@ -146,7 +146,10 @@ After authoritative cleanup receipts are appended, invoke exactly:
 "$WORKFLOW_KERNEL" observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
 "$WORKFLOW_KERNEL" compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
 "$WORKFLOW_KERNEL" metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
+"$WORKFLOW_KERNEL" run-cost-summary --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/run-cost-summary.json --repository-commit "$(git rev-parse HEAD)" $(test -n "$(git status --porcelain)" && echo --dirty-state)
 ```
+
+The `run-cost-summary` command emits a schema-bound `run-cost-summary.json` artifact beside the authoritative receipts. It is observation-only and never gates, waives, or alters any review outcome. If the kernel runtime is unavailable, record `run-cost-summary unavailable` as a skip reason and continue; never block the review. The command auto-detects a dirty working tree via `git status --porcelain` and passes `--dirty-state` accordingly. The receipts file accumulates across iterations, so the final `run-cost-summary.json` reflects the complete review.
 
 The pre-action bind seals `review-shadow-prediction.json`; later authoritative observation only consumes it and cannot create or overwrite it. Keep the prediction source and bound artifact through comparison, and delete them only after semantic `match`. Missing or reused prediction evidence fails closed without changing convergence. The repository-lifetime scope file is never auto-deleted, and parity match alone never deletes terminal run state; retain the run directory or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches.
 
