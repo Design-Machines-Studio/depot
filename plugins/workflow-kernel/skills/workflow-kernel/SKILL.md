@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, or when asked to batch repository tests, select focused/full verification lanes, authenticate reusable test receipts, or use Workflow Kernel pipeline/review mechanics.
-version: 0.7.0
+version: 0.8.0
 ---
 
 # Workflow Kernel
@@ -23,7 +23,7 @@ first, then versioned cache directories under `~/.claude` and `~/.codex`
 ordered by parsed semver -- never `ls -td` mtime, so re-pulling an older
 version cannot shadow a newer one), verifies Python 3.12+, sets the module
 path, and execs `python3 -m workflow_kernel`. Compatibility is same-major at
-or above the declared `>=0.7.0` capability floor. The complete consumer-facing
+or above the declared `>=0.8.0` capability floor. The complete consumer-facing
 resolution and fail-closed contract, including the launcher discovery
 snippet, is `references/runtime-resolution.md`; consuming plugins link there
 instead of restating it.
@@ -34,7 +34,7 @@ checkout or invoke the module with
 
 ## Operating Contract
 
-Initialize every run in shadow mode by default. Version 0.7.0 permits a
+Initialize every run in shadow mode by default. Version 0.8.0 permits a
 canonical caller to explicitly select an approved `enforce` or `native` mode
 and delegate the
 bounded authoritative mechanics for behavioral-contract binding/revision,
@@ -64,7 +64,7 @@ evidence attachment and one cleanup reconciliation.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
-0.7.0 surface includes state/replay and inspection commands, repository
+0.8.0 surface includes state/replay and inspection commands, repository
 verification planning/execution, contract bind/revise and retry
 decisions, prediction/observation/comparison, canonical review-contribution
 export, metrics, guarded resource planning/execution/reconciliation, and the

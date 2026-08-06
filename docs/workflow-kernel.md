@@ -6,9 +6,12 @@ owned-resource cleanup. Pipeline and dm-review depend on it, while the kernel
 depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
-Version 0.7.0 retains the inspection, shadow-comparison, retry, redaction,
+Version 0.8.0 retains the inspection, shadow-comparison, retry, redaction,
 authoritative JSON, derived Markdown, and compatible trend mechanics introduced
-in earlier releases. It adds authenticated repository verification with sealed
+in earlier releases. It adds the `run-cost-summary` command — a canonical,
+deterministic, schema-bound per-run cost artifact emitted alongside
+authoritative receipts (see [Run Cost Summary](#run-cost-summary) below).
+Version 0.7.0 added authenticated repository verification with sealed
 profile approvals, exact-head provider evidence, contained Docker lanes, and
 canonical provider-dispatch construction and verification.
 Those commands are authoritative only where the
@@ -24,7 +27,8 @@ Depot checkout or a compatible same-major entry under the Claude cache, then
 the Codex cache, ordered by parsed semver (never mtime). Existing inspection,
 quality-pulse, behavioral-contract, validation-retry, and review-contribution
 consumers require `>=0.5.0`; repository-verification consumers require
-`>=0.6.1`; provider-dispatch consumers require `>=0.7.0`. The
+`>=0.6.1`; provider-dispatch consumers require `>=0.7.0`; run-cost-summary
+consumers require `>=0.8.0`. The
 launcher verifies Python 3.12+, sets the module path, and execs the CLI. Never
 discover the runtime from the downstream project, `PATH`, or a symlink escape.
 The full consumer-facing contract is `references/runtime-resolution.md`; in
@@ -368,3 +372,76 @@ Use `--evidence-output plans/<feature>/workflow-kernel-evidence.json` to
 override that path. The receipt explicitly sets `real_run_evidence` false and
 cannot satisfy native promotion. Run `./tools/validate-composition.sh --all`
 for the full Depot release gate.
+
+## Run Cost Summary
+
+The `run-cost-summary` command emits a canonical, deterministic
+`run-cost-summary.json` artifact beside a run's existing authoritative receipts.
+It is **observation only** — it never gates, waives, selects, or alters any
+lane, phase, or review outcome. Its purpose is to make the cost of every
+pipeline and dm-review run measurable so later optimization phases can prove
+token and elapsed-time reductions against a real baseline.
+
+### Schema
+
+The artifact validates against `run-cost-summary-schema.json` (schema version 1).
+Unknown schema versions fail closed via `validate_run_cost_summary()`. The
+required top-level fields are: `schema_version`, `run_identity`, `versions`,
+`invocation`, `phases`, `lanes`, `totals`, `measurement_coverage`,
+`volatile_fields`, and `digest`.
+
+### Provenance vocabulary
+
+Usage and cost totals carry a provenance string (or null when coverage is
+incomplete):
+
+- `authoritative_run_total` — a run-level usage receipt with `usage_scope: "run"`.
+- `legacy_unscoped_run_summary` — a legacy `tokens`/`cost_usd` field in a
+  `run_summary` receipt (pre-attempt-economics format).
+- `derived_complete_attempts` — all expected attempt-level receipts are
+  present with no overlap, so the total is the sum of attempt values.
+- `provider_receipt` — per-attempt measurement from a provider receipt.
+- `billing_export` — per-attempt measurement from a billing export.
+- `unavailable` — no usage telemetry exists for this row; usage fields are
+  null, never zero-filled.
+- `unknown` — usage data is present but no explicit `measurement_source` was
+  recorded in the event log.
+
+### Volatile fields and digest
+
+The `volatile_fields` array lists field paths (dot notation) excluded from the
+digest. In schema v1 the only volatile field is `invocation.emitted_at` (the
+wall-clock timestamp when the summary was generated). The `digest` field itself
+is also excluded from its own input.
+
+The digest is `sha256:` followed by the hex digest of the non-volatile content
+serialized as UTF-8 JSON with `sort_keys=True` and `separators=(",", ":")`.
+Two emissions from the same event log produce identical bytes after excluding
+the declared volatile fields, and therefore identical digests. Redaction is
+applied before digest computation in the CLI, so the emitted digest is
+verifiable from the emitted file alone.
+
+### No-op-on-unavailable
+
+If the kernel runtime is unavailable, the `run-cost-summary` command is a
+silent no-op. Record `run-cost-summary unavailable` as a skip reason in the
+progress ledger or review notes and continue; never block delivery or review
+on a measurement artifact.
+
+### Computing a before/after per-lane cost table
+
+To compare two runs:
+
+1. Emit `run-cost-summary.json` for each run (the pipeline and dm-review
+   skills do this automatically after the `metrics` command).
+2. Join the `lanes` arrays from both files on the key `(lane, chunk_id,
+   attempt)`.
+3. For each matched lane, compare `cost_usd`, `usage_count`, and
+   `duration_seconds`.
+4. Use `measurement_coverage` to confirm both runs have complete coverage;
+   runs with differing coverage are not directly cost-comparable.
+5. Use `totals.usage_provenance` to confirm both totals come from the same
+   provenance (e.g., both `authoritative_run_total`).
+
+The artifact is designed so a later session can compute this table without
+reading kernel source.

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 from collections import Counter, defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
+import hashlib
+import json
 import math
 from typing import Iterable, Mapping, Optional, Tuple
 
@@ -534,3 +536,350 @@ class MetricsAggregator:
             len(interventions), dict(intervention_reasons), tuple(interventions),
             proposals,
         )
+
+
+# --- Run cost summary ---
+
+COST_SUMMARY_SCHEMA_VERSION = 1
+VOLATILE_FIELDS = ("invocation.emitted_at",)
+
+_REQUIRED_TOP_LEVEL = frozenset({
+    "schema_version", "run_identity", "versions", "invocation",
+    "phases", "lanes", "totals", "measurement_coverage",
+    "volatile_fields", "digest",
+})
+_REQUIRED_RUN_IDENTITY = frozenset({
+    "run_id", "workflow_class", "repository_commit", "dirty_state",
+})
+_REQUIRED_INVOCATION = frozenset({"emitted_at", "first_event_at", "last_event_at"})
+_REQUIRED_TOTALS = frozenset({
+    "usage_count", "input_usage_count", "output_usage_count",
+    "cache_read_usage_count", "cache_write_usage_count",
+    "reasoning_usage_count", "cost_usd",
+    "usage_provenance", "cost_provenance",
+})
+_ROW_FIELDS = frozenset({
+    "requested_provider", "attempted_provider", "implemented_by",
+    "provider", "model", "host", "duration_seconds", "wait_category",
+    *USAGE_FIELDS, "cost_usd", "measurement_source", "usage_estimated",
+})
+
+
+def validate_run_cost_summary(summary: Mapping) -> None:
+    """Validate a run-cost-summary dict against the schema contract.
+
+    Raises ValueError on any structural violation, including an unknown
+    schema version.  This is the fail-closed gate for consumers that read
+    a run-cost-summary.json artifact.
+    """
+    if type(summary) is not dict:
+        raise ValueError("run-cost-summary is not an object")
+    if summary.get("schema_version") != COST_SUMMARY_SCHEMA_VERSION:
+        raise ValueError("unsupported run-cost-summary schema version")
+    missing = _REQUIRED_TOP_LEVEL - set(summary)
+    if missing:
+        raise ValueError("run-cost-summary missing fields: " + ",".join(sorted(missing)))
+    identity = summary["run_identity"]
+    if type(identity) is not dict:
+        raise ValueError("run_identity is not an object")
+    if set(identity) != _REQUIRED_RUN_IDENTITY:
+        raise ValueError("run_identity fields mismatch")
+    if type(identity["run_id"]) is not str or not identity["run_id"]:
+        raise ValueError("run_id is invalid")
+    if type(identity["dirty_state"]) is not bool:
+        raise ValueError("dirty_state is not boolean")
+    versions = summary["versions"]
+    if type(versions) is not dict or "kernel_version" not in versions:
+        raise ValueError("versions missing kernel_version")
+    if type(versions["kernel_version"]) is not str or not versions["kernel_version"]:
+        raise ValueError("kernel_version is invalid")
+    invocation = summary["invocation"]
+    if type(invocation) is not dict:
+        raise ValueError("invocation is not an object")
+    if set(invocation) != _REQUIRED_INVOCATION:
+        raise ValueError("invocation fields mismatch")
+    if type(summary["phases"]) is not list:
+        raise ValueError("phases is not a list")
+    for row in summary["phases"]:
+        _validate_row(row, "phase")
+    if type(summary["lanes"]) is not list:
+        raise ValueError("lanes is not a list")
+    for row in summary["lanes"]:
+        _validate_row(row, "lane")
+    totals = summary["totals"]
+    if type(totals) is not dict:
+        raise ValueError("totals is not an object")
+    if set(totals) != _REQUIRED_TOTALS:
+        raise ValueError("totals fields mismatch")
+    coverage = summary["measurement_coverage"]
+    if type(coverage) is not dict or set(coverage) != {"usage", "cost"}:
+        raise ValueError("measurement_coverage is invalid")
+    for key in ("usage", "cost"):
+        section = coverage[key]
+        if type(section) is not dict:
+            raise ValueError("measurement_coverage.%s is not an object" % key)
+        expected = {"expected", "measured", "estimated", "missing", "overlap", "unassigned"}
+        if set(section) != expected:
+            raise ValueError("measurement_coverage.%s fields mismatch" % key)
+    if type(summary["volatile_fields"]) is not list:
+        raise ValueError("volatile_fields is not a list")
+
+
+def _validate_row(row: Mapping, id_field: str) -> None:
+    if type(row) is not dict:
+        raise ValueError("row is not an object")
+    if id_field not in row or type(row[id_field]) is not str or not row[id_field]:
+        raise ValueError("row %s is invalid" % id_field)
+    if type(row.get("measurement_source")) is not str or not row["measurement_source"]:
+        raise ValueError("measurement_source is invalid")
+    if type(row.get("usage_estimated")) is not bool:
+        raise ValueError("usage_estimated is not boolean")
+    for field in _ROW_FIELDS:
+        if field not in row:
+            raise ValueError("row missing field: " + field)
+
+
+def _kernel_version_string() -> str:
+    from .runtime_resolution import KERNEL_VERSION
+    return ".".join(str(part) for part in KERNEL_VERSION)
+
+
+def _remove_volatile(summary: dict) -> dict:
+    """Return a shallow copy with volatile fields and digest removed."""
+    result = dict(summary)
+    result.pop("digest", None)
+    for path in VOLATILE_FIELDS:
+        parts = path.split(".")
+        target = result
+        for part in parts[:-1]:
+            if not isinstance(target, dict) or part not in target:
+                target = None
+                break
+            if not isinstance(target[part], dict):
+                target = None
+                break
+            target[part] = dict(target[part])
+            target = target[part]
+        if isinstance(target, dict):
+            target.pop(parts[-1], None)
+    return result
+
+
+def compute_cost_summary_digest(summary: Mapping) -> str:
+    """Compute a stable SHA-256 digest over non-volatile content."""
+    non_volatile = _remove_volatile(dict(summary))
+    content = json.dumps(non_volatile, sort_keys=True, separators=(",", ":"))
+    return "sha256:" + hashlib.sha256(content.encode("utf-8")).hexdigest()
+
+
+def _empty_phase_row(stage: str) -> dict:
+    return {
+        "phase": stage,
+        "requested_provider": None,
+        "attempted_provider": None,
+        "implemented_by": None,
+        "provider": None,
+        "model": None,
+        "host": None,
+        "duration_seconds": 0.0,
+        "wait_category": None,
+        "_has_usage": False,
+        "usage_count": None,
+        "input_usage_count": None,
+        "output_usage_count": None,
+        "cache_read_usage_count": None,
+        "cache_write_usage_count": None,
+        "reasoning_usage_count": None,
+        "cost_usd": None,
+        "measurement_source": None,
+        "usage_estimated": False,
+    }
+
+
+def _phase_row_final(row: dict) -> dict:
+    has_usage = row.pop("_has_usage")
+    if not has_usage:
+        for field in USAGE_FIELDS:
+            row[field] = None
+    duration = row.pop("duration_seconds")
+    # 'unavailable' = no usage telemetry at all; 'unknown' = usage data
+    # present but no explicit measurement_source in the event log.
+    if row["measurement_source"] is None:
+        row["measurement_source"] = "unknown" if has_usage else "unavailable"
+    return {
+        "phase": row["phase"],
+        "requested_provider": row["requested_provider"],
+        "attempted_provider": row["attempted_provider"],
+        "implemented_by": row["implemented_by"],
+        "provider": row["provider"],
+        "model": row["model"],
+        "host": row["host"],
+        "duration_seconds": duration if duration else None,
+        "wait_category": row["wait_category"],
+        "usage_count": row["usage_count"],
+        "input_usage_count": row["input_usage_count"],
+        "output_usage_count": row["output_usage_count"],
+        "cache_read_usage_count": row["cache_read_usage_count"],
+        "cache_write_usage_count": row["cache_write_usage_count"],
+        "reasoning_usage_count": row["reasoning_usage_count"],
+        "cost_usd": row["cost_usd"],
+        "measurement_source": row["measurement_source"],
+        "usage_estimated": row["usage_estimated"],
+    }
+
+
+def build_run_cost_summary(
+    events: Iterable[WorkflowEvent], *,
+    repository_commit: Optional[str] = None,
+    dirty_state: bool = False,
+) -> dict:
+    """Build a schema-bound run-cost-summary dict from workflow events.
+
+    Reuses MetricsAggregator for all aggregation; adds a thin shaping layer
+    that produces per-phase rows (from event stages), per-lane rows (from
+    attempt economics), totals with provenance, and measurement coverage.
+    Missing-data honesty: phases/lanes without usage telemetry report
+    measurement_source "unavailable" and null usage fields, never zeros.
+    """
+    values = tuple(events)
+    report = MetricsAggregator().aggregate(values)
+
+    run_id = values[0].run_id if values else "unknown"
+    workflow_class = None
+    if report.workflow_classes:
+        workflow_class = max(
+            report.workflow_classes, key=report.workflow_classes.get,
+        )
+
+    # Per-phase rows: aggregate by event stage.
+    phase_data: dict = {}
+    for event in values:
+        stage = event.payload.get("stage")
+        if type(stage) is not str or not stage:
+            continue
+        if stage not in phase_data:
+            phase_data[stage] = _empty_phase_row(stage)
+        row = phase_data[stage]
+        payload = event.payload
+        for field in (
+            "requested_provider", "attempted_provider", "implemented_by",
+            "provider", "model", "host", "wait_category",
+        ):
+            if row[field] is None and payload.get(field) is not None:
+                row[field] = payload[field]
+        if "duration_seconds" in payload:
+            row["duration_seconds"] += _number(payload, "duration_seconds", float)
+        for field in USAGE_FIELDS:
+            if field in payload:
+                row["_has_usage"] = True
+                if row[field] is None:
+                    row[field] = 0
+                row[field] += _number(payload, field, int)
+        if "cost_usd" in payload:
+            if row["cost_usd"] is None:
+                row["cost_usd"] = 0.0
+            row["cost_usd"] += _number(payload, "cost_usd", float)
+        if payload.get("measurement_source") is not None:
+            if row["measurement_source"] is None:
+                row["measurement_source"] = payload["measurement_source"]
+        if payload.get("usage_estimated") is True:
+            row["usage_estimated"] = True
+
+    phases = [_phase_row_final(phase_data[stage]) for stage in sorted(phase_data)]
+
+    # Per-lane rows: from attempt economics.
+    lanes = []
+    for econ in report.attempt_economics:
+        lane = (
+            econ.get("lane") or econ.get("reviewer")
+            or econ.get("node_id") or "unknown"
+        )
+        lanes.append({
+            "lane": lane,
+            "chunk_id": econ.get("chunk_id"),
+            "attempt": econ.get("attempt"),
+            "requested_provider": econ.get("requested_provider"),
+            "attempted_provider": econ.get("attempted_provider"),
+            "implemented_by": econ.get("implemented_by"),
+            "provider": econ.get("provider"),
+            "model": econ.get("model"),
+            "host": econ.get("host"),
+            "duration_seconds": econ.get("duration_seconds"),
+            "wait_category": econ.get("wait_category"),
+            "usage_count": econ.get("usage_count"),
+            "input_usage_count": econ.get("input_usage_count"),
+            "output_usage_count": econ.get("output_usage_count"),
+            "cache_read_usage_count": econ.get("cache_read_usage_count"),
+            "cache_write_usage_count": econ.get("cache_write_usage_count"),
+            "reasoning_usage_count": econ.get("reasoning_usage_count"),
+            "cost_usd": econ.get("cost_usd"),
+            "measurement_source": econ.get("measurement_source") or "unavailable",
+            "usage_estimated": bool(econ.get("usage_estimated", False)),
+        })
+    lanes.sort(key=lambda r: (r["lane"] or "", r["chunk_id"] or "", r["attempt"] or 0))
+
+    # Totals with provenance.
+    usage_provenance = {
+        field: report.usage_total_provenance.get(field) for field in USAGE_FIELDS
+    }
+    totals = {
+        "usage_count": report.usage_totals.get("usage_count"),
+        "input_usage_count": report.usage_totals.get("input_usage_count"),
+        "output_usage_count": report.usage_totals.get("output_usage_count"),
+        "cache_read_usage_count": report.usage_totals.get("cache_read_usage_count"),
+        "cache_write_usage_count": report.usage_totals.get("cache_write_usage_count"),
+        "reasoning_usage_count": report.usage_totals.get("reasoning_usage_count"),
+        "cost_usd": report.cost_usd,
+        "usage_provenance": usage_provenance,
+        "cost_provenance": report.cost_total_provenance,
+    }
+
+    # Measurement coverage.
+    measurement_coverage = {
+        "usage": {
+            "expected": report.usage_measurement_coverage.get("expected", 0),
+            "measured": report.usage_measurement_coverage.get("measured", 0),
+            "estimated": report.usage_measurement_coverage.get("estimated", 0),
+            "missing": report.usage_measurement_coverage.get("missing", 0),
+            "overlap": report.usage_measurement_coverage.get("overlap", 0),
+            "unassigned": report.usage_measurement_coverage.get("unassigned", 0),
+        },
+        "cost": {
+            "expected": report.cost_measurement_coverage.get("expected", 0),
+            "measured": report.cost_measurement_coverage.get("measured", 0),
+            "estimated": report.cost_measurement_coverage.get("estimated", 0),
+            "missing": report.cost_measurement_coverage.get("missing", 0),
+            "overlap": report.cost_measurement_coverage.get("overlap", 0),
+            "unassigned": report.cost_measurement_coverage.get("unassigned", 0),
+        },
+    }
+
+    emitted_at = datetime.now(timezone.utc).isoformat()
+    first_event_at = values[0].occurred_at if values else None
+    last_event_at = values[-1].occurred_at if values else None
+
+    summary = {
+        "schema_version": COST_SUMMARY_SCHEMA_VERSION,
+        "run_identity": {
+            "run_id": run_id,
+            "workflow_class": workflow_class,
+            "repository_commit": repository_commit,
+            "dirty_state": dirty_state,
+        },
+        "versions": {
+            "kernel_version": _kernel_version_string(),
+        },
+        "invocation": {
+            "emitted_at": emitted_at,
+            "first_event_at": first_event_at,
+            "last_event_at": last_event_at,
+        },
+        "phases": phases,
+        "lanes": lanes,
+        "totals": totals,
+        "measurement_coverage": measurement_coverage,
+        "volatile_fields": list(VOLATILE_FIELDS),
+        "digest": None,
+    }
+    summary["digest"] = compute_cost_summary_digest(summary)
+    return summary

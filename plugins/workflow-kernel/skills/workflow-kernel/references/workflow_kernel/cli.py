@@ -1978,6 +1978,30 @@ def command_metrics(args):
     return 0
 
 
+def command_run_cost_summary(args):
+    from .dm_review_adapter import translate_review_receipts
+    from .metrics import build_run_cost_summary, compute_cost_summary_digest
+    from .pipeline_adapter import translate_pipeline_receipts
+    from .redaction import sanitize_durable_payload
+
+    receipts = _load_json(args.events)
+    if not isinstance(receipts, list):
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
+    try:
+        events = translate_pipeline_receipts(receipts)
+    except ValueError:
+        events = translate_review_receipts(receipts)
+    repository_commit = getattr(args, "repository_commit", None)
+    dirty_state = bool(getattr(args, "dirty_state", False))
+    summary = build_run_cost_summary(
+        events, repository_commit=repository_commit, dirty_state=dirty_state,
+    )
+    sanitized = sanitize_durable_payload(summary)
+    sanitized["digest"] = compute_cost_summary_digest(sanitized)
+    _write_json(args.output, sanitized)
+    return 0
+
+
 # Fixed PATH for the one runtime path that shells out; the caller's PATH
 # never selects the docker binary that executes destructive stop/rm actions.
 _FIXED_SUBPROCESS_PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -3212,6 +3236,16 @@ def parser():
     metrics.add_argument("--events", required=True)
     metrics.add_argument("--output", required=True)
     metrics.set_defaults(handler=command_metrics)
+
+    run_cost_summary = commands.add_parser(
+        "run-cost-summary",
+        help="emit a schema-bound per-run cost summary artifact",
+    )
+    run_cost_summary.add_argument("--events", required=True)
+    run_cost_summary.add_argument("--output", required=True)
+    run_cost_summary.add_argument("--repository-commit", default=None)
+    run_cost_summary.add_argument("--dirty-state", action="store_true", default=False)
+    run_cost_summary.set_defaults(handler=command_run_cost_summary)
 
     approve_verification = commands.add_parser(
         "approve-verification-profile",
