@@ -69,10 +69,10 @@ Use these exact later observation interfaces:
 "$WORKFLOW_KERNEL" observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
 "$WORKFLOW_KERNEL" compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
 "$WORKFLOW_KERNEL" metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
-"$WORKFLOW_KERNEL" run-cost-summary --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/run-cost-summary.json --repository-commit "$(git rev-parse HEAD)"
+"$WORKFLOW_KERNEL" run-cost-summary --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/run-cost-summary.json --repository-commit "$(git rev-parse HEAD)" $(test -n "$(git status --porcelain)" && echo --dirty-state)
 ```
 
-The `run-cost-summary` command emits a schema-bound `run-cost-summary.json` artifact beside the authoritative receipts. It is observation-only and never gates, waives, or alters any review outcome. If the kernel runtime is unavailable, record `run-cost-summary unavailable` as a skip reason and continue; never block the review. Pass `--dirty-state` when the working tree has uncommitted changes.
+The `run-cost-summary` command emits a schema-bound `run-cost-summary.json` artifact beside the authoritative receipts. It is observation-only and never gates, waives, or alters any review outcome. If the kernel runtime is unavailable, record `run-cost-summary unavailable` as a skip reason and continue; never block the review. The command auto-detects a dirty working tree via `git status --porcelain` and passes `--dirty-state` accordingly.
 
 If review setup creates any Docker/Compose resource, invoke exactly one planning interface:
 

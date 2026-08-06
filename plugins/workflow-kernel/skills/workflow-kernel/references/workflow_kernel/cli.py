@@ -1979,8 +1979,8 @@ def command_metrics(args):
 
 
 def command_run_cost_summary(args):
+    from .cost_summary import build_run_cost_summary, compute_cost_summary_digest
     from .dm_review_adapter import translate_review_receipts
-    from .metrics import build_run_cost_summary, compute_cost_summary_digest
     from .pipeline_adapter import translate_pipeline_receipts
     from .redaction import sanitize_durable_payload
 

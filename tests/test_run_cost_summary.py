@@ -3,7 +3,7 @@
 import json
 import unittest
 
-from workflow_kernel.metrics import (
+from workflow_kernel.cost_summary import (
     COST_SUMMARY_SCHEMA_VERSION,
     build_run_cost_summary,
     compute_cost_summary_digest,
@@ -82,8 +82,10 @@ class RunCostSummaryTests(unittest.TestCase):
 
     def test_digest_is_stable_across_emissions(self):
         events = self._fixture_events()
-        s1 = build_run_cost_summary(events)
-        s2 = build_run_cost_summary(events)
+        s1 = sanitize_durable_payload(build_run_cost_summary(events))
+        s2 = sanitize_durable_payload(build_run_cost_summary(events))
+        s1["digest"] = compute_cost_summary_digest(s1)
+        s2["digest"] = compute_cost_summary_digest(s2)
         self.assertEqual(s1["digest"], s2["digest"])
 
     def test_sanitized_output_is_byte_stable(self):
@@ -319,20 +321,183 @@ class RunCostSummaryTests(unittest.TestCase):
             if os.path.exists(output_path):
                 os.unlink(output_path)
 
-    # -- 10. Digest verification with redaction active --
+    # -- 10. Digest verification with redaction active (CLI end-to-end) --
 
-    def test_digest_matches_after_redaction(self):
+    def test_cli_digest_verifies_after_redaction_with_secret(self):
+        """The CLI must emit a digest that independently verifies against the
+        redacted emitted file.  A secret-shaped model must not appear in the
+        output.  This replaces the tautological in-process version that set
+        and recomputed the digest from the same object."""
+        import os
+        import sys
+        import tempfile
+
         receipts = [
             _usage_receipt(0, 1, usage_count=10, cost_usd=0.1,
                            model="sk-test-key-1234567890abcdef"),
         ]
-        events = translate_pipeline_receipts(receipts)
-        summary = build_run_cost_summary(events)
-        sanitized = sanitize_durable_payload(summary)
-        sanitized["digest"] = compute_cost_summary_digest(sanitized)
-        # Recompute from the sanitized output
-        recomputed = compute_cost_summary_digest(sanitized)
-        self.assertEqual(recomputed, sanitized["digest"])
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False,
+        ) as f:
+            json.dump(receipts, f)
+            events_path = f.name
+        output_path = events_path + ".summary.json"
+        try:
+            old_argv = sys.argv
+            sys.argv = [
+                "workflow_kernel", "run-cost-summary",
+                "--events", events_path, "--output", output_path,
+            ]
+            from workflow_kernel.cli import main
+            try:
+                main()
+            except SystemExit as exc:
+                self.assertEqual(exc.code, 0)
+            finally:
+                sys.argv = old_argv
+            with open(output_path) as f:
+                emitted = json.load(f)
+            output_text = json.dumps(emitted, sort_keys=True)
+            self.assertNotIn("sk-test-key-1234567890abcdef", output_text)
+            recomputed = compute_cost_summary_digest(emitted)
+            self.assertEqual(recomputed, emitted["digest"])
+        finally:
+            os.unlink(events_path)
+            if os.path.exists(output_path):
+                os.unlink(output_path)
+
+    # -- 11. CLI --repository-commit and --dirty-state provenance --
+
+    def test_cli_passes_repository_commit_and_dirty_state(self):
+        import os
+        import sys
+        import tempfile
+
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False,
+        ) as f:
+            json.dump(receipts, f)
+            events_path = f.name
+        output_path = events_path + ".summary.json"
+        try:
+            old_argv = sys.argv
+            sys.argv = [
+                "workflow_kernel", "run-cost-summary",
+                "--events", events_path, "--output", output_path,
+                "--repository-commit", "abc123def456",
+                "--dirty-state",
+            ]
+            from workflow_kernel.cli import main
+            try:
+                main()
+            except SystemExit as exc:
+                self.assertEqual(exc.code, 0)
+            finally:
+                sys.argv = old_argv
+            with open(output_path) as f:
+                summary = json.load(f)
+            identity = summary["run_identity"]
+            self.assertEqual(identity["repository_commit"], "abc123def456")
+            self.assertTrue(identity["dirty_state"])
+        finally:
+            os.unlink(events_path)
+            if os.path.exists(output_path):
+                os.unlink(output_path)
+
+    def test_cli_defaults_repository_commit_null_dirty_false(self):
+        import os
+        import sys
+        import tempfile
+
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False,
+        ) as f:
+            json.dump(receipts, f)
+            events_path = f.name
+        output_path = events_path + ".summary.json"
+        try:
+            old_argv = sys.argv
+            sys.argv = [
+                "workflow_kernel", "run-cost-summary",
+                "--events", events_path, "--output", output_path,
+            ]
+            from workflow_kernel.cli import main
+            try:
+                main()
+            except SystemExit as exc:
+                self.assertEqual(exc.code, 0)
+            finally:
+                sys.argv = old_argv
+            with open(output_path) as f:
+                summary = json.load(f)
+            identity = summary["run_identity"]
+            self.assertIsNone(identity["repository_commit"])
+            self.assertFalse(identity["dirty_state"])
+        finally:
+            os.unlink(events_path)
+            if os.path.exists(output_path):
+                os.unlink(output_path)
+
+    # -- 12. build_run_cost_summary leaves digest None (CLI finalizes) --
+
+    def test_build_leaves_digest_none(self):
+        summary = build_run_cost_summary(self._fixture_events())
+        self.assertIsNone(summary["digest"])
+
+    # -- 13. Validator rejects malformed artifacts (strict schema) --
+
+    def test_extra_top_level_field_is_rejected(self):
+        summary = build_run_cost_summary(self._fixture_events())
+        bad = json.loads(json.dumps(summary))
+        bad["extra_field"] = True
+        with self.assertRaises(ValueError):
+            validate_run_cost_summary(bad)
+
+    def test_extra_phase_row_field_is_rejected(self):
+        summary = build_run_cost_summary(self._fixture_events())
+        if not summary["phases"]:
+            self.skipTest("no phases in fixture")
+        bad = json.loads(json.dumps(summary))
+        bad["phases"][0]["extra_field"] = True
+        with self.assertRaises(ValueError):
+            validate_run_cost_summary(bad)
+
+    def test_malformed_usage_provenance_is_rejected(self):
+        summary = build_run_cost_summary(self._fixture_events())
+        bad = json.loads(json.dumps(summary))
+        bad["totals"]["usage_provenance"] = "garbage"
+        with self.assertRaises(ValueError):
+            validate_run_cost_summary(bad)
+
+    def test_coverage_non_integer_is_rejected(self):
+        summary = build_run_cost_summary(self._fixture_events())
+        bad = json.loads(json.dumps(summary))
+        bad["measurement_coverage"]["usage"]["expected"] = "five"
+        with self.assertRaises(ValueError):
+            validate_run_cost_summary(bad)
+
+    def test_coverage_boolean_is_rejected(self):
+        summary = build_run_cost_summary(self._fixture_events())
+        bad = json.loads(json.dumps(summary))
+        bad["measurement_coverage"]["cost"]["missing"] = True
+        with self.assertRaises(ValueError):
+            validate_run_cost_summary(bad)
+
+    def test_bad_digest_type_is_rejected(self):
+        summary = build_run_cost_summary(self._fixture_events())
+        bad = json.loads(json.dumps(summary))
+        bad["digest"] = 123
+        with self.assertRaises(ValueError):
+            validate_run_cost_summary(bad)
+
+    def test_forged_volatile_fields_is_rejected(self):
+        summary = build_run_cost_summary(self._fixture_events())
+        bad = json.loads(json.dumps(summary))
+        bad["volatile_fields"] = ["invocation.emitted_at", "totals.cost_usd"]
+        with self.assertRaises(ValueError):
+            validate_run_cost_summary(bad)
 
 
 if __name__ == "__main__":

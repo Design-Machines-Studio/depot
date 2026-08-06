@@ -414,12 +414,22 @@ digest. In schema v1 the only volatile field is `invocation.emitted_at` (the
 wall-clock timestamp when the summary was generated). The `digest` field itself
 is also excluded from its own input.
 
+**Verifiers must exclude the kernel-declared `VOLATILE_FIELDS` constant, not
+paths declared by the artifact itself.** The validator
+(`validate_run_cost_summary`) rejects any `volatile_fields` value that does not
+exactly match the kernel's declared set for the schema version, preventing a
+self-declared integrity-scope attack where a tampered artifact adds sensitive
+fields to the exclusion list to keep its digest matching.
+
 The digest is `sha256:` followed by the hex digest of the non-volatile content
 serialized as UTF-8 JSON with `sort_keys=True` and `separators=(",", ":")`.
 Two emissions from the same event log produce identical bytes after excluding
 the declared volatile fields, and therefore identical digests. Redaction is
 applied before digest computation in the CLI, so the emitted digest is
-verifiable from the emitted file alone.
+verifiable from the emitted file alone. `build_run_cost_summary()` leaves
+`digest` set to `None`; the CLI command is the sole place that finalizes the
+digest after redaction, so a stale pre-redaction digest can never be emitted
+or trusted.
 
 ### No-op-on-unavailable
 
