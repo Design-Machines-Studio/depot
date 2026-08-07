@@ -58,6 +58,21 @@ fi
   GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" build -tags fixture ./...
 )
 
+# Formatting. vet and build both accept unformatted source, so without this the
+# gate reports success on a file gofmt would rewrite -- which is exactly how the
+# fixture launcher shipped unformatted. gofmt reads files directly, so one pass
+# covers tagged and untagged sources with no build-tag selection.
+GOFMT_BIN="$(dirname "$GO_BIN")/gofmt"
+if [[ ! -x "$GOFMT_BIN" ]]; then
+  printf 'FAIL  exact gofmt unavailable beside the pinned Go launcher: %s\n' "$GOFMT_BIN" >&2
+  exit 1
+fi
+unformatted="$(cd "$MODULE" && "$GOFMT_BIN" -l . || true)"
+if [ -n "$unformatted" ]; then
+  printf 'FAIL  unformatted Go source in the authority module:\n%s\n' "$unformatted" >&2
+  exit 1
+fi
+
 # Secret surface. Credential-shaped literals must never appear in the authority
 # module or its harness. The product's own scanner pattern table is not a match:
 # a bracket expression such as AKIA[0-9A-Z]{16} does not satisfy the pattern it

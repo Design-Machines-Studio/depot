@@ -675,20 +675,29 @@ class DenyMatrixTest(HarnessBase):
 
     # Positive control for the sentinel scanners REQ-E2E-07 and REQ-E2E-08
     # depend on. Chunk 06c asserts absence; absence is only meaningful if the
-    # same scanner demonstrably finds a planted sentinel.
+    # same scanner demonstrably finds a planted sentinel. Every sentinel the
+    # absence assertions cover is planted here -- arming one scanner and
+    # relying on three absence claims is the vacuity this control exists to
+    # prevent.
     def test_artifact_scanner_positive_control(self):
         root = self.fixture_root()
-        planted = root / "planted-artifact"
-        planted.write_text("prefix " + PROVIDER_CREDENTIAL_SENTINEL + " suffix")
-        found = [
-            path for path in root.rglob("*")
-            if path.is_file() and PROVIDER_CREDENTIAL_SENTINEL in _safe_read(path)
-        ]
-        self.assertIn(
-            planted, found,
-            "the artifact scanner cannot find a planted sentinel; every "
-            "absence assertion built on it is vacuous",
-        )
+        for name, sentinel in (
+            ("planted-provider-credential", PROVIDER_CREDENTIAL_SENTINEL),
+            ("planted-credential-id", CREDENTIAL_ID_SENTINEL),
+            ("planted-response", RESPONSE_SENTINEL),
+        ):
+            with self.subTest(sentinel=name):
+                planted = root / name
+                planted.write_text("prefix " + sentinel + " suffix")
+                found = [
+                    path for path in root.rglob("*")
+                    if path.is_file() and sentinel in _safe_read(path)
+                ]
+                self.assertIn(
+                    planted, found,
+                    "the artifact scanner cannot find a planted {}; every "
+                    "absence assertion built on it is vacuous".format(name),
+                )
 
 
 @unittest.skipUnless(
@@ -846,18 +855,25 @@ class ProcessHostilityTest(HarnessBase):
         self.assertTrue(attempts[0]["ok"], attempts[0].get("error"))
         self.assertGreater(len(artifacts), 0, "no artifacts to scan")
 
-        # The response body never reaches disk or the daemon's own log.
+        # The response body never reaches disk or the daemon's own log, and
+        # neither does either credential sentinel. The credential ID belongs
+        # here and not only in the argv scan: authority.Manager deliberately
+        # nils Credential.ID before anything is persisted and zeroes it on
+        # close, so a raw ID found under the fixture root is a real leak of a
+        # value the production code says it never writes.
         for path, text in contents.items():
-            self.assertNotIn(
-                RESPONSE_SENTINEL, text,
-                "response bytes leaked into {}".format(path),
-            )
-            self.assertNotIn(
-                PROVIDER_CREDENTIAL_SENTINEL, text,
-                "the provider credential leaked into {}".format(path),
-            )
+            for sentinel, leaked in (
+                (RESPONSE_SENTINEL, "response bytes"),
+                (PROVIDER_CREDENTIAL_SENTINEL, "the provider credential"),
+                (CREDENTIAL_ID_SENTINEL, "the credential ID"),
+            ):
+                self.assertNotIn(
+                    sentinel, text,
+                    "{} leaked into {}".format(leaked, path),
+                )
         self.assertNotIn(RESPONSE_SENTINEL, daemon_stderr)
         self.assertNotIn(PROVIDER_CREDENTIAL_SENTINEL, daemon_stderr)
+        self.assertNotIn(CREDENTIAL_ID_SENTINEL, daemon_stderr)
 
         # Neither sentinel is visible in the daemon's command line, which any
         # same-user process can read.
@@ -903,8 +919,11 @@ class ProcessHostilityTest(HarnessBase):
         # receipt carries digests and lengths, never content.
         for field in ("response_sha256", "request_body_sha256", "usage_sha256"):
             self.assertTrue(receipt[field].startswith("sha256:"))
-        self.assertNotIn(RESPONSE_SENTINEL, json.dumps(receipt))
-        self.assertNotIn(PROVIDER_CREDENTIAL_SENTINEL, json.dumps(receipt))
+        encoded_receipt = json.dumps(receipt)
+        for sentinel in (
+            RESPONSE_SENTINEL, PROVIDER_CREDENTIAL_SENTINEL, CREDENTIAL_ID_SENTINEL,
+        ):
+            self.assertNotIn(sentinel, encoded_receipt)
 
         record_gap(
             "repository-verification-rejection",
@@ -956,6 +975,14 @@ class UnrunLaneLedgerTest(unittest.TestCase):
                 "the production guard that rejects SCM_RIGHTS on every read is "
                 "Linux-only; the darwin fixture guard is a plain read",
             )
+        record_gap(
+            "fixture-peer-other-uncompiled",
+            "peer_other.go's fail-closed stub is compiled by no lane: the "
+            "module is not yet portable to a third GOOS (freebsd fails on "
+            "syscall.Mlock in internal/provider/credential.go, windows also on "
+            "syscall.Stat_t in internal/platform/linux.go), so a regression in "
+            "that path would be invisible",
+        )
         for requirement, reason in (
             ("libfido2", "real authenticator and libfido2 1.17.0 require Linux hardware"),
             ("systemd", "root systemd install, socket activation, and tmpfiles require Linux root"),

@@ -196,30 +196,50 @@ func emit(document any) error {
 	return err
 }
 
-func runDaemon(root string, now time.Time, providerDelay time.Duration) error {
-	owner := uint32(os.Geteuid())
+// fixtureDirs are the three fixture root subdirectories, created with the same
+// modes the production layout uses.
+type fixtureDirs struct{ run, trust, state string }
 
-	runDir := filepath.Join(root, "run")
-	trustDir := filepath.Join(root, "trust")
-	stateDir := filepath.Join(root, "state")
-	for path, mode := range map[string]os.FileMode{runDir: 0o750, trustDir: 0o755, stateDir: 0o700} {
+func prepareFixtureDirs(root string) (fixtureDirs, error) {
+	dirs := fixtureDirs{
+		run:   filepath.Join(root, "run"),
+		trust: filepath.Join(root, "trust"),
+		state: filepath.Join(root, "state"),
+	}
+	for path, mode := range map[string]os.FileMode{dirs.run: 0o750, dirs.trust: 0o755, dirs.state: 0o700} {
 		if err := os.MkdirAll(path, mode); err != nil {
-			return err
+			return fixtureDirs{}, err
 		}
 		if err := os.Chmod(path, mode); err != nil {
-			return err
+			return fixtureDirs{}, err
 		}
 	}
+	return dirs, nil
+}
 
+// fixtureIdentity is the enrolled credential the daemon publishes as public
+// trust and hands to the authority manager. credentialID is the
+// credentialIDSentinel: only its derived reference appears in the trust
+// document, and REQ-E2E-07/08 assert the raw ID reaches no artifact at all.
+type fixtureIdentity struct {
+	credentialID        []byte
+	credentialReference string
+	publicDER           []byte
+	generation          uint64
+	enrolledAt          time.Time
+	trustPath           string
+}
+
+func writeFixtureTrust(trustDir string, now time.Time) (fixtureIdentity, error) {
 	credentialID := []byte(credentialIDSentinel)
 	credentialReference := enrollment.ReferenceForID(credentialID)
 	credentialKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	if err != nil {
-		return err
+		return fixtureIdentity{}, err
 	}
 	publicDER, err := x509.MarshalPKIXPublicKey(&credentialKey.PublicKey)
 	if err != nil {
-		return err
+		return fixtureIdentity{}, err
 	}
 	generation := uint64(1)
 	publicCredential := enrollment.PublicCredential{
@@ -235,36 +255,50 @@ func runDaemon(root string, now time.Time, providerDelay time.Duration) error {
 	}
 	trustRaw, err := protocol.CanonicalJSON(trust)
 	if err != nil {
-		return err
+		return fixtureIdentity{}, err
 	}
 	trustPath := filepath.Join(trustDir, "authority-public.json")
 	if err := os.WriteFile(trustPath, trustRaw, 0o644); err != nil {
-		return err
+		return fixtureIdentity{}, err
 	}
+	return fixtureIdentity{
+		credentialID: credentialID, credentialReference: credentialReference,
+		publicDER: publicDER, generation: generation,
+		enrolledAt: publicCredential.EnrolledAt, trustPath: trustPath,
+	}, nil
+}
 
-	policy := []byte(`{"schemaVersion":2,"disclosureControls":{"refuseClasses":["high-confidence credentials","private keys","authenticated connection strings / DSNs","access or session tokens","explicitly classified private or regulated values"],"onMatch":"decline-disclosure","exitCode":3}}`)
-	providerCredentialPath := filepath.Join(root, "openrouter-credential")
-	if err := os.WriteFile(providerCredentialPath, []byte(providerCredentialSentinel+"\n"), 0o600); err != nil {
-		return err
+// fixtureProvider owns the loopback TLS provider the dispatcher talks to, its
+// request counters, and the canary listener nothing legitimate may ever reach.
+type fixtureProvider struct {
+	server         *httptest.Server
+	credentialPath string
+	requests       atomic.Int32
+	rejections     atomic.Int32
+	canary         net.Listener
+	canaryHits     atomic.Int32
+}
+
+func newFixtureProvider(root string, delay time.Duration) (*fixtureProvider, error) {
+	p := &fixtureProvider{credentialPath: filepath.Join(root, "openrouter-credential")}
+	if err := os.WriteFile(p.credentialPath, []byte(providerCredentialSentinel+"\n"), 0o600); err != nil {
+		return nil, err
 	}
-
-	var providerRequests atomic.Int32
-	var providerRejections atomic.Int32
-	providerServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		providerRequests.Add(1)
-		if providerDelay > 0 {
+	p.server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		p.requests.Add(1)
+		if delay > 0 {
 			// Counted before sleeping, so a request that is in flight is
 			// already visible to the harness through /counters.
-			time.Sleep(providerDelay)
+			time.Sleep(delay)
 		}
 		if r.Method != protocol.Method || r.URL.Path != protocol.Path || r.Header.Get("Authorization") != "Bearer "+providerCredentialSentinel {
-			providerRejections.Add(1)
+			p.rejections.Add(1)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		var body map[string]any
 		if json.NewDecoder(r.Body).Decode(&body) != nil {
-			providerRejections.Add(1)
+			p.rejections.Add(1)
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -274,32 +308,49 @@ func runDaemon(root string, now time.Time, providerDelay time.Duration) error {
 			"choices": []any{map[string]any{"message": map[string]any{"role": "assistant", "content": responseSentinel}, "finish_reason": "stop"}},
 		})
 	}))
-	defer providerServer.Close()
-
 	// A second listener that nothing legitimate may ever reach. REQ-E2E-03
 	// asserts env/flag overrides cannot redirect the broker: pointing an
 	// override at this canary and observing zero connections is the
 	// differential proof, where an unchanged outcome alone would not be.
 	canary, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return err
+		p.server.Close()
+		return nil, err
 	}
-	defer canary.Close()
-	var canaryHits atomic.Int32
+	p.canary = canary
 	go func() {
 		for {
 			conn, err := canary.Accept()
 			if err != nil {
 				return
 			}
-			canaryHits.Add(1)
+			p.canaryHits.Add(1)
 			_ = conn.Close()
 		}
 	}()
+	return p, nil
+}
 
-	store, err := ipc.OpenDirStateStore(stateDir, owner)
+func (p *fixtureProvider) origin() string { return p.server.URL + protocol.Path }
+
+func (p *fixtureProvider) close() {
+	p.server.Close()
+	_ = p.canary.Close()
+}
+
+// newFixtureBroker wires the durable allocator, WAL, authority manager,
+// dispatcher, and IPC server that sit behind the fixture socket.
+//
+// The peer is derived from the connection by the kernel, never injected and
+// never supplied by the caller. The client verifies that the daemon saw its own
+// PID (client.go asserts challenge.PeerPID == os.Getpid()), so a fabricated
+// peer identity here would make every authorization proof the harness collects
+// a statement about the fixture rather than about the broker.
+func newFixtureBroker(dirs fixtureDirs, identity fixtureIdentity, policy []byte,
+	owner uint32, now time.Time, prov *fixtureProvider) (*ipc.Server, *fixtureFIDO, error) {
+	store, err := ipc.OpenDirStateStore(dirs.state, owner)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	allocator, err := ipc.NewDurableAllocator(ipc.AllocatorConfig{
 		DaemonBuildSHA256: protocol.Digest([]byte("fixture-daemon")), ScannerBuildSHA256: provider.ScannerBuildDigest,
@@ -307,74 +358,112 @@ func runDaemon(root string, now time.Time, providerDelay time.Duration) error {
 		Clock: func() time.Time { return now }, Random: strings.NewReader(strings.Repeat("r", 256)),
 	}, store)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
-	wal, err := authority.OpenDirWAL(stateDir, owner)
+	wal, err := authority.OpenDirWAL(dirs.state, owner)
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	fido := &fixtureFIDO{}
 	manager, err := authority.NewManager(authority.Config{
 		BootID: "fixture-boot", SessionID: "fixture-session", AllowedUIDs: map[uint32]struct{}{owner: {}},
 		MaxOperations: 8, MaxBytes: 16 << 20, MaxConcurrent: 1,
 		Credential: authority.Credential{
-			Reference: credentialReference, PublicKey: publicDER, Algorithm: enrollment.ES256, Generation: generation,
-			RPID: enrollment.RPID, EnrolledAt: publicCredential.EnrolledAt, Status: "active", InternalUV: true,
-			ID: append([]byte(nil), credentialID...),
+			Reference: identity.credentialReference, PublicKey: identity.publicDER,
+			Algorithm: enrollment.ES256, Generation: identity.generation,
+			RPID: enrollment.RPID, EnrolledAt: identity.enrolledAt, Status: "active", InternalUV: true,
+			ID: append([]byte(nil), identity.credentialID...),
 		},
 	}, fido, wal, fixtureClock{now: now})
 	if err != nil {
-		return err
+		return nil, nil, err
 	}
 	dispatcher := &provider.Dispatcher{
 		Scanner: provider.BuiltinScanner{}, Policy: policy,
-		Credentials: provider.FileCredentialReader{Path: providerCredentialPath, FixtureMode: true, Owner: owner},
+		Credentials: provider.FileCredentialReader{Path: prov.credentialPath, FixtureMode: true, Owner: owner},
 		Transport: &provider.Transport{
-			Origin: providerServer.URL + protocol.Path, Fixture: true, Timeout: 5 * time.Second,
-			TLSConfig: providerServer.Client().Transport.(*http.Transport).TLSClientConfig,
+			Origin: prov.origin(), Fixture: true, Timeout: 5 * time.Second,
+			TLSConfig: prov.server.Client().Transport.(*http.Transport).TLSClientConfig,
 		},
 		Authority: manager, Clock: func() time.Time { return now },
 	}
+	return &ipc.Server{
+		Allocator: allocator, Peers: fixturePeerAuthenticator(owner), Guard: fixtureGuardConn,
+		Manager: manager, Dispatcher: dispatcher, Clock: func() time.Time { return now }, QueueDepth: 1,
+	}, fido, nil
+}
 
+// listenFixtureSocket opens the broker's Unix socket inside the fixture run dir.
+func listenFixtureSocket(runDir string) (*net.UnixListener, string, error) {
 	socketPath := filepath.Join(runDir, "authority.sock")
 	listener, err := net.ListenUnix("unix", &net.UnixAddr{Name: socketPath, Net: "unix"})
 	if err != nil {
-		return err
+		return nil, "", err
 	}
 	if err := os.Chmod(socketPath, 0o660); err != nil {
+		_ = listener.Close()
+		return nil, "", err
+	}
+	return listener, socketPath, nil
+}
+
+// serveFixtureCounters starts the plain-HTTP loopback control surface. It
+// carries counters only -- never response bytes, credential material, or
+// receipts -- so observing it can never itself become the leak REQ-E2E-07 is
+// meant to detect.
+func serveFixtureCounters(prov *fixtureProvider, fido *fixtureFIDO) (net.Listener, error) {
+	control, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		return nil, err
+	}
+	mux := http.NewServeMux()
+	mux.HandleFunc("/counters", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]int32{
+			"provider_requests":   prov.requests.Load(),
+			"provider_rejections": prov.rejections.Load(),
+			"fido_assertions":     fido.assertions.Load(),
+			"fido_verifications":  fido.verifications.Load(),
+			"canary_hits":         prov.canaryHits.Load(),
+		})
+	})
+	server := &http.Server{Handler: mux, ReadHeaderTimeout: 5 * time.Second}
+	go func() { _ = server.Serve(control) }()
+	return control, nil
+}
+
+func runDaemon(root string, now time.Time, providerDelay time.Duration) error {
+	owner := uint32(os.Geteuid())
+
+	dirs, err := prepareFixtureDirs(root)
+	if err != nil {
 		return err
 	}
-	// The peer is derived from the connection by the kernel, never injected and
-	// never supplied by the caller. The client verifies that the daemon saw its
-	// own PID (client.go asserts challenge.PeerPID == os.Getpid()), so a
-	// fabricated peer identity here would make every authorization proof below
-	// a statement about the fixture rather than about the broker.
-	server := &ipc.Server{
-		Allocator: allocator, Peers: fixturePeerAuthenticator(owner), Guard: fixtureGuardConn,
-		Manager: manager, Dispatcher: dispatcher, Clock: func() time.Time { return now }, QueueDepth: 1,
+	identity, err := writeFixtureTrust(dirs.trust, now)
+	if err != nil {
+		return err
 	}
+	policy := []byte(`{"schemaVersion":2,"disclosureControls":{"refuseClasses":["high-confidence credentials","private keys","authenticated connection strings / DSNs","access or session tokens","explicitly classified private or regulated values"],"onMatch":"decline-disclosure","exitCode":3}}`)
 
-	// Plain-HTTP loopback control surface. It carries counters only -- never
-	// response bytes, credential material, or receipts -- so observing it can
-	// never itself become the leak REQ-E2E-07 is meant to detect.
-	control, err := net.Listen("tcp", "127.0.0.1:0")
+	prov, err := newFixtureProvider(root, providerDelay)
+	if err != nil {
+		return err
+	}
+	defer prov.close()
+
+	server, fido, err := newFixtureBroker(dirs, identity, policy, owner, now, prov)
+	if err != nil {
+		return err
+	}
+	listener, socketPath, err := listenFixtureSocket(dirs.run)
+	if err != nil {
+		return err
+	}
+	control, err := serveFixtureCounters(prov, fido)
 	if err != nil {
 		return err
 	}
 	defer control.Close()
-	controlMux := http.NewServeMux()
-	controlMux.HandleFunc("/counters", func(w http.ResponseWriter, _ *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		_ = json.NewEncoder(w).Encode(map[string]int32{
-			"provider_requests":   providerRequests.Load(),
-			"provider_rejections": providerRejections.Load(),
-			"fido_assertions":     fido.assertions.Load(),
-			"fido_verifications":  fido.verifications.Load(),
-			"canary_hits":         canaryHits.Load(),
-		})
-	})
-	controlServer := &http.Server{Handler: controlMux, ReadHeaderTimeout: 5 * time.Second}
-	go func() { _ = controlServer.Serve(control) }()
 
 	serveContext, cancelServe := context.WithCancel(context.Background())
 	defer cancelServe()
@@ -382,20 +471,20 @@ func runDaemon(root string, now time.Time, providerDelay time.Duration) error {
 	go func() { serveDone <- server.Serve(serveContext, listener) }()
 
 	if err := emit(map[string]any{
-		"ready":            true,
-		"root":             root,
-		"socket":           socketPath,
-		"trust":            trustPath,
-		"state":            stateDir,
-		"policy_digest":    protocol.Digest(policy),
-		"provider_origin":  providerServer.URL + protocol.Path,
-		"provider_credential": providerCredentialPath,
-		"control":          "http://" + control.Addr().String(),
-		"canary":           canary.Addr().String(),
-		"clock":            now.Format(time.RFC3339),
-		"pid":              os.Getpid(),
-		"peer_source":      peerSource,
-		"production":       false,
+		"ready":               true,
+		"root":                root,
+		"socket":              socketPath,
+		"trust":               identity.trustPath,
+		"state":               dirs.state,
+		"policy_digest":       protocol.Digest(policy),
+		"provider_origin":     prov.origin(),
+		"provider_credential": prov.credentialPath,
+		"control":             "http://" + control.Addr().String(),
+		"canary":              prov.canary.Addr().String(),
+		"clock":               now.Format(time.RFC3339),
+		"pid":                 os.Getpid(),
+		"peer_source":         peerSource,
+		"production":          false,
 	}); err != nil {
 		return err
 	}
