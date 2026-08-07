@@ -6,9 +6,10 @@ gets an artifact whose every row reads `unavailable` -- structurally valid,
 informationally empty, and indistinguishable from a run that was never
 measured at all.
 
-Two commands produce those events. Both are pure translators: they read one
-input, emit one attempt-scoped payload, and write nothing to the run's ledger.
-Appending the payload is the orchestrator's job, described under
+Two commands produce those events. Each reads one input and emits one
+attempt-scoped payload. With `--append-to` the same invocation also wraps that
+payload as an `attempt_usage` receipt and appends it to the run's ledger, so
+wiring a lane is one command rather than a prose recipe. See
 **The emission boundary** below.
 
 Both are observation-only. Nothing here gates, waives, selects, or alters any
@@ -32,13 +33,22 @@ cost.
   [--output <payload.json>]
 ```
 
-Without `--output` the payload goes to stdout as canonical JSON (sorted keys,
-no spaces, trailing newline), so two runs over the same receipt produce
-byte-identical bytes.
+Without `--output` or `--append-to` the payload goes to stdout as canonical
+JSON (sorted keys, no spaces, trailing newline), so two runs over the same
+receipt produce byte-identical bytes.
 
-**Receipt requirements.** `schemaVersion` must be the integer `2`. A counter
-that is negative, boolean, float, or string-typed is rejected outright rather
-than propagated.
+**Receipt requirements.** `schemaVersion` must be the integer `2` and
+`outcome` must be a non-empty string. A counter that is negative, boolean,
+float, or string-typed is rejected outright rather than propagated.
+
+`outcome` is required rather than defaulted because the two available defaults
+are both wrong. Treating a missing outcome as success would mask real
+failures; treating it as failure would reclassify a legacy success and invent
+failures that never happened. A schemaVersion-2 receipt that cannot state its
+outcome is malformed, and the command says so and exits non-zero. (The library
+function is more conservative than the CLI: called directly with a receipt
+lacking `outcome`, it returns a failure row, because a library that cannot
+reject must not assume success.)
 
 **Omitted, never null.** A counter absent from the receipt is absent from the
 payload. `metrics._number` raises on a present-null numeric and `cost_summary`
@@ -136,19 +146,42 @@ that runs lanes and never invokes them produces a structurally correct,
 permanently empty cost summary -- the exact failure this measurement backbone
 exists to end.
 
-After each lane attempt completes, before the run's terminal receipt:
+After each lane attempt completes, before the run's terminal receipt, run the
+matching translator with `--append-to`. Pick it by rail: a lane that went
+through `openrouter-wrapper.sh` has a receipt, so use `openrouter-usage`; a
+Codex or Claude lane has none, so use `lane-input-bytes` with the exact files
+that lane was fed.
 
-1. Pick the translator by rail. A lane that went through
-   `openrouter-wrapper.sh` has a receipt: use `openrouter-usage`. A Codex or
-   Claude lane has none: use `lane-input-bytes` with the exact files that lane
-   was fed.
-2. Wrap the returned payload in the run's `attempt_usage` event envelope.
-3. Append it to that run's `authoritative-receipts.json` before
-   `run-cost-summary` reads it.
+```sh
+"$WORKFLOW_KERNEL" openrouter-usage \
+  --receipt <wrapper-receipt.json> \
+  --lane <lane> --chunk-id <chunk> --node-id <node> \
+  --attempt <n> --host <host> --duration-seconds <seconds> \
+  --append-to <run-dir>/authoritative-receipts.json \
+  --run-id <run-id> \
+  --occurred-at <timezone-aware-ISO-8601> \
+  --authoritative-receipt <path-to-that-lane-s-receipt>
+```
+
+`--append-to` is the whole boundary in one command. It wraps the payload as an
+`attempt_usage` receipt, derives `sequence` from the existing array so a caller
+cannot collide two receipts or leave a gap, re-translates the entire stream to
+prove it still parses, and only then replaces the file atomically. A crash
+mid-append leaves the prior stream intact.
+
+`--run-id`, `--occurred-at`, and `--authoritative-receipt` are required with
+`--append-to` and rejected-by-omission rather than defaulted: a receipt with a
+guessed timestamp or a missing provenance pointer is not evidence.
 
 Emit a row for **every** attempt, including failed ones. An attempt that
 vanishes from the receipt stream is indistinguishable from an attempt that
 never ran, and its spend disappears with it.
+
+What this boundary does not do: nothing forces an orchestrator to call it. The
+command exists so that wiring a lane is one invocation rather than a prose
+recipe, but a runner that never invokes it still produces an empty summary.
+That is what the verification below is for -- check the artifact, not the
+intention.
 
 Verify the wiring by reading the artifact, not the code path:
 

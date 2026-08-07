@@ -2022,28 +2022,107 @@ def _append_receipt_inventory_line(receipt_path, artifact_path):
     """
     if not receipt_path:
         return
-    line = "run-cost-summary: " + str(artifact_path) + "\n"
+    encoded = ("run-cost-summary: " + str(artifact_path) + "\n").encode("utf-8")
     directory = os.path.dirname(os.path.abspath(receipt_path)) or "."
     os.makedirs(directory, exist_ok=True)
-    # O_APPEND makes the write atomic against a concurrent appender, so two
-    # runs sharing a receipt file interleave whole lines rather than bytes.
-    descriptor = os.open(
-        receipt_path,
-        os.O_WRONLY | os.O_CREAT | os.O_APPEND,
-        0o600,
-    )
+    # O_APPEND makes each write land at the current end of file, so a
+    # concurrent appender cannot overwrite this one. It does NOT make a
+    # multi-byte write indivisible: a short write is still possible, so the
+    # loop below drives the line to completion and a residual short write is
+    # reported as receipt corruption rather than silently accepted.
+    #
+    # O_NOFOLLOW rejects a symlinked final component. Receipt paths are
+    # predictable and live in the workspace, so without it a pre-created
+    # symlink would redirect this append to an arbitrary file under the
+    # invoking user's authority.
+    flags = os.O_WRONLY | os.O_CREAT | os.O_APPEND
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    descriptor = os.open(receipt_path, flags, 0o600)
     try:
-        handle = os.fdopen(descriptor, "a", encoding="utf-8")
-    except BaseException:
+        info = os.fstat(descriptor)
+        if not stat.S_ISREG(info.st_mode):
+            raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+                ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+            })
+        written = 0
+        while written < len(encoded):
+            count = os.write(descriptor, encoded[written:])
+            if count <= 0:
+                raise OSError("short write appending the run-cost-summary line")
+            written += count
+        os.fsync(descriptor)
+    finally:
         os.close(descriptor)
-        raise
-    with handle:
-        handle.write(line)
-        handle.flush()
-        os.fsync(handle.fileno())
 
 
-def _emit_measurement_payload(produce, output, error_label):
+def _append_attempt_usage_receipt(receipts_path, payload, args, error_label):
+    """Wrap one measurement payload as an attempt_usage receipt and append it.
+
+    This is the executable half of the emission boundary. Documenting "wrap the
+    payload in an envelope and append it to the run's receipt stream" left the
+    step to whoever read the prose, and a step nobody performs produces a cost
+    summary with `lanes: []` -- structurally valid and informationally empty,
+    which is the exact failure the measurement backbone exists to end.
+
+    `sequence` is derived from the existing array rather than supplied, so a
+    caller cannot collide two receipts or leave a gap. The array is rewritten
+    through `_write_json`, which is atomic, so a crash mid-append leaves the
+    prior receipt stream intact rather than a truncated one.
+    """
+    for flag, value in (
+        ("--run-id", args.run_id),
+        ("--occurred-at", args.occurred_at),
+        ("--authoritative-receipt", args.authoritative_receipt),
+    ):
+        if not value:
+            sys.stderr.write(
+                error_label + ": " + flag + " is required with --append-to\n"
+            )
+            raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+                ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+            })
+    if os.path.exists(receipts_path):
+        receipts = _load_json(receipts_path)
+        if not isinstance(receipts, list):
+            sys.stderr.write(
+                error_label + ": --append-to target is not a receipt array\n"
+            )
+            raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+                ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+            })
+    else:
+        receipts = []
+    # `sequence` must equal the receipt's zero-based position in the array;
+    # `_translation` rejects any other value. Deriving it from the array length
+    # rather than accepting it as a flag is what makes a collision or a gap
+    # unrepresentable.
+    receipt = {
+        "run_id": args.run_id,
+        "sequence": len(receipts),
+        "stage": "attempt_usage",
+        "status": "observed",
+        "occurred_at": args.occurred_at,
+        "authoritative_receipt": args.authoritative_receipt,
+    }
+    receipt.update(payload)
+    receipts.append(receipt)
+    # Prove the appended stream still translates before it replaces the old
+    # one. A receipt stream that no longer parses is worse than no append.
+    from .pipeline_adapter import translate_pipeline_receipts
+    try:
+        translate_pipeline_receipts(receipts)
+    except ValueError as error:
+        sys.stderr.write(
+            error_label + ": appended receipt would break the stream: "
+            + str(error) + "\n"
+        )
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        }) from None
+    _write_json(receipts_path, receipts)
+
+
+def _emit_measurement_payload(produce, output, error_label, args=None):
     """Run one measurement translator and write its payload.
 
     The two measurement commands differ only in how they obtain a payload.
@@ -2062,9 +2141,12 @@ def _emit_measurement_payload(produce, output, error_label):
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
             ErrorDetailKey.REASON_CODE.value: "invalid_argument",
         }) from None
+    append_to = getattr(args, "append_to", None) if args is not None else None
+    if append_to:
+        _append_attempt_usage_receipt(append_to, payload, args, error_label)
     if output:
         _write_json(output, payload)
-    else:
+    elif not append_to:
         sys.stdout.write(json.dumps(
             payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
         ) + "\n")
@@ -2082,6 +2164,20 @@ def command_openrouter_usage(args):
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
             ErrorDetailKey.REASON_CODE.value: "invalid_argument",
         })
+    # `outcome` is required, not optional-with-a-default. The translator
+    # treats a missing outcome as a failure, which is the safe reading for a
+    # library, but at the CLI boundary a schemaVersion-2 receipt that omits it
+    # is malformed rather than failed -- and silently reclassifying a legacy
+    # success as a failure would corrupt the cost picture in the direction of
+    # inventing failures. Reject it and say so.
+    if type(receipt.get("outcome")) is not str or not receipt.get("outcome"):
+        sys.stderr.write(
+            "openrouter-usage: receipt has no 'outcome'; a schemaVersion-2 "
+            "receipt must state its outcome\n"
+        )
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        })
     return _emit_measurement_payload(
         lambda: translate_openrouter_receipt(
             receipt,
@@ -2094,6 +2190,7 @@ def command_openrouter_usage(args):
         ),
         args.output,
         "openrouter-usage",
+        args,
     )
 
 
@@ -2119,6 +2216,7 @@ def command_lane_input_bytes(args):
         ),
         args.output,
         "lane-input-bytes",
+        args,
     )
 
 
@@ -3386,6 +3484,16 @@ def parser():
     openrouter_usage.add_argument("--host", required=True)
     openrouter_usage.add_argument("--duration-seconds", required=True, type=float)
     openrouter_usage.add_argument("--output", default=None)
+    openrouter_usage.add_argument(
+        "--append-to", default=None,
+        help=(
+            "append the payload to this authoritative receipt array as an "
+            "attempt_usage receipt instead of printing it"
+        ),
+    )
+    openrouter_usage.add_argument("--run-id", default=None)
+    openrouter_usage.add_argument("--occurred-at", default=None)
+    openrouter_usage.add_argument("--authoritative-receipt", default=None)
     openrouter_usage.set_defaults(handler=command_openrouter_usage)
 
     lane_input_bytes = commands.add_parser(
@@ -3407,6 +3515,16 @@ def parser():
     lane_input_bytes.add_argument("--provider", required=True)
     lane_input_bytes.add_argument("--model", required=True)
     lane_input_bytes.add_argument("--output", default=None)
+    lane_input_bytes.add_argument(
+        "--append-to", default=None,
+        help=(
+            "append the payload to this authoritative receipt array as an "
+            "attempt_usage receipt instead of printing it"
+        ),
+    )
+    lane_input_bytes.add_argument("--run-id", default=None)
+    lane_input_bytes.add_argument("--occurred-at", default=None)
+    lane_input_bytes.add_argument("--authoritative-receipt", default=None)
     lane_input_bytes.set_defaults(handler=command_lane_input_bytes)
 
     approve_verification = commands.add_parser(

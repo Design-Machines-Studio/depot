@@ -374,6 +374,145 @@ class OpenRouterUsageTranslationTests(unittest.TestCase):
         self.assertEqual(_kernel_version_string(), "0.9.0")
 
 
+class OpenRouterUsageAppendTests(unittest.TestCase):
+    """The executable half of the emission boundary."""
+
+    def _run(self, args):
+        import sys
+        old = sys.argv
+        sys.argv = ["workflow_kernel"] + args
+        try:
+            from workflow_kernel.cli import main
+            try:
+                return main() or 0
+            except SystemExit as exc:
+                return exc.code or 0
+        finally:
+            sys.argv = old
+
+    def _base(self, receipts_path, lane, chunk, fixture=None):
+        return [
+            "openrouter-usage",
+            "--receipt", str(fixture or SUCCESS_FIXTURE),
+            "--lane", lane, "--chunk-id", chunk, "--node-id", chunk,
+            "--attempt", "1", "--host", "claude", "--duration-seconds", "3.5",
+            "--append-to", receipts_path,
+            "--run-id", "run-append-1",
+            "--occurred-at", "2026-08-07T04:05:06+00:00",
+            "--authoritative-receipt", "receipts/lane-" + lane + ".json",
+        ]
+
+    def test_append_creates_then_extends_the_receipt_stream(self):
+        import os
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts_path = os.path.join(directory, "authoritative-receipts.json")
+        try:
+            self.assertEqual(self._run(self._base(receipts_path, "a", "chunk-a")), 0)
+            with open(receipts_path) as f:
+                first = json.load(f)
+            self.assertEqual(len(first), 1)
+            self.assertEqual(first[0]["stage"], "attempt_usage")
+            self.assertEqual(first[0]["sequence"], 0)
+            self.assertEqual(first[0]["run_id"], "run-append-1")
+            self.assertEqual(first[0]["lane"], "a")
+
+            self.assertEqual(self._run(self._base(receipts_path, "b", "chunk-b")), 0)
+            with open(receipts_path) as f:
+                second = json.load(f)
+            self.assertEqual([r["sequence"] for r in second], [0, 1])
+            self.assertEqual([r["lane"] for r in second], ["a", "b"])
+        finally:
+            import shutil
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_appended_stream_feeds_a_populated_cost_summary(self):
+        """The point of the boundary: lanes[] is no longer empty."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts_path = os.path.join(directory, "authoritative-receipts.json")
+        try:
+            self._run(self._base(receipts_path, "security", "chunk-a"))
+            self._run(self._base(
+                receipts_path, "docs", "chunk-b", fixture=FAILED_FIXTURE,
+            ))
+            with open(receipts_path) as f:
+                receipts = json.load(f)
+            summary = build_run_cost_summary(translate_pipeline_receipts(receipts))
+            validate_run_cost_summary(summary)
+            self.assertEqual(len(summary["lanes"]), 2)
+            sources = {row["lane"]: row["measurement_source"] for row in summary["lanes"]}
+            self.assertEqual(sources["security"], "openrouter_api_receipt")
+            self.assertEqual(sources["docs"], "openrouter_receipt_failed")
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_append_requires_the_envelope_flags(self):
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts_path = os.path.join(directory, "authoritative-receipts.json")
+        try:
+            for drop in ("--run-id", "--occurred-at", "--authoritative-receipt"):
+                with self.subTest(missing=drop):
+                    args = self._base(receipts_path, "a", "chunk-a")
+                    index = args.index(drop)
+                    del args[index:index + 2]
+                    self.assertNotEqual(self._run(args), 0)
+                    self.assertFalse(os.path.exists(receipts_path))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_append_rejects_a_non_array_target(self):
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts_path = os.path.join(directory, "authoritative-receipts.json")
+        with open(receipts_path, "w") as f:
+            f.write('{"not": "an array"}')
+        try:
+            self.assertNotEqual(
+                self._run(self._base(receipts_path, "a", "chunk-a")), 0,
+            )
+            with open(receipts_path) as f:
+                self.assertEqual(json.load(f), {"not": "an array"})
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_cli_rejects_a_receipt_with_no_outcome(self):
+        """A schemaVersion-2 receipt that cannot state its outcome is
+        malformed. Defaulting either way would either mask real failures or
+        invent failures that never happened."""
+        import json as _json
+        import os
+        import tempfile
+
+        receipt = _json.loads(SUCCESS_FIXTURE.read_text())
+        del receipt["outcome"]
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False,
+        ) as f:
+            _json.dump(receipt, f)
+            path = f.name
+        try:
+            code = self._run([
+                "openrouter-usage", "--receipt", path,
+                "--lane", "a", "--chunk-id", "c", "--node-id", "c",
+                "--attempt", "1", "--host", "claude", "--duration-seconds", "1.0",
+            ])
+            self.assertNotEqual(code, 0)
+        finally:
+            os.unlink(path)
+
+
 class OpenRouterUsageCliTests(unittest.TestCase):
     def test_cli_success_stdout_when_no_output(self):
         code, stdout, _ = _invoke(_cli_args(SUCCESS_FIXTURE))
