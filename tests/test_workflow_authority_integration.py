@@ -1,4 +1,8 @@
-"""Black-box acceptance harness for the workflow-authority broker (chunk 06a).
+"""Black-box acceptance harness for the workflow-authority broker (chunk 06).
+
+Three classes, one per sub-chunk: WorkflowAuthorityIntegrationTest (06a, seams
+and accepted path), DenyMatrixTest (06b, fail-closed and containment), and
+ProcessHostilityTest (06c, concurrency, crash, and side channels).
 
 This module runs the broker daemon and the public client as SEPARATE OS
 PROCESSES and observes them from outside. That process isolation is its whole
@@ -6,9 +10,12 @@ reason to exist: the in-Go end-to-end test at
 native/workflow-authority/internal/client/integration_test.go already proves
 the accepted path, single provider contact, single FIDO assertion, and replay
 rejection in-process. Anything here that merely re-asserts in-process behavior
-over a socket is wasted effort, so the accepted path below is kept to one
-scenario and serves as the positive control for the deny matrix that chunks
-06b and 06c add.
+over a socket is wasted effort, so the accepted path is kept to one scenario
+and serves as the positive control for the deny matrix.
+
+Every absence assertion is armed by a positive control that plants the
+sentinel where the same scanner must find it. An absence check that has never
+been shown to detect anything proves nothing.
 
 Skipped by default. tools/validate-workflow-authority.sh exports
 WORKFLOW_AUTHORITY_E2E=1 after its Go preconditions pass, and asserts that a
