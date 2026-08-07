@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="depot pipeline">
+  <meta name="pipeline-artifact" content="research">
+  <title>Research: broker-authorized provider dispatch</title>
+  <style>
+    :root { color-scheme: light dark; --measure: 78rem; } * { box-sizing: border-box; }
+    body { margin: 0; font: 1rem/1.58 system-ui, sans-serif; background: Canvas; color: CanvasText; }
+    main, header, footer { max-width: var(--measure); margin: auto; padding: 1rem; }
+    h1, h2, h3 { line-height: 1.2; } code, pre { font-family: ui-monospace, monospace; }
+    pre { overflow: auto; padding: .75rem; border: 1px solid GrayText; }
+    table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid GrayText; padding: .5rem; text-align: left; vertical-align: top; }
+    .critical { border-inline-start: .35rem solid #c33; padding-inline-start: 1rem; }
+    .selected { border-inline-start: .35rem solid Highlight; padding-inline-start: 1rem; }
+  </style>
+</head>
+<body>
+<header><nav><a href="assessment.html">Assessment</a> · Research · <a href="plan.html">Plan</a></nav><p>Scope-expansion research · revision 6 · 2026-08-03</p></header>
+<main>
+  <h1>Research: independent authority for external-provider dispatch</h1>
+  <section>
+    <h2>Executive conclusion</h2>
+    <p>The existing OpenRouter path has a sound ordered-byte snapshot mechanism but no independent authority: the repository worker selects the mode, can calculate the supplied approval digest, inherits the API key, performs the request, and writes an unsigned receipt. The strongest practical repair for the accepted small-team boundary is broker-owned provider transport.</p>
+    <div class="selected"><p><strong>Selected:</strong> extend the root-owned Go broker with a separate provider-dispatch subsystem. Within a FIDO-approved closed run, one indivisible broker transaction receives bounded exact bytes, applies installed policy, consumes a single-use operation authorization, rehashes, sends to a pinned origin with a broker-only key, bounds the response, and emits a signed result/cleanup chain.</p></div>
+    <div class="critical"><p><strong>Do not confuse three meanings of “provider”:</strong> the local authority provider, imported repository-verification evidence, and outbound model transport are separate contracts. Existing <code>provider_attestation</code> remains inbound verification evidence and cannot authorize disclosure.</p></div>
+  </section>
+
+  <section>
+    <h2>Evidence from current code</h2>
+    <table>
+      <thead><tr><th>Stable anchor</th><th>Finding</th></tr></thead>
+      <tbody>
+        <tr><td><code>payload-authorization.sh</code> snapshot/verify</td><td>Length-delimited ordered files and per-file SHA-256/bytes are useful integrity inputs. The JSON manifest is unsigned and verification compares a caller-provided digest or locally reruns a caller-selected trusted-boundary mode.</td></tr>
+        <tr><td><code>cascade-dispatch.sh</code> authorization branch</td><td>Reads <code>OPENROUTER_PAYLOAD_AUTHORIZATION</code> and <code>OPENROUTER_PAYLOAD_APPROVAL_SHA256</code>, then calls the wrapper directly. This is the primary migration seam.</td></tr>
+        <tr><td><code>openrouter-exec.sh</code> dispatch branch</td><td>Repeats the local snapshot/mode decision and invokes the wrapper; allowed paths and authority inputs are caller environment.</td></tr>
+        <tr><td><code>openrouter-agent-runner.md</code> authorization/dispatch</td><td>A child receives <code>approved_payload_sha256</code> in its prompt, the API key in environment, and prose telling it not to self-promote. Instructions are not a security boundary.</td></tr>
+        <tr><td><code>openrouter-wrapper.sh</code></td><td>Production base is default-pinned and redirects are not intentionally followed, but the child has the key, models are argv, claims are env, curl receives the bearer token, and receipts are unsigned.</td></tr>
+        <tr><td><code>authority_provider.py</code> request/response validation</td><td>Closed binding checks, public-key verification seams, no fallback, and canonical JSON are reusable. Broker persistence/concurrency and provider-dispatch artifact types are missing.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Architecture alternatives</h2>
+    <table>
+      <thead><tr><th>Option</th><th>Decision</th><th>Reason</th></tr></thead>
+      <tbody>
+        <tr><td>A. Broker-owned provider transport</td><td><strong>Selected</strong></td><td>The single existing privileged service controls FIDO run authority, credential read, scanner identity, destination, HTTP behavior, single-use ledger, and signed provenance. The repository child has neither credential nor reusable grant.</td></tr>
+        <tr><td>B. Broker-owned local provider proxy</td><td>Rejected for initial scope</td><td>A second privileged component creates another key-custody process, socket, peer-authentication contract, replay ledger, lifecycle, and failure boundary without reducing trust for one OpenRouter transport. Revisit only if several independently deployed transports require process isolation.</td></tr>
+        <tr><td>C. Signed grant; child keeps key/network</td><td>Rejected</td><td>A signature does not constrain a child that can directly call the provider. It can change bytes, model, destination, or omit the grant. Returning a reusable bearer also creates a new exfiltration/replay surface.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Trust boundaries and same-UID guarantee</h2>
+    <pre>FIDO authenticator
+      │ one UP+UV closed-run assertion
+      ▼
+root workflow-authorityd ── in-memory run signer / replay ledger
+      ├── verification family ── Docker Engine ── network-off candidate
+      └── provider family ───── scanner ── pinned TLS origin ── OpenRouter
+                    ▲                 │
+same-UID worker ────┘ untrusted request bytes/metadata only
+                    └── no key, no bearer grant, no signed-result minting</pre>
+    <p>Candidate containers are launched without network and without broker, Docker, FIDO, credential, state, or service-manager mounts. A same-UID host repository worker may still have ordinary internet access on a developer workstation. Without a separate OS principal and host egress policy, the product cannot honestly prevent all TCP calls made with the worker's own credentials. The supported authoritative guarantee is narrower and useful: the worker cannot read or use the broker's production key, cannot ask the broker to leave the approved scope, and cannot forge the broker-signed result chain. A strict “only broker can reach OpenRouter” deployment remains an optional, separately proven host-firewall lane and is not a parity/release claim until both OSes pass it.</p>
+  </section>
+
+  <section>
+    <h2>Closed dispatch protocol</h2>
+    <p>The public request is <code>dispatch_provider_request</code>. Authorization and transmission are one broker transaction. Internally it creates three signed artifact roles—<code>provider_request_authorization</code>, <code>provider_result</code>, and <code>provider_cleanup</code>—but never returns a reusable capability. <code>cancel_provider_request</code> can cancel only the exact active request under the same run/session. <code>provider_transport_status</code> is read-only and content-free. <code>authorize_external_disclosure</code> and <code>record_provider_result</code> are internal transitions, not caller-controlled success operations.</p>
+    <p>The daemon atomically reserves nonce/sequence and cumulative run budget before scanning or transport. Failure before network contact records a denied/declined result without a send. Once transport begins, the sequence remains consumed even on cancellation, timeout, partial response, or restart recovery.</p>
+  </section>
+
+  <section>
+    <h2>Exact request and policy binding</h2>
+    <p>The authorization digest covers a closed canonical object containing:</p>
+    <ul>
+      <li>ordered system/user part manifest; for every part: role, ordinal, byte count, SHA-256, media type, and sanitized logical label;</li>
+      <li>combined length-delimited manifest digest; aggregate payload byte count and approved maximum;</li>
+      <li>canonical origin exactly <code>https://openrouter.ai/api/v1</code>, operation path, redirect-disabled transport identity, and production/test credential class;</li>
+      <li>requested model, ordered optional fallback models, workload class, provider-routing policy digest, disclosure-security policy digest, scanner build/version/digest, response byte/token/time bounds;</li>
+      <li>repository descriptor/scope, run and authorization event, profile, trusted base, candidate commit and snapshot, include-worktree flag, cadence boundary, lane, authority digest, and substrate digest when the dispatched work depends on contained evidence;</li>
+      <li>nonce, strict sequence, boot ID, session ID, issued/expiry, single-use flag, prior-chain digest, and cumulative run-call/payload/response budget.</li>
+    </ul>
+    <p>Unknown fields, missing fields, reordering, downgrade, null-vs-value changes, altered bytes, or mismatched live state fail closed.</p>
+  </section>
+
+  <section>
+    <h2>Payload, credential, and transport custody</h2>
+    <ul>
+      <li>The client sends length-prefixed binary-safe frames; it does not use shell command substitution or pass content/path/key through argv or environment. UTF-8 text is required for OpenRouter content; malformed UTF-8 and binary parts are rejected before network contact.</li>
+      <li>Default bounds are frozen by installed policy: 1 MiB per IPC frame, 256 parts, 8 MiB aggregate request, 8 MiB aggregate response, 16-level JSON depth, and explicit token/time ceilings. Smaller run-specific limits may be approved; callers cannot raise them.</li>
+      <li>The broker runs a root-owned installed scanner asset whose version and digest are in policy and the authorization. It scans the same immutable spool bytes later transported, then rehashes immediately before constructing HTTPS JSON. Repository plugin-cache scanners are compatibility inputs, not trust roots.</li>
+      <li>Small requests stay in bounded memory. Spooling uses the fixed root state filesystem, no-follow exclusive creation, mode 0600, randomized names unrelated to repository input, immediate unlink-after-open where supported, per-run quotas, zero content logging, and cleanup/tombstone evidence on every terminal path.</li>
+      <li>For parity and simplicity, the provider secret is provisioned through the root admin client's controlling-terminal stdin into a fixed root-owned 0600 credential record. The daemon opens it with no-follow/owner/mode checks and never forwards it. This differs from the rejected same-UID authority-key file: repository workers are non-root and the provider key grants transport only, not authority signatures. Root compromise remains outside scope.</li>
+      <li>The HTTP client ignores proxy/base URL environment, sets the fixed origin/path itself, uses normal system TLS hostname verification, rejects every redirect, bounds headers/body/time, and records DNS/TLS/HTTP outcomes only as closed non-secret reason codes. Test endpoints require a compiled test mode, isolated authority namespace, loopback-only origin, and fixture-only credential class.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Consent and cadence</h2>
+    <p>One FIDO-approved closed run may authorize automated provider dispatch only when its displayed scope includes provider <code>openrouter</code>, approved model/fallback set or model class, repository/candidate, lane set, policy digests, maximum calls/request bytes/response bytes/tokens/cost, and expiry. Each exact payload still receives a fresh single-use operation signature after broker scanning and budget reservation.</p>
+    <p>Payload changes within the already-approved classes and budgets require a new dispatch operation but not a new FIDO ceremony. Any destination, credential class, model set/class, routing/disclosure policy, repository, candidate/snapshot, lane set, authority generation, or limit expansion requires a new FIDO-approved run. Exact-digest interactive mode is narrower: the broker displays and confirms the exact combined digest inside the active run; the caller cannot supply the approval digest. Missing/expired authority never becomes trusted-boundary. It produces a signed <code>host_authority_unavailable</code>, <code>host_disclosure_declined</code>, or <code>local_codex_fallback</code> outcome.</p>
+  </section>
+
+  <section>
+    <h2>Signed result and confidentiality model</h2>
+    <p>The requesting client may receive bounded response bytes over the authenticated IPC session. Durable public receipts contain no content. They bind request digest, operation authorization digest, exact origin/path, requested/fallback models, actual response model, serving-provider provenance, provider generation ID, safe usage/token/cost fields, fallback status, response digest/bytes, terminal outcome, run/lane/candidate/substrate, prior-chain digest, and cleanup result. Missing or contradictory provider provenance is <code>unverified</code> or failure, never guessed.</p>
+    <p>Prompts/responses, bearer keys, headers, scanner excerpts, and secret-shaped diagnostics are excluded from logs, receipts, filenames, crash reports, and fixtures. The broker cannot turn a provider response into a passing repository-verification result; that requires the separate verification operation family.</p>
+  </section>
+
+  <section>
+    <h2>Adversarial-review refinements</h2>
+    <h3>Wire identity must be signed before transport</h3>
+    <p>The input manifest alone is insufficient because JSON construction can change semantics or bytes. The selected <code>openrouter-chat-v1</code> mapping creates one <code>messages</code> entry per ordered UTF-8 part, preserving its <code>system</code>/<code>user</code> role and exact text without concatenation. Installed policy creates the mutually exclusive <code>model</code> or ordered <code>models</code> field, provider-routing object, <code>stream: true</code>, and <code>stream_options.include_usage: true</code>. The broker then canonicalizes the complete compact UTF-8 body, hashes it, and signs that final wire-body digest together with <code>POST</code>, <code>/api/v1/chat/completions</code>, fixed semantic headers, and the payload manifest before the first socket write. It rehashes the immutable body immediately before transport.</p>
+    <h3>Credential storage is a root boundary, not a same-UID authority-key file</h3>
+    <p>The provider key remains a root-owned transport credential. Provisioning is performed only by the Go admin binary reading echo-disabled <code>/dev/tty</code>; Python and plugin wrappers never see the key. Fixed 0700 parent directories and a regular 0600, root-owned, single-link, no-follow file are mandatory. Rotation uses an exclusive same-directory temporary file, file and directory fsync, atomic rename, generation update, daemon memory replacement, and zeroization. Core dumps are disabled and secret memory is locked where the platform permits. Backup exclusion is an operator requirement. Revocation zeroes daemon memory and unlinks the file; purge never claims reliable physical secure erasure on copy-on-write/SSD storage.</p>
+    <h3>Response delivery is connection-bound</h3>
+    <p>The daemon delivers response bytes once on the original authenticated socket and never exposes lookup-by-request-ID. The fixed automated client sends only the public signed result on stdout and writes response content to inherited anonymous pipe/socket descriptor 3 after verifying its file type; it accepts no response pathname. A disconnect or cancellation discards remaining content and zeroes buffers best-effort. Direct interactive mode may render to its existing controlling terminal, but never persists automatically. This prevents later broker retrieval; same-UID process-memory inspection remains part of the accepted compromised-session residual.</p>
+    <h3>Replay state needs durable linearization</h3>
+    <p>The root WAL records run/session/request IDs, nonce, sequence, request/body/authorization/prior digests, state, reserved attempt/network/cost budgets, timestamps, and terminal/cleanup digests. Reservation fsync consumes the sequence and scan-attempt quota. The final authorization/body digest is fsynced before send. Under the per-run lock, cancellation wins only if its terminal record fsyncs before the <code>sending</code> record; otherwise sending wins and cancellation aborts transport without refunding the send budget. Restart tombstones pre-send states as unsent and releases only network/cost reservations; a persisted <code>sending</code> state is indeterminate and remains consumed. No automatic retry or response retrieval is allowed.</p>
+  </section>
+
+  <section>
+    <h2>Integration and migration findings</h2>
+    <ul>
+      <li>Replace the direct wrapper calls in Pipeline cascade, Pipeline OpenRouter exec, and the OpenRouter agent runner with the fixed broker client.</li>
+      <li>Strip/reject <code>OPENROUTER_PAYLOAD_AUTHORIZATION</code>, <code>OPENROUTER_PAYLOAD_APPROVAL_SHA256</code>, <code>OPENROUTER_AUTHORIZATION_MODE</code>, <code>OPENROUTER_BASE</code>, and <code>OPENROUTER_API_KEY</code> at automated child boundaries.</li>
+      <li>Preserve current ordered framing, scanner policy behavior, bundle resolution, model-slug validation, and return-code semantics as migration inputs; move authoritative execution into the broker.</li>
+      <li>Pipeline, dm-review, and Airlift consume signed broker results and record explicit Codex fallback. Workflow Kernel verifies the external-dispatch evidence family separately from inbound <code>provider_attestation</code>.</li>
+      <li>Direct interactive <code>/openrouter</code> retains a manual broker-owned exact-digest flow. A temporary explicitly named legacy direct mode may exist only for interactive migration, must never be selected automatically, and is not authoritative workflow evidence.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Residual risks and research gaps</h2>
+    <ul>
+      <li>Real libfido2, service-manager, provider, TLS, cancellation, and credential-rotation acceptance require later live gates on Linux and macOS.</li>
+      <li>OpenRouter may omit or vary serving-provider provenance. The broker must preserve raw safe fields as signed observations and label absent fields unavailable rather than infer them.</li>
+      <li>Host-wide same-UID egress denial cannot be promised without an OS isolation/firewall deployment. Candidate egress denial and authoritative-result integrity remain mandatory.</li>
+      <li>The existing schema/Python/Swift operation mismatch must be resolved with shared Go/Python golden vectors before any implementation builds on the partial files.</li>
+    </ul>
+  </section>
+</main>
+<footer><p>Research artifact only. No provider contact, credential access, or implementation occurred.</p></footer>
+<script type="application/json" id="pipeline-data">{"artifact":"research","slug":"macos-authority-broker","revision":6,"selectedArchitecture":{"authorityFoundation":"one FIDO-authorized closed run with memory-only ephemeral signer","operationFamilies":["repository_verification","external_provider_dispatch"],"providerTransport":"broker-owned scanner, credential, HTTPS transport, response provenance, and cleanup","provider":"openrouter","origin":"https://openrouter.ai/api/v1","wireMapping":"openrouter-chat-v1","language":"Go 1.26.5","fido":"libfido2 1.17.0","ipc":"fixed root-owned pathname Unix SOCK_STREAM","credentialCustody":"fixed root-owned no-follow 0600 record provisioned only by Go admin client through echo-disabled /dev/tty","responseDelivery":"original authenticated socket to fixed client inherited anonymous fd 3; no later retrieval","linuxAdapters":["SO_PEERCRED","systemd"],"macosAdapters":["getpeereid","launchd"]},"rejectedAlternatives":[{"id":"broker_proxy","reason":"adds a second privileged IPC and custody boundary without reducing initial trust"},{"id":"signed_child_grant","reason":"child-held key or unrestricted authoritative transport permits direct bypass"}],"criticalConstraints":["No reusable provider bearer or authority key crosses into repository workers.","Provider dispatch does not become Docker substrate or inbound provider-attestation evidence.","Candidate containers have no egress or privileged host interfaces.","Same-UID host network access cannot mint broker-signed evidence.","Prompt and response content never enters durable receipts or logs.","Final compact wire-body digest is signed and fsynced before first network write.","Provider response content is delivered once on the original connection and is never broker-retrievable."],"protocolOperations":["dispatch_provider_request","cancel_provider_request","provider_transport_status"],"internalArtifactRoles":["provider_request_authorization","provider_result","provider_cleanup"],"defaultBounds":{"frameBytes":1048576,"parts":256,"requestBytes":8388608,"responseBytes":8388608,"jsonDepth":16},"durability":"WAL reservation, authorization, sending, terminal, and cleanup records with defined fsync/cancel/restart linearization","adversarialReview":{"lens":"local_codex","reviewArtifact":"expanded-plan-adversarial-review.md","revisionReviewed":6,"verdict":"REVISE","disposition":"incorporated_into_plan_revision_7"},"researchGaps":["live Linux/macOS FIDO and service lifecycle","live OpenRouter/TLS/provenance behavior","optional host egress isolation parity"],"sources":["/private/tmp/depot-pipeline-speed-matrix/todos/112-pending-p1-openrouter-host-authority.md","plugins/pipeline/references/cascade-dispatch.sh","plugins/pipeline/references/openrouter-exec.sh","plugins/pipeline/references/openrouter-authorization-contract.md","plugins/openrouter/agents/workflow/openrouter-agent-runner.md","plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh","plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh","plugins/workflow-kernel/skills/workflow-kernel/references/authority-provider-schema.json","plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/authority_provider.py","plugins/workflow-kernel/skills/workflow-kernel/references/repository-verification-substrate-schema.json","plans/macos-authority-broker/expanded-plan-adversarial-review.md"]}</script>
+</body>
+</html>

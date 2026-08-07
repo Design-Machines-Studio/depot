@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark">
+  <meta name="generator" content="depot pipeline"><meta name="pipeline-artifact" content="plan">
+  <title>Plan: exact-request Linux Workflow Authority dispatch</title>
+  <style>:root{color-scheme:light dark;--measure:84rem}*{box-sizing:border-box}body{margin:0;font:1rem/1.55 system-ui,sans-serif;background:Canvas;color:CanvasText}main,header,footer{max-width:var(--measure);margin:auto;padding:1rem}h1,h2,h3{line-height:1.2}code,pre{font-family:ui-monospace,monospace}pre{overflow:auto;padding:.75rem;border:1px solid GrayText}table{border-collapse:collapse;width:100%;font-size:.93rem}th,td{border:1px solid GrayText;padding:.45rem;text-align:left;vertical-align:top}.gate{border-inline-start:.35rem solid #c33;padding-inline-start:1rem}.selected{border-inline-start:.35rem solid Highlight;padding-inline-start:1rem}</style>
+</head>
+<body>
+<header><nav><a href="assessment.html">Assessment</a> · <a href="research.html">Research</a> · Plan · <a href="prompt-adversarial-review-round-3.md">Prompt review approval</a></nav><p>Phase 5 converged · plan revision 10 · 2026-08-03</p></header>
+<main>
+  <h1>Earliest safe Linux dispatch: one exact FIDO-authorized request</h1>
+  <div class="gate"><p><strong>Status:</strong> prompt adversarial review converged at round 3 with <code>APPROVED</code>. The manifest remains non-dispatchable pending explicit Pipeline execution approval. OpenRouter review was unavailable because the authority broker does not yet exist; missing coverage is not green evidence.</p></div>
+
+  <section>
+    <h2>Converged authority correction</h2>
+    <p class="selected"><strong>A broad one-touch run is not safe for same-UID automated callers.</strong> <code>SO_PEERCRED</code> identifies a UID, not which code under that UID spends authority. M1 therefore authorizes exactly one final OpenRouter request body per FIDO UP+UV assertion. The assertion covers the final body digest and complete destination/model/repository/run/lane/candidate/policy/time/replay scope. A competing same-UID process cannot substitute another body, and exact replay sends at most once.</p>
+    <p>This is the smallest safe request, not unattended multi-request automation. A later milestone must add a distinct client principal or equivalent non-transferable capability before one approval can cover dynamically generated requests.</p>
+  </section>
+
+  <section>
+    <h2>M1 authority and transaction</h2>
+    <pre>Pipeline assessment prepares exact ordered system/user bytes
+        │ untrusted request; no key/base/socket/auth mode
+        ▼
+fixed Linux client ─► fixed root daemon socket ─► in-process scanner + fixed policy
+        │                                         │
+        │                        deterministic final OpenRouter body + digest
+        │                                         │
+        └─ operator terminal displays exact scope ◄┘
+                              │
+                    libfido2 1.17.0 internal UV
+                              │ exact single-request assertion
+                              ▼
+                  WAL authorize → send_started
+                              ▼
+         broker-owned credential + pinned TLS OpenRouter transport
+                              │
+          response on original connection; content-free signed result</pre>
+    <ul>
+      <li>Only Pipeline assessment artifact delegation is an M1 consumer. All other automated lanes retain <code>host_authority_unavailable</code> and Codex fallback.</li>
+      <li>Scanner code is compiled into the daemon. Root-owned policy remains fixed at <code>/etc/design-machines/workflow-authority/provider-policy.json</code>; its digest and daemon build identity are bound to FIDO authority.</li>
+      <li>The root-owned OpenRouter credential and HTTPS transport never leave the daemon. The provider origin remains <code>https://openrouter.ai/api/v1</code>, method <code>POST</code>, path <code>/chat/completions</code>, mapping <code>openrouter-chat-v1</code>.</li>
+      <li>Dispatch receipts state <code>operation_family=external_provider_dispatch</code> and <code>substrate_authority=not_asserted</code>; repository-verification validators reject them.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Critical path and ownership</h2>
+    <pre>01 contract/schemas/vectors
+├──► 02 Linux protocol + exact-request libfido2 authority ─► 04 provider transport + daemon composition
+└──► 03 single-lane Depot adapter + executable fake              │
+                                                                  ▼
+                                                     05 Linux client/admin/package
+                                                                  │
+                                                                  ▼
+                                                     06 hostile fixture acceptance</pre>
+    <p><strong>Serial critical path:</strong> 01 → 02 → 04 → 05 → 06. Chunk 03 runs beside chunk 02 after contract freeze and joins at chunk 06. Revised estimate: 11–17 focused engineering days, plus separately scheduled hardware/root/provider acceptance.</p>
+    <table>
+      <thead><tr><th>Chunk</th><th>Exclusive product ownership</th><th>Exit</th></tr></thead>
+      <tbody>
+        <tr><td>01 contract</td><td>Three provider-dispatch schemas, Python canonical/verifier module, golden/negative tests.</td><td>Closed exact-body/result/status vectors; authority-envelope v1/HMAC downgrade forbidden.</td></tr>
+        <tr><td>02 authority</td><td>Go module/protocol, WAL/run, libfido2/stub adapters, consent and tests.</td><td>Exact-request internal-UV challenge and crash/replay state proven; stub cannot report ready.</td></tr>
+        <tr><td>03 adapter</td><td>Two Pipeline shell seams, production-ineligible executable fake, runner-policy regression tests.</td><td>Only assessment lane may enter broker branch; every other lane falls back.</td></tr>
+        <tr><td>04 transport/join</td><td>Provider mapping, credential, HTTP/response, tests, daemon composition root.</td><td>In-process scan/FIDO/body rehash/send/result are wired; fixture TLS only.</td></tr>
+        <tr><td>05 Linux package</td><td>Combined public/admin client source, Linux platform tests, systemd units.</td><td>Injected-root enrollment/provision/status/revoke/disable/uninstall plan; no live apply.</td></tr>
+        <tr><td>06 acceptance</td><td>Top-level validator and black-box hostile integration test.</td><td>One exact assessment request works through fixture; all bypass/replay/leakage cases fail.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Non-negotiable M1 tests</h2>
+    <ul>
+      <li>Wrong/missing UP/UV, RP ID, credential generation, body digest, origin, path, model order, repository, run, lane, candidate, policy digest, nonce, issuance, expiry, signer, boot/session, or sequence fails before network contact.</li>
+      <li>A same-UID competing process cannot replace the approved body; concurrent exact duplicates send at most once; restart after <code>send_started</code> produces <code>outcome_unknown</code> with no retry.</li>
+      <li>Missing/wrong libfido2 1.17.0 ABI, stub build, host-PIN authenticator, redirected/changed/missing controlling TTY, device removal, cancellation, and timeout never report production ready.</li>
+      <li>Caller key/base/proxy/socket/client/scanner/policy/output/auth-mode/digest values are ineffective. Scanner rejection and all pre-send mismatches produce zero fixture-server requests.</li>
+      <li>Credential, prompt, response, assertions, and private signing bytes are absent from argv, environment, logs, files, receipts, crash output, children, and sibling reads.</li>
+      <li>Only the assessment lane is enabled. Research, adversarial review, execution, dm-review, Airlift, unknown/missing lanes, and ordinary developer checkout preserve explicit Codex fallback.</li>
+      <li>Real FIDO hardware, root systemd lifecycle, production credential, system TLS/OpenRouter, macOS, Docker substrate, and repository verification remain live gaps and cannot be mocked as passes.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Deferred milestones and safety</h2>
+    <table>
+      <thead><tr><th>Deferred</th><th>Why M1 remains safe</th></tr></thead>
+      <tbody>
+        <tr><td>Unattended multi-request run</td><td>M1 requires exact-request FIDO every send. No reusable grant exists. A dedicated client principal/capability is required before relaxing cadence.</td></tr>
+        <tr><td>Broader Pipeline/dm-review/Airlift</td><td>Exact lane allowlist keeps them unavailable; no routing redesign or silent enablement.</td></tr>
+        <tr><td>Docker/repository verification</td><td>M1 asserts no substrate authority and cannot satisfy verification schemas.</td></tr>
+        <tr><td>macOS</td><td>Protocol, canonical bytes, FIDO challenge and results remain portable; macOS cannot enable until its later adapter passes the same tests.</td></tr>
+        <tr><td>Rich recovery/rotation/purge/docs</td><td>M1 retains minimal enrollment, provision, revoke, disable and uninstall-plan semantics; convenience is deferred, not authority.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Gates</h2>
+    <ol>
+      <li>Present the reviewed prompts for explicit execution approval as required by Pipeline. OpenRouter perspective remains unavailable until the broker exists; missing coverage is recorded, not green.</li>
+      <li>Implementation runs remain separate from live root install, FIDO enrollment, credential provisioning, provider contact, PR15 mutation, git publication, and release.</li>
+      <li>A real provider smoke requires exact payload/destination/model disclosure approval and completed native/root prerequisites even if general OpenRouter work is approved for the session.</li>
+    </ol>
+  </section>
+</main>
+<footer><p>Revision 10 prompts are adversarially approved and non-dispatchable pending explicit execution approval. No implementation or live action has begun.</p></footer>
+<script type="application/json" id="pipeline-data">{"artifact":"plan","slug":"macos-authority-broker","revision":10,"scopeRevision":"exact-request-single-connection-post-round-2","title":"Earliest safe Linux dispatch: one exact FIDO-authorized request","phase":"prompt_adversarial_review_approved","workflowClass":"security","decisionProfile":{"uncertainty":"high","consequence":"high","rationale":"Cross-platform cryptographic authority, local IPC, Docker attestation, and lifecycle mistakes could expose signing authority or falsely attest verification."},"executionAuthorized":false,"dispatchable":false,"promptGenerationStatus":"complete_adversarially_approved_pending_execution_approval","supersedesPlanRevision":9,"promptReview":{"round":3,"verdict":"APPROVED","artifacts":["prompt-adversarial-review-round-1.md","prompt-adversarial-review-round-2.md","prompt-adversarial-review-round-3.md"],"openrouterPerspective":"host_authority_unavailable"},"selectedArchitecture":"single_connection_exact_request_fido_broker_owned_transport","firstConsumer":"pipeline-assessment-artifact-delegation-v1","firstMilestone":{"operationFamily":"external_provider_dispatch","authorizationCadence":"one_internal_uv_fido_assertion_per_exact_request","exchange":"one_connection_reserve_challenge_consent_fido_content_terminal","substrateAuthority":"not_asserted"},"criticalPath":{"serial":["01-contract-vectors-fake","02-linux-authority-core","04-provider-transport","05-linux-packaging-admin","06-linux-integration-acceptance"],"parallelAfter01":["02-linux-authority-core","03-depot-adapter"],"estimateFocusedEngineeringDays":{"min":11,"max":17}},"chunks":[{"id":"01-contract-vectors-fake","dependsOn":[]},{"id":"02-linux-authority-core","dependsOn":["01-contract-vectors-fake"]},{"id":"03-depot-adapter","dependsOn":["01-contract-vectors-fake"]},{"id":"04-provider-transport","dependsOn":["02-linux-authority-core"]},{"id":"05-linux-packaging-admin","dependsOn":["02-linux-authority-core","04-provider-transport"]},{"id":"06-linux-integration-acceptance","dependsOn":["02-linux-authority-core","03-depot-adapter","04-provider-transport","05-linux-packaging-admin"]}],"providerOrigin":"https://openrouter.ai/api/v1","wireMapping":{"id":"openrouter-chat-v1","method":"POST","path":"/chat/completions"},"scanner":"in_process_daemon_scanner_plus_fixed_root_policy","daemonBuildIdentityBound":true,"libfido2":"1.17.0","deferred":["unattended-multi-request-authority","broader-consumers","macos","docker-substrate","repository-verification","airlift","rich-lifecycle","strict-host-egress","multiple-providers"],"nextGate":"explicit Pipeline execution approval; product changes remain blocked until received"}</script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "contract_digest": "sha256:4d5a7a7089e557a962ed0c467c11298ff1da596c8891a98d815d058875cc1d8a",
+  "contract_id": "workflow-authority-linux-m1",
+  "contract_ref": "verification-contracts/sha256-4d5a7a7089e557a962ed0c467c11298ff1da596c8891a98d815d058875cc1d8a.json",
+  "human_approval_evidence_ref": null,
+  "previous_contract_digest": null,
+  "reason_code": "initial_binding",
+  "revision": 1,
+  "schema_version": 1,
+  "stage": "verification_contract_bound",
+  "verification_profile_digest": "sha256:7d11ec8ddacf4f6243ded4a7f5941a861bf15fa256de19468eb51302defda1cc",
+  "verification_profile_id": "profile-sha256:50855a4bc10cde0774eb6f0c28c2aecba141afe4233356ff74eb3f09edf91ac8",
+  "verification_profile_ref": "verification-profiles/sha256-7d11ec8ddacf4f6243ded4a7f5941a861bf15fa256de19468eb51302defda1cc.json"
+}

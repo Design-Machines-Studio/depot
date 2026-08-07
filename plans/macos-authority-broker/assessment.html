@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="generator" content="depot pipeline">
+  <meta name="pipeline-artifact" content="assessment">
+  <title>Assessment: Workflow Authority Broker and provider dispatch</title>
+  <style>
+    :root { color-scheme: light dark; --measure: 74rem; } * { box-sizing: border-box; }
+    body { margin: 0; font: 1rem/1.6 system-ui, sans-serif; background: Canvas; color: CanvasText; }
+    main, header, footer { max-width: var(--measure); margin: auto; padding: 1rem; }
+    h1, h2 { line-height: 1.2; } code { font-family: ui-monospace, monospace; }
+    table { border-collapse: collapse; width: 100%; } th, td { border: 1px solid GrayText; padding: .5rem; text-align: left; vertical-align: top; }
+    .callout { border-inline-start: .3rem solid Highlight; padding-inline-start: 1rem; }
+    .warning { border-inline-start: .3rem solid #c33; padding-inline-start: 1rem; }
+  </style>
+</head>
+<body>
+<header><p>Pipeline reassessment · revision 6 · 2026-08-03 · post-review provider-dispatch scope</p></header>
+<main>
+  <h1>Assessment: shared run authority with separate verification and provider-dispatch families</h1>
+  <section>
+    <h2>Material scope change</h2>
+    <p>The previous plan covered repository verification authority and Docker substrate evidence. PR15 demonstrates a separate P1: automated OpenRouter callers let the repository worker choose <code>trusted-boundary</code> or supply the digest it claims was approved. Ordered hashing proves byte identity, but not independent user or host authority.</p>
+    <div class="callout"><p><strong>Required direction:</strong> retain the Linux-first Go/libfido2 closed-run foundation, but add an independent external-provider operation family. The broker—not repository code—must scan the exact bytes, decide whether the closed run permits disclosure, hold the provider credential, perform the pinned HTTPS request, and sign the observed result provenance.</p></div>
+    <div class="warning"><p><strong>Gate reset:</strong> the old manifest, eight prompts, and OpenRouter adversary pack cover the verification-only plan and are superseded. This revision authorizes planning edits only.</p></div>
+  </section>
+
+  <section>
+    <h2>Key requirements</h2>
+    <ol>
+      <li>Preserve the approved cross-platform foundation: one Go core, pinned libfido2, one internal-UV FIDO approval per closed run, an in-memory ephemeral run signer, fixed root-owned service/socket paths, and equivalent Linux/macOS behavior.</li>
+      <li>Keep repository verification/substrate operations separate from outbound provider-dispatch operations while sharing repository, run, candidate, authority, replay, and expiry bindings.</li>
+      <li>Select broker-owned provider transport. Repository workers never receive the provider key, reusable approval material, unrestricted broker transport, or authority private keys.</li>
+      <li>Bind every dispatch to the ordered payload manifest and per-part bytes/digests, pinned OpenRouter origin, requested/fallback models, workload, routing/disclosure policy digests, byte/response limits, repository/run/base/candidate/snapshot/lane/authority/substrate, nonce, sequence, boot/session, expiry, and single use.</li>
+      <li>Move the canonical disclosure scanner into a fixed trusted broker installation; rehash immediately before network contact; reject malformed, binary, secret-bearing, reordered, oversized, or policy-mismatched content without sending.</li>
+      <li>Pin production destination and reject redirects, proxy/base URL overrides, production credentials at test endpoints, model/policy downgrade, and caller-selected authorization environment variables.</li>
+      <li>Return bounded response content only to the requesting client and public signed receipts containing digests/provenance—not prompt, response, API key, or secret-shaped diagnostics.</li>
+      <li>Define run consent and exact-digest manual mode without allowing callers to self-approve; missing broker authority returns a signed local-Codex fallback/coverage-gap outcome and never silently becomes automated trusted-boundary execution.</li>
+      <li>Migrate OpenRouter, dm-review, Pipeline, Airlift, and Workflow Kernel integration points, including direct interactive <code>/openrouter</code>, with canonical/generated ownership separated.</li>
+      <li>Add Linux/macOS parity and adversarial coverage for same-UID bypass, replay, destination/model/policy mutation, credential discovery, direct curl, malformed streams, cancellation, concurrency, provenance forgery, and cleanup.</li>
+      <li>Keep candidate containers without network, broker, Docker, FIDO, credential, authority-state, or service-manager access. State honestly that a same-UID host worker may have ordinary network access but cannot use the broker credential or mint broker-signed authoritative results.</li>
+      <li>Do not implement, generate replacement prompts, mutate PR15, install, enroll, access credentials, contact a provider, validate live services, stage, commit, push, open a PR, merge, tag, publish, or release without later authorization.</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>Current code and evidence state</h2>
+    <table>
+      <thead><tr><th>Area</th><th>Assessment</th></tr></thead>
+      <tbody>
+        <tr><td>PR15 provider callers</td><td><code>cascade-dispatch.sh</code>, <code>openrouter-exec.sh</code>, and <code>openrouter-agent-runner.md</code> perform useful ordered-byte scanning but accept caller-controlled mode/digest values, expose <code>OPENROUTER_API_KEY</code> to child shells/curl, and emit unsigned caller-writable receipts.</td></tr>
+        <tr><td>Workflow Kernel partial v2 authority</td><td><code>authority_provider.py</code> already validates closed public bindings and rejects fallback, but it is a consumer-side verifier rather than a broker. Its replay memory is per process. The partial JSON and Python/Swift operation vocabularies disagree and must be reset before extension.</td></tr>
+        <tr><td>Provider attestation</td><td>The existing <code>provider_attestation</code> imports remote verification evidence. It does not authorize outbound disclosure, hold a key, send HTTP, observe model routing, or prove response provenance. It must not be overloaded.</td></tr>
+        <tr><td>Native foundation</td><td>The Swift client is inert macOS-only scaffolding and remains superseded. The approved replacement remains a Go 1.26.5 core with Linux <code>SO_PEERCRED</code>/<code>systemd</code> and macOS <code>getpeereid</code>/<code>launchd</code> adapters.</td></tr>
+        <tr><td>Repository state</td><td>Product files contain partial earlier work and the unrelated <code>CLAUDE.md</code> marker. They are preserved untouched in this planning revision. The PR15 worktree is read-only evidence.</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>Threat boundary and consequence</h2>
+    <ul>
+      <li>In scope: malicious candidate code, prompt-injected repository workers, same-UID attempts to self-promote authorization, key/env/file/process discovery, wrapper bypass, request mutation, replay, forged receipts, and accidental secret disclosure.</li>
+      <li>Supported guarantee: only the root broker can use the production provider credential or sign an authoritative dispatch/result chain. Candidate containers have no egress. Host workers may possess unrelated network access, but their calls cannot become authoritative broker evidence.</li>
+      <li>Out of scope: a deliberately compromised root account, kernel, authenticator, provider, TLS trust store, or fully compromised developer desktop; deliberate host-wide traffic interception; and a developer intentionally using separate personal credentials. These residuals must never be reported as defended.</li>
+      <li>Hardware/service/provider unavailability is a fail-closed coverage gap, not passing evidence. Local Codex may continue only with an explicit signed fallback outcome.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Classification and renewed gate</h2>
+    <p><strong>Full mode; workflow class <code>security</code>; approved decision profile remains unchanged at high/high.</strong> The scope now includes confidential payload handling, provider credential/network custody, billing/disclosure policy, and signed response provenance. Independent local adversarial review returned <code>REVISE</code>; plan revision 7 incorporates its eight findings. Explicit post-review approval is required before replacement prompt generation.</p>
+    <p>UX assessment: skipped (no UI/Integration surface). Baseline screenshots and test personas are not applicable; operational actors are recorded in the data island.</p>
+  </section>
+</main>
+<footer><p>Planning artifact only. No implementation or external-disclosure authority is conveyed.</p></footer>
+<script type="application/json" id="pipeline-data">{"artifact":"assessment","slug":"macos-authority-broker","revision":6,"supersedes":"assessment revision 5 pre-adversarial scope","workflowClass":"security","decisionProfile":{"uncertainty":"high","consequence":"high","rationale":"Cross-platform cryptographic authority, local IPC, Docker attestation, and lifecycle mistakes could expose signing authority or falsely attest verification."},"scopeExpansion":"independently authorized external-provider dispatch","reviewStatus":{"artifact":"expanded-plan-adversarial-review.md","verdict":"REVISE","disposition":"incorporated_into_plan_revision_7","nextGate":"explicit_post_review_plan_approval"},"keyRequirements":["Preserve the approved Linux-first Go/libfido2 closed-run authority and macOS parity.","Keep repository verification and provider dispatch as separate operation families sharing the run-authority foundation.","Use broker-owned provider credential custody, disclosure scanning, pinned HTTPS transport, and signed result provenance.","Bind exact ordered payload bytes, final wire body, and complete destination/model/policy/repository/run/candidate/lane/authority/substrate/replay scope.","Remove caller-controlled authorization mode/digest/key/base URL inputs and fail closed to an explicit local-Codex outcome.","Migrate OpenRouter, dm-review, Pipeline, Airlift, Workflow Kernel, and direct interactive OpenRouter consumers.","Prove same-UID bypass resistance, replay safety, credential non-disclosure, response delivery custody, provenance integrity, cleanup, and Linux/macOS parity.","Keep candidate containers without network or privileged control surfaces and document same-UID host-network residuals honestly.","Freeze installed paths, lifecycle ownership, TTY custody, credential lifecycle, and durable cancel/send/restart linearization.","Preserve the isolated worktree and perform planning-only edits until explicit post-review approval."],"testPersonas":["operator","root broker","same-UID repository worker","contained candidate","disclosure-policy evaluator","destination attacker","replay attacker","response-forgery attacker"],"recentLessons":["Ordered byte hashing is integrity evidence, not independent authority.","Authorization must cover the final transport body, not only its source parts.","Installed launcher, credential, response, and lifecycle behavior are part of release proof.","Unavailable lanes remain explicit coverage gaps."],"baselineScreenshots":[],"uxAssessment":"skipped_no_ui_surface"}</script>
+</body>
+</html>

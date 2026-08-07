@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "profile_id": "profile-sha256:50855a4bc10cde0774eb6f0c28c2aecba141afe4233356ff74eb3f09edf91ac8",
+  "source": "not_declared",
+  "discovery_status": "not_declared",
+  "selection_status": "not_declared",
+  "cases": [],
+  "auth_field_names": [],
+  "configured_engines": [],
+  "target_origin_digest": null,
+  "coverage_diagnostics": [],
+  "route_binding_gaps": []
+}

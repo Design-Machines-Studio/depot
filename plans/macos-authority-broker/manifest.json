@@ -1,0 +1,122 @@
+{
+  "feature": "macos-authority-broker",
+  "description": "M0/M1 implementation of one exact FIDO-authorized Linux broker-mediated OpenRouter dispatch",
+  "workflowClass": "security",
+  "decisionProfile": {
+    "uncertainty": "high",
+    "consequence": "high",
+    "rationale": "Cross-platform cryptographic authority, local IPC, Docker attestation, and lifecycle mistakes could expose signing authority or falsely attest verification."
+  },
+  "executionMode": "codex_native",
+  "baseBranch": "main",
+  "featureBranch": "ai/workflow-authority-linux-m1",
+  "generatedAt": "2026-08-03T09:34:00Z",
+  "overlapRisk": "low",
+  "noMergeOnCompletion": true,
+  "campaignSlug": "workflow-authority-broker",
+  "dispatchable": true,
+  "executionAuthorized": true,
+  "promptScope": "M0-M1 only; M2-M3 require separately approved follow-up manifests",
+  "chunks": [
+    {
+      "id": "01-contract-vectors-fake",
+      "title": "Freeze provider-dispatch contract, vectors, and fake broker",
+      "prompt": "prompts/01-contract-vectors-fake.md",
+      "level": 0,
+      "parallelGroup": null,
+      "dependsOn": [],
+      "filesToModify": ["plugins/workflow-kernel/skills/workflow-kernel/references/provider-dispatch-request-schema.json", "plugins/workflow-kernel/skills/workflow-kernel/references/provider-dispatch-result-schema.json", "plugins/workflow-kernel/skills/workflow-kernel/references/provider-dispatch-status-schema.json", "plugins/workflow-kernel/skills/workflow-kernel/references/provider-dispatch-exchange-schema.json", "plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/provider_dispatch.py", "tests/test_provider_dispatch_contract.py", "tools/validate-workflow-kernel.py", "tests/test_release_validator.py"],
+      "companionSkills": ["developer-essentials:auth-implementation-patterns", "developer-essentials:error-handling-patterns"],
+      "estimatedComplexity": "large",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "02-linux-authority-core",
+      "title": "Implement Linux authority core and replay-safe IPC",
+      "prompt": "prompts/02-linux-authority-core.md",
+      "level": 1,
+      "parallelGroup": "A",
+      "dependsOn": ["01-contract-vectors-fake"],
+      "filesToModify": ["native/workflow-authority/go.mod", "native/workflow-authority/internal/protocol/protocol.go", "native/workflow-authority/internal/authority/run.go", "native/workflow-authority/internal/authority/run_test.go", "native/workflow-authority/internal/authority/fido_libfido2.go", "native/workflow-authority/internal/authority/fido_stub.go", "native/workflow-authority/internal/authority/fido_test.go", "native/workflow-authority/internal/authority/consent.go"],
+      "companionSkills": ["assembly:golang-patterns", "developer-essentials:auth-implementation-patterns", "developer-essentials:error-handling-patterns"],
+      "estimatedComplexity": "large",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "03-depot-adapter",
+      "title": "Integrate Depot with the fixed broker client seam",
+      "prompt": "prompts/03-depot-adapter.md",
+      "level": 1,
+      "parallelGroup": "A",
+      "dependsOn": ["01-contract-vectors-fake"],
+      "filesToModify": ["plugins/pipeline/references/cascade-dispatch.sh", "plugins/pipeline/references/openrouter-exec.sh", "tools/fixtures/fake-workflow-authority-client.py", "tools/test-openrouter-runner-policy.sh"],
+      "companionSkills": ["developer-essentials:auth-implementation-patterns", "developer-essentials:error-handling-patterns"],
+      "estimatedComplexity": "medium",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "04-provider-transport",
+      "title": "Implement broker-owned OpenRouter transport",
+      "prompt": "prompts/04-provider-transport.md",
+      "level": 2,
+      "parallelGroup": null,
+      "dependsOn": ["02-linux-authority-core"],
+      "filesToModify": ["native/workflow-authority/internal/provider/openrouter.go", "native/workflow-authority/internal/provider/credential.go", "native/workflow-authority/internal/provider/transport.go", "native/workflow-authority/internal/provider/provider_test.go", "native/workflow-authority/cmd/workflow-authorityd/main.go"],
+      "companionSkills": ["assembly:golang-patterns", "developer-essentials:auth-implementation-patterns", "developer-essentials:error-handling-patterns"],
+      "estimatedComplexity": "medium",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "05-linux-packaging-admin",
+      "title": "Package the minimal Linux service and admin lifecycle",
+      "prompt": "prompts/05-linux-packaging-admin.md",
+      "level": 3,
+      "parallelGroup": null,
+      "dependsOn": ["02-linux-authority-core", "04-provider-transport"],
+      "filesToModify": ["native/workflow-authority/cmd/workflow-authority/main.go", "native/workflow-authority/internal/platform/linux.go", "native/workflow-authority/internal/platform/linux_test.go", "native/workflow-authority/packaging/linux/workflow-authority.socket", "native/workflow-authority/packaging/linux/workflow-authority.service"],
+      "companionSkills": ["assembly:golang-patterns", "developer-essentials:auth-implementation-patterns", "developer-essentials:error-handling-patterns"],
+      "estimatedComplexity": "medium",
+      "kind": "logic",
+      "executor": "codex"
+    },
+    {
+      "id": "06-linux-integration-acceptance",
+      "title": "Prove and gate the first safe Linux dispatch",
+      "prompt": "prompts/06-linux-integration-acceptance.md",
+      "level": 4,
+      "parallelGroup": null,
+      "dependsOn": ["02-linux-authority-core", "03-depot-adapter", "04-provider-transport", "05-linux-packaging-admin"],
+      "filesToModify": ["tools/validate-workflow-authority.sh", "tests/test_workflow_authority_integration.py"],
+      "companionSkills": ["developer-essentials:e2e-testing-patterns", "developer-essentials:auth-implementation-patterns", "developer-essentials:error-handling-patterns", "assembly:golang-patterns"],
+      "estimatedComplexity": "small",
+      "kind": "logic",
+      "executor": "codex"
+    }
+  ],
+  "executionPlan": {
+    "levels": [
+      {"level": 0, "strategy": "sequential", "chunks": ["01-contract-vectors-fake"]},
+      {"level": 1, "strategy": "parallel", "groups": {"A": ["02-linux-authority-core", "03-depot-adapter"]}},
+      {"level": 2, "strategy": "sequential", "chunks": ["04-provider-transport"]},
+      {"level": 3, "strategy": "sequential", "chunks": ["05-linux-packaging-admin"]},
+      {"level": 4, "strategy": "sequential", "chunks": ["06-linux-integration-acceptance"]}
+    ],
+    "totalChunks": 6,
+    "parallelChunks": 2,
+    "sequentialChunks": 4,
+    "maxConcurrency": 2
+  },
+  "requirementsCoverage": {
+    "source": "original-prompt.md through Iteration 12 plus plan revision 10",
+    "currentRun": "M0-M1",
+    "covered": ["REQ-M0-01..11", "REQ-M1-01..13", "REQ-ADAPTER-01..10", "REQ-TRANSPORT-01..11", "REQ-PACKAGE-01..12", "REQ-E2E-01..12 plus 06A/06B/10A"],
+    "deferredCampaignMilestones": ["M2", "M3"],
+    "uncoveredCurrentRunRequirements": []
+  },
+  "promptReview": {"round": 3, "verdict": "APPROVED", "artifacts": ["prompt-adversarial-review-round-1.md", "prompt-adversarial-review-round-2.md", "prompt-adversarial-review-round-3.md"], "openrouterPerspective": "host_authority_unavailable"},
+  "nextAuthorizationGate": "Execution approved. Live installation, real credential provisioning, provider contact, publication, and M2-M3 remain separately gated."
+}

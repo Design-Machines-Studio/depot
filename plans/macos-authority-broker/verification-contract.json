@@ -1,0 +1,79 @@
+{
+  "schema_version": 1,
+  "contract_id": "workflow-authority-linux-m1",
+  "revision": 1,
+  "previous_contract_digest": null,
+  "requirements": [
+    {"id": "REQ-001", "source_ref": "original-prompt.md#iteration-12", "statement": "Freeze a closed byte-exact provider-dispatch protocol, schemas, golden vectors, and a non-production fake broker."},
+    {"id": "REQ-002", "source_ref": "original-prompt.md#iteration-12", "statement": "Authorize one exact final provider request with authenticator-internal FIDO2 user verification and no reusable run-wide grant."},
+    {"id": "REQ-003", "source_ref": "original-prompt.md#iteration-12", "statement": "Keep the OpenRouter credential and network transport exclusively inside the broker process."},
+    {"id": "REQ-004", "source_ref": "original-prompt.md#iteration-12", "statement": "Use fixed trusted endpoint discovery and independently authenticated local client eligibility without caller-provided socket paths or environment authorization."},
+    {"id": "REQ-005", "source_ref": "original-prompt.md#iteration-12", "statement": "Bind payload, destination, model order, repository, run, lane, candidate, nonce, issuance, expiry, policy, scanner, and result key into the exact authorization exchange."},
+    {"id": "REQ-006", "source_ref": "original-prompt.md#iteration-12", "statement": "Reject replay, stale authorization, downgrade, cross-connection resume, cancellation takeover, and altered request state fail closed."},
+    {"id": "REQ-007", "source_ref": "original-prompt.md#iteration-12", "statement": "Replace only Depot's host_authority_unavailable assessment seam while preserving the existing routing matrix and Codex fallback before provider contact."},
+    {"id": "REQ-008", "source_ref": "original-prompt.md#iteration-12", "statement": "Provide Linux-first daemon, client, systemd socket activation, status, installation, recovery, and uninstallation artifacts without performing a live install."},
+    {"id": "REQ-009", "source_ref": "original-prompt.md#iteration-12", "statement": "Prove the complete slice with hostile offline integration tests using fake FIDO, fixture credentials, fixed test sockets, and a local TLS provider fixture."},
+    {"id": "REQ-010", "source_ref": "original-prompt.md#iteration-12", "statement": "Keep live installation, real credential provisioning, FIDO enrollment, provider contact, publication, macOS parity, and broader rollout behind explicit later authorization gates."}
+  ],
+  "prohibited_regressions": [
+    {"id": "REG-001", "source_ref": "original-prompt.md#current-integration-state", "statement": "Pipeline, dm-review, assessment, research, and adversarial lanes must continue falling back to Codex before unauthorized provider contact."},
+    {"id": "REG-002", "source_ref": "original-prompt.md#current-integration-state", "statement": "Direct interactive OpenRouter dispatch must remain exact-digest gated."},
+    {"id": "REG-003", "source_ref": "original-prompt.md#current-integration-state", "statement": "Dry-run routing and the dormant OpenRouter executor must remain intact."},
+    {"id": "REG-004", "source_ref": "original-prompt.md#security-boundary", "statement": "Authority keys and provider credentials must not enter repository files, worker-readable files, stdout, logs, argv, environment, crash reports, receipts, or fixtures."},
+    {"id": "REG-005", "source_ref": "original-prompt.md#execution-gates", "statement": "Offline validation must not install or enable a service, enroll a real authenticator, contact OpenRouter, mutate another worktree, or publish git state."}
+  ],
+  "checks": [
+    {"id": "CHK-001", "argv": ["./tools/validate-workflow-kernel.py"], "proves_requirement_ids": ["REQ-001"], "proves_regression_ids": [], "baseline_expectation": "must_fail"},
+    {"id": "CHK-002", "argv": ["go", "-C", "native/workflow-authority", "test", "./..."], "proves_requirement_ids": ["REQ-002", "REQ-003", "REQ-004", "REQ-005", "REQ-006"], "proves_regression_ids": [], "baseline_expectation": "not_runnable"},
+    {"id": "CHK-003", "argv": ["./tools/test-openrouter-runner-policy.sh"], "proves_requirement_ids": ["REQ-007"], "proves_regression_ids": ["REG-001", "REG-002", "REG-003"], "baseline_expectation": "may_pass"},
+    {"id": "CHK-004", "argv": ["./tools/validate-workflow-authority.sh"], "proves_requirement_ids": ["REQ-008", "REQ-009"], "proves_regression_ids": ["REG-004", "REG-005"], "baseline_expectation": "not_runnable"},
+    {"id": "CHK-005", "argv": ["./tools/validate-composition.sh", "--all"], "proves_requirement_ids": [], "proves_regression_ids": ["REG-001", "REG-003"], "baseline_expectation": "may_pass"}
+  ],
+  "persona_case_ids": [],
+  "browser_case_ids": [],
+  "verification_profile_id": "profile-sha256:50855a4bc10cde0774eb6f0c28c2aecba141afe4233356ff74eb3f09edf91ac8",
+  "verification_profile_digest": "sha256:7d11ec8ddacf4f6243ded4a7f5941a861bf15fa256de19468eb51302defda1cc",
+  "manual_requirements": [
+    {"requirement_id": "REQ-010", "reason_code": "separate_live_authorization_required", "evidence_ref": "original-prompt.md#execution-gates"}
+  ],
+  "revision_justification": {
+    "reason_code": "initial_binding",
+    "summary": "Initial approved Linux M0-M1 authority-broker verification boundary.",
+    "added_obligation_ids": [
+      "PROOF:CHK-001:REQ-001",
+      "PROOF:CHK-002:REQ-002",
+      "PROOF:CHK-002:REQ-003",
+      "PROOF:CHK-002:REQ-004",
+      "PROOF:CHK-002:REQ-005",
+      "PROOF:CHK-002:REQ-006",
+      "PROOF:CHK-003:REG-001",
+      "PROOF:CHK-003:REG-002",
+      "PROOF:CHK-003:REG-003",
+      "PROOF:CHK-003:REQ-007",
+      "PROOF:CHK-004:REG-004",
+      "PROOF:CHK-004:REG-005",
+      "PROOF:CHK-004:REQ-008",
+      "PROOF:CHK-004:REQ-009",
+      "PROOF:CHK-005:REG-001",
+      "PROOF:CHK-005:REG-003",
+      "REG-001",
+      "REG-002",
+      "REG-003",
+      "REG-004",
+      "REG-005",
+      "REQ-001",
+      "REQ-002",
+      "REQ-003",
+      "REQ-004",
+      "REQ-005",
+      "REQ-006",
+      "REQ-007",
+      "REQ-008",
+      "REQ-009",
+      "REQ-010"
+    ],
+    "retained_obligation_ids": [],
+    "removed_obligation_ids": [],
+    "human_approval_evidence_ref": null
+  }
+}
