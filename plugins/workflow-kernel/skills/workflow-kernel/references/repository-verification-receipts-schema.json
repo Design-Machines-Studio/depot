@@ -1,99 +1,542 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://designmachines.studio/schemas/repository-verification-receipts-v1.json",
-  "title": "Repository Verification Receipt Ledger",
-  "type": "object",
-  "additionalProperties": false,
-  "required": ["schema_version", "artifact_role", "receipts"],
-  "properties": {
-    "schema_version": {"const": 1},
-    "artifact_role": {"const": "repository_verification_receipts"},
-    "receipts": {
-      "type": "array",
-      "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "required": [
-          "schema_version", "lane_id", "tier", "boundary", "owner",
-          "required", "status", "reason", "command_digest", "input_digest",
-          "cache_key", "exit_code", "duration_seconds",
-          "source_receipt_digest", "stdout_digest", "stderr_digest",
-          "stdout_bytes", "stderr_bytes", "profile_digest", "head_commit",
-          "provider_run_id", "observed_at", "evidence_digest", "receipt_auth"
-        ],
-        "properties": {
-          "schema_version": {"const": 1},
-          "profile_digest": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "lane_id": {"type": "string"},
-          "tier": {
-            "enum": [
-              "doctor", "fast", "focused", "full", "race", "harness", "remote"
-            ]
-          },
-          "boundary": {
-            "enum": [
-              "chunk", "revision_batch", "execution_level",
-              "merge_candidate", "post_merge"
-            ]
-          },
-          "owner": {
-            "enum": ["local", "github", "blueprint", "other", "unresolved"]
-          },
-          "required": {"type": "boolean"},
-          "status": {
-            "enum": [
-              "passed", "failed", "reused", "remote_pending", "blocked",
-              "unavailable"
-            ]
-          },
-          "reason": {"type": "string"},
-          "command_digest": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "input_digest": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "cache_key": {
-            "type": "string",
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "exit_code": {"type": ["integer", "null"]},
-          "duration_seconds": {"type": "number", "minimum": 0},
-          "source_receipt_digest": {
-            "type": ["string", "null"],
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "stdout_digest": {
-            "type": ["string", "null"],
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "stderr_digest": {
-            "type": ["string", "null"],
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "stdout_bytes": {"type": "integer", "minimum": 0},
-          "stderr_bytes": {"type": "integer", "minimum": 0},
-          "head_commit": {
-            "type": ["string", "null"],
-            "pattern": "^(?:unresolved|[0-9a-f]{40}|[0-9a-f]{64})$"
-          },
-          "provider_run_id": {"type": ["string", "null"]},
-          "observed_at": {"type": ["string", "null"]},
-          "evidence_digest": {
-            "type": ["string", "null"],
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "receipt_auth": {
-            "type": "string",
-            "pattern": "^hmac-sha256:[0-9a-f]{64}$"
-          }
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "$id": "https://designmachines.studio/schemas/repository-verification-receipts.json",
+    "title": "Repository Verification Receipt Ledger",
+    "oneOf": [
+        {
+            "$ref": "#/$defs/ledgerV1"
+        },
+        {
+            "$ref": "#/$defs/ledgerV2"
         }
-      }
+    ],
+    "$defs": {
+        "digest": {
+            "type": "string",
+            "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "nullableDigest": {
+            "type": [
+                "string",
+                "null"
+            ],
+            "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "safeString": {
+            "type": "string",
+            "maxLength": 4096
+        },
+        "receiptProperties": {
+            "schema_version": {},
+            "profile_digest": {
+                "$ref": "#/$defs/digest"
+            },
+            "lane_id": {
+                "$ref": "#/$defs/safeString"
+            },
+            "tier": {
+                "enum": [
+                    "doctor",
+                    "fast",
+                    "focused",
+                    "full",
+                    "race",
+                    "harness",
+                    "remote"
+                ]
+            },
+            "boundary": {
+                "enum": [
+                    "chunk",
+                    "revision_batch",
+                    "execution_level",
+                    "merge_candidate",
+                    "post_merge"
+                ]
+            },
+            "owner": {
+                "enum": [
+                    "local",
+                    "github",
+                    "blueprint",
+                    "other",
+                    "unresolved"
+                ]
+            },
+            "required": {
+                "type": "boolean"
+            },
+            "status": {
+                "enum": [
+                    "passed",
+                    "failed",
+                    "reused",
+                    "remote_pending",
+                    "blocked",
+                    "unavailable"
+                ]
+            },
+            "reason": {
+                "$ref": "#/$defs/safeString"
+            },
+            "command_digest": {
+                "$ref": "#/$defs/digest"
+            },
+            "input_digest": {
+                "$ref": "#/$defs/digest"
+            },
+            "cache_key": {
+                "$ref": "#/$defs/digest"
+            },
+            "exit_code": {
+                "type": [
+                    "integer",
+                    "null"
+                ]
+            },
+            "duration_seconds": {
+                "type": "number",
+                "minimum": 0
+            },
+            "source_receipt_digest": {
+                "$ref": "#/$defs/nullableDigest"
+            },
+            "stdout_digest": {
+                "$ref": "#/$defs/nullableDigest"
+            },
+            "stderr_digest": {
+                "$ref": "#/$defs/nullableDigest"
+            },
+            "stdout_bytes": {
+                "type": "integer",
+                "minimum": 0
+            },
+            "stderr_bytes": {
+                "type": "integer",
+                "minimum": 0
+            },
+            "head_commit": {
+                "type": [
+                    "string",
+                    "null"
+                ],
+                "pattern": "^(?:unresolved|[0-9a-f]{40}|[0-9a-f]{64})$"
+            },
+            "provider_run_id": {
+                "type": [
+                    "string",
+                    "null"
+                ],
+                "maxLength": 4096
+            },
+            "observed_at": {
+                "type": [
+                    "string",
+                    "null"
+                ],
+                "maxLength": 64
+            },
+            "evidence_digest": {
+                "$ref": "#/$defs/nullableDigest"
+            }
+        },
+        "receiptRequired": [
+            "schema_version",
+            "lane_id",
+            "tier",
+            "boundary",
+            "owner",
+            "required",
+            "status",
+            "reason",
+            "command_digest",
+            "input_digest",
+            "cache_key",
+            "exit_code",
+            "duration_seconds",
+            "source_receipt_digest",
+            "stdout_digest",
+            "stderr_digest",
+            "stdout_bytes",
+            "stderr_bytes",
+            "profile_digest",
+            "head_commit",
+            "provider_run_id",
+            "observed_at",
+            "evidence_digest"
+        ],
+        "receiptV1": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "schema_version",
+                "lane_id",
+                "tier",
+                "boundary",
+                "owner",
+                "required",
+                "status",
+                "reason",
+                "command_digest",
+                "input_digest",
+                "cache_key",
+                "exit_code",
+                "duration_seconds",
+                "source_receipt_digest",
+                "stdout_digest",
+                "stderr_digest",
+                "stdout_bytes",
+                "stderr_bytes",
+                "profile_digest",
+                "head_commit",
+                "provider_run_id",
+                "observed_at",
+                "evidence_digest",
+                "receipt_auth"
+            ],
+            "properties": {
+                "schema_version": {
+                    "const": 1
+                },
+                "profile_digest": {
+                    "$ref": "#/$defs/digest"
+                },
+                "lane_id": {
+                    "type": "string"
+                },
+                "tier": {
+                    "enum": [
+                        "doctor",
+                        "fast",
+                        "focused",
+                        "full",
+                        "race",
+                        "harness",
+                        "remote"
+                    ]
+                },
+                "boundary": {
+                    "enum": [
+                        "chunk",
+                        "revision_batch",
+                        "execution_level",
+                        "merge_candidate",
+                        "post_merge"
+                    ]
+                },
+                "owner": {
+                    "enum": [
+                        "local",
+                        "github",
+                        "blueprint",
+                        "other",
+                        "unresolved"
+                    ]
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "status": {
+                    "enum": [
+                        "passed",
+                        "failed",
+                        "reused",
+                        "remote_pending",
+                        "blocked",
+                        "unavailable"
+                    ]
+                },
+                "reason": {
+                    "type": "string"
+                },
+                "command_digest": {
+                    "$ref": "#/$defs/digest"
+                },
+                "input_digest": {
+                    "$ref": "#/$defs/digest"
+                },
+                "cache_key": {
+                    "$ref": "#/$defs/digest"
+                },
+                "exit_code": {
+                    "type": [
+                        "integer",
+                        "null"
+                    ]
+                },
+                "duration_seconds": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "source_receipt_digest": {
+                    "$ref": "#/$defs/nullableDigest"
+                },
+                "stdout_digest": {
+                    "$ref": "#/$defs/nullableDigest"
+                },
+                "stderr_digest": {
+                    "$ref": "#/$defs/nullableDigest"
+                },
+                "stdout_bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "stderr_bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "head_commit": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "pattern": "^(?:unresolved|[0-9a-f]{40}|[0-9a-f]{64})$"
+                },
+                "provider_run_id": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+                "observed_at": {
+                    "type": [
+                        "string",
+                        "null"
+                    ]
+                },
+                "evidence_digest": {
+                    "$ref": "#/$defs/nullableDigest"
+                },
+                "receipt_auth": {
+                    "type": "string",
+                    "pattern": "^hmac-sha256:[0-9a-f]{64}$"
+                }
+            }
+        },
+        "receiptV2": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "schema_version",
+                "lane_id",
+                "tier",
+                "boundary",
+                "owner",
+                "required",
+                "status",
+                "reason",
+                "command_digest",
+                "input_digest",
+                "cache_key",
+                "exit_code",
+                "duration_seconds",
+                "source_receipt_digest",
+                "stdout_digest",
+                "stderr_digest",
+                "stdout_bytes",
+                "stderr_bytes",
+                "profile_digest",
+                "head_commit",
+                "provider_run_id",
+                "observed_at",
+                "evidence_digest",
+                "authority_mode",
+                "authority_provenance"
+            ],
+            "properties": {
+                "schema_version": {
+                    "const": 2
+                },
+                "profile_digest": {
+                    "$ref": "#/$defs/digest"
+                },
+                "lane_id": {
+                    "$ref": "#/$defs/safeString"
+                },
+                "tier": {
+                    "enum": [
+                        "doctor",
+                        "fast",
+                        "focused",
+                        "full",
+                        "race",
+                        "harness",
+                        "remote"
+                    ]
+                },
+                "boundary": {
+                    "enum": [
+                        "chunk",
+                        "revision_batch",
+                        "execution_level",
+                        "merge_candidate",
+                        "post_merge"
+                    ]
+                },
+                "owner": {
+                    "enum": [
+                        "local",
+                        "github",
+                        "blueprint",
+                        "other",
+                        "unresolved"
+                    ]
+                },
+                "required": {
+                    "type": "boolean"
+                },
+                "status": {
+                    "enum": [
+                        "passed",
+                        "failed",
+                        "reused",
+                        "remote_pending",
+                        "blocked",
+                        "unavailable"
+                    ]
+                },
+                "reason": {
+                    "$ref": "#/$defs/safeString"
+                },
+                "command_digest": {
+                    "$ref": "#/$defs/digest"
+                },
+                "input_digest": {
+                    "$ref": "#/$defs/digest"
+                },
+                "cache_key": {
+                    "$ref": "#/$defs/digest"
+                },
+                "exit_code": {
+                    "type": [
+                        "integer",
+                        "null"
+                    ]
+                },
+                "duration_seconds": {
+                    "type": "number",
+                    "minimum": 0
+                },
+                "source_receipt_digest": {
+                    "$ref": "#/$defs/nullableDigest"
+                },
+                "stdout_digest": {
+                    "$ref": "#/$defs/nullableDigest"
+                },
+                "stderr_digest": {
+                    "$ref": "#/$defs/nullableDigest"
+                },
+                "stdout_bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "stderr_bytes": {
+                    "type": "integer",
+                    "minimum": 0
+                },
+                "head_commit": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "pattern": "^(?:unresolved|[0-9a-f]{40}|[0-9a-f]{64})$"
+                },
+                "provider_run_id": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "maxLength": 4096
+                },
+                "observed_at": {
+                    "type": [
+                        "string",
+                        "null"
+                    ],
+                    "maxLength": 64
+                },
+                "evidence_digest": {
+                    "$ref": "#/$defs/nullableDigest"
+                },
+                "authority_mode": {
+                    "const": "native_provider"
+                },
+                "authority_provenance": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "required": [
+                        "authority_mode",
+                        "grant",
+                        "envelope",
+                        "key_record"
+                    ],
+                    "properties": {
+                        "authority_mode": {
+                            "const": "native_provider"
+                        },
+                        "grant": {
+                            "$ref": "authority-provider-schema.json#/$defs/grant"
+                        },
+                        "envelope": {
+                            "$ref": "authority-provider-schema.json#/$defs/envelope"
+                        },
+                        "key_record": {
+                            "$ref": "authority-provider-schema.json#/$defs/keyRecord"
+                        }
+                    }
+                }
+            }
+        },
+        "ledgerV1": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "schema_version",
+                "artifact_role",
+                "receipts"
+            ],
+            "properties": {
+                "schema_version": {
+                    "const": 1
+                },
+                "artifact_role": {
+                    "const": "repository_verification_receipts"
+                },
+                "receipts": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/$defs/receiptV1"
+                    }
+                }
+            }
+        },
+        "ledgerV2": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+                "schema_version",
+                "artifact_role",
+                "authority_mode",
+                "receipts"
+            ],
+            "properties": {
+                "schema_version": {
+                    "const": 2
+                },
+                "artifact_role": {
+                    "const": "repository_verification_receipts"
+                },
+                "authority_mode": {
+                    "const": "native_provider"
+                },
+                "receipts": {
+                    "type": "array",
+                    "maxItems": 256,
+                    "items": {
+                        "$ref": "#/$defs/receiptV2"
+                    }
+                }
+            }
+        }
     }
-  }
 }

@@ -9,6 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tests import KERNEL_REFERENCES, schema_matches
+from workflow_kernel.authority_provider import LegacyHMACAuthority
 from workflow_kernel.verification_authority import issue_profile_approval
 from workflow_kernel.verification_errors import VerificationPlannerError
 from workflow_kernel.verification_execution import run_bounded_capture
@@ -38,6 +39,7 @@ ASSEMBLY_EXAMPLE = (
     / "assembly/references/repository-verification-profile.example.json"
 )
 RECEIPT_KEY = b"repository-verification-test-key-32-bytes"
+LEGACY_AUTHORITY = LegacyHMACAuthority(RECEIPT_KEY)
 APPROVED_AT = "2026-07-30T00:00:00Z"
 BASE_REF = "refs/verification/base"
 TEST_ENVIRONMENT = {
@@ -335,7 +337,7 @@ class RepositoryVerificationTests(unittest.TestCase):
                 "observed_at": "2026-07-30T00:30:00Z",
                 "outcome": "passed",
                 "exit_code": 0,
-            }, RECEIPT_KEY)
+            }, LEGACY_AUTHORITY)
         self.assertEqual(outcome, "complete")
         self.assertTrue(schema_matches(
             validate_profile(profile),
@@ -367,7 +369,7 @@ class RepositoryVerificationTests(unittest.TestCase):
             json.loads(RECEIPT_SCHEMA.read_text(encoding="utf-8")),
         ))
         with self.assertRaises(VerificationPlannerError):
-            validate_receipt(invalid_receipt, RECEIPT_KEY)
+            validate_receipt(invalid_receipt, LEGACY_AUTHORITY)
         invalid_plan = {
             **plan,
             "lanes": [{**plan["lanes"][0], "owner": "bogus"}, *plan["lanes"][1:]],
@@ -657,7 +659,7 @@ class RepositoryVerificationTests(unittest.TestCase):
             second, second_outcome = execute(profile, repository, second_plan)
             self.assertEqual(second_outcome, "complete")
             merged = merge_receipt_ledgers(
-                first, second, 0, RECEIPT_KEY,
+                first, second, 0, LEGACY_AUTHORITY,
             )
         focused_keys = {
             receipt["cache_key"] for receipt in merged["receipts"]
@@ -820,7 +822,7 @@ class RepositoryVerificationTests(unittest.TestCase):
                 "observed_at": "2026-07-30T01:00:00Z",
                 "outcome": "passed",
                 "exit_code": 0,
-            }, RECEIPT_KEY)
+            }, LEGACY_AUTHORITY)
             authenticated = record_provider_result(
                 profile, repository, candidate, approval=approved,
                 receipt_ledger=pending_receipts, receipt_key=RECEIPT_KEY,
@@ -895,7 +897,7 @@ class RepositoryVerificationTests(unittest.TestCase):
                 "observed_at": "2026-07-30T01:00:00Z",
                 "outcome": "passed",
                 "exit_code": 0,
-            }, RECEIPT_KEY)
+            }, LEGACY_AUTHORITY)
             authenticated = record_provider_result(
                 profile, repository, first, approval=first_approval,
                 receipt_ledger=pending, receipt_key=RECEIPT_KEY,
@@ -1630,7 +1632,7 @@ class RepositoryVerificationTests(unittest.TestCase):
                 "observed_at": "2026-07-30T02:00:00Z",
                 "outcome": "failed",
                 "exit_code": 1,
-            }, RECEIPT_KEY)
+            }, LEGACY_AUTHORITY)
             attestation_path.write_text(json.dumps(failed_attestation))
             record_command = [
                 "record-verification-result",
@@ -1677,7 +1679,7 @@ class RepositoryVerificationTests(unittest.TestCase):
                 "observed_at": "2026-07-30T02:05:00Z",
                 "outcome": "passed",
                 "exit_code": 0,
-            }, RECEIPT_KEY)
+            }, LEGACY_AUTHORITY)
             attestation_path.write_text(json.dumps(passed_attestation))
             recorded_pass = run_cli(record_command)
             self.assertEqual(

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.studio/schemas/repository-verification-substrate-v2.json",
+  "title": "Repository Verification Substrate",
+  "oneOf": [{"$ref": "#/$defs/handle"}, {"$ref": "#/$defs/attestation"}],
+  "$defs": {
+    "safeString": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "authorityProvenance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["authority_mode", "grant", "envelope", "key_record"],
+      "properties": {
+        "authority_mode": {"const": "native_provider"},
+        "grant": {"$ref": "authority-provider-schema.json#/$defs/grant"},
+        "envelope": {"$ref": "authority-provider-schema.json#/$defs/envelope"},
+        "key_record": {"$ref": "authority-provider-schema.json#/$defs/keyRecord"}
+      }
+    },
+    "cleanupSuccess": {
+      "type": "object", "additionalProperties": false,
+      "required": ["container_removed", "workspace_removed", "residue", "verified_at"],
+      "properties": {
+        "container_removed": {"const": true}, "workspace_removed": {"const": true},
+        "residue": {"type": "array", "maxItems": 0},
+        "verified_at": {"type": "string", "format": "date-time", "maxLength": 64}
+      }
+    },
+    "cleanupFailure": {
+      "type": "object", "additionalProperties": false,
+      "required": ["container_removed", "workspace_removed", "residue", "tombstone_digest", "verified_at"],
+      "properties": {
+        "container_removed": {"type": "boolean"}, "workspace_removed": {"type": "boolean"},
+        "residue": {"type": "array", "minItems": 1, "maxItems": 256, "items": {"$ref": "#/$defs/safeString"}},
+        "tombstone_digest": {"$ref": "#/$defs/digest"},
+        "verified_at": {"type": "string", "format": "date-time", "maxLength": 64}
+      }
+    },
+    "handle": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "artifact_role", "handle_id", "issuer_identity", "expires_at"],
+      "properties": {
+        "schema_version": {"const": 2}, "artifact_role": {"const": "repository_verification_substrate_handle"},
+        "handle_id": {"$ref": "#/$defs/safeString"}, "issuer_identity": {"$ref": "#/$defs/safeString"}, "expires_at": {"type": "string", "format": "date-time", "maxLength": 64}
+      }
+    },
+    "attestation": {
+      "type": "object", "additionalProperties": false,
+      "oneOf": [
+        {"properties": {"lifecycle": {"const": "cleaned"}, "cleanup": {"$ref": "#/$defs/cleanupSuccess"}}},
+        {"properties": {"lifecycle": {"const": "cleanup_failed"}, "result": {"type": "object", "properties": {"outcome": {"const": "failed"}}}, "cleanup": {"$ref": "#/$defs/cleanupFailure"}}}
+      ],
+      "required": ["schema_version", "artifact_role", "authority_mode", "repository_descriptor_id", "repository_scope_digest", "run_id", "authorization_event_id", "profile_digest", "candidate_commit", "lane_id", "request_nonce", "request_sequence", "issued_at", "expires_at", "endpoint_digest", "engine_digest", "image_digest", "container_id", "workspace_digest", "toolchain_digest", "go_version", "generator_name", "generator_version", "generator_binary_digest", "containment_security", "result", "cleanup", "lifecycle", "observed_at", "authority_provenance"],
+      "properties": {
+        "schema_version": {"const": 2}, "artifact_role": {"const": "repository_verification_substrate_attestation"}, "authority_mode": {"const": "native_provider"},
+        "repository_descriptor_id": {"$ref": "#/$defs/safeString"}, "repository_scope_digest": {"$ref": "#/$defs/digest"}, "run_id": {"$ref": "#/$defs/safeString"}, "authorization_event_id": {"$ref": "#/$defs/safeString"}, "profile_digest": {"$ref": "#/$defs/digest"}, "candidate_commit": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"}, "lane_id": {"$ref": "#/$defs/safeString"},
+        "request_nonce": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "request_sequence": {"type": "integer", "minimum": 1}, "issued_at": {"type": "string", "format": "date-time", "maxLength": 64}, "expires_at": {"type": "string", "format": "date-time", "maxLength": 64},
+        "endpoint_digest": {"$ref": "#/$defs/digest"}, "engine_digest": {"$ref": "#/$defs/digest"}, "image_digest": {"$ref": "#/$defs/digest"}, "container_id": {"$ref": "#/$defs/safeString"},
+        "workspace_digest": {"$ref": "#/$defs/digest"}, "toolchain_digest": {"$ref": "#/$defs/digest"}, "go_version": {"const": "go1.26.5"}, "generator_name": {"$ref": "#/$defs/safeString"}, "generator_version": {"$ref": "#/$defs/safeString"}, "generator_binary_digest": {"$ref": "#/$defs/digest"},
+        "containment_security": {"type": "object", "additionalProperties": false, "required": ["unprivileged", "no_new_privileges", "read_only_root", "network_mode", "docker_socket_mounted", "authority_surfaces_mounted"], "properties": {"unprivileged": {"const": true}, "no_new_privileges": {"const": true}, "read_only_root": {"const": true}, "network_mode": {"enum": ["none", "provider_allowlisted"]}, "docker_socket_mounted": {"const": false}, "authority_surfaces_mounted": {"const": false}}},
+        "result": {"type": "object", "additionalProperties": false, "required": ["outcome", "exit_code", "stdout_digest", "stderr_digest"], "properties": {"outcome": {"enum": ["passed", "failed"]}, "exit_code": {"type": "integer"}, "stdout_digest": {"$ref": "#/$defs/digest"}, "stderr_digest": {"$ref": "#/$defs/digest"}}},
+        "cleanup": {"oneOf": [{"$ref": "#/$defs/cleanupSuccess"}, {"$ref": "#/$defs/cleanupFailure"}]},
+        "lifecycle": {"enum": ["cleaned", "cleanup_failed"]}, "observed_at": {"type": "string", "format": "date-time", "maxLength": 64},
+        "authority_provenance": {"$ref": "#/$defs/authorityProvenance"}
+      }
+    }
+  }
+}

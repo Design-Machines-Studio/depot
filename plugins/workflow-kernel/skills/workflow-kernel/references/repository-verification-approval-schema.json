@@ -1,67 +1,82 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://designmachines.studio/schemas/repository-verification-approval-v1.json",
+  "$id": "https://designmachines.studio/schemas/repository-verification-approval.json",
   "title": "Repository Verification Profile Approval",
-  "type": "object",
-  "additionalProperties": false,
-  "required": [
-    "schema_version", "artifact_role", "repository_scope_digest",
-    "profile_id", "profile_ref", "profile_digest", "authority_digest",
-    "trusted_base_commit", "candidate_commit", "include_worktree",
-    "changed_paths", "changed_paths_digest", "candidate_snapshot_digest",
-    "run_id", "authorization_event_id",
-    "approved_at", "authority_key_id", "approval_auth"
-  ],
-  "properties": {
-    "schema_version": {"const": 1},
-    "artifact_role": {"const": "repository_verification_profile_approval"},
-    "repository_scope_digest": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
+  "oneOf": [
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "artifact_role", "repository_scope_digest",
+        "profile_id", "profile_ref", "profile_digest", "authority_digest",
+        "trusted_base_commit", "candidate_commit", "include_worktree",
+        "changed_paths", "changed_paths_digest", "candidate_snapshot_digest",
+        "run_id", "authorization_event_id", "approved_at",
+        "authority_key_id", "approval_auth"
+      ],
+      "properties": {
+        "schema_version": {"const": 1},
+        "artifact_role": {"const": "repository_verification_profile_approval"},
+        "repository_scope_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "profile_id": {"type": "string"},
+        "profile_ref": {"type": "string"},
+        "profile_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "authority_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "trusted_base_commit": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+        "candidate_commit": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+        "include_worktree": {"type": "boolean"},
+        "changed_paths": {"type": "array", "maxItems": 100000, "uniqueItems": true, "items": {"type": "string"}},
+        "changed_paths_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "candidate_snapshot_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "run_id": {"type": "string"},
+        "authorization_event_id": {"type": "string"},
+        "approved_at": {"type": "string"},
+        "authority_key_id": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+        "approval_auth": {"type": "string", "pattern": "^hmac-sha256:[0-9a-f]{64}$"}
+      }
     },
-    "profile_id": {"type": "string"},
-    "profile_ref": {"type": "string"},
-    "profile_digest": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
-    },
-    "authority_digest": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
-    },
-    "trusted_base_commit": {
-      "type": "string",
-      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
-    },
-    "candidate_commit": {
-      "type": "string",
-      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
-    },
-    "include_worktree": {"type": "boolean"},
-    "changed_paths": {
-      "type": "array",
-      "maxItems": 100000,
-      "uniqueItems": true,
-      "items": {"type": "string"}
-    },
-    "changed_paths_digest": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
-    },
-    "candidate_snapshot_digest": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
-    },
-    "run_id": {"type": "string"},
-    "authorization_event_id": {"type": "string"},
-    "approved_at": {"type": "string"},
-    "authority_key_id": {
-      "type": "string",
-      "pattern": "^sha256:[0-9a-f]{64}$"
-    },
-    "approval_auth": {
-      "type": "string",
-      "pattern": "^hmac-sha256:[0-9a-f]{64}$"
+    {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema_version", "artifact_role", "authority_mode",
+        "repository_scope_digest", "profile_id", "profile_ref",
+        "profile_digest", "authority_digest", "trusted_base_commit",
+        "candidate_commit", "include_worktree", "changed_paths",
+        "changed_paths_digest", "candidate_snapshot_digest", "run_id",
+        "authorization_event_id", "approved_at", "authority_key_id",
+        "authority_provenance"
+      ],
+      "properties": {
+        "schema_version": {"const": 2},
+        "artifact_role": {"const": "repository_verification_profile_approval"},
+        "authority_mode": {"const": "native_provider"},
+        "repository_scope_digest": {"$ref": "authority-provider-schema.json#/$defs/digest"},
+        "profile_id": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "profile_ref": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "profile_digest": {"$ref": "authority-provider-schema.json#/$defs/digest"},
+        "authority_digest": {"$ref": "authority-provider-schema.json#/$defs/digest"},
+        "trusted_base_commit": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+        "candidate_commit": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+        "include_worktree": {"type": "boolean"},
+        "changed_paths": {"type": "array", "maxItems": 100000, "uniqueItems": true, "items": {"type": "string", "maxLength": 4096}},
+        "changed_paths_digest": {"$ref": "authority-provider-schema.json#/$defs/digest"},
+        "candidate_snapshot_digest": {"$ref": "authority-provider-schema.json#/$defs/digest"},
+        "run_id": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "authorization_event_id": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "approved_at": {"type": "string", "format": "date-time", "maxLength": 64},
+        "authority_key_id": {"type": "string", "minLength": 1, "maxLength": 4096},
+        "authority_provenance": {
+          "type": "object", "additionalProperties": false,
+          "required": ["authority_mode", "grant", "envelope", "key_record"],
+          "properties": {
+            "authority_mode": {"const": "native_provider"},
+            "grant": {"$ref": "authority-provider-schema.json#/$defs/grant"},
+            "envelope": {"$ref": "authority-provider-schema.json#/$defs/envelope"},
+            "key_record": {"$ref": "authority-provider-schema.json#/$defs/keyRecord"}
+          }
+        }
+      }
     }
-  }
+  ]
 }

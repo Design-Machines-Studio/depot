@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.studio/schemas/authority-provider-v2.json",
+  "title": "Workflow Authority Provider Contract",
+  "oneOf": [
+    {"$ref": "#/$defs/request"},
+    {"$ref": "#/$defs/grant"},
+    {"$ref": "#/$defs/envelope"},
+    {"$ref": "#/$defs/keyRecord"},
+    {"$ref": "#/$defs/providerResponse"},
+    {"$ref": "#/$defs/evidenceDecision"}
+  ],
+  "$defs": {
+    "safeString": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "timestamp": {"type": "string", "format": "date-time", "maxLength": 64},
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "repository_descriptor_id", "repository_scope_digest", "run_id",
+        "authorization_event_id", "profile_ref", "profile_digest",
+        "authority_digest", "trusted_base_commit", "candidate_commit",
+        "candidate_snapshot_digest", "include_worktree", "cadence_boundary",
+        "lane_id", "provider", "substrate_digest"
+      ],
+      "properties": {
+        "repository_descriptor_id": {"$ref": "#/$defs/safeString"},
+        "repository_scope_digest": {"$ref": "#/$defs/digest"},
+        "run_id": {"$ref": "#/$defs/safeString"},
+        "authorization_event_id": {"$ref": "#/$defs/safeString"},
+        "profile_ref": {"$ref": "#/$defs/safeString"},
+        "profile_digest": {"$ref": "#/$defs/digest"},
+        "authority_digest": {"$ref": "#/$defs/digest"},
+        "trusted_base_commit": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+        "candidate_commit": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+        "candidate_snapshot_digest": {"$ref": "#/$defs/digest"},
+        "include_worktree": {"type": "boolean"},
+        "cadence_boundary": {"enum": ["chunk", "revision_batch", "execution_level", "merge_candidate", "post_merge"]},
+        "lane_id": {"type": ["string", "null"], "maxLength": 4096},
+        "provider": {"type": ["string", "null"], "maxLength": 4096},
+        "substrate_digest": {"oneOf": [{"$ref": "#/$defs/digest"}, {"type": "null"}]}
+      }
+    },
+    "request": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "artifact_role", "operation", "bindings", "nonce", "sequence", "key_id", "boot_id", "session_id", "issued_at", "expires_at", "document_digest"],
+      "properties": {
+        "schema_version": {"const": 2}, "artifact_role": {"const": "workflow_authority_request"},
+        "operation": {"enum": ["approve", "plan", "run", "record", "merge_candidate", "provider_attestation", "seal_receipt"]},
+        "bindings": {"$ref": "#/$defs/bindings"}, "nonce": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "sequence": {"type": "integer", "minimum": 1}, "key_id": {"$ref": "#/$defs/safeString"},
+        "boot_id": {"$ref": "#/$defs/safeString"}, "session_id": {"$ref": "#/$defs/safeString"},
+        "issued_at": {"$ref": "#/$defs/timestamp"}, "expires_at": {"$ref": "#/$defs/timestamp"}, "document_digest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "grant": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "artifact_role", "authority_mode", "request_digest", "key_id", "public_key_digest", "operation", "bindings", "nonce", "sequence", "boot_id", "session_id", "issued_at", "expires_at"],
+      "properties": {
+        "schema_version": {"const": 2}, "artifact_role": {"const": "workflow_authority_grant"}, "authority_mode": {"const": "native_provider"},
+        "request_digest": {"$ref": "#/$defs/digest"}, "key_id": {"$ref": "#/$defs/safeString"}, "public_key_digest": {"$ref": "#/$defs/digest"},
+        "operation": {"enum": ["approve", "plan", "run", "record", "merge_candidate", "provider_attestation", "seal_receipt"]}, "bindings": {"$ref": "#/$defs/bindings"},
+        "nonce": {"type": "string", "pattern": "^[0-9a-f]{64}$"}, "sequence": {"type": "integer", "minimum": 1},
+        "boot_id": {"$ref": "#/$defs/safeString"}, "session_id": {"$ref": "#/$defs/safeString"}, "issued_at": {"$ref": "#/$defs/timestamp"}, "expires_at": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "envelope": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "artifact_role", "authority_mode", "algorithm", "key_id", "public_key_digest", "request_digest", "document_digest", "signature"],
+      "properties": {
+        "schema_version": {"const": 2}, "artifact_role": {"const": "workflow_authority_signature_envelope"}, "authority_mode": {"const": "native_provider"},
+        "algorithm": {"enum": ["ecdsa-p256-sha256"]}, "key_id": {"$ref": "#/$defs/safeString"}, "public_key_digest": {"$ref": "#/$defs/digest"},
+        "request_digest": {"$ref": "#/$defs/digest"}, "document_digest": {"$ref": "#/$defs/digest"}, "signature": {"type": "string", "pattern": "^p256-sha256:[A-Za-z0-9+/]+={0,2}$", "maxLength": 4096}
+      }
+    },
+    "keyRecord": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "artifact_role", "record_digest", "key_id", "algorithm", "public_key_digest", "issuer_identity", "activated_at", "revoked_at", "verify_not_before", "verify_not_after"],
+      "properties": {
+        "schema_version": {"const": 2}, "artifact_role": {"const": "workflow_authority_public_key_record"}, "record_digest": {"$ref": "#/$defs/digest"},
+        "key_id": {"$ref": "#/$defs/safeString"}, "algorithm": {"enum": ["ecdsa-p256-sha256"]}, "public_key_digest": {"$ref": "#/$defs/digest"},
+        "issuer_identity": {"$ref": "#/$defs/safeString"}, "activated_at": {"$ref": "#/$defs/timestamp"}, "revoked_at": {"oneOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]},
+        "verify_not_before": {"$ref": "#/$defs/timestamp"}, "verify_not_after": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "evidenceDecision": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "artifact_role", "verifier_id", "verifier_key_id", "provider", "provider_run_id", "head_commit", "evidence_ref", "evidence_digest", "verified_at", "outcome", "exit_code"],
+      "properties": {
+        "schema_version": {"const": 2}, "artifact_role": {"const": "workflow_authority_evidence_decision"}, "verifier_id": {"$ref": "#/$defs/safeString"}, "verifier_key_id": {"$ref": "#/$defs/safeString"},
+        "provider": {"enum": ["github", "blueprint", "other"]}, "provider_run_id": {"$ref": "#/$defs/safeString"}, "head_commit": {"type": "string", "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"},
+        "evidence_ref": {"$ref": "#/$defs/safeString"}, "evidence_digest": {"$ref": "#/$defs/digest"}, "verified_at": {"$ref": "#/$defs/timestamp"}, "outcome": {"enum": ["passed", "failed"]}, "exit_code": {"type": "integer"}
+      }
+    },
+    "providerResponse": {
+      "type": "object", "additionalProperties": false,
+      "required": ["schema_version", "artifact_role", "status", "reason_code", "request", "grant", "envelope", "key_record", "evidence_decision"],
+      "properties": {
+        "schema_version": {"const": 2}, "artifact_role": {"const": "workflow_authority_provider_response"}, "status": {"enum": ["approved", "denied", "cancelled", "unavailable"]},
+        "reason_code": {"type": ["string", "null"], "maxLength": 64}, "request": {"$ref": "#/$defs/request"}, "grant": {"oneOf": [{"$ref": "#/$defs/grant"}, {"type": "null"}]},
+        "envelope": {"oneOf": [{"$ref": "#/$defs/envelope"}, {"type": "null"}]}, "key_record": {"oneOf": [{"$ref": "#/$defs/keyRecord"}, {"type": "null"}]},
+        "evidence_decision": {"oneOf": [{"$ref": "#/$defs/evidenceDecision"}, {"type": "null"}]}
+      }
+    }
+  }
+}
