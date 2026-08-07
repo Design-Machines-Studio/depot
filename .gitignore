@@ -26,3 +26,9 @@ plans/*/brainstorm.html
 # Python bytecode (workflow-kernel reference runtime test runs)
 __pycache__/
 *.pyc
+
+# macOS finder metadata
+.DS_Store
+
+# Serena MCP per-project state
+.serena/
