@@ -520,6 +520,20 @@ EOF
 chmod +x "$AUTH_ROOT/workflow-authority"
 printf '%s\n' workflow-authority-fixture-v1 > "$AUTH_ROOT/.workflow-authority-fixture"
 printf '%s\n' signed-success > "$AUTH_ROOT/case"
+
+# Pin the usage probe. cascade-dispatch.sh skips any rail whose probe reports
+# state "low" or "limited", so an unpinned probe couples this offline policy
+# gate to the live OpenRouter account balance: once real credit runs low the
+# terminal-outcome cases below fall through to the native rung and exit 64
+# instead of 75, failing validate-composition.sh on every machine regardless of
+# the code. validate-openrouter-cascade.sh pins --probe-file for the same
+# reason; PROBE_CMD covers every cascade invocation here without editing each.
+cat > "$AUTH_ROOT/usage-probe.sh" <<'PROBE_EOF'
+#!/bin/sh
+printf '%s\n' '{"codex":{"state":"ok","remaining_pct":100},"claude":{"state":"ok","remaining_pct":100},"openrouter":{"state":"ok","remaining_pct":100}}'
+PROBE_EOF
+chmod +x "$AUTH_ROOT/usage-probe.sh"
+export PROBE_CMD="$AUTH_ROOT/usage-probe.sh"
 PRODUCTION_EXEC_RUNNER="$EXEC_RUNNER"
 PRODUCTION_CASCADE="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
 EXEC_RUNNER="$AUTH_ROOT/openrouter-exec.sh"
