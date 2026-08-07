@@ -51,15 +51,27 @@ if [ ! -f "$CANONICAL" ]; then
   exit 2
 fi
 
-# Exactly one start marker and exactly one end marker, in that order.
-marker_counts=$(awk '
-  /<!-- CANONICAL-PARAGRAPH-START -->/ { starts++ }
-  /<!-- CANONICAL-PARAGRAPH-END -->/   { ends++ }
-  END { printf "%d %d", starts, ends }
+# Exactly one start marker and exactly one end marker, IN THAT ORDER. Counting
+# alone accepted an end marker that preceded its start, in which case the
+# extraction below would capture from the start marker to end of file and
+# silently treat the rest of the document as the paragraph.
+marker_state=$(awk '
+  /<!-- CANONICAL-PARAGRAPH-START -->/ { starts++; if (!first_start) first_start = NR }
+  /<!-- CANONICAL-PARAGRAPH-END -->/   { ends++;   if (!first_end)   first_end   = NR }
+  END { printf "%d %d %d %d", starts, ends, first_start, first_end }
 ' "$CANONICAL")
-if [ "$marker_counts" != "1 1" ]; then
-  printf 'FAIL canonical source must have exactly one start and one end marker (found: %s)\n' \
-    "$marker_counts" >&2
+marker_starts=$(printf '%s' "$marker_state" | cut -d" " -f1)
+marker_ends=$(printf '%s' "$marker_state" | cut -d" " -f2)
+marker_start_line=$(printf '%s' "$marker_state" | cut -d" " -f3)
+marker_end_line=$(printf '%s' "$marker_state" | cut -d" " -f4)
+if [ "$marker_starts" != "1" ] || [ "$marker_ends" != "1" ]; then
+  printf 'FAIL canonical source needs exactly one start and one end marker (found %s and %s)\n' \
+    "$marker_starts" "$marker_ends" >&2
+  exit 2
+fi
+if [ "$marker_start_line" -ge "$marker_end_line" ]; then
+  printf 'FAIL canonical end marker (line %s) precedes its start marker (line %s)\n' \
+    "$marker_end_line" "$marker_start_line" >&2
   exit 2
 fi
 
@@ -98,6 +110,15 @@ ANCHOR='The `run-cost-summary` command emits'
 
 expected_consumers=0
 for _ in $CONSUMERS; do expected_consumers=$((expected_consumers + 1)); done
+
+# An interrupted run must not leave .sync-rcs.* files beside shipped plugin
+# sources; they would be picked up as plugin content on the next cache sync.
+cleanup_temporaries() {
+  for rel in $CONSUMERS; do
+    rm -f "$(dirname -- "$REPO_ROOT/$rel")"/.sync-rcs.* 2>/dev/null
+  done
+}
+trap 'cleanup_temporaries; exit 130' INT TERM HUP
 
 drift=0
 synced=0
@@ -164,7 +185,21 @@ for rel in $CONSUMERS; do
     exit 2
   fi
 
-  chmod --reference="$f" "$tmp" 2>/dev/null || chmod 644 "$tmp"
+  # `chmod --reference` is GNU-only; macOS has no such flag, so the previous
+  # fallback silently reset every consumer to 644 on the platform this repo is
+  # developed on. Read the mode portably and fail closed rather than guessing.
+  mode=$(stat -f '%Lp' "$f" 2>/dev/null || stat -c '%a' "$f" 2>/dev/null)
+  case "$mode" in
+    [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) ;;
+    *) rm -f "$tmp"
+       printf 'FAIL could not read the mode of %s\n' "$rel" >&2
+       exit 2 ;;
+  esac
+  if ! chmod "$mode" "$tmp"; then
+    rm -f "$tmp"
+    printf 'FAIL could not apply mode %s to the replacement for %s\n' "$mode" "$rel" >&2
+    exit 2
+  fi
   if ! mv -f "$tmp" "$f"; then
     rm -f "$tmp"
     printf 'FAIL could not replace %s\n' "$rel" >&2

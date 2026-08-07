@@ -173,6 +173,18 @@ mid-append leaves the prior stream intact.
 `--append-to` and rejected-by-omission rather than defaulted: a receipt with a
 guessed timestamp or a missing provenance pointer is not evidence.
 
+The append holds an exclusive `flock` on `<receipts>.lock` across load,
+validate, and replace. Lane attempts finish concurrently by design, and atomic
+replacement alone would not save them: two appenders could both read length
+`n`, both claim sequence `n`, and the later write would silently discard the
+earlier attempt -- a measurement backbone losing exactly what it exists to
+keep.
+
+`--append-to` and `--output` are mutually exclusive. Appending mutates a
+durable ledger; writing `--output` does not. Allowing both would mean an
+`--output` failure could report the command as failed over an attempt already
+recorded, and a retry would append it twice.
+
 Emit a row for **every** attempt, including failed ones. An attempt that
 vanishes from the receipt stream is indistinguishable from an attempt that
 never ran, and its spend disappears with it.

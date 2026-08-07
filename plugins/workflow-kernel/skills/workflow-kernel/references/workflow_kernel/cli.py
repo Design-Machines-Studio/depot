@@ -2081,6 +2081,27 @@ def _append_attempt_usage_receipt(receipts_path, payload, args, error_label):
             raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
                 ErrorDetailKey.REASON_CODE.value: "invalid_argument",
             })
+    # Lane attempts finish concurrently by design, so this is a read-modify-
+    # write race unless it is serialized. Atomic replacement protects against a
+    # truncated file, not against a lost update: two appenders could both read
+    # length n, both claim sequence n, and the later replacement would silently
+    # discard the earlier attempt -- a measurement backbone losing exactly the
+    # measurements it exists to keep. The lock is held across load, validate,
+    # and replace.
+    lock_path = str(receipts_path) + ".lock"
+    lock_directory = os.path.dirname(os.path.abspath(lock_path)) or "."
+    os.makedirs(lock_directory, exist_ok=True)
+    lock_flags = os.O_WRONLY | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    lock_descriptor = os.open(lock_path, lock_flags, 0o600)
+    try:
+        fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+        _append_attempt_usage_locked(receipts_path, payload, args, error_label)
+    finally:
+        os.close(lock_descriptor)
+
+
+def _append_attempt_usage_locked(receipts_path, payload, args, error_label):
+    """The critical section of :func:`_append_attempt_usage_receipt`."""
     if os.path.exists(receipts_path):
         receipts = _load_json(receipts_path)
         if not isinstance(receipts, list):
@@ -2142,6 +2163,18 @@ def _emit_measurement_payload(produce, output, error_label, args=None):
             ErrorDetailKey.REASON_CODE.value: "invalid_argument",
         }) from None
     append_to = getattr(args, "append_to", None) if args is not None else None
+    if append_to and output:
+        # Appending is a durable ledger mutation; writing --output is not. If
+        # the output write failed after a successful append, the command would
+        # report failure over an attempt that is already recorded, and a retry
+        # would append it twice. Refuse the combination instead of documenting
+        # a commit order nobody will remember.
+        sys.stderr.write(
+            error_label + ": --append-to and --output are mutually exclusive\n"
+        )
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        })
     if append_to:
         _append_attempt_usage_receipt(append_to, payload, args, error_label)
     if output:

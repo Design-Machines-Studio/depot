@@ -369,9 +369,24 @@ class OpenRouterUsageTranslationTests(unittest.TestCase):
             summary["measurement_coverage"]["cost"]["measured"], 1,
         )
 
-    def test_kernel_version_is_0_9_0(self):
-        self.assertEqual(KERNEL_VERSION, (0, 9, 0))
-        self.assertEqual(_kernel_version_string(), "0.9.0")
+    def test_kernel_runtime_version_matches_the_plugin_manifest(self):
+        """The runtime version is a fourth place the kernel version lives.
+
+        Pinning a literal here meant the suite enforced the stale value: the
+        manifests moved to 0.10.0 and this test kept 0.9.0 green. Read the
+        manifest instead so the assertion cannot drift away from it.
+        """
+        import json
+        import pathlib
+        manifest = json.loads((
+            pathlib.Path(__file__).parent.parent
+            / "plugins/workflow-kernel/.claude-plugin/plugin.json"
+        ).read_text())
+        self.assertEqual(_kernel_version_string(), manifest["version"])
+        self.assertEqual(
+            KERNEL_VERSION,
+            tuple(int(part) for part in manifest["version"].split(".")),
+        )
 
 
 class OpenRouterUsageAppendTests(unittest.TestCase):
@@ -466,6 +481,71 @@ class OpenRouterUsageAppendTests(unittest.TestCase):
                     del args[index:index + 2]
                     self.assertNotEqual(self._run(args), 0)
                     self.assertFalse(os.path.exists(receipts_path))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_append_and_output_are_mutually_exclusive(self):
+        """Appending is a durable ledger mutation; --output is not.
+
+        If --output failed after a successful append, the command would report
+        failure over an already-recorded attempt and a retry would append it
+        twice. Refuse the combination rather than document a commit order.
+        """
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts_path = os.path.join(directory, "authoritative-receipts.json")
+        output_path = os.path.join(directory, "payload.json")
+        try:
+            args = self._base(receipts_path, "a", "chunk-a")
+            args += ["--output", output_path]
+            self.assertNotEqual(self._run(args), 0)
+            self.assertFalse(os.path.exists(receipts_path))
+            self.assertFalse(os.path.exists(output_path))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_concurrent_appends_do_not_lose_an_attempt(self):
+        """Lane attempts finish concurrently; a lost update loses a
+        measurement. The append holds an exclusive lock across load, validate,
+        and replace, so sequences stay contiguous and no row is discarded."""
+        import os
+        import shutil
+        import subprocess
+        import sys
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts_path = os.path.join(directory, "authoritative-receipts.json")
+        repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        module_root = os.path.join(
+            repo_root,
+            "plugins/workflow-kernel/skills/workflow-kernel/references",
+        )
+        env = dict(os.environ, PYTHONPATH=module_root)
+        try:
+            processes = [
+                subprocess.Popen(
+                    [sys.executable, "-m", "workflow_kernel"]
+                    + self._base(receipts_path, "lane-%d" % index, "chunk-%d" % index),
+                    env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                )
+                for index in range(4)
+            ]
+            for process in processes:
+                self.assertEqual(process.wait(timeout=120), 0)
+            with open(receipts_path) as f:
+                receipts = json.load(f)
+            self.assertEqual(len(receipts), 4)
+            self.assertEqual(
+                [entry["sequence"] for entry in receipts], [0, 1, 2, 3],
+            )
+            self.assertEqual(
+                sorted(entry["lane"] for entry in receipts),
+                ["lane-0", "lane-1", "lane-2", "lane-3"],
+            )
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 

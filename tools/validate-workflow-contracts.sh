@@ -466,6 +466,21 @@ require_absent "$kernel_doc" "silent no-op" "kernel contract doc retires silent 
 require_absent "$kernel_doc" "run-cost-summary unavailable" "kernel contract doc uses the mandated skip line"
 require_text "$kernel_doc" "run-cost-summary: skipped (<reason>)" "kernel contract doc mandates the literal skip line"
 
+# The kernel version lives in four places: two plugin manifests, the
+# marketplace entry, and the runtime constant. A test that pinned the runtime
+# literal kept a stale value green while the manifests moved. Compare them.
+runtime_resolution="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/runtime_resolution.py"
+kernel_manifest="$REPO_ROOT/plugins/workflow-kernel/.claude-plugin/plugin.json"
+manifest_version=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([0-9.]*\)".*/\1/p' "$kernel_manifest" | head -1)
+runtime_tuple=$(sed -n 's/^KERNEL_VERSION = (\([0-9]*\), \([0-9]*\), \([0-9]*\))$/\1.\2.\3/p' "$runtime_resolution" | head -1)
+if [ -n "$manifest_version" ] && [ "$manifest_version" = "$runtime_tuple" ]; then
+  printf "  ok    kernel runtime version %s matches the plugin manifest\n" "$runtime_tuple"
+else
+  printf "  FAIL  kernel runtime version '%s' does not match manifest '%s'\n" \
+    "$runtime_tuple" "$manifest_version"
+  failures=$((failures + 1))
+fi
+
 # The measurement producers must be documented, not just registered in the CLI.
 measurement_doc="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/cli-measurement-commands.md"
 require_text "$measurement_doc" "openrouter-usage" "measurement CLI reference documents openrouter-usage"

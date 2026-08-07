@@ -1,6 +1,7 @@
 import ast
 import inspect
 import json
+import pathlib
 import subprocess
 import tempfile
 import unittest
@@ -168,6 +169,21 @@ class ReviewFixContractTests(unittest.TestCase):
             / "plugins/workflow-kernel/skills/workflow-kernel/references"
             / "workflow-kernel-launcher.sh"
         )
+        # The unsatisfiable case is derived, not written down. A hardcoded
+        # "one minor above current" goes stale on every bump: 0.8.1 was the
+        # unsatisfiable case until 0.9.0 shipped, then 0.9.1 until 0.10.0. Each
+        # time, a green suite hid the fact that the case no longer tested
+        # anything. Compute it from the manifest instead.
+        import json
+        manifest = json.loads((
+            pathlib.Path(__file__).parent.parent
+            / "plugins/workflow-kernel/.claude-plugin/plugin.json"
+        ).read_text())
+        major, minor, patch = (
+            int(part) for part in manifest["version"].split(".")
+        )
+        unsatisfiable = "%d.%d.%d" % (major, minor + 1, 0)
+        satisfied_floor = "%d.%d.%d" % (major, minor, patch)
         for minimum, expected in (
             ("0.3.0", 0),
             ("0.5.0", 0),
@@ -178,7 +194,8 @@ class ReviewFixContractTests(unittest.TestCase):
             ("0.7.1", 0),
             ("0.8.0", 0),
             ("0.8.1", 0),
-            ("0.9.1", 2),
+            (satisfied_floor, 0),
+            (unsatisfiable, 2),
             ("not-semver", 2),
         ):
             with self.subTest(minimum=minimum):
