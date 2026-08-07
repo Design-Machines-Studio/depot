@@ -487,14 +487,36 @@ done
 # marketplace entry, and the runtime constant. A test that pinned the runtime
 # literal kept a stale value green while the manifests moved. Compare them.
 runtime_resolution="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/runtime_resolution.py"
-kernel_manifest="$REPO_ROOT/plugins/workflow-kernel/.claude-plugin/plugin.json"
-manifest_version=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([0-9.]*\)".*/\1/p' "$kernel_manifest" | head -1)
 runtime_tuple=$(sed -n 's/^KERNEL_VERSION = (\([0-9]*\), \([0-9]*\), \([0-9]*\))$/\1.\2.\3/p' "$runtime_resolution" | head -1)
-if [ -n "$manifest_version" ] && [ "$manifest_version" = "$runtime_tuple" ]; then
-  printf "  ok    kernel runtime version %s matches the plugin manifest\n" "$runtime_tuple"
+# All four homes, not just the Claude manifest. Checking one of them let the
+# other three drift from the runtime constant with nothing to catch it -- which
+# is the exact failure this block was added to prevent, half-implemented.
+for kernel_manifest in \
+  "$REPO_ROOT/plugins/workflow-kernel/.claude-plugin/plugin.json" \
+  "$REPO_ROOT/plugins/workflow-kernel/.codex-plugin/plugin.json"; do
+  rel="${kernel_manifest#$REPO_ROOT/}"
+  manifest_version=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([0-9.]*\)".*/\1/p' "$kernel_manifest" | head -1)
+  if [ -n "$manifest_version" ] && [ "$manifest_version" = "$runtime_tuple" ]; then
+    printf "  ok    kernel runtime version %s matches %s\n" "$runtime_tuple" "$rel"
+  else
+    printf "  FAIL  kernel runtime version '%s' does not match %s '%s'\n" \
+      "$runtime_tuple" "$rel" "$manifest_version"
+    failures=$((failures + 1))
+  fi
+done
+marketplace_version=$(python3 -c "
+import json, sys
+manifest = json.load(open(sys.argv[1]))
+entry = next(
+    (p for p in manifest['plugins'] if p.get('name') == 'workflow-kernel'), {}
+)
+sys.stdout.write(entry.get('version', ''))
+" "$REPO_ROOT/.claude-plugin/marketplace.json" 2>/dev/null)
+if [ -n "$marketplace_version" ] && [ "$marketplace_version" = "$runtime_tuple" ]; then
+  printf "  ok    kernel runtime version %s matches the marketplace entry\n" "$runtime_tuple"
 else
-  printf "  FAIL  kernel runtime version '%s' does not match manifest '%s'\n" \
-    "$runtime_tuple" "$manifest_version"
+  printf "  FAIL  kernel runtime version '%s' does not match marketplace entry '%s'\n" \
+    "$runtime_tuple" "$marketplace_version"
   failures=$((failures + 1))
 fi
 

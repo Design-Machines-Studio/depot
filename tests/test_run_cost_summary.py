@@ -803,6 +803,80 @@ class RunCostSummaryTests(unittest.TestCase):
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 
+    def _run_cost_summary(self, **paths):
+        import sys
+        argv = ["workflow_kernel", "run-cost-summary"]
+        for flag, value in paths.items():
+            argv += ["--" + flag.replace("_", "-"), str(value)]
+        old = sys.argv
+        sys.argv = argv
+        try:
+            from workflow_kernel.cli import main
+            try:
+                return main() or 0
+            except SystemExit as exc:
+                return exc.code or 0
+        finally:
+            sys.argv = old
+
+    def test_legacy_path_refuses_the_receipt_before_writing_the_artifact(self):
+        """Order matters: refuse first, produce second.
+
+        The symlink preflight used to live inside the append helper, which runs
+        after the build -- so an unsafe receipt path left the artifact on disk
+        with nothing pointing at it and an exception escaping uncaught.
+        """
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp(dir=os.getcwd())
+        try:
+            outside = os.path.join(directory, "outside")
+            os.mkdir(outside)
+            os.symlink(outside, os.path.join(directory, "run"))
+
+            events = self._events_file(directory)
+            output = os.path.join(directory, "run-cost-summary.json")
+            self.assertNotEqual(self._run_cost_summary(
+                events=events, output=output,
+                receipt_line=os.path.join(directory, "run", "run-receipt.md"),
+            ), 0)
+            # No orphan: the artifact was never written.
+            self.assertFalse(os.path.exists(output))
+            self.assertEqual(os.listdir(outside), [])
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_legacy_path_maps_a_non_array_events_file_to_invalid_schema(self):
+        """The merged builder must not change the legacy command's error type."""
+        import os
+        import shutil
+        import tempfile
+
+        from workflow_kernel.schema import InvalidSchemaError
+
+        directory = tempfile.mkdtemp()
+        try:
+            events = os.path.join(directory, "not-an-array.json")
+            with open(events, "w") as f:
+                f.write('{"not": "an array"}')
+            output = os.path.join(directory, "run-cost-summary.json")
+            with self.assertRaises(InvalidSchemaError):
+                from workflow_kernel.cli import command_run_cost_summary
+
+                class _Args:
+                    pass
+
+                args = _Args()
+                args.events = events
+                args.output = output
+                args.receipt_line = None
+                command_run_cost_summary(args)
+            self.assertFalse(os.path.exists(output))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
     def test_emit_exits_conflict_when_the_receipt_cannot_be_written(self):
         """A receipt naming neither an artifact nor a skip is the silence the
         failure-modes checklist forbids. Exit code is the only way left to say

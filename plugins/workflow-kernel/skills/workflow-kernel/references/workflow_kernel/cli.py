@@ -2053,7 +2053,10 @@ def _coverage_suffix(output_path):
     emission.
     """
     try:
-        with open(output_path) as handle:
+        # Explicit UTF-8: `_write_json` writes it, and a C or cp1252 default
+        # locale would otherwise fail to decode a non-ASCII provider or lane
+        # name and silently drop the count off the receipt line.
+        with open(output_path, encoding="utf-8") as handle:
             coverage = json.load(handle)["measurement_coverage"]["usage"]
         return " (usage measured %s/%s)" % (
             coverage["measured"], coverage["expected"],
@@ -2076,10 +2079,18 @@ def _read_receipt_events(events_path):
 
     receipts = _load_json(events_path)
     if not isinstance(receipts, list):
-        raise ValueError("events file is not a receipt array")
+        # `InvalidSchemaError` rather than `ValueError`, because that is what the
+        # legacy entry point raised for this exact input and both entry points
+        # now share this function. `emit-cost-summary` catches everything and
+        # records `summary-failed` either way, so only the legacy path can tell
+        # the difference -- and it should not start telling a different story
+        # because the two builders were merged.
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
     try:
         return translate_pipeline_receipts(receipts)
     except ValueError:
+        # A stream neither adapter accepts still raises ValueError out of here,
+        # exactly as before the merge.
         return translate_review_receipts(receipts)
 
 
@@ -2130,10 +2141,26 @@ def command_emit_cost_summary(args):
     """
     if not _emit_paths_are_distinct(args):
         return EXIT_INVALID
-    reason, receipt_unsafe = _prepare_emit_artifact_path(args)
-    if reason is None:
-        reason = _run_emit_summary(args)
-    return _record_emit_outcome(args, reason, receipt_unsafe)
+    outcome = _prepare_emit_artifact_path(args)
+    if outcome.reason is None:
+        outcome = _EmitOutcome(_run_emit_summary(args), recordable=True)
+    return _record_emit_outcome(args, outcome)
+
+
+class _EmitOutcome:
+    """What happened, and whether the run receipt can be told about it.
+
+    Two loose values -- a reason string and a boolean -- could spell states that
+    cannot occur, such as a successful build whose receipt was refused. Pairing
+    them here means `recordable=False` only ever accompanies the refusal that
+    produced it.
+    """
+
+    __slots__ = ("reason", "recordable")
+
+    def __init__(self, reason, *, recordable):
+        self.reason = reason
+        self.recordable = recordable
 
 
 def _emit_stderr(message):
@@ -2161,24 +2188,23 @@ def _emit_paths_are_distinct(args):
 def _prepare_emit_artifact_path(args):
     """Validate both paths and take ownership of the artifact path.
 
-    Returns ``(reason, receipt_unsafe)``. ``reason`` is ``None`` when the
-    command may proceed to build. ``receipt_unsafe`` records *which* path was
-    refused, because a bad `--output` still leaves a writable receipt to record
-    the skip in and a bad `--receipt` does not: appending the skip line anyway
-    would write through the symlink just refused, since `_append_receipt_line`
-    guards only the final component with `O_NOFOLLOW`. Refusing a path and then
-    writing to it is not a guard.
+    Returns an :class:`_EmitOutcome`. ``recordable`` is False only when the
+    *receipt* path itself was refused, because a bad `--output` still leaves a
+    writable receipt to record the skip in and a bad `--receipt` does not:
+    appending the skip line anyway would write through the symlink just refused,
+    since `_append_receipt_line` guards only the final component with
+    `O_NOFOLLOW`. Refusing a path and then writing to it is not a guard.
     """
     try:
         _reject_symlinked_components(args.receipt)
     except ValueError as error:
         _emit_stderr(str(error))
-        return "unsafe-path", True
+        return _EmitOutcome("unsafe-path", recordable=False)
     try:
         _reject_symlinked_components(args.output)
     except ValueError as error:
         _emit_stderr(str(error))
-        return "unsafe-path", False
+        return _EmitOutcome("unsafe-path", recordable=True)
     try:
         # Own the artifact path. A stale file left by an earlier run must not
         # survive to be recorded as this run's measurement.
@@ -2186,8 +2212,8 @@ def _prepare_emit_artifact_path(args):
             os.unlink(args.output)
     except OSError as error:
         _emit_stderr(str(error))
-        return "stale-artifact-not-removable", False
-    return None, False
+        return _EmitOutcome("stale-artifact-not-removable", recordable=True)
+    return _EmitOutcome(None, recordable=True)
 
 
 def _run_emit_summary(args):
@@ -2205,14 +2231,14 @@ def _run_emit_summary(args):
     return None
 
 
-def _record_emit_outcome(args, reason, receipt_unsafe):
+def _record_emit_outcome(args, outcome):
     """Append exactly one inventory line naming what actually happened."""
     line = (
         "run-cost-summary: " + str(args.output) + _coverage_suffix(args.output)
-        if reason is None
-        else "run-cost-summary: skipped (" + reason + ")"
+        if outcome.reason is None
+        else "run-cost-summary: skipped (" + outcome.reason + ")"
     )
-    if receipt_unsafe:
+    if not outcome.recordable:
         # Nothing to append to: the receipt path is the thing that was refused.
         # Say so on stderr and stop, rather than writing the refusal through the
         # symlink that caused it.
@@ -2246,23 +2272,26 @@ def command_run_cost_summary(args):
     nothing. The artifact it produces is byte-identical, because both go
     through :func:`_build_and_write_cost_summary`.
     """
-    try:
-        _build_and_write_cost_summary(args)
-    except ValueError:
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS) from None
-    _append_receipt_inventory_line(
-        getattr(args, "receipt_line", None), args.output,
-    )
+    # Validate the receipt path BEFORE writing the artifact. The preflight used
+    # to live inside `_append_receipt_inventory_line`, which runs after the
+    # build -- so a symlinked or unwritable receipt left the artifact on disk
+    # with nothing pointing at it and an exception escaping uncaught. Order the
+    # checks the way `emit-cost-summary` does: refuse first, produce second.
+    receipt_line = getattr(args, "receipt_line", None)
+    if receipt_line:
+        _reject_symlinked_components(receipt_line)
+    _build_and_write_cost_summary(args)
+    _append_receipt_inventory_line(receipt_line, args.output)
     return 0
 
 
 def _append_receipt_inventory_line(receipt_path, artifact_path):
     if not receipt_path:
         return
-    # Same sink as `emit-cost-summary`, so the same preflight. This legacy entry
-    # point is still what the installed plugin caches invoke, so leaving it
-    # unguarded meant one policy with two enforcement levels and no reason for
-    # the difference.
+    # Same sink as `emit-cost-summary`, so the same preflight. The caller runs it
+    # before building as well -- refusing after the artifact exists would leave
+    # an orphan -- but a second check here costs nothing and keeps the guard
+    # attached to the write it protects rather than to one caller's ordering.
     _reject_symlinked_components(receipt_path)
     _append_receipt_line(receipt_path, "run-cost-summary: " + str(artifact_path))
 

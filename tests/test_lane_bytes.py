@@ -517,6 +517,30 @@ class LaneBytesAggregationTests(unittest.TestCase):
         self.assertEqual(totals["input_usage_count"], 100)
         self.assertEqual(provenance["input_usage_count"], "derived_complete_attempts")
 
+    def test_complete_byte_attempts_sum_into_the_input_bytes_total(self):
+        """The byte total had row-level and partial-coverage tests but nothing
+        asserting that two complete byte-measured attempts actually sum, so a
+        regression in the new aggregation branch or its provenance would not
+        have been caught."""
+        first = estimate_lane_input_bytes(
+            agent_definition_bytes=100, diff_bytes=50, boilerplate_bytes=25,
+            **_identity(lane="implementation"),
+        )
+        second = estimate_lane_input_bytes(
+            agent_definition_bytes=200, diff_bytes=25, boilerplate_bytes=0,
+            **_identity(lane="browser", chunk_id="chunk-b", node_id="chunk-b"),
+        )
+        self.assertEqual(first["input_bytes"], 175)
+        self.assertEqual(second["input_bytes"], 225)
+        events = self._events(first, second)
+        event_rows = [
+            (_attempt_identity(event), event.payload) for event in events
+        ]
+        expected = {identity for identity, _ in event_rows}
+        totals, provenance, _, _ = _scoped_totals(event_rows, [], [], expected)
+        self.assertEqual(totals["input_bytes"], 400)
+        self.assertEqual(provenance["input_bytes"], "derived_complete_attempts")
+
     def test_orphan_chunk_identity_is_measured_under_its_own_identity(self):
         payload = estimate_lane_input_bytes(
             **BYTE_ARGS,
