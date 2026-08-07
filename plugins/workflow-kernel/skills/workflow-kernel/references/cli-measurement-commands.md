@@ -261,6 +261,52 @@ The emission block in each consumer computes it:
 $(test -n "$(git status --porcelain)" && echo --dirty-state)
 ```
 
+## `record-attempt` -- the boundary, as a mechanism
+
+```sh
+"$WORKFLOW_KERNEL" record-attempt \
+  --receipts <run-dir>/authoritative-receipts.json \
+  --run-id <id> --occurred-at <ISO-8601> \
+  --authoritative-receipt <path> \
+  --stage <review_dispatch|progress> --status <completed|failed|declined|skipped> \
+  --lane <id> --chunk-id <id> --node-id <id> --attempt <n> \
+  --host <claude|codex> --duration-seconds <measured> \
+  --requested-executor <x> --attempted-executor <y> --implemented-by <z> \
+  [--fallback-reason <reason>] \
+  [--openrouter-receipt <wrapper receipt>] \
+  [--agent-definition <path> --diff <path> [--boilerplate <path> ...] \
+   --provider <p> --model <m>]
+```
+
+**Two receipts, one append, one lock.** The lane's outcome and its
+`attempt_usage` row are built together and written together: either both land or
+neither does. This is the difference between a mechanism and an instruction.
+Recording a lane and measuring it used to be two calls, and the second was prose
+in eleven files -- so every run that forgot it produced a structurally valid
+`run-cost-summary.json` with `lanes: []`, which reads exactly like a run that
+cost nothing. There is now no call that records a lane without its measurement.
+
+**Evidence, in order of preference.** Supply the strongest the attempt has:
+
+1. `--openrouter-receipt` -- the wrapper's `OPENROUTER_RECEIPT_FILE`. Real
+   provider counters and cost.
+2. `--agent-definition` and `--diff` (plus `--boilerplate`) -- deterministic
+   input bytes for Codex and Claude lanes. Bytes, never a token count, never
+   comparable to one.
+3. Neither -- the row records `measurement_source: attempt_unmeasured`.
+
+**`attempt_unmeasured` is the point, not the fallback.** It states that the lane
+ran and nothing on this host reported usage for it. That is a claim a reader can
+count, audit, and argue with. An absent row is not: it is indistinguishable from
+a lane that never ran, and the spend disappears with it. Record failed and
+declined attempts for the same reason -- a lane that burned a provider call and
+returned nothing still cost money.
+
+Do not pair this with `openrouter-usage --append-to` or `lane-input-bytes
+--append-to` for the same attempt; that is the older two-call path and using
+both double-counts. The standalone translators remain for measuring something
+that is not a recorded lane attempt.
+
 ## The emission boundary
 
 The translators are reachable only if something calls them. An orchestrator

@@ -99,6 +99,18 @@ BEHAVIORAL_CLI_CASES = {
     # would be unlinked, written as JSON, then appended to as text, producing a
     # corrupt artifact. The command refuses that, so the always-zero probe below
     # has to give it two paths or it would be asserting the refusal instead.
+    # A well-formed invocation whose measurement evidence does not exist: the
+    # command must refuse before writing either receipt, never half-record.
+    "record-attempt": (
+        "--receipts", "<output>", "--run-id", "validator-cli",
+        "--occurred-at", "2026-07-14T00:00:00Z",
+        "--authoritative-receipt", "receipts/validator.json",
+        "--stage", "review_dispatch", "--status", "completed",
+        "--lane", "validator", "--chunk-id", "chunk", "--node-id", "node",
+        "--attempt", "1", "--host", "validator", "--duration-seconds", "1.0",
+        "--requested-executor", "codex", "--attempted-executor", "codex",
+        "--implemented-by", "codex", "--openrouter-receipt", "<missing>",
+    ),
     "emit-cost-summary": (
         "--events", "<missing>", "--output", "<output>", "--receipt", "<receipt>",
     ),
@@ -479,7 +491,7 @@ def check_cli(context):
         "observe-pipeline", "observe-review", "export-review-contributions",
         "compare", "metrics", "run-cost-summary", "emit-cost-summary",
         "openrouter-usage",
-        "lane-input-bytes", "approve-verification-profile",
+        "lane-input-bytes", "record-attempt", "approve-verification-profile",
         "plan-verification", "run-verification",
         "record-verification-result",
         "plan-create", "plan-compose", "record-create", "plan-cleanup",
@@ -733,6 +745,31 @@ def check_cli(context):
         successful(
             "run-cost-summary", "--events", RECEIPTS / "pipeline-codex.json",
             "--output", root / "run-cost-summary.json",
+        )
+        record_attempt_stream = root / "record-attempt-receipts.json"
+        successful(
+            "record-attempt",
+            "--receipts", record_attempt_stream,
+            "--run-id", "validator-cli",
+            "--occurred-at", "2026-07-14T00:02:00Z",
+            "--authoritative-receipt", "receipts/validator.json",
+            "--stage", "review_dispatch", "--status", "completed",
+            "--lane", "validator", "--chunk-id", "chunk", "--node-id", "node",
+            "--attempt", "1", "--host", "validator", "--duration-seconds", "1.0",
+            "--requested-executor", "codex", "--attempted-executor", "openrouter",
+            "--implemented-by", "openrouter",
+            "--openrouter-receipt",
+            Path(ROOT) / "tests" / "fixtures" / "openrouter-receipt-success.json",
+        )
+        recorded = json.loads(record_attempt_stream.read_text(encoding="utf-8"))
+        require(
+            [r["stage"] for r in recorded]
+            == ["review_dispatch", "attempt_usage"],
+            "record-attempt did not append the lane and its measurement together",
+        )
+        require(
+            [r["sequence"] for r in recorded] == [0, 1],
+            "record-attempt produced a non-contiguous sequence",
         )
         successful(
             "openrouter-usage",

@@ -805,5 +805,168 @@ class OpenRouterUsageCliTests(unittest.TestCase):
                 self.assertNotEqual(code, 0)
 
 
+class RecordAttemptTests(unittest.TestCase):
+    """`record-attempt` is the mechanism that replaced the prose obligation.
+
+    Recording a lane and recording its measurement used to be two calls, the
+    second of which lived only in documentation. These tests pin the property
+    that made it a mechanism: there is no way to record a lane without also
+    recording a usage row for it.
+    """
+
+    def _argv(self, receipts, lane, minute, **extra):
+        argv = [
+            "record-attempt",
+            "--receipts", str(receipts),
+            "--run-id", "record-attempt-1",
+            "--occurred-at", "2026-08-07T09:%02d:00Z" % minute,
+            "--authoritative-receipt", "receipts/%s.json" % lane,
+            "--stage", "review_dispatch", "--status", "completed",
+            "--lane", lane, "--chunk-id", "chunk-a", "--node-id", lane,
+            "--attempt", "1", "--host", "claude",
+            "--duration-seconds", "5.0",
+            "--requested-executor", "codex",
+            "--attempted-executor", "openrouter",
+            "--implemented-by", "openrouter",
+        ]
+        for flag, value in extra.items():
+            argv += ["--" + flag.replace("_", "-"), str(value)]
+        return argv
+
+    def _stream(self, path):
+        with open(path, encoding="utf-8") as handle:
+            return json.load(handle)
+
+    def test_every_recorded_lane_carries_a_usage_row(self):
+        """The whole point. Three evidence paths, no unpaired lane."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts = os.path.join(directory, "authoritative-receipts.json")
+        try:
+            code, _, err = _invoke(self._argv(
+                receipts, "security", 1,
+                openrouter_receipt=SUCCESS_FIXTURE,
+            ))
+            self.assertEqual(code, 0, err)
+            code, _, err = _invoke(self._argv(
+                receipts, "docs", 2,
+                agent_definition=FIXTURES / "lane-bytes" / "agent-definition.md",
+                diff=FIXTURES / "lane-bytes" / "diff.patch",
+                provider="anthropic", model="opus",
+            ))
+            self.assertEqual(code, 0, err)
+            # No evidence at all -- the case that used to produce no row.
+            code, _, err = _invoke(self._argv(receipts, "architecture", 3))
+            self.assertEqual(code, 0, err)
+
+            stream = self._stream(receipts)
+            recorded = {
+                r["lane"] for r in stream if r["stage"] == "review_dispatch"
+            }
+            measured = {
+                r["lane"] for r in stream if r["stage"] == "attempt_usage"
+            }
+            self.assertEqual(recorded, {"security", "docs", "architecture"})
+            self.assertEqual(recorded - measured, set())
+            sources = {
+                r["lane"]: r["measurement_source"]
+                for r in stream if r["stage"] == "attempt_usage"
+            }
+            self.assertEqual(sources["security"], "openrouter_api_receipt")
+            self.assertEqual(sources["docs"], "estimated_input_bytes")
+            self.assertEqual(sources["architecture"], "attempt_unmeasured")
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_unmeasured_lane_still_reaches_the_cost_summary(self):
+        """An `attempt_unmeasured` row is a claim, not a gap. It must survive
+        translation and appear as a lane the reader can see and question."""
+        import os
+        import shutil
+        import tempfile
+
+        from workflow_kernel.cost_summary import validate_run_cost_summary
+        from workflow_kernel.dm_review_adapter import translate_review_receipts
+
+        directory = tempfile.mkdtemp()
+        receipts = os.path.join(directory, "authoritative-receipts.json")
+        try:
+            _invoke(self._argv(receipts, "architecture", 1))
+            summary = build_run_cost_summary(
+                translate_review_receipts(self._stream(receipts))
+            )
+            validate_run_cost_summary(summary)
+            (lane,) = summary["lanes"]
+            self.assertEqual(lane["lane"], "architecture")
+            self.assertEqual(lane["measurement_source"], "attempt_unmeasured")
+            self.assertIsNone(lane["cost_usd"])
+            self.assertIsNone(lane["usage_count"])
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_a_rejected_measurement_appends_neither_receipt(self):
+        """Both receipts land or neither does. A lane receipt written beside a
+        failed measurement would be the unpaired state this command exists to
+        make unrepresentable."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts = os.path.join(directory, "authoritative-receipts.json")
+        bad = os.path.join(directory, "not-a-receipt.json")
+        with open(bad, "w", encoding="utf-8") as handle:
+            handle.write("[]")
+        try:
+            code, _, _ = _invoke(self._argv(
+                receipts, "security", 1, openrouter_receipt=bad,
+            ))
+            self.assertNotEqual(code, 0)
+            self.assertFalse(os.path.exists(receipts))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_sequences_stay_contiguous_across_paired_appends(self):
+        """Two receipts per call still means one contiguous sequence."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts = os.path.join(directory, "authoritative-receipts.json")
+        try:
+            for index, lane in enumerate(("a", "b", "c"), start=1):
+                _invoke(self._argv(receipts, lane, index))
+            stream = self._stream(receipts)
+            self.assertEqual(
+                [r["sequence"] for r in stream], list(range(len(stream))),
+            )
+            self.assertEqual(len(stream), 6)
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_refuses_a_symlinked_receipt_stream(self):
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp(dir=os.getcwd())
+        try:
+            outside = os.path.join(directory, "outside")
+            os.mkdir(outside)
+            os.symlink(outside, os.path.join(directory, "workflow-kernel"))
+            receipts = os.path.join(
+                directory, "workflow-kernel", "authoritative-receipts.json",
+            )
+            code, _, _ = _invoke(self._argv(receipts, "security", 1))
+            self.assertNotEqual(code, 0)
+            self.assertEqual(os.listdir(outside), [])
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+
 if __name__ == "__main__":
     unittest.main()

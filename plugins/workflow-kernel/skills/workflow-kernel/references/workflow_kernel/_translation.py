@@ -186,8 +186,14 @@ _MEASUREMENT_FIELDS = frozenset({
     "cache_read_usage_count", "cache_write_usage_count",
     "reasoning_usage_count", "input_bytes",
 })
+# A row may legitimately carry no measurement, but only by saying so. Silence
+# is the thing this backbone exists to remove: an absent row and a lane that
+# never ran are indistinguishable, and the spend disappears with it.
+# `attempt_unmeasured` is the explicit claim -- the lane ran, and nothing on
+# this host reported usage for it.
 _MEASUREMENTLESS_SOURCES = frozenset({
     "openrouter_receipt_no_usage", "openrouter_receipt_failed",
+    "attempt_unmeasured",
 })
 _CONTRIBUTION_DISPOSITIONS = frozenset({"retained", "merged", "discarded"})
 _CONTRIBUTION_AGREEMENTS = frozenset({"unique", "corroborated", "disputed"})

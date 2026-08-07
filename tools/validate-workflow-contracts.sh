@@ -32,7 +32,9 @@ require_text() {
     return
   fi
 
-  if grep -Fq "$pattern" "$file"; then
+  # `--` before the pattern: a pattern that starts with a dash (a CLI flag, say)
+  # is otherwise parsed as a grep option and the check silently fails.
+  if grep -Fq -- "$pattern" "$file"; then
     printf "  OK    %s\n" "$label"
   else
     printf "  FAIL  %s\n" "$label"
@@ -51,7 +53,11 @@ require_absent() {
     return
   fi
 
-  if grep -Fq "$pattern" "$file"; then
+  # `--` as above, and it matters more here: without it a dash-leading pattern
+  # makes grep exit non-zero as an *error*, which this branch would then report
+  # as the absence it was asked to prove. A check that fails open is worse than
+  # no check, because the OK line says it ran.
+  if grep -Fq -- "$pattern" "$file"; then
     printf "  FAIL  %s\n" "$label"
     failures=1
   else
@@ -525,6 +531,23 @@ measurement_doc="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/refer
 require_text "$measurement_doc" "openrouter-usage" "measurement CLI reference documents openrouter-usage"
 require_text "$measurement_doc" "lane-input-bytes" "measurement CLI reference documents lane-input-bytes"
 require_text "$measurement_doc" "input_bytes" "measurement CLI reference documents the byte-unit field"
+require_text "$measurement_doc" "record-attempt" "measurement CLI reference documents record-attempt"
+require_text "$measurement_doc" "attempt_unmeasured" "measurement CLI reference documents the explicit unmeasured claim"
+
+# The emission boundary has to be wired at the DISPATCH site, not only described
+# in the terminal emission paragraph. Six review lanes and four production runs
+# established that an instruction living next to the last command in the run is
+# an instruction nobody executes during the run. Assert that the two consumers
+# that actually dispatch lanes name `record-attempt` where they dispatch them.
+review_dispatch_skill="$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
+orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
+for f in "$review_dispatch_skill" "$orchestrator"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "record-attempt" "$rel records each attempt through the kernel"
+  require_text "$f" "attempt_unmeasured" "$rel names the explicit unmeasured claim"
+  require_text "$f" "--openrouter-receipt" "$rel names the provider-receipt evidence path"
+  require_text "$f" "--agent-definition" "$rel names the input-bytes evidence path"
+done
 
 printf "\n"
 if [ "$failures" -ne 0 ]; then

@@ -1,6 +1,6 @@
 {
   "name": "workflow-kernel",
-  "version": "0.11.5",
+  "version": "0.12.0",
   "description": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, replay, recovery, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
   "author": {
     "name": "Design Machines",

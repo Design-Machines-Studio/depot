@@ -30,6 +30,7 @@ class ReleaseValidatorTests(unittest.TestCase):
             "compare", "metrics", "run-cost-summary", "emit-cost-summary",
             "openrouter-usage",
             "lane-input-bytes",
+            "record-attempt",
             "plan-create", "plan-compose", "record-create", "plan-cleanup",
             "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
             "plan-reconcile",

@@ -609,6 +609,56 @@ When no design spec exists, omit this section entirely. The browser agents will 
 - Do not wait for one agent to finish before launching the next
 - Each agent runs independently with its own copy of the diff
 
+#### Recording each lane (mandatory, one call per attempt)
+
+**As each lane settles -- completed, failed, declined, or skipped -- record it
+with `record-attempt`. This is not optional and it is not deferred to the
+terminal emission block.**
+
+```bash
+"$WORKFLOW_KERNEL" record-attempt \
+  --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json \
+  --run-id <run-id> --occurred-at <ISO-8601> \
+  --authoritative-receipt receipts/review/<lane>.json \
+  --stage review_dispatch --status <completed|failed|declined|skipped> \
+  --lane <lane-id> --chunk-id <review-target> --node-id <lane-id> \
+  --attempt <n> --host <claude|codex> --duration-seconds <elapsed> \
+  --requested-executor <codex|openrouter|claude> \
+  --attempted-executor <what actually ran> \
+  --implemented-by <what produced the output> \
+  [--fallback-reason <reason>] \
+  # exactly one measurement source, in this order of preference:
+  [--openrouter-receipt <wrapper receipt path>] \
+  [--agent-definition <path> --diff <path> [--boilerplate <path> ...] \
+   --provider <p> --model <m>]
+```
+
+One call appends **two** receipts under one lock -- the lane outcome and its
+`attempt_usage` row -- and either both land or neither does. That is the whole
+mechanism: there is no call that records a lane without its measurement, so a
+lane cannot go unmeasured by being forgotten.
+
+Supply the strongest evidence the lane actually has:
+
+- **OpenRouter lanes:** `--openrouter-receipt`, the wrapper's
+  `OPENROUTER_RECEIPT_FILE`. Real provider counters and cost.
+- **Codex and Claude lanes:** `--agent-definition` and `--diff` (plus any
+  `--boilerplate`). Deterministic input bytes -- never a token count, never
+  comparable to one.
+- **Neither available:** omit both. The row records `attempt_unmeasured`, which
+  states that the lane ran and nothing measured it. That is a claim a reader can
+  audit. An absent row is not -- it is indistinguishable from a lane that never
+  ran, and the spend disappears with it.
+
+Record failed and declined attempts too. A lane that burned a provider call and
+returned nothing still cost money.
+
+Do **not** hand-write lane receipts into the array, and do not call
+`openrouter-usage` or `lane-input-bytes` with `--append-to` for a lane you are
+recording here -- that is the older two-call path this replaces, and using both
+double-counts the attempt. The standalone translators remain available for
+measuring something that is not a recorded lane attempt.
+
 #### Failure handling
 
 Apply the failure policies from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:

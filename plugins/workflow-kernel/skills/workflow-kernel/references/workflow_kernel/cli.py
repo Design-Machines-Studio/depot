@@ -2445,31 +2445,49 @@ def _append_attempt_usage_receipt(receipts_path, payload, args, error_label):
 
 def _append_attempt_usage_locked(receipts_path, payload, args, error_label):
     """The critical section of :func:`_append_attempt_usage_receipt`."""
+    _append_receipts_locked(receipts_path, error_label, [
+        {
+            "stage": "attempt_usage",
+            "status": "observed",
+            "authoritative_receipt": args.authoritative_receipt,
+            **payload,
+        },
+    ], args.run_id, args.occurred_at)
+
+
+def _append_receipts_locked(receipts_path, error_label, bodies, run_id,
+                            occurred_at):
+    """Append one or more receipts to the stream as a single unit.
+
+    Callers pass receipt bodies without `run_id`, `sequence`, or `occurred_at`.
+    `sequence` must equal each receipt's zero-based position in the array and
+    `_translation` rejects any other value, so deriving it from the array length
+    here -- rather than accepting it as a flag -- is what makes a collision or a
+    gap unrepresentable.
+
+    Appending several receipts in one call is what lets `record-attempt` put a
+    lane's outcome and its measurement into the stream together: either both
+    land or neither does, so a recorded lane cannot be missing its usage row.
+    """
     if os.path.exists(receipts_path):
         receipts = _load_json(receipts_path)
         if not isinstance(receipts, list):
             sys.stderr.write(
-                error_label + ": --append-to target is not a receipt array\n"
+                error_label + ": receipt target is not a receipt array\n"
             )
             raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
                 ErrorDetailKey.REASON_CODE.value: "invalid_argument",
             })
     else:
         receipts = []
-    # `sequence` must equal the receipt's zero-based position in the array;
-    # `_translation` rejects any other value. Deriving it from the array length
-    # rather than accepting it as a flag is what makes a collision or a gap
-    # unrepresentable.
-    receipt = {
-        "run_id": args.run_id,
-        "sequence": len(receipts),
-        "stage": "attempt_usage",
-        "status": "observed",
-        "occurred_at": args.occurred_at,
-        "authoritative_receipt": args.authoritative_receipt,
-    }
-    receipt.update(payload)
-    receipts.append(receipt)
+    for body in bodies:
+        receipt = {
+            "run_id": run_id,
+            "sequence": len(receipts),
+            "occurred_at": occurred_at,
+        }
+        receipt.update(body)
+        receipts.append(receipt)
     # Prove the appended stream still translates before it replaces the old
     # one. A receipt stream that no longer parses is worse than no append.
     #
@@ -2614,6 +2632,115 @@ def command_lane_input_bytes(args):
         "lane-input-bytes",
         args,
     )
+
+
+def _attempt_usage_payload(args):
+    """Build the usage half of a recorded attempt from whatever evidence exists.
+
+    Three sources, in the order the caller can supply them:
+
+    * an OpenRouter wrapper receipt, translated to real provider counters;
+    * the lane's input files, measured deterministically as bytes;
+    * neither, which becomes an explicit `attempt_unmeasured` row.
+
+    The third case is the point. A lane that ran on a host reporting nothing
+    used to produce no row at all, and an absent row is indistinguishable from
+    a lane that never ran -- so the spend vanished and the artifact still called
+    itself complete. Saying "this ran and nothing measured it" is a claim that
+    can be counted, audited, and argued with.
+    """
+    from ._usage_identity import ProviderAttribution, build_attempt_identity
+    from .lane_bytes import measure_lane_inputs
+    from .openrouter_usage import translate_openrouter_receipt
+
+    context = _attempt_context(args)
+    if args.openrouter_receipt:
+        receipt = _load_json(args.openrouter_receipt)
+        if not isinstance(receipt, dict):
+            raise ValueError("openrouter receipt is not an object")
+        return translate_openrouter_receipt(receipt, context=context)
+
+    attribution = ProviderAttribution(
+        requested_provider=args.requested_provider,
+        attempted_provider=args.attempted_provider,
+        implemented_by=args.implemented_by,
+        provider=args.provider,
+        model=args.model,
+    )
+    if args.agent_definition and args.diff:
+        return measure_lane_inputs(
+            args.agent_definition, args.diff, args.boilerplate,
+            context=context, attribution=attribution,
+        )
+    payload = build_attempt_identity("record-attempt", context, attribution)
+    payload["measurement_source"] = "attempt_unmeasured"
+    payload["usage_estimated"] = False
+    return payload
+
+
+def command_record_attempt(args):
+    """Record a lane's outcome and its measurement as one indivisible append.
+
+    Before this command the two were separate obligations: write the lane
+    receipt, then remember to run `openrouter-usage` or `lane-input-bytes`. The
+    second half was prose in eleven consumer files, and prose is not a
+    mechanism -- every run that forgot it produced a structurally valid
+    `run-cost-summary.json` with `lanes: []`, which reads exactly like a run
+    that cost nothing.
+
+    Recording the lane now *is* recording its measurement. Both receipts are
+    built, then appended together under one lock and validated as one stream:
+    either both land or neither does. A recorded lane cannot be missing its
+    usage row, because there is no call that writes one without the other.
+    """
+    error_label = "record-attempt"
+    _validate_append_envelope(args, error_label)
+    _reject_symlinked_receipt_stream(args.receipts, error_label)
+    try:
+        usage = _attempt_usage_payload(args)
+    except ValueError as error:
+        sys.stderr.write(error_label + ": " + str(error) + "\n")
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        }) from None
+
+    lane_receipt = {
+        "stage": args.stage,
+        "status": args.status,
+        "node_id": args.node_id,
+        "authoritative_receipt": args.authoritative_receipt,
+        "host": args.host,
+        "lane": args.lane,
+        "chunk_id": args.chunk_id,
+        "attempt": args.attempt,
+        "requested_executor": args.requested_executor,
+        "attempted_executor": args.attempted_executor,
+        "implemented_by": args.implemented_by,
+    }
+    if args.fallback_reason:
+        lane_receipt["fallback_reason"] = args.fallback_reason
+    usage_receipt = {
+        "stage": "attempt_usage",
+        "status": "observed",
+        "authoritative_receipt": args.authoritative_receipt,
+        **usage,
+    }
+
+    lock_descriptor = _open_receipt_stream_lock(args.receipts)
+    try:
+        fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+        _append_receipts_locked(
+            args.receipts, error_label, [lane_receipt, usage_receipt],
+            args.run_id, args.occurred_at,
+        )
+    finally:
+        os.close(lock_descriptor)
+    sys.stdout.write(json.dumps({
+        "recorded": 2,
+        "lane": args.lane,
+        "measurement_source": usage["measurement_source"],
+    }, sort_keys=True) + "\n")
+    return 0
 
 
 # Fixed PATH for the one runtime path that shells out; the caller's PATH
@@ -3934,6 +4061,38 @@ def parser():
     lane_input_bytes.add_argument("--run-id", default=None)
     lane_input_bytes.add_argument("--occurred-at", default=None)
     lane_input_bytes.add_argument("--authoritative-receipt", default=None)
+
+    record_attempt = commands.add_parser(
+        "record-attempt",
+        help="append a lane outcome and its measurement as one unit",
+    )
+    record_attempt.add_argument("--receipts", required=True)
+    record_attempt.add_argument("--run-id", required=True)
+    record_attempt.add_argument("--occurred-at", required=True)
+    record_attempt.add_argument("--authoritative-receipt", required=True)
+    record_attempt.add_argument("--stage", required=True)
+    record_attempt.add_argument("--status", required=True)
+    record_attempt.add_argument("--lane", required=True)
+    record_attempt.add_argument("--chunk-id", required=True)
+    record_attempt.add_argument("--node-id", required=True)
+    record_attempt.add_argument("--attempt", required=True, type=int)
+    record_attempt.add_argument("--host", required=True)
+    record_attempt.add_argument("--duration-seconds", required=True, type=float)
+    record_attempt.add_argument("--requested-executor", required=True)
+    record_attempt.add_argument("--attempted-executor", required=True)
+    record_attempt.add_argument("--implemented-by", required=True)
+    record_attempt.add_argument("--fallback-reason", default=None)
+    # Measurement evidence. An OpenRouter receipt wins; otherwise the lane input
+    # files are measured; otherwise the row is recorded `attempt_unmeasured`.
+    record_attempt.add_argument("--openrouter-receipt", default=None)
+    record_attempt.add_argument("--agent-definition", default=None)
+    record_attempt.add_argument("--diff", default=None)
+    record_attempt.add_argument("--boilerplate", action="append", default=[])
+    record_attempt.add_argument("--requested-provider", default="not_reported")
+    record_attempt.add_argument("--attempted-provider", default="not_reported")
+    record_attempt.add_argument("--provider", default="not_reported")
+    record_attempt.add_argument("--model", default="not_reported")
+    record_attempt.set_defaults(handler=command_record_attempt)
     lane_input_bytes.set_defaults(handler=command_lane_input_bytes)
 
     approve_verification = commands.add_parser(
