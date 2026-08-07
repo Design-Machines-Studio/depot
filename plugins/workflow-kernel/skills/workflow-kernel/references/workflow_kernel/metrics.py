@@ -243,6 +243,9 @@ def _scoped_totals(attempt_rows, run_rows, legacy_rows, expected_attempts):
             expected_attempts, attempt_rows, lambda payload: field in payload,
         )
         attempt_values = [payload[field] for _, payload in assigned_rows]
+        attempt_sources = {
+            payload.get("measurement_source") for _, payload in assigned_rows
+        }
         if len(run_values) > 1:
             raise ValueError("overlapping authoritative run usage: " + field)
         if run_values:
@@ -257,6 +260,7 @@ def _scoped_totals(attempt_rows, run_rows, legacy_rows, expected_attempts):
             and coverage["overlap"] == 0
             and coverage["unassigned"] == 0
             and len(attempt_values) == coverage["expected"]
+            and len(attempt_sources) == 1
         ):
             usage_totals[field] = sum(attempt_values)
             usage_provenance[field] = "derived_complete_attempts"

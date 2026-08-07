@@ -2036,6 +2036,40 @@ def command_openrouter_usage(args):
     return 0
 
 
+def command_lane_input_bytes(args):
+    from .lane_bytes import measure_lane_inputs
+
+    try:
+        payload = measure_lane_inputs(
+            args.agent_definition,
+            args.diff,
+            args.boilerplate,
+            lane=args.lane,
+            chunk_id=args.chunk_id,
+            node_id=args.node_id,
+            attempt=args.attempt,
+            host=args.host,
+            duration_seconds=args.duration_seconds,
+            requested_provider=args.requested_provider,
+            attempted_provider=args.attempted_provider,
+            implemented_by=args.implemented_by,
+            provider=args.provider,
+            model=args.model,
+        )
+    except ValueError as error:
+        sys.stderr.write("lane-input-bytes: " + str(error) + "\n")
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        }) from None
+    if args.output:
+        _write_json(args.output, payload)
+    else:
+        sys.stdout.write(json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ) + "\n")
+    return 0
+
+
 # Fixed PATH for the one runtime path that shells out; the caller's PATH
 # never selects the docker binary that executes destructive stop/rm actions.
 _FIXED_SUBPROCESS_PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -3294,6 +3328,27 @@ def parser():
     openrouter_usage.add_argument("--duration-seconds", required=True, type=float)
     openrouter_usage.add_argument("--output", default=None)
     openrouter_usage.set_defaults(handler=command_openrouter_usage)
+
+    lane_input_bytes = commands.add_parser(
+        "lane-input-bytes",
+        help="measure deterministic per-lane input bytes into an attempt usage payload",
+    )
+    lane_input_bytes.add_argument("--agent-definition", required=True)
+    lane_input_bytes.add_argument("--diff", required=True)
+    lane_input_bytes.add_argument("--boilerplate", action="append", default=[])
+    lane_input_bytes.add_argument("--lane", required=True)
+    lane_input_bytes.add_argument("--chunk-id", required=True)
+    lane_input_bytes.add_argument("--node-id", required=True)
+    lane_input_bytes.add_argument("--attempt", required=True, type=int)
+    lane_input_bytes.add_argument("--host", required=True)
+    lane_input_bytes.add_argument("--duration-seconds", required=True, type=float)
+    lane_input_bytes.add_argument("--requested-provider", required=True)
+    lane_input_bytes.add_argument("--attempted-provider", required=True)
+    lane_input_bytes.add_argument("--implemented-by", required=True)
+    lane_input_bytes.add_argument("--provider", required=True)
+    lane_input_bytes.add_argument("--model", required=True)
+    lane_input_bytes.add_argument("--output", default=None)
+    lane_input_bytes.set_defaults(handler=command_lane_input_bytes)
 
     approve_verification = commands.add_parser(
         "approve-verification-profile",

@@ -101,6 +101,17 @@ BEHAVIORAL_CLI_CASES = {
         "--attempt", "1", "--host", "validator",
         "--duration-seconds", "1.0",
     ),
+    "lane-input-bytes": (
+        "--agent-definition", "<missing>", "--diff", "<missing>",
+        "--lane", "validator",
+        "--chunk-id", "chunk", "--node-id", "node",
+        "--attempt", "1", "--host", "validator",
+        "--duration-seconds", "1.0",
+        "--requested-provider", "validator",
+        "--attempted-provider", "validator",
+        "--implemented-by", "validator",
+        "--provider", "validator", "--model", "validator",
+    ),
     "approve-verification-profile": (
         "--repository-root", "<state>", "--profile", "<missing>",
         "--trusted-base-commit", "0" * 40,
@@ -460,7 +471,7 @@ def check_cli(context):
         "bind-verification-contract", "revise-verification-contract",
         "observe-pipeline", "observe-review", "export-review-contributions",
         "compare", "metrics", "run-cost-summary", "openrouter-usage",
-        "approve-verification-profile",
+        "lane-input-bytes", "approve-verification-profile",
         "plan-verification", "run-verification",
         "record-verification-result",
         "plan-create", "plan-compose", "record-create", "plan-cleanup",
@@ -717,6 +728,23 @@ def check_cli(context):
             "--node-id", "node", "--attempt", "1",
             "--host", "validator", "--duration-seconds", "1.0",
             "--output", root / "openrouter-usage.json",
+        )
+        successful(
+            "lane-input-bytes",
+            "--agent-definition",
+            Path(ROOT) / "tests" / "fixtures" / "lane-bytes" / "agent-definition.md",
+            "--diff",
+            Path(ROOT) / "tests" / "fixtures" / "lane-bytes" / "diff.patch",
+            "--boilerplate",
+            Path(ROOT) / "tests" / "fixtures" / "lane-bytes" / "boilerplate.md",
+            "--lane", "validator", "--chunk-id", "chunk",
+            "--node-id", "node", "--attempt", "1",
+            "--host", "validator", "--duration-seconds", "1.0",
+            "--requested-provider", "validator",
+            "--attempted-provider", "validator",
+            "--implemented-by", "validator",
+            "--provider", "validator", "--model", "validator",
+            "--output", root / "lane-input-bytes.json",
         )
 
         from tests.test_runtime_cli import verification_contract

@@ -28,6 +28,7 @@ class ReleaseValidatorTests(unittest.TestCase):
             "bind-verification-contract", "revise-verification-contract",
             "observe-pipeline", "observe-review", "export-review-contributions",
             "compare", "metrics", "run-cost-summary", "openrouter-usage",
+            "lane-input-bytes",
             "plan-create", "plan-compose", "record-create", "plan-cleanup",
             "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
             "plan-reconcile",
