@@ -1994,32 +1994,45 @@ def _reject_symlinked_components(path):
     imply a guarantee the check cannot provide.
     """
     absolute = os.path.abspath(path)
-    # Only components INSIDE the workspace are ours to judge. The path above it
-    # belongs to the operating system and is legitimately symlinked on the
-    # platforms this runs on -- macOS resolves /var to /private/var and every
-    # temporary directory sits under it. Walking from the filesystem root and
-    # refusing every symlink would reject nearly every real path while proving
-    # nothing about the workspace.
-    #
-    # "Inside the workspace" cannot be decided by comparing whole path strings.
-    # An earlier version tested a realpath base against a lexical candidate, so
-    # a workspace reached through a symlink -- `/tmp` -> `/private/tmp` is the
-    # everyday case -- never matched, fell through to the final-component check
-    # below, and was weakest in exactly the situation this guard exists for.
-    # Comparing both sides lexically does not fix it either: `os.getcwd()`
-    # always answers with the resolved path, so the workspace's symlinked
-    # spelling is not recoverable from it.
-    #
-    # So decide per component instead. Walk the path as written, carrying the
-    # resolved parent alongside. A component is ours to judge once its resolved
-    # parent is the workspace or below it; above that line the operating
-    # system's own symlinks pass untouched. Walking as written is the point --
-    # resolving the candidate first would erase the very symlinks being looked
-    # for.
+    judged_final = False
+    for lexical, is_final in _workspace_components(absolute):
+        judged_final = judged_final or is_final
+        if os.path.islink(lexical):
+            raise ValueError("symlinked path component: " + lexical)
+    # Outside the workspace there is no trusted root to walk from, so judge
+    # only what this command will actually open.
+    if not judged_final and os.path.islink(absolute):
+        raise ValueError("symlinked path: " + absolute)
+
+
+def _workspace_components(absolute):
+    """Yield ``(path_as_written, is_final)`` for components inside the workspace.
+
+    Only components INSIDE the workspace are ours to judge. The path above it
+    belongs to the operating system and is legitimately symlinked on the
+    platforms this runs on -- macOS resolves /var to /private/var and every
+    temporary directory sits under it. Walking from the filesystem root and
+    refusing every symlink would reject nearly every real path while proving
+    nothing about the workspace.
+
+    "Inside the workspace" cannot be decided by comparing whole path strings.
+    An earlier version tested a realpath base against a lexical candidate, so a
+    workspace reached through a symlink -- `/tmp` -> `/private/tmp` is the
+    everyday case -- never matched, fell through to the final-component check,
+    and was weakest in exactly the situation the guard exists for. Comparing
+    both sides lexically does not fix it either: `os.getcwd()` always answers
+    with the resolved path, so the workspace's symlinked spelling is not
+    recoverable from it.
+
+    So decide per component instead. Walk the path as written, carrying the
+    resolved parent alongside. A component is ours to judge once its resolved
+    parent is the workspace or below it; above that line the operating system's
+    own symlinks pass untouched. Walking as written is the point -- resolving
+    the candidate first would erase the very symlinks being looked for.
+    """
     base = os.path.realpath(os.getcwd())
     lexical = os.sep if os.path.isabs(absolute) else ""
     resolved_parent = os.path.realpath(lexical or os.curdir)
-    judged_final = False
     parts = [p for p in absolute.split(os.sep) if p not in ("", os.curdir)]
     for index, part in enumerate(parts):
         lexical = os.path.join(lexical, part)
@@ -2028,15 +2041,8 @@ def _reject_symlinked_components(path):
         except ValueError:  # different drives / no common prefix
             inside = False
         if inside:
-            if index == len(parts) - 1:
-                judged_final = True
-            if os.path.islink(lexical):
-                raise ValueError("symlinked path component: " + lexical)
+            yield lexical, index == len(parts) - 1
         resolved_parent = os.path.realpath(lexical)
-    # Outside the workspace there is no trusted root to walk from, so judge
-    # only what this command will actually open.
-    if not judged_final and os.path.islink(absolute):
-        raise ValueError("symlinked path: " + absolute)
 
 
 def _coverage_suffix(output_path):
@@ -2346,6 +2352,73 @@ def _append_receipt_line(receipt_path, line):
         os.close(descriptor)
 
 
+def _invalid_append_argument(error_label, message):
+    sys.stderr.write(error_label + ": " + message + "\n")
+    raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+        ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+    }) from None
+
+
+def _validate_append_envelope(args, error_label):
+    """Require the envelope flags, and require the timestamp to be a timestamp."""
+    for flag, value in (
+        ("--run-id", args.run_id),
+        ("--occurred-at", args.occurred_at),
+        ("--authoritative-receipt", args.authoritative_receipt),
+    ):
+        if not value:
+            _invalid_append_argument(
+                error_label, flag + " is required with --append-to",
+            )
+    # The contract says `--occurred-at <ISO-8601>` and nothing enforced it, so
+    # any non-empty string became durable evidence verbatim. A timestamp that
+    # cannot be ordered against its neighbours is not a timestamp.
+    try:
+        parsed = datetime.fromisoformat(
+            str(args.occurred_at).replace("Z", "+00:00")
+        )
+        if parsed.tzinfo is None:
+            raise ValueError("missing UTC offset")
+    except ValueError as error:
+        _invalid_append_argument(
+            error_label,
+            "--occurred-at must be a timezone-aware ISO-8601 timestamp: "
+            + str(error),
+        )
+
+
+def _reject_symlinked_receipt_stream(receipts_path, error_label):
+    """Preflight the ledger path, as `emit-cost-summary` does for its own.
+
+    The receipt stream is the authoritative evidence ledger, written after every
+    lane attempt. Without this, the same leftover `.claude/ux-review/` or
+    `plans/<feature>/` symlink that the emission command refuses would redirect
+    the ledger write -- and the lock file beside it -- out of the run directory.
+    `O_NOFOLLOW` on the lock guards only its final component.
+    """
+    try:
+        _reject_symlinked_components(receipts_path)
+    except ValueError as error:
+        _invalid_append_argument(error_label, str(error))
+
+
+def _open_receipt_stream_lock(receipts_path):
+    """Open the exclusive lock guarding one receipt-stream read-modify-write.
+
+    Lane attempts finish concurrently by design, so appending is a
+    read-modify-write race unless it is serialized. Atomic replacement protects
+    against a truncated file, not against a lost update: two appenders could
+    both read length n, both claim sequence n, and the later replacement would
+    silently discard the earlier attempt -- a measurement backbone losing
+    exactly the measurements it exists to keep.
+    """
+    lock_path = str(receipts_path) + ".lock"
+    lock_directory = os.path.dirname(os.path.abspath(lock_path)) or "."
+    os.makedirs(lock_directory, exist_ok=True)
+    lock_flags = os.O_WRONLY | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
+    return os.open(lock_path, lock_flags, 0o600)
+
+
 def _append_attempt_usage_receipt(receipts_path, payload, args, error_label):
     """Wrap one measurement payload as an attempt_usage receipt and append it.
 
@@ -2360,58 +2433,9 @@ def _append_attempt_usage_receipt(receipts_path, payload, args, error_label):
     through `_write_json`, which is atomic, so a crash mid-append leaves the
     prior receipt stream intact rather than a truncated one.
     """
-    for flag, value in (
-        ("--run-id", args.run_id),
-        ("--occurred-at", args.occurred_at),
-        ("--authoritative-receipt", args.authoritative_receipt),
-    ):
-        if not value:
-            sys.stderr.write(
-                error_label + ": " + flag + " is required with --append-to\n"
-            )
-            raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-                ErrorDetailKey.REASON_CODE.value: "invalid_argument",
-            })
-    # The contract says `--occurred-at <ISO-8601>` and nothing enforced it, so
-    # any non-empty string became durable evidence verbatim. A timestamp that
-    # cannot be ordered against its neighbours is not a timestamp.
-    try:
-        parsed = datetime.fromisoformat(str(args.occurred_at).replace("Z", "+00:00"))
-        if parsed.tzinfo is None:
-            raise ValueError("missing UTC offset")
-    except ValueError as error:
-        sys.stderr.write(
-            error_label + ": --occurred-at must be a timezone-aware ISO-8601 "
-            "timestamp: " + str(error) + "\n"
-        )
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
-        }) from None
-    # Lane attempts finish concurrently by design, so this is a read-modify-
-    # write race unless it is serialized. Atomic replacement protects against a
-    # truncated file, not against a lost update: two appenders could both read
-    # length n, both claim sequence n, and the later replacement would silently
-    # discard the earlier attempt -- a measurement backbone losing exactly the
-    # measurements it exists to keep. The lock is held across load, validate,
-    # and replace.
-    # The receipt stream is the authoritative evidence ledger, written after
-    # every lane attempt. `emit-cost-summary` preflights its paths for symlinked
-    # components and this did not, so the same leftover `.claude/ux-review/` or
-    # `plans/<feature>/` symlink that the emission command refuses would
-    # redirect the ledger write -- and the lock file beside it -- out of the run
-    # directory. O_NOFOLLOW on the lock guards only its final component.
-    try:
-        _reject_symlinked_components(receipts_path)
-    except ValueError as error:
-        sys.stderr.write(error_label + ": " + str(error) + "\n")
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
-        }) from None
-    lock_path = str(receipts_path) + ".lock"
-    lock_directory = os.path.dirname(os.path.abspath(lock_path)) or "."
-    os.makedirs(lock_directory, exist_ok=True)
-    lock_flags = os.O_WRONLY | os.O_CREAT | getattr(os, "O_NOFOLLOW", 0)
-    lock_descriptor = os.open(lock_path, lock_flags, 0o600)
+    _validate_append_envelope(args, error_label)
+    _reject_symlinked_receipt_stream(receipts_path, error_label)
+    lock_descriptor = _open_receipt_stream_lock(receipts_path)
     try:
         fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
         _append_attempt_usage_locked(receipts_path, payload, args, error_label)

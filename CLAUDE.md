@@ -62,7 +62,7 @@ Workflow Kernel is the neutral mechanics leaf beneath pipeline and dm-review.
 It owns deterministic run state, replay, receipts, verification evidence,
 shadow comparison, exact owned-resource cleanup, trusted inspection profiles,
 contained lanes, redaction, canonical output, and compatible trends. Version
-0.11.4 keeps workflow shadow as the default while allowing consumers to
+0.11.5 keeps workflow shadow as the default while allowing consumers to
 explicitly delegate bounded authoritative mechanics. See
 `docs/workflow-kernel.md` and `docs/quality-pulse.md`.
 
