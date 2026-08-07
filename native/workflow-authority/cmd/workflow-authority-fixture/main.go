@@ -459,6 +459,10 @@ func runDaemon(root string, now time.Time, providerDelay time.Duration) error {
 	if err != nil {
 		return err
 	}
+	// Serve owns the listener while it runs, but an error between here and the
+	// serve goroutine would otherwise leave the bound socket behind.
+	defer listener.Close()
+
 	control, err := serveFixtureCounters(prov, fido)
 	if err != nil {
 		return err
