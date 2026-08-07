@@ -85,7 +85,11 @@ func TestEndToEndUnixBrokerDispatchAndReplayRejection(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.RemoveAll(root) })
-	now := time.Date(2026, 8, 4, 2, 0, 0, 0, time.UTC)
+	// Anchored to the wall clock: ipc.Server.handle applies the allocation's
+	// ExpiresAt as a real net.Conn deadline, so a frozen calendar date expires
+	// the broker connection once that date passes and the whole end-to-end
+	// dispatch fails with authority_unavailable.
+	now := time.Now().UTC().Truncate(time.Second)
 	owner := uint32(os.Geteuid())
 	peer := authority.Peer{UID: owner, PID: int32(os.Getpid())}
 
