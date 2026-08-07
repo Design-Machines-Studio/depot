@@ -139,6 +139,59 @@ disagreeing provenance yields `null` for that field with `null` provenance --
 never a partial sum presented as a whole. Per-lane rows stay fully populated
 regardless.
 
+## `emit-cost-summary`
+
+One command, one transaction: it owns the artifact path, clears any stale file
+left there by an earlier run, builds and writes the summary, and appends
+exactly one inventory line to the run receipt.
+
+```sh
+"$WORKFLOW_KERNEL" emit-cost-summary \
+  --events <run-dir>/authoritative-receipts.json \
+  --output <run-dir>/run-cost-summary.json \
+  --receipt <run-dir>/run-receipt.md \
+  [--repository-commit <sha>] [--dirty-state]
+```
+
+**It always exits 0.** The artifact is observation-only, so a measurement
+failure must never become a workflow failure. Signalling by exit code would
+also leave the caller nothing useful to do, because the command has already
+recorded what happened. The one case a caller still handles is the launcher
+itself failing to run, which no process inside it can report:
+
+```sh
+"$WORKFLOW_KERNEL" emit-cost-summary ... \
+  || printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> <receipt>
+```
+
+**Exactly one line, always.** Either `run-cost-summary: <artifact path>` or
+`run-cost-summary: skipped (<reason>)`. Reasons are `unsafe-path` (a symlinked
+artifact or receipt component inside the workspace),
+`stale-artifact-not-removable`, and `summary-failed`.
+
+**Why this is one command and not a shell block.** It used to be six lines
+duplicated into eleven consumer files: remove the stale artifact, run the
+summary, then branch on the exit code to append either the artifact path or a
+skip line. Six independent review lanes found defects in that block -- an
+unchecked `rm -f` that let a stale artifact be recorded as the current run's, a
+`test -L` preflight that a later `>>` raced, an `&& ... || ...` chain that
+could append a skip line after already appending the artifact line, and a
+validator that could only check the prose beside it. None of those were shell
+bugs to patch. They were what happens when a transaction is written as a
+sequence of independent commands.
+
+**Symlink handling, honestly.** The command refuses a symlinked component of
+the artifact or receipt path inside the workspace, and opens the receipt with
+`O_NOFOLLOW`. Components *above* the workspace are not judged: the operating
+system legitimately symlinks them (macOS resolves `/var` to `/private/var`).
+This closes accidental and leftover symlinks. It does not defeat an attacker
+who can swap a directory between the check and the open -- but that attacker
+can already edit the scripts being run, so the check is stated for what it is.
+
+A symlinked *receipt* is the one refusal the command cannot record, because
+there is nowhere safe to record it. That goes to stderr and the receipt is left
+untouched; it is an operator misconfiguration, not a measurement gap.
+
 ## The emission boundary
 
 The translators are reachable only if something calls them. An orchestrator

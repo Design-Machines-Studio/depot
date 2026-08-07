@@ -35,15 +35,31 @@ candidate.
 ## Honesty Rule
 
 Baselines carry `measurement_source` provenance for every row. A baseline
-consisting entirely of `unavailable` rows is **valid evidence of absence**,
-not a failed baseline. It proves the measurement wiring ran and found no usage
-data -- that is honest evidence.
+consisting entirely of `unavailable` rows is structurally valid, but it is
+**not** evidence that measurement ran. A run that never invoked
+`openrouter-usage` or `lane-input-bytes` produces exactly the same artifact as
+a run that invoked them and found nothing.
+
+Two different things are easy to confuse here, so name them:
+
+- **Infrastructure evidence** -- the emission command ran and wrote an
+  artifact. An all-`unavailable` baseline proves this and nothing more.
+- **Lane usage evidence** -- the attempts that executed are accounted for.
+  Only populated `lanes[]` rows prove this.
+
+Before recording an all-`unavailable` baseline, confirm from the run's own
+receipt stream that lanes executed and the translators were called. If they
+were not, the baseline records an unwired emission boundary, not an honest
+absence.
 
 When a run mixes measurement sources, readers must read `lanes[]`, not
-`totals`. `lanes` is an array of per-lane rows; `totals` is a single object. In
-kernel 0.9.0, `totals` is deliberately null when measurement sources are mixed,
-so it carries no useful signal in that case. The per-lane breakdown in `lanes[]`
-is authoritative.
+`totals`. `lanes` is an array of per-lane rows; `totals` is a single object
+that is always present and is never null as a whole. Each of its usage fields
+is null unless every expected attempt contributed that field **and** all
+contributing rows agree on `measurement_source`; `usage_provenance` and
+`cost_provenance` record which rule applied. Under mixed sources those fields
+read null, so the per-lane breakdown in `lanes[]` is the authoritative
+reading.
 
 Units differ by source, so rows are not interchangeable even inside `lanes[]`.
 A row with `measurement_source: "openrouter_api_receipt"` reports provider

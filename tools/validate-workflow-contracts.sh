@@ -466,6 +466,23 @@ require_absent "$kernel_doc" "silent no-op" "kernel contract doc retires silent 
 require_absent "$kernel_doc" "run-cost-summary unavailable" "kernel contract doc uses the mandated skip line"
 require_text "$kernel_doc" "run-cost-summary: skipped (<reason>)" "kernel contract doc mandates the literal skip line"
 
+# Only the paragraph is generated; the invocation beside it is path-specific.
+# That left the executable half unchecked -- eleven shell blocks could drift or
+# keep a bug while every prose anchor passed. Assert the shape of each.
+for f in "$review_skill" "$review_cmd" "$dm_review_skill_alias" "$review_loop" \
+         "$dm_review_loop_skill" "$dm_review_visual_cmd" "$dm_review_visual_skill" \
+         "$pipeline_cmd" "$pipeline_skill" "$pipeline_run" "$pipeline_run_skill"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "emit-cost-summary --events" "$rel invokes the transactional emission command"
+  # --receipt is argparse-required, so the command cannot run without it; what
+  # needs pinning is that the consumer names a receipt at all.
+  require_text "$f" "run-cost-summary: skipped" "$rel names a receipt skip line"
+  require_text "$f" "skipped (kernel-unresolvable)" "$rel handles an unresolvable launcher"
+  # The retired multi-command block must not come back in any consumer.
+  require_absent "$f" "run-cost-summary: skipped (%s)\\n' \"kernel-unavailable-or-failed\"" \
+    "$rel does not carry the retired shell fallback chain"
+done
+
 # The kernel version lives in four places: two plugin manifests, the
 # marketplace entry, and the runtime constant. A test that pinned the runtime
 # literal kept a stale value green while the manifests moved. Compare them.

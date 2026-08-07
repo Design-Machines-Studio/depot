@@ -1978,6 +1978,133 @@ def command_metrics(args):
     return 0
 
 
+def _reject_symlinked_components(path):
+    """Refuse a path whose directory chain or final name is a symlink.
+
+    ``O_NOFOLLOW`` guards only the final component. Receipt and artifact paths
+    are predictable and live in the workspace, so a symlinked `.claude/`,
+    `ux-review/`, or `plans/<feature>/` would redirect both the write and the
+    delete outside the run directory while the final-component check passed.
+
+    This narrows the window; it does not close it. An attacker who can swap a
+    directory in the working tree between this check and the open can still
+    win the race -- but that attacker can already edit the scripts being run,
+    so the realistic threat this addresses is an accidental or leftover
+    symlink, not a live adversary inside the workspace. Say so rather than
+    imply a guarantee the check cannot provide.
+    """
+    absolute = os.path.abspath(path)
+    # Only components INSIDE the workspace are ours to judge. The path above it
+    # belongs to the operating system and is legitimately symlinked on the
+    # platforms this runs on -- macOS resolves /var to /private/var and every
+    # temporary directory sits under it. Walking from the filesystem root would
+    # reject nearly every real path while proving nothing about the workspace.
+    base = os.path.realpath(os.getcwd())
+    if os.path.commonpath([base, absolute]) == base:
+        relative = os.path.relpath(absolute, base)
+        candidate = base
+        for part in relative.split(os.sep):
+            if part in ("", os.curdir):
+                continue
+            candidate = os.path.join(candidate, part)
+            if os.path.islink(candidate):
+                raise ValueError("symlinked path component: " + candidate)
+        return
+    # Outside the workspace there is no trusted root to walk from, so judge
+    # only what this command will actually open.
+    if os.path.islink(absolute):
+        raise ValueError("symlinked path: " + absolute)
+
+
+def _build_and_write_cost_summary(args):
+    """Build the artifact and write it. Shared by both entry points."""
+    from .cost_summary import build_run_cost_summary, compute_cost_summary_digest
+    from .dm_review_adapter import translate_review_receipts
+    from .pipeline_adapter import translate_pipeline_receipts
+    from .redaction import sanitize_durable_payload
+
+    receipts = _load_json(args.events)
+    if not isinstance(receipts, list):
+        raise ValueError("events file is not a receipt array")
+    try:
+        events = translate_pipeline_receipts(receipts)
+    except ValueError:
+        events = translate_review_receipts(receipts)
+    summary = build_run_cost_summary(
+        events,
+        repository_commit=getattr(args, "repository_commit", None),
+        dirty_state=bool(getattr(args, "dirty_state", False)),
+    )
+    sanitized = sanitize_durable_payload(summary)
+    sanitized["digest"] = compute_cost_summary_digest(sanitized)
+    _write_json(args.output, sanitized)
+
+
+def command_emit_cost_summary(args):
+    """Clear, build, write, and record the cost summary in one command.
+
+    The emission obligation used to be an eight-line shell block duplicated
+    into eleven consumer files: remove the stale artifact, run the summary,
+    then branch on the exit code to append either the artifact path or a skip
+    line. Six independent review lanes found defects in that block -- an
+    unchecked `rm -f` that let a stale artifact be attributed to the current
+    run, a `test -L` preflight that a later `>>` redirection raced, an
+    `&& ... || ...` chain that could append a skip line after successfully
+    appending the artifact line, and a validator that could only check the
+    prose beside it, never the behavior.
+
+    None of those are shell bugs to be patched. They are what happens when a
+    transaction is expressed as a sequence of independent commands. This
+    command is the transaction: it owns the artifact path, writes the artifact,
+    and records exactly one inventory line naming what actually happened.
+
+    It always exits 0. The artifact is observation-only, so a measurement
+    failure must never become a workflow failure -- and because this command
+    records its own skip line, exiting non-zero would leave the caller nothing
+    useful to do anyway. The only case the caller still handles is the launcher
+    itself failing to run, which no process inside it can report.
+    """
+    reason = None
+    try:
+        _reject_symlinked_components(args.receipt)
+        _reject_symlinked_components(args.output)
+    except ValueError as error:
+        reason = "unsafe-path"
+        sys.stderr.write("emit-cost-summary: " + str(error) + "\n")
+
+    if reason is None:
+        try:
+            # Own the artifact path. A stale file left by an earlier run must
+            # not survive to be recorded as this run's measurement.
+            if os.path.lexists(args.output):
+                os.unlink(args.output)
+        except OSError as error:
+            reason = "stale-artifact-not-removable"
+            sys.stderr.write("emit-cost-summary: " + str(error) + "\n")
+
+    if reason is None:
+        try:
+            _build_and_write_cost_summary(args)
+        except (ValueError, OSError, InvalidSchemaError) as error:
+            reason = "summary-failed"
+            sys.stderr.write("emit-cost-summary: " + str(error) + "\n")
+
+    line = (
+        "run-cost-summary: " + str(args.output) if reason is None
+        else "run-cost-summary: skipped (" + reason + ")"
+    )
+    try:
+        _append_receipt_line(args.receipt, line)
+    except (OSError, InvalidSchemaError) as error:
+        # The receipt could not be written at all. Nothing here can fix that,
+        # and inventing a success would be worse than saying so on stderr.
+        sys.stderr.write(
+            "emit-cost-summary: could not record '" + line + "': "
+            + str(error) + "\n"
+        )
+    return 0
+
+
 def command_run_cost_summary(args):
     from .cost_summary import build_run_cost_summary, compute_cost_summary_digest
     from .dm_review_adapter import translate_review_receipts
@@ -2006,6 +2133,12 @@ def command_run_cost_summary(args):
 
 
 def _append_receipt_inventory_line(receipt_path, artifact_path):
+    if not receipt_path:
+        return
+    _append_receipt_line(receipt_path, "run-cost-summary: " + str(artifact_path))
+
+
+def _append_receipt_line(receipt_path, line):
     """Append the required inventory line, atomically, after the artifact.
 
     The emission obligation was previously prose: a consumer was told to put
@@ -2022,7 +2155,7 @@ def _append_receipt_inventory_line(receipt_path, artifact_path):
     """
     if not receipt_path:
         return
-    encoded = ("run-cost-summary: " + str(artifact_path) + "\n").encode("utf-8")
+    encoded = (line + "\n").encode("utf-8")
     directory = os.path.dirname(os.path.abspath(receipt_path)) or "."
     os.makedirs(directory, exist_ok=True)
     # O_APPEND makes each write land at the current end of file, so a
@@ -3504,6 +3637,19 @@ def parser():
         ),
     )
     run_cost_summary.set_defaults(handler=command_run_cost_summary)
+
+    emit_cost_summary = commands.add_parser(
+        "emit-cost-summary",
+        help="clear, build, write, and record the run cost summary in one step",
+    )
+    emit_cost_summary.add_argument("--events", required=True)
+    emit_cost_summary.add_argument("--output", required=True)
+    emit_cost_summary.add_argument("--receipt", required=True)
+    emit_cost_summary.add_argument("--repository-commit", default=None)
+    emit_cost_summary.add_argument(
+        "--dirty-state", action="store_true", default=False,
+    )
+    emit_cost_summary.set_defaults(handler=command_emit_cost_summary)
 
     openrouter_usage = commands.add_parser(
         "openrouter-usage",

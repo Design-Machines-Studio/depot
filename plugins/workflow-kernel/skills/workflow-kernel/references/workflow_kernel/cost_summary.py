@@ -140,10 +140,21 @@ def _validate_invocation(invocation: Mapping) -> None:
                 raise ValueError(field + " must be a string or null")
 
 
+# Fields introduced after schema_version 1 was already emitting artifacts.
+# Every emitter writes them; the validator accepts their absence so an artifact
+# produced before they existed -- including the committed cost baselines this
+# repository grades against -- still validates. Making them strictly required
+# would have retroactively invalidated shipped evidence without a version bump,
+# which is a change to the meaning of `schema_version: 1`, not an addition to
+# it. New fields belong here until the schema version moves.
+_POST_V1_OPTIONAL_FIELDS = frozenset({"input_bytes"})
+
+
 def _validate_row(row: Mapping, id_field: str, expected_keys: frozenset) -> None:
     if type(row) is not dict:
         raise ValueError("row is not an object")
-    if set(row) != expected_keys:
+    present = set(row)
+    if present != expected_keys and present != (expected_keys - _POST_V1_OPTIONAL_FIELDS):
         raise ValueError("row fields mismatch for " + id_field)
     if type(row[id_field]) is not str or not row[id_field]:
         raise ValueError("row %s is invalid" % id_field)
@@ -158,6 +169,8 @@ def _validate_row(row: Mapping, id_field: str, expected_keys: frozenset) -> None
     if type(row["duration_seconds"]) not in _NULLABLE_NUM:
         raise ValueError("duration_seconds must be a number or null")
     for field in USAGE_FIELDS:
+        if field not in row:
+            continue
         if type(row[field]) not in _NULLABLE_INT:
             raise ValueError(field + " must be an integer or null")
     if type(row["cost_usd"]) not in _NULLABLE_NUM:
@@ -174,9 +187,12 @@ def _validate_lane_identity(row: Mapping) -> None:
 def _validate_totals(totals: Mapping) -> None:
     if type(totals) is not dict:
         raise ValueError("totals is not an object")
-    if set(totals) != _REQUIRED_TOTALS:
+    present = set(totals)
+    if present != _REQUIRED_TOTALS and present != (_REQUIRED_TOTALS - _POST_V1_OPTIONAL_FIELDS):
         raise ValueError("totals fields mismatch")
     for field in USAGE_FIELDS:
+        if field not in totals:
+            continue
         if type(totals[field]) not in _NULLABLE_INT:
             raise ValueError("totals." + field + " must be an integer or null")
     if type(totals["cost_usd"]) not in _NULLABLE_NUM:
@@ -184,9 +200,15 @@ def _validate_totals(totals: Mapping) -> None:
     usage_provenance = totals["usage_provenance"]
     if type(usage_provenance) is not dict:
         raise ValueError("totals.usage_provenance is not an object")
-    if set(usage_provenance) != _REQUIRED_USAGE_PROVENANCE:
+    present_provenance = set(usage_provenance)
+    if (
+        present_provenance != _REQUIRED_USAGE_PROVENANCE
+        and present_provenance != (_REQUIRED_USAGE_PROVENANCE - _POST_V1_OPTIONAL_FIELDS)
+    ):
         raise ValueError("totals.usage_provenance fields mismatch")
     for field in USAGE_FIELDS:
+        if field not in usage_provenance:
+            continue
         if type(usage_provenance[field]) not in _NULLABLE_STR:
             raise ValueError(
                 "totals.usage_provenance." + field + " must be a string or null",

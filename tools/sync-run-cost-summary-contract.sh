@@ -106,7 +106,7 @@ plugins/pipeline/skills/pipeline-run/SKILL.md
 
 # Every consumer's paragraph begins with this literal. It is the replacement
 # anchor, matched as a literal prefix -- never as a pattern.
-ANCHOR='The `run-cost-summary` command emits'
+ANCHOR='The `emit-cost-summary` command is one transaction'
 
 expected_consumers=0
 for _ in $CONSUMERS; do expected_consumers=$((expected_consumers + 1)); done

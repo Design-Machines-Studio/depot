@@ -557,6 +557,173 @@ class RunCostSummaryTests(unittest.TestCase):
 
     # -- 12. build_run_cost_summary leaves digest None (CLI finalizes) --
 
+    def test_every_committed_cost_baseline_validates(self):
+        """Committed baselines are the reference for phase exit gates.
+
+        Adding `input_bytes` to the row and totals contracts silently
+        invalidated the baseline this branch committed: it declared
+        schema_version 1 and had no such field, and nothing checked. A
+        reference artifact that its own validator rejects is not a reference.
+        Every file in docs/cost-baselines/ is now validated on every run.
+        """
+        import pathlib
+        directory = pathlib.Path(__file__).parent.parent / "docs" / "cost-baselines"
+        baselines = sorted(directory.glob("*.json"))
+        self.assertTrue(baselines, "no committed cost baselines found")
+        for path in baselines:
+            with self.subTest(baseline=path.name):
+                validate_run_cost_summary(json.loads(path.read_text()))
+
+    def test_post_v1_fields_are_optional_but_emitted(self):
+        """New emissions carry input_bytes; older artifacts without it stay
+        valid. Requiring it would change what schema_version 1 means rather
+        than add to it."""
+        summary = build_run_cost_summary(self._fixture_events())
+        self.assertIn("input_bytes", summary["totals"])
+        stripped = json.loads(json.dumps(summary))
+        del stripped["totals"]["input_bytes"]
+        del stripped["totals"]["usage_provenance"]["input_bytes"]
+        for row in stripped["phases"] + stripped["lanes"]:
+            row.pop("input_bytes", None)
+        stripped["digest"] = compute_cost_summary_digest(stripped)
+        validate_run_cost_summary(stripped)
+
+    # ---- emit-cost-summary: the whole obligation as one transaction ----
+
+    def _emit(self, **paths):
+        import sys
+        argv = ["workflow_kernel", "emit-cost-summary"]
+        for flag, value in paths.items():
+            argv += ["--" + flag.replace("_", "-"), str(value)]
+        old = sys.argv
+        sys.argv = argv
+        try:
+            from workflow_kernel.cli import main
+            try:
+                return main() or 0
+            except SystemExit as exc:
+                return exc.code or 0
+        finally:
+            sys.argv = old
+
+    def _events_file(self, directory):
+        import os
+        path = os.path.join(directory, "authoritative-receipts.json")
+        with open(path, "w") as f:
+            json.dump(json.loads((FIXTURES / "pipeline-claude.json").read_text()), f)
+        return path
+
+    def test_emit_writes_artifact_and_records_exactly_one_line(self):
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        try:
+            events = self._events_file(directory)
+            output = os.path.join(directory, "run-cost-summary.json")
+            receipt = os.path.join(directory, "run-receipt.md")
+            self.assertEqual(
+                self._emit(events=events, output=output, receipt=receipt), 0,
+            )
+            validate_run_cost_summary(json.load(open(output)))
+            with open(receipt) as f:
+                lines = f.read().splitlines()
+            self.assertEqual(lines, ["run-cost-summary: " + output])
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_emit_clears_a_stale_artifact_before_writing(self):
+        """A stale file at the fixed path must never be recorded as this run's."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        try:
+            events = self._events_file(directory)
+            output = os.path.join(directory, "run-cost-summary.json")
+            receipt = os.path.join(directory, "run-receipt.md")
+            with open(output, "w") as f:
+                f.write('{"stale": true}')
+            self._emit(events=events, output=output, receipt=receipt)
+            summary = json.load(open(output))
+            self.assertNotIn("stale", summary)
+            validate_run_cost_summary(summary)
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_emit_records_a_skip_line_and_still_exits_zero_on_failure(self):
+        """Measurement failure is never workflow failure -- and it is never
+        silence either. The command records its own skip reason."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        try:
+            events = os.path.join(directory, "not-an-array.json")
+            with open(events, "w") as f:
+                f.write('{"not": "an array"}')
+            output = os.path.join(directory, "run-cost-summary.json")
+            receipt = os.path.join(directory, "run-receipt.md")
+            self.assertEqual(
+                self._emit(events=events, output=output, receipt=receipt), 0,
+            )
+            self.assertFalse(os.path.exists(output))
+            with open(receipt) as f:
+                lines = f.read().splitlines()
+            self.assertEqual(lines, ["run-cost-summary: skipped (summary-failed)"])
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_emit_never_records_both_an_artifact_and_a_skip(self):
+        """The retired shell chain could append a skip line after appending the
+        artifact line. One command, one line, always."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        try:
+            events = self._events_file(directory)
+            output = os.path.join(directory, "run-cost-summary.json")
+            receipt = os.path.join(directory, "run-receipt.md")
+            self._emit(events=events, output=output, receipt=receipt)
+            self._emit(events=events, output=output, receipt=receipt)
+            with open(receipt) as f:
+                lines = [l for l in f.read().splitlines() if l.strip()]
+            self.assertEqual(len(lines), 2)
+            for line in lines:
+                self.assertTrue(line.startswith("run-cost-summary: "))
+                self.assertNotIn("skipped", line)
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_emit_refuses_a_symlinked_receipt(self):
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        try:
+            events = self._events_file(directory)
+            output = os.path.join(directory, "run-cost-summary.json")
+            real = os.path.join(directory, "elsewhere.md")
+            open(real, "w").close()
+            receipt = os.path.join(directory, "run-receipt.md")
+            os.symlink(real, receipt)
+            self._emit(events=events, output=output, receipt=receipt)
+            # Nothing is written through the symlink, and no artifact is
+            # produced. A symlinked receipt is an operator misconfiguration the
+            # command refuses; it cannot record its own refusal anywhere safe,
+            # so the refusal goes to stderr and the receipt stays untouched.
+            self.assertFalse(os.path.exists(output))
+            with open(real) as f:
+                self.assertEqual(f.read(), "")
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
     def test_build_leaves_digest_none(self):
         summary = build_run_cost_summary(self._fixture_events())
         self.assertIsNone(summary["digest"])

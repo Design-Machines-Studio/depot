@@ -73,12 +73,28 @@ def _first_text(*values):
 
 
 def _counter(usage, path):
+    """Read one counter, distinguishing "absent" from "explicitly null".
+
+    A key the provider never mentioned and a key the provider set to ``null``
+    are different claims. The first is silence; the second is the provider
+    saying it does not know. Treating an explicit null as absence would let a
+    row keep ``openrouter_api_receipt`` -- measured -- while quietly dropping a
+    counter the provider declined to report, so the artifact would understate
+    usage and still call itself measured. An explicit null fails closed.
+    """
     node = usage
-    for part in path:
+    for index, part in enumerate(path):
         if not isinstance(node, dict):
             return _ABSENT
-        node = node.get(part)
+        if part not in node:
+            return _ABSENT
+        node = node[part]
         if node is None:
+            if index == len(path) - 1:
+                raise ValueError(
+                    "openrouter usage counter is explicitly null: "
+                    + ".".join(path)
+                )
             return _ABSENT
     if type(node) is not int or node < 0:
         raise ValueError("invalid openrouter usage counter: " + ".".join(path))

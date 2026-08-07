@@ -109,7 +109,7 @@ these numbers to prove itself.
   `authoritative-receipts.json`.
 - Acceptance: one week of Baseplate runs produces a per-lane cost table that
   names the top three token sinks with real numbers, replacing the estimates
-  in §1.
+  in section 1.
 
 ### Phase 1 -- Stop paying for redundant review (Depot, dm-review + pipeline)
 

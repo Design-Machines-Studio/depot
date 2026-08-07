@@ -433,11 +433,16 @@ or trusted.
 
 ### Unavailable-must-be-declared
 
-If the kernel runtime is unavailable or fails, the `run-cost-summary` command
-produces no artifact. Write a literal `run-cost-summary: skipped (<reason>)`
-line into the run receipt and continue. Never omit both the artifact path and
-the skip line -- an absent measurement must be visible as an absent
-measurement, not as silence a reader mistakes for "nothing to report."
+If the kernel runtime cannot be resolved, no artifact is produced. If it runs
+but exits non-zero, it may still have written the artifact before failing,
+because the receipt-line append happens after the artifact write. Decide by
+testing for the artifact, not by reading the exit code alone: record its path
+when it exists, and write a literal `run-cost-summary: skipped (<reason>)` line
+only when it does not.
+
+Never omit both the artifact path and the skip line -- an absent measurement
+must be visible as an absent measurement, not as silence a reader mistakes for
+"nothing to report."
 
 Kernel absence never fails, blocks, waives, or alters a review, lane, or phase
 outcome. The obligation is to declare the gap, not to gate on it.

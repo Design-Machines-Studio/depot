@@ -95,6 +95,9 @@ BEHAVIORAL_CLI_CASES = {
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
     "metrics": ("--events", "<missing>", "--output", "<output>"),
     "run-cost-summary": ("--events", "<missing>", "--output", "<output>"),
+    "emit-cost-summary": (
+        "--events", "<missing>", "--output", "<output>", "--receipt", "<output>",
+    ),
     "openrouter-usage": (
         "--receipt", "<missing>", "--lane", "validator",
         "--chunk-id", "chunk", "--node-id", "node",
@@ -470,7 +473,8 @@ def check_cli(context):
         "authorize-verification-contract-revision",
         "bind-verification-contract", "revise-verification-contract",
         "observe-pipeline", "observe-review", "export-review-contributions",
-        "compare", "metrics", "run-cost-summary", "openrouter-usage",
+        "compare", "metrics", "run-cost-summary", "emit-cost-summary",
+        "openrouter-usage",
         "lane-input-bytes", "approve-verification-profile",
         "plan-verification", "run-verification",
         "record-verification-result",
@@ -526,6 +530,11 @@ def check_cli(context):
             if command in {
                 "init", "validate", "append", "replay", "status",
                 "plan-cleanup",
+                # emit-cost-summary is contractually always-zero: a measurement
+                # failure must never become a workflow failure, and the command
+                # records its own skip line rather than signalling by exit code.
+                # Probing it with a missing events file asserts exactly that.
+                "emit-cost-summary",
             }:
                 require(completed.returncode == 0, f"{command} behavioral execution failed")
             else:
