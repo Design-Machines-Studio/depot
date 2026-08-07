@@ -677,6 +677,93 @@ class RunCostSummaryTests(unittest.TestCase):
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 
+    def test_emit_writes_nothing_through_a_symlinked_receipt_directory(self):
+        """Refusing a path and then writing to it is not a guard.
+
+        The command classified the receipt path `unsafe-path`, then fell
+        through to the unconditional append and wrote the refusal line through
+        the symlink -- `_append_receipt_line` guards only the final component
+        with O_NOFOLLOW, so a symlinked *intermediate* directory carried the
+        write out of the run directory. The prior tests only ever symlinked the
+        final component, the one case O_NOFOLLOW happens to save.
+        """
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp(dir=os.getcwd())
+        try:
+            outside = os.path.join(directory, "outside")
+            os.mkdir(outside)
+            linked = os.path.join(directory, "run")
+            os.symlink(outside, linked)
+
+            events = self._events_file(directory)
+            output = os.path.join(directory, "run-cost-summary.json")
+            receipt = os.path.join(linked, "run-receipt.md")
+
+            self.assertEqual(
+                self._emit(events=events, output=output, receipt=receipt), 0,
+            )
+            # Nothing was written through the symlink, under either spelling.
+            self.assertFalse(os.path.exists(os.path.join(outside, "run-receipt.md")))
+            self.assertFalse(os.path.exists(receipt))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_emit_exits_conflict_when_the_receipt_cannot_be_written(self):
+        """A receipt naming neither an artifact nor a skip is the silence the
+        failure-modes checklist forbids. Exit code is the only way left to say
+        so once the receipt itself is unwritable."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        try:
+            events = self._events_file(directory)
+            output = os.path.join(directory, "run-cost-summary.json")
+            # A directory where a file is expected: the append cannot succeed.
+            receipt = os.path.join(directory, "run-receipt.md")
+            os.mkdir(receipt)
+            self.assertEqual(
+                self._emit(events=events, output=output, receipt=receipt), 6,
+            )
+            # The artifact itself was still produced -- observation-only holds.
+            validate_run_cost_summary(json.load(open(output)))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_symlink_guard_walks_components_from_a_symlinked_workspace(self):
+        """The guard compared a realpath base against a lexical candidate, so a
+        workspace reached through a symlink never matched, fell through to the
+        final-component check, and was weakest in exactly the situation it
+        exists for."""
+        import os
+        import shutil
+        import tempfile
+
+        from workflow_kernel.cli import _reject_symlinked_components
+
+        real = tempfile.mkdtemp()
+        link = tempfile.mktemp()
+        original = os.getcwd()
+        try:
+            os.symlink(real, link)
+            os.mkdir(os.path.join(real, "outside"))
+            os.symlink(os.path.join(real, "outside"),
+                       os.path.join(real, "ux-review"))
+            # Enter the workspace through the symlink, as a shell `cd` would.
+            os.chdir(link)
+            with self.assertRaises(ValueError):
+                _reject_symlinked_components(
+                    os.path.join(link, "ux-review", "run-receipt.md"),
+                )
+        finally:
+            os.chdir(original)
+            os.unlink(link)
+            shutil.rmtree(real, ignore_errors=True)
+
     def test_emit_never_records_both_an_artifact_and_a_skip(self):
         """The retired shell chain could append a skip line after appending the
         artifact line. One command, one line, always."""
@@ -778,6 +865,95 @@ class RunCostSummaryTests(unittest.TestCase):
         summary = build_run_cost_summary(self._fixture_events())
         bad = json.loads(json.dumps(summary))
         bad["volatile_fields"] = ["invocation.emitted_at", "totals.cost_usd"]
+        with self.assertRaises(ValueError):
+            validate_run_cost_summary(bad)
+
+    # ---- the two validators must agree about schema_version 1 ----
+
+    def test_published_schema_does_not_require_a_post_v1_optional_field(self):
+        """The JSON schema and the Python validator both claim authority over
+        `schema_version: 1`. They must answer the same way.
+
+        They did not. `_POST_V1_OPTIONAL_FIELDS` kept `input_bytes` optional so
+        shipped evidence stayed valid without a version bump, while the schema
+        listed it in four `required` arrays -- so the repository's own committed
+        baseline passed one validator and failed the other, and only the lenient
+        one was ever run. This walks the schema so the pair cannot drift again.
+        """
+        import pathlib
+
+        from workflow_kernel.cost_summary import _POST_V1_OPTIONAL_FIELDS
+
+        schema_path = (
+            pathlib.Path(__file__).parent.parent / "plugins" / "workflow-kernel"
+            / "skills" / "workflow-kernel" / "references"
+            / "run-cost-summary-schema.json"
+        )
+        schema = json.loads(schema_path.read_text())
+        self.assertEqual(schema["properties"]["schema_version"]["const"],
+                         COST_SUMMARY_SCHEMA_VERSION)
+
+        offenders = []
+
+        def walk(node, path):
+            if isinstance(node, dict):
+                required = node.get("required")
+                if isinstance(required, list):
+                    for field in _POST_V1_OPTIONAL_FIELDS & set(required):
+                        offenders.append(path + " requires " + field)
+                for key, value in node.items():
+                    walk(value, path + "/" + key)
+            elif isinstance(node, list):
+                for index, value in enumerate(node):
+                    walk(value, path + "/%d" % index)
+
+        walk(schema, "")
+        self.assertEqual(offenders, [])
+
+    def test_published_schema_forbids_negative_byte_counts(self):
+        """`input_bytes` is a count of bytes on disk. A negative one is not a
+        measurement that happens to be wrong."""
+        import pathlib
+
+        schema_path = (
+            pathlib.Path(__file__).parent.parent / "plugins" / "workflow-kernel"
+            / "skills" / "workflow-kernel" / "references"
+            / "run-cost-summary-schema.json"
+        )
+        schema = json.loads(schema_path.read_text())
+        unbounded = []
+
+        def walk(node, path):
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    child = path + "/" + key
+                    if key == "input_bytes" and isinstance(value, dict):
+                        types = value.get("type")
+                        types = types if isinstance(types, list) else [types]
+                        if "integer" in types and "minimum" not in value:
+                            unbounded.append(child)
+                    walk(value, child)
+            elif isinstance(node, list):
+                for index, value in enumerate(node):
+                    walk(value, path + "/%d" % index)
+
+        walk(schema, "")
+        self.assertEqual(unbounded, [])
+
+    def test_negative_usage_counter_is_rejected(self):
+        summary = build_run_cost_summary(self._fixture_events())
+        bad = json.loads(json.dumps(summary))
+        bad["totals"]["input_bytes"] = -1
+        bad["digest"] = compute_cost_summary_digest(bad)
+        with self.assertRaises(ValueError):
+            validate_run_cost_summary(bad)
+
+    def test_negative_row_counter_is_rejected(self):
+        summary = build_run_cost_summary(self._fixture_events())
+        bad = json.loads(json.dumps(summary))
+        self.assertTrue(bad["phases"], "fixture produced no phase rows")
+        bad["phases"][0]["input_usage_count"] = -5
+        bad["digest"] = compute_cost_summary_digest(bad)
         with self.assertRaises(ValueError):
             validate_run_cost_summary(bad)
 

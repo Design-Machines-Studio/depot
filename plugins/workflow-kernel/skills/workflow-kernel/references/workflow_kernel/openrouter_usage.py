@@ -80,7 +80,23 @@ def _counter(usage, path):
     saying it does not know. Treating an explicit null as absence would let a
     row keep ``openrouter_api_receipt`` -- measured -- while quietly dropping a
     counter the provider declined to report, so the artifact would understate
-    usage and still call itself measured. An explicit null fails closed.
+    usage and still call itself measured. An explicit null on the counter
+    itself therefore fails closed.
+
+    Two neighbouring cases deliberately do not, and saying so here is cheaper
+    than letting a reader infer a guarantee that is not there:
+
+    - A null *intermediate* object (``"prompt_tokens_details": null``) returns
+      ``_ABSENT``. The provider declined the whole sub-object rather than a
+      counter inside it, and per-field coverage already records the leaves as
+      missing.
+    - ``_cost`` maps an explicit ``"cost": null`` to ``_ABSENT`` for the same
+      reason: cost is not a usage counter, and its absence is recorded by
+      ``cost_provenance`` rather than by refusing the receipt.
+
+    So the rule is narrower than "an explicit null fails closed": a null *leaf
+    counter* fails closed; a null container or a null cost is recorded as
+    unmeasured.
     """
     node = usage
     for index, part in enumerate(path):

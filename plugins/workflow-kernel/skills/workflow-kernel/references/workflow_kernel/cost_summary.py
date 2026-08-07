@@ -173,6 +173,11 @@ def _validate_row(row: Mapping, id_field: str, expected_keys: frozenset) -> None
             continue
         if type(row[field]) not in _NULLABLE_INT:
             raise ValueError(field + " must be an integer or null")
+        # Every usage field is a count of something -- tokens, or bytes on disk.
+        # None of them can be negative, and a negative one is not a measurement
+        # that happens to be wrong, it is a bug wearing a measurement's clothes.
+        if row[field] is not None and row[field] < 0:
+            raise ValueError(field + " must not be negative")
     if type(row["cost_usd"]) not in _NULLABLE_NUM:
         raise ValueError("cost_usd must be a number or null")
 
@@ -195,6 +200,8 @@ def _validate_totals(totals: Mapping) -> None:
             continue
         if type(totals[field]) not in _NULLABLE_INT:
             raise ValueError("totals." + field + " must be an integer or null")
+        if totals[field] is not None and totals[field] < 0:
+            raise ValueError("totals." + field + " must not be negative")
     if type(totals["cost_usd"]) not in _NULLABLE_NUM:
         raise ValueError("totals.cost_usd must be a number or null")
     usage_provenance = totals["usage_provenance"]

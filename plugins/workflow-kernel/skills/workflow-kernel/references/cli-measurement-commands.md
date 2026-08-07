@@ -153,11 +153,20 @@ exactly one inventory line to the run receipt.
   [--repository-commit <sha>] [--dirty-state]
 ```
 
-**It always exits 0.** The artifact is observation-only, so a measurement
-failure must never become a workflow failure. Signalling by exit code would
-also leave the caller nothing useful to do, because the command has already
-recorded what happened. The one case a caller still handles is the launcher
-itself failing to run, which no process inside it can report:
+**It exits 0 for every measurement outcome.** The artifact is observation-only,
+so a measurement failure must never become a workflow failure. Signalling by
+exit code would also leave the caller nothing useful to do, because the command
+has already recorded what happened.
+
+**It exits 6 when it could not record anything.** If the receipt itself cannot
+be written -- unwritable path, full disk -- there is no recorded outcome, and
+the run receipt then names neither an artifact nor a skip. That is the silence
+the failure-modes checklist forbids, so it is surfaced by exit code rather than
+by stderr alone. This is the only non-zero exit; it reports the absence of a
+report, never a measurement verdict.
+
+The one case a caller still handles is the launcher itself failing to run, which
+no process inside it can report:
 
 ```sh
 "$WORKFLOW_KERNEL" emit-cost-summary ... \
@@ -190,7 +199,20 @@ can already edit the scripts being run, so the check is stated for what it is.
 
 A symlinked *receipt* is the one refusal the command cannot record, because
 there is nowhere safe to record it. That goes to stderr and the receipt is left
-untouched; it is an operator misconfiguration, not a measurement gap.
+untouched; it is an operator misconfiguration, not a measurement gap. Untouched
+means untouched: the command must not append the `skipped (unsafe-path)` line to
+the path it just refused, because `O_NOFOLLOW` guards only the final component
+and a symlinked intermediate directory would carry the write out of the run
+directory.
+
+**`--dirty-state` is supplied by the caller.** The command does not run `git`
+and does not inspect the working tree. It records the flag it was given, so a
+caller that omits it on a dirty tree publishes an artifact claiming a clean one.
+The emission block in each consumer computes it:
+
+```sh
+$(test -n "$(git status --porcelain)" && echo --dirty-state)
+```
 
 ## The emission boundary
 

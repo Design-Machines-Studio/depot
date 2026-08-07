@@ -466,6 +466,85 @@ class OpenRouterUsageAppendTests(unittest.TestCase):
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 
+    def test_append_accepts_a_dm_review_receipt_stream(self):
+        """The documented `--append-to` wiring for seven of the eleven consumers.
+
+        The append path validated the updated stream with the pipeline adapter
+        alone, so every dm-review stream was rejected with "unknown receipt
+        stage" -- the measurement boundary could not be wired for the consumer
+        the branch was written for. Every other reader of a receipt stream in
+        cli.py already tried both adapters; only this one did not, and the
+        existing tests all appended onto fresh pipeline-style streams so
+        nothing caught it.
+        """
+        import json as _json
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts_path = os.path.join(directory, "authoritative-receipts.json")
+        try:
+            review_stream = [
+                {
+                    "run_id": "run-append-1", "sequence": 0,
+                    "stage": "review_request", "status": "accepted",
+                    "node_id": None, "occurred_at": "2026-08-07T00:00:00Z",
+                    "authoritative_receipt": "receipts/review/request.json",
+                    "host": "claude", "workflow_class": "feature",
+                    "workflow_class_defaulted": True,
+                    "requested_lanes": ["security-auditor-codex-signoff"],
+                },
+                {
+                    "run_id": "run-append-1", "sequence": 1,
+                    "stage": "review_dispatch", "status": "dispatched",
+                    "node_id": "security-auditor-codex-signoff",
+                    "occurred_at": "2026-08-07T00:01:00Z",
+                    "authoritative_receipt": "receipts/review/dispatch.json",
+                    "host": "claude", "requested_executor": "codex",
+                    "attempted_executor": "codex", "implemented_by": "codex",
+                    "attempt": 1,
+                },
+            ]
+            with open(receipts_path, "w") as f:
+                _json.dump(review_stream, f)
+
+            self.assertEqual(
+                self._run(self._base(receipts_path, "security", "chunk-a")), 0,
+            )
+            with open(receipts_path) as f:
+                updated = _json.load(f)
+            self.assertEqual(len(updated), 3)
+            self.assertEqual(updated[-1]["stage"], "attempt_usage")
+            self.assertEqual(updated[-1]["sequence"], 2)
+            # The pre-existing review receipts are untouched.
+            self.assertEqual(updated[0]["stage"], "review_request")
+            self.assertEqual(updated[1]["stage"], "review_dispatch")
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_append_still_rejects_a_stream_neither_adapter_accepts(self):
+        """Falling back to the review adapter must not become "accept
+        anything". A stream that no adapter can read is still refused."""
+        import json as _json
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts_path = os.path.join(directory, "authoritative-receipts.json")
+        try:
+            with open(receipts_path, "w") as f:
+                _json.dump([{"stage": "not-a-real-stage", "sequence": 0}], f)
+            self.assertNotEqual(
+                self._run(self._base(receipts_path, "security", "chunk-a")), 0,
+            )
+            # The refused append left the original stream in place.
+            with open(receipts_path) as f:
+                self.assertEqual(len(_json.load(f)), 1)
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
     def test_append_requires_the_envelope_flags(self):
         import os
         import shutil

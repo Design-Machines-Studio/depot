@@ -1997,22 +1997,45 @@ def _reject_symlinked_components(path):
     # Only components INSIDE the workspace are ours to judge. The path above it
     # belongs to the operating system and is legitimately symlinked on the
     # platforms this runs on -- macOS resolves /var to /private/var and every
-    # temporary directory sits under it. Walking from the filesystem root would
-    # reject nearly every real path while proving nothing about the workspace.
+    # temporary directory sits under it. Walking from the filesystem root and
+    # refusing every symlink would reject nearly every real path while proving
+    # nothing about the workspace.
+    #
+    # "Inside the workspace" cannot be decided by comparing whole path strings.
+    # An earlier version tested a realpath base against a lexical candidate, so
+    # a workspace reached through a symlink -- `/tmp` -> `/private/tmp` is the
+    # everyday case -- never matched, fell through to the final-component check
+    # below, and was weakest in exactly the situation this guard exists for.
+    # Comparing both sides lexically does not fix it either: `os.getcwd()`
+    # always answers with the resolved path, so the workspace's symlinked
+    # spelling is not recoverable from it.
+    #
+    # So decide per component instead. Walk the path as written, carrying the
+    # resolved parent alongside. A component is ours to judge once its resolved
+    # parent is the workspace or below it; above that line the operating
+    # system's own symlinks pass untouched. Walking as written is the point --
+    # resolving the candidate first would erase the very symlinks being looked
+    # for.
     base = os.path.realpath(os.getcwd())
-    if os.path.commonpath([base, absolute]) == base:
-        relative = os.path.relpath(absolute, base)
-        candidate = base
-        for part in relative.split(os.sep):
-            if part in ("", os.curdir):
-                continue
-            candidate = os.path.join(candidate, part)
-            if os.path.islink(candidate):
-                raise ValueError("symlinked path component: " + candidate)
-        return
+    lexical = os.sep if os.path.isabs(absolute) else ""
+    resolved_parent = os.path.realpath(lexical or os.curdir)
+    judged_final = False
+    parts = [p for p in absolute.split(os.sep) if p not in ("", os.curdir)]
+    for index, part in enumerate(parts):
+        lexical = os.path.join(lexical, part)
+        try:
+            inside = os.path.commonpath([resolved_parent, base]) == base
+        except ValueError:  # different drives / no common prefix
+            inside = False
+        if inside:
+            if index == len(parts) - 1:
+                judged_final = True
+            if os.path.islink(lexical):
+                raise ValueError("symlinked path component: " + lexical)
+        resolved_parent = os.path.realpath(lexical)
     # Outside the workspace there is no trusted root to walk from, so judge
     # only what this command will actually open.
-    if os.path.islink(absolute):
+    if not judged_final and os.path.islink(absolute):
         raise ValueError("symlinked path: " + absolute)
 
 
@@ -2065,12 +2088,25 @@ def command_emit_cost_summary(args):
     itself failing to run, which no process inside it can report.
     """
     reason = None
+    # Which path failed matters. A bad `--output` still leaves a writable
+    # receipt to record the skip in; a bad `--receipt` does not, and appending
+    # the skip line anyway would write through the symlink this just refused --
+    # `_append_receipt_line` guards only the final component with O_NOFOLLOW, so
+    # a symlinked intermediate directory is followed. Refusing a path and then
+    # writing to it is not a guard.
+    receipt_unsafe = False
     try:
         _reject_symlinked_components(args.receipt)
-        _reject_symlinked_components(args.output)
     except ValueError as error:
         reason = "unsafe-path"
+        receipt_unsafe = True
         sys.stderr.write("emit-cost-summary: " + str(error) + "\n")
+    if reason is None:
+        try:
+            _reject_symlinked_components(args.output)
+        except ValueError as error:
+            reason = "unsafe-path"
+            sys.stderr.write("emit-cost-summary: " + str(error) + "\n")
 
     if reason is None:
         try:
@@ -2085,7 +2121,13 @@ def command_emit_cost_summary(args):
     if reason is None:
         try:
             _build_and_write_cost_summary(args)
-        except (ValueError, OSError, InvalidSchemaError) as error:
+        # Catch everything. A narrower tuple made "always exits 0" true only for
+        # the failures already thought of: any other defect escaped, exited
+        # non-zero, and -- if it happened after the artifact was written -- let
+        # the caller's `||` fallback append `skipped (kernel-unresolvable)` next
+        # to a present, current measurement. A false skip reason is worse than
+        # an honest one.
+        except Exception as error:  # noqa: BLE001 -- see comment above
             reason = "summary-failed"
             sys.stderr.write("emit-cost-summary: " + str(error) + "\n")
 
@@ -2093,15 +2135,29 @@ def command_emit_cost_summary(args):
         "run-cost-summary: " + str(args.output) if reason is None
         else "run-cost-summary: skipped (" + reason + ")"
     )
+    if receipt_unsafe:
+        # Nothing to append to: the receipt path is the thing that was refused.
+        # Say so on stderr and stop, rather than writing the refusal through the
+        # symlink that caused it.
+        sys.stderr.write(
+            "emit-cost-summary: could not record '" + line
+            + "': receipt path refused\n"
+        )
+        return 0
     try:
         _append_receipt_line(args.receipt, line)
     except (OSError, InvalidSchemaError) as error:
-        # The receipt could not be written at all. Nothing here can fix that,
-        # and inventing a success would be worse than saying so on stderr.
+        # The artifact may well have been written, but the run receipt will not
+        # say so -- and a receipt that names neither an artifact nor a skip is
+        # the silence the failure-modes checklist forbids. Exiting non-zero is
+        # the only remaining way to surface it: the observation-only contract
+        # protects the *artifact* from failing a review, not this command's
+        # ability to report that it could not report.
         sys.stderr.write(
             "emit-cost-summary: could not record '" + line + "': "
             + str(error) + "\n"
         )
+        return EXIT_CONFLICT
     return 0
 
 
@@ -2135,6 +2191,11 @@ def command_run_cost_summary(args):
 def _append_receipt_inventory_line(receipt_path, artifact_path):
     if not receipt_path:
         return
+    # Same sink as `emit-cost-summary`, so the same preflight. This legacy entry
+    # point is still what the installed plugin caches invoke, so leaving it
+    # unguarded meant one policy with two enforcement levels and no reason for
+    # the difference.
+    _reject_symlinked_components(receipt_path)
     _append_receipt_line(receipt_path, "run-cost-summary: " + str(artifact_path))
 
 
@@ -2262,17 +2323,26 @@ def _append_attempt_usage_locked(receipts_path, payload, args, error_label):
     receipts.append(receipt)
     # Prove the appended stream still translates before it replaces the old
     # one. A receipt stream that no longer parses is worse than no append.
+    #
+    # Try both adapters, exactly as every other reader of a receipt stream in
+    # this file does. Validating with the pipeline adapter alone rejected every
+    # dm-review stream -- which is to say, the documented `--append-to` wiring
+    # for seven of the eleven consumers could never have worked.
+    from .dm_review_adapter import translate_review_receipts
     from .pipeline_adapter import translate_pipeline_receipts
     try:
         translate_pipeline_receipts(receipts)
-    except ValueError as error:
-        sys.stderr.write(
-            error_label + ": appended receipt would break the stream: "
-            + str(error) + "\n"
-        )
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
-        }) from None
+    except ValueError:
+        try:
+            translate_review_receipts(receipts)
+        except ValueError as error:
+            sys.stderr.write(
+                error_label + ": appended receipt would break the stream: "
+                + str(error) + "\n"
+            )
+            raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+                ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+            }) from None
     _write_json(receipts_path, receipts)
 
 

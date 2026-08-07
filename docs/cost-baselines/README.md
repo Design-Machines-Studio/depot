@@ -1,6 +1,10 @@
 # Cost Baselines
 
-This directory holds committed cost baselines used by phase exit gates.
+This directory holds committed cost baselines. Some of them bound a phase exit
+gate. Others record that a run's measurement was unavailable or unwired, and
+bound nothing -- they are kept because the absence is itself evidence, not
+because a gate can use them. Read the Honesty Rule below before treating any
+file here as a reference for a comparison.
 
 ## Naming
 
@@ -39,6 +43,12 @@ consisting entirely of `unavailable` rows is structurally valid, but it is
 **not** evidence that measurement ran. A run that never invoked
 `openrouter-usage` or `lane-input-bytes` produces exactly the same artifact as
 a run that invoked them and found nothing.
+
+An **empty** `lanes[]` says even less. All-`unavailable` rows at least name the
+attempts that ran; zero rows name nothing at all, and the artifact cannot bound
+any gate because there is no per-lane cost to compare a candidate against.
+`2026-08-07-adaptive-fusion-verification.json` is such a file: it is the
+committed example of an unwired emission boundary, not a gate reference.
 
 Two different things are easy to confuse here, so name them:
 

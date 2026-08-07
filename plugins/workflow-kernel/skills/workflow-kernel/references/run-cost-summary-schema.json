@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://designmachines.ca/schemas/workflow-kernel/run-cost-summary-v1.json",
   "title": "Workflow kernel run cost summary",
-  "description": "Canonical, deterministic per-run cost artifact emitted alongside authoritative receipts. Observation only — never gates, waives, selects, or alters any lane, phase, or review outcome.",
+  "description": "Canonical, deterministic per-run cost artifact emitted alongside authoritative receipts. Observation only \u2014 never gates, waives, selects, or alters any lane, phase, or review outcome.",
   "type": "object",
   "additionalProperties": false,
   "required": [
@@ -125,8 +125,7 @@
           "reasoning_usage_count",
           "cost_usd",
           "measurement_source",
-          "usage_estimated",
-          "input_bytes"
+          "usage_estimated"
         ],
         "properties": {
           "phase": {
@@ -237,7 +236,8 @@
               "integer",
               "null"
             ],
-            "description": "Deterministic input BYTES for lanes with no provider usage receipt. Never a token count and never comparable to input_usage_count."
+            "description": "Deterministic input BYTES for lanes with no provider usage receipt. Never a token count and never comparable to input_usage_count.",
+            "minimum": 0
           }
         }
       }
@@ -267,8 +267,7 @@
           "reasoning_usage_count",
           "cost_usd",
           "measurement_source",
-          "usage_estimated",
-          "input_bytes"
+          "usage_estimated"
         ],
         "properties": {
           "lane": {
@@ -391,7 +390,8 @@
               "integer",
               "null"
             ],
-            "description": "Deterministic input BYTES for lanes with no provider usage receipt. Never a token count and never comparable to input_usage_count."
+            "description": "Deterministic input BYTES for lanes with no provider usage receipt. Never a token count and never comparable to input_usage_count.",
+            "minimum": 0
           }
         }
       }
@@ -408,8 +408,7 @@
         "reasoning_usage_count",
         "cost_usd",
         "usage_provenance",
-        "cost_provenance",
-        "input_bytes"
+        "cost_provenance"
       ],
       "properties": {
         "usage_count": {
@@ -463,8 +462,7 @@
             "output_usage_count",
             "cache_read_usage_count",
             "cache_write_usage_count",
-            "reasoning_usage_count",
-            "input_bytes"
+            "reasoning_usage_count"
           ],
           "properties": {
             "usage_count": {
@@ -508,7 +506,7 @@
                 "string",
                 "null"
               ],
-              "description": "Deterministic input BYTES for lanes with no provider usage receipt. Never a token count and never comparable to input_usage_count."
+              "description": "Provenance rule applied to the input_bytes total; null when the total is null."
             }
           }
         },
@@ -523,7 +521,8 @@
             "integer",
             "null"
           ],
-          "description": "Deterministic input BYTES for lanes with no provider usage receipt. Never a token count and never comparable to input_usage_count."
+          "description": "Deterministic input BYTES for lanes with no provider usage receipt. Never a token count and never comparable to input_usage_count.",
+          "minimum": 0
         }
       }
     },
