@@ -413,10 +413,45 @@ done
 require_text "$quality_pulse_degradation" "Redaction refuses unsafe evidence" "quality-pulse reports redaction refusal"
 require_text "$quality_pulse_degradation" "Partial evidence cannot become" "quality-pulse prevents partial success"
 
+# --------------------------------------------------------------------------
+# Group 7: run-cost-summary emission contract
+# --------------------------------------------------------------------------
+
+printf "\nrun-cost-summary emission contract:\n"
+
+dm_review_skill_alias="$REPO_ROOT/plugins/dm-review/skills/dm-review/SKILL.md"
+dm_review_loop_skill="$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md"
+dm_review_visual_cmd="$REPO_ROOT/plugins/dm-review/commands/dm-review-visual.md"
+dm_review_visual_skill="$REPO_ROOT/plugins/dm-review/skills/dm-review-visual/SKILL.md"
+pipeline_skill="$REPO_ROOT/plugins/pipeline/skills/pipeline/SKILL.md"
+pipeline_run_skill="$REPO_ROOT/plugins/pipeline/skills/pipeline-run/SKILL.md"
+
+# The required-inventory sentence is identical across all eleven emission
+# sites so a single grep anchor pins it in each. Vary only the path examples.
+for f in "$review_skill" "$review_cmd" "$dm_review_skill_alias" "$review_loop" \
+         "$dm_review_loop_skill" "$dm_review_visual_cmd" "$dm_review_visual_skill" \
+         "$pipeline_cmd" "$pipeline_skill" "$pipeline_run" "$pipeline_run_skill"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "silence is no longer permitted" "$rel requires run-cost-summary receipt entry"
+done
+
+# The never-block sentence survives verbatim -- the obligation is to speak,
+# not to gate.
+for f in "$review_skill" "$review_cmd" "$dm_review_skill_alias" "$review_loop" \
+         "$dm_review_loop_skill" "$dm_review_visual_cmd" "$dm_review_visual_skill" \
+         "$pipeline_cmd" "$pipeline_skill" "$pipeline_run" "$pipeline_run_skill"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "the new obligation is to speak, not to gate" "$rel preserves never-block rule"
+done
+
+# "silent no-op" framing is retired from pipeline-run files.
+require_absent "$pipeline_run" "silent no-op" "pipeline-run command retires silent no-op"
+require_absent "$pipeline_run_skill" "silent no-op" "pipeline-run skill retires silent no-op"
+
 printf "\n"
 if [ "$failures" -ne 0 ]; then
   printf "FIX  restore the missing workflow-contract anchors (see docs and plugin sources above)\n"
   exit 1
 fi
 
-printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance)\n"
+printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission)\n"

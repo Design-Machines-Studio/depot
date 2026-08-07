@@ -72,7 +72,7 @@ Use these exact later observation interfaces:
 "$WORKFLOW_KERNEL" run-cost-summary --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/run-cost-summary.json --repository-commit "$(git rev-parse HEAD)" $(test -n "$(git status --porcelain)" && echo --dirty-state)
 ```
 
-The `run-cost-summary` command emits a schema-bound `run-cost-summary.json` artifact beside the authoritative receipts. It is observation-only and never gates, waives, or alters any review outcome. If the kernel runtime is unavailable, record `run-cost-summary unavailable` as a skip reason and continue; never block the review. The command auto-detects a dirty working tree via `git status --porcelain` and passes `--dirty-state` accordingly.
+The `run-cost-summary` command emits a schema-bound `run-cost-summary.json` artifact beside the authoritative receipts at `.claude/ux-review/workflow-kernel/run-cost-summary.json`, run-scoped beside that run's own `authoritative-receipts.json` so concurrent instances never collide. Every run receipt must contain either the `run-cost-summary.json` artifact path or a literal `run-cost-summary: skipped (<reason>)` line; silence is no longer permitted. Kernel absence or failure records a skip reason and can never fail, block, waive, or alter a review, lane, or phase outcome -- the new obligation is to speak, not to gate. The command auto-detects a dirty working tree via `git status --porcelain` and passes `--dirty-state` accordingly.
 
 If review setup creates any Docker/Compose resource, invoke exactly one planning interface:
 
