@@ -90,6 +90,13 @@ func (d *fixtureDispatcher) Dispatch(ctx context.Context, input provider.Dispatc
 	return provider.TerminalResult{}, nil
 }
 
+// fixtureNow anchors fixture allocations to the wall clock. Server.handle
+// applies the allocation's ExpiresAt as a real net.Conn deadline, so a frozen
+// calendar date silently expires every fixture connection once that date
+// passes -- the daemon then closes before writing its hello frame and every
+// assertion below fails with invalid_document.
+func fixtureNow() time.Time { return time.Now().UTC().Truncate(time.Second) }
+
 func fixtureServer(now time.Time, failAt int) (*Server, *fixtureAllocator, *fixtureManager, *fixtureDispatcher) {
 	digest := protocol.Digest([]byte("fixture"))
 	hello := protocol.AuthorityHello{SchemaVersion: 1, Protocol: protocol.Name, Type: protocol.AuthorityHelloType, DaemonBuildSHA256: digest, ScannerBuildSHA256: digest, PolicySHA256: digest, BootID: "boot-01", SessionID: "session-01", Sequence: 1, IssuedAt: now.Format(time.RFC3339), ExpiresAt: now.Add(120 * time.Second).Format(time.RFC3339), PriorChainDigest: protocol.Digest(nil), ConnectionNonceSHA256: digest, Limits: protocol.FrozenAllocationLimits()}
@@ -140,7 +147,7 @@ func writeFixtureRequest(t *testing.T, conn net.Conn, hello protocol.AuthorityHe
 }
 
 func TestServerWritesHelloBeforeCallerBytesAndKeepsResponseOnConnection(t *testing.T) {
-	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	now := fixtureNow()
 	server, allocator, _, dispatcher := fixtureServer(now, 0)
 	daemon, client := net.Pipe()
 	done := make(chan struct{})
@@ -170,7 +177,7 @@ func TestServerWritesHelloBeforeCallerBytesAndKeepsResponseOnConnection(t *testi
 }
 
 func TestServerRejectsWrongConsentBeforeDispatch(t *testing.T) {
-	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	now := fixtureNow()
 	server, allocator, manager, dispatcher := fixtureServer(now, 0)
 	daemon, client := net.Pipe()
 	done := make(chan struct{})
@@ -191,7 +198,7 @@ func TestServerRejectsWrongConsentBeforeDispatch(t *testing.T) {
 }
 
 func TestServerRejectsAlteredPartBeforeReservation(t *testing.T) {
-	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	now := fixtureNow()
 	server, allocator, manager, dispatcher := fixtureServer(now, 0)
 	daemon, client := net.Pipe()
 	done := make(chan struct{})
@@ -227,7 +234,7 @@ func TestServerRejectsAlteredPartBeforeReservation(t *testing.T) {
 }
 
 func TestServerRejectsOversizedPartDeclarationWithoutReadingParts(t *testing.T) {
-	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	now := fixtureNow()
 	server, allocator, manager, dispatcher := fixtureServer(now, 0)
 	daemon, client := net.Pipe()
 	done := make(chan struct{})
@@ -260,7 +267,7 @@ func TestServerRejectsOversizedPartDeclarationWithoutReadingParts(t *testing.T) 
 }
 
 func TestServerRejectsUnauthorizedPeerWithoutHello(t *testing.T) {
-	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	now := fixtureNow()
 	server, allocator, _, dispatcher := fixtureServer(now, 0)
 	server.Peers = fixturePeers{err: authority.ErrDenied}
 	daemon, client := net.Pipe()
@@ -277,7 +284,7 @@ func TestServerRejectsUnauthorizedPeerWithoutHello(t *testing.T) {
 }
 
 func TestServerRejectsAncillaryDataAndConsumesAllocation(t *testing.T) {
-	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	now := fixtureNow()
 	server, allocator, _, dispatcher := fixtureServer(now, 1)
 	daemon, client := net.Pipe()
 	done := make(chan struct{})
@@ -293,7 +300,7 @@ func TestServerRejectsAncillaryDataAndConsumesAllocation(t *testing.T) {
 }
 
 func TestServerEOFConsumesAllocationWithoutDispatch(t *testing.T) {
-	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	now := fixtureNow()
 	server, allocator, _, dispatcher := fixtureServer(now, 0)
 	daemon, client := net.Pipe()
 	done := make(chan struct{})
@@ -309,7 +316,7 @@ func TestServerEOFConsumesAllocationWithoutDispatch(t *testing.T) {
 }
 
 func TestServerStaleAllocationIsConsumedBeforeCallerInput(t *testing.T) {
-	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	now := fixtureNow()
 	server, allocator, _, dispatcher := fixtureServer(now, 0)
 	server.Clock = func() time.Time { return now.Add(121 * time.Second) }
 	daemon, client := net.Pipe()
@@ -326,7 +333,7 @@ func TestServerStaleAllocationIsConsumedBeforeCallerInput(t *testing.T) {
 }
 
 func TestServerNeverWritesUnsignedSafeErrorAfterDispatcher(t *testing.T) {
-	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	now := fixtureNow()
 	server, allocator, _, dispatcher := fixtureServer(now, 0)
 	dispatcher.fail = true
 	daemon, client := net.Pipe()
@@ -355,7 +362,7 @@ func (a fixtureAddr) Network() string { return "fixture" }
 func (a fixtureAddr) String() string  { return string(a) }
 
 func TestServerUnexpectedAcceptFailureShutsDownDependencies(t *testing.T) {
-	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	now := fixtureNow()
 	server, allocator, manager, _ := fixtureServer(now, 0)
 	want := errors.New("accept failed")
 	if err := server.Serve(context.Background(), failingListener{err: want}); !errors.Is(err, want) {
@@ -409,7 +416,7 @@ func (d *blockingDispatcher) Dispatch(ctx context.Context, _ provider.DispatchIn
 }
 
 func TestStopCancelsInflightDispatchAndPreventsQueuedProgress(t *testing.T) {
-	now := time.Date(2026, 8, 4, 1, 2, 3, 0, time.UTC)
+	now := fixtureNow()
 	server, allocator, manager, _ := fixtureServer(now, 0)
 	blocking := &blockingDispatcher{entered: make(chan struct{}), cancelled: make(chan struct{})}
 	server.Dispatcher = blocking

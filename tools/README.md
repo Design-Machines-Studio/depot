@@ -146,6 +146,39 @@ that replay does not cause a second provider request.
 ./tools/validate-workflow-authority.sh
 ```
 
+After the Go suite, the gate runs these additive checks. None of them replaces or
+relaxes a check above:
+
+- **Fixture build-tag isolation.** `go list ./...` must not contain the
+  `workflow-authority-fixture` package and `go list -tags fixture ./...` must, so the
+  harness scaffolding can never become a shipped code path. The tagged sources are then
+  vetted and built.
+- **Formatting.** `gofmt -l` over the module, using the `gofmt` beside the pinned Go
+  launcher. `go vet` and `go build` both accept unformatted source, so this is the only
+  check that holds the convention.
+- **Credential-shaped literal scan.** The module and the acceptance harness must contain
+  no AWS key, OpenRouter/Anthropic key, GitHub token, GitLab token, or PEM private-key
+  shape. Tripwire vectors in the product's own scanner tests are concatenated at runtime
+  so the literal never appears contiguously in a source file.
+- **Calendar-date literal scan.** No `time.Date(` or `YYYY-MM-DD` literal in the fixture
+  sources. `ipc.Server.handle` applies an allocation's `ExpiresAt` as a real `net.Conn`
+  deadline, so a frozen date silently expires every fixture connection once it passes.
+  Prose in comments is exempt; code literals are not.
+- **Black-box acceptance harness.** Requires Python >= 3.12. The gate is the only place
+  the harness runs: it sets `WORKFLOW_AUTHORITY_E2E=1` and puts the workflow-kernel
+  references on `PYTHONPATH` (`tests/__init__.py` imports `workflow_kernel` at module
+  level), then runs `python -m unittest -v tests.test_workflow_authority_integration`.
+
+`unittest` counts skipped cases inside its `Ran N tests` line, so `N > 0` alone cannot
+distinguish a real run from a wholly skipped module. The gate subtracts the reported skip
+count and fails unless at least one case actually executed. A missing summary also fails.
+
+The harness prints `GAP <id>  <reason>` lines for everything it deliberately does not
+prove -- real FIDO hardware, Linux-only `SO_PEERCRED` peer UID authentication, `/proc`
+sibling inspection, live provider contact, systemd install, and so on. A `GAP` is a
+reported non-claim, not a failure; treat the set of `GAP` ids as the boundary of what a
+green run means.
+
 On Linux with exactly libfido2 1.17.0, the validator additionally tests, race
 tests, vets, and builds with `-tags libfido2`. A pinned packaging/CI lane must
 require that evidence rather than accepting a local coverage gap:
