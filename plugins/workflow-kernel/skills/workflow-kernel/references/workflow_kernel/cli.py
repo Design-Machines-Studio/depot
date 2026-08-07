@@ -2002,6 +2002,40 @@ def command_run_cost_summary(args):
     return 0
 
 
+def command_openrouter_usage(args):
+    from .openrouter_usage import translate_openrouter_receipt
+
+    receipt = _load_json(args.receipt)
+    if not isinstance(receipt, dict):
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
+    schema_version = receipt.get("schemaVersion")
+    if type(schema_version) is not int or schema_version != 2:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        })
+    try:
+        payload = translate_openrouter_receipt(
+            receipt,
+            lane=args.lane,
+            chunk_id=args.chunk_id,
+            node_id=args.node_id,
+            attempt=args.attempt,
+            host=args.host,
+            duration_seconds=args.duration_seconds,
+        )
+    except ValueError:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        }) from None
+    if args.output:
+        _write_json(args.output, payload)
+    else:
+        sys.stdout.write(json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ) + "\n")
+    return 0
+
+
 # Fixed PATH for the one runtime path that shells out; the caller's PATH
 # never selects the docker binary that executes destructive stop/rm actions.
 _FIXED_SUBPROCESS_PATH = "/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -3246,6 +3280,20 @@ def parser():
     run_cost_summary.add_argument("--repository-commit", default=None)
     run_cost_summary.add_argument("--dirty-state", action="store_true", default=False)
     run_cost_summary.set_defaults(handler=command_run_cost_summary)
+
+    openrouter_usage = commands.add_parser(
+        "openrouter-usage",
+        help="translate one OpenRouter wrapper receipt into an attempt usage payload",
+    )
+    openrouter_usage.add_argument("--receipt", required=True)
+    openrouter_usage.add_argument("--lane", required=True)
+    openrouter_usage.add_argument("--chunk-id", required=True)
+    openrouter_usage.add_argument("--node-id", required=True)
+    openrouter_usage.add_argument("--attempt", required=True, type=int)
+    openrouter_usage.add_argument("--host", required=True)
+    openrouter_usage.add_argument("--duration-seconds", required=True, type=float)
+    openrouter_usage.add_argument("--output", default=None)
+    openrouter_usage.set_defaults(handler=command_openrouter_usage)
 
     approve_verification = commands.add_parser(
         "approve-verification-profile",

@@ -95,6 +95,12 @@ BEHAVIORAL_CLI_CASES = {
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
     "metrics": ("--events", "<missing>", "--output", "<output>"),
     "run-cost-summary": ("--events", "<missing>", "--output", "<output>"),
+    "openrouter-usage": (
+        "--receipt", "<missing>", "--lane", "validator",
+        "--chunk-id", "chunk", "--node-id", "node",
+        "--attempt", "1", "--host", "validator",
+        "--duration-seconds", "1.0",
+    ),
     "approve-verification-profile": (
         "--repository-root", "<state>", "--profile", "<missing>",
         "--trusted-base-commit", "0" * 40,
@@ -453,7 +459,8 @@ def check_cli(context):
         "authorize-verification-contract-revision",
         "bind-verification-contract", "revise-verification-contract",
         "observe-pipeline", "observe-review", "export-review-contributions",
-        "compare", "metrics", "run-cost-summary", "approve-verification-profile",
+        "compare", "metrics", "run-cost-summary", "openrouter-usage",
+        "approve-verification-profile",
         "plan-verification", "run-verification",
         "record-verification-result",
         "plan-create", "plan-compose", "record-create", "plan-cleanup",
@@ -701,6 +708,15 @@ def check_cli(context):
         successful(
             "run-cost-summary", "--events", RECEIPTS / "pipeline-codex.json",
             "--output", root / "run-cost-summary.json",
+        )
+        successful(
+            "openrouter-usage",
+            "--receipt",
+            Path(ROOT) / "tests" / "fixtures" / "openrouter-receipt-success.json",
+            "--lane", "validator", "--chunk-id", "chunk",
+            "--node-id", "node", "--attempt", "1",
+            "--host", "validator", "--duration-seconds", "1.0",
+            "--output", root / "openrouter-usage.json",
         )
 
         from tests.test_runtime_cli import verification_contract

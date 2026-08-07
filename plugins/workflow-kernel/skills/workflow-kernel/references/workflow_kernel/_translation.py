@@ -630,7 +630,14 @@ def _validate_observation_receipt(receipt: dict) -> dict:
         if type(receipt.get("usage_estimated")) is not bool:
             raise ValueError("invalid usage estimated flag")
         if not ((_USAGE_COUNT_FIELDS & set(receipt)) or "cost_usd" in receipt):
-            raise ValueError("scoped usage row has no measurement")
+            # Honest-absence allowance, exactly one provenance string wide:
+            # an OpenRouter failure receipt (usage: null) carries no counters
+            # and no cost, yet its attempt row must survive intake so the
+            # run-cost summary reports it as present-but-unmeasured rather
+            # than silently dropping it.  Every other measurement_source
+            # with no measurement still fails closed.
+            if receipt.get("measurement_source") != "openrouter_receipt_no_usage":
+                raise ValueError("scoped usage row has no measurement")
         if receipt["usage_scope"] == "attempt":
             if (
                 "attempt" not in receipt or not receipt.get("node_id")
