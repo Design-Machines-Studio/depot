@@ -125,6 +125,12 @@ func main() {
 	// freshness and terminal-result windows are evaluated against the same
 	// value on both sides. This is a runtime value, never a literal.
 	clockAt := flag.String("clock", "", "RFC3339 instant to use instead of the wall clock")
+	// Holds the fixture provider's response open so the harness can act while a
+	// dispatch is genuinely in flight: kill the client, open a competing
+	// connection, or race a second request. Without it those cases resolve
+	// faster than the harness can observe them and the assertions become
+	// timing-dependent rather than deterministic.
+	providerDelay := flag.Duration("provider-delay", 0, "daemon mode: hold the fixture provider response open")
 
 	socketPath := flag.String("socket", "", "client mode: broker socket path")
 	trustPath := flag.String("trust", "", "client mode: public trust document path")
@@ -155,7 +161,7 @@ func main() {
 
 	switch *mode {
 	case "daemon":
-		if err := runDaemon(*root, now); err != nil {
+		if err := runDaemon(*root, now, *providerDelay); err != nil {
 			fail(err.Error())
 		}
 	case "client":
@@ -190,7 +196,7 @@ func emit(document any) error {
 	return err
 }
 
-func runDaemon(root string, now time.Time) error {
+func runDaemon(root string, now time.Time, providerDelay time.Duration) error {
 	owner := uint32(os.Geteuid())
 
 	runDir := filepath.Join(root, "run")
@@ -246,6 +252,11 @@ func runDaemon(root string, now time.Time) error {
 	var providerRejections atomic.Int32
 	providerServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		providerRequests.Add(1)
+		if providerDelay > 0 {
+			// Counted before sleeping, so a request that is in flight is
+			// already visible to the harness through /counters.
+			time.Sleep(providerDelay)
+		}
 		if r.Method != protocol.Method || r.URL.Path != protocol.Path || r.Header.Get("Authorization") != "Bearer "+providerCredentialSentinel {
 			providerRejections.Add(1)
 			w.WriteHeader(http.StatusBadRequest)

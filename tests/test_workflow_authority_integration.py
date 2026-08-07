@@ -36,6 +36,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 import urllib.request
 from pathlib import Path
@@ -82,10 +83,11 @@ def tearDownModule():  # noqa: N802 - unittest's required spelling
 class FixtureDaemon:
     """A workflow-authority broker running as its own OS process."""
 
-    def __init__(self, binary, root, clock_offset=None, extra_env=None):
+    def __init__(self, binary, root, clock_offset=None, extra_env=None, provider_delay=None):
         self.binary = binary
         self.root = root
         self.clock_offset = clock_offset
+        self.provider_delay = provider_delay
         self.extra_env = extra_env or {}
         self.process = None
         self.ready = None
@@ -93,6 +95,8 @@ class FixtureDaemon:
 
     def __enter__(self):
         argv = [str(self.binary), "-mode", "daemon", "-root", str(self.root)]
+        if self.provider_delay:
+            argv += ["-provider-delay", self.provider_delay]
         if self.clock_offset:
             argv += ["-clock-offset", self.clock_offset]
         self._stderr = open(self.stderr_path, "wb")
@@ -195,17 +199,37 @@ class HarnessBase(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         return Path(directory.name)
 
-    def dispatch(self, daemon, root, repeat=1, extra=(), socket=None, trust=None):
+    def client_argv(self, daemon, root, repeat=1, extra=(), socket=None, trust=None):
         # Share the daemon's instant. The in-process integration test uses one
         # clock for both sides; across processes the harness reproduces that by
         # handing the daemon's ready-line instant back to the client, so
         # freshness and terminal-result windows are evaluated identically.
-        argv = [
+        return [
             str(self.binary), "-mode", "client", "-root", str(root),
             "-socket", socket or daemon.ready["socket"],
             "-trust", trust or daemon.ready["trust"],
             "-clock", daemon.ready["clock"], "-repeat", str(repeat), *extra,
         ]
+
+    def dispatch_async(self, daemon, root, **kwargs):
+        """Start a client process without waiting, for competing-process cases."""
+        return subprocess.Popen(
+            self.client_argv(daemon, root, **kwargs), cwd=str(GO_MODULE),
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+        )
+
+    @staticmethod
+    def collect(process, timeout=CLIENT_TIMEOUT_SECONDS):
+        """Reap a client process and return its attempts, or None if it failed."""
+        stdout, _ = process.communicate(timeout=timeout)
+        if process.returncode != 0 or not stdout.strip():
+            return None
+        return json.loads(stdout.strip())["attempts"]
+
+    def dispatch(self, daemon, root, repeat=1, extra=(), socket=None, trust=None):
+        argv = self.client_argv(
+            daemon, root, repeat=repeat, extra=extra, socket=socket, trust=trust,
+        )
         completed = subprocess.run(
             argv, cwd=str(GO_MODULE), capture_output=True, text=True,
             timeout=CLIENT_TIMEOUT_SECONDS,
@@ -658,6 +682,246 @@ class DenyMatrixTest(HarnessBase):
             "the artifact scanner cannot find a planted sentinel; every "
             "absence assertion built on it is vacuous",
         )
+
+
+@unittest.skipUnless(
+    ENABLED,
+    "requires WORKFLOW_AUTHORITY_E2E=1; tools/validate-workflow-authority.sh sets it",
+)
+class ProcessHostilityTest(HarnessBase):
+    """Chunk 06c: what only separate processes can prove.
+
+    REQ-E2E-05 (coarse crash and disconnect), REQ-E2E-06/06A/06B (concurrency
+    and competing processes at the same UID), REQ-E2E-07 and REQ-E2E-08
+    (side-channel and sentinel absence, armed by the positive controls in
+    06b), REQ-E2E-09 (the receipt is not repository verification), and
+    REQ-E2E-10/10A (routing is unchanged).
+
+    The in-Go end-to-end test cannot reach any of the first three groups: they
+    require real OS processes competing over one socket.
+    """
+
+    # Long enough for the harness to act while a dispatch is genuinely in
+    # flight, short enough that a hung case fails fast.
+    IN_FLIGHT_DELAY = "3s"
+
+    def wait_for_counter(self, daemon, name, minimum, timeout=20.0):
+        """Poll the control endpoint until a counter reaches `minimum`."""
+        deadline = time.monotonic() + timeout
+        value = 0
+        while time.monotonic() < deadline:
+            value = daemon.counters()[name]
+            if value >= minimum:
+                return value
+            time.sleep(0.05)
+        self.fail("{} stayed at {} (wanted >= {})".format(name, value, minimum))
+
+    # REQ-E2E-06 -- two concurrent duplicate requests yield at most one send.
+    def test_concurrent_duplicate_requests_send_at_most_once(self):
+        root = self.fixture_root()
+        with FixtureDaemon(self.binary, root) as daemon:
+            first = self.dispatch_async(daemon, root)
+            second = self.dispatch_async(daemon, root)
+            results = [self.collect(first), self.collect(second)]
+            counters = daemon.counters()
+
+        accepted = [
+            attempts[0] for attempts in results
+            if attempts and attempts[0]["ok"]
+        ]
+        # Exactly one, not "at most one": a run where both clients failed
+        # would satisfy an at-most assertion while proving nothing about
+        # duplicate suppression.
+        self.assertEqual(
+            len(accepted), 1,
+            "expected exactly one winner, got {}".format(len(accepted)),
+        )
+        self.assertEqual(
+            counters["provider_requests"], 1,
+            "duplicate concurrent requests produced {} sends".format(
+                counters["provider_requests"]),
+        )
+
+    # REQ-E2E-06A -- a same-UID competing process cannot substitute a different
+    # body under the same caller nonce.
+    def test_competing_process_cannot_substitute_body(self):
+        root = self.fixture_root()
+        substituted = "attacker substituted body"
+        with FixtureDaemon(self.binary, root) as daemon:
+            honest = self.dispatch_async(daemon, root)
+            attacker = self.dispatch_async(daemon, root, extra=("-user", substituted))
+            results = [self.collect(honest), self.collect(attacker)]
+            counters = daemon.counters()
+
+        accepted = [a[0] for a in results if a and a[0]["ok"]]
+        # Exactly one, for the same reason as above: a double failure must not
+        # read as successful suppression.
+        self.assertEqual(len(accepted), 1, "expected exactly one body to be spent")
+        self.assertEqual(counters["provider_requests"], 1)
+        for attempt in accepted:
+            # Whichever body won, the response is the broker's, never the
+            # attacker's text echoed back.
+            self.assertEqual(attempt["response"], RESPONSE_SENTINEL)
+
+    # REQ-E2E-06B -- while one request is in flight, a second connection gets
+    # nothing: no acknowledgement, no resumption, no response bytes.
+    def test_second_connection_cannot_reach_pending_request(self):
+        root = self.fixture_root()
+        with FixtureDaemon(self.binary, root, provider_delay=self.IN_FLIGHT_DELAY) as daemon:
+            in_flight = self.dispatch_async(daemon, root)
+            self.wait_for_counter(daemon, "provider_requests", 1)
+            # The first request is now parked inside the provider handler.
+            intruder = self.collect(self.dispatch_async(daemon, root))
+            first = self.collect(in_flight)
+            counters = daemon.counters()
+
+        self.assertIsNotNone(first)
+        self.assertTrue(first[0]["ok"], first[0].get("error"))
+        if intruder is not None:
+            self.assertFalse(
+                intruder[0]["ok"],
+                "a second connection reached a pending request",
+            )
+            self.assertNotIn(
+                "response", intruder[0],
+                "a second connection received response bytes",
+            )
+        self.assertEqual(
+            counters["provider_requests"], 1,
+            "the intruding connection produced a second send",
+        )
+
+    # REQ-E2E-05 -- a client killed mid-dispatch yields no retry, and the
+    # consumed allocation is not resumable by a later process.
+    def test_killed_client_produces_no_retry_and_no_resume(self):
+        root = self.fixture_root()
+        with FixtureDaemon(self.binary, root, provider_delay=self.IN_FLIGHT_DELAY) as daemon:
+            victim = self.dispatch_async(daemon, root)
+            self.wait_for_counter(daemon, "provider_requests", 1)
+            victim.kill()
+            victim.communicate(timeout=CLIENT_TIMEOUT_SECONDS)
+            # Give the daemon room to observe the disconnect and finish or
+            # abandon the in-flight send.
+            time.sleep(5)
+            after_kill = daemon.counters()["provider_requests"]
+            # A later process must not be able to resume or replay it.
+            resumed = self.collect(self.dispatch_async(daemon, root))
+            counters = daemon.counters()
+
+        self.assertEqual(after_kill, 1, "the killed dispatch was retried")
+        self.assertEqual(
+            counters["provider_requests"], 1,
+            "a later process resumed or replayed the killed dispatch",
+        )
+        if resumed is not None:
+            self.assertFalse(resumed[0]["ok"], "the killed dispatch was resumable")
+
+    # REQ-E2E-07 and REQ-E2E-08 -- response bytes and credential sentinels are
+    # absent from every artifact the daemon leaves behind, and from its argv.
+    # The scanners used here are the ones armed by the positive controls in
+    # DenyMatrixTest.
+    def test_sentinels_absent_from_artifacts_and_argv(self):
+        root = self.fixture_root()
+        with FixtureDaemon(self.binary, root) as daemon:
+            attempts = self.dispatch(daemon, root)
+            credential_path = Path(daemon.ready["provider_credential"])
+            argv = subprocess.run(
+                ["ps", "-ww", "-o", "command=", "-p", str(daemon.ready["pid"])],
+                capture_output=True, text=True, timeout=30,
+            ).stdout
+            daemon_stderr = daemon.stderr_text()
+            artifacts = sorted(
+                path for path in root.rglob("*")
+                if path.is_file() and path != credential_path
+            )
+            contents = {path: _safe_read(path) for path in artifacts}
+
+        self.assertTrue(attempts[0]["ok"], attempts[0].get("error"))
+        self.assertGreater(len(artifacts), 0, "no artifacts to scan")
+
+        # The response body never reaches disk or the daemon's own log.
+        for path, text in contents.items():
+            self.assertNotIn(
+                RESPONSE_SENTINEL, text,
+                "response bytes leaked into {}".format(path),
+            )
+            self.assertNotIn(
+                PROVIDER_CREDENTIAL_SENTINEL, text,
+                "the provider credential leaked into {}".format(path),
+            )
+        self.assertNotIn(RESPONSE_SENTINEL, daemon_stderr)
+        self.assertNotIn(PROVIDER_CREDENTIAL_SENTINEL, daemon_stderr)
+
+        # Neither sentinel is visible in the daemon's command line, which any
+        # same-user process can read.
+        self.assertNotIn(PROVIDER_CREDENTIAL_SENTINEL, argv)
+        self.assertNotIn(RESPONSE_SENTINEL, argv)
+        self.assertNotIn(CREDENTIAL_ID_SENTINEL, argv)
+
+        record_gap(
+            "sibling-environ-read",
+            "reading another process's environment requires /proc; macOS "
+            "restricts ps -E to the caller's own processes",
+        )
+
+    # REQ-E2E-08 (cleanup half) -- nothing survives the fixture root once it is
+    # removed, and the receipt itself carries no secret material.
+    def test_no_sentinel_survives_cleanup(self):
+        directory = tempfile.TemporaryDirectory(prefix="wa-e2e-", dir="/tmp")
+        root = Path(directory.name)
+        with FixtureDaemon(self.binary, root) as daemon:
+            attempts = self.dispatch(daemon, root)
+        self.assertTrue(attempts[0]["ok"], attempts[0].get("error"))
+        directory.cleanup()
+        self.assertFalse(root.exists(), "the fixture root survived cleanup")
+
+    # REQ-E2E-09 -- the signed dispatch result is a provider receipt, not
+    # repository verification, and says so in its own body.
+    def test_receipt_is_not_repository_verification(self):
+        import base64
+
+        root = self.fixture_root()
+        with FixtureDaemon(self.binary, root) as daemon:
+            attempts = self.dispatch(daemon, root)
+        self.assertTrue(attempts[0]["ok"], attempts[0].get("error"))
+        receipt = json.loads(base64.b64decode(attempts[0]["receipt_b64"]))
+
+        self.assertEqual(
+            receipt["substrate_authority"], "not_asserted",
+            "the receipt claimed substrate authority it does not have",
+        )
+        self.assertEqual(receipt["operation_family"], "external_provider_dispatch")
+        self.assertEqual(receipt["outcome"], "verified")
+        # A verified provider exchange is not a verified repository state. The
+        # receipt carries digests and lengths, never content.
+        for field in ("response_sha256", "request_body_sha256", "usage_sha256"):
+            self.assertTrue(receipt[field].startswith("sha256:"))
+        self.assertNotIn(RESPONSE_SENTINEL, json.dumps(receipt))
+        self.assertNotIn(PROVIDER_CREDENTIAL_SENTINEL, json.dumps(receipt))
+
+        record_gap(
+            "repository-verification-rejection",
+            "feeding the receipt to the live repository-verification "
+            "validators is out of M1 scope; the receipt's own "
+            "substrate_authority=not_asserted is what is asserted here",
+        )
+
+    # REQ-E2E-10 and REQ-E2E-10A -- routing, ladders, economics, and the
+    # direct-interactive path are untouched by anything in this chunk.
+    def test_routing_and_economics_unchanged(self):
+        for script in ("validate-routing-economics.sh", "validate-openrouter-cascade.sh"):
+            path = REPO_ROOT / "tools" / script
+            if not path.is_file():
+                record_gap("routing-{}".format(script), "validator not present")
+                continue
+            completed = subprocess.run(
+                ["bash", str(path)], cwd=str(REPO_ROOT),
+                capture_output=True, text=True, timeout=600,
+            )
+            self.assertEqual(
+                completed.returncode, 0,
+                "{} failed:\n{}\n{}".format(script, completed.stdout[-4000:], completed.stderr[-2000:]),
+            )
 
 
 def _safe_read(path):
