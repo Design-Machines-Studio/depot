@@ -82,10 +82,11 @@ def tearDownModule():  # noqa: N802 - unittest's required spelling
 class FixtureDaemon:
     """A workflow-authority broker running as its own OS process."""
 
-    def __init__(self, binary, root, clock_offset=None):
+    def __init__(self, binary, root, clock_offset=None, extra_env=None):
         self.binary = binary
         self.root = root
         self.clock_offset = clock_offset
+        self.extra_env = extra_env or {}
         self.process = None
         self.ready = None
         self.stderr_path = root / "daemon.stderr"
@@ -95,8 +96,11 @@ class FixtureDaemon:
         if self.clock_offset:
             argv += ["-clock-offset", self.clock_offset]
         self._stderr = open(self.stderr_path, "wb")
+        environment = dict(os.environ)
+        environment.update(self.extra_env)
         self.process = subprocess.Popen(
             argv, stdout=subprocess.PIPE, stderr=self._stderr, cwd=str(GO_MODULE),
+            env=environment,
         )
         self.ready = self._read_ready()
         return self
@@ -147,12 +151,8 @@ class FixtureDaemon:
         return False
 
 
-@unittest.skipUnless(
-    ENABLED,
-    "requires WORKFLOW_AUTHORITY_E2E=1; tools/validate-workflow-authority.sh sets it",
-)
-class WorkflowAuthorityIntegrationTest(unittest.TestCase):
-    """Chunk 06a: seams, gate, accepted path, and the GAP ledger."""
+class HarnessBase(unittest.TestCase):
+    """Shared fixture build and process helpers. Holds no test cases itself."""
 
     binary = None
     _binary_dir = None
@@ -195,14 +195,15 @@ class WorkflowAuthorityIntegrationTest(unittest.TestCase):
         self.addCleanup(directory.cleanup)
         return Path(directory.name)
 
-    def dispatch(self, daemon, root, repeat=1, extra=()):
+    def dispatch(self, daemon, root, repeat=1, extra=(), socket=None, trust=None):
         # Share the daemon's instant. The in-process integration test uses one
         # clock for both sides; across processes the harness reproduces that by
         # handing the daemon's ready-line instant back to the client, so
         # freshness and terminal-result windows are evaluated identically.
         argv = [
             str(self.binary), "-mode", "client", "-root", str(root),
-            "-socket", daemon.ready["socket"], "-trust", daemon.ready["trust"],
+            "-socket", socket or daemon.ready["socket"],
+            "-trust", trust or daemon.ready["trust"],
             "-clock", daemon.ready["clock"], "-repeat", str(repeat), *extra,
         ]
         completed = subprocess.run(
@@ -215,6 +216,14 @@ class WorkflowAuthorityIntegrationTest(unittest.TestCase):
                 completed.stderr, daemon.stderr_text()),
         )
         return json.loads(completed.stdout.strip())["attempts"]
+
+
+@unittest.skipUnless(
+    ENABLED,
+    "requires WORKFLOW_AUTHORITY_E2E=1; tools/validate-workflow-authority.sh sets it",
+)
+class WorkflowAuthorityIntegrationTest(HarnessBase):
+    """Chunk 06a: seams, gate, accepted path, and the GAP ledger."""
 
     # REQ-E2E-01 -- accepted path, across processes. Positive control for the
     # deny matrix in 06b/06c.
@@ -376,6 +385,287 @@ class WorkflowAuthorityIntegrationTest(unittest.TestCase):
             "workflow-authorityd: startup dependencies unavailable",
             completed.stdout + completed.stderr,
         )
+
+
+@unittest.skipUnless(
+    ENABLED,
+    "requires WORKFLOW_AUTHORITY_E2E=1; tools/validate-workflow-authority.sh sets it",
+)
+class DenyMatrixTest(HarnessBase):
+    """Chunk 06b: every rejection fails closed and never reaches the provider.
+
+    REQ-E2E-02 (fail-closed states), REQ-E2E-03 (caller overrides are inert),
+    REQ-E2E-04 (zero provider contact on rejection), and the filesystem cases
+    of REQ-E2E-11. Wrong-owner cases are absent by design: a file owned by
+    another UID cannot be created without privilege on any host, so that lane
+    is reported as a GAP rather than faked.
+    """
+
+    # The client's terminal error strings. A rejection must be one of these --
+    # never a silent success, never an unclassified error.
+    TERMINAL_ERRORS = frozenset({
+        "usage_error",
+        "authority_unavailable",
+        "authorization_declined",
+        "disclosure_declined",
+        "result_verification_failed",
+    })
+
+    def dispatch_expecting_failure(self, daemon, root, extra=(), socket=None, trust=None):
+        attempts = self.dispatch(daemon, root, extra=extra, socket=socket, trust=trust)
+        self.assertEqual(len(attempts), 1)
+        attempt = attempts[0]
+        self.assertFalse(
+            attempt["ok"],
+            "a rejection case unexpectedly succeeded: {}".format(attempt),
+        )
+        self.assertIn(
+            attempt["error"], self.TERMINAL_ERRORS,
+            "unclassified terminal error: {}".format(attempt["error"]),
+        )
+        self.assertNotIn("response", attempt, "a failed attempt reported response bytes")
+        return attempt["error"]
+
+    # REQ-E2E-02 + REQ-E2E-11 + REQ-E2E-04, asserted together against one
+    # daemon so the zero-contact claim covers every case at once.
+    def test_deny_matrix_fails_closed_without_provider_contact(self):
+        root = self.fixture_root()
+        with FixtureDaemon(self.binary, root) as daemon:
+            socket_path = Path(daemon.ready["socket"])
+            trust_path = Path(daemon.ready["trust"])
+            run_dir = socket_path.parent
+            trust_dir = trust_path.parent
+            original_trust = trust_path.read_bytes()
+            observed = {}
+
+            def scenario(name, mutate, restore, socket=None, trust=None):
+                mutate()
+                try:
+                    observed[name] = self.dispatch_expecting_failure(
+                        daemon, root, socket=socket, trust=trust,
+                    )
+                finally:
+                    restore()
+
+            # Socket permissions must be exactly 0o660.
+            scenario(
+                "socket-mode",
+                lambda: socket_path.chmod(0o666),
+                lambda: socket_path.chmod(0o660),
+            )
+            # The run directory must be exactly 0o750.
+            scenario(
+                "socket-parent-mode",
+                lambda: run_dir.chmod(0o755),
+                lambda: run_dir.chmod(0o750),
+            )
+            # A stale regular file where a socket belongs: the client is aimed
+            # at it, so this is a real substitution, not a bystander file.
+            stale = run_dir / "stale.sock"
+            scenario(
+                "stale-socket",
+                lambda: stale.write_bytes(b""),
+                lambda: stale.unlink(),
+                socket=str(stale),
+            )
+            # A symlink pointing at the genuine socket is still refused: the
+            # client must never follow one, even to the right target.
+            link = run_dir / "linked.sock"
+            scenario(
+                "socket-symlink",
+                lambda: link.symlink_to(socket_path),
+                lambda: link.unlink(),
+                socket=str(link),
+            )
+            # Trust document permissions must be exactly 0o644.
+            scenario(
+                "trust-mode",
+                lambda: trust_path.chmod(0o600),
+                lambda: trust_path.chmod(0o644),
+            )
+            # The trust directory must be exactly 0o755.
+            scenario(
+                "trust-parent-mode",
+                lambda: trust_dir.chmod(0o700),
+                lambda: trust_dir.chmod(0o755),
+            )
+            # A hard link raises the link count, which the client rejects: an
+            # attacker-held second name for the trust document is a swap
+            # primitive.
+            hard = trust_dir / "authority-public-hardlink.json"
+            scenario(
+                "trust-hardlink",
+                lambda: os.link(trust_path, hard),
+                lambda: hard.unlink(),
+            )
+            # Corrupt trust must not degrade to "no credential, proceed".
+            scenario(
+                "trust-corrupt",
+                lambda: trust_path.write_bytes(b"{not json"),
+                lambda: trust_path.write_bytes(original_trust),
+            )
+            # A missing trust document is not an implicit allow.
+            scenario(
+                "trust-missing",
+                lambda: trust_path.unlink(),
+                lambda: trust_path.write_bytes(original_trust) or trust_path.chmod(0o644),
+            )
+
+            counters = daemon.counters()
+
+        self.assertEqual(len(observed), 9, "not every deny scenario ran: {}".format(observed))
+        for name, error in observed.items():
+            self.assertEqual(
+                error, "authority_unavailable",
+                "{} produced {} rather than a fail-closed authority_unavailable".format(name, error),
+            )
+        # REQ-E2E-04: not one rejection reached the fixture provider.
+        self.assertEqual(counters["provider_requests"], 0, "a rejection contacted the provider")
+        self.assertEqual(counters["canary_hits"], 0)
+
+    # Socket path pointing somewhere that does not exist at all.
+    def test_absent_socket_fails_closed(self):
+        root = self.fixture_root()
+        with FixtureDaemon(self.binary, root) as daemon:
+            daemon.ready = dict(daemon.ready)
+            daemon.ready["socket"] = str(root / "run" / "absent.sock")
+            error = self.dispatch_expecting_failure(daemon, root)
+            counters = daemon.counters()
+        self.assertEqual(error, "authority_unavailable")
+        self.assertEqual(counters["provider_requests"], 0)
+
+    # REQ-E2E-04 headline case: the disclosure scanner declines BEFORE the
+    # transport is used, so a request carrying credential-shaped content never
+    # leaves the host. The sentinel is assembled at runtime -- a contiguous
+    # literal would trip repository secret scanning and this module's own
+    # secret-surface gate.
+    #
+    # The client sees result_verification_failed rather than a named
+    # disclosure decline, and that is by design, not a defect: the scanner runs
+    # inside Dispatcher.Dispatch, which is after the consent ack, and the
+    # daemon never writes an unsigned safe error once the dispatcher has been
+    # entered (internal/ipc/server_test.go asserts exactly that). Post-consent,
+    # every failure is deliberately indistinguishable to the caller. What must
+    # hold, and what is asserted here, is that nothing left the host.
+    def test_disclosure_decline_precedes_provider_contact(self):
+        root = self.fixture_root()
+        planted = "AK" + "IAABCDEFGHIJKLMNOP"
+        with FixtureDaemon(self.binary, root) as daemon:
+            error = self.dispatch_expecting_failure(
+                daemon, root, extra=("-user", "please review " + planted),
+            )
+            counters = daemon.counters()
+        self.assertEqual(error, "result_verification_failed")
+        self.assertEqual(
+            counters["provider_requests"], 0,
+            "a disclosure rejection reached the provider",
+        )
+        record_gap(
+            "disclosure-decline-attribution",
+            "post-consent failures are indistinguishable to the caller by "
+            "design; a named disclosure decline is not observable black-box",
+        )
+
+    # Positive control for the case above. If the scanner cannot be shown to
+    # accept ordinary text, "it declined" proves nothing -- it might decline
+    # everything.
+    def test_disclosure_scanner_accepts_ordinary_text(self):
+        root = self.fixture_root()
+        with FixtureDaemon(self.binary, root) as daemon:
+            attempts = self.dispatch(daemon, root, extra=("-user", "ordinary review text"))
+            counters = daemon.counters()
+        self.assertTrue(attempts[0]["ok"], attempts[0].get("error"))
+        self.assertEqual(counters["provider_requests"], 1)
+
+    # REQ-E2E-03, asserted differentially. An unchanged outcome alone would be
+    # a false pass: the overrides point at a canary listener that must record
+    # zero connections, so honoring any of them would be visible.
+    def test_req_e2e_03_caller_overrides_are_inert(self):
+        root = self.fixture_root()
+        probe = FixtureDaemon(self.binary, root)
+        with probe as daemon:
+            canary = daemon.ready["canary"]
+
+        hostile_root = self.fixture_root()
+        hostile = {
+            "OPENROUTER_API_KEY": "sk-or-v1-" + "caller-supplied-must-be-ignored",
+            "OPENROUTER_BASE_URL": "http://" + canary,
+            "OPENROUTER_API_BASE": "http://" + canary,
+            "HTTPS_PROXY": "http://" + canary,
+            "HTTP_PROXY": "http://" + canary,
+            "ALL_PROXY": "http://" + canary,
+            "WORKFLOW_AUTHORITY_SOCKET": str(hostile_root / "attacker.sock"),
+            "WORKFLOW_AUTHORITY_TRUST": str(hostile_root / "attacker-trust.json"),
+            "WORKFLOW_AUTHORITY_POLICY": str(hostile_root / "attacker-policy.json"),
+            "WORKFLOW_AUTHORITY_AUTHORIZATION_MODE": "none",
+            "WORKFLOW_AUTHORITY_APPROVED_DIGEST": "sha256:" + "0" * 64,
+        }
+        with FixtureDaemon(self.binary, hostile_root, extra_env=hostile) as daemon:
+            self.assertNotIn(
+                canary, daemon.ready["provider_origin"],
+                "an environment override redirected the provider origin",
+            )
+            attempts = self.dispatch(daemon, hostile_root)
+            counters = daemon.counters()
+
+        self.assertTrue(
+            attempts[0]["ok"],
+            "hostile environment changed the outcome: {}".format(attempts[0].get("error")),
+        )
+        self.assertEqual(counters["provider_requests"], 1)
+        self.assertEqual(
+            counters["canary_hits"], 0,
+            "an environment override was honored: the canary listener was contacted",
+        )
+        self.assertEqual(counters["provider_rejections"], 0)
+
+    # Positive control for the canary. If the canary can never register a hit,
+    # asserting canary_hits == 0 above is vacuous.
+    def test_canary_positive_control(self):
+        import socket as socket_module
+
+        root = self.fixture_root()
+        with FixtureDaemon(self.binary, root) as daemon:
+            host, port = daemon.ready["canary"].rsplit(":", 1)
+            with socket_module.create_connection((host, int(port)), timeout=10):
+                pass
+            # The daemon closes each canary connection immediately; poll until
+            # the accept loop has recorded it.
+            hits = 0
+            for _ in range(50):
+                hits = daemon.counters()["canary_hits"]
+                if hits:
+                    break
+        self.assertGreaterEqual(
+            hits, 1,
+            "the canary cannot register a connection, so canary_hits == 0 "
+            "proves nothing",
+        )
+
+    # Positive control for the sentinel scanners REQ-E2E-07 and REQ-E2E-08
+    # depend on. Chunk 06c asserts absence; absence is only meaningful if the
+    # same scanner demonstrably finds a planted sentinel.
+    def test_artifact_scanner_positive_control(self):
+        root = self.fixture_root()
+        planted = root / "planted-artifact"
+        planted.write_text("prefix " + PROVIDER_CREDENTIAL_SENTINEL + " suffix")
+        found = [
+            path for path in root.rglob("*")
+            if path.is_file() and PROVIDER_CREDENTIAL_SENTINEL in _safe_read(path)
+        ]
+        self.assertIn(
+            planted, found,
+            "the artifact scanner cannot find a planted sentinel; every "
+            "absence assertion built on it is vacuous",
+        )
+
+
+def _safe_read(path):
+    """Read a file as text, tolerating binary and unreadable artifacts."""
+    try:
+        return path.read_text(errors="replace")
+    except OSError:
+        return ""
 
 
 @unittest.skipUnless(ENABLED, "requires WORKFLOW_AUTHORITY_E2E=1")
