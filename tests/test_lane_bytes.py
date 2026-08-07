@@ -9,6 +9,10 @@ import unittest
 from pathlib import Path
 
 from workflow_kernel import cli
+from workflow_kernel._usage_identity import (
+    AttemptContext,
+    ProviderAttribution,
+)
 from workflow_kernel.cost_summary import (
     build_run_cost_summary,
     validate_run_cost_summary,
@@ -43,13 +47,48 @@ BASE_KEYS = {
     "requested_provider", "attempted_provider", "implemented_by",
     "provider", "model", "host",
 }
-IDENTITY = dict(
+CONTEXT = AttemptContext(
     lane="dm-review", chunk_id="chunk-a", node_id="chunk-a",
     attempt=1, host="claude-code", duration_seconds=12.5,
+)
+ATTRIBUTION = ProviderAttribution(
     requested_provider="anthropic", attempted_provider="anthropic",
     implemented_by="claude-code", provider="anthropic",
     model="claude-opus-4",
 )
+# Splatted at every call site, so the carrier swap stays a one-line change.
+IDENTITY = {"context": CONTEXT, "attribution": ATTRIBUTION}
+# The flat spelling, for assertions that walk the identity fields and for the
+# CLI argv builder -- the command line is still eleven flags.
+IDENTITY_FIELDS = dict(
+    lane=CONTEXT.lane, chunk_id=CONTEXT.chunk_id, node_id=CONTEXT.node_id,
+    attempt=CONTEXT.attempt, host=CONTEXT.host,
+    duration_seconds=CONTEXT.duration_seconds,
+    requested_provider=ATTRIBUTION.requested_provider,
+    attempted_provider=ATTRIBUTION.attempted_provider,
+    implemented_by=ATTRIBUTION.implemented_by,
+    provider=ATTRIBUTION.provider, model=ATTRIBUTION.model,
+)
+_CONTEXT_FIELDS = frozenset(
+    ("lane", "chunk_id", "node_id", "attempt", "host", "duration_seconds")
+)
+
+
+def _identity(**overrides):
+    """Rebuild the identity kwargs with individual fields overridden."""
+    import dataclasses
+
+    context_changes = {
+        key: value for key, value in overrides.items() if key in _CONTEXT_FIELDS
+    }
+    attribution_changes = {
+        key: value for key, value in overrides.items()
+        if key not in _CONTEXT_FIELDS
+    }
+    return {
+        "context": dataclasses.replace(CONTEXT, **context_changes),
+        "attribution": dataclasses.replace(ATTRIBUTION, **attribution_changes),
+    }
 BYTE_ARGS = dict(agent_definition_bytes=100, diff_bytes=50, boilerplate_bytes=25)
 
 
@@ -72,7 +111,7 @@ def _invoke(argv):
 
 
 def _cli_args(agent=None, diff=None, boilerplate=(), output=None, **overrides):
-    identity = dict(IDENTITY)
+    identity = dict(IDENTITY_FIELDS)
     identity.update(overrides)
     argv = [
         "lane-input-bytes",
@@ -106,7 +145,7 @@ class LaneInputBytesPayloadTests(unittest.TestCase):
         self.assertEqual(payload["measurement_source"], "estimated_input_bytes")
         self.assertIs(payload["usage_estimated"], True)
         self.assertEqual(payload["input_bytes"], 175)
-        for key, value in IDENTITY.items():
+        for key, value in IDENTITY_FIELDS.items():
             self.assertEqual(payload[key], value)
 
     def test_exact_key_set_omits_other_counters_and_cost(self):
@@ -164,20 +203,20 @@ class LaneInputBytesPayloadTests(unittest.TestCase):
                 with self.subTest(field=field, bad=bad):
                     with self.assertRaises(ValueError):
                         estimate_lane_input_bytes(
-                            **BYTE_ARGS, **dict(IDENTITY, **{field: bad}),
+                            **BYTE_ARGS, **_identity(**{field: bad}),
                         )
         for bad_attempt in (0, -1, 1.5, "1", True, None):
             with self.subTest(attempt=bad_attempt):
                 with self.assertRaises(ValueError):
                     estimate_lane_input_bytes(
-                        **BYTE_ARGS, **dict(IDENTITY, attempt=bad_attempt),
+                        **BYTE_ARGS, **_identity(attempt=bad_attempt),
                     )
         for bad_duration in (-0.1, -1, float("nan"), float("inf"), "1.0", True, None):
             with self.subTest(duration=bad_duration):
                 with self.assertRaises(ValueError):
                     estimate_lane_input_bytes(
                         **BYTE_ARGS,
-                        **dict(IDENTITY, duration_seconds=bad_duration),
+                        **_identity(duration_seconds=bad_duration),
                     )
 
 
@@ -288,7 +327,7 @@ class LaneInputBytesCliTests(unittest.TestCase):
             code, _, err = _invoke(_cli_args(output=destination))
             self.assertEqual(code, 0, err)
             payload = json.loads(destination.read_text(encoding="utf-8"))
-            for key, value in IDENTITY.items():
+            for key, value in IDENTITY_FIELDS.items():
                 self.assertEqual(payload[key], value)
 
     def test_repeated_boilerplate_flag_counts_each_occurrence(self):
@@ -371,8 +410,10 @@ class LaneBytesAggregationTests(unittest.TestCase):
                 "schemaVersion": 2, "outcome": "success",
                 "usage": {"prompt_tokens": prompt_tokens},
             },
-            lane=lane, chunk_id="chunk-a", node_id="chunk-a",
-            attempt=1, host="codex", duration_seconds=9.0,
+            context=AttemptContext(
+                lane=lane, chunk_id="chunk-a", node_id="chunk-a",
+                attempt=1, host="codex", duration_seconds=9.0,
+            ),
         )
 
     def test_payload_lands_in_attempt_economics(self):
@@ -479,7 +520,7 @@ class LaneBytesAggregationTests(unittest.TestCase):
     def test_orphan_chunk_identity_is_measured_under_its_own_identity(self):
         payload = estimate_lane_input_bytes(
             **BYTE_ARGS,
-            **dict(IDENTITY, chunk_id="chunk-orphan", node_id="chunk-orphan"),
+            **_identity(chunk_id="chunk-orphan", node_id="chunk-orphan"),
         )
         events = self._events(payload)
         report = MetricsAggregator().aggregate(events)

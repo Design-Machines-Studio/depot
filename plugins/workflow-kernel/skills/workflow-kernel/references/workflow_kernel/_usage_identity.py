@@ -20,6 +20,7 @@ malformed field never reaches a payload.
 from __future__ import annotations
 
 import math
+from dataclasses import dataclass
 
 
 IDENTITY_TEXT_FIELDS = (
@@ -27,6 +28,53 @@ IDENTITY_TEXT_FIELDS = (
     "requested_provider", "attempted_provider", "implemented_by",
     "provider", "model",
 )
+
+
+@dataclass(frozen=True)
+class AttemptContext:
+    """Where an attempt happened, as asserted by the caller.
+
+    These six travel together through every producer and always have. Passed
+    as loose keywords they were a data clump: eleven-plus positional-by-name
+    arguments threaded through three functions, easy to reorder, easy to drop
+    one from, and guaranteed to grow as the identity contract does.
+    """
+
+    lane: str
+    chunk_id: str
+    node_id: str
+    attempt: int
+    host: str
+    duration_seconds: float
+
+
+@dataclass(frozen=True)
+class ProviderAttribution:
+    """Who was asked, who was tried, and who actually did the work.
+
+    Kept separate from :class:`AttemptContext` because the two producers obtain
+    it differently: `lane_bytes` is told, while `openrouter_usage` reads it off
+    the provider's own receipt. Splitting them keeps caller-asserted identity
+    distinguishable from receipt-attributed identity, which is a distinction
+    the payload contract already cares about.
+    """
+
+    requested_provider: str
+    attempted_provider: str
+    implemented_by: str
+    provider: str
+    model: str
+
+    @classmethod
+    def openrouter(cls, provider: str, model: str) -> "ProviderAttribution":
+        """Attribution for a lane that ran through the OpenRouter rail."""
+        return cls(
+            requested_provider="openrouter",
+            attempted_provider="openrouter",
+            implemented_by="openrouter",
+            provider=provider,
+            model=model,
+        )
 
 
 def required_text(value, name, prefix):
@@ -56,19 +104,9 @@ def required_duration(value, prefix):
 
 
 def build_attempt_identity(
-    *,
     prefix: str,
-    lane: str,
-    chunk_id: str,
-    node_id: str,
-    attempt: int,
-    host: str,
-    duration_seconds: float,
-    requested_provider: str,
-    attempted_provider: str,
-    implemented_by: str,
-    provider: str,
-    model: str,
+    context: AttemptContext,
+    attribution: ProviderAttribution,
 ) -> dict:
     """Validate and return the attempt-scoped identity block.
 
@@ -76,32 +114,36 @@ def build_attempt_identity(
     translator rejected the input.  Every field is validated before any part of
     the returned dict is constructed.
     """
+    if type(context) is not AttemptContext:
+        raise ValueError(prefix + ": invalid attempt context")
+    if type(attribution) is not ProviderAttribution:
+        raise ValueError(prefix + ": invalid provider attribution")
     values = {
-        "lane": lane,
-        "chunk_id": chunk_id,
-        "node_id": node_id,
-        "host": host,
-        "requested_provider": requested_provider,
-        "attempted_provider": attempted_provider,
-        "implemented_by": implemented_by,
-        "provider": provider,
-        "model": model,
+        "lane": context.lane,
+        "chunk_id": context.chunk_id,
+        "node_id": context.node_id,
+        "host": context.host,
+        "requested_provider": attribution.requested_provider,
+        "attempted_provider": attribution.attempted_provider,
+        "implemented_by": attribution.implemented_by,
+        "provider": attribution.provider,
+        "model": attribution.model,
     }
     for name in IDENTITY_TEXT_FIELDS:
         required_text(values[name], name, prefix)
-    required_attempt(attempt, prefix)
-    required_duration(duration_seconds, prefix)
+    required_attempt(context.attempt, prefix)
+    required_duration(context.duration_seconds, prefix)
     return {
         "usage_scope": "attempt",
-        "attempt": attempt,
-        "chunk_id": chunk_id,
-        "node_id": node_id,
-        "duration_seconds": duration_seconds,
-        "lane": lane,
-        "requested_provider": requested_provider,
-        "attempted_provider": attempted_provider,
-        "implemented_by": implemented_by,
-        "provider": provider,
-        "model": model,
-        "host": host,
+        "attempt": context.attempt,
+        "chunk_id": context.chunk_id,
+        "node_id": context.node_id,
+        "duration_seconds": context.duration_seconds,
+        "lane": context.lane,
+        "requested_provider": attribution.requested_provider,
+        "attempted_provider": attribution.attempted_provider,
+        "implemented_by": attribution.implemented_by,
+        "provider": attribution.provider,
+        "model": attribution.model,
+        "host": context.host,
     }

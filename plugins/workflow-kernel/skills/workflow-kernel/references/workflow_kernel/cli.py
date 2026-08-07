@@ -2064,22 +2064,38 @@ def _coverage_suffix(output_path):
         return ""
 
 
-def _build_and_write_cost_summary(args):
-    """Build the artifact and write it. Shared by both entry points."""
-    from .cost_summary import build_run_cost_summary, compute_cost_summary_digest
+def _read_receipt_events(events_path):
+    """Translate a receipt array with whichever adapter accepts it.
+
+    Pipeline first, review second. Both entry points and every other reader of
+    a receipt stream in this file do exactly this; the one place that did not
+    is what made the dm-review measurement boundary unusable.
+    """
     from .dm_review_adapter import translate_review_receipts
     from .pipeline_adapter import translate_pipeline_receipts
-    from .redaction import sanitize_durable_payload
 
-    receipts = _load_json(args.events)
+    receipts = _load_json(events_path)
     if not isinstance(receipts, list):
         raise ValueError("events file is not a receipt array")
     try:
-        events = translate_pipeline_receipts(receipts)
+        return translate_pipeline_receipts(receipts)
     except ValueError:
-        events = translate_review_receipts(receipts)
+        return translate_review_receipts(receipts)
+
+
+def _build_and_write_cost_summary(args):
+    """Build the artifact and write it. The only path that produces one.
+
+    Both entry points funnel through here. They used to carry their own copies
+    of the adapter selection, summary construction, redaction, digest, and
+    write -- five steps that had to stay identical while the artifact format
+    moved under them, with nothing enforcing that they did.
+    """
+    from .cost_summary import build_run_cost_summary, compute_cost_summary_digest
+    from .redaction import sanitize_durable_payload
+
     summary = build_run_cost_summary(
-        events,
+        _read_receipt_events(args.events),
         repository_commit=getattr(args, "repository_commit", None),
         dirty_state=bool(getattr(args, "dirty_state", False)),
     )
@@ -2112,64 +2128,85 @@ def command_emit_cost_summary(args):
     useful to do anyway. The only case the caller still handles is the launcher
     itself failing to run, which no process inside it can report.
     """
-    reason = None
-    # One path cannot be both the artifact and the receipt. The sequence below
-    # unlinks `--output`, writes JSON to it, then appends a text line to
-    # `--receipt`; aiming them at one file produces `{json}\nrun-cost-summary:
-    # ...` -- an artifact no parser can read, emitted with exit 0. The wired
-    # consumers use different extensions so this cannot happen there, but the
-    # CLI is a public entry point and a corrupt artifact that reports success
-    # is worse than a refused invocation.
-    if os.path.abspath(args.output) == os.path.abspath(args.receipt):
-        sys.stderr.write(
-            "emit-cost-summary: --output and --receipt are the same path: "
-            + os.path.abspath(args.output) + "\n"
-        )
+    if not _emit_paths_are_distinct(args):
         return EXIT_INVALID
+    reason, receipt_unsafe = _prepare_emit_artifact_path(args)
+    if reason is None:
+        reason = _run_emit_summary(args)
+    return _record_emit_outcome(args, reason, receipt_unsafe)
 
-    # Which path failed matters. A bad `--output` still leaves a writable
-    # receipt to record the skip in; a bad `--receipt` does not, and appending
-    # the skip line anyway would write through the symlink this just refused --
-    # `_append_receipt_line` guards only the final component with O_NOFOLLOW, so
-    # a symlinked intermediate directory is followed. Refusing a path and then
-    # writing to it is not a guard.
-    receipt_unsafe = False
+
+def _emit_stderr(message):
+    sys.stderr.write("emit-cost-summary: " + message + "\n")
+
+
+def _emit_paths_are_distinct(args):
+    """Refuse one path used as both the artifact and the receipt.
+
+    The emission sequence unlinks `--output`, writes JSON to it, then appends a
+    text line to `--receipt`; aiming them at one file produces
+    `{json}\\nrun-cost-summary: ...` -- an artifact no parser can read, emitted
+    with a success exit. The wired consumers use different extensions so this
+    cannot happen there, but the CLI is a public entry point and a corrupt
+    artifact that reports success is worse than a refused invocation.
+    """
+    if os.path.abspath(args.output) != os.path.abspath(args.receipt):
+        return True
+    _emit_stderr(
+        "--output and --receipt are the same path: " + os.path.abspath(args.output)
+    )
+    return False
+
+
+def _prepare_emit_artifact_path(args):
+    """Validate both paths and take ownership of the artifact path.
+
+    Returns ``(reason, receipt_unsafe)``. ``reason`` is ``None`` when the
+    command may proceed to build. ``receipt_unsafe`` records *which* path was
+    refused, because a bad `--output` still leaves a writable receipt to record
+    the skip in and a bad `--receipt` does not: appending the skip line anyway
+    would write through the symlink just refused, since `_append_receipt_line`
+    guards only the final component with `O_NOFOLLOW`. Refusing a path and then
+    writing to it is not a guard.
+    """
     try:
         _reject_symlinked_components(args.receipt)
     except ValueError as error:
-        reason = "unsafe-path"
-        receipt_unsafe = True
-        sys.stderr.write("emit-cost-summary: " + str(error) + "\n")
-    if reason is None:
-        try:
-            _reject_symlinked_components(args.output)
-        except ValueError as error:
-            reason = "unsafe-path"
-            sys.stderr.write("emit-cost-summary: " + str(error) + "\n")
+        _emit_stderr(str(error))
+        return "unsafe-path", True
+    try:
+        _reject_symlinked_components(args.output)
+    except ValueError as error:
+        _emit_stderr(str(error))
+        return "unsafe-path", False
+    try:
+        # Own the artifact path. A stale file left by an earlier run must not
+        # survive to be recorded as this run's measurement.
+        if os.path.lexists(args.output):
+            os.unlink(args.output)
+    except OSError as error:
+        _emit_stderr(str(error))
+        return "stale-artifact-not-removable", False
+    return None, False
 
-    if reason is None:
-        try:
-            # Own the artifact path. A stale file left by an earlier run must
-            # not survive to be recorded as this run's measurement.
-            if os.path.lexists(args.output):
-                os.unlink(args.output)
-        except OSError as error:
-            reason = "stale-artifact-not-removable"
-            sys.stderr.write("emit-cost-summary: " + str(error) + "\n")
 
-    if reason is None:
-        try:
-            _build_and_write_cost_summary(args)
-        # Catch everything. A narrower tuple made "always exits 0" true only for
-        # the failures already thought of: any other defect escaped, exited
-        # non-zero, and -- if it happened after the artifact was written -- let
-        # the caller's `||` fallback append `skipped (kernel-unresolvable)` next
-        # to a present, current measurement. A false skip reason is worse than
-        # an honest one.
-        except Exception as error:  # noqa: BLE001 -- see comment above
-            reason = "summary-failed"
-            sys.stderr.write("emit-cost-summary: " + str(error) + "\n")
+def _run_emit_summary(args):
+    """Build and write the artifact. Returns a skip reason, or ``None``."""
+    try:
+        _build_and_write_cost_summary(args)
+    # Catch everything. A narrower tuple made "always exits 0" true only for the
+    # failures already thought of: any other defect escaped, exited non-zero,
+    # and -- if it happened after the artifact was written -- let the caller's
+    # `||` fallback append `skipped (kernel-unresolvable)` next to a present,
+    # current measurement. A false skip reason is worse than an honest one.
+    except Exception as error:  # noqa: BLE001 -- see comment above
+        _emit_stderr(str(error))
+        return "summary-failed"
+    return None
 
+
+def _record_emit_outcome(args, reason, receipt_unsafe):
+    """Append exactly one inventory line naming what actually happened."""
     line = (
         "run-cost-summary: " + str(args.output) + _coverage_suffix(args.output)
         if reason is None
@@ -2185,10 +2222,7 @@ def command_emit_cost_summary(args):
         # `|| printf 'run-cost-summary: skipped (...)' >> <receipt>`, so exiting
         # non-zero here would append through the very symlink just rejected and
         # undo the refusal. Stderr is the only safe channel left.
-        sys.stderr.write(
-            "emit-cost-summary: could not record '" + line
-            + "': receipt path refused\n"
-        )
+        _emit_stderr("could not record '" + line + "': receipt path refused")
         return 0
     try:
         _append_receipt_line(args.receipt, line)
@@ -2199,35 +2233,23 @@ def command_emit_cost_summary(args):
         # the only remaining way to surface it: the observation-only contract
         # protects the *artifact* from failing a review, not this command's
         # ability to report that it could not report.
-        sys.stderr.write(
-            "emit-cost-summary: could not record '" + line + "': "
-            + str(error) + "\n"
-        )
+        _emit_stderr("could not record '" + line + "': " + str(error))
         return EXIT_CONFLICT
     return 0
 
 
 def command_run_cost_summary(args):
-    from .cost_summary import build_run_cost_summary, compute_cost_summary_digest
-    from .dm_review_adapter import translate_review_receipts
-    from .pipeline_adapter import translate_pipeline_receipts
-    from .redaction import sanitize_durable_payload
+    """The legacy two-step entry point. Kept for callers not yet migrated.
 
-    receipts = _load_json(args.events)
-    if not isinstance(receipts, list):
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
+    Unlike `emit-cost-summary` it does not own the artifact path (no stale-file
+    clearing) and has no skip line: a failure exits non-zero and records
+    nothing. The artifact it produces is byte-identical, because both go
+    through :func:`_build_and_write_cost_summary`.
+    """
     try:
-        events = translate_pipeline_receipts(receipts)
+        _build_and_write_cost_summary(args)
     except ValueError:
-        events = translate_review_receipts(receipts)
-    repository_commit = getattr(args, "repository_commit", None)
-    dirty_state = bool(getattr(args, "dirty_state", False))
-    summary = build_run_cost_summary(
-        events, repository_commit=repository_commit, dirty_state=dirty_state,
-    )
-    sanitized = sanitize_durable_payload(summary)
-    sanitized["digest"] = compute_cost_summary_digest(sanitized)
-    _write_json(args.output, sanitized)
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS) from None
     _append_receipt_inventory_line(
         getattr(args, "receipt_line", None), args.output,
     )
@@ -2463,6 +2485,25 @@ def _emit_measurement_payload(produce, output, error_label, args=None):
     return 0
 
 
+def _attempt_context(args):
+    """Collect the attempt coordinates both measurement commands share.
+
+    The six arrive as identical flags on both commands, so reading them into
+    the shared carrier here keeps one spelling of the mapping rather than two
+    that can drift.
+    """
+    from ._usage_identity import AttemptContext
+
+    return AttemptContext(
+        lane=args.lane,
+        chunk_id=args.chunk_id,
+        node_id=args.node_id,
+        attempt=args.attempt,
+        host=args.host,
+        duration_seconds=args.duration_seconds,
+    )
+
+
 def command_openrouter_usage(args):
     from .openrouter_usage import translate_openrouter_receipt
 
@@ -2490,13 +2531,7 @@ def command_openrouter_usage(args):
         })
     return _emit_measurement_payload(
         lambda: translate_openrouter_receipt(
-            receipt,
-            lane=args.lane,
-            chunk_id=args.chunk_id,
-            node_id=args.node_id,
-            attempt=args.attempt,
-            host=args.host,
-            duration_seconds=args.duration_seconds,
+            receipt, context=_attempt_context(args),
         ),
         args.output,
         "openrouter-usage",
@@ -2505,6 +2540,7 @@ def command_openrouter_usage(args):
 
 
 def command_lane_input_bytes(args):
+    from ._usage_identity import ProviderAttribution
     from .lane_bytes import measure_lane_inputs
 
     return _emit_measurement_payload(
@@ -2512,17 +2548,14 @@ def command_lane_input_bytes(args):
             args.agent_definition,
             args.diff,
             args.boilerplate,
-            lane=args.lane,
-            chunk_id=args.chunk_id,
-            node_id=args.node_id,
-            attempt=args.attempt,
-            host=args.host,
-            duration_seconds=args.duration_seconds,
-            requested_provider=args.requested_provider,
-            attempted_provider=args.attempted_provider,
-            implemented_by=args.implemented_by,
-            provider=args.provider,
-            model=args.model,
+            context=_attempt_context(args),
+            attribution=ProviderAttribution(
+                requested_provider=args.requested_provider,
+                attempted_provider=args.attempted_provider,
+                implemented_by=args.implemented_by,
+                provider=args.provider,
+                model=args.model,
+            ),
         ),
         args.output,
         "lane-input-bytes",

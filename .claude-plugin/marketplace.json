@@ -274,7 +274,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.51.2",
+      "version": "1.51.3",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -350,7 +350,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.39.2",
+      "version": "1.39.3",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -375,7 +375,7 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.11.2",
+      "version": "0.11.3",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

@@ -45,7 +45,7 @@ from __future__ import annotations
 
 import math
 
-from ._usage_identity import build_attempt_identity
+from ._usage_identity import AttemptContext, ProviderAttribution, build_attempt_identity
 
 
 MEASUREMENT_SOURCE = "openrouter_api_receipt"
@@ -150,12 +150,7 @@ def _failure_kind(receipt):
 def translate_openrouter_receipt(
     receipt: dict,
     *,
-    lane: str,
-    chunk_id: str,
-    node_id: str,
-    attempt: int,
-    host: str,
-    duration_seconds: float,
+    context: AttemptContext,
 ) -> dict:
     """Translate one schemaVersion-2 OpenRouter receipt into a payload.
 
@@ -188,18 +183,8 @@ def translate_openrouter_receipt(
         receipt.get("requestedModel"),
     )
     payload = build_attempt_identity(
-        prefix=_PREFIX,
-        lane=lane,
-        chunk_id=chunk_id,
-        node_id=node_id,
-        attempt=attempt,
-        host=host,
-        duration_seconds=duration_seconds,
-        requested_provider="openrouter",
-        attempted_provider="openrouter",
-        implemented_by="openrouter",
-        provider=receipt_provider,
-        model=receipt_model,
+        _PREFIX, context,
+        ProviderAttribution.openrouter(receipt_provider, receipt_model),
     )
 
     measurements = {}

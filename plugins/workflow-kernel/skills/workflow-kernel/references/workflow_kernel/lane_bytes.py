@@ -48,7 +48,7 @@ from __future__ import annotations
 import os
 import stat
 
-from ._usage_identity import build_attempt_identity
+from ._usage_identity import AttemptContext, ProviderAttribution, build_attempt_identity
 
 
 MEASUREMENT_SOURCE = "estimated_input_bytes"
@@ -66,17 +66,8 @@ def estimate_lane_input_bytes(
     agent_definition_bytes: int,
     diff_bytes: int,
     boilerplate_bytes: int,
-    lane: str,
-    chunk_id: str,
-    node_id: str,
-    attempt: int,
-    host: str,
-    duration_seconds: float,
-    requested_provider: str,
-    attempted_provider: str,
-    implemented_by: str,
-    provider: str,
-    model: str,
+    context: AttemptContext,
+    attribution: ProviderAttribution,
 ) -> dict:
     """Build an attempt-scoped usage payload from deterministic bytes.
 
@@ -91,20 +82,7 @@ def estimate_lane_input_bytes(
     _byte_count(agent_definition_bytes, "agent_definition_bytes")
     _byte_count(diff_bytes, "diff_bytes")
     _byte_count(boilerplate_bytes, "boilerplate_bytes")
-    payload = build_attempt_identity(
-        prefix=_PREFIX,
-        lane=lane,
-        chunk_id=chunk_id,
-        node_id=node_id,
-        attempt=attempt,
-        host=host,
-        duration_seconds=duration_seconds,
-        requested_provider=requested_provider,
-        attempted_provider=attempted_provider,
-        implemented_by=implemented_by,
-        provider=provider,
-        model=model,
-    )
+    payload = build_attempt_identity(_PREFIX, context, attribution)
     payload["measurement_source"] = MEASUREMENT_SOURCE
     payload["usage_estimated"] = True
     payload["input_bytes"] = (
@@ -132,7 +110,9 @@ def measure_lane_inputs(
     agent_definition_path,
     diff_path,
     boilerplate_paths: list,
-    **identity,
+    *,
+    context: AttemptContext,
+    attribution: ProviderAttribution,
 ) -> dict:
     """Stat the lane inputs and return the attempt-scoped payload.
 
@@ -141,8 +121,8 @@ def measure_lane_inputs(
     Missing paths, directories passed where a file is expected, dangling
     symlinks, and permission-denied files raise ``ValueError`` naming
     the path; there is never a silent ``0``.  Repeated boilerplate paths
-    count once per occurrence.  ``identity`` is forwarded verbatim to
-    :func:`estimate_lane_input_bytes`.
+    count once per occurrence.  ``context`` and ``attribution`` are forwarded
+    to :func:`estimate_lane_input_bytes`, which validates them.
     """
     agent_definition_bytes = _stat_size(agent_definition_path, "agent definition")
     diff_bytes = _stat_size(diff_path, "diff")
@@ -153,5 +133,6 @@ def measure_lane_inputs(
         agent_definition_bytes=agent_definition_bytes,
         diff_bytes=diff_bytes,
         boilerplate_bytes=boilerplate_bytes,
-        **identity,
+        context=context,
+        attribution=attribution,
     )

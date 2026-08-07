@@ -1,6 +1,7 @@
 """Tests for the OpenRouter receipt usage translator and CLI command."""
 
 import contextlib
+import dataclasses
 import io
 import json
 import tempfile
@@ -8,6 +9,7 @@ import unittest
 from pathlib import Path
 
 from workflow_kernel import cli
+from workflow_kernel._usage_identity import AttemptContext
 from workflow_kernel.cost_summary import (
     _kernel_version_string,
     build_run_cost_summary,
@@ -35,10 +37,12 @@ BASE_KEYS = {
     "requested_provider", "attempted_provider", "implemented_by",
     "provider", "model", "host",
 }
-TRANSLATE_ARGS = dict(
+CONTEXT = AttemptContext(
     lane="implementation", chunk_id="chunk-a", node_id="chunk-a",
     attempt=1, host="codex", duration_seconds=12.5,
 )
+# Splatted at every call site, so the carrier swap stays a one-line change.
+TRANSLATE_ARGS = {"context": CONTEXT}
 
 
 def _receipt(path):
@@ -232,8 +236,8 @@ class OpenRouterUsageTranslationTests(unittest.TestCase):
             _receipt(SUCCESS_FIXTURE), **TRANSLATE_ARGS,
         )
         self.assertEqual(payload["identity_provenance"], "receipt_asserted")
-        self.assertEqual(payload["lane"], TRANSLATE_ARGS["lane"])
-        self.assertEqual(payload["chunk_id"], TRANSLATE_ARGS["chunk_id"])
+        self.assertEqual(payload["lane"], CONTEXT.lane)
+        self.assertEqual(payload["chunk_id"], CONTEXT.chunk_id)
         self.assertEqual(payload["requested_provider"], "openrouter")
 
         forged = _receipt(SUCCESS_FIXTURE)
@@ -244,8 +248,8 @@ class OpenRouterUsageTranslationTests(unittest.TestCase):
         tampered = translate_openrouter_receipt(forged, **TRANSLATE_ARGS)
         self.assertEqual(tampered["provider"], "Totally-Legit-Inc")
         self.assertEqual(tampered["identity_provenance"], "receipt_asserted")
-        self.assertEqual(tampered["lane"], TRANSLATE_ARGS["lane"])
-        self.assertEqual(tampered["chunk_id"], TRANSLATE_ARGS["chunk_id"])
+        self.assertEqual(tampered["lane"], CONTEXT.lane)
+        self.assertEqual(tampered["chunk_id"], CONTEXT.chunk_id)
 
     def test_measurementless_payloads_survive_intake(self):
         for fixture, source in (
@@ -343,7 +347,8 @@ class OpenRouterUsageTranslationTests(unittest.TestCase):
             with self.subTest(label=label):
                 with self.assertRaises(ValueError):
                     translate_openrouter_receipt(
-                        receipt, **{**TRANSLATE_ARGS, **override},
+                        receipt,
+                        context=dataclasses.replace(CONTEXT, **override),
                     )
 
     def test_end_to_end_attempt_usage_lands_in_run_cost_summary(self):
