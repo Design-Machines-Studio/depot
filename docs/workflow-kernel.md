@@ -431,12 +431,28 @@ verifiable from the emitted file alone. `build_run_cost_summary()` leaves
 digest after redaction, so a stale pre-redaction digest can never be emitted
 or trusted.
 
-### No-op-on-unavailable
+### Unavailable-must-be-declared
 
-If the kernel runtime is unavailable, the `run-cost-summary` command is a
-silent no-op. Record `run-cost-summary unavailable` as a skip reason in the
-progress ledger or review notes and continue; never block delivery or review
-on a measurement artifact.
+If the kernel runtime cannot be resolved, no artifact is produced. If it runs
+but exits non-zero, it may still have written the artifact before failing,
+because the receipt-line append happens after the artifact write. Decide by
+testing for the artifact, not by reading the exit code alone: record its path
+when it exists, and write a literal `run-cost-summary: skipped (<reason>)` line
+only when it does not.
+
+Never omit both the artifact path and the skip line -- an absent measurement
+must be visible as an absent measurement, not as silence a reader mistakes for
+"nothing to report."
+
+Kernel absence never fails, blocks, waives, or alters a review, lane, or phase
+outcome. The obligation is to declare the gap, not to gate on it.
+
+This is the canonical statement of the obligation. Eleven pipeline and
+dm-review consumers embed the operative paragraph verbatim, generated from
+`plugins/workflow-kernel/skills/workflow-kernel/references/run-cost-summary-contract.md`
+by `tools/sync-run-cost-summary-contract.sh`. Change the contract there, run the
+generator, and `tools/validate-workflow-contracts.sh` will confirm all eleven
+match.
 
 ### Computing a before/after per-lane cost table
 

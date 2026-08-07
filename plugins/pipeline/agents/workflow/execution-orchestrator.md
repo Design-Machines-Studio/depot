@@ -249,6 +249,47 @@ Produce the independent prediction before corresponding authoritative actions, t
 "$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest plans/<feature-slug>/manifest.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
 ```
 
+### Recording each chunk attempt (mandatory, one call per attempt)
+
+**As each chunk attempt settles -- completed, failed, or fell back -- record it
+with `record-attempt` before moving to the next chunk.** This is the measurement
+boundary. It is not deferred to the terminal emission block, and it is not
+satisfied by writing the chunk receipt alone.
+
+```text
+"$WORKFLOW_KERNEL" record-attempt \
+  --receipts plans/<feature-slug>/authoritative-receipts.json \
+  --run-id <run-id> --occurred-at <timezone-aware-ISO-8601> \
+  --authoritative-receipt receipts/chunks/<chunk-id>.json \
+  --stage progress --status <completed|failed> \
+  --lane <chunk-id> --chunk-id <chunk-id> --node-id <chunk-id> \
+  --attempt <n> --host <claude|codex> --duration-seconds <measured> \
+  --requested-executor <policy executor> \
+  --attempted-executor <what was dispatched> \
+  --implemented-by <what produced the diff> \
+  [--fallback-reason <cascade reason>] \
+  [--openrouter-receipt <wrapper receipt path>] \
+  [--agent-definition <prompt path> --diff <diff path> --provider <p> --model <m>]
+```
+
+One call appends **two** receipts under one lock -- the chunk outcome and its
+`attempt_usage` row -- and either both land or neither does. There is no call
+that records a chunk without its measurement, which is what stops a chunk from
+going unmeasured by being forgotten.
+
+Supply the strongest evidence the attempt has: `--openrouter-receipt` for
+OpenRouter chunks, `--agent-definition`/`--diff` for Codex chunks (deterministic
+input bytes, never a token count). When the host reports neither, omit both and
+the row records `attempt_unmeasured` -- an explicit statement that the chunk ran
+and nothing measured it. Record failed and fallen-back attempts too: a chunk
+that burned a provider call and produced nothing still cost money, and
+`providerSplit` accounting that omits it is wrong in the direction that flatters
+the run.
+
+A `lanes: 0` cost summary after a run that executed chunks means this step was
+skipped. The terminal `emit-cost-summary` reports the count on the receipt line
+as `(usage measured m/n)`; `0/n` is the signature of an unwired boundary.
+
 The next canonical transition is `run.started`. After that transition and before
 the first builder dispatch, Pipeline generates
 `plans/<feature-slug>/verification-profile.json` by running the complete

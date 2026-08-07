@@ -26,6 +26,7 @@ The CLI/VSCode and Desktop Cowork maintain **independent** plugin caches. Updati
 |--------|------------------|--------------|
 | CLI/VSCode | `~/.claude/plugins/marketplaces/depot/` | `~/.claude/plugins/cache/depot/` |
 | Desktop Cowork | `~/Library/Application Support/Claude/local-agent-mode-sessions/<session>/<account>/cowork_plugins/marketplaces/depot/` | Same path but `/cache/depot/` |
+| Codex | `~/.codex/plugins/marketplaces/depot/` | `~/.codex/plugins/cache/depot/` |
 
 To fix stale Desktop plugins, pull the Desktop's marketplace clone directly:
 
@@ -34,6 +35,24 @@ cd ~/Library/Application\ Support/Claude/local-agent-mode-sessions/*/*/cowork_pl
 ```
 
 Then restart Claude Desktop for it to detect the new versions.
+
+To fix a stale Codex clone, pull it the same way:
+
+```shell
+cd ~/.codex/plugins/marketplaces/depot && git pull origin main
+```
+
+Codex resolves plugin assets from `~/.codex/plugins/cache/depot/<plugin>/<version>/`,
+so confirm the expected version directory exists after pulling:
+
+```shell
+ls ~/.codex/plugins/cache/depot/<plugin>/
+```
+
+Agent and skill resolvers throughout the depot check `~/.claude/plugins/cache/depot`
+first and fall back to `~/.codex/plugins/cache/depot`. A Codex clone that is
+behind therefore goes unnoticed whenever the Claude cache happens to hold a
+usable copy -- check both when a version looks wrong.
 
 ## Notion Manual Sync
 

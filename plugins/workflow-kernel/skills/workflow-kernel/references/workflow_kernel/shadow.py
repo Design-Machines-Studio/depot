@@ -144,6 +144,7 @@ def _semantic(
         (None if ignore_economics else payload.get("cache_read_usage_count")),
         (None if ignore_economics else payload.get("cache_write_usage_count")),
         (None if ignore_economics else payload.get("reasoning_usage_count")),
+        (None if ignore_economics else payload.get("input_bytes")),
         (None if ignore_economics else payload.get("cost_usd")),
         (None if ignore_economics else payload.get("duration_seconds")),
         (None if ignore_economics else payload.get("wait_category")),

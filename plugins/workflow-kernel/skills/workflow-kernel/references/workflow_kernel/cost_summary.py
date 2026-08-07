@@ -38,7 +38,7 @@ _REQUIRED_INVOCATION = frozenset({"emitted_at", "first_event_at", "last_event_at
 _REQUIRED_TOTALS = frozenset({
     "usage_count", "input_usage_count", "output_usage_count",
     "cache_read_usage_count", "cache_write_usage_count",
-    "reasoning_usage_count", "cost_usd",
+    "reasoning_usage_count", "input_bytes", "cost_usd",
     "usage_provenance", "cost_provenance",
 })
 _REQUIRED_USAGE_PROVENANCE = frozenset(USAGE_FIELDS)
@@ -140,10 +140,21 @@ def _validate_invocation(invocation: Mapping) -> None:
                 raise ValueError(field + " must be a string or null")
 
 
+# Fields introduced after schema_version 1 was already emitting artifacts.
+# Every emitter writes them; the validator accepts their absence so an artifact
+# produced before they existed -- including the committed cost baselines this
+# repository grades against -- still validates. Making them strictly required
+# would have retroactively invalidated shipped evidence without a version bump,
+# which is a change to the meaning of `schema_version: 1`, not an addition to
+# it. New fields belong here until the schema version moves.
+_POST_V1_OPTIONAL_FIELDS = frozenset({"input_bytes"})
+
+
 def _validate_row(row: Mapping, id_field: str, expected_keys: frozenset) -> None:
     if type(row) is not dict:
         raise ValueError("row is not an object")
-    if set(row) != expected_keys:
+    present = set(row)
+    if present != expected_keys and present != (expected_keys - _POST_V1_OPTIONAL_FIELDS):
         raise ValueError("row fields mismatch for " + id_field)
     if type(row[id_field]) is not str or not row[id_field]:
         raise ValueError("row %s is invalid" % id_field)
@@ -158,8 +169,15 @@ def _validate_row(row: Mapping, id_field: str, expected_keys: frozenset) -> None
     if type(row["duration_seconds"]) not in _NULLABLE_NUM:
         raise ValueError("duration_seconds must be a number or null")
     for field in USAGE_FIELDS:
+        if field not in row:
+            continue
         if type(row[field]) not in _NULLABLE_INT:
             raise ValueError(field + " must be an integer or null")
+        # Every usage field is a count of something -- tokens, or bytes on disk.
+        # None of them can be negative, and a negative one is not a measurement
+        # that happens to be wrong, it is a bug wearing a measurement's clothes.
+        if row[field] is not None and row[field] < 0:
+            raise ValueError(field + " must not be negative")
     if type(row["cost_usd"]) not in _NULLABLE_NUM:
         raise ValueError("cost_usd must be a number or null")
 
@@ -174,19 +192,30 @@ def _validate_lane_identity(row: Mapping) -> None:
 def _validate_totals(totals: Mapping) -> None:
     if type(totals) is not dict:
         raise ValueError("totals is not an object")
-    if set(totals) != _REQUIRED_TOTALS:
+    present = set(totals)
+    if present != _REQUIRED_TOTALS and present != (_REQUIRED_TOTALS - _POST_V1_OPTIONAL_FIELDS):
         raise ValueError("totals fields mismatch")
     for field in USAGE_FIELDS:
+        if field not in totals:
+            continue
         if type(totals[field]) not in _NULLABLE_INT:
             raise ValueError("totals." + field + " must be an integer or null")
+        if totals[field] is not None and totals[field] < 0:
+            raise ValueError("totals." + field + " must not be negative")
     if type(totals["cost_usd"]) not in _NULLABLE_NUM:
         raise ValueError("totals.cost_usd must be a number or null")
     usage_provenance = totals["usage_provenance"]
     if type(usage_provenance) is not dict:
         raise ValueError("totals.usage_provenance is not an object")
-    if set(usage_provenance) != _REQUIRED_USAGE_PROVENANCE:
+    present_provenance = set(usage_provenance)
+    if (
+        present_provenance != _REQUIRED_USAGE_PROVENANCE
+        and present_provenance != (_REQUIRED_USAGE_PROVENANCE - _POST_V1_OPTIONAL_FIELDS)
+    ):
         raise ValueError("totals.usage_provenance fields mismatch")
     for field in USAGE_FIELDS:
+        if field not in usage_provenance:
+            continue
         if type(usage_provenance[field]) not in _NULLABLE_STR:
             raise ValueError(
                 "totals.usage_provenance." + field + " must be a string or null",
@@ -269,6 +298,7 @@ def _empty_phase_row(stage: str) -> dict:
         "cache_read_usage_count": None,
         "cache_write_usage_count": None,
         "reasoning_usage_count": None,
+        "input_bytes": None,
         "cost_usd": None,
         "measurement_source": None,
         "usage_estimated": False,
@@ -301,6 +331,7 @@ def _phase_row_final(row: dict) -> dict:
         "cache_read_usage_count": row["cache_read_usage_count"],
         "cache_write_usage_count": row["cache_write_usage_count"],
         "reasoning_usage_count": row["reasoning_usage_count"],
+        "input_bytes": row["input_bytes"],
         "cost_usd": row["cost_usd"],
         "measurement_source": row["measurement_source"],
         "usage_estimated": row["usage_estimated"],
@@ -370,6 +401,7 @@ def _build_lane_rows(report: MetricsAggregator) -> list:
             "cache_read_usage_count": econ.get("cache_read_usage_count"),
             "cache_write_usage_count": econ.get("cache_write_usage_count"),
             "reasoning_usage_count": econ.get("reasoning_usage_count"),
+            "input_bytes": econ.get("input_bytes"),
             "cost_usd": econ.get("cost_usd"),
             "measurement_source": econ.get("measurement_source") or "unavailable",
             "usage_estimated": bool(econ.get("usage_estimated", False)),
@@ -389,6 +421,7 @@ def _build_totals(report: MetricsAggregator) -> dict:
         "cache_read_usage_count": report.usage_totals.get("cache_read_usage_count"),
         "cache_write_usage_count": report.usage_totals.get("cache_write_usage_count"),
         "reasoning_usage_count": report.usage_totals.get("reasoning_usage_count"),
+        "input_bytes": report.usage_totals.get("input_bytes"),
         "cost_usd": report.cost_usd,
         "usage_provenance": usage_provenance,
         "cost_provenance": report.cost_total_provenance,

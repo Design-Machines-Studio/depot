@@ -32,7 +32,9 @@ require_text() {
     return
   fi
 
-  if grep -Fq "$pattern" "$file"; then
+  # `--` before the pattern: a pattern that starts with a dash (a CLI flag, say)
+  # is otherwise parsed as a grep option and the check silently fails.
+  if grep -Fq -- "$pattern" "$file"; then
     printf "  OK    %s\n" "$label"
   else
     printf "  FAIL  %s\n" "$label"
@@ -51,7 +53,11 @@ require_absent() {
     return
   fi
 
-  if grep -Fq "$pattern" "$file"; then
+  # `--` as above, and it matters more here: without it a dash-leading pattern
+  # makes grep exit non-zero as an *error*, which this branch would then report
+  # as the absence it was asked to prove. A check that fails open is worse than
+  # no check, because the OK line says it ran.
+  if grep -Fq -- "$pattern" "$file"; then
     printf "  FAIL  %s\n" "$label"
     failures=1
   else
@@ -413,10 +419,140 @@ done
 require_text "$quality_pulse_degradation" "Redaction refuses unsafe evidence" "quality-pulse reports redaction refusal"
 require_text "$quality_pulse_degradation" "Partial evidence cannot become" "quality-pulse prevents partial success"
 
+# --------------------------------------------------------------------------
+# Group 7: run-cost-summary emission contract
+# --------------------------------------------------------------------------
+
+printf "\nrun-cost-summary emission contract:\n"
+
+dm_review_skill_alias="$REPO_ROOT/plugins/dm-review/skills/dm-review/SKILL.md"
+dm_review_loop_skill="$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md"
+dm_review_visual_cmd="$REPO_ROOT/plugins/dm-review/commands/dm-review-visual.md"
+dm_review_visual_skill="$REPO_ROOT/plugins/dm-review/skills/dm-review-visual/SKILL.md"
+pipeline_skill="$REPO_ROOT/plugins/pipeline/skills/pipeline/SKILL.md"
+pipeline_run_skill="$REPO_ROOT/plugins/pipeline/skills/pipeline-run/SKILL.md"
+
+contract_canonical="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/run-cost-summary-contract.md"
+contract_sync="$REPO_ROOT/tools/sync-run-cost-summary-contract.sh"
+kernel_doc="$REPO_ROOT/docs/workflow-kernel.md"
+
+# The paragraph is generated into all eleven consumers from one canonical
+# source. Presence anchors let wording drift file by file while still passing;
+# byte-identity does not. Delegate to the generator's --check mode.
+require_text "$contract_canonical" "CANONICAL-PARAGRAPH-START" "canonical contract exposes a generated paragraph block"
+require_text "$contract_canonical" "CANONICAL-PARAGRAPH-END" "canonical contract closes the generated paragraph block"
+
+if [ -x "$contract_sync" ]; then
+  if "$contract_sync" --check >/dev/null 2>&1; then
+    printf "  ok    eleven consumers match the canonical run-cost-summary paragraph\n"
+  else
+    printf "  FAIL  run-cost-summary paragraph drifted from the canonical source\n"
+    "$contract_sync" --check 2>&1 | sed 's/^/        /'
+    failures=$((failures + 1))
+  fi
+else
+  printf "  FAIL  tools/sync-run-cost-summary-contract.sh missing or not executable\n"
+  failures=$((failures + 1))
+fi
+
+# The contract states the real concurrency property. The retired draft promised
+# isolation the fixed paths do not provide; it must not come back.
+for f in "$review_skill" "$review_cmd" "$dm_review_skill_alias" "$review_loop" \
+         "$dm_review_loop_skill" "$dm_review_visual_cmd" "$dm_review_visual_skill" \
+         "$pipeline_cmd" "$pipeline_skill" "$pipeline_run" "$pipeline_run_skill"; do
+  rel="${f#$REPO_ROOT/}"
+  require_absent "$f" "never collide" "$rel does not promise unbacked run isolation"
+done
+
+# "silent no-op" framing is retired everywhere the contract is stated --
+# including the kernel's own contract document, which consumers defer to.
+require_absent "$pipeline_run" "silent no-op" "pipeline-run command retires silent no-op"
+require_absent "$pipeline_run_skill" "silent no-op" "pipeline-run skill retires silent no-op"
+require_absent "$kernel_doc" "silent no-op" "kernel contract doc retires silent no-op"
+require_absent "$kernel_doc" "run-cost-summary unavailable" "kernel contract doc uses the mandated skip line"
+require_text "$kernel_doc" "run-cost-summary: skipped (<reason>)" "kernel contract doc mandates the literal skip line"
+
+# Only the paragraph is generated; the invocation beside it is path-specific.
+# That left the executable half unchecked -- eleven shell blocks could drift or
+# keep a bug while every prose anchor passed. Assert the shape of each.
+for f in "$review_skill" "$review_cmd" "$dm_review_skill_alias" "$review_loop" \
+         "$dm_review_loop_skill" "$dm_review_visual_cmd" "$dm_review_visual_skill" \
+         "$pipeline_cmd" "$pipeline_skill" "$pipeline_run" "$pipeline_run_skill"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "emit-cost-summary --events" "$rel invokes the transactional emission command"
+  # --receipt is argparse-required, so the command cannot run without it; what
+  # needs pinning is that the consumer names a receipt at all.
+  require_text "$f" "run-cost-summary: skipped" "$rel names a receipt skip line"
+  require_text "$f" "skipped (kernel-unresolvable)" "$rel handles an unresolvable launcher"
+  # The retired multi-command block must not come back in any consumer.
+  require_absent "$f" "run-cost-summary: skipped (%s)\\n' \"kernel-unavailable-or-failed\"" \
+    "$rel does not carry the retired shell fallback chain"
+done
+
+# The kernel version lives in four places: two plugin manifests, the
+# marketplace entry, and the runtime constant. A test that pinned the runtime
+# literal kept a stale value green while the manifests moved. Compare them.
+runtime_resolution="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/runtime_resolution.py"
+runtime_tuple=$(sed -n 's/^KERNEL_VERSION = (\([0-9]*\), \([0-9]*\), \([0-9]*\))$/\1.\2.\3/p' "$runtime_resolution" | head -1)
+# All four homes, not just the Claude manifest. Checking one of them let the
+# other three drift from the runtime constant with nothing to catch it -- which
+# is the exact failure this block was added to prevent, half-implemented.
+for kernel_manifest in \
+  "$REPO_ROOT/plugins/workflow-kernel/.claude-plugin/plugin.json" \
+  "$REPO_ROOT/plugins/workflow-kernel/.codex-plugin/plugin.json"; do
+  rel="${kernel_manifest#$REPO_ROOT/}"
+  manifest_version=$(sed -n 's/.*"version"[[:space:]]*:[[:space:]]*"\([0-9.]*\)".*/\1/p' "$kernel_manifest" | head -1)
+  if [ -n "$manifest_version" ] && [ "$manifest_version" = "$runtime_tuple" ]; then
+    printf "  ok    kernel runtime version %s matches %s\n" "$runtime_tuple" "$rel"
+  else
+    printf "  FAIL  kernel runtime version '%s' does not match %s '%s'\n" \
+      "$runtime_tuple" "$rel" "$manifest_version"
+    failures=$((failures + 1))
+  fi
+done
+marketplace_version=$(python3 -c "
+import json, sys
+manifest = json.load(open(sys.argv[1]))
+entry = next(
+    (p for p in manifest['plugins'] if p.get('name') == 'workflow-kernel'), {}
+)
+sys.stdout.write(entry.get('version', ''))
+" "$REPO_ROOT/.claude-plugin/marketplace.json" 2>/dev/null)
+if [ -n "$marketplace_version" ] && [ "$marketplace_version" = "$runtime_tuple" ]; then
+  printf "  ok    kernel runtime version %s matches the marketplace entry\n" "$runtime_tuple"
+else
+  printf "  FAIL  kernel runtime version '%s' does not match marketplace entry '%s'\n" \
+    "$runtime_tuple" "$marketplace_version"
+  failures=$((failures + 1))
+fi
+
+# The measurement producers must be documented, not just registered in the CLI.
+measurement_doc="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/cli-measurement-commands.md"
+require_text "$measurement_doc" "openrouter-usage" "measurement CLI reference documents openrouter-usage"
+require_text "$measurement_doc" "lane-input-bytes" "measurement CLI reference documents lane-input-bytes"
+require_text "$measurement_doc" "input_bytes" "measurement CLI reference documents the byte-unit field"
+require_text "$measurement_doc" "record-attempt" "measurement CLI reference documents record-attempt"
+require_text "$measurement_doc" "attempt_unmeasured" "measurement CLI reference documents the explicit unmeasured claim"
+
+# The emission boundary has to be wired at the DISPATCH site, not only described
+# in the terminal emission paragraph. Six review lanes and four production runs
+# established that an instruction living next to the last command in the run is
+# an instruction nobody executes during the run. Assert that the two consumers
+# that actually dispatch lanes name `record-attempt` where they dispatch them.
+review_dispatch_skill="$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
+orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
+for f in "$review_dispatch_skill" "$orchestrator"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "record-attempt" "$rel records each attempt through the kernel"
+  require_text "$f" "attempt_unmeasured" "$rel names the explicit unmeasured claim"
+  require_text "$f" "--openrouter-receipt" "$rel names the provider-receipt evidence path"
+  require_text "$f" "--agent-definition" "$rel names the input-bytes evidence path"
+done
+
 printf "\n"
 if [ "$failures" -ne 0 ]; then
   printf "FIX  restore the missing workflow-contract anchors (see docs and plugin sources above)\n"
   exit 1
 fi
 
-printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance)\n"
+printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission)\n"

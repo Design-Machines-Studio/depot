@@ -65,7 +65,8 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "verification_contract_provenance",
     "chunk_id", "usage_scope", "measurement_source", "usage_estimated",
     "input_usage_count", "output_usage_count", "cache_read_usage_count",
-    "cache_write_usage_count", "reasoning_usage_count",
+    "cache_write_usage_count", "reasoning_usage_count", "input_bytes",
+    "failure_kind", "identity_provenance",
     "source_finding_id", "canonical_finding_id", "finding_disposition",
     "agreement", "decision_reason_code", "source_severity", "evidence_ref",
     "action",
@@ -115,6 +116,7 @@ RECEIPT_FIELD_ALIASES = {
     "measurementSource": "measurement_source",
     "usageEstimated": "usage_estimated",
     "inputUsageCount": "input_usage_count",
+    "inputBytes": "input_bytes",
     "outputUsageCount": "output_usage_count",
     "cacheReadUsageCount": "cache_read_usage_count",
     "cacheWriteUsageCount": "cache_write_usage_count",
@@ -175,10 +177,23 @@ _CREDENTIAL_LIKE = re.compile(
 )
 _USAGE_SCOPES = frozenset({"attempt", "run"})
 _WAIT_CATEGORIES = frozenset({"human_gate", "external_dependency", "capacity", "ci"})
-_USAGE_COUNT_FIELDS = frozenset({
+# Every field that counts *something* about an attempt. The set is named for
+# measurement rather than usage because `input_bytes` is a byte count, not a
+# token count: the previous name promised token semantics to anything iterating
+# it, while the member list quietly broke that promise.
+_MEASUREMENT_FIELDS = frozenset({
     "usage_count", "input_usage_count", "output_usage_count",
     "cache_read_usage_count", "cache_write_usage_count",
-    "reasoning_usage_count",
+    "reasoning_usage_count", "input_bytes",
+})
+# A row may legitimately carry no measurement, but only by saying so. Silence
+# is the thing this backbone exists to remove: an absent row and a lane that
+# never ran are indistinguishable, and the spend disappears with it.
+# `attempt_unmeasured` is the explicit claim -- the lane ran, and nothing on
+# this host reported usage for it.
+_MEASUREMENTLESS_SOURCES = frozenset({
+    "openrouter_receipt_no_usage", "openrouter_receipt_failed",
+    "attempt_unmeasured",
 })
 _CONTRIBUTION_DISPOSITIONS = frozenset({"retained", "merged", "discarded"})
 _CONTRIBUTION_AGREEMENTS = frozenset({"unique", "corroborated", "disputed"})
@@ -597,7 +612,7 @@ def _validate_observation_receipt(receipt: dict) -> dict:
         receipt["decision_profile_defaulted"]
     ) is not bool:
         raise ValueError("invalid decision profile provenance")
-    for field in _USAGE_COUNT_FIELDS:
+    for field in _MEASUREMENT_FIELDS:
         if field in receipt:
             _nonnegative_number(receipt[field], field, integer=True)
     for field in ("cost_usd", "duration_seconds"):
@@ -619,7 +634,7 @@ def _validate_observation_receipt(receipt: dict) -> dict:
         raise ValueError("invalid wait category")
 
     scoped = "usage_scope" in receipt
-    detailed = bool((_USAGE_COUNT_FIELDS - {"usage_count"}) & set(receipt))
+    detailed = bool((_MEASUREMENT_FIELDS - {"usage_count"}) & set(receipt))
     provenance = bool({"measurement_source", "usage_estimated"} & set(receipt))
     if detailed or provenance:
         scoped = True
@@ -629,8 +644,23 @@ def _validate_observation_receipt(receipt: dict) -> dict:
         required_text(receipt.get("measurement_source"), "measurement source")
         if type(receipt.get("usage_estimated")) is not bool:
             raise ValueError("invalid usage estimated flag")
-        if not ((_USAGE_COUNT_FIELDS & set(receipt)) or "cost_usd" in receipt):
-            raise ValueError("scoped usage row has no measurement")
+        if not ((_MEASUREMENT_FIELDS & set(receipt)) or "cost_usd" in receipt):
+            # Honest-absence allowance, exactly two provenance strings wide.
+            # An OpenRouter receipt can carry no counters and no cost for two
+            # distinct reasons: the attempt failed, or it succeeded and
+            # reported nothing.  Both rows must survive intake so the
+            # run-cost summary reports them as present-but-unmeasured rather
+            # than silently dropping them -- an attempt that vanishes from the
+            # cost picture is indistinguishable from one that never ran.  The
+            # two are separate strings because a failed attempt may still have
+            # been billed.  Every other measurement_source with no measurement
+            # still fails closed.
+            if receipt.get("measurement_source") not in _MEASUREMENTLESS_SOURCES:
+                raise ValueError("scoped usage row has no measurement")
+        if receipt.get("measurement_source") == "openrouter_receipt_failed":
+            required_text(receipt.get("failure_kind"), "failure kind")
+        elif "failure_kind" in receipt:
+            raise ValueError("failure kind on a non-failed usage row")
         if receipt["usage_scope"] == "attempt":
             if (
                 "attempt" not in receipt or not receipt.get("node_id")

@@ -69,10 +69,11 @@ Use these exact later observation interfaces:
 "$WORKFLOW_KERNEL" observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
 "$WORKFLOW_KERNEL" compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
 "$WORKFLOW_KERNEL" metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
-"$WORKFLOW_KERNEL" run-cost-summary --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/run-cost-summary.json --repository-commit "$(git rev-parse HEAD)" $(test -n "$(git status --porcelain)" && echo --dirty-state)
+"$WORKFLOW_KERNEL" emit-cost-summary --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/run-cost-summary.json --receipt .claude/ux-review/workflow-kernel/run-receipt.md --repository-commit "$(git rev-parse HEAD)" $(test -n "$(git status --porcelain)" && echo --dirty-state) \
+  || { s=$?; [ "$s" -eq 2 ] || [ "$s" -eq 6 ]; } || printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> .claude/ux-review/workflow-kernel/run-receipt.md
 ```
 
-The `run-cost-summary` command emits a schema-bound `run-cost-summary.json` artifact beside the authoritative receipts. It is observation-only and never gates, waives, or alters any review outcome. If the kernel runtime is unavailable, record `run-cost-summary unavailable` as a skip reason and continue; never block the review. The command auto-detects a dirty working tree via `git status --porcelain` and passes `--dirty-state` accordingly.
+The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file left there by an earlier run, writes a schema-bound `run-cost-summary.json` beside that run's own `authoritative-receipts.json`, and appends exactly one inventory line to the run receipt naming what actually happened -- the artifact path on success, or `run-cost-summary: skipped (<reason>)` on any internal failure. It exits 0 for every measurement outcome, because the artifact is observation-only: it never gates, blocks, waives, or alters a review, lane, or phase outcome, and its absence never fails one. It exits 6 in exactly one case -- the receipt path was accepted but the write failed -- because a receipt naming neither an artifact nor a skip is the silence the failure-modes checklist forbids, and reporting that it could not report is the command's last obligation. A *refused* receipt path is the deliberate exception and still exits 0: exiting non-zero would fire the caller's `||` fallback, which appends through the very symlink the command just rejected, so the refusal is reported on stderr alone. Exit 2 is the other non-zero outcome and means the invocation was wrong -- bad flags, or `--output` and `--receipt` pointing at one path -- so nothing ran and nothing is recorded. The `||` fallback beside it must be gated on the status (`|| { s=$?; [ "$s" -eq 2 ] || [ "$s" -eq 6 ]; } || printf ...`), because a bare `||` fires on every non-zero exit: after an exit 6 whose receipt line was already written it appends a second, contradicting skip line, and after an exit 2 it blames a launcher that demonstrably ran. Gated, the fallback covers only what no process inside the kernel can report -- the launcher itself failing to run. Receipt paths are fixed for a given receipt directory, so two concurrent runs sharing one directory overwrite each other: serialize them, or give each run its own directory. The command refuses a symlinked artifact or receipt path, and when the *receipt* path is the one refused it records nothing rather than writing the refusal through the symlink it just rejected. It does not inspect the working tree: the caller passes `--dirty-state`, and that flag is the artifact's only source of that fact. Populate the events it reads: after each lane attempt, translate that attempt's OpenRouter wrapper receipt with `openrouter-usage`, or that lane's Codex/Claude input files with `lane-input-bytes`, passing `--append-to <authoritative-receipts.json> --run-id <id> --occurred-at <ISO-8601> --authoritative-receipt <path>` so the translator wraps the payload as an `attempt_usage` receipt and appends it under an exclusive lock in one validated step. Emit a row for every attempt including failed ones -- an attempt missing from the receipt stream is indistinguishable from one that never ran, and its spend disappears with it. A `lanes: 0` artifact after a run that executed lanes means this boundary is not wired; a structurally valid artifact with zero measured lanes proves the command ran, never that lanes were measured. Full command reference, when the workflow-kernel plugin is installed alongside this one: `plugins/workflow-kernel/skills/workflow-kernel/references/cli-measurement-commands.md`; if that path is not readable from this cache, the flags named above are the complete required set.
 
 If review setup creates any Docker/Compose resource, invoke exactly one planning interface:
 
@@ -607,6 +608,56 @@ When no design spec exists, omit this section entirely. The browser agents will 
 - Launch ALL agents in a single message with multiple Agent tool calls
 - Do not wait for one agent to finish before launching the next
 - Each agent runs independently with its own copy of the diff
+
+#### Recording each lane (mandatory, one call per attempt)
+
+**As each lane settles -- completed, failed, declined, or skipped -- record it
+with `record-attempt`. This is not optional and it is not deferred to the
+terminal emission block.**
+
+```bash
+"$WORKFLOW_KERNEL" record-attempt \
+  --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json \
+  --run-id <run-id> --occurred-at <ISO-8601> \
+  --authoritative-receipt receipts/review/<lane>.json \
+  --stage review_dispatch --status <completed|failed|declined|skipped> \
+  --lane <lane-id> --chunk-id <review-target> --node-id <lane-id> \
+  --attempt <n> --host <claude|codex> --duration-seconds <elapsed> \
+  --requested-executor <codex|openrouter|claude> \
+  --attempted-executor <what actually ran> \
+  --implemented-by <what produced the output> \
+  [--fallback-reason <reason>] \
+  # exactly one measurement source, in this order of preference:
+  [--openrouter-receipt <wrapper receipt path>] \
+  [--agent-definition <path> --diff <path> [--boilerplate <path> ...] \
+   --provider <p> --model <m>]
+```
+
+One call appends **two** receipts under one lock -- the lane outcome and its
+`attempt_usage` row -- and either both land or neither does. That is the whole
+mechanism: there is no call that records a lane without its measurement, so a
+lane cannot go unmeasured by being forgotten.
+
+Supply the strongest evidence the lane actually has:
+
+- **OpenRouter lanes:** `--openrouter-receipt`, the wrapper's
+  `OPENROUTER_RECEIPT_FILE`. Real provider counters and cost.
+- **Codex and Claude lanes:** `--agent-definition` and `--diff` (plus any
+  `--boilerplate`). Deterministic input bytes -- never a token count, never
+  comparable to one.
+- **Neither available:** omit both. The row records `attempt_unmeasured`, which
+  states that the lane ran and nothing measured it. That is a claim a reader can
+  audit. An absent row is not -- it is indistinguishable from a lane that never
+  ran, and the spend disappears with it.
+
+Record failed and declined attempts too. A lane that burned a provider call and
+returned nothing still cost money.
+
+Do **not** hand-write lane receipts into the array, and do not call
+`openrouter-usage` or `lane-input-bytes` with `--append-to` for a lane you are
+recording here -- that is the older two-call path this replaces, and using both
+double-counts the attempt. The standalone translators remain available for
+measuring something that is not a recorded lane attempt.
 
 #### Failure handling
 

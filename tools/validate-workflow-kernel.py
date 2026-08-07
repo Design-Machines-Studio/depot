@@ -95,6 +95,42 @@ BEHAVIORAL_CLI_CASES = {
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
     "metrics": ("--events", "<missing>", "--output", "<output>"),
     "run-cost-summary": ("--events", "<missing>", "--output", "<output>"),
+    # --output and --receipt must be distinct paths: one file used for both
+    # would be unlinked, written as JSON, then appended to as text, producing a
+    # corrupt artifact. The command refuses that, so the always-zero probe below
+    # has to give it two paths or it would be asserting the refusal instead.
+    # A well-formed invocation whose measurement evidence does not exist: the
+    # command must refuse before writing either receipt, never half-record.
+    "record-attempt": (
+        "--receipts", "<output>", "--run-id", "validator-cli",
+        "--occurred-at", "2026-07-14T00:00:00Z",
+        "--authoritative-receipt", "receipts/validator.json",
+        "--stage", "review_dispatch", "--status", "completed",
+        "--lane", "validator", "--chunk-id", "chunk", "--node-id", "node",
+        "--attempt", "1", "--host", "validator", "--duration-seconds", "1.0",
+        "--requested-executor", "codex", "--attempted-executor", "codex",
+        "--implemented-by", "codex", "--openrouter-receipt", "<missing>",
+    ),
+    "emit-cost-summary": (
+        "--events", "<missing>", "--output", "<output>", "--receipt", "<receipt>",
+    ),
+    "openrouter-usage": (
+        "--receipt", "<missing>", "--lane", "validator",
+        "--chunk-id", "chunk", "--node-id", "node",
+        "--attempt", "1", "--host", "validator",
+        "--duration-seconds", "1.0",
+    ),
+    "lane-input-bytes": (
+        "--agent-definition", "<missing>", "--diff", "<missing>",
+        "--lane", "validator",
+        "--chunk-id", "chunk", "--node-id", "node",
+        "--attempt", "1", "--host", "validator",
+        "--duration-seconds", "1.0",
+        "--requested-provider", "validator",
+        "--attempted-provider", "validator",
+        "--implemented-by", "validator",
+        "--provider", "validator", "--model", "validator",
+    ),
     "approve-verification-profile": (
         "--repository-root", "<state>", "--profile", "<missing>",
         "--trusted-base-commit", "0" * 40,
@@ -453,7 +489,9 @@ def check_cli(context):
         "authorize-verification-contract-revision",
         "bind-verification-contract", "revise-verification-contract",
         "observe-pipeline", "observe-review", "export-review-contributions",
-        "compare", "metrics", "run-cost-summary", "approve-verification-profile",
+        "compare", "metrics", "run-cost-summary", "emit-cost-summary",
+        "openrouter-usage",
+        "lane-input-bytes", "record-attempt", "approve-verification-profile",
         "plan-verification", "run-verification",
         "record-verification-result",
         "plan-create", "plan-compose", "record-create", "plan-cleanup",
@@ -492,6 +530,7 @@ def check_cli(context):
         replacements = {
             "<run>": str(run_root), "<state>": str(state_dir),
             "<missing>": str(root / "missing.json"),
+            "<receipt>": str(root / "emit-cost-summary-receipt.md"),
             "<event>": json.dumps({
                 "schema_version": 1, "sequence": 1, "run_id": "validator-cli",
                 "node_id": None, "kind": "run.started",
@@ -508,6 +547,11 @@ def check_cli(context):
             if command in {
                 "init", "validate", "append", "replay", "status",
                 "plan-cleanup",
+                # emit-cost-summary is contractually always-zero: a measurement
+                # failure must never become a workflow failure, and the command
+                # records its own skip line rather than signalling by exit code.
+                # Probing it with a missing events file asserts exactly that.
+                "emit-cost-summary",
             }:
                 require(completed.returncode == 0, f"{command} behavioral execution failed")
             else:
@@ -701,6 +745,57 @@ def check_cli(context):
         successful(
             "run-cost-summary", "--events", RECEIPTS / "pipeline-codex.json",
             "--output", root / "run-cost-summary.json",
+        )
+        record_attempt_stream = root / "record-attempt-receipts.json"
+        successful(
+            "record-attempt",
+            "--receipts", record_attempt_stream,
+            "--run-id", "validator-cli",
+            "--occurred-at", "2026-07-14T00:02:00Z",
+            "--authoritative-receipt", "receipts/validator.json",
+            "--stage", "review_dispatch", "--status", "completed",
+            "--lane", "validator", "--chunk-id", "chunk", "--node-id", "node",
+            "--attempt", "1", "--host", "validator", "--duration-seconds", "1.0",
+            "--requested-executor", "codex", "--attempted-executor", "openrouter",
+            "--implemented-by", "openrouter",
+            "--openrouter-receipt",
+            Path(ROOT) / "tests" / "fixtures" / "openrouter-receipt-success.json",
+        )
+        recorded = json.loads(record_attempt_stream.read_text(encoding="utf-8"))
+        require(
+            [r["stage"] for r in recorded]
+            == ["review_dispatch", "attempt_usage"],
+            "record-attempt did not append the lane and its measurement together",
+        )
+        require(
+            [r["sequence"] for r in recorded] == [0, 1],
+            "record-attempt produced a non-contiguous sequence",
+        )
+        successful(
+            "openrouter-usage",
+            "--receipt",
+            Path(ROOT) / "tests" / "fixtures" / "openrouter-receipt-success.json",
+            "--lane", "validator", "--chunk-id", "chunk",
+            "--node-id", "node", "--attempt", "1",
+            "--host", "validator", "--duration-seconds", "1.0",
+            "--output", root / "openrouter-usage.json",
+        )
+        successful(
+            "lane-input-bytes",
+            "--agent-definition",
+            Path(ROOT) / "tests" / "fixtures" / "lane-bytes" / "agent-definition.md",
+            "--diff",
+            Path(ROOT) / "tests" / "fixtures" / "lane-bytes" / "diff.patch",
+            "--boilerplate",
+            Path(ROOT) / "tests" / "fixtures" / "lane-bytes" / "boilerplate.md",
+            "--lane", "validator", "--chunk-id", "chunk",
+            "--node-id", "node", "--attempt", "1",
+            "--host", "validator", "--duration-seconds", "1.0",
+            "--requested-provider", "validator",
+            "--attempted-provider", "validator",
+            "--implemented-by", "validator",
+            "--provider", "validator", "--model", "validator",
+            "--output", root / "lane-input-bytes.json",
         )
 
         from tests.test_runtime_cli import verification_contract
