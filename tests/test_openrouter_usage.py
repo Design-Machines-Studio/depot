@@ -19,7 +19,10 @@ from workflow_kernel.runtime_resolution import KERNEL_VERSION
 
 FIXTURES = Path(__file__).parent / "fixtures"
 SUCCESS_FIXTURE = FIXTURES / "openrouter-receipt-success.json"
-NO_USAGE_FIXTURE = FIXTURES / "openrouter-receipt-no-usage.json"
+FAILED_FIXTURE = FIXTURES / "openrouter-receipt-no-usage.json"
+SUCCESS_NO_USAGE_FIXTURE = (
+    FIXTURES / "openrouter-receipt-success-no-usage.json"
+)
 
 USAGE_KEYS = {
     "usage_count", "input_usage_count", "output_usage_count",
@@ -107,7 +110,9 @@ class OpenRouterUsageTranslationTests(unittest.TestCase):
         payload = translate_openrouter_receipt(
             _receipt(SUCCESS_FIXTURE), **TRANSLATE_ARGS,
         )
-        self.assertEqual(set(payload), BASE_KEYS | USAGE_KEYS)
+        self.assertEqual(
+            set(payload), BASE_KEYS | USAGE_KEYS | {"identity_provenance"},
+        )
         for leaked in (
             "generation_id", "generationId", "authorization", "routing", "cost",
         ):
@@ -165,45 +170,139 @@ class OpenRouterUsageTranslationTests(unittest.TestCase):
         payload = translate_openrouter_receipt(receipt, **TRANSLATE_ARGS)
         self.assertEqual(payload["model"], "not_reported")
 
-    def test_no_usage_failure_receipt(self):
+    def test_failed_receipt_is_tagged_as_failed_and_names_the_reason(self):
+        """A failed attempt must not read as an attempt that simply reported
+        nothing. OpenRouter can bill a generation that returns HTTP 200 with
+        `usage: null`, so a row that hides the failure hides real spend."""
         payload = translate_openrouter_receipt(
-            _receipt(NO_USAGE_FIXTURE), **TRANSLATE_ARGS,
+            _receipt(FAILED_FIXTURE), **TRANSLATE_ARGS,
         )
-        self.assertEqual(set(payload), BASE_KEYS)
         self.assertEqual(
-            payload["measurement_source"], "openrouter_receipt_no_usage",
+            set(payload),
+            BASE_KEYS | {"failure_kind", "identity_provenance"},
         )
+        self.assertEqual(
+            payload["measurement_source"], "openrouter_receipt_failed",
+        )
+        self.assertEqual(payload["failure_kind"], "incomplete_stream")
         self.assertEqual(payload["model"], "moonshotai/kimi-k3")
         self.assertEqual(payload["provider"], "not_reported")
         self.assertTrue(all(value is not None for value in payload.values()))
 
-    def test_no_usage_payload_survives_intake(self):
+    def test_unmetered_success_is_distinguishable_from_a_failure(self):
+        """The two measurement-less cases carry different provenance."""
         payload = translate_openrouter_receipt(
-            _receipt(NO_USAGE_FIXTURE), **TRANSLATE_ARGS,
+            _receipt(SUCCESS_NO_USAGE_FIXTURE), **TRANSLATE_ARGS,
+        )
+        self.assertEqual(
+            payload["measurement_source"], "openrouter_receipt_no_usage",
+        )
+        self.assertNotIn("failure_kind", payload)
+        self.assertEqual(payload["provider"], "Z.AI")
+        self.assertEqual(payload["model"], "z-ai/glm-5.2")
+
+    def test_missing_outcome_is_treated_as_a_failure(self):
+        """A receipt that cannot state it succeeded has not demonstrated
+        that it did."""
+        receipt = _receipt(SUCCESS_NO_USAGE_FIXTURE)
+        del receipt["outcome"]
+        payload = translate_openrouter_receipt(receipt, **TRANSLATE_ARGS)
+        self.assertEqual(
+            payload["measurement_source"], "openrouter_receipt_failed",
+        )
+        self.assertEqual(payload["failure_kind"], "unreported")
+
+    def test_failed_receipt_still_reports_counters_it_carries(self):
+        """A partial generation that billed tokens must show those tokens."""
+        receipt = _receipt(FAILED_FIXTURE)
+        receipt["usage"] = {"prompt_tokens": 1200, "cost": 0.5}
+        payload = translate_openrouter_receipt(receipt, **TRANSLATE_ARGS)
+        self.assertEqual(
+            payload["measurement_source"], "openrouter_receipt_failed",
+        )
+        self.assertEqual(payload["input_usage_count"], 1200)
+        self.assertEqual(payload["cost_usd"], 0.5)
+        self.assertEqual(payload["failure_kind"], "incomplete_stream")
+
+    def test_identity_provenance_marks_receipt_sourced_fields(self):
+        """Provider and model are the only receipt-sourced payload fields, and
+        the row says so. Lane, chunk, node, attempt, and host come from the
+        caller, so lane attribution cannot be forged by editing a receipt."""
+        payload = translate_openrouter_receipt(
+            _receipt(SUCCESS_FIXTURE), **TRANSLATE_ARGS,
+        )
+        self.assertEqual(payload["identity_provenance"], "receipt_asserted")
+        self.assertEqual(payload["lane"], TRANSLATE_ARGS["lane"])
+        self.assertEqual(payload["chunk_id"], TRANSLATE_ARGS["chunk_id"])
+        self.assertEqual(payload["requested_provider"], "openrouter")
+
+        forged = _receipt(SUCCESS_FIXTURE)
+        forged["servingProvider"] = "Totally-Legit-Inc"
+        forged["responseModel"] = "vendor/imaginary-model"
+        forged["lane"] = "some-other-lane"
+        forged["chunk_id"] = "some-other-chunk"
+        tampered = translate_openrouter_receipt(forged, **TRANSLATE_ARGS)
+        self.assertEqual(tampered["provider"], "Totally-Legit-Inc")
+        self.assertEqual(tampered["identity_provenance"], "receipt_asserted")
+        self.assertEqual(tampered["lane"], TRANSLATE_ARGS["lane"])
+        self.assertEqual(tampered["chunk_id"], TRANSLATE_ARGS["chunk_id"])
+
+    def test_measurementless_payloads_survive_intake(self):
+        for fixture, source in (
+            (FAILED_FIXTURE, "openrouter_receipt_failed"),
+            (SUCCESS_NO_USAGE_FIXTURE, "openrouter_receipt_no_usage"),
+        ):
+            with self.subTest(source=source):
+                self._assert_survives_intake(fixture, source)
+
+    def _assert_survives_intake(self, fixture, source):
+        payload = translate_openrouter_receipt(
+            _receipt(fixture), **TRANSLATE_ARGS,
         )
         events = translate_pipeline_receipts([_envelope(payload)])
         summary = build_run_cost_summary(events)
         validate_run_cost_summary(summary)
         (lane,) = summary["lanes"]
-        self.assertEqual(
-            lane["measurement_source"], "openrouter_receipt_no_usage",
-        )
+        self.assertEqual(lane["measurement_source"], source)
         self.assertIsNone(lane["usage_count"])
         self.assertIsNone(lane["cost_usd"])
         self.assertEqual(
             summary["measurement_coverage"]["usage"]["measured"], 0,
         )
 
-    def test_no_measurement_allowance_is_one_provenance_string_wide(self):
+    def test_no_measurement_allowance_is_exactly_two_strings_wide(self):
+        """Only the two OpenRouter measurement-less provenance strings may
+        carry a scoped row with no counters. Every other source fails closed,
+        so absence cannot be laundered through an invented provenance."""
         payload = translate_openrouter_receipt(
-            _receipt(NO_USAGE_FIXTURE), **TRANSLATE_ARGS,
+            _receipt(FAILED_FIXTURE), **TRANSLATE_ARGS,
         )
+        payload.pop("failure_kind")
         payload["measurement_source"] = "provider_receipt"
         with self.assertRaises(ValueError) as caught:
             translate_pipeline_receipts([_envelope(payload)])
         self.assertIn(
             "scoped usage row has no measurement", str(caught.exception),
         )
+
+    def test_failure_kind_is_rejected_on_a_non_failed_row(self):
+        payload = translate_openrouter_receipt(
+            _receipt(SUCCESS_FIXTURE), **TRANSLATE_ARGS,
+        )
+        payload["failure_kind"] = "smuggled"
+        with self.assertRaises(ValueError) as caught:
+            translate_pipeline_receipts([_envelope(payload)])
+        self.assertIn(
+            "failure kind on a non-failed usage row", str(caught.exception),
+        )
+
+    def test_failed_row_without_failure_kind_is_rejected(self):
+        payload = translate_openrouter_receipt(
+            _receipt(FAILED_FIXTURE), **TRANSLATE_ARGS,
+        )
+        payload.pop("failure_kind")
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts([_envelope(payload)])
 
     def test_invalid_counter_values_rejected(self):
         for bad in (-1, 1.5, True, "100"):
@@ -285,13 +384,17 @@ class OpenRouterUsageCliTests(unittest.TestCase):
         self.assertEqual(payload["usage_count"], 88239)
 
     def test_cli_failure_receipt_exits_zero(self):
-        code, stdout, _ = _invoke(_cli_args(NO_USAGE_FIXTURE))
+        code, stdout, _ = _invoke(_cli_args(FAILED_FIXTURE))
         self.assertEqual(code, 0)
         payload = json.loads(stdout)
-        self.assertEqual(set(payload), BASE_KEYS)
         self.assertEqual(
-            payload["measurement_source"], "openrouter_receipt_no_usage",
+            set(payload),
+            BASE_KEYS | {"failure_kind", "identity_provenance"},
         )
+        self.assertEqual(
+            payload["measurement_source"], "openrouter_receipt_failed",
+        )
+        self.assertEqual(payload["failure_kind"], "incomplete_stream")
 
     def test_cli_byte_identical_canonical_output(self):
         code1, first, _ = _invoke(_cli_args(SUCCESS_FIXTURE))

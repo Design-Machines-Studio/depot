@@ -1999,6 +1999,75 @@ def command_run_cost_summary(args):
     sanitized = sanitize_durable_payload(summary)
     sanitized["digest"] = compute_cost_summary_digest(sanitized)
     _write_json(args.output, sanitized)
+    _append_receipt_inventory_line(
+        getattr(args, "receipt_line", None), args.output,
+    )
+    return 0
+
+
+def _append_receipt_inventory_line(receipt_path, artifact_path):
+    """Append the required inventory line, atomically, after the artifact.
+
+    The emission obligation was previously prose: a consumer was told to put
+    either the artifact path or a skip line into its run receipt, and whether
+    that happened depended on a model reading the instruction and acting on it.
+    This makes the success half deterministic -- the same command that wrote
+    the artifact records that it did, and it records it only after the write
+    succeeded, so the receipt can never claim an artifact that is not there.
+
+    The skip half stays with the caller by necessity: the reason to skip is
+    that this runtime could not be resolved or could not run, and a process
+    that did not start cannot write its own absence. Callers pair this flag
+    with a shell fallback that writes the skip line on a non-zero exit.
+    """
+    if not receipt_path:
+        return
+    line = "run-cost-summary: " + str(artifact_path) + "\n"
+    directory = os.path.dirname(os.path.abspath(receipt_path)) or "."
+    os.makedirs(directory, exist_ok=True)
+    # O_APPEND makes the write atomic against a concurrent appender, so two
+    # runs sharing a receipt file interleave whole lines rather than bytes.
+    descriptor = os.open(
+        receipt_path,
+        os.O_WRONLY | os.O_CREAT | os.O_APPEND,
+        0o600,
+    )
+    try:
+        handle = os.fdopen(descriptor, "a", encoding="utf-8")
+    except BaseException:
+        os.close(descriptor)
+        raise
+    with handle:
+        handle.write(line)
+        handle.flush()
+        os.fsync(handle.fileno())
+
+
+def _emit_measurement_payload(produce, output, error_label):
+    """Run one measurement translator and write its payload.
+
+    The two measurement commands differ only in how they obtain a payload.
+    Everything after that -- the ValueError-to-invalid-argument mapping, the
+    canonical JSON serialization, and the stdout-or-file branch -- is one
+    contract, defined here so the handlers cannot drift apart.
+
+    ``produce`` is a zero-argument callable returning the payload dict.
+    ``error_label`` names the command in the stderr diagnostic, so a caller
+    reading a failed run knows which translator rejected its input.
+    """
+    try:
+        payload = produce()
+    except ValueError as error:
+        sys.stderr.write(error_label + ": " + str(error) + "\n")
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        }) from None
+    if output:
+        _write_json(output, payload)
+    else:
+        sys.stdout.write(json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+        ) + "\n")
     return 0
 
 
@@ -2013,8 +2082,8 @@ def command_openrouter_usage(args):
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
             ErrorDetailKey.REASON_CODE.value: "invalid_argument",
         })
-    try:
-        payload = translate_openrouter_receipt(
+    return _emit_measurement_payload(
+        lambda: translate_openrouter_receipt(
             receipt,
             lane=args.lane,
             chunk_id=args.chunk_id,
@@ -2022,25 +2091,17 @@ def command_openrouter_usage(args):
             attempt=args.attempt,
             host=args.host,
             duration_seconds=args.duration_seconds,
-        )
-    except ValueError:
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
-        }) from None
-    if args.output:
-        _write_json(args.output, payload)
-    else:
-        sys.stdout.write(json.dumps(
-            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
-        ) + "\n")
-    return 0
+        ),
+        args.output,
+        "openrouter-usage",
+    )
 
 
 def command_lane_input_bytes(args):
     from .lane_bytes import measure_lane_inputs
 
-    try:
-        payload = measure_lane_inputs(
+    return _emit_measurement_payload(
+        lambda: measure_lane_inputs(
             args.agent_definition,
             args.diff,
             args.boilerplate,
@@ -2055,19 +2116,10 @@ def command_lane_input_bytes(args):
             implemented_by=args.implemented_by,
             provider=args.provider,
             model=args.model,
-        )
-    except ValueError as error:
-        sys.stderr.write("lane-input-bytes: " + str(error) + "\n")
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
-        }) from None
-    if args.output:
-        _write_json(args.output, payload)
-    else:
-        sys.stdout.write(json.dumps(
-            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
-        ) + "\n")
-    return 0
+        ),
+        args.output,
+        "lane-input-bytes",
+    )
 
 
 # Fixed PATH for the one runtime path that shells out; the caller's PATH
@@ -3313,6 +3365,13 @@ def parser():
     run_cost_summary.add_argument("--output", required=True)
     run_cost_summary.add_argument("--repository-commit", default=None)
     run_cost_summary.add_argument("--dirty-state", action="store_true", default=False)
+    run_cost_summary.add_argument(
+        "--receipt-line", default=None,
+        help=(
+            "append 'run-cost-summary: <artifact path>' to this run-receipt "
+            "file after the artifact is written"
+        ),
+    )
     run_cost_summary.set_defaults(handler=command_run_cost_summary)
 
     openrouter_usage = commands.add_parser(

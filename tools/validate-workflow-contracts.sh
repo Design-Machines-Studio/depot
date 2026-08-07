@@ -426,27 +426,51 @@ dm_review_visual_skill="$REPO_ROOT/plugins/dm-review/skills/dm-review-visual/SKI
 pipeline_skill="$REPO_ROOT/plugins/pipeline/skills/pipeline/SKILL.md"
 pipeline_run_skill="$REPO_ROOT/plugins/pipeline/skills/pipeline-run/SKILL.md"
 
-# The required-inventory sentence is identical across all eleven emission
-# sites so a single grep anchor pins it in each. Vary only the path examples.
+contract_canonical="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/run-cost-summary-contract.md"
+contract_sync="$REPO_ROOT/tools/sync-run-cost-summary-contract.sh"
+kernel_doc="$REPO_ROOT/docs/workflow-kernel.md"
+
+# The paragraph is generated into all eleven consumers from one canonical
+# source. Presence anchors let wording drift file by file while still passing;
+# byte-identity does not. Delegate to the generator's --check mode.
+require_text "$contract_canonical" "CANONICAL-PARAGRAPH-START" "canonical contract exposes a generated paragraph block"
+require_text "$contract_canonical" "CANONICAL-PARAGRAPH-END" "canonical contract closes the generated paragraph block"
+
+if [ -x "$contract_sync" ]; then
+  if "$contract_sync" --check >/dev/null 2>&1; then
+    printf "  ok    eleven consumers match the canonical run-cost-summary paragraph\n"
+  else
+    printf "  FAIL  run-cost-summary paragraph drifted from the canonical source\n"
+    "$contract_sync" --check 2>&1 | sed 's/^/        /'
+    failures=$((failures + 1))
+  fi
+else
+  printf "  FAIL  tools/sync-run-cost-summary-contract.sh missing or not executable\n"
+  failures=$((failures + 1))
+fi
+
+# The contract states the real concurrency property. The retired draft promised
+# isolation the fixed paths do not provide; it must not come back.
 for f in "$review_skill" "$review_cmd" "$dm_review_skill_alias" "$review_loop" \
          "$dm_review_loop_skill" "$dm_review_visual_cmd" "$dm_review_visual_skill" \
          "$pipeline_cmd" "$pipeline_skill" "$pipeline_run" "$pipeline_run_skill"; do
   rel="${f#$REPO_ROOT/}"
-  require_text "$f" "silence is no longer permitted" "$rel requires run-cost-summary receipt entry"
+  require_absent "$f" "never collide" "$rel does not promise unbacked run isolation"
 done
 
-# The never-block sentence survives verbatim -- the obligation is to speak,
-# not to gate.
-for f in "$review_skill" "$review_cmd" "$dm_review_skill_alias" "$review_loop" \
-         "$dm_review_loop_skill" "$dm_review_visual_cmd" "$dm_review_visual_skill" \
-         "$pipeline_cmd" "$pipeline_skill" "$pipeline_run" "$pipeline_run_skill"; do
-  rel="${f#$REPO_ROOT/}"
-  require_text "$f" "the new obligation is to speak, not to gate" "$rel preserves never-block rule"
-done
-
-# "silent no-op" framing is retired from pipeline-run files.
+# "silent no-op" framing is retired everywhere the contract is stated --
+# including the kernel's own contract document, which consumers defer to.
 require_absent "$pipeline_run" "silent no-op" "pipeline-run command retires silent no-op"
 require_absent "$pipeline_run_skill" "silent no-op" "pipeline-run skill retires silent no-op"
+require_absent "$kernel_doc" "silent no-op" "kernel contract doc retires silent no-op"
+require_absent "$kernel_doc" "run-cost-summary unavailable" "kernel contract doc uses the mandated skip line"
+require_text "$kernel_doc" "run-cost-summary: skipped (<reason>)" "kernel contract doc mandates the literal skip line"
+
+# The measurement producers must be documented, not just registered in the CLI.
+measurement_doc="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/cli-measurement-commands.md"
+require_text "$measurement_doc" "openrouter-usage" "measurement CLI reference documents openrouter-usage"
+require_text "$measurement_doc" "lane-input-bytes" "measurement CLI reference documents lane-input-bytes"
+require_text "$measurement_doc" "input_bytes" "measurement CLI reference documents the byte-unit field"
 
 printf "\n"
 if [ "$failures" -ne 0 ]; then

@@ -38,7 +38,7 @@ _REQUIRED_INVOCATION = frozenset({"emitted_at", "first_event_at", "last_event_at
 _REQUIRED_TOTALS = frozenset({
     "usage_count", "input_usage_count", "output_usage_count",
     "cache_read_usage_count", "cache_write_usage_count",
-    "reasoning_usage_count", "cost_usd",
+    "reasoning_usage_count", "input_bytes", "cost_usd",
     "usage_provenance", "cost_provenance",
 })
 _REQUIRED_USAGE_PROVENANCE = frozenset(USAGE_FIELDS)
@@ -269,6 +269,7 @@ def _empty_phase_row(stage: str) -> dict:
         "cache_read_usage_count": None,
         "cache_write_usage_count": None,
         "reasoning_usage_count": None,
+        "input_bytes": None,
         "cost_usd": None,
         "measurement_source": None,
         "usage_estimated": False,
@@ -301,6 +302,7 @@ def _phase_row_final(row: dict) -> dict:
         "cache_read_usage_count": row["cache_read_usage_count"],
         "cache_write_usage_count": row["cache_write_usage_count"],
         "reasoning_usage_count": row["reasoning_usage_count"],
+        "input_bytes": row["input_bytes"],
         "cost_usd": row["cost_usd"],
         "measurement_source": row["measurement_source"],
         "usage_estimated": row["usage_estimated"],
@@ -370,6 +372,7 @@ def _build_lane_rows(report: MetricsAggregator) -> list:
             "cache_read_usage_count": econ.get("cache_read_usage_count"),
             "cache_write_usage_count": econ.get("cache_write_usage_count"),
             "reasoning_usage_count": econ.get("reasoning_usage_count"),
+            "input_bytes": econ.get("input_bytes"),
             "cost_usd": econ.get("cost_usd"),
             "measurement_source": econ.get("measurement_source") or "unavailable",
             "usage_estimated": bool(econ.get("usage_estimated", False)),
@@ -389,6 +392,7 @@ def _build_totals(report: MetricsAggregator) -> dict:
         "cache_read_usage_count": report.usage_totals.get("cache_read_usage_count"),
         "cache_write_usage_count": report.usage_totals.get("cache_write_usage_count"),
         "reasoning_usage_count": report.usage_totals.get("reasoning_usage_count"),
+        "input_bytes": report.usage_totals.get("input_bytes"),
         "cost_usd": report.cost_usd,
         "usage_provenance": usage_provenance,
         "cost_provenance": report.cost_total_provenance,

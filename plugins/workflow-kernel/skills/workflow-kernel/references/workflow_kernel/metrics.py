@@ -20,7 +20,7 @@ WAIT_CATEGORIES = (
 USAGE_FIELDS = (
     "usage_count", "input_usage_count", "output_usage_count",
     "cache_read_usage_count", "cache_write_usage_count",
-    "reasoning_usage_count",
+    "reasoning_usage_count", "input_bytes",
 )
 CONTRIBUTION_BUCKETS = (
     "retained", "merged", "discarded", "unique", "corroborated", "disputed",

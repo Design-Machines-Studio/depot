@@ -405,6 +405,121 @@ class RunCostSummaryTests(unittest.TestCase):
             if os.path.exists(output_path):
                 os.unlink(output_path)
 
+    def test_cli_receipt_line_records_the_artifact_after_writing_it(self):
+        """The success half of the emission obligation is deterministic.
+
+        Before this flag, whether a run receipt gained its cost-summary line
+        depended on a model reading prose and acting on it. Now the same
+        command that writes the artifact records that it did -- and only after
+        the write succeeded, so a receipt can never cite an artifact that is
+        not there.
+        """
+        import os
+        import sys
+        import tempfile
+
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False,
+        ) as f:
+            json.dump(receipts, f)
+            events_path = f.name
+        output_path = events_path + ".summary.json"
+        receipt_path = events_path + ".receipt.md"
+        try:
+            old_argv = sys.argv
+            sys.argv = [
+                "workflow_kernel", "run-cost-summary",
+                "--events", events_path, "--output", output_path,
+                "--receipt-line", receipt_path,
+            ]
+            from workflow_kernel.cli import main
+            try:
+                main()
+            except SystemExit as exc:
+                self.assertEqual(exc.code, 0)
+            finally:
+                sys.argv = old_argv
+            self.assertTrue(os.path.exists(output_path))
+            with open(receipt_path) as f:
+                lines = f.read().splitlines()
+            self.assertEqual(lines, ["run-cost-summary: " + output_path])
+        finally:
+            for path in (events_path, output_path, receipt_path):
+                if os.path.exists(path):
+                    os.unlink(path)
+
+    def test_cli_receipt_line_appends_rather_than_truncating(self):
+        """A run receipt is append-only; the flag must not clobber it."""
+        import os
+        import sys
+        import tempfile
+
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False,
+        ) as f:
+            json.dump(receipts, f)
+            events_path = f.name
+        output_path = events_path + ".summary.json"
+        receipt_path = events_path + ".receipt.md"
+        with open(receipt_path, "w") as f:
+            f.write("# Receipt\nprior line\n")
+        try:
+            old_argv = sys.argv
+            sys.argv = [
+                "workflow_kernel", "run-cost-summary",
+                "--events", events_path, "--output", output_path,
+                "--receipt-line", receipt_path,
+            ]
+            from workflow_kernel.cli import main
+            try:
+                main()
+            except SystemExit as exc:
+                self.assertEqual(exc.code, 0)
+            finally:
+                sys.argv = old_argv
+            with open(receipt_path) as f:
+                lines = f.read().splitlines()
+            self.assertEqual(lines[:2], ["# Receipt", "prior line"])
+            self.assertEqual(lines[-1], "run-cost-summary: " + output_path)
+        finally:
+            for path in (events_path, output_path, receipt_path):
+                if os.path.exists(path):
+                    os.unlink(path)
+
+    def test_cli_without_receipt_line_writes_no_receipt(self):
+        """The flag is opt-in; omitting it leaves the old behavior exactly."""
+        import os
+        import sys
+        import tempfile
+
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False,
+        ) as f:
+            json.dump(receipts, f)
+            events_path = f.name
+        output_path = events_path + ".summary.json"
+        try:
+            old_argv = sys.argv
+            sys.argv = [
+                "workflow_kernel", "run-cost-summary",
+                "--events", events_path, "--output", output_path,
+            ]
+            from workflow_kernel.cli import main
+            try:
+                main()
+            except SystemExit as exc:
+                self.assertEqual(exc.code, 0)
+            finally:
+                sys.argv = old_argv
+            self.assertTrue(os.path.exists(output_path))
+        finally:
+            for path in (events_path, output_path):
+                if os.path.exists(path):
+                    os.unlink(path)
+
     def test_cli_defaults_repository_commit_null_dirty_false(self):
         import os
         import sys

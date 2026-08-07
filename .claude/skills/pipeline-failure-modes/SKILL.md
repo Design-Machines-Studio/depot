@@ -43,6 +43,8 @@ After any pipeline run or manual feature implementation, verify:
 - [ ] No "visually identical" requirements left unverified (visual diff protocol applied)
 - [ ] If any UI chunk receipt carries a browser-evidence status other than verified (browser unavailable, alternate engine, or human-help escalation), the 3-item Caller Verification Checklist is complete with attached evidence
 - [ ] Repository cleanup phase ran; receipt carries a `## Branch & Worktree Inventory` with every created ref dispositioned, every kept/blocked ref carrying a follow-up command, and a clean `git status --porcelain`
+- [ ] Run receipt carries either the `run-cost-summary.json` artifact path or a literal `run-cost-summary: skipped (<reason>)` line; silence fails the checklist
+- [ ] Cost summary has at least one populated `lanes[]` row, or the receipt states why every lane is `unavailable` -- a structurally valid artifact with zero measured lanes is not evidence of measurement
 - [ ] Feature branch preserved unless `git merge-base --is-ancestor <branch> origin/main` proves it landed
 - [ ] UI work uses Datastar/Datastar Pro attributes rather than hand-rolled JS; every Pro attribute has a recorded bundle-presence check
 - [ ] Session recorded to ai-memory

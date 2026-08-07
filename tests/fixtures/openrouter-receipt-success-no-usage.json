@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 2,
+  "outcome": "success",
+  "failureKind": null,
+  "timeout": null,
+  "httpStatus": 200,
+  "generationId": "gen-0000000000-SYNTHETICFIXTURE",
+  "created": 1786000000,
+  "requestedModel": "z-ai/glm-5.2",
+  "modelCandidates": ["z-ai/glm-5.2"],
+  "attemptedModel": "z-ai/glm-5.2",
+  "attemptedModels": ["z-ai/glm-5.2"],
+  "attemptProvenance": "response_model",
+  "fallbackUsed": false,
+  "responseModel": "z-ai/glm-5.2",
+  "responseModelProvenance": "response",
+  "servingProvider": "Z.AI",
+  "servingProviderProvenance": "response",
+  "usage": null,
+  "routing": {"workload": "mechanical", "sort": null},
+  "authorization": {"mode": "exact-digest"}
+}

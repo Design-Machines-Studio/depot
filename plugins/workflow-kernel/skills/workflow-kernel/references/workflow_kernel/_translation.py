@@ -65,7 +65,8 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "verification_contract_provenance",
     "chunk_id", "usage_scope", "measurement_source", "usage_estimated",
     "input_usage_count", "output_usage_count", "cache_read_usage_count",
-    "cache_write_usage_count", "reasoning_usage_count",
+    "cache_write_usage_count", "reasoning_usage_count", "input_bytes",
+    "failure_kind", "identity_provenance",
     "source_finding_id", "canonical_finding_id", "finding_disposition",
     "agreement", "decision_reason_code", "source_severity", "evidence_ref",
     "action",
@@ -115,6 +116,7 @@ RECEIPT_FIELD_ALIASES = {
     "measurementSource": "measurement_source",
     "usageEstimated": "usage_estimated",
     "inputUsageCount": "input_usage_count",
+    "inputBytes": "input_bytes",
     "outputUsageCount": "output_usage_count",
     "cacheReadUsageCount": "cache_read_usage_count",
     "cacheWriteUsageCount": "cache_write_usage_count",
@@ -175,10 +177,16 @@ _CREDENTIAL_LIKE = re.compile(
 )
 _USAGE_SCOPES = frozenset({"attempt", "run"})
 _WAIT_CATEGORIES = frozenset({"human_gate", "external_dependency", "capacity", "ci"})
+# input_bytes is a measurement in a different unit, never a token count. It
+# lives here so a byte-only row satisfies the has-a-measurement gate, and it is
+# deliberately absent from the token-count set used to detect detailed usage.
 _USAGE_COUNT_FIELDS = frozenset({
     "usage_count", "input_usage_count", "output_usage_count",
     "cache_read_usage_count", "cache_write_usage_count",
-    "reasoning_usage_count",
+    "reasoning_usage_count", "input_bytes",
+})
+_MEASUREMENTLESS_SOURCES = frozenset({
+    "openrouter_receipt_no_usage", "openrouter_receipt_failed",
 })
 _CONTRIBUTION_DISPOSITIONS = frozenset({"retained", "merged", "discarded"})
 _CONTRIBUTION_AGREEMENTS = frozenset({"unique", "corroborated", "disputed"})
@@ -630,14 +638,22 @@ def _validate_observation_receipt(receipt: dict) -> dict:
         if type(receipt.get("usage_estimated")) is not bool:
             raise ValueError("invalid usage estimated flag")
         if not ((_USAGE_COUNT_FIELDS & set(receipt)) or "cost_usd" in receipt):
-            # Honest-absence allowance, exactly one provenance string wide:
-            # an OpenRouter failure receipt (usage: null) carries no counters
-            # and no cost, yet its attempt row must survive intake so the
-            # run-cost summary reports it as present-but-unmeasured rather
-            # than silently dropping it.  Every other measurement_source
-            # with no measurement still fails closed.
-            if receipt.get("measurement_source") != "openrouter_receipt_no_usage":
+            # Honest-absence allowance, exactly two provenance strings wide.
+            # An OpenRouter receipt can carry no counters and no cost for two
+            # distinct reasons: the attempt failed, or it succeeded and
+            # reported nothing.  Both rows must survive intake so the
+            # run-cost summary reports them as present-but-unmeasured rather
+            # than silently dropping them -- an attempt that vanishes from the
+            # cost picture is indistinguishable from one that never ran.  The
+            # two are separate strings because a failed attempt may still have
+            # been billed.  Every other measurement_source with no measurement
+            # still fails closed.
+            if receipt.get("measurement_source") not in _MEASUREMENTLESS_SOURCES:
                 raise ValueError("scoped usage row has no measurement")
+        if receipt.get("measurement_source") == "openrouter_receipt_failed":
+            required_text(receipt.get("failure_kind"), "failure kind")
+        elif "failure_kind" in receipt:
+            raise ValueError("failure kind on a non-failed usage row")
         if receipt["usage_scope"] == "attempt":
             if (
                 "attempt" not in receipt or not receipt.get("node_id")

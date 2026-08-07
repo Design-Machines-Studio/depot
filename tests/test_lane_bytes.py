@@ -105,14 +105,14 @@ class LaneInputBytesPayloadTests(unittest.TestCase):
         self.assertEqual(payload["usage_scope"], "attempt")
         self.assertEqual(payload["measurement_source"], "estimated_input_bytes")
         self.assertIs(payload["usage_estimated"], True)
-        self.assertEqual(payload["input_usage_count"], 175)
+        self.assertEqual(payload["input_bytes"], 175)
         for key, value in IDENTITY.items():
             self.assertEqual(payload[key], value)
 
     def test_exact_key_set_omits_other_counters_and_cost(self):
         payload = estimate_lane_input_bytes(**BYTE_ARGS, **IDENTITY)
-        self.assertEqual(set(payload), BASE_KEYS | {"input_usage_count"})
-        for key in USAGE_KEYS - {"input_usage_count"}:
+        self.assertEqual(set(payload), BASE_KEYS | {"input_bytes"})
+        for key in USAGE_KEYS - {"input_bytes"}:
             self.assertNotIn(key, payload)
         self.assertTrue(all(value is not None for value in payload.values()))
 
@@ -121,9 +121,9 @@ class LaneInputBytesPayloadTests(unittest.TestCase):
             agent_definition_bytes=0, diff_bytes=0, boilerplate_bytes=0,
             **IDENTITY,
         )
-        self.assertIn("input_usage_count", payload)
-        self.assertEqual(payload["input_usage_count"], 0)
-        self.assertIs(type(payload["input_usage_count"]), int)
+        self.assertIn("input_bytes", payload)
+        self.assertEqual(payload["input_bytes"], 0)
+        self.assertIs(type(payload["input_bytes"]), int)
 
     def test_byte_sum_larger_than_two_to_31_stays_exact_int(self):
         total = 2**31 + 7
@@ -131,13 +131,13 @@ class LaneInputBytesPayloadTests(unittest.TestCase):
             agent_definition_bytes=2**31, diff_bytes=7, boilerplate_bytes=0,
             **IDENTITY,
         )
-        self.assertEqual(payload["input_usage_count"], total)
-        self.assertIs(type(payload["input_usage_count"]), int)
+        self.assertEqual(payload["input_bytes"], total)
+        self.assertIs(type(payload["input_bytes"]), int)
         encoded = json.dumps(
             payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
         )
-        self.assertIn('"input_usage_count":' + str(total), encoded)
-        self.assertEqual(json.loads(encoded)["input_usage_count"], total)
+        self.assertIn('"input_bytes":' + str(total), encoded)
+        self.assertEqual(json.loads(encoded)["input_bytes"], total)
 
     def test_invalid_byte_counts_rejected(self):
         for bad in (-1, -100, 1.5, "10", True, None):
@@ -201,7 +201,7 @@ class MeasureLaneInputsTests(unittest.TestCase):
         payload = measure_lane_inputs(
             self.agent, self.diff, [self.boiler], **IDENTITY,
         )
-        self.assertEqual(payload["input_usage_count"], expected)
+        self.assertEqual(payload["input_bytes"], expected)
         self.assertEqual(payload["measurement_source"], MEASUREMENT_SOURCE)
         self.assertIs(payload["usage_estimated"], True)
         self.assertEqual(payload["lane"], "dm-review")
@@ -210,8 +210,8 @@ class MeasureLaneInputsTests(unittest.TestCase):
         empty = Path(self._tmp.name) / "empty.md"
         empty.write_bytes(b"")
         payload = measure_lane_inputs(empty, empty, [], **IDENTITY)
-        self.assertIn("input_usage_count", payload)
-        self.assertEqual(payload["input_usage_count"], 0)
+        self.assertIn("input_bytes", payload)
+        self.assertEqual(payload["input_bytes"], 0)
 
     def test_missing_path_names_the_path(self):
         missing = Path(self._tmp.name) / "missing.md"
@@ -237,7 +237,7 @@ class MeasureLaneInputsTests(unittest.TestCase):
         os.symlink(self.agent, link)
         payload = measure_lane_inputs(link, self.diff, [], **IDENTITY)
         self.assertEqual(
-            payload["input_usage_count"],
+            payload["input_bytes"],
             os.stat(self.agent).st_size + os.stat(self.diff).st_size,
         )
 
@@ -263,7 +263,7 @@ class MeasureLaneInputsTests(unittest.TestCase):
             self.agent, self.diff, [self.boiler, self.boiler], **IDENTITY,
         )
         self.assertEqual(
-            twice["input_usage_count"] - once["input_usage_count"],
+            twice["input_bytes"] - once["input_bytes"],
             boiler_size,
         )
 
@@ -277,10 +277,10 @@ class LaneInputBytesCliTests(unittest.TestCase):
         code, out, err = _invoke(_cli_args(boilerplate=[BOILERPLATE_FIXTURE]))
         self.assertEqual(code, 0, err)
         payload = json.loads(out)
-        self.assertEqual(payload["input_usage_count"], expected)
+        self.assertEqual(payload["input_bytes"], expected)
         self.assertEqual(payload["measurement_source"], "estimated_input_bytes")
         self.assertIs(payload["usage_estimated"], True)
-        self.assertEqual(set(payload), BASE_KEYS | {"input_usage_count"})
+        self.assertEqual(set(payload), BASE_KEYS | {"input_bytes"})
 
     def test_output_file_carries_full_identity(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -299,8 +299,8 @@ class LaneInputBytesCliTests(unittest.TestCase):
         self.assertEqual(once[0], 0, once[2])
         self.assertEqual(twice[0], 0, twice[2])
         self.assertEqual(
-            json.loads(twice[1])["input_usage_count"]
-            - json.loads(once[1])["input_usage_count"],
+            json.loads(twice[1])["input_bytes"]
+            - json.loads(once[1])["input_bytes"],
             os.stat(BOILERPLATE_FIXTURE).st_size,
         )
 
@@ -367,7 +367,10 @@ class LaneBytesAggregationTests(unittest.TestCase):
 
     def _openrouter_payload(self, lane, prompt_tokens):
         return translate_openrouter_receipt(
-            {"schemaVersion": 2, "usage": {"prompt_tokens": prompt_tokens}},
+            {
+                "schemaVersion": 2, "outcome": "success",
+                "usage": {"prompt_tokens": prompt_tokens},
+            },
             lane=lane, chunk_id="chunk-a", node_id="chunk-a",
             attempt=1, host="codex", duration_seconds=9.0,
         )
@@ -379,7 +382,7 @@ class LaneBytesAggregationTests(unittest.TestCase):
         row = report.attempt_economics[0]
         self.assertIs(row["usage_estimated"], True)
         self.assertEqual(row["measurement_source"], "estimated_input_bytes")
-        self.assertEqual(row["input_usage_count"], 175)
+        self.assertEqual(row["input_bytes"], 175)
         self.assertEqual(row["lane"], "dm-review")
         self.assertEqual(row["chunk_id"], "chunk-a")
         self.assertEqual(row["attempt"], 1)
@@ -394,20 +397,65 @@ class LaneBytesAggregationTests(unittest.TestCase):
         lane = lanes[0]
         self.assertIs(lane["usage_estimated"], True)
         self.assertEqual(lane["measurement_source"], "estimated_input_bytes")
-        self.assertEqual(lane["input_usage_count"], 175)
+        self.assertEqual(lane["input_bytes"], 175)
         self.assertEqual(lane["chunk_id"], "chunk-a")
         self.assertEqual(lane["attempt"], 1)
 
-    def test_mixed_measurement_sources_null_the_field_total(self):
+    def test_bytes_and_tokens_never_share_a_field(self):
+        """A byte row and a token row are separate columns, not one column.
+
+        This is the invariant behind the unit split: a consumer reading a lane
+        row can never receive bytes under a token-named key, so it cannot
+        misread a ~4x-inflated number as a token count.
+        """
         lane_payload = estimate_lane_input_bytes(**BYTE_ARGS, **IDENTITY)
         openrouter_payload = self._openrouter_payload("implementation", 40)
         events = self._events(lane_payload, openrouter_payload)
         report = MetricsAggregator().aggregate(events)
         rows_by_lane = {row["lane"]: row for row in report.attempt_economics}
-        self.assertEqual(rows_by_lane["dm-review"]["input_usage_count"], 175)
-        self.assertEqual(rows_by_lane["implementation"]["input_usage_count"], 40)
-        self.assertIs(rows_by_lane["dm-review"]["usage_estimated"], True)
-        self.assertIs(rows_by_lane["implementation"]["usage_estimated"], False)
+        byte_row = rows_by_lane["dm-review"]
+        token_row = rows_by_lane["implementation"]
+        self.assertEqual(byte_row["input_bytes"], 175)
+        self.assertNotIn("input_usage_count", byte_row)
+        self.assertEqual(token_row["input_usage_count"], 40)
+        self.assertNotIn("input_bytes", token_row)
+        self.assertIs(byte_row["usage_estimated"], True)
+        self.assertIs(token_row["usage_estimated"], False)
+
+    def test_partial_field_coverage_nulls_that_field_total(self):
+        """Neither total sums, because neither field covers every attempt.
+
+        Two attempts, each measured in a different unit: `input_bytes` is
+        missing from one and `input_usage_count` from the other. A total is
+        only honest when every expected attempt contributed to it.
+        """
+        lane_payload = estimate_lane_input_bytes(**BYTE_ARGS, **IDENTITY)
+        openrouter_payload = self._openrouter_payload("implementation", 40)
+        events = self._events(lane_payload, openrouter_payload)
+        event_rows = [
+            (_attempt_identity(event), event.payload) for event in events
+        ]
+        expected = {identity for identity, _ in event_rows}
+        totals, provenance, _, _ = _scoped_totals(event_rows, [], [], expected)
+        for field in ("input_bytes", "input_usage_count"):
+            with self.subTest(field=field):
+                self.assertIsNone(totals[field])
+                self.assertIsNone(provenance[field])
+
+    def test_mixed_measurement_sources_null_the_field_total(self):
+        """Same field, disagreeing provenance -> no sum.
+
+        Two attempts both report `input_usage_count`, but one is a provider
+        receipt and the other is tagged as a failed receipt. Coverage is
+        complete, so only the single-source rule can stop the sum -- and it
+        must, or an estimate gets promoted to measured truth.
+        """
+        first = self._openrouter_payload("implementation", 40)
+        second = self._openrouter_payload("browser", 60)
+        second["measurement_source"] = "estimated_input_bytes"
+        second["usage_estimated"] = True
+        second.pop("identity_provenance", None)
+        events = self._events(first, second)
         event_rows = [
             (_attempt_identity(event), event.payload) for event in events
         ]
@@ -443,7 +491,7 @@ class LaneBytesAggregationTests(unittest.TestCase):
         ]
         expected = {identity for identity, _ in event_rows}
         usage_coverage, assigned = _coverage_assignments(
-            expected, event_rows, lambda row: "input_usage_count" in row,
+            expected, event_rows, lambda row: "input_bytes" in row,
         )
         self.assertEqual(usage_coverage["expected"], 1)
         self.assertEqual(usage_coverage["measured"], 1)
