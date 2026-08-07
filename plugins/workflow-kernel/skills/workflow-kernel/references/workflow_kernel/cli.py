@@ -2039,6 +2039,31 @@ def _reject_symlinked_components(path):
         raise ValueError("symlinked path: " + absolute)
 
 
+def _coverage_suffix(output_path):
+    """Name the measured-lane count on the inventory line.
+
+    Nothing enforces that an orchestrator calls `openrouter-usage` or
+    `lane-input-bytes` after each attempt -- it is prose in eleven consumer
+    files, so an unwired run still emits a structurally valid artifact with
+    `lanes: []`. The artifact says so in `measurement_coverage`, but nobody
+    reads the artifact to find out whether reading the artifact is worthwhile.
+    The run receipt is where an operator looks, so the count goes there too.
+
+    This reports; it does not gate. An unmeasured run is still a successful
+    emission.
+    """
+    try:
+        with open(output_path) as handle:
+            coverage = json.load(handle)["measurement_coverage"]["usage"]
+        return " (usage measured %s/%s)" % (
+            coverage["measured"], coverage["expected"],
+        )
+    except (OSError, ValueError, KeyError, TypeError):
+        # The line must still be written. A missing count is not worth losing
+        # the inventory entry over.
+        return ""
+
+
 def _build_and_write_cost_summary(args):
     """Build the artifact and write it. Shared by both entry points."""
     from .cost_summary import build_run_cost_summary, compute_cost_summary_digest
@@ -2088,6 +2113,20 @@ def command_emit_cost_summary(args):
     itself failing to run, which no process inside it can report.
     """
     reason = None
+    # One path cannot be both the artifact and the receipt. The sequence below
+    # unlinks `--output`, writes JSON to it, then appends a text line to
+    # `--receipt`; aiming them at one file produces `{json}\nrun-cost-summary:
+    # ...` -- an artifact no parser can read, emitted with exit 0. The wired
+    # consumers use different extensions so this cannot happen there, but the
+    # CLI is a public entry point and a corrupt artifact that reports success
+    # is worse than a refused invocation.
+    if os.path.abspath(args.output) == os.path.abspath(args.receipt):
+        sys.stderr.write(
+            "emit-cost-summary: --output and --receipt are the same path: "
+            + os.path.abspath(args.output) + "\n"
+        )
+        return EXIT_INVALID
+
     # Which path failed matters. A bad `--output` still leaves a writable
     # receipt to record the skip in; a bad `--receipt` does not, and appending
     # the skip line anyway would write through the symlink this just refused --
@@ -2132,13 +2171,20 @@ def command_emit_cost_summary(args):
             sys.stderr.write("emit-cost-summary: " + str(error) + "\n")
 
     line = (
-        "run-cost-summary: " + str(args.output) if reason is None
+        "run-cost-summary: " + str(args.output) + _coverage_suffix(args.output)
+        if reason is None
         else "run-cost-summary: skipped (" + reason + ")"
     )
     if receipt_unsafe:
         # Nothing to append to: the receipt path is the thing that was refused.
         # Say so on stderr and stop, rather than writing the refusal through the
         # symlink that caused it.
+        #
+        # This is the one case that records nothing and still exits 0, and the
+        # exemption is deliberate. The caller's fallback is
+        # `|| printf 'run-cost-summary: skipped (...)' >> <receipt>`, so exiting
+        # non-zero here would append through the very symlink just rejected and
+        # undo the refusal. Stderr is the only safe channel left.
         sys.stderr.write(
             "emit-cost-summary: could not record '" + line
             + "': receipt path refused\n"
@@ -2275,6 +2321,21 @@ def _append_attempt_usage_receipt(receipts_path, payload, args, error_label):
             raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
                 ErrorDetailKey.REASON_CODE.value: "invalid_argument",
             })
+    # The contract says `--occurred-at <ISO-8601>` and nothing enforced it, so
+    # any non-empty string became durable evidence verbatim. A timestamp that
+    # cannot be ordered against its neighbours is not a timestamp.
+    try:
+        parsed = datetime.fromisoformat(str(args.occurred_at).replace("Z", "+00:00"))
+        if parsed.tzinfo is None:
+            raise ValueError("missing UTC offset")
+    except ValueError as error:
+        sys.stderr.write(
+            error_label + ": --occurred-at must be a timezone-aware ISO-8601 "
+            "timestamp: " + str(error) + "\n"
+        )
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        }) from None
     # Lane attempts finish concurrently by design, so this is a read-modify-
     # write race unless it is serialized. Atomic replacement protects against a
     # truncated file, not against a lost update: two appenders could both read
@@ -2282,6 +2343,19 @@ def _append_attempt_usage_receipt(receipts_path, payload, args, error_label):
     # discard the earlier attempt -- a measurement backbone losing exactly the
     # measurements it exists to keep. The lock is held across load, validate,
     # and replace.
+    # The receipt stream is the authoritative evidence ledger, written after
+    # every lane attempt. `emit-cost-summary` preflights its paths for symlinked
+    # components and this did not, so the same leftover `.claude/ux-review/` or
+    # `plans/<feature>/` symlink that the emission command refuses would
+    # redirect the ledger write -- and the lock file beside it -- out of the run
+    # directory. O_NOFOLLOW on the lock guards only its final component.
+    try:
+        _reject_symlinked_components(receipts_path)
+    except ValueError as error:
+        sys.stderr.write(error_label + ": " + str(error) + "\n")
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        }) from None
     lock_path = str(receipts_path) + ".lock"
     lock_directory = os.path.dirname(os.path.abspath(lock_path)) or "."
     os.makedirs(lock_directory, exist_ok=True)

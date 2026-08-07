@@ -95,8 +95,12 @@ BEHAVIORAL_CLI_CASES = {
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
     "metrics": ("--events", "<missing>", "--output", "<output>"),
     "run-cost-summary": ("--events", "<missing>", "--output", "<output>"),
+    # --output and --receipt must be distinct paths: one file used for both
+    # would be unlinked, written as JSON, then appended to as text, producing a
+    # corrupt artifact. The command refuses that, so the always-zero probe below
+    # has to give it two paths or it would be asserting the refusal instead.
     "emit-cost-summary": (
-        "--events", "<missing>", "--output", "<output>", "--receipt", "<output>",
+        "--events", "<missing>", "--output", "<output>", "--receipt", "<receipt>",
     ),
     "openrouter-usage": (
         "--receipt", "<missing>", "--lane", "validator",
@@ -514,6 +518,7 @@ def check_cli(context):
         replacements = {
             "<run>": str(run_root), "<state>": str(state_dir),
             "<missing>": str(root / "missing.json"),
+            "<receipt>": str(root / "emit-cost-summary-receipt.md"),
             "<event>": json.dumps({
                 "schema_version": 1, "sequence": 1, "run_id": "validator-cli",
                 "node_id": None, "kind": "run.started",

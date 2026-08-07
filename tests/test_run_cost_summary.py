@@ -629,7 +629,28 @@ class RunCostSummaryTests(unittest.TestCase):
             validate_run_cost_summary(json.load(open(output)))
             with open(receipt) as f:
                 lines = f.read().splitlines()
-            self.assertEqual(lines, ["run-cost-summary: " + output])
+            self.assertEqual(len(lines), 1)
+            self.assertTrue(lines[0].startswith("run-cost-summary: " + output))
+            # The coverage count is the point: an unwired run says 0/n here.
+            self.assertRegex(lines[0], r"\(usage measured \d+/\d+\)$")
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_emit_refuses_one_path_for_both_artifact_and_receipt(self):
+        """Aiming --output and --receipt at one file would unlink it, write JSON
+        to it, then append text to it -- a corrupt artifact reporting success."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        try:
+            events = self._events_file(directory)
+            shared = os.path.join(directory, "both.json")
+            self.assertEqual(
+                self._emit(events=events, output=shared, receipt=shared), 2,
+            )
+            self.assertFalse(os.path.exists(shared))
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 
@@ -708,6 +729,77 @@ class RunCostSummaryTests(unittest.TestCase):
             # Nothing was written through the symlink, under either spelling.
             self.assertFalse(os.path.exists(os.path.join(outside, "run-receipt.md")))
             self.assertFalse(os.path.exists(receipt))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_emit_writes_no_artifact_through_a_symlinked_output_directory(self):
+        """The receipt path had symlink coverage; `--output` did not. It is the
+        path the command unlinks *and* writes, so an unguarded regression there
+        deletes and recreates a file outside the run directory."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp(dir=os.getcwd())
+        try:
+            outside = os.path.join(directory, "outside")
+            os.mkdir(outside)
+            os.symlink(outside, os.path.join(directory, "artifacts"))
+
+            events = self._events_file(directory)
+            output = os.path.join(directory, "artifacts", "run-cost-summary.json")
+            receipt = os.path.join(directory, "run-receipt.md")
+
+            self.assertEqual(
+                self._emit(events=events, output=output, receipt=receipt), 0,
+            )
+            self.assertFalse(
+                os.path.exists(os.path.join(outside, "run-cost-summary.json")),
+            )
+            # The receipt is writable here, so the refusal IS recorded.
+            with open(receipt) as f:
+                self.assertEqual(
+                    f.read().splitlines(),
+                    ["run-cost-summary: skipped (unsafe-path)"],
+                )
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_legacy_receipt_line_refuses_a_symlinked_receipt(self):
+        """`run-cost-summary --receipt-line` shares the sink with
+        `emit-cost-summary`, so it must share the preflight. It did not."""
+        import os
+        import shutil
+        import sys
+        import tempfile
+
+        directory = tempfile.mkdtemp(dir=os.getcwd())
+        try:
+            outside = os.path.join(directory, "outside")
+            os.mkdir(outside)
+            os.symlink(outside, os.path.join(directory, "run"))
+
+            events = self._events_file(directory)
+            output = os.path.join(directory, "run-cost-summary.json")
+            receipt_line = os.path.join(directory, "run", "run-receipt.md")
+
+            old = sys.argv
+            sys.argv = [
+                "workflow_kernel", "run-cost-summary",
+                "--events", events, "--output", output,
+                "--receipt-line", receipt_line,
+            ]
+            try:
+                from workflow_kernel.cli import main
+                try:
+                    code = main() or 0
+                except SystemExit as exc:
+                    code = exc.code or 0
+            finally:
+                sys.argv = old
+
+            self.assertNotEqual(code, 0)
+            self.assertFalse(os.path.exists(os.path.join(outside, "run-receipt.md")))
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 

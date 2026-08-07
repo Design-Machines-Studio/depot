@@ -158,12 +158,40 @@ so a measurement failure must never become a workflow failure. Signalling by
 exit code would also leave the caller nothing useful to do, because the command
 has already recorded what happened.
 
-**It exits 6 when it could not record anything.** If the receipt itself cannot
-be written -- unwritable path, full disk -- there is no recorded outcome, and
-the run receipt then names neither an artifact nor a skip. That is the silence
-the failure-modes checklist forbids, so it is surfaced by exit code rather than
-by stderr alone. This is the only non-zero exit; it reports the absence of a
-report, never a measurement verdict.
+**It exits 6 when an accepted receipt could not be written.** If the receipt
+path passed the preflight but the write then failed -- unwritable path, full
+disk -- there is no recorded outcome, and the run receipt names neither an
+artifact nor a skip. That is the silence the failure-modes checklist forbids, so
+it is surfaced by exit code rather than by stderr alone. It reports the absence
+of a report, never a measurement verdict.
+
+Exit 2 is the other non-zero outcome, and it means the invocation itself was
+wrong -- bad flags, or `--output` and `--receipt` pointing at one path. Nothing
+ran, so nothing is recorded.
+
+**The `||` fallback must be gated.** `||` fires on *any* non-zero status, so an
+ungated fallback appends `skipped (kernel-unresolvable)` after an exit 6 whose
+receipt line was already written -- producing the artifact-line-plus-skip-line
+state this command exists to make impossible -- and reports "unresolvable" for
+an exit 2 where the kernel demonstrably resolved and ran. Gate it so it fires
+only when the kernel never reported an outcome at all:
+
+```sh
+"$WORKFLOW_KERNEL" emit-cost-summary ... \
+  || { s=$?; [ "$s" -eq 2 ] || [ "$s" -eq 6 ]; } \
+  || printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> <receipt>
+```
+
+That leaves the fallback covering launcher exit 4 and the shell's own 126/127 --
+the cases no process inside the kernel can report.
+
+**A refused receipt path still exits 0.** It is the one case that also records
+nothing, and it is exempt on purpose: the caller's fallback is
+`|| printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> <receipt>`, so
+a non-zero exit would append through the very symlink the command just rejected
+and undo the refusal. The refusal goes to stderr alone. An operator who
+symlinked the receipt path gets no receipt line, and that is the correct
+outcome.
 
 The one case a caller still handles is the launcher itself failing to run, which
 no process inside it can report:
@@ -173,10 +201,29 @@ no process inside it can report:
   || printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> <receipt>
 ```
 
-**Exactly one line, always.** Either `run-cost-summary: <artifact path>` or
+**Exactly one line, always.** Either
+`run-cost-summary: <artifact path> (usage measured <m>/<n>)` or
 `run-cost-summary: skipped (<reason>)`. Reasons are `unsafe-path` (a symlinked
 artifact or receipt component inside the workspace),
 `stale-artifact-not-removable`, and `summary-failed`.
+
+The `(usage measured m/n)` count is `measurement_coverage.usage` from the
+artifact, repeated on the receipt because that is where an operator looks. A
+`0/n` says the emission boundary is not wired for this run: the command ran, the
+translators did not. It reports; it never gates. The count is omitted only if
+the artifact cannot be re-read, which is not worth losing the inventory line
+over.
+
+**`--output` and `--receipt` must differ.** Passing one path for both would
+unlink it, write JSON to it, then append a text line to it -- a corrupt artifact
+emitted with a success exit. The command refuses that up front with exit 2.
+
+**Legacy: `run-cost-summary --receipt-line <path>`.** The older two-step entry
+point still exists and still works: it writes the artifact and appends the same
+inventory line. It runs the same symlink preflight as `emit-cost-summary`, but
+it does not own the artifact path (no stale-file clearing) and it has no skip
+line -- a failure exits non-zero and records nothing. Prefer
+`emit-cost-summary`; `--receipt-line` is kept for callers not yet migrated.
 
 **Why this is one command and not a shell block.** It used to be six lines
 duplicated into eleven consumer files: remove the stale artifact, run the

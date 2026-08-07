@@ -523,6 +523,50 @@ class OpenRouterUsageAppendTests(unittest.TestCase):
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 
+    def test_append_rejects_a_timestamp_that_is_not_iso_8601(self):
+        """The contract says `--occurred-at <ISO-8601>` and nothing enforced it,
+        so any non-empty string became durable evidence verbatim."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts_path = os.path.join(directory, "authoritative-receipts.json")
+        try:
+            for stamp in ("yesterday", "2026-08-07", "2026-08-07T06:10:00"):
+                with self.subTest(occurred_at=stamp):
+                    argv = self._base(receipts_path, "a", "chunk-a")
+                    for index, item in enumerate(argv):
+                        if item == "--occurred-at":
+                            argv[index + 1] = stamp
+                    self.assertNotEqual(self._run(argv), 0)
+            self.assertFalse(os.path.exists(receipts_path))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_append_refuses_a_symlinked_receipts_directory(self):
+        """The ledger write path had no symlink preflight, while the emission
+        command that reads the same directory did. One leftover symlink and the
+        evidence ledger -- plus its lock file -- lands outside the run."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp(dir=os.getcwd())
+        try:
+            outside = os.path.join(directory, "outside")
+            os.mkdir(outside)
+            os.symlink(outside, os.path.join(directory, "workflow-kernel"))
+            receipts_path = os.path.join(
+                directory, "workflow-kernel", "authoritative-receipts.json",
+            )
+            self.assertNotEqual(
+                self._run(self._base(receipts_path, "a", "chunk-a")), 0,
+            )
+            self.assertEqual(os.listdir(outside), [])
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
     def test_append_still_rejects_a_stream_neither_adapter_accepts(self):
         """Falling back to the review adapter must not become "accept
         anything". A stream that no adapter can read is still refused."""

@@ -177,10 +177,11 @@ _CREDENTIAL_LIKE = re.compile(
 )
 _USAGE_SCOPES = frozenset({"attempt", "run"})
 _WAIT_CATEGORIES = frozenset({"human_gate", "external_dependency", "capacity", "ci"})
-# input_bytes is a measurement in a different unit, never a token count. It
-# lives here so a byte-only row satisfies the has-a-measurement gate, and it is
-# deliberately absent from the token-count set used to detect detailed usage.
-_USAGE_COUNT_FIELDS = frozenset({
+# Every field that counts *something* about an attempt. The set is named for
+# measurement rather than usage because `input_bytes` is a byte count, not a
+# token count: the previous name promised token semantics to anything iterating
+# it, while the member list quietly broke that promise.
+_MEASUREMENT_FIELDS = frozenset({
     "usage_count", "input_usage_count", "output_usage_count",
     "cache_read_usage_count", "cache_write_usage_count",
     "reasoning_usage_count", "input_bytes",
@@ -605,7 +606,7 @@ def _validate_observation_receipt(receipt: dict) -> dict:
         receipt["decision_profile_defaulted"]
     ) is not bool:
         raise ValueError("invalid decision profile provenance")
-    for field in _USAGE_COUNT_FIELDS:
+    for field in _MEASUREMENT_FIELDS:
         if field in receipt:
             _nonnegative_number(receipt[field], field, integer=True)
     for field in ("cost_usd", "duration_seconds"):
@@ -627,7 +628,7 @@ def _validate_observation_receipt(receipt: dict) -> dict:
         raise ValueError("invalid wait category")
 
     scoped = "usage_scope" in receipt
-    detailed = bool((_USAGE_COUNT_FIELDS - {"usage_count"}) & set(receipt))
+    detailed = bool((_MEASUREMENT_FIELDS - {"usage_count"}) & set(receipt))
     provenance = bool({"measurement_source", "usage_estimated"} & set(receipt))
     if detailed or provenance:
         scoped = True
@@ -637,7 +638,7 @@ def _validate_observation_receipt(receipt: dict) -> dict:
         required_text(receipt.get("measurement_source"), "measurement source")
         if type(receipt.get("usage_estimated")) is not bool:
             raise ValueError("invalid usage estimated flag")
-        if not ((_USAGE_COUNT_FIELDS & set(receipt)) or "cost_usd" in receipt):
+        if not ((_MEASUREMENT_FIELDS & set(receipt)) or "cost_usd" in receipt):
             # Honest-absence allowance, exactly two provenance strings wide.
             # An OpenRouter receipt can carry no counters and no cost for two
             # distinct reasons: the attempt failed, or it succeeded and
