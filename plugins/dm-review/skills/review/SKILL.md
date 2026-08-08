@@ -36,17 +36,17 @@ Match the review depth to the moment. Running full multi-round review on every c
 |------|------|-----------|
 | **Per chunk during pipeline execution** | `dm-review-quick` | 5 core criteria: 6 logical lanes with OpenRouter, 5 without (+ ui-standards-reviewer when UI files changed). |
 | **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + memory capture. Run once, not per chunk. |
-| **Bulk second opinions / large-diff first pass** | OpenRouter model selected by `routing-policy.json` | Kimi-led security analysis plus style, duplication, pattern, and doc-consistency lanes. The exact diff is content-scanned immediately before disclosure; sensitive file sections stay local while eligible sections proceed. Security completion always includes independent Codex sign-off. |
+| **Bulk second opinions / large-diff first pass** | Model selected by `routing-policy.json` | Family-independent security analysis plus style, duplication, pattern, and doc-consistency lanes. The exact diff is content-scanned immediately before external disclosure; sensitive file sections stay local while eligible sections proceed. Security completion always includes mandatory full-diff independent-family sign-off. |
 | **Adversarial multi-round review** | full + iterate | Reserve for P1 findings and plan reviews. Do NOT multi-round every chunk. |
 
 **Escalation exception:** when a chunk touches auth, federation, or
 security-related paths (`internal/auth/**`, `internal/federation/**`,
 `**/secretbox*`, `**/destructive_confirmation*`,
 `internal/baseplate/email/settings*`, `deploy/**`, `*.env*`), skip the quick
-tier and run both the Kimi-led `security-auditor` analysis (for eligible file
-sections) and the full-diff Codex security sign-off. File sections containing
-actual secret/private data stay on Codex; path names alone never decline
-disclosure.
+tier and run both the matrix-selected `security-auditor` analysis (for eligible
+file sections) and the mandatory full-diff independent-family security sign-off.
+File sections containing actual secret/private data stay on an eligible native
+family; path names alone never decline disclosure.
 
 ## Shadow Workflow Kernel Contract
 
@@ -190,11 +190,15 @@ This classification scales agent count in Phase 3. Only applies to quick mode --
 
 Select which agents to launch based on mode, diff classification, changed file extensions, and project type. Resolve each agent's path via the plugin cache (see conditional agents table below for the canonical resolver pattern).
 
-**Coding-provider boundary:** Claude is non-coding-only. Core code review, security, architecture, UI, and test review use Codex or OpenRouter regardless of legacy agent frontmatter. Claude may still run clearly non-coding lanes such as voice/editorial review, research synthesis, or strategy.
+**Coding-provider boundary:** Claude is not a coding implementation rail. Core code review, security, architecture, UI, and test review use policy-derived families regardless of legacy agent frontmatter. A native Claude family may run the read-only `second-perspective` or independent-family security sign-off only when the implementing family is different. Claude may also run clearly non-coding lanes such as voice/editorial review, research synthesis, or strategy.
 
 #### Routing Policy for Mechanical Agents
 
-Read `plugins/pipeline/references/routing-policy.json` before selecting models **when it is present**. When dm-review is installed standalone, use the inline OpenRouter model table. OpenRouter is the only external model provider; DeepSeek identifiers are OpenRouter slugs. Architecture and visual/UI code reviewers stay Codex-native. Security always has a Codex-native full-diff signoff and may add a separate Kimi lane for eligible content. Claude is allowed only for non-coding lanes such as voice/editorial review.
+Read `plugins/pipeline/references/routing-policy.json` before selecting models **when it is present**. When dm-review is installed standalone, use the inline model table. Family means provider lineage: OpenAI/Codex, Anthropic/Claude, and each OpenRouter-served third party under its own vendor family; OpenRouter is a transport, not a family. The second-perspective reviewer model family MUST differ from the family that implemented the diff under review. For a mixed-family diff, treat every contributing family as implementing and select outside that set. The same family exclusion applies to the mandatory full-diff security sign-off.
+
+Resolve both family-independent roles subscription-first: an eligible non-implementing family with live subscription headroom for both `five_hour` and `weekly` beats every API family, then API candidates follow matrix quality-per-price. Unknown subscription headroom is treated as at-threshold, never as available. Do not start a planned multi-chunk review whose projected subscription spend would cross the threshold mid-run. Apply `.dm/operator-profile.local.json` only after policy derivation: it may rank and remove derived candidates, never add one or override `neverOfferable`, disclosure/security controls, or family independence. No profile means policy defaults. This is the remove-only precedence defined by `plugins/pipeline/references/operator-profile-schema.json` (`properties.precedence`), not a separate override system.
+
+Every `second-perspective` and independent-family security sign-off receipt records `implementer_family`, `reviewer_family`, and `resolution_reason`. For mixed implementation, `implementer_family` records `mixed(<sorted families>)`. A receipt with equal implementing and reviewing families is invalid and leaves the required lane incomplete.
 
 **Before selecting agents, check external routing availability:**
 
@@ -268,15 +272,16 @@ separate exact-digest workflow and does not enable these child lanes.
 
 Run 3 review criteria as 4 logical lanes when OpenRouter is available:
 
-1. **security-auditor-codex-signoff** -- `dm-review/*/agents/review/security-auditor.md` -- **Codex, full diff, always required**
+1. **security-auditor-codex-signoff** -- compatibility lane ID for `dm-review/*/agents/review/security-auditor.md` -- **independent family, full diff, always required**
 2. **security-auditor-openrouter** -- same criteria -- **Kimi K3, eligible sections only, selected only when OpenRouter is available**
 3. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
 4. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
 
 Skip architecture-reviewer and doc-sync-reviewer. With OpenRouter available,
-this is 3 OpenRouter lanes plus the independent Codex security-signoff lane. If
-OpenRouter is unavailable, the three criteria run as 3 Codex lanes and the
-external security lane is not selected.
+this is 3 OpenRouter lanes plus the independent-family security-signoff lane. If
+OpenRouter is unavailable, the external security lane is not selected and the
+remaining criteria use their policy-derived native routes. The sign-off still
+uses its family-aware route and never returns to the implementing family.
 
 Skip to Phase 4 with the selected logical lanes.
 
@@ -284,29 +289,25 @@ Skip to Phase 4 with the selected logical lanes.
 
 These 5 review criteria run as 6 logical lanes when OpenRouter is available:
 
-1. **security-auditor-codex-signoff** -- `dm-review/*/agents/review/security-auditor.md` -- **Codex, full diff, always required**
+1. **security-auditor-codex-signoff** -- compatibility lane ID for `dm-review/*/agents/review/security-auditor.md` -- **independent family, full diff, always required**
 2. **security-auditor-openrouter** -- same criteria -- **Kimi K3, eligible sections only, selected only when OpenRouter is available**
 3. **architecture-reviewer** -- `dm-review/*/agents/review/architecture-reviewer.md` -- **Codex**
 4. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
 5. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
 6. **doc-sync-reviewer** -- `dm-review/*/agents/review/doc-sync-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
 
-#### Configurable Codex Perspective
+#### Configurable Second Perspective
 
-When `DM_REVIEW_CODEX_PERSPECTIVE` is not `0` and the `codex` CLI is installed, add **codex-perspective** as a parallel read-only reviewer in both quick and full mode. This is the default dual-perspective review lane; it caught distinct blockers in real pipeline closeout runs and should not be treated as an emergency fallback.
+`DM_REVIEW_SECOND_PERSPECTIVE` fails OPEN: when it is unset, empty, unreadable, or any value other than exactly `0`, launch second-perspective. Only exactly `0` disables it, and a disabled lane must be receipted in Coverage Gaps. The legacy name `DM_REVIEW_CODEX_PERSPECTIVE` is still honoured for back-compat -- exactly `0` in EITHER variable disables the lane -- so an operator who had it switched off before the role was renamed does not get it silently switched back on.
 
-Invocation:
+When the lane is enabled, add **second-perspective** as a parallel read-only reviewer in both quick and full mode. This is the default dual-perspective review lane; it caught distinct blockers in real pipeline closeout runs. Independence is the property that caught those blockers, so this role is not tied to the orchestrating harness or a named provider.
 
-```bash
-printf '%s' "$REVIEW_PROMPT" | codex exec -s read-only -c service_tier=fast --skip-git-repo-check -
-```
+Resolve the role by the subscription-first family rules above. When the implementer is OpenAI/Codex, select native Claude if both subscription windows have headroom; otherwise select the highest matrix quality-per-price eligible OpenRouter frontier family through its authorized path. Never resolve back to OpenAI/Codex for that diff. When another family implemented the diff, Codex is the preferred resolution when its subscription has headroom, followed by the remaining policy-derived families.
 
-Use `-c service_tier=fast` even when a user config sets another tier. A stale `~/.codex/config.toml` with `service_tier = "default"` can prevent startup, and `flex` may be API-rejected; retry once with the known-good `service_tier=fast` override before recording `codex-perspective: unavailable`. For write-capable Codex fix workflows outside review, the known-good form is `codex exec -s workspace-write -c service_tier=fast --skip-git-repo-check`.
-
-Resolve its agent file at `dm-review/*/agents/review/codex-perspective.md` via the same Claude-first/Codex-fallback cache loop as other agents. The output is normalized to P1/P2/P3 and the consolidator merges it with all other findings; a finding from either perspective is in-scope.
+Use `dm-review/*/agents/review/codex-perspective.md` as the compatibility-named default agent definition for the role. Dispatch it on the resolved family, normalize output to P1/P2/P3, and let the consolidator merge every finding as in-scope. The filename does not select the provider.
 
 **If mode is "quick" AND no UI files changed, stop here. Skip to Phase 4 with
-the selected core logical lanes plus `codex-perspective` when enabled.**
+the selected core logical lanes plus `second-perspective` when enabled.**
 
 **If mode is "quick" AND UI files changed** (`.templ`, `.twig`, `.html`, or `.css` in the diff), add one more agent:
 
@@ -314,7 +315,7 @@ Add **ui-standards-reviewer** as one additional logical lane.
 
 This ensures per-chunk pipeline reviews catch design quality issues, not just
 code quality. Skip to Phase 4 with the selected core lanes, this UI lane, and
-`codex-perspective` when enabled.
+`second-perspective` when enabled.
 
 #### Conditional Agents (Full mode only)
 
@@ -438,7 +439,9 @@ When `routing-policy.json` supplies `model` and `fallbackModel`, those full Open
 ```
 Provider routing (OPENROUTER_AVAILABLE={true|false}):
 - N analyses -> OpenRouter (Kimi security, pattern-recognition, code-simplicity, doc-sync, test-coverage, openrouter-bulk-analyst when selected)
-- N coding/sign-off agents -> Codex (required security sign-off, architecture, visual/UI, unavailable-provider and sensitive-section coverage)
+- N native coding agents -> Codex (architecture, visual/UI, unavailable-provider and sensitive-section coverage)
+- 1 required security sign-off -> resolved independent family (full diff)
+- 1 second perspective -> resolved independent family when enabled
 - N non-coding agents -> Claude when explicitly selected (for example voice/editorial)
 ```
 
@@ -463,8 +466,9 @@ Launch ALL selected agents simultaneously using multiple Agent tool calls in a s
 
 #### How to launch each agent
 
-For each selected agent, check whether it is `codex-perspective` first and use
-Branch C for that reviewer. All OpenRouter lanes, including
+For each selected role, resolve `second-perspective` and
+`security-auditor-codex-signoff` against the implementing family first and use
+Branches C and D. All other OpenRouter lanes, including
 `openrouter-bulk-analyst`, use Branch A. The bulk analyst definition contains
 review criteria only; the generic runner is the single boundary,
 authorization, invocation, fallback, and provenance implementation.
@@ -492,9 +496,9 @@ authorization, invocation, fallback, and provenance implementation.
 3. **Launch without Claude coding execution:** on a Codex host, use a native Codex subagent with the combined runner prompt. On any other host, pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -`. The runner performs mechanical orchestration and OpenRouter performs the review judgment; a Claude `Agent` call is not a valid Branch A launcher.
 4. `security-auditor-openrouter` targets the installed
    `security-auditor.md` criteria but keeps its distinct logical lane ID.
-   `security-auditor-codex-signoff` launches independently through Branch B
+   `security-auditor-codex-signoff` launches independently through Branch D
    with the full unfiltered diff and is tagged
-   `[codex-signoff/security-auditor]`. Neither output substitutes for the
+   `[family-signoff/security-auditor]`. Neither output substitutes for the
    other. A full external decline may be completed by Codex under the external
    lane ID, but it still does not satisfy the independent signoff lane.
 
@@ -522,21 +526,33 @@ authorization, invocation, fallback, and provenance implementation.
 
 Both A and B agents launch in parallel in the same message. The runner reads the target agent's definition file itself at runtime -- the orchestrator only needs to pass the path. The consolidator dedupes findings tagged `[openrouter/{model}/{agent}]` against findings from other agents using the same file:line key.
 
-**C. If the selected agent is `codex-perspective`:**
+**C. If the selected role is `second-perspective`:**
 
 1. Read `plugins/dm-review/agents/review/codex-perspective.md`.
-2. Build a read-only prompt with the changed files, diff content, project context, and the standard Fix Philosophy.
-3. Run:
+2. Build a read-only prompt with the changed files, diff content, project context, standard Fix Philosophy, `implementer_family`, `reviewer_family`, and `resolution_reason`.
+3. Dispatch on the resolved family:
+   - OpenAI/Codex: run:
    ```bash
    printf '%s' "$REVIEW_PROMPT" | codex exec -s read-only -c service_tier=fast --skip-git-repo-check -
    ```
-4. If Codex fails to start due to service tier, retry once with the same `-c service_tier=fast` override even if user config says `default` or `flex`.
-5. If Codex still fails, record `codex-perspective: unavailable` in the Agent Summary. Do not mark the review clean until the remaining selected agents have completed and Phase 5 consolidation has run.
+   - Anthropic/Claude: dispatch through the native read-only Claude harness with the same prompt and no coding authority.
+   - An OpenRouter-served third party: use Branch A only through the authorized path, preserving that model vendor as `reviewer_family`.
+4. If the resolved family fails, continue down the remaining policy-derived non-implementing families in subscription-first order. Never retry on an implementing family.
+5. If no independent family completes, record `second-perspective: unavailable` and its attempted resolution in the Agent Summary and Coverage Gaps. Do not mark the review clean until the remaining selected agents have completed and Phase 5 consolidation has run.
+
+**D. If the selected role is `security-auditor-codex-signoff`:**
+
+1. The compatibility lane ID remains stable, but provider resolution is family-aware. Codex is preferred when Codex did not implement the diff.
+2. When Codex is the implementer, use the strongest available non-implementing family under subscription-first resolution. After eligible subscription rails, use the matrix security head, currently Kimi K3, only through its authorized path. Never fall back to Codex for this sign-off.
+3. Dispatch `security-auditor.md` with the complete unfiltered diff. The sign-off remains mandatory, full-diff, and zero-deferral regardless of which family performs it.
+4. Record `implementer_family`, `reviewer_family`, and `resolution_reason`, including every family swap and why it occurred. If no independent family can complete, the lane is incomplete and the review cannot be clean.
 
 **Authorization and failure handling:** Current automated OpenRouter selection
-must produce `host_authority_unavailable` before payload preparation and launch
-the same logical criterion on Codex. Treat any approval-required or successful
-OpenRouter child result as an invalid authority transition. If a future
+must produce `host_authority_unavailable` before payload preparation. Ordinary
+logical criteria then launch on Codex; family-independent roles continue only
+through eligible non-implementing families and become incomplete if none can
+run. Treat any approval-required or successful OpenRouter child result as an
+invalid authority transition. If a future
 broker-backed routed agent emits `### RUNNER FAILURE`, Phase 4.5 retries on
 Codex before applying guardrails. If it emits
 `### CODEX PARTIAL COVERAGE REQUIRED`, Phase 4.5 completes the same criteria
@@ -665,7 +681,7 @@ record `diff_scope: full` with `slice_status: unclassified`.
   `inputScope: full-diff` and `required: true`; scoping it would contradict policy)
 - security-auditor-openrouter
 - architecture-reviewer
-- codex-perspective
+- second-perspective (default agent definition: `codex-perspective.md`)
 - pattern-recognition-specialist
 - code-simplicity-reviewer
 - doc-sync-reviewer
@@ -768,7 +784,7 @@ Apply the failure policies from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
 - If a non-browser agent fails or times out (>120s), record the failure in the Agent Summary table and apply the documented lane policy. A required browser agent instead runs browser recovery and, on exhaustion, blocks with `human_help_required` and asks the user for help.
 - For agents routed to external LLMs, defer failure classification to Phase 4.5 before applying these policies
-- If a **core agent** (security-auditor-codex-signoff, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer) fails after any applicable Phase 4.5 retry, flag the review as "REVIEW INCOMPLETE" in the merge recommendation. A selected security-auditor-openrouter lane is also required until it completes externally or through its explicit Codex fallback.
+- If a **core agent** (security-auditor-codex-signoff, architecture-reviewer, code-simplicity-reviewer, pattern-recognition-specialist, doc-sync-reviewer) fails after any applicable Phase 4.5 retry, flag the review as "REVIEW INCOMPLETE" in the merge recommendation. A selected security-auditor-openrouter lane is also required until it completes externally or through an allowed non-implementing-family fallback.
 - If all non-browser conditional agents fail but core agents succeed, the review is "Degraded" but still valid. Missing required browser evidence is never degraded-valid.
 - See `${CLAUDE_SKILL_DIR}/references/graceful-degradation.md` for the full failure classification table
 
@@ -776,7 +792,7 @@ Apply the failure policies from `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
 ### Phase 4.5: Lane Fallback
 
-A **lane** is a review path with its own provider and absence mode: Codex, OpenRouter, optional non-coding Claude, Codex perspective, and evidence. An unavailable lane must be named.
+A **lane** is a review path with its own provider and absence mode: Codex, OpenRouter, optional native Claude, second perspective, independent-family security sign-off, and evidence. An unavailable lane must be named.
 
 #### Lane failure modes
 
@@ -785,19 +801,20 @@ A **lane** is a review path with its own provider and absence mode: Codex, OpenR
 | OpenRouter | `### RUNNER FAILURE` in agent output | Retry on Codex (procedure below) |
 | OpenRouter full disclosure decline | `### RUNNER DECLINED -- SENSITIVE CONTENT` or `host_disclosure_declined` | Run the complete same logical lane on Codex; preserve the declined external attempt |
 | OpenRouter partial | `### CODEX PARTIAL COVERAGE REQUIRED` in agent output | Run the same agent criteria on Codex for the named locally held paths |
-| Codex perspective | `codex` CLI absent, or `DM_REVIEW_CODEX_PERSPECTIVE=0` | Lane skipped -- **must** appear in Coverage Gaps, not omitted |
+| Second perspective | disabled by `DM_REVIEW_SECOND_PERSPECTIVE=0` or legacy `DM_REVIEW_CODEX_PERSPECTIVE=0`, or no independent family completes | Lane skipped -- **must** appear in Coverage Gaps, not omitted |
+| Independent-family security sign-off | no non-implementing family completes | REVIEW INCOMPLETE; never substitute the implementing family |
 | Evidence (PR threads) | `gh pr view` returns no comments/reviews | Phase 1b source fallback; report which source was used |
 | Codex-native coding agent | Agent errored or timed out | No Claude retry; apply guardrails immediately |
 
-Coding fallback moves between OpenRouter and Codex only. Security analysis
-starts on Kimi when eligible and always has an independent full-diff Codex
-sign-off. OpenRouter lanes remain content-gated: file sections containing actual
+Coding fallback moves only among policy-derived eligible families. Security
+analysis starts on the matrix security head when eligible and always has an
+independent-family full-diff sign-off. OpenRouter lanes remain content-gated: file sections containing actual
 secret/private content stay local, while safe sections remain eligible
 regardless of path.
 
-A skipped lane is a coverage gap, and a coverage gap is reported. "All agents completed" while the Codex lane never ran is a false clean.
+A skipped lane is a coverage gap, and a coverage gap is reported. "All agents completed" while a required independent-family lane never ran is a false clean.
 
-Every lane receipt records `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. Preserve failed attempts across Codex, OpenRouter, optional non-coding Claude, and generic hosts.
+Every lane receipt records `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. Second-perspective and sign-off receipts additionally record `implementer_family`, `reviewer_family`, and `resolution_reason`. Preserve failed attempts across Codex, OpenRouter, optional native Claude, and generic hosts.
 
 #### When the external-LLM retry triggers
 
@@ -845,7 +862,7 @@ Report the fallback in the Agent Summary table:
 | pattern-recognition-specialist | OpenRouter `z-ai/glm-5.2` | RUNNER FAILURE |
 | pattern-recognition-specialist | Codex (fallback) | Completed |
 | security-auditor-openrouter | OpenRouter `moonshotai/kimi-k3` | Completed (eligible sections) |
-| security-auditor-codex-signoff | Codex (independent sign-off) | Completed (full diff) |
+| security-auditor-codex-signoff | Resolved independent family | Completed (full diff) |
 
 Summarize: "pattern-recognition-specialist: OpenRouter failed -> Codex fallback succeeded"
 

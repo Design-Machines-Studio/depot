@@ -17,19 +17,19 @@ kill switch.
 | # | Agent | Source | Coding provider | What it reviews |
 |---|-------|--------|-----------------|-----------------|
 | 1 | code-simplicity-reviewer | dm-review | OpenRouter, then Codex | Complexity, redundancy, dead code, over-engineering, naming clarity |
-| 2a | security-auditor-codex-signoff | dm-review | Codex, full diff, required | SQL injection, XSS, CSRF, auth, input validation, data exposure |
+| 2a | security-auditor-codex-signoff | dm-review | Independent family, full diff, required; Codex preferred when it was not the implementer | SQL injection, XSS, CSRF, auth, input validation, data exposure |
 | 2b | security-auditor-openrouter | dm-review | Kimi K3 eligible-content lens, then Codex fallback | Same criteria; never substitutes for 2a |
 | 3 | pattern-recognition-specialist | dm-review | OpenRouter, then Codex | Anti-patterns, naming conventions, duplication, magic values |
 | 4 | architecture-reviewer | dm-review | Codex only | Component boundaries, SOLID, coupling, layer violations |
 | 5 | doc-sync-reviewer | dm-review | OpenRouter, then Codex | CLAUDE.md, README, manual pages, docs, references, CHANGELOG |
 
-### Configurable Parallel Reviewer
+### Configurable Parallel Reviewer Role
 
-| Agent | Source | Provider | Trigger |
-|---|---|---|---|
-| codex-perspective | dm-review | `codex exec -s read-only -c service_tier=fast --skip-git-repo-check` | Enabled by default when `codex` is installed; set `DM_REVIEW_CODEX_PERSPECTIVE=0` to disable |
+| Role | Default agent definition | Source | Family resolution | Trigger |
+|---|---|---|---|---|
+| second-perspective | `codex-perspective.md` | dm-review | Reviewer family differs from every implementing family; subscription headroom first, then API matrix quality-per-price | Fails open -- enabled unless `DM_REVIEW_SECOND_PERSPECTIVE` or legacy `DM_REVIEW_CODEX_PERSPECTIVE` is exactly `0` |
 
-`codex-perspective` runs in parallel with the selected Codex/OpenRouter agents and reports in the same P1/P2/P3 shape. It is a second-opinion lane, not a replacement for either security lane or architecture-reviewer. Legacy `model:` frontmatter is Claude Code compatibility metadata, not a provider-routing instruction.
+`second-perspective` runs in parallel with the selected agents and reports in the same P1/P2/P3 shape. The compatibility-named `codex-perspective.md` file is its default prompt definition, not a provider lock. It is a second-opinion lane, not a replacement for either security lane or architecture-reviewer. Every second-perspective and security sign-off receipt records `implementer_family`, `reviewer_family`, and `resolution_reason`. Legacy `model:` frontmatter is Claude Code compatibility metadata, not a provider-routing instruction.
 
 ---
 
