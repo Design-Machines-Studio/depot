@@ -821,4 +821,75 @@ if grep -Eq 'eval.*RAW_OUT|bash.*RAW_OUT' "$EXEC_RUNNER"; then
   exit 1
 fi
 
+
+# --- Interim operator-batch: transmission-point digest binding --------------
+# Proves the WRAPPER refuses bytes that are not in payload_digests, at the point
+# of disclosure, without any verify-batch step having run. The batch file is
+# hand-written on purpose: that is exactly the unauthenticated, same-user
+# artifact the threat model now documents, and it is the reason the wrapper
+# cannot treat the file's existence as proof that the payload was approved.
+# Guarded by the program sunset -- after 2026-09-07 the mode itself is dead and
+# the wrapper refuses earlier, on the sunset check.
+if [ "$(date -u +%Y-%m-%d)" \< "2026-09-07" ]; then
+  python3 - "$FIXTURE_ROOT/batch-authorization.json" <<'PY'
+import json
+import sys
+from datetime import datetime, timedelta, timezone
+
+now = datetime.now(timezone.utc).replace(microsecond=0)
+document = {
+    "schema_version": 1,
+    "authorization_mode": "interim_operator_batch",
+    "run_id": "fixture-run",
+    "operator": "fixture-operator",
+    "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "expires_at": (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "payload_digests": ["0" * 64],
+    "scope_note": "fixture batch covering no real payload",
+    "program_sunset": "2026-09-07",
+}
+with open(sys.argv[1], "w", encoding="utf-8") as handle:
+    json.dump(document, handle, sort_keys=True)
+    handle.write("\n")
+PY
+  FIXTURE_BATCH_DIGEST="$(shasum -a 256 "$FIXTURE_ROOT/batch-authorization.json" | awk '{print $1}')"
+  expect_rc 2 'transmitted payload digest is not in the batch authorization' \
+    'interim batch refuses unapproved transmitted bytes' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization.json" \
+      OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$FIXTURE_BATCH_DIGEST" \
+      "$WRAPPER" moonshotai/kimi-k3 'payload bytes the operator never approved'
+
+  python3 - "$FIXTURE_ROOT/batch-authorization-sunset.json" <<'PY'
+import json
+import sys
+from datetime import datetime, timedelta, timezone
+
+now = datetime.now(timezone.utc).replace(microsecond=0)
+document = {
+    "schema_version": 1,
+    "authorization_mode": "interim_operator_batch",
+    "run_id": "fixture-run",
+    "operator": "fixture-operator",
+    "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "expires_at": (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "payload_digests": ["0" * 64],
+    "scope_note": "fixture batch asserting its own later sunset",
+    "program_sunset": "2099-01-01",
+}
+with open(sys.argv[1], "w", encoding="utf-8") as handle:
+    json.dump(document, handle, sort_keys=True)
+    handle.write("\n")
+PY
+  FIXTURE_SUNSET_DIGEST="$(shasum -a 256 "$FIXTURE_ROOT/batch-authorization-sunset.json" | awk '{print $1}')"
+  expect_rc 2 'sunset-mismatched' \
+    'interim batch refuses a self-asserted program sunset' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization-sunset.json" \
+      OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$FIXTURE_SUNSET_DIGEST" \
+      "$WRAPPER" moonshotai/kimi-k3 'payload bytes the operator never approved'
+fi
+
 printf '  OK    OpenRouter threat/content and output-boundary fixtures pass\n'

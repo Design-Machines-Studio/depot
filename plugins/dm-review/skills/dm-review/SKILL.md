@@ -81,20 +81,34 @@ fail-closed at every step:
    and the only permanent one.
 2. **Valid unexpired batch authorization for THIS run** -- available,
    `OPENROUTER_AUTHORIZATION_MODE=interim_operator_batch`, reason
-   `interim_operator_batch`. This INTERIM mode exists only on hosts where no
-   broker is installed yet. It is entered exclusively through
+   `interim_operator_batch`. This INTERIM mode is reachable only when the
+   broker client is ABSENT from the host. Its intended entry is
    `payload-authorization.sh batch-approve`, which shows the operator the lane
    list, byte totals, and digest count on the controlling terminal at run start
    and waits for a typed confirmation.
    **No environment variable substitutes for the interactive confirmation.**
-   Only digests the operator saw are accepted; any other payload falls back to
-   the per-payload interactive path or fails closed.
-3. **Otherwise** -- unavailable, reason `host_authority_unavailable`. Coding
-   agents run on Codex. An available API key, runner, policy, or caller
-   environment variable is not automated dispatch authority.
+   **The batch artifact is procedural and unauthenticated** -- bare JSON with
+   no signature and no user-presence binding, so nothing proves the
+   confirmation ever happened and a same-user process can hand-write an
+   equivalent file. The confirmation guards against accidental and automated
+   entry by this tooling, not against same-user forgery; the out-of-process
+   Workflow Authority Broker is what closes that gap, and it is the primary
+   reason for the sunset. Only digests recorded in the batch file are accepted;
+   the wrapper re-checks that membership over the bytes it actually transmits,
+   and any other payload falls back to the per-payload interactive path or
+   fails closed.
+3. **Otherwise** -- unavailable. Coding agents run on Codex. An available API
+   key, runner, policy, or caller environment variable is not automated
+   dispatch authority. The reason is `broker_present_not_ready` when the broker
+   client is installed but does not probe ready -- an unknown state fails
+   closed instead of widening exposure -- and `host_authority_unavailable`
+   otherwise.
 
 Interim mode is FORBIDDEN when a broker probe on the host reports `ready`; the
 batch path refuses with `broker available; interim mode retired on this host`.
+It is likewise WITHHELD when the broker client is installed but does not probe
+ready. Probes are parsed with `jq -e '.status == "ready"'`, never a substring
+match.
 It also carries a hard calendar backstop, `program_sunset` (2026-09-07), after
 which batch files fail validation and extending the program requires a reviewed
 commit that re-issues the sunset in the schema. The darwin broker milestone is

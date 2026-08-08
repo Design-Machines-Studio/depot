@@ -577,6 +577,42 @@ for f in "$payload_authorization" "$openrouter_wrapper" "$review_skill" "$review
     "$rel retires interim mode when a broker probe reports ready"
 done
 
+# Anchor (c). An installed-but-unhealthy broker is an UNKNOWN state, not a
+# brokerless host. Treating it like one would widen exposure on a machine that
+# is mid-install or degraded, so every layer names the withheld reason.
+for f in "$payload_authorization" "$openrouter_wrapper" "$review_skill" "$review_cmd"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "broker_present_not_ready" \
+    "$rel withholds interim mode when the broker is present but not ready"
+done
+
+# Anchor (d). The batch artifact is unsigned. Every file that teaches or
+# implements the mode must say so in those words, because an overclaim here
+# would sell a procedural control as an enforced one.
+for f in "$payload_authorization" "$openrouter_wrapper"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "PROCEDURAL and UNAUTHENTICATED" \
+    "$rel states that the batch artifact is unauthenticated"
+done
+for f in "$review_skill" "$review_cmd"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "procedural and unauthenticated" \
+    "$rel states that the batch artifact is unauthenticated"
+done
+
+# Anchor (e). The calendar backstop is pinned, not self-asserted: every
+# enforcement layer compares program_sunset against this release constant.
+for f in "$payload_authorization" "$openrouter_wrapper" "$review_skill"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "2026-09-07" \
+    "$rel pins the interim program sunset constant"
+done
+
+# Anchor (f). Transmission-point digest binding. The wrapper must not depend on
+# a separate verify-batch step having run over a separately snapshotted file.
+require_text "$openrouter_wrapper" "transmitted payload digest is not in the batch authorization" \
+  "openrouter-wrapper.sh binds transmitted bytes to the batch payload digests"
+
 printf "\n"
 if [ "$failures" -ne 0 ]; then
   printf "FIX  restore the missing workflow-contract anchors (see docs and plugin sources above)\n"

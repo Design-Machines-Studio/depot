@@ -6,17 +6,38 @@
 #
 # `batch-approve` and `verify-batch` implement the INTERIM operator-batch mode.
 # One interactive approval per run covers a digest-bound payload set, so
-# automated lanes stop needing one approval per payload. The mode changes
-# approval GRANULARITY, never approval EXISTENCE: only exact digests the
-# operator saw and confirmed are accepted, and everything else falls back to
-# the per-payload interactive path or fails closed.
+# automated lanes stop needing one approval per payload. For payloads that
+# travel this path the mode changes approval GRANULARITY rather than approval
+# EXISTENCE: only exact digests recorded in the batch file are accepted, and
+# everything else falls back to the per-payload interactive path or fails
+# closed.
 #
-# Interim-mode invariants:
+# HONESTY NOTE -- what the batch artifact is, and what it is not.
+# The batch file is PROCEDURAL and UNAUTHENTICATED. It is bare JSON with no
+# signature, no MAC, and no user-presence binding, so nothing in it proves that
+# `batch-approve` -- or its /dev/tty confirmation -- ever ran. Any process
+# running as the same user, including the very agent this gate is meant to
+# constrain, can hand-write a batch file carrying its own payload digests and
+# this run's id and enter interim mode with no interactive approval at all. The
+# run id, expiry, and sunset checks all validate data that such a forger
+# supplies.
+# The interactive confirmation is therefore a control against ACCIDENTAL and
+# AUTOMATED entry by this tooling. It is NOT a technical barrier against a
+# same-user process that forges the artifact.
+# Closing that same-user gap is exactly what the out-of-process Workflow
+# Authority Broker does, and it is the primary reason this mode carries a
+# sunset. Do not answer this with a Keychain ACL or a shared-secret MAC here:
+# same-user enforcement inside a script the same user can read and edit is
+# theatre, not a control.
+#
+# Interim-mode invariants (true as written, and no stronger):
 #   - batch-approve reads its confirmation from the controlling terminal only.
 #     No environment variable substitutes for the interactive confirmation.
-#   - A ready Workflow Authority Broker retires the mode on this host: both
-#     batch modes refuse with
-#     "broker available; interim mode retired on this host".
+#   - A Workflow Authority Broker installed on this host withholds the mode. A
+#     probe reporting ready retires it outright: both batch modes refuse with
+#     "broker available; interim mode retired on this host". An installed
+#     client whose probe errors, is unparseable, or does not report ready is an
+#     UNKNOWN state and also refuses, with reason broker_present_not_ready.
 #   - `program_sunset` is a hard calendar backstop (2026-09-07). After it,
 #     batch files fail validation and extending it requires a reviewed commit
 #     that changes PROGRAM_SUNSET here.
@@ -43,21 +64,49 @@ BROKER_CLIENT="/usr/local/bin/workflow-authority"
 PROGRAM_SUNSET="2026-09-07"
 BATCH_CONFIRMATION_PHRASE="APPROVE INTERIM BATCH"
 
-broker_ready() {
-  [ -x "$BROKER_CLIENT" ] || return 1
+# Three broker states, not two. "absent" is the only one that leaves interim
+# mode available. A client that is installed but whose probe errors, is
+# unparseable, or does not report ready is an UNKNOWN state: it fails closed
+# rather than widening exposure on a host that is mid-install or degraded.
+# The probe is parsed with jq, not a substring glob. A glob yields false
+# positives on unrelated "ready" substrings (safe: wrongly refuses) and false
+# negatives on formatting variations of a genuine ready status (unsafe: interim
+# mode would proceed above a ready broker). A missing jq or unparseable probe
+# resolves to present_not_ready, which refuses.
+broker_state() {
+  if [ ! -x "$BROKER_CLIENT" ]; then
+    printf 'absent'
+    return 0
+  fi
   local probe=""
-  probe="$("$BROKER_CLIENT" probe --format json 2>/dev/null)" || return 1
-  case "$probe" in
-    *'"status"'*'"ready"'*) return 0 ;;
-  esac
-  return 1
+  if ! probe="$("$BROKER_CLIENT" probe --format json 2>/dev/null)"; then
+    printf 'present_not_ready'
+    return 0
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    printf 'present_not_ready'
+    return 0
+  fi
+  if printf '%s' "$probe" | jq -e '.status == "ready"' >/dev/null 2>&1; then
+    printf 'ready'
+    return 0
+  fi
+  printf 'present_not_ready'
 }
 
 refuse_when_broker_ready() {
-  if broker_ready; then
-    echo "payload-authorization: broker available; interim mode retired on this host" >&2
-    exit 2
-  fi
+  local state=""
+  state="$(broker_state)"
+  case "$state" in
+    ready)
+      echo "payload-authorization: broker available; interim mode retired on this host" >&2
+      exit 2
+      ;;
+    present_not_ready)
+      echo "payload-authorization: broker_present_not_ready; broker client is installed but does not probe ready -- interim mode withheld" >&2
+      exit 2
+      ;;
+  esac
 }
 
 MODE="${1:-}"

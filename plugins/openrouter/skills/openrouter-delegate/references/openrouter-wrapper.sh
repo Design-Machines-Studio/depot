@@ -51,12 +51,22 @@
 #                       optional content-free success or failure receipt path
 #
 # Interim operator-batch mode is a temporary, sunset-bound loosening of approval
-# granularity. Setting these variables cannot create an authorization: the batch
-# file only exists after payload-authorization.sh read an operator confirmation
-# from the controlling terminal.
+# granularity. Setting these variables does not by itself create an
+# authorization: this wrapper requires a batch file whose bytes match the
+# declared digest, whose schema, run, expiry, and pinned sunset fields all
+# validate, and which already contains the canonical digest of the content this
+# invocation is about to transmit.
 # No environment variable substitutes for the interactive confirmation.
+# The batch file is PROCEDURAL and UNAUTHENTICATED: it carries no signature and
+# no user-presence binding, so a same-user process can forge one. The
+# interactive confirmation guards against accidental and automated entry by
+# this tooling, not against same-user forgery. Closing that gap is what the
+# out-of-process Workflow Authority Broker does, and it is the primary reason
+# this mode is sunset-bound.
 # A ready broker retires the mode: this wrapper refuses with
-# "broker available; interim mode retired on this host".
+# "broker available; interim mode retired on this host". An installed broker
+# client that does not probe ready is an unknown state and also refuses, with
+# reason broker_present_not_ready.
 #
 # Exit codes:
 #   0  success   28 timeout   1 exhausted/error   2 bad args
@@ -180,22 +190,66 @@ esac
 # Fixed, non-overridable probe path -- a caller-selected probe would let the
 # interim mode outlive a ready broker.
 BROKER_CLIENT="/usr/local/bin/workflow-authority"
+# Single source for the interim program sunset in this file. It must stay equal
+# to PROGRAM_SUNSET in payload-authorization.sh; tools/validate-workflow-contracts.sh
+# Group 8 pins the same literal in every enforcement layer so the calendar
+# backstop is never self-asserted by the batch file alone.
+INTERIM_PROGRAM_SUNSET="2026-09-07"
 BATCH_AUTHORIZATION_SHA256=""
-broker_ready() {
-  [ -x "$BROKER_CLIENT" ] || return 1
+BATCH_AUTHORIZATION_FILE=""
+# Three broker states, not two. Only "absent" leaves interim mode available.
+# An installed client whose probe errors, is unparseable, or does not report
+# ready is an UNKNOWN state and fails closed rather than widening exposure.
+# jq decides readiness, not a substring glob: a glob false-negative on a
+# formatting variation would let interim mode run above a ready broker.
+broker_state() {
+  if [ ! -x "$BROKER_CLIENT" ]; then
+    printf 'absent'
+    return 0
+  fi
   local probe=""
-  probe="$("$BROKER_CLIENT" probe --format json 2>/dev/null)" || return 1
-  case "$probe" in
-    *'"status"'*'"ready"'*) return 0 ;;
-  esac
-  return 1
+  if ! probe="$("$BROKER_CLIENT" probe --format json 2>/dev/null)"; then
+    printf 'present_not_ready'
+    return 0
+  fi
+  if ! command -v jq >/dev/null 2>&1; then
+    printf 'present_not_ready'
+    return 0
+  fi
+  if printf '%s' "$probe" | jq -e '.status == "ready"' >/dev/null 2>&1; then
+    printf 'ready'
+    return 0
+  fi
+  printf 'present_not_ready'
+}
+
+# Canonical exact-ordered-content-bytes digest, byte-identical to the framing
+# payload-authorization.sh uses when it snapshots a single content file:
+# sha256(index_be64 || length_be64 || bytes).
+canonical_content_digest() {
+  local file="$1" size="" index_escape="" length_escape=""
+  size="$(wc -c < "$file" | tr -d '[:space:]')"
+  index_escape="$(printf '%016x' 0 | sed 's/../\\x&/g')"
+  length_escape="$(printf '%016x' "$size" | sed 's/../\\x&/g')"
+  {
+    printf '%b' "$index_escape"
+    printf '%b' "$length_escape"
+    cat "$file"
+  } | shasum -a 256 | awk '{print $1}'
 }
 
 if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
-  if broker_ready; then
-    echo "### RUNNER FAILURE: broker available; interim mode retired on this host" >&2
-    exit 2
-  fi
+  BROKER_STATE="$(broker_state)"
+  case "$BROKER_STATE" in
+    ready)
+      echo "### RUNNER FAILURE: broker available; interim mode retired on this host" >&2
+      exit 2
+      ;;
+    present_not_ready)
+      echo "### RUNNER FAILURE: broker_present_not_ready; broker client is installed but does not probe ready -- interim mode withheld" >&2
+      exit 2
+      ;;
+  esac
   BATCH_AUTHORIZATION_FILE="${OPENROUTER_BATCH_AUTHORIZATION_FILE:-}"
   DECLARED_BATCH_DIGEST="${OPENROUTER_BATCH_AUTHORIZATION_DIGEST:-}"
   [ -n "$BATCH_AUTHORIZATION_FILE" ] && [ -f "$BATCH_AUTHORIZATION_FILE" ] &&
@@ -212,15 +266,21 @@ if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
     echo "### RUNNER FAILURE: batch authorization file does not match its declared digest" >&2
     exit 2
   }
-  jq -e --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+  # The sunset is PINNED to this release's constant, not merely parsed as a
+  # future date. Pinning and expiry are different controls: pinning stops a
+  # hand-written batch file from asserting its own later backstop, expiry stops
+  # a stale one from being replayed.
+  jq -e --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+     --arg sunset "$INTERIM_PROGRAM_SUNSET" '
     .schema_version == 1
     and .authorization_mode == "interim_operator_batch"
     and (.run_id | type == "string" and length > 0)
     and (.payload_digests | type == "array" and length > 0)
     and (.expires_at > $now)
+    and .program_sunset == $sunset
     and ((.program_sunset + "T00:00:00Z") > $now)
   ' "$BATCH_AUTHORIZATION_FILE" >/dev/null 2>&1 || {
-    echo "### RUNNER FAILURE: batch authorization is expired, past program sunset, or malformed" >&2
+    echo "### RUNNER FAILURE: batch authorization is expired, past program sunset, sunset-mismatched, or malformed" >&2
     exit 2
   }
 fi
@@ -456,6 +516,33 @@ else
         {role: "user", content: $prompt}
       ]
     }' > "$request_file"
+fi
+
+if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
+  # Digest binding at the point of disclosure, over the bytes actually about to
+  # be sent. `verify-batch` runs in the calling lane, but this wrapper must not
+  # assume it ran, and must not rely on a digest taken over a separately
+  # snapshotted file: a payload swapped in after verify-batch passed would
+  # otherwise still be transmitted. The disclosed content is read back out of
+  # the request body curl is about to POST and must already be a member of the
+  # validated batch file's payload_digests.
+  transmitted_content_file="$RUN_ROOT/transmitted.content"
+  jq -j '[.messages[] | select(.role == "user") | .content] | add // ""' \
+    "$request_file" > "$transmitted_content_file" || {
+    echo "### RUNNER FAILURE: could not read transmitted content for batch digest binding" >&2
+    exit 2
+  }
+  TRANSMITTED_PAYLOAD_SHA256="$(canonical_content_digest "$transmitted_content_file")"
+  [[ "$TRANSMITTED_PAYLOAD_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "### RUNNER FAILURE: could not compute the transmitted payload digest" >&2
+    exit 2
+  }
+  jq -e --arg digest "$TRANSMITTED_PAYLOAD_SHA256" '
+    (.payload_digests | index($digest)) != null
+  ' "$BATCH_AUTHORIZATION_FILE" >/dev/null 2>&1 || {
+    echo "### RUNNER FAILURE: transmitted payload digest is not in the batch authorization" >&2
+    exit 2
+  }
 fi
 
 : > "$stream_file"

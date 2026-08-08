@@ -186,12 +186,17 @@
   },
   "authorization": {
     "schemaVersion": 1,
-    "_comment": "How an automated OpenRouter lane becomes authorized. Resolved, never assumed. Ordered, fail-closed: broker-ready, then the interim operator batch, then unavailable. The interim rung never sits above broker authority.",
+    "_comment": "How an automated OpenRouter lane becomes authorized. Resolved, never assumed. Ordered, fail-closed: broker-ready, then the interim operator batch, then unavailable. The interim rung never sits above broker authority. Broker presence has THREE states: ready (broker mode), present_not_ready (unknown -- resolves to unavailable, interim withheld), and absent (the only state where interim is reachable).",
     "resolutionOrder": ["broker", "interim_operator_batch", "unavailable"],
+    "brokerStates": {
+      "ready": "probe parsed with jq -e '.status == \"ready\"' succeeds -- broker mode",
+      "present_not_ready": "client installed but probe errors, is unparseable, or does not report ready -- unknown state, resolves to unavailable with reason broker_present_not_ready; interim mode is withheld",
+      "absent": "client not installed or not executable -- the only state in which interim_operator_batch is reachable"
+    },
     "modes": {
       "broker": {
         "status": "target",
-        "probe": "/usr/local/bin/workflow-authority probe --format json reports status ready",
+        "probe": "/usr/local/bin/workflow-authority probe --format json reports status ready, parsed with jq -e '.status == \"ready\"' and never a substring match",
         "authority": "independent broker owns run-bound authorization, credential custody, and transport",
         "permanent": true
       },
@@ -204,7 +209,12 @@
         "programSunset": "2026-09-07",
         "programSunsetRationale": "About four weeks. The darwin broker milestone is scheduled inside this window. After this date batch files fail validation and extending the program requires a reviewed commit that re-issues the sunset in the schema.",
         "entryRequirement": "interactive operator confirmation on the controlling terminal showing lane list, byte totals, and digest count; no environment variable substitutes for the interactive confirmation",
+        "artifactAuthentication": "none",
+        "artifactHonesty": "The batch file is PROCEDURAL and UNAUTHENTICATED -- bare JSON with no signature, MAC, or user-presence binding. Nothing proves batch-approve or its /dev/tty confirmation ever ran, and a same-user process can hand-write an equivalent file carrying its own digests and the known run id. The confirmation is a control against accidental and automated entry by this tooling, NOT a technical barrier against same-user forgery. Closing that gap is what the out-of-process Workflow Authority Broker does, and it is the primary reason this mode carries a sunset. Do not substitute Keychain ACLs or a shared-secret MAC: same-user enforcement inside a user-readable script is theatre.",
+        "transmissionBinding": "openrouter-wrapper.sh recomputes the canonical exact-ordered-content digest from the request body it is about to POST and refuses (exit 2) unless that digest is already a member of the validated batch file's payload_digests. The check is at the point of disclosure, over the bytes actually sent, and does not depend on the lane having run verify-batch first.",
+        "sunsetPinning": "All three enforcement layers (payload-authorization.sh PROGRAM_SUNSET, openrouter-wrapper.sh INTERIM_PROGRAM_SUNSET, the dm-review review skill's OPENROUTER_INTERIM_PROGRAM_SUNSET) compare program_sunset against this release constant; a file-asserted future date is not accepted on its own.",
         "retiredWhen": "broker probe on the host reports ready",
+        "withheldWhen": "broker client is installed but does not probe ready (broker_present_not_ready)",
         "retirementMessage": "broker available; interim mode retired on this host",
         "wrapperMode": "interim-operator-batch",
         "receiptFields": ["authorization_mode", "batchSha256"],
@@ -214,6 +224,7 @@
       "unavailable": {
         "status": "default",
         "reason": "host_authority_unavailable",
+        "reasons": ["host_authority_unavailable", "broker_present_not_ready"],
         "exhaustionFallback": "codex",
         "_comment": "On hosts with no broker and no valid batch authorization the external rail stays closed and the complete criterion runs on Codex. An available API key, runner, policy, or caller environment variable is not automated dispatch authority."
       }
