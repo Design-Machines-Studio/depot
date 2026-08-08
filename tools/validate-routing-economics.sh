@@ -289,7 +289,21 @@ require_text "$orchestrator" "Claude JSONL delta" "postmortem measures Claude JS
 require_text "$orchestrator" "AWAITING APPROVAL" "postmortem recommendations are proposal-only"
 require_text "$model_cascade" '"openrouter"' "model cascade defines OpenRouter class"
 if [ -f "$model_cascade" ] && [ -f "$harness" ]; then
-  jq -e '(.cascades | has("claude") | not) and ([.cascades[].ladder[]] | index("native_judgment") | not)' "$model_cascade" >/dev/null || { printf "  FAIL  coding cascades exclude Claude-native ladders\n"; failures=1; }
+  # 2026-08-08 user directive: native_judgment is an executable LAST-RESORT coding rung.
+  # Claude must still never be a cascade class of its own, and where the native rung is
+  # present it must rank below premium_sub and openrouter_exec so both external rails are
+  # tried first. This replaces the former absolute exclusion.
+  jq -e '.cascades | has("claude") | not' "$model_cascade" >/dev/null || { printf "  FAIL  no Claude-native cascade class\n"; failures=1; }
+  jq -e '
+    [.cascades[]
+      | .ladder as $l
+      | select($l | index("native_judgment"))
+      | ($l | index("native_judgment")) as $n
+      | (($l | index("premium_sub")) // -1) as $p
+      | (($l | index("openrouter_exec")) // -1) as $o
+      | ($n > $p and $n > $o)]
+    | all
+  ' "$model_cascade" >/dev/null || { printf "  FAIL  native_judgment ranks below premium_sub and openrouter_exec in every cascade\n"; failures=1; }
   jq -e '
     [.hosts[].roles | to_entries[]
       | select(.value.kind == "wrapper" or .value.kind == "openrouter_exec")
@@ -300,8 +314,9 @@ if [ -f "$model_cascade" ] && [ -f "$harness" ]; then
   jq -e '
     [.quality_rank | keys[] | select(test("^(openai|anthropic)/"))] | length == 0
   ' "$model_cascade" >/dev/null || { printf "  FAIL  model cascade excludes OpenRouter-prefixed native-vendor identities\n"; failures=1; }
-  if ! jq -e '.hosts.generic.roles.native_judgment.kind == "none"' "$harness" >/dev/null ||
-     ! jq -e '([.cascades[].ladder[]] | index("native_judgment") | not)' "$model_cascade" >/dev/null; then
+  # Generic (non-Claude, non-Codex) harnesses still have NO native vendor rail: the native
+  # rung must resolve to "none" there rather than being silently mapped onto OpenRouter.
+  if ! jq -e '.hosts.generic.roles.native_judgment.kind == "none"' "$harness" >/dev/null; then
     printf "  FAIL  generic/native-vendor intent is unavailable rather than mapped to OpenRouter\n"
     failures=1
   fi
