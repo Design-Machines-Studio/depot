@@ -108,7 +108,19 @@ one repair/recheck pass. Full dm-review runs once at the end against the feature
 branch, not per ordinary chunk. Do not dispatch the 5-agent quick dm-review
 suite for an ordinary chunk.
 
-**Sensitive-path exception.** Before the per-chunk review, test the chunk's `filesToModify` against the sensitive-path set. If any path matches, run **full** review for that chunk (`args="full <worktree-path>"`) so `security-auditor-codex-signoff` and all conditional agents engage, and record `review_tier: full (sensitive path)` in the chunk receipt:
+If `PIPELINE_FULL_TIER_REVIEW=1`, fail open to more coverage: run full dm-review
+for every chunk. Record an ordinary forced chunk as
+`review_tier: full (override)`, retain `full (sensitive path)` for a matching
+chunk and `full (final gate)` for the final gate, and add
+`review_tier_override: PIPELINE_FULL_TIER_REVIEW=1` to every chunk receipt. The
+override never reduces sensitive-path or final-gate coverage.
+
+Do NOT dispatch the multi-agent dm-review suite for an ordinary, non-final
+chunk when the kill switch is inactive. Doing so is a policy violation, not a
+judgment call; the chunk receipt MUST confess it with
+`review_tier_violation: ordinary chunk received multi-agent dm-review suite`.
+
+**Sensitive-path exception.** Before the per-chunk review, classify the union of the chunk's declared `filesToModify` and every path in the authoritative chunk diff against the sensitive-path set; the declaration alone is never authoritative. Inspect added content under `migrations/**` for seed credentials rather than classifying migration sensitivity by path alone. If a path or migration addition matches, run **full** review for that chunk (`args="full <worktree-path>"`) so `security-auditor-codex-signoff` and all conditional agents engage, and record `review_tier: full (sensitive path)` in the chunk receipt. If classification cannot complete for any reason, including an unreadable or unparseable input or incomplete migration-addition inspection, fail closed to full review and record the classification failure as the reason:
 
 ```
 internal/auth/**            internal/federation/**
@@ -124,6 +136,10 @@ disclosure-risk sections locally, an eligible remainder may receive the
 supplementary Kimi security lens, but that external analysis cannot replace the
 Codex signoff. A chunk that touches auth/federation/secrets and did not receive
 full dm-review is a run-postmortem miss.
+
+Every chunk receipt MUST use exactly one closed-vocabulary value: `review_tier: focused-codex | full (sensitive path) | full (override) | full (final gate)`.
+
+An adjacent `review_tier_reason:` line MUST name why: `ordinary chunk`, the exact matched sensitive glob or migration seed-credential match, `PIPELINE_FULL_TIER_REVIEW=1`, `final gate`, or `classification unavailable: <stable reason>`. The final full-review receipt uses `full (final gate)`.
 
 ### Why this matters for OpenRouter routing
 
@@ -1397,6 +1413,10 @@ Append `requestedProvider: <provider>`, `attemptedProvider: <provider>`,
 `fallbackReason: <stable-reason|null>` to the chunk receipt adjacent to the eval
 gate line. `fallback` is always boolean; the three provider fields carry any
 transition.
+
+Write the closed-vocabulary `review_tier` and adjacent `review_tier_reason`
+fields defined in the tier policy into the authoritative chunk receipt before
+its `record-attempt` call so the recorded attempt row carries the tier decision.
 
 Also record `requestedProvider`, `attemptedProvider`, and `fallbackReason`. Preserve unavailable attempts and misroutes honestly across `full_cli`, `codex_native`, and generic hosts. Append the complete authoritative evaluation receipt to the cumulative ledger and defer shadow observation until `all-chunks-complete`; never synthesize `EVAL_GATE_PASSED` from a kernel prediction.
 
