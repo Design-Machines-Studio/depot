@@ -1,6 +1,7 @@
 .claude/settings.local.json
 .env
 *.local
+.dm/operator-profile.local.json
 
 # Pipeline-generated feature artefacts (per-feature plans, briefs, manifests, prompts)
 plans/

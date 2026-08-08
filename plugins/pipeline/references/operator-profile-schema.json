@@ -1,0 +1,95 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.io/schemas/pipeline/operator-profile-schema.json",
+  "title": "Pipeline operator routing profile",
+  "description": "Local remove-and-rank preferences for policy-derived routing options. Credentials and account secrets are forbidden.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "operator",
+    "subscriptions",
+    "familyPreferenceOrder",
+    "neverUse",
+    "updated"
+  ],
+  "properties": {
+    "operator": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128
+    },
+    "subscriptions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "rail",
+          "plan",
+          "windows",
+          "probe",
+          "notes"
+        ],
+        "properties": {
+          "rail": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9._-]*$",
+            "maxLength": 128
+          },
+          "plan": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 128
+          },
+          "windows": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9._-]*$",
+              "maxLength": 64
+            }
+          },
+          "probe": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024,
+            "description": "Use none or a local command that emits one conservative state, remaining_pct, and window JSON object for all declared windows."
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 512
+          }
+        }
+      }
+    },
+    "familyPreferenceOrder": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._/-]*$",
+        "maxLength": 128
+      }
+    },
+    "neverUse": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 256
+      }
+    },
+    "updated": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "precedence": {
+      "$comment": "TRACKED CANONICAL DEFINITION of remove-only precedence for operator profiles. routing-policy.json operatorProfile.precedenceRef points here. Kept in a tracked plugin reference rather than a plans/ prompt, because plans/ is gitignored and never reaches a user's plugin cache.",
+      "type": "string",
+      "description": "Remove-only precedence: an operator profile may reorder (RANK) and drop (REMOVE) options that policy derivation already produced. It may never ADD a routing provider that derivation did not find, never override neverOfferable, never relax a security invariant, and never override the family-independence rule for the second perspective or the security sign-off. Declaring a subscription rail supplies headroom observability only and does not by itself make a provider routable. With no profile present, policy defaults apply unchanged."
+    }
+  }
+}
