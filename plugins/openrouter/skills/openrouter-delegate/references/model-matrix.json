@@ -1,0 +1,269 @@
+{
+  "_comment": "CANONICAL machine-readable OpenRouter model matrix. This file is the data source of truth for the Available Models table in model-selection.md: on any disagreement between the prose table and this JSON, the JSON wins. Consumers are pinned to it by tools/validate-openrouter-cascade.sh, which rejects (a) a quality_rank in plugins/pipeline/references/model-cascade.json that disagrees with or is missing from this file, (b) a routing-policy.json agentType model or fallbackModel slug that is absent here, and (c) a snapshot_date that diverges from the prose snapshot date. Scope is the OpenRouter rail only: native Codex identities (bare gpt-* names) and native Claude aliases are not OpenRouter models and are deliberately absent. anthropic/* slugs are rejected by openrouter-wrapper.sh before network contact and must never be added.",
+  "schema_version": 1,
+  "snapshot_date": "2026-08-03",
+  "freshness_rule_minutes": 15,
+  "authority": "The matrix recommends, routing policy decides, receipts record. Nothing re-routes automatically when this file is refreshed.",
+  "refresh_protocol": {
+    "cadence": "On demand, and before any paid or policy-changing run.",
+    "price_context_availability_source": "OpenRouter live API. Record a receipt whose observedAt and expiresAt are no more than freshness_rule_minutes apart, and use it only before expiry.",
+    "quality_source": "A named external evaluation source with its dataset version recorded in aa_scores.source and aa_scores.source_version. A score without provenance does not enter the matrix.",
+    "on_refresh": [
+      "Bump snapshot_date (top level and every entry) to the refresh date.",
+      "Where a source is unreachable, keep the prior value and mark it stale in the write-up -- never guess or interpolate.",
+      "Land the refresh as an ordinary reviewed commit so the drift validator re-fences every downstream consumer."
+    ],
+    "documented_in": "model-selection.md -- Refreshing the matrix"
+  },
+  "receipt_contract": {
+    "_comment": "Mirrored as routing-policy.json .matrixReceipt; tools/validate-openrouter-cascade.sh is the fence for the slug and rank data, and the receipt fields below are the shared contract text.",
+    "required_fields": [
+      "matrix_snapshot_date",
+      "rung_rationale"
+    ],
+    "rung_rationale_axes": [
+      "cost",
+      "context",
+      "strength",
+      "availability"
+    ],
+    "statement": "Every routing decision recorded in a run receipt must carry matrix_snapshot_date and a one-line rung_rationale naming the deciding axis (cost, context, strength, or availability)."
+  },
+  "models": [
+    {
+      "slug": "moonshotai/kimi-k3",
+      "name": "Kimi K3",
+      "input_usd_per_m": 3.0,
+      "output_usd_per_m": 15.0,
+      "cache_read_usd_per_m": 0.3,
+      "context_tokens": 1048576,
+      "quality_rank": 97,
+      "aa_scores": {
+        "intelligence": 57.1,
+        "coding": 76.2,
+        "agentic": 50.1,
+        "source": "artificial-analysis",
+        "source_version": "v4.1"
+      },
+      "role": "Quality-first security and bulk-analysis head; reasoning efforts low/high/max.",
+      "snapshot_date": "2026-08-03",
+      "sources": [
+        "https://openrouter.ai/moonshotai/kimi-k3",
+        "https://artificialanalysis.ai/models"
+      ]
+    },
+    {
+      "slug": "openai/gpt-5.6-terra",
+      "name": "GPT-5.6 Terra",
+      "input_usd_per_m": 1.0,
+      "output_usd_per_m": 6.0,
+      "cache_read_usd_per_m": 0.1,
+      "context_tokens": 1050000,
+      "quality_rank": 94,
+      "aa_scores": {
+        "intelligence": 55.0,
+        "coding": 76.7,
+        "agentic": 47.4,
+        "source": "artificial-analysis",
+        "source_version": "v4.1"
+      },
+      "role": "High-quality OpenRouter backup; reasoning none through max.",
+      "snapshot_date": "2026-08-03",
+      "sources": [
+        "https://openrouter.ai/openai/gpt-5.6-terra",
+        "https://artificialanalysis.ai/models"
+      ]
+    },
+    {
+      "slug": "x-ai/grok-4.5",
+      "name": "Grok 4.5",
+      "input_usd_per_m": 2.0,
+      "output_usd_per_m": 6.0,
+      "cache_read_usd_per_m": null,
+      "context_tokens": 500000,
+      "quality_rank": 93,
+      "aa_scores": {
+        "intelligence": 54.0,
+        "coding": null,
+        "agentic": null,
+        "source": "artificial-analysis",
+        "source_version": "v4.1"
+      },
+      "role": "Near-frontier value fallback.",
+      "snapshot_date": "2026-08-03",
+      "sources": [
+        "https://openrouter.ai/x-ai/grok-4.5",
+        "https://artificialanalysis.ai/models"
+      ]
+    },
+    {
+      "slug": "z-ai/glm-5.2",
+      "name": "GLM-5.2",
+      "input_usd_per_m": 1.19,
+      "output_usd_per_m": 3.74,
+      "cache_read_usd_per_m": null,
+      "context_tokens": 1000000,
+      "quality_rank": 90,
+      "aa_scores": {
+        "intelligence": 51.1,
+        "coding": 68.8,
+        "agentic": 43.1,
+        "source": "artificial-analysis",
+        "source_version": "v4.1"
+      },
+      "role": "Third-party mechanical and security-capacity fallback; catalog price shown, lower-cost endpoints exist.",
+      "snapshot_date": "2026-08-03",
+      "sources": [
+        "https://openrouter.ai/z-ai/glm-5.2",
+        "https://artificialanalysis.ai/models"
+      ]
+    },
+    {
+      "slug": "meta/muse-spark-1.1",
+      "name": "Muse Spark 1.1",
+      "input_usd_per_m": 1.25,
+      "output_usd_per_m": 4.25,
+      "cache_read_usd_per_m": null,
+      "context_tokens": 1000000,
+      "quality_rank": 90,
+      "aa_scores": {
+        "intelligence": 51.0,
+        "coding": null,
+        "agentic": null,
+        "source": "artificial-analysis",
+        "source_version": "v4.1"
+      },
+      "role": "Multimodal frontier value; the current wrapper is text-only.",
+      "snapshot_date": "2026-08-03",
+      "sources": [
+        "https://openrouter.ai/meta/muse-spark-1.1",
+        "https://artificialanalysis.ai/models"
+      ]
+    },
+    {
+      "slug": "openai/gpt-5.6-luna",
+      "name": "GPT-5.6 Luna",
+      "input_usd_per_m": 0.1,
+      "output_usd_per_m": 0.6,
+      "cache_read_usd_per_m": 0.01,
+      "context_tokens": 1050000,
+      "quality_rank": 90,
+      "aa_scores": {
+        "intelligence": 51.2,
+        "coding": 71.4,
+        "agentic": 45.6,
+        "source": "artificial-analysis",
+        "source_version": "v4.1"
+      },
+      "role": "Low-cost mechanical and config/doc work; reasoning none through max.",
+      "snapshot_date": "2026-08-03",
+      "sources": [
+        "https://openrouter.ai/openai/gpt-5.6-luna",
+        "https://artificialanalysis.ai/models"
+      ]
+    },
+    {
+      "slug": "google/gemini-3.5-flash",
+      "name": "Gemini 3.5 Flash",
+      "input_usd_per_m": 1.5,
+      "output_usd_per_m": 9.0,
+      "cache_read_usd_per_m": null,
+      "context_tokens": 1000000,
+      "quality_rank": 89,
+      "aa_scores": {
+        "intelligence": 50.0,
+        "coding": null,
+        "agentic": null,
+        "source": "artificial-analysis",
+        "source_version": "v4.1"
+      },
+      "role": "Multimodal frontier tail; the current wrapper is text-only.",
+      "snapshot_date": "2026-08-03",
+      "sources": [
+        "https://openrouter.ai/google/gemini-3.5-flash",
+        "https://artificialanalysis.ai/models"
+      ]
+    },
+    {
+      "slug": "deepseek/deepseek-v4-pro",
+      "name": "DeepSeek V4 Pro",
+      "input_usd_per_m": 0.435,
+      "output_usd_per_m": 0.87,
+      "cache_read_usd_per_m": null,
+      "context_tokens": 1000000,
+      "quality_rank": 83,
+      "aa_scores": {
+        "intelligence": 44.0,
+        "coding": null,
+        "agentic": null,
+        "source": "artificial-analysis",
+        "source_version": "v4.1"
+      },
+      "role": "Cheap code-analysis fallback through OpenRouter.",
+      "snapshot_date": "2026-08-03",
+      "sources": [
+        "https://openrouter.ai/deepseek/deepseek-v4-pro",
+        "https://artificialanalysis.ai/models"
+      ]
+    },
+    {
+      "slug": "minimax/minimax-m3",
+      "name": "MiniMax-M3",
+      "input_usd_per_m": 0.3,
+      "output_usd_per_m": 1.2,
+      "cache_read_usd_per_m": null,
+      "context_tokens": 1000000,
+      "quality_rank": 83,
+      "aa_scores": {
+        "intelligence": 44.0,
+        "coding": null,
+        "agentic": null,
+        "source": "artificial-analysis",
+        "source_version": "v4.1"
+      },
+      "role": "Multimodal cost workhorse; model context is 1M but the top endpoint serves about 524K.",
+      "snapshot_date": "2026-08-03",
+      "sources": [
+        "https://openrouter.ai/minimax/minimax-m3",
+        "https://artificialanalysis.ai/models"
+      ]
+    },
+    {
+      "slug": "deepseek/deepseek-v4-flash",
+      "name": "DeepSeek V4 Flash",
+      "input_usd_per_m": 0.098,
+      "output_usd_per_m": 0.196,
+      "cache_read_usd_per_m": null,
+      "context_tokens": 1000000,
+      "quality_rank": 78,
+      "aa_scores": {
+        "intelligence": 40.0,
+        "coding": null,
+        "agentic": null,
+        "source": "artificial-analysis",
+        "source_version": "v4.1"
+      },
+      "role": "Cheapest mechanical checks.",
+      "snapshot_date": "2026-08-03",
+      "sources": [
+        "https://openrouter.ai/deepseek/deepseek-v4-flash",
+        "https://artificialanalysis.ai/models"
+      ]
+    },
+    {
+      "slug": "qwen/qwen3-coder",
+      "name": "Qwen3 Coder",
+      "input_usd_per_m": 0.3,
+      "output_usd_per_m": 1.0,
+      "cache_read_usd_per_m": null,
+      "context_tokens": 1000000,
+      "quality_rank": 72,
+      "aa_scores": null,
+      "role": "Lower-quality final bulk fallback; model context is 1M but the top endpoint serves about 262K, so validate endpoint capacity before very large prompts.",
+      "snapshot_date": "2026-08-03",
+      "sources": [
+        "https://openrouter.ai/qwen/qwen3-coder"
+      ]
+    }
+  ]
+}

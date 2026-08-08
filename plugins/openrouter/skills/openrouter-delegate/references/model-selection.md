@@ -29,6 +29,53 @@ no more than 15 minutes apart and use it only before expiry.
 | `deepseek/deepseek-v4-flash` | DeepSeek V4 Flash | $0.098 / $0.196 | 1M | AA 40; cheapest mechanical checks |
 | `qwen/qwen3-coder` | Qwen3 Coder | $0.30 / $1 | 1M model; top endpoint about 262K | Lower-quality final bulk fallback; validate endpoint capacity before very large prompts |
 
+**Data source of truth:** the machine-readable
+[`model-matrix.json`](model-matrix.json) is the canonical form of this table --
+the prose above is the human view, and on any disagreement the JSON wins.
+`tools/validate-openrouter-cascade.sh` pins the downstream consumers to it: a
+`quality_rank` in `model-cascade.json` that disagrees with or is missing from
+the matrix, a `routing-policy.json` agentType model or fallback slug that is
+absent from the matrix, and a snapshot date that diverges from the date stated
+above are all hard failures.
+
+**Receipt requirement:** every routing decision recorded in a run receipt must
+carry `matrix_snapshot_date` and a one-line `rung_rationale` naming the deciding
+axis -- cost, context, strength, or availability. The same requirement is
+declared as `matrixReceipt` in `plugins/pipeline/references/routing-policy.json`
+so the delegation skill and the cascade consumers share one contract.
+
+Native Codex identities (bare `gpt-*` names) and native Claude aliases are not
+OpenRouter models and are deliberately absent from the matrix; `anthropic/`
+slugs are rejected by `openrouter-wrapper.sh` before network contact and must
+never be added to it.
+
+## Refreshing the matrix
+
+Model preferences churn weekly with releases, so the matrix is a refreshable
+recommendation instrument grounded in named external sources -- never a frozen
+opinion. Refresh it on demand, and always before a paid or policy-changing run.
+This is a documented human procedure; nothing here is automated.
+
+- **Price, context, and availability** come from the OpenRouter live API. Record
+  a receipt whose `observedAt` and `expiresAt` are no more than 15 minutes apart
+  (the existing freshness rule, mirrored as `freshness_rule_minutes` in the
+  JSON) and use it only before expiry.
+- **Quality scores** come from the named evaluation source with its dataset
+  version recorded in `aa_scores.source` and `aa_scores.source_version`. A score
+  without provenance does not enter the matrix.
+- **Every refresh bumps `snapshot_date`** -- both the top-level value and each
+  entry -- and the prose snapshot date above must move with it, because the
+  validator compares them.
+- **Where a source is unreachable, keep the prior value** and mark it stale in
+  the refresh write-up. Never guess, interpolate, or backfill from memory.
+- **A refresh lands as an ordinary reviewed commit**, so the drift validator
+  re-fences every downstream consumer against the new values.
+
+The matrix recommends, routing policy decides, receipts record. Refreshing the
+matrix never re-routes anything on its own; a routing change is a separate,
+deliberate edit to `model-cascade.json`, `harness-profile.json`, or
+`routing-policy.json`.
+
 ## Native Codex execution
 
 Native Codex models run through the Codex host or `codex-companion`; they are not OpenRouter requests and retain `implementedBy: codex` provenance.
