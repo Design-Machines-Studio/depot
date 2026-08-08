@@ -249,20 +249,133 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
   OPENROUTER_CACHE_CLASS=$(printf '%s' "$BUNDLE_JSON" | jq -r '.cache_class // empty' 2>/dev/null)
   OPENROUTER_RESOLUTION_REASON=$(printf '%s' "$BUNDLE_JSON" | jq -r '.reason // empty' 2>/dev/null)
 fi
-# Automated external review is disabled until the independent Workflow
-# Authority Broker owns run-bound authorization and provider transport. An API
-# key or caller-selected environment mode cannot make this true.
+# Availability is RESOLVED, never assumed. Three outcomes, evaluated in this
+# order, fail-closed: broker-ready > interim operator batch > unavailable.
 OPENROUTER_AVAILABLE=false
+OPENROUTER_AUTHORIZATION_MODE=""
+OPENROUTER_BATCH_AUTHORIZATION_FILE=""
+OPENROUTER_BATCH_AUTHORIZATION_DIGEST=""
 OPENROUTER_UNAVAILABLE_REASON=host_authority_unavailable
+OPENROUTER_BROKER_CLIENT=/usr/local/bin/workflow-authority
+# The interim program sunset, pinned here as well as in payload-authorization.sh
+# (PROGRAM_SUNSET) and openrouter-wrapper.sh (INTERIM_PROGRAM_SUNSET). All three
+# enforcement layers compare against this constant so no batch file can assert
+# its own later backstop.
+OPENROUTER_INTERIM_PROGRAM_SUNSET=2026-09-07
+# Three broker states, not two. `absent` is the ONLY state that leaves interim
+# mode available. A client that is installed but whose probe errors or does not
+# report ready is an UNKNOWN state -- treating it like a brokerless host would
+# widen exposure on a machine that is mid-install or degraded -- so it fails
+# closed with reason broker_present_not_ready.
+OPENROUTER_BROKER_STATUS=absent
+if [ -x "$OPENROUTER_BROKER_CLIENT" ]; then
+  if "$OPENROUTER_BROKER_CLIENT" probe --format json 2>/dev/null |
+       jq -e '.status == "ready"' >/dev/null 2>&1; then
+    OPENROUTER_BROKER_STATUS=ready
+  else
+    OPENROUTER_BROKER_STATUS=present_not_ready
+  fi
+fi
+
+# Outcome 1 -- broker probe reports ready. This is the R3.1 target state and
+# the only permanent one. The rung cannot fire until a broker exists on a
+# supported host; it is written now so the interim rung never sits above it.
+if [ "$OPENROUTER_BROKER_STATUS" = ready ]; then
+  OPENROUTER_AVAILABLE=true
+  OPENROUTER_AUTHORIZATION_MODE=broker
+  OPENROUTER_UNAVAILABLE_REASON=""
+# Outcome 2 -- INTERIM operator batch. Requires a valid, unexpired,
+# sunset-pinned batch authorization bound to THIS run. It is intended to be
+# created at run start by an interactive approval the operator typed on the
+# controlling terminal -- but the artifact is procedural and unauthenticated
+# and this check cannot prove that happened. Only reachable when the broker
+# client is ABSENT; present_not_ready falls through to Outcome 3.
+elif [ "$OPENROUTER_BROKER_STATUS" = absent ] &&
+     [ -n "${OPENROUTER_API_KEY:-}" ] && [ -n "$OPENROUTER_BUNDLE_ROOT" ] &&
+     [ -f "plans/$FEATURE_SLUG/openrouter-batch-authorization.json" ] &&
+     jq -e --arg run "$REVIEW_RUN_ID" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+        --arg sunset "$OPENROUTER_INTERIM_PROGRAM_SUNSET" '
+       .schema_version == 1
+       and .authorization_mode == "interim_operator_batch"
+       and .run_id == $run
+       and (.payload_digests | type == "array" and length > 0)
+       and (.expires_at > $now)
+       and .program_sunset == $sunset
+       and ((.program_sunset + "T00:00:00Z") > $now)
+     ' "plans/$FEATURE_SLUG/openrouter-batch-authorization.json" >/dev/null 2>&1; then
+  OPENROUTER_AVAILABLE=true
+  OPENROUTER_AUTHORIZATION_MODE=interim_operator_batch
+  OPENROUTER_BATCH_AUTHORIZATION_FILE="plans/$FEATURE_SLUG/openrouter-batch-authorization.json"
+  OPENROUTER_BATCH_AUTHORIZATION_DIGEST=$(shasum -a 256 \
+    "$OPENROUTER_BATCH_AUTHORIZATION_FILE" | awk '{print $1}')
+  OPENROUTER_UNAVAILABLE_REASON=""
+# Outcome 3 -- unavailable. Unchanged from today on hosts with no broker and
+# no batch authorization, and the fail-closed landing spot for an installed
+# broker client that does not probe ready.
+else
+  OPENROUTER_AVAILABLE=false
+  OPENROUTER_AUTHORIZATION_MODE=""
+  if [ "$OPENROUTER_BROKER_STATUS" = present_not_ready ]; then
+    OPENROUTER_UNAVAILABLE_REASON=broker_present_not_ready
+  else
+    OPENROUTER_UNAVAILABLE_REASON=host_authority_unavailable
+  fi
+fi
 ```
 
-**When `OPENROUTER_AVAILABLE=true`:** agents marked for OpenRouter MUST use `openrouter-agent-runner`. Mechanical orchestration runs on Codex or directly in the host; do not spend Claude coding quota to invoke the wrapper.
+**Outcome 1 -- `broker` (`OPENROUTER_AVAILABLE=true`):** the independent
+Workflow Authority Broker owns run-bound authorization, credential custody, and
+transport. Agents marked for OpenRouter MUST use `openrouter-agent-runner`.
+Mechanical orchestration runs on Codex or directly in the host; do not spend
+Claude coding quota to invoke the wrapper.
 
-**When false:** coding agents run on Codex. Record
-`host_authority_unavailable`; do not reinterpret an available API key, runner,
-policy, or caller environment variable as automated dispatch authority.
-Non-coding agents may still use Claude. Direct interactive `/openrouter` is a
-separate exact-digest workflow and does not enable these child lanes.
+**Outcome 2 -- `interim_operator_batch` (`OPENROUTER_AVAILABLE=true`,
+reason `interim_operator_batch`):** an explicitly temporary, sunset-bound mode
+for hosts where no broker client is installed at all. It changes approval
+granularity from per-payload to per-run; for payloads that travel this path it
+does not change approval existence. The intended entry is
+`payload-authorization.sh batch-approve` showing the operator the lane list,
+byte totals, and digest count on the controlling terminal, with the operator
+typing the confirmation phrase.
+**No environment variable substitutes for the interactive confirmation.**
+**The batch artifact is procedural and unauthenticated.** It is bare JSON with
+no signature and no user-presence binding, so nothing verifies that
+`batch-approve` ever ran: a same-user process can hand-write the file with its
+own digests and this run's id and enter the mode without any interactive
+approval. The confirmation is a control against accidental and automated entry
+by this tooling, not a technical barrier against same-user forgery. Closing
+that gap is what the out-of-process Workflow Authority Broker does, and it is
+the primary reason this mode is sunset-bound.
+Lanes dispatch with
+`OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch` plus the batch file and
+its digest, and each lane verifies its own exact payload digest against the
+batch through `payload-authorization.sh verify-batch` before transmission. The
+wrapper does not rely on that step having run: it recomputes the canonical
+exact-ordered-content digest over ALL message contents of the request body it
+is about to POST -- system, developer, assistant, and user turns in
+transmission order -- and refuses unless that digest is already in the batch
+file's `payload_digests`. Non-string (structured or array-typed) message
+content is refused rather than hashed. The binding covers ordered message
+CONTENT bytes only: model, fallback, provider order, and sort are
+caller-selected routing metadata outside the approved set. A payload whose
+digest is not in the batch falls back to the per-payload interactive path or
+fails closed. Interim mode is FORBIDDEN when a broker probe
+on this host reports `ready`: both the batch path and the wrapper refuse with
+`broker available; interim mode retired on this host`. It is also WITHHELD when
+the broker client is installed but does not probe ready -- an unknown state
+resolves to unavailable with reason `broker_present_not_ready`, never to
+interim. The batch file also
+carries a hard calendar backstop, `program_sunset` (2026-09-07, about four
+weeks); after that date batch files fail validation and extending the program
+requires a reviewed commit that changes the sunset in the schema. The rationale
+for that window is that the darwin broker milestone is scheduled inside it.
+
+**Outcome 3 -- unavailable (`OPENROUTER_AVAILABLE=false`):** coding agents run
+on Codex. Record `host_authority_unavailable`; do not reinterpret an available
+API key, runner, policy, or caller environment variable as automated dispatch
+authority. Non-coding agents may still use Claude. Direct interactive
+`/openrouter` is a separate exact-digest workflow and does not enable these
+child lanes.
 
 #### Quick mode with `lightweight` classification (diff < 100 lines)
 
@@ -435,7 +548,7 @@ When `routing-policy.json` supplies `model` and `fallbackModel`, those full Open
 **Routing report** -- print before Phase 4:
 
 ```
-Provider routing (OPENROUTER_AVAILABLE={true|false}):
+Provider routing (OPENROUTER_AVAILABLE={true|false}, authorization={broker|interim_operator_batch|none}):
 - N analyses -> OpenRouter (Kimi security, pattern-recognition, code-simplicity, doc-sync, test-coverage, openrouter-bulk-analyst when selected)
 - N coding/sign-off agents -> Codex (required security sign-off, architecture, visual/UI, unavailable-provider and sensitive-section coverage)
 - N non-coding agents -> Claude when explicitly selected (for example voice/editorial)
@@ -443,16 +556,78 @@ Provider routing (OPENROUTER_AVAILABLE={true|false}):
 
 #### Byte-bound authorization
 
-Automated external lanes are unavailable in this release. Selection always
-records `host_authority_unavailable` and launches the complete criterion on
-Codex without preparing external payload bytes. An API key, exact digest, or
-caller-selected `trusted-boundary` does not change this state.
+Authorization follows the resolved outcome from Phase 3, never an API key, an
+exact digest, or a caller-selected `trusted-boundary`.
 
-The dormant generic runner documents the future broker integration seam. It
-must remain non-callable until an independently installed broker owns
-authorization, credential custody, and transport and binds the exact payload,
-destination, repository, run, candidate, lane, and substrate. Direct
-interactive `/openrouter` retains its separate exact-digest human workflow.
+**Broker outcome.** The independently installed broker owns authorization,
+credential custody, and transport and binds the exact payload, destination,
+repository, run, candidate, lane, and substrate.
+
+**Interim operator-batch outcome.** Before dispatching any lane, snapshot each
+lane's exact outbound bytes, then take ONE interactive approval covering the
+whole set:
+
+```bash
+for LANE in $OPENROUTER_LANES; do
+  "$OPENROUTER_AUTHORIZATION_PATH" snapshot \
+    --output ".claude/ux-review/openrouter/$LANE.manifest.json" \
+    --content-file ".claude/ux-review/openrouter/$LANE.payload"
+done
+"$OPENROUTER_AUTHORIZATION_PATH" batch-approve \
+  --batch-file "plans/$FEATURE_SLUG/openrouter-batch-authorization.json" \
+  --run-id "$REVIEW_RUN_ID" --operator "$OPERATOR" \
+  --scope-note "dm-review lanes for $FEATURE_SLUG" \
+  --lane "<lane-id>=.claude/ux-review/openrouter/<lane-id>.manifest.json"
+```
+
+`batch-approve` prints the lane list, per-lane byte totals, the grand total,
+and the digest count on the controlling terminal and waits for the operator to
+type the confirmation phrase. It reads that answer from `/dev/tty` and nothing
+else, and an unavailable terminal fails closed:
+**No environment variable substitutes for the interactive confirmation.**
+It refuses outright with
+`broker available; interim mode retired on this host`
+when a broker probe reports ready, refuses with `broker_present_not_ready` when
+the broker client is installed but does not probe ready, and refuses after the
+`program_sunset` calendar backstop. It reads the probe with
+`jq -e '.status == "ready"'`, never a substring match.
+
+That terminal prompt constrains this tooling, not the filesystem: the batch
+file it writes is unauthenticated, so a same-user process can produce an
+equivalent file without ever showing the prompt. Treat interim mode as an
+operator-procedural control with a technical digest binding, not as proof of
+consent.
+
+Immediately before transmission each lane re-verifies its own bytes against the
+batch:
+
+```bash
+"$OPENROUTER_AUTHORIZATION_PATH" verify-batch \
+  --batch-file "$OPENROUTER_BATCH_AUTHORIZATION_FILE" \
+  --run-id "$REVIEW_RUN_ID" \
+  --manifest ".claude/ux-review/openrouter/$LANE.manifest.json" \
+  --content-file ".claude/ux-review/openrouter/$LANE.payload"
+```
+
+A non-zero exit means the payload is not covered: fall back to the per-payload
+interactive exact-digest path, or fail the lane closed to Codex. Never widen
+the batch to make a lane fit. Every lane receipt in interim mode carries
+`authorization_mode: interim_operator_batch` and the batch file digest
+(`$OPENROUTER_BATCH_AUTHORIZATION_DIGEST`); the wrapper is invoked with
+`OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch`,
+`OPENROUTER_BATCH_AUTHORIZATION_FILE`,
+`OPENROUTER_BATCH_AUTHORIZATION_DIGEST`, and
+`OPENROUTER_BATCH_RUN_ID="$REVIEW_RUN_ID"` so its own schemaVersion-2 receipt
+records the same mode and digest. `OPENROUTER_BATCH_RUN_ID` is not optional:
+the wrapper re-checks the run binding itself and refuses a batch issued for a
+different run, because it must hold even when no `verify-batch` step ran. The review report's coverage section MUST
+state that interim operator-batch authorization was active for the run, name
+the batch digest, and name its `expires_at` and `program_sunset`.
+
+**Unavailable outcome.** Selection records `host_authority_unavailable` and
+launches the complete criterion on Codex without preparing external payload
+bytes. Direct interactive `/openrouter` retains its separate exact-digest human
+workflow.
 
 ---
 
