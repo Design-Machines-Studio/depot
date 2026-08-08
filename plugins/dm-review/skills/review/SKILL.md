@@ -615,9 +615,12 @@ the batch to make a lane fit. Every lane receipt in interim mode carries
 `authorization_mode: interim_operator_batch` and the batch file digest
 (`$OPENROUTER_BATCH_AUTHORIZATION_DIGEST`); the wrapper is invoked with
 `OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch`,
-`OPENROUTER_BATCH_AUTHORIZATION_FILE`, and
-`OPENROUTER_BATCH_AUTHORIZATION_DIGEST` so its own schemaVersion-2 receipt
-records the same mode and digest. The review report's coverage section MUST
+`OPENROUTER_BATCH_AUTHORIZATION_FILE`,
+`OPENROUTER_BATCH_AUTHORIZATION_DIGEST`, and
+`OPENROUTER_BATCH_RUN_ID="$REVIEW_RUN_ID"` so its own schemaVersion-2 receipt
+records the same mode and digest. `OPENROUTER_BATCH_RUN_ID` is not optional:
+the wrapper re-checks the run binding itself and refuses a batch issued for a
+different run, because it must hold even when no `verify-batch` step ran. The review report's coverage section MUST
 state that interim operator-batch authorization was active for the run, name
 the batch digest, and name its `expires_at` and `program_sunset`.
 

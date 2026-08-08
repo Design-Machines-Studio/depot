@@ -613,6 +613,43 @@ done
 require_text "$openrouter_wrapper" "transmitted payload digest is not in the batch authorization" \
   "openrouter-wrapper.sh binds transmitted bytes to the batch payload digests"
 
+# Anchor (g). The wrapper binds the batch to the CURRENT run and parses
+# timestamps strictly. A batch issued for another run, issued in the future, or
+# carrying a lifetime past the 24-hour ceiling must be refused at the point of
+# disclosure, independently of any verify-batch step.
+for phrase in \
+  "batch authorization was issued for a different run" \
+  "batch authorization is issued in the future" \
+  "batch authorization lifetime exceeds the 24-hour maximum" \
+  "not well-formed UTC timestamps"; do
+  require_text "$openrouter_wrapper" "$phrase" \
+    "openrouter-wrapper.sh enforces \"$phrase\" at the transmission point"
+done
+
+# Anchor (h). Anchors (a)-(g) pin PROSE. Prose cannot fail when enforcement is
+# deleted, so the security properties are additionally pinned by behavioral
+# fixtures in tools/test-openrouter-runner-policy.sh. This anchor exists to stop
+# those fixtures from being quietly dropped -- it names the fixture labels, and
+# the fixtures themselves run the wrapper and assert the refusal.
+openrouter_policy_fixtures="$REPO_ROOT/tools/test-openrouter-runner-policy.sh"
+for phrase in \
+  "a ready broker retires interim mode at the wrapper" \
+  "a present-but-not-ready broker withholds interim mode" \
+  "a failing broker probe withholds interim mode" \
+  "a missing jq withholds interim mode above an installed broker" \
+  "interim batch refuses a malformed expiry timestamp" \
+  "interim batch refuses a future-issued authorization" \
+  "interim batch refuses a lifetime over 24 hours" \
+  "interim batch refuses an expired authorization" \
+  "interim batch refuses a batch issued for another run" \
+  "interim batch refuses when the current run id is absent" \
+  "interim batch refuses unapproved transmitted bytes" \
+  "interim batch refuses a self-asserted program sunset" \
+  "interim batch accepts the exact ordered content snapshot approved"; do
+  require_text "$openrouter_policy_fixtures" "$phrase" \
+    "behavioral fixture retained: $phrase"
+done
+
 printf "\n"
 if [ "$failures" -ne 0 ]; then
   printf "FIX  restore the missing workflow-contract anchors (see docs and plugin sources above)\n"

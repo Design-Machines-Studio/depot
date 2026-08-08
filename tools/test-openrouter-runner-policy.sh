@@ -857,6 +857,7 @@ PY
     'interim batch refuses unapproved transmitted bytes' \
     env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
       OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_BATCH_RUN_ID=fixture-run \
       OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization.json" \
       OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$FIXTURE_BATCH_DIGEST" \
       "$WRAPPER" moonshotai/kimi-k3 'payload bytes the operator never approved'
@@ -887,6 +888,7 @@ PY
     'interim batch refuses a self-asserted program sunset' \
     env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
       OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_BATCH_RUN_ID=fixture-run \
       OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization-sunset.json" \
       OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$FIXTURE_SUNSET_DIGEST" \
       "$WRAPPER" moonshotai/kimi-k3 'payload bytes the operator never approved'
@@ -949,6 +951,7 @@ PY
     env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
       OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
       OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_BATCH_RUN_ID=fixture-run \
       OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization-positive.json" \
       OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$POSITIVE_BATCH_DIGEST" \
       "$WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT"
@@ -958,6 +961,181 @@ PY
     cat "$FIXTURE_ROOT/cmd.err" >&2
     exit 1
   fi
+
+  # --- BEHAVIORAL fixtures for the interim-mode security properties ---------
+  # These deliberately reuse the POSITIVE payload and the POSITIVE ordered
+  # content. Every case below would otherwise reach the transport stage (rc 1),
+  # so deleting the broker gate, the run binding, the timestamp parsing, the
+  # sunset comparison or the membership logic FLIPS a case here. Prose anchors
+  # in validate-workflow-contracts.sh Group 8 pin the honesty language; these
+  # pin the enforcement.
+
+  # Emits a batch document with every field parameterised so a fixture can vary
+  # exactly one property. A numeric spec is an offset in seconds from now; any
+  # other spec is written through verbatim, which is how malformed timestamps
+  # reach the wrapper.
+  write_batch_fixture() {
+    python3 - "$1" "$2" "$3" "$4" "$5" "$6" <<'PY'
+import json
+import sys
+from datetime import datetime, timedelta, timezone
+
+path, run_id, created_spec, expires_spec, sunset, digest = sys.argv[1:7]
+now = datetime.now(timezone.utc).replace(microsecond=0)
+
+
+def stamp(spec):
+    if spec.lstrip("+-").isdigit():
+        return (now + timedelta(seconds=int(spec))).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return spec
+
+
+document = {
+    "schema_version": 1,
+    "authorization_mode": "interim_operator_batch",
+    "run_id": run_id,
+    "operator": "fixture-operator",
+    "created_at": stamp(created_spec),
+    "expires_at": stamp(expires_spec),
+    "payload_digests": [digest],
+    "scope_note": "behavioral fixture batch",
+    "program_sunset": sunset,
+}
+with open(path, "w", encoding="utf-8") as handle:
+    json.dump(document, handle, sort_keys=True)
+    handle.write("\n")
+PY
+  }
+
+  # Runs the wrapper over the POSITIVE ordered content with the given batch
+  # file, expecting a fail-closed refusal carrying the named reason.
+  expect_batch_refusal() {
+    local label="$1" expected="$2" path="$3" wrapper="${4:-$WRAPPER}"
+    local digest
+    digest="$(shasum -a 256 "$path" | awk '{print $1}')"
+    expect_rc 2 "$expected" "$label" \
+      env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+        OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+        OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+        OPENROUTER_BATCH_RUN_ID=fixture-run \
+        OPENROUTER_BATCH_AUTHORIZATION_FILE="$path" \
+        OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$digest" \
+        "$wrapper" moonshotai/kimi-k3 "$POSITIVE_PROMPT"
+  }
+
+  # Timestamp handling. A lexical `.expires_at > $now` accepts "zzzz" as a
+  # distant future; epoch parsing cannot.
+  write_batch_fixture "$FIXTURE_ROOT/batch-malformed-stamp.json" \
+    fixture-run -60 zzzz 2026-09-07 "$POSITIVE_DIGEST"
+  expect_batch_refusal 'interim batch refuses a malformed expiry timestamp' \
+    'not well-formed UTC timestamps' "$FIXTURE_ROOT/batch-malformed-stamp.json"
+
+  write_batch_fixture "$FIXTURE_ROOT/batch-future-issued.json" \
+    fixture-run 3600 7200 2026-09-07 "$POSITIVE_DIGEST"
+  expect_batch_refusal 'interim batch refuses a future-issued authorization' \
+    'issued in the future' "$FIXTURE_ROOT/batch-future-issued.json"
+
+  write_batch_fixture "$FIXTURE_ROOT/batch-long-lifetime.json" \
+    fixture-run -60 90000 2026-09-07 "$POSITIVE_DIGEST"
+  expect_batch_refusal 'interim batch refuses a lifetime over 24 hours' \
+    'lifetime exceeds the 24-hour maximum' "$FIXTURE_ROOT/batch-long-lifetime.json"
+
+  write_batch_fixture "$FIXTURE_ROOT/batch-expired.json" \
+    fixture-run -7200 -3600 2026-09-07 "$POSITIVE_DIGEST"
+  expect_batch_refusal 'interim batch refuses an expired authorization' \
+    'batch authorization is expired' "$FIXTURE_ROOT/batch-expired.json"
+
+  # Run binding, enforced at the wrapper without any verify-batch step.
+  write_batch_fixture "$FIXTURE_ROOT/batch-wrong-run.json" \
+    some-other-run -60 3600 2026-09-07 "$POSITIVE_DIGEST"
+  expect_batch_refusal 'interim batch refuses a batch issued for another run' \
+    'issued for a different run' "$FIXTURE_ROOT/batch-wrong-run.json"
+
+  # And the run id is REQUIRED, not merely compared when supplied.
+  expect_rc 2 'requires the current run id' \
+    'interim batch refuses when the current run id is absent' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+      OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization-positive.json" \
+      OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$POSITIVE_BATCH_DIGEST" \
+      "$WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT"
+
+  # Broker states. The shipped probe path is a non-overridable constant, which
+  # is the correct production posture, so the fixture repoints that ONE
+  # constant in a copy of the wrapper rather than adding a test hook to the
+  # shipped script. The rewrite is verified, so a renamed constant fails the
+  # fixture instead of silently making it vacuous.
+  BROKER_STUB_DIR="$FIXTURE_ROOT/broker-stubs"
+  mkdir -p "$BROKER_STUB_DIR"
+  make_broker_stub() {
+    printf '#!/bin/sh\n%s\n' "$2" > "$1"
+    chmod 755 "$1"
+  }
+  wrapper_with_broker() {
+    local dest="$1" broker="$2" path_override="${3:-}"
+    sed -e "s|^BROKER_CLIENT=.*|BROKER_CLIENT=\"$broker\"|" "$WRAPPER" > "$dest"
+    if [ -n "$path_override" ]; then
+      sed -e "s|^export PATH=.*|export PATH=\"$path_override\"|" "$dest" > "$dest.rewritten"
+      mv "$dest.rewritten" "$dest"
+      grep -Fq "export PATH=\"$path_override\"" "$dest" || {
+        echo 'broker fixture: could not repoint the wrapper PATH' >&2
+        exit 1
+      }
+    fi
+    chmod 755 "$dest"
+    grep -Fq "BROKER_CLIENT=\"$broker\"" "$dest" || {
+      echo 'broker fixture: could not repoint the broker probe path' >&2
+      exit 1
+    }
+  }
+
+  make_broker_stub "$BROKER_STUB_DIR/ready" \
+    'printf "{\"status\": \"ready\"}\n"'
+  make_broker_stub "$BROKER_STUB_DIR/degraded" \
+    'printf "{\"status\": \"degraded\"}\n"'
+  make_broker_stub "$BROKER_STUB_DIR/failing" \
+    'echo "probe failed" >&2; exit 1'
+
+  wrapper_with_broker "$FIXTURE_ROOT/wrapper-broker-ready.sh" "$BROKER_STUB_DIR/ready"
+  expect_batch_refusal 'a ready broker retires interim mode at the wrapper' \
+    'broker available; interim mode retired on this host' \
+    "$FIXTURE_ROOT/batch-authorization-positive.json" \
+    "$FIXTURE_ROOT/wrapper-broker-ready.sh"
+
+  wrapper_with_broker "$FIXTURE_ROOT/wrapper-broker-degraded.sh" "$BROKER_STUB_DIR/degraded"
+  expect_batch_refusal 'a present-but-not-ready broker withholds interim mode' \
+    'broker_present_not_ready' \
+    "$FIXTURE_ROOT/batch-authorization-positive.json" \
+    "$FIXTURE_ROOT/wrapper-broker-degraded.sh"
+
+  wrapper_with_broker "$FIXTURE_ROOT/wrapper-broker-failing.sh" "$BROKER_STUB_DIR/failing"
+  expect_batch_refusal 'a failing broker probe withholds interim mode' \
+    'broker_present_not_ready' \
+    "$FIXTURE_ROOT/batch-authorization-positive.json" \
+    "$FIXTURE_ROOT/wrapper-broker-failing.sh"
+
+  # Missing jq must NOT make an installed broker look absent. Readiness is a jq
+  # decision; if an absent jq collapsed to "absent broker" the interim mode
+  # would run above a ready broker. Build a PATH that has everything the
+  # wrapper touches before the broker gate and nothing named jq.
+  NOJQ_BIN="$FIXTURE_ROOT/nojq-bin"
+  rm -rf "$NOJQ_BIN"
+  mkdir -p "$NOJQ_BIN"
+  for tool in sh cat tr sed awk wc date mktemp chmod rm shasum sleep kill curl; do
+    tool_path="$(command -v "$tool" 2>/dev/null || true)"
+    [ -n "$tool_path" ] && ln -sf "$tool_path" "$NOJQ_BIN/$tool"
+  done
+  if env PATH="$NOJQ_BIN" sh -c 'command -v jq' >/dev/null 2>&1; then
+    echo 'missing-jq fixture: jq is still reachable, the fixture would pass vacuously' >&2
+    exit 1
+  fi
+  wrapper_with_broker "$FIXTURE_ROOT/wrapper-broker-nojq.sh" \
+    "$BROKER_STUB_DIR/ready" "$NOJQ_BIN"
+  expect_batch_refusal 'a missing jq withholds interim mode above an installed broker' \
+    'broker_present_not_ready' \
+    "$FIXTURE_ROOT/batch-authorization-positive.json" \
+    "$FIXTURE_ROOT/wrapper-broker-nojq.sh"
 fi
 
 # Broker-state case statements must both carry a fail-closed catch-all. An
