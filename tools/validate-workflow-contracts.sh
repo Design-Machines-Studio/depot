@@ -90,6 +90,10 @@ contract="$REPO_ROOT/plugins/dm-review/skills/review/references/repo-cleanup-con
 orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
 pipeline_cmd="$REPO_ROOT/plugins/pipeline/commands/pipeline.md"
 pipeline_run="$REPO_ROOT/plugins/pipeline/commands/pipeline-run.md"
+# Defined here, not at first use in Group 7: Group 5 anchors these too, and a
+# variable assigned below its own use expands empty and reports "missing file".
+pipeline_run_skill="$REPO_ROOT/plugins/pipeline/skills/pipeline-run/SKILL.md"
+routing_policy="$REPO_ROOT/plugins/pipeline/references/routing-policy.json"
 pipeline_prompts="$REPO_ROOT/plugins/pipeline/commands/pipeline-prompts.md"
 pipeline_fix="$REPO_ROOT/plugins/pipeline/commands/pipeline-fix.md"
 lifecycle="$REPO_ROOT/plugins/pipeline/references/artifact-lifecycle.md"
@@ -395,6 +399,24 @@ require_text "$assembly_go_tests" "Batch all fixes from one review pass" "assemb
 require_text "$assembly_go_tests" "Preserve full race, security, container, browser," "assembly runner keeps expensive remote lanes explicit"
 require_text "$assembly_verification_profile" '"argv": [' "assembly publishes argv-array profile examples"
 require_text "$assembly_verification_profile" '"id": "go-full-race"' "assembly profile retains candidate race coverage"
+require_text "$orchestrator" "Ask-then-default-park is the only headless behavior" "orchestrator parks rather than assuming yes on rail exhaustion"
+require_text "$orchestrator" "The Workflow Authority broker gate is a security authorization boundary, not a" "orchestrator keeps the broker gate non-overridable by the exhaustion ask"
+require_text "$orchestrator" "never implemented under fallback authorization" "orchestrator excludes sensitive-path chunks from fallback"
+require_text "$orchestrator" "The final full dm-review is never waived" "orchestrator never waives the final review for capacity"
+require_text "$orchestrator" "Record the authorization before any fallback dispatch" "orchestrator receipts authorization before dispatch"
+require_text "$orchestrator" "ask_evidence_ref" "orchestrator binds the authorization receipt to a real ask exchange"
+# The bare field name above is satisfied by the JSON literal alone, so the
+# sentence that gives it force gets its own anchor.
+require_text "$orchestrator" "an invalid receipt authorizes nothing" "orchestrator voids an authorization receipt with no ask evidence"
+require_text "$routing_policy" '"exhaustionFallback"' "routing policy declares the exhaustion fallback object"
+require_text "$routing_policy" '"headlessDefault": "park"' "routing policy defaults headless exhaustion to park"
+require_text "$routing_policy" '"neverOfferable"' "routing policy pins the never-offerable rails"
+require_text "$routing_policy" "can only REMOVE options" "routing policy keeps the operator override remove-only"
+require_text "$pipeline_run_skill" "Rail-Exhaustion Ask Gate" "generated pipeline-run alias carries the ask gate section"
+require_text "$orchestrator" "are NOT operators and can" "orchestrator forbids agent self-authorization"
+require_text "$pipeline_run" "A fallback dispatch without a prior valid authorization receipt MUST be halted" "pipeline-run halts unauthorized fallback"
+require_text "$review_skill" "and never assumes yes" "dm-review never reads an unanswered lane ask as consent"
+require_text "$review_skill" "gap-and-continue default are all unavailable" "dm-review cannot gap-and-continue the pipeline final review"
 
 # --------------------------------------------------------------------------
 # Group 6: dm-review quality-pulse contract
@@ -591,10 +613,117 @@ require_text "$review_skill" \
   "Unknown subscription headroom is treated as at-threshold, never as available." \
   "routing-policy consumers treat unknown subscription headroom conservatively"
 
+# ---------------------------------------------------------------------------
+# Group 9: interim operator-batch authorization contract
+# ---------------------------------------------------------------------------
+printf "\nGroup 9: interim operator-batch authorization\n"
+
+payload_authorization="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
+openrouter_wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+
+# Anchor (a). The interim mode buys automation by widening approval
+# GRANULARITY. It must never buy it by removing the human. Anything that lets
+# an environment variable stand in for the terminal confirmation turns a
+# sunset-bound loosening into a permanent hole, so pin the sentence itself in
+# every file that teaches or implements the mode.
+for f in "$payload_authorization" "$openrouter_wrapper" "$review_skill" "$review_cmd"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "No environment variable substitutes for the interactive confirmation." \
+    "$rel forbids an env-only path into interim operator-batch mode"
+done
+
+# Anchor (b). The interim rung sits BETWEEN broker-ready and unavailable, never
+# above broker authority. A ready broker retires the mode on that host with no
+# migration step and no grace period.
+for f in "$payload_authorization" "$openrouter_wrapper" "$review_skill" "$review_cmd"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "broker available; interim mode retired on this host" \
+    "$rel retires interim mode when a broker probe reports ready"
+done
+
+# Anchor (c). An installed-but-unhealthy broker is an UNKNOWN state, not a
+# brokerless host. Treating it like one would widen exposure on a machine that
+# is mid-install or degraded, so every layer names the withheld reason.
+for f in "$payload_authorization" "$openrouter_wrapper" "$review_skill" "$review_cmd"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "broker_present_not_ready" \
+    "$rel withholds interim mode when the broker is present but not ready"
+done
+
+# Anchor (d). The batch artifact is unsigned. Every file that teaches or
+# implements the mode must say so in those words, because an overclaim here
+# would sell a procedural control as an enforced one.
+for f in "$payload_authorization" "$openrouter_wrapper"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "PROCEDURAL and UNAUTHENTICATED" \
+    "$rel states that the batch artifact is unauthenticated"
+done
+for f in "$review_skill" "$review_cmd"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "procedural and unauthenticated" \
+    "$rel states that the batch artifact is unauthenticated"
+done
+
+# Anchor (e). The calendar backstop is pinned, not self-asserted: every
+# enforcement layer compares program_sunset against this release constant.
+for f in "$payload_authorization" "$openrouter_wrapper" "$review_skill"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "2026-09-07" \
+    "$rel pins the interim program sunset constant"
+done
+
+# Anchor (f). Transmission-point digest binding. The wrapper must not depend on
+# a separate verify-batch step having run over a separately snapshotted file.
+require_text "$openrouter_wrapper" "transmitted payload digest is not in the batch authorization" \
+  "openrouter-wrapper.sh binds transmitted bytes to the batch payload digests"
+
+# Anchor (g). The wrapper binds the batch to the CURRENT run and parses
+# timestamps strictly. A batch issued for another run, issued in the future, or
+# carrying a lifetime past the 24-hour ceiling must be refused at the point of
+# disclosure, independently of any verify-batch step.
+for phrase in \
+  "batch authorization was issued for a different run" \
+  "batch authorization is issued in the future" \
+  "batch authorization lifetime exceeds the 24-hour maximum" \
+  "not well-formed UTC timestamps"; do
+  require_text "$openrouter_wrapper" "$phrase" \
+    "openrouter-wrapper.sh enforces \"$phrase\" at the transmission point"
+done
+
+# Anchor (h). Anchors (a)-(g) pin PROSE. Prose cannot fail when enforcement is
+# deleted, so the security properties are additionally pinned by behavioral
+# fixtures in tools/test-openrouter-runner-policy.sh. This anchor exists to stop
+# those fixtures from being quietly dropped -- it names the fixture labels, and
+# the fixtures themselves run the wrapper and assert the refusal.
+openrouter_policy_fixtures="$REPO_ROOT/tools/test-openrouter-runner-policy.sh"
+for phrase in \
+  "a ready broker retires interim mode at the wrapper" \
+  "a present-but-not-ready broker withholds interim mode" \
+  "a failing broker probe withholds interim mode" \
+  "a missing jq withholds interim mode above an installed broker" \
+  "interim batch refuses a malformed expiry timestamp" \
+  "interim batch refuses a future-issued authorization" \
+  "interim batch refuses a lifetime over 24 hours" \
+  "interim batch refuses an expired authorization" \
+  "interim batch refuses a batch issued for another run" \
+  "interim batch refuses when the current run id is absent" \
+  "interim batch refuses unapproved transmitted bytes" \
+  "interim batch refuses a self-asserted program sunset" \
+  "interim batch accepts the exact ordered content snapshot approved" \
+  "interim batch refuses a non-existent leap day" \
+  "interim batch refuses a day past the end of a short month" \
+  "interim batch refuses a sixtieth second" \
+  "interim batch parses a genuine leap day" \
+  "shipped sunset constant still admits the interim mode today" \
+  "shipped sunset constant has passed and the interim mode is dead"; do
+  require_text "$openrouter_policy_fixtures" "$phrase" \
+    "behavioral fixture retained: $phrase"
+done
+
 printf "\n"
 if [ "$failures" -ne 0 ]; then
   printf "FIX  restore the missing workflow-contract anchors (see docs and plugin sources above)\n"
   exit 1
 fi
 
-printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission)\n"
+printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, routing invariants, interim operator-batch authorization)\n"

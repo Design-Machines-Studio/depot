@@ -310,6 +310,8 @@ if [ -f "$model_cascade" ] && [ -f "$harness" ]; then
   jq -e '
     [.quality_rank | keys[] | select(test("^(openai|anthropic)/"))] | length == 0
   ' "$model_cascade" >/dev/null || { printf "  FAIL  model cascade excludes OpenRouter-prefixed native-vendor identities\n"; failures=1; }
+  # Generic (non-Claude, non-Codex) harnesses still have NO native vendor rail: the native
+  # rung must resolve to "none" there rather than being silently mapped onto OpenRouter.
   if ! jq -e '.hosts.generic.roles.native_judgment.kind == "none"' "$harness" >/dev/null; then
     printf "  FAIL  generic/native-vendor intent is unavailable rather than mapped to OpenRouter\n"
     failures=1

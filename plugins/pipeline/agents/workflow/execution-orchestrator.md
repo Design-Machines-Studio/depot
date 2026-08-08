@@ -985,7 +985,7 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 | `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model` and `role`. **Re-dispatch IN-PROCESS through the current host's native path**, then apply **Native Model Descent** below. Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
 | `0` | `openrouter_exec`, wrapper, or codex-companion rung executed; stdout is produced text or a receipt. | If stdout includes `implementedBy: openrouter` or a JSON receipt with `"implementedBy": "openrouter"`, treat it as an agentic OpenRouter implementation receipt. Otherwise apply the **one-shot validity rule** below. |
 | `75` | Provider-terminal boundary. Nonempty stdout is the exact client-verified signed `provider_failure`/`unknown` receipt; empty stdout is an unsigned or unverifiable post-dial outcome. | Apply **Provider Terminal Persistence** below. Flag the lane failed and stop all model/provider traversal. Never retry, downgrade, or use Codex as completion. |
-| `76` | Ladder exhausted -- no rung above the quality floor had headroom, and no provider-terminal receipt exists. | Flag the chunk failed, record `cascade_exhausted: true` in the receipt, skip dependent chunks, continue independent chunks (same as a Step 3e failure). Do NOT silently ship partial output. |
+| `76` | Ladder exhausted -- no rung above the quality floor had headroom, and no provider-terminal receipt exists. | Run **Step 3d.5 -- Rail-exhaustion ask gate** BEFORE any terminal receipt. It has four exits, and only one of them is a failure: **(a) wait** -> parked resumable, `wait_category: human_gate` receipt carries the named reset time and the resume instruction, dependents are held not skipped; **(b) authorized fallback** -> proceed to Step 3e under the authorization receipt; **(c) park, or `PIPELINE_EXHAUSTION_ASK=0`, or a fail-closed policy read** -> flag the chunk failed, record `cascade_exhausted: true`, skip dependent chunks, continue independent chunks (same as a Step 3e failure); **operator unreachable** -> stop with `human_help_required` and hand the ask to the reaching context. Do NOT silently ship partial output on any exit. |
 | `77` | Disclosure boundary, exact authorization, or trusted-boundary authorization declined. | Record `host_disclosure_declined` or `disclosure_declined` exactly, then use the Codex fallback. Do not classify this as provider exhaustion. |
 | `78` | Exact-digest mode only: payload changed after approval or still needs user authorization. | Stop with `human_help_required`, show the content-free digest, and do not dispatch or silently fall back. |
 | other | Bad args / engine error. | Fall back to Codex once. If Codex is unavailable, fail the chunk; do not route coding work to Claude. |
@@ -1053,7 +1053,187 @@ For complex `kind: logic`, `kind: ui`, or `kind: integration` chunks, a single-t
 After a valid Codex or OpenRouter path produces a commit, write a receipt with
 `requestedProvider`, `attemptedProvider`, `implementedBy: {codex|openrouter}`,
 boolean `fallback`, `fallbackReason`, verification, and usage, then proceed to
-Step 3e.
+Step 3e. The single exception to this enum is the rail-exhaustion authorization
+in Step 3d.5, which admits `implementedBy: claude` and only under an explicit
+operator authorization receipt.
+
+**Step 3d.5 -- Rail-exhaustion ask gate.** RC 76 means every rail permitted for
+this chunk is exhausted or gated. Capacity is recoverable; a terminal receipt is
+not. The orchestrator MUST NOT emit a terminal blocked receipt for rail
+exhaustion while an operator can still be asked. The boundary forbids SILENT
+fallback; it does not forbid asking the owner.
+
+**Who the operator is.** The operator is the human at the top-level interactive
+session. An agent, a subagent, a hook, an auto-answer configuration, a parent
+agent driving this session, and any automated harness are NOT operators and can
+never authorize a fallback -- including this orchestrator, which runs as a
+subagent and whose asks do not reach a human on their own. An ask answered by
+any of them is an unanswered ask.
+
+0. **Fail closed before you pause.** In this order, before any pause or ask:
+   - If `PIPELINE_EXHAUSTION_ASK=0`, do not pause and do not ask. Restore the old
+     hard block immediately. The kill switch is evaluated first precisely so it
+     cannot be reached after a dispatch has already happened.
+   - Read `exhaustionFallback` from `routing-policy.json`. A missing file, a
+     missing or malformed `exhaustionFallback`, or any `mode` other than `ask`
+     restores the old hard block. A configuration read failure never yields a
+     path to fallback.
+   - If the chunk matches the sensitive-path set, option (b) does not exist for
+     it (see the exclusions below). Continue to the ask with (a) and (c) only.
+   - If this execution context cannot reach the operator directly -- the common
+     case, because the orchestrator is a subagent -- do not fabricate the
+     exchange. The predicate that chooses the terminal state is whether a
+     reaching caller exists to take the handoff: **if one does**, stop with
+     `human_help_required`, exactly as RC 78 and browser exhaustion already do,
+     and surface the ask through it; **if none does** -- a fully headless run
+     with no interactive session anywhere above this one -- park resumable under
+     the headless rule in step 6. Never treat the absence of a caller as
+     permission.
+
+     **Delegated ask handoff.** This path is not a dead end, and it is the
+     normal path. The reaching context -- the top-level session that owns the
+     ask tool -- performs steps 2, 3, and 4 itself and appends the
+     authorization receipt with its OWN `ask_evidence_ref` from its OWN
+     exchange. It then resumes this orchestrator with the structured result:
+     `authorization_id`, question id, selected option, and the exact rail
+     identifier. The orchestrator accepts that handoff, validates the receipt
+     exists with a matching `authorization_id`, `phase`, `scope`, and chunk id,
+     and proceeds to step 5. A relayed answer is not an agent answering the ask:
+     the human answered it in the reaching context, and the receipt records that
+     context's evidence, not the orchestrator's assertion. What remains
+     forbidden is an agent inventing an answer nobody gave. Without a matching
+     receipt the orchestrator parks.
+
+     The step 1 pause receipt stays the orchestrator's own write even on this
+     path: it appends it on resume, measuring its own stop-to-resume interval,
+     so exit (a) always carries the `wait_category: human_gate` receipt it
+     requires and no pause goes unmeasured.
+
+1. **Pause, and receipt the pause.** Append an authoritative `progress` receipt
+   with `wait_category: human_gate` and the measured pause interval. The kernel
+   already accepts this category; no kernel change is required. When option (b)
+   is unavailable because the chunk is sensitive-path, record
+   `fallback_not_offerable: sensitive_path` in that receipt.
+
+2. **Derive the offerable rails at ask time.** Build the list from the active
+   host's `harness-profile.json` roles, live `usage-probe.sh` headroom, and the
+   interactive paths this session can actually reach. Never read a hardcoded
+   provider list -- rail availability is per-operator and time-varying, and last
+   week's list is not today's facts. Where a probe parser is a TODO stub, the ask
+   reports `unknown`; an honest `unknown` beats a guessed `available`. Each entry
+   carries an exact rail identifier, because the operator's answer is matched
+   against those identifiers and nothing else.
+
+   Apply `exhaustionFallback.operatorOverride` last, and only to REMOVE entries.
+   The override file lives outside the workspace, its annotations are never
+   rendered into the ask, and any entry it names that the derivation did not
+   find is ignored rather than added -- an override can only ever shrink this
+   list. An in-workspace override could be rewritten by a prior chunk's own
+   output to strip every option but the orchestrator itself, which is why the
+   file is not permitted to live there.
+
+3. **Ask the operator.** Use `AskUserQuestion` on Claude Code or
+   `request_user_input` on Codex, from a context that reaches the human. Show the
+   derived per-rail status -- for example `codex: capped until 12:54`,
+   `claude_native: available this session`, `openrouter interactive: credits
+   present, exact-digest approval required` -- so the decision comes from live
+   facts. Offer these options, each carrying its consequence:
+
+   | Option | Consequence |
+   |---|---|
+   | (a) Wait until reset | Park resumable; record the named reset time. The receipt carries the resume instruction. |
+   | (b) Authorize fallback for THIS CHUNK in this run only | The operator selects one exact rail identifier from the derived offerable list. Omitted entirely for sensitive-path chunks. |
+   | (c) Park | Current terminal-blocked behavior; resumable state preserved. |
+
+   The answer must be an exact identifier from the derived list. An ambiguous or
+   unlisted name -- `openrouter` alone, which does not distinguish the
+   never-offerable automated lane from the permitted interactive exact-digest
+   path -- is not a selection. Resolve it against the list or park.
+
+4. **Record the authorization before any fallback dispatch.** Option (b) appends
+   this receipt to the cumulative authoritative receipts first:
+
+   ```json
+   {"authorization_id": "<stable unique id>",
+    "phase": "execute",
+    "scope": "<run_id>",
+    "chunks": ["<chunk-id>"],
+    "provider": "<exact rail identifier the operator selected>",
+    "authorized_by": "operator",
+    "ask_evidence_ref": "<verbatim reference to the ask exchange: question id plus selected option>",
+    "occurred_at": "<timezone-aware ISO-8601>"}
+   ```
+
+   `ask_evidence_ref` is what makes the receipt evidence rather than an
+   assertion: a receipt without a reference to a real ask exchange is invalid,
+   and an invalid receipt authorizes nothing. `phase` separates an
+   implementation grant from a review-lane grant so a consumer cannot match one
+   against the other.
+
+   The `chunks` list may contain only chunk ids that have individually reached
+   RC 76 at ask time. A new exhaustion requires a new ask; one ask never
+   pre-authorizes the rest of the run.
+
+   The authorization is consumed by exactly one dispatch attempt per named
+   chunk. It does not carry into a later run, a chunk outside the list, a resume
+   under a new run id, or a resume under the SAME run id, and it expires the
+   moment the cascade again reports headroom on a permitted rail. Re-run the
+   cascade before honoring a stored authorization: an authorization granted
+   while a rail was capped is void once that rail resets, because its premise is
+   gone.
+
+5. **Execute with honest provider evidence.** Every chunk implemented under an
+   authorization leaves `requestedProvider` unchanged and records
+   `attemptedProvider`, `implementedBy`, `fallback: true`, and
+   `fallbackReason: rail_exhausted_user_authorized`, at one authoritative write
+   point per chunk -- the authorizing context owns that write, so the ordinary
+   ladder cannot emit a competing receipt for the same chunk that omits
+   `fallback: true`. Never relabel the requested provider to match the actual
+   one.
+
+   **Enum exception.** `implementedBy: {codex|openrouter}` and the surrounding
+   "do not route coding work to Claude" rules carry exactly one stated
+   exception: under a rail-exhaustion authorization receipt, `implementedBy:
+   claude` is legal and REQUIRED when a native Claude rung produced the diff.
+   Without this exception the only schema-legal value would be a false `codex`,
+   which is the relabeling this step forbids -- the enum would manufacture the
+   dishonesty it exists to prevent.
+
+   A fallback dispatch without a prior valid authorization receipt MUST be
+   halted, its output discarded and never merged, and the chunk flagged failed.
+   It is also a run-postmortem misroute, but the halt is the obligation and the
+   postmortem entry is the record of it.
+
+6. **Headless rule.** Ask-then-default-park is the only headless behavior: no
+   operator response available -- a non-interactive session, an ask that errors
+   or whose tool is unavailable, an ask answered by anything other than the
+   operator defined above, or no response within the caller's stated ask timeout
+   -- means park, never assume yes. `PIPELINE_EXHAUSTION_ASK=0` restores the old
+   hard block for headless CI; it is a kill switch on the ASK, never an enabler
+   of silent fallback.
+
+**Non-overridable exclusions.** No operator answer weakens any of these:
+
+- The Workflow Authority broker gate is a security authorization boundary, not a
+  capacity setting: automated OpenRouter lanes stay fail-closed regardless of the
+  operator's answer. The interactive exact-digest `/openrouter` path MAY be
+  offered as an option because it carries its own per-payload approval.
+- The final full dm-review is never waived, and is never executed by a
+  fallback-authorized provider outside its own policy. If the review rails are
+  capped, the branch WAITS for them. A review carrying a coverage gap on a
+  required lane never satisfies the final-review gate, and the coding-lane
+  exhaustion ask cannot convert one into a pass. The property is deliberate: a
+  chunk implemented under fallback and reviewed by Codex after reset gets a
+  genuinely independent second family -- implementation unblocks now, canonical
+  review is deferred, and zero-deferral is untouched.
+- No fallback-authorized review lane may share a provider family with the
+  chunk's implementer. Cross-provider verification is the reason the deferred
+  review is worth waiting for; an authorization that lets one family mark its
+  own homework destroys it.
+- Security-sensitive chunks -- the sensitive-path set in the per-chunk review
+  tier -- are never implemented under fallback authorization. Option (b) is
+  omitted from their ask entirely rather than offered and then refused. They
+  wait, or they park.
 
 #### 3d-LEGACY: Binary executor path (preserved verbatim)
 
@@ -1201,8 +1381,9 @@ behavioral contract's check order, never discovery time, lexical display order,
 or provider output order.
 The closed enums are `builder_session_continuity:
 proven|unavailable|invalid`, `action:
-resume|replace|human_help_required`, and `implementedBy: codex|openrouter|null`;
-`fallback` is strictly boolean and is never a transition string or null. The
+resume|replace|human_help_required`, and `implementedBy: codex|openrouter|null`,
+which admits `claude` only under a Step 3d.5 rail-exhaustion authorization
+receipt; `fallback` is strictly boolean and is never a transition string or null. The
 provider transition is carried only by `requestedProvider`, `attemptedProvider`,
 and `implementedBy`; `fallbackReason` is a stable reason when `fallback: true`
 and null otherwise. The human-help, prior-attempt, and resume-reason fields are
