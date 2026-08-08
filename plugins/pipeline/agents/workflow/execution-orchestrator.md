@@ -1043,23 +1043,32 @@ any of them is an unanswered ask.
      it (see the exclusions below). Continue to the ask with (a) and (c) only.
    - If this execution context cannot reach the operator directly -- the common
      case, because the orchestrator is a subagent -- do not fabricate the
-     exchange. Stop with `human_help_required`, exactly as RC 78 and browser
-     exhaustion already do, and surface the ask through the caller that CAN
-     reach the human.
+     exchange. The predicate that chooses the terminal state is whether a
+     reaching caller exists to take the handoff: **if one does**, stop with
+     `human_help_required`, exactly as RC 78 and browser exhaustion already do,
+     and surface the ask through it; **if none does** -- a fully headless run
+     with no interactive session anywhere above this one -- park resumable under
+     the headless rule in step 6. Never treat the absence of a caller as
+     permission.
 
      **Delegated ask handoff.** This path is not a dead end, and it is the
      normal path. The reaching context -- the top-level session that owns the
      ask tool -- performs steps 2, 3, and 4 itself and appends the
      authorization receipt with its OWN `ask_evidence_ref` from its OWN
      exchange. It then resumes this orchestrator with the structured result:
-     question id, selected option, and the exact rail identifier. The
-     orchestrator accepts that handoff, validates the receipt exists with a
-     matching `authorization_id`, `phase`, `scope`, and chunk id, and proceeds
-     to step 5. A relayed answer is not an agent answering the ask: the human
-     answered it in the reaching context, and the receipt records that context's
-     evidence, not the orchestrator's assertion. What remains forbidden is an
-     agent inventing an answer nobody gave. Without a matching receipt the
-     orchestrator parks.
+     `authorization_id`, question id, selected option, and the exact rail
+     identifier. The orchestrator accepts that handoff, validates the receipt
+     exists with a matching `authorization_id`, `phase`, `scope`, and chunk id,
+     and proceeds to step 5. A relayed answer is not an agent answering the ask:
+     the human answered it in the reaching context, and the receipt records that
+     context's evidence, not the orchestrator's assertion. What remains
+     forbidden is an agent inventing an answer nobody gave. Without a matching
+     receipt the orchestrator parks.
+
+     The step 1 pause receipt stays the orchestrator's own write even on this
+     path: it appends it on resume, measuring its own stop-to-resume interval,
+     so exit (a) always carries the `wait_category: human_gate` receipt it
+     requires and no pause goes unmeasured.
 
 1. **Pause, and receipt the pause.** Append an authoritative `progress` receipt
    with `wait_category: human_gate` and the measured pause interval. The kernel
