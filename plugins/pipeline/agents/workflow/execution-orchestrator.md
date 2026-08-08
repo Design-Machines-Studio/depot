@@ -946,7 +946,7 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 | `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model` and `role`. **Re-dispatch IN-PROCESS through the current host's native path**, then apply **Native Model Descent** below. Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
 | `0` | `openrouter_exec`, wrapper, or codex-companion rung executed; stdout is produced text or a receipt. | If stdout includes `implementedBy: openrouter` or a JSON receipt with `"implementedBy": "openrouter"`, treat it as an agentic OpenRouter implementation receipt. Otherwise apply the **one-shot validity rule** below. |
 | `75` | Provider-terminal boundary. Nonempty stdout is the exact client-verified signed `provider_failure`/`unknown` receipt; empty stdout is an unsigned or unverifiable post-dial outcome. | Apply **Provider Terminal Persistence** below. Flag the lane failed and stop all model/provider traversal. Never retry, downgrade, or use Codex as completion. |
-| `76` | Ladder exhausted -- no rung above the quality floor had headroom, and no provider-terminal receipt exists. | Run **Step 3d.5 -- Rail-exhaustion ask gate** BEFORE any terminal receipt. Only when the ask parks (or `PIPELINE_EXHAUSTION_ASK=0`) flag the chunk failed, record `cascade_exhausted: true` in the receipt, skip dependent chunks, continue independent chunks (same as a Step 3e failure). Do NOT silently ship partial output. |
+| `76` | Ladder exhausted -- no rung above the quality floor had headroom, and no provider-terminal receipt exists. | Run **Step 3d.5 -- Rail-exhaustion ask gate** BEFORE any terminal receipt. It has four exits, and only one of them is a failure: **(a) wait** -> parked resumable, `wait_category: human_gate` receipt carries the named reset time and the resume instruction, dependents are held not skipped; **(b) authorized fallback** -> proceed to Step 3e under the authorization receipt; **(c) park, or `PIPELINE_EXHAUSTION_ASK=0`, or a fail-closed policy read** -> flag the chunk failed, record `cascade_exhausted: true`, skip dependent chunks, continue independent chunks (same as a Step 3e failure); **operator unreachable** -> stop with `human_help_required` and hand the ask to the reaching context. Do NOT silently ship partial output on any exit. |
 | `77` | Disclosure boundary, exact authorization, or trusted-boundary authorization declined. | Record `host_disclosure_declined` or `disclosure_declined` exactly, then use the Codex fallback. Do not classify this as provider exhaustion. |
 | `78` | Exact-digest mode only: payload changed after approval or still needs user authorization. | Stop with `human_help_required`, show the content-free digest, and do not dispatch or silently fall back. |
 | other | Bad args / engine error. | Fall back to Codex once. If Codex is unavailable, fail the chunk; do not route coding work to Claude. |
@@ -1047,6 +1047,20 @@ any of them is an unanswered ask.
      exhaustion already do, and surface the ask through the caller that CAN
      reach the human.
 
+     **Delegated ask handoff.** This path is not a dead end, and it is the
+     normal path. The reaching context -- the top-level session that owns the
+     ask tool -- performs steps 2, 3, and 4 itself and appends the
+     authorization receipt with its OWN `ask_evidence_ref` from its OWN
+     exchange. It then resumes this orchestrator with the structured result:
+     question id, selected option, and the exact rail identifier. The
+     orchestrator accepts that handoff, validates the receipt exists with a
+     matching `authorization_id`, `phase`, `scope`, and chunk id, and proceeds
+     to step 5. A relayed answer is not an agent answering the ask: the human
+     answered it in the reaching context, and the receipt records that context's
+     evidence, not the orchestrator's assertion. What remains forbidden is an
+     agent inventing an answer nobody gave. Without a matching receipt the
+     orchestrator parks.
+
 1. **Pause, and receipt the pause.** Append an authoritative `progress` receipt
    with `wait_category: human_gate` and the measured pause interval. The kernel
    already accepts this category; no kernel change is required. When option (b)
@@ -1061,6 +1075,14 @@ any of them is an unanswered ask.
    reports `unknown`; an honest `unknown` beats a guessed `available`. Each entry
    carries an exact rail identifier, because the operator's answer is matched
    against those identifiers and nothing else.
+
+   Apply `exhaustionFallback.operatorOverride` last, and only to REMOVE entries.
+   The override file lives outside the workspace, its annotations are never
+   rendered into the ask, and any entry it names that the derivation did not
+   find is ignored rather than added -- an override can only ever shrink this
+   list. An in-workspace override could be rewritten by a prior chunk's own
+   output to strip every option but the orchestrator itself, which is why the
+   file is not permitted to live there.
 
 3. **Ask the operator.** Use `AskUserQuestion` on Claude Code or
    `request_user_input` on Codex, from a context that reaches the human. Show the

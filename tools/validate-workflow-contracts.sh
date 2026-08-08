@@ -383,7 +383,7 @@ require_text "$orchestrator" "ask_evidence_ref" "orchestrator binds the authoriz
 require_text "$orchestrator" "are NOT operators and can" "orchestrator forbids agent self-authorization"
 require_text "$pipeline_run" "A fallback dispatch without a prior valid authorization receipt MUST be halted" "pipeline-run halts unauthorized fallback"
 require_text "$review_skill" "and never assumes yes" "dm-review never reads an unanswered lane ask as consent"
-require_text "$review_skill" "the headless gap-and-continue default are unavailable" "dm-review cannot gap-and-continue the pipeline final review"
+require_text "$review_skill" "gap-and-continue default are all unavailable" "dm-review cannot gap-and-continue the pipeline final review"
 
 # --------------------------------------------------------------------------
 # Group 6: dm-review quality-pulse contract
