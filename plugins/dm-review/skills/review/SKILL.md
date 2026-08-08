@@ -344,6 +344,7 @@ Substitute `<plugin>`, `<category>` (`review` or `workflow`), and `<agent-id>` p
 | Paths contain `governance`, `proposal`, `voting`, `member`, `resolution`, or `bylaw` | **governance-domain** | `council/*/agents/review/governance-domain.md` |
 | `.go` or `.templ` changed AND `go.mod` exists | **go-build-verifier** | `dm-review/*/agents/review/go-build-verifier.md` |
 | `.twig` or `.php` changed AND (`craft/` or `.ddev/` exists) | **craft-reviewer** | `dm-review/*/agents/review/craft-reviewer.md` |
+| `.sql` changed under a migrations directory (`migrations/` or `seeds/`) | **migration-validator** | `dm-review/*/agents/review/migration-validator.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **visual-browser-tester** | `dm-review/*/agents/review/visual-browser-tester.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ux-quality-reviewer** | `dm-review/*/agents/review/ux-quality-reviewer.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ui-standards-reviewer** | `dm-review/*/agents/review/ui-standards-reviewer.md` |
@@ -603,11 +604,97 @@ Source: [path to spec file]
 
 When no design spec exists, omit this section entirely. The browser agents will evaluate against general heuristics only (their default behavior).
 
+#### Diff scoping per lane
+
+A scoped lane's `## Diff` section contains only the files its Phase 3 trigger
+condition selects; the lane may still read any project file it needs (a
+migration validator, for instance, must read earlier migrations that are not in
+the diff at all). Build that section from the slice, and always include the file
+list of the WHOLE diff (names only, no hunks) under `## Files to Review`, so the
+lane still sees everything that moved. A lane never receives hunks it has no
+mandate over.
+
+Slice from the lane's FULL Phase 3 condition, not from its file extensions
+alone. Several triggers are broader than an extension list -- `voice-editor`
+fires on "`.md` or `.txt` changed, OR user-facing text in templates", so its
+slice must carry those template files too. Slicing on the extension half of a
+compound trigger silently drops the other half without ever failing, which the
+fail-open path below cannot catch.
+
+**Only the lanes named in the scoped list below are ever sliced. Every other
+lane receives the FULL diff, and the full-diff list takes precedence over this
+general rule wherever a lane appears extension-triggered.** That precedence is
+why `test-coverage-reviewer` and `governance-domain` sit in the registry's
+extension-triggered table and still get the whole diff. A lane named in neither
+list is a classification gap, not a licence to narrow: give it the full diff and
+record `diff_scope: full` with `slice_status: unclassified`.
+
+**Scoped lanes** -- diff sliced to the lane's Phase 3 trigger condition:
+
+- a11y-html-reviewer
+- a11y-css-reviewer
+- css-reviewer
+- a11y-dynamic-content-reviewer
+- voice-editor
+- go-build-verifier
+- craft-reviewer
+- migration-validator
+- visual-browser-tester
+- ux-quality-reviewer
+- ui-standards-reviewer
+
+**Full-diff lanes** -- never scoped, and this list is closed:
+
+- security-auditor-codex-signoff (`routing-policy.json` sets
+  `inputScope: full-diff` and `required: true`; scoping it would contradict policy)
+- security-auditor-openrouter
+- architecture-reviewer
+- codex-perspective
+- pattern-recognition-specialist
+- code-simplicity-reviewer
+- doc-sync-reviewer
+- test-coverage-reviewer
+- governance-domain
+- openrouter-bulk-analyst
+
+The always-run judgment lanes detect cross-file problems -- a coupling
+violation, a pattern duplicated across two packages, a doc that no longer
+matches the code it describes -- and a sliced diff hides exactly those. Scoping
+them trades coverage for bytes, which this program refuses.
+
+"Never scoped" means never sliced to a trigger set. It does not override the
+byte-bound disclosure eligibility that governs what an OpenRouter lane may be
+sent: `security-auditor-openrouter` and `openrouter-bulk-analyst` still receive
+only the eligible sections their runner's disclosure boundary approves. That is
+a separate, unchanged mechanism.
+
+**Receipt:** every lane records `diff_scope` -- `full` for an unscoped lane, or
+`scoped(<n> files of <total>)` for a sliced one, where `<n>` is the file count
+in the slice and `<total>` is the file count in the whole diff. Write it into
+the per-lane receipt JSON that the `record-attempt` call below passes as
+`--authoritative-receipt`. The kernel's `record-attempt` flag set is closed and
+has no scoping flag, so do not invent one and do not hand-write rows into the
+receipt array. Record `full_diff_override` and `slice_status` in that same
+per-lane receipt. Do not overload `--fallback-reason`, which already carries
+executor-fallback semantics: a lane can both fall back to another executor and
+hit a slice failure, and those are two independent facts.
+
+**Kill switch:** `DM_REVIEW_FULL_DIFF=1` disables scoping entirely. Every lane
+receives the full diff, exactly as dispatch behaved before scoping existed, and
+each lane records `diff_scope: full` alongside `full_diff_override: true`.
+Default OFF, which means scoping is active. The switch fails OPEN: if slice
+construction fails for any lane -- unparseable diff, a trigger condition that
+resolves to no files, any error at all -- that lane receives the FULL diff and
+its receipt records `diff_scope: full` with `slice_status: slice_failed`. A lane
+is never dispatched against a slice nobody could verify, and never skipped
+because its slice came out empty; uncertainty always widens the input.
+
 #### Parallelization rules
 
 - Launch ALL agents in a single message with multiple Agent tool calls
 - Do not wait for one agent to finish before launching the next
-- Each agent runs independently with its own copy of the diff
+- Each agent runs independently with its own copy of the diff, scoped per the
+  diff scoping rules above
 
 #### Recording each lane (mandatory, one call per attempt)
 
