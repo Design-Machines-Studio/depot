@@ -230,30 +230,38 @@ broker_state() {
   printf 'present_not_ready'
 }
 
-# Canonical exact-ordered-content-bytes digest over an ORDERED LIST of content
-# entries, byte-identical to the framing `payload-authorization.sh snapshot`
-# produces: sha256 over the concatenation of index_be64 || length_be64 || bytes
-# for every entry, in order. The framing was always multi-entry. Hashing only
-# the first entry would leave every other transmitted message outside the
-# approved set, which is the whole point of the binding.
-# Every read, format and hash step reports failure explicitly. A swallowed
-# nonzero here would let a truncated or unreadable content part produce a
-# valid-LOOKING digest over fewer bytes than are actually transmitted, which is
-# exactly the shape of a membership check that passes for the wrong payload.
+# Canonical exact-ordered-content-bytes digest over the ORDERED message content
+# entries of a request body held IN MEMORY, byte-identical to the framing
+# `payload-authorization.sh snapshot` produces: sha256 over the concatenation of
+# index_be64 || length_be64 || bytes for every entry, in order. The framing was
+# always multi-entry. Hashing only the first entry would leave every other
+# transmitted message outside the approved set, which is the whole point of the
+# binding.
+# The body is passed BY VALUE, never by path. Extracting the content parts to
+# files and hashing those files would reintroduce the very window this binding
+# exists to close: the bytes hashed must be derived from the same single copy
+# curl is about to transmit, with nothing on disk in between.
+# Every read, format and hash step reports failure explicitly, and `pipefail`
+# carries a subshell failure out through the shasum pipeline. A swallowed
+# nonzero here would let a truncated extraction produce a valid-LOOKING digest
+# over fewer bytes than are actually transmitted, which is exactly the shape of
+# a membership check that passes for the wrong payload.
 canonical_content_digest() {
-  local digest=""
+  local body="${1:-}" count="${2:-}" digest=""
+  [[ "$count" =~ ^[0-9]+$ ]] && [ "$count" -gt 0 ] || return 1
   digest="$(
     {
-      local file="" size="" index=0 index_escape="" length_escape=""
-      for file in "$@"; do
-        [ -r "$file" ] || exit 1
-        size="$(wc -c < "$file" | tr -d '[:space:]')" || exit 1
+      local size="" index=0 index_escape="" length_escape=""
+      while [ "$index" -lt "$count" ]; do
+        size="$(printf '%s' "$body" |
+          jq -j --argjson i "$index" '.messages[$i].content' |
+          wc -c | tr -d '[:space:]')" || exit 1
         [[ "$size" =~ ^[0-9]+$ ]] || exit 1
         index_escape="$(printf '%016x' "$index" | sed 's/../\\x&/g')" || exit 1
         length_escape="$(printf '%016x' "$size" | sed 's/../\\x&/g')" || exit 1
         printf '%b' "$index_escape" || exit 1
         printf '%b' "$length_escape" || exit 1
-        cat "$file" || exit 1
+        printf '%s' "$body" | jq -j --argjson i "$index" '.messages[$i].content' || exit 1
         index=$((index + 1))
       done
     } | shasum -a 256 | awk '{print $1}'
@@ -277,8 +285,29 @@ iso8601_utc_to_epoch() {
   local minute=$((10#${BASH_REMATCH[5]}))
   local second=$((10#${BASH_REMATCH[6]}))
   [ "$month" -ge 1 ] && [ "$month" -le 12 ] || return 1
-  [ "$day" -ge 1 ] && [ "$day" -le 31 ] || return 1
-  [ "$hour" -le 23 ] && [ "$minute" -le 59 ] && [ "$second" -le 60 ] || return 1
+  [ "$hour" -le 23 ] && [ "$minute" -le 59 ] && [ "$second" -le 59 ] || return 1
+  # Days-per-month with the FULL Gregorian leap rule. A field-range check alone
+  # accepts dates that do not exist -- 2025-02-29, 2026-04-31 -- and
+  # days-from-civil happily converts them into a real epoch, so an impossible
+  # timestamp would become a usable authorization window. The century rule is
+  # part of the test, not an optimization: 1900 and 2100 are not leap years,
+  # 2000 and 2400 are. Seconds stop at 59: this schema carries no leap second,
+  # and :60 has no epoch this arithmetic can express.
+  local max_day=0
+  case "$month" in
+    1|3|5|7|8|10|12) max_day=31 ;;
+    4|6|9|11) max_day=30 ;;
+    2)
+      if [ $((year % 4)) -eq 0 ] &&
+         { [ $((year % 100)) -ne 0 ] || [ $((year % 400)) -eq 0 ]; }; then
+        max_day=29
+      else
+        max_day=28
+      fi
+      ;;
+    *) return 1 ;;
+  esac
+  [ "$day" -ge 1 ] && [ "$day" -le "$max_day" ] || return 1
   # days-from-civil (proleptic Gregorian), no external date(1) parsing so the
   # result is identical on BSD and GNU userlands.
   local shifted=$year era yoe doy doe days
@@ -670,9 +699,18 @@ else
     }' > "$request_file"
 fi
 
-# The bytes curl posts. Under interim mode this is replaced by a private
-# snapshot so the digested bytes and the transmitted bytes are the same file.
-TRANSMIT_FILE="$request_file"
+# The bytes curl posts, held in process memory. curl is fed these bytes on
+# stdin (`--data-binary @-`) and is never handed a path, so there is no reopen
+# between any check and the POST. Under interim mode this same in-memory copy
+# is what the payload digest is computed over.
+TRANSMIT_BYTES="$(cat "$request_file")" || {
+  echo "### RUNNER FAILURE: could not read the request body for transmission" >&2
+  exit 2
+}
+[ -n "$TRANSMIT_BYTES" ] || {
+  echo "### RUNNER FAILURE: could not read the request body for transmission" >&2
+  exit 2
+}
 
 if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
   # Digest binding at the point of disclosure, over the bytes actually about to
@@ -692,9 +730,13 @@ if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
   # agree with it, so they are REFUSED here rather than silently hashed into
   # something the operator never approved.
   #
-  # SNAPSHOT ONCE, then digest, validate and TRANSMIT the same bytes. curl is
-  # handed this private copy, never the path the checks ran over, so nothing
-  # can be substituted between the membership test and the POST.
+  # ONE OPEN, ONE COPY. Copying the request body to another path and handing
+  # curl that path still leaves curl reopening a mutable name after the digest
+  # was taken, so the bytes hashed and the bytes sent are only assumed to be
+  # equal. Instead: open the private copy on a dedicated descriptor, UNLINK the
+  # path immediately so no name resolves to it any more, read the bytes once
+  # through that descriptor into process memory, and drive both the digest and
+  # the POST from that single in-memory copy. curl is fed stdin, never a path.
   TRANSMIT_FILE="$RUN_ROOT/request.transmit.json"
   (
     umask 077
@@ -703,15 +745,39 @@ if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
     echo "### RUNNER FAILURE: could not snapshot the request body for batch digest binding" >&2
     exit 2
   }
-  jq -e '
+  [ -r "$TRANSMIT_FILE" ] || {
+    echo "### RUNNER FAILURE: could not bind the request body to a transmission descriptor" >&2
+    exit 2
+  }
+  exec 9<"$TRANSMIT_FILE" || {
+    echo "### RUNNER FAILURE: could not bind the request body to a transmission descriptor" >&2
+    exit 2
+  }
+  rm -f "$TRANSMIT_FILE" || {
+    echo "### RUNNER FAILURE: could not unlink the bound request body path" >&2
+    exit 2
+  }
+  TRANSMIT_BYTES="$(cat <&9)" || {
+    echo "### RUNNER FAILURE: could not read the bound request body" >&2
+    exit 2
+  }
+  exec 9<&- || {
+    echo "### RUNNER FAILURE: could not release the transmission descriptor" >&2
+    exit 2
+  }
+  [ -n "$TRANSMIT_BYTES" ] || {
+    echo "### RUNNER FAILURE: could not read the bound request body" >&2
+    exit 2
+  }
+  printf '%s' "$TRANSMIT_BYTES" | jq -e '
     (.messages | type) == "array"
     and (.messages | length) > 0
     and (all(.messages[]; (.content | type) == "string"))
-  ' "$TRANSMIT_FILE" >/dev/null 2>&1 || {
+  ' >/dev/null 2>&1 || {
     echo "### RUNNER FAILURE: non-string message content cannot be bound to the batch authorization; interim mode withheld" >&2
     exit 2
   }
-  transmitted_count="$(jq '.messages | length' "$TRANSMIT_FILE")" || {
+  transmitted_count="$(printf '%s' "$TRANSMIT_BYTES" | jq '.messages | length')" || {
     echo "### RUNNER FAILURE: could not read transmitted content for batch digest binding" >&2
     exit 2
   }
@@ -719,22 +785,10 @@ if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
     echo "### RUNNER FAILURE: could not read transmitted content for batch digest binding" >&2
     exit 2
   }
-  transmitted_parts=()
-  transmitted_index=0
-  while [ "$transmitted_index" -lt "$transmitted_count" ]; do
-    transmitted_part_file="$RUN_ROOT/transmitted.$transmitted_index.content"
-    jq -j --argjson i "$transmitted_index" '.messages[$i].content' \
-      "$TRANSMIT_FILE" > "$transmitted_part_file" || {
-      echo "### RUNNER FAILURE: could not read transmitted content for batch digest binding" >&2
-      exit 2
-    }
-    transmitted_parts+=("$transmitted_part_file")
-    transmitted_index=$((transmitted_index + 1))
-  done
   # The nonzero return is CHECKED, not inferred from the shape of the output: a
   # read or extraction failure inside the digest must fail closed rather than
   # yield a partial digest that happens to look like a sha256.
-  TRANSMITTED_PAYLOAD_SHA256="$(canonical_content_digest "${transmitted_parts[@]}")" || {
+  TRANSMITTED_PAYLOAD_SHA256="$(canonical_content_digest "$TRANSMIT_BYTES" "$transmitted_count")" || {
     echo "### RUNNER FAILURE: could not compute the transmitted payload digest" >&2
     exit 2
   }
@@ -753,7 +807,7 @@ fi
 : > "$stream_file"
 : > "$status_file"
 : > "$curl_error_file"
-curl -N -sS -o "$stream_file" -w '%{http_code}' \
+printf '%s' "$TRANSMIT_BYTES" | curl -N -sS -o "$stream_file" -w '%{http_code}' \
   "$BASE/chat/completions" \
   -H "Authorization: Bearer $OPENROUTER_API_KEY" \
   -H "Content-Type: application/json" \
@@ -761,7 +815,7 @@ curl -N -sS -o "$stream_file" -w '%{http_code}' \
   -H "X-Title: world-b-runner" \
   --connect-timeout "$CONNECT_TIMEOUT" \
   --max-time "$TIMEOUT" \
-  --data-binary "@$TRANSMIT_FILE" \
+  --data-binary @- \
   > "$status_file" 2> "$curl_error_file" &
 curl_pid=$!
 started_at="$(date +%s)"

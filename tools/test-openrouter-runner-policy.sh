@@ -828,10 +828,40 @@ fi
 # hand-written on purpose: that is exactly the unauthenticated, same-user
 # artifact the threat model now documents, and it is the reason the wrapper
 # cannot treat the file's existence as proof that the payload was approved.
-# Guarded by the program sunset -- after 2026-09-07 the mode itself is dead and
-# the wrapper refuses earlier, on the sunset check.
-if [ "$(date -u +%Y-%m-%d)" \< "2026-09-07" ]; then
-  python3 - "$FIXTURE_ROOT/batch-authorization.json" <<'PY'
+# NOT guarded by the calendar. The interim mode carries a program sunset, but
+# the fixtures below must not evaporate when that date passes: a harness that
+# silently stops asserting is exactly the failure these anchors exist to
+# prevent, because after the sunset the enforcement could be deleted outright
+# and every anchor would stay green.
+#
+# So the sunset-dependent cases run against a COPY of the wrapper whose sunset
+# constant is repointed to a fixed far-future date -- the same
+# rewrite-one-constant-in-a-copy pattern the broker fixtures use, and the same
+# effect as an injected fixed clock. They keep executing and asserting
+# identical behavior regardless of the real date. Both rewrites are verified,
+# so a renamed or retuned constant fails the fixture instead of silently making
+# it vacuous.
+#
+# The ONE genuinely date-dependent assertion -- what the SHIPPED constant does
+# today -- is made separately at the end of this block, and it asserts in BOTH
+# branches. There is no branch in which nothing is checked.
+REAL_PROGRAM_SUNSET='2026-09-07'
+FIXED_PROGRAM_SUNSET='2099-01-01'
+MISMATCHED_PROGRAM_SUNSET='2098-01-01'
+CLOCK_WRAPPER="$FIXTURE_ROOT/wrapper-fixed-sunset.sh"
+grep -Fq "INTERIM_PROGRAM_SUNSET=\"$REAL_PROGRAM_SUNSET\"" "$WRAPPER" || {
+  echo 'fixed-sunset fixture: shipped wrapper no longer pins the expected sunset constant' >&2
+  exit 1
+}
+sed -e "s|^INTERIM_PROGRAM_SUNSET=.*|INTERIM_PROGRAM_SUNSET=\"$FIXED_PROGRAM_SUNSET\"|" \
+  "$WRAPPER" > "$CLOCK_WRAPPER"
+chmod 755 "$CLOCK_WRAPPER"
+grep -Fq "INTERIM_PROGRAM_SUNSET=\"$FIXED_PROGRAM_SUNSET\"" "$CLOCK_WRAPPER" || {
+  echo 'fixed-sunset fixture: could not repoint the wrapper sunset constant' >&2
+  exit 1
+}
+if true; then
+  python3 - "$FIXTURE_ROOT/batch-authorization.json" "$FIXED_PROGRAM_SUNSET" <<'PY'
 import json
 import sys
 from datetime import datetime, timedelta, timezone
@@ -846,7 +876,7 @@ document = {
     "expires_at": (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "payload_digests": ["0" * 64],
     "scope_note": "fixture batch covering no real payload",
-    "program_sunset": "2026-09-07",
+    "program_sunset": sys.argv[2],
 }
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
     json.dump(document, handle, sort_keys=True)
@@ -860,9 +890,9 @@ PY
       OPENROUTER_BATCH_RUN_ID=fixture-run \
       OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization.json" \
       OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$FIXTURE_BATCH_DIGEST" \
-      "$WRAPPER" moonshotai/kimi-k3 'payload bytes the operator never approved'
+      "$CLOCK_WRAPPER" moonshotai/kimi-k3 'payload bytes the operator never approved'
 
-  python3 - "$FIXTURE_ROOT/batch-authorization-sunset.json" <<'PY'
+  python3 - "$FIXTURE_ROOT/batch-authorization-sunset.json" "$MISMATCHED_PROGRAM_SUNSET" <<'PY'
 import json
 import sys
 from datetime import datetime, timedelta, timezone
@@ -876,8 +906,8 @@ document = {
     "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
     "expires_at": (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "payload_digests": ["0" * 64],
-    "scope_note": "fixture batch asserting its own later sunset",
-    "program_sunset": "2099-01-01",
+    "scope_note": "fixture batch asserting its own sunset",
+    "program_sunset": sys.argv[2],
 }
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
     json.dump(document, handle, sort_keys=True)
@@ -891,7 +921,7 @@ PY
       OPENROUTER_BATCH_RUN_ID=fixture-run \
       OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization-sunset.json" \
       OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$FIXTURE_SUNSET_DIGEST" \
-      "$WRAPPER" moonshotai/kimi-k3 'payload bytes the operator never approved'
+      "$CLOCK_WRAPPER" moonshotai/kimi-k3 'payload bytes the operator never approved'
 
   # POSITIVE fixture: framing parity between the wrapper and `snapshot`.
   # Negative paths alone cannot tell a correct binding from a framing mismatch
@@ -920,7 +950,8 @@ PY
       exit 1
       ;;
   esac
-  python3 - "$FIXTURE_ROOT/batch-authorization-positive.json" "$POSITIVE_DIGEST" <<'PY'
+  python3 - "$FIXTURE_ROOT/batch-authorization-positive.json" "$POSITIVE_DIGEST" \
+    "$FIXED_PROGRAM_SUNSET" <<'PY'
 import json
 import sys
 from datetime import datetime, timedelta, timezone
@@ -935,7 +966,7 @@ document = {
     "expires_at": (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
     "payload_digests": [sys.argv[2]],
     "scope_note": "fixture batch covering the exact ordered content transmitted",
-    "program_sunset": "2026-09-07",
+    "program_sunset": sys.argv[3],
 }
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
     json.dump(document, handle, sort_keys=True)
@@ -954,7 +985,7 @@ PY
       OPENROUTER_BATCH_RUN_ID=fixture-run \
       OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization-positive.json" \
       OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$POSITIVE_BATCH_DIGEST" \
-      "$WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT"
+      "$CLOCK_WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT"
   if grep -Eq 'transmitted payload digest is not in the batch authorization|could not compute the transmitted payload digest|could not read transmitted content|non-string message content' \
       "$FIXTURE_ROOT/cmd.err"; then
     echo 'positive interim fixture: approved ordered content was refused at the membership check' >&2
@@ -1010,7 +1041,7 @@ PY
   # Runs the wrapper over the POSITIVE ordered content with the given batch
   # file, expecting a fail-closed refusal carrying the named reason.
   expect_batch_refusal() {
-    local label="$1" expected="$2" path="$3" wrapper="${4:-$WRAPPER}"
+    local label="$1" expected="$2" path="$3" wrapper="${4:-$CLOCK_WRAPPER}"
     local digest
     digest="$(shasum -a 256 "$path" | awk '{print $1}')"
     expect_rc 2 "$expected" "$label" \
@@ -1026,28 +1057,59 @@ PY
   # Timestamp handling. A lexical `.expires_at > $now` accepts "zzzz" as a
   # distant future; epoch parsing cannot.
   write_batch_fixture "$FIXTURE_ROOT/batch-malformed-stamp.json" \
-    fixture-run -60 zzzz 2026-09-07 "$POSITIVE_DIGEST"
+    fixture-run -60 zzzz "$FIXED_PROGRAM_SUNSET" "$POSITIVE_DIGEST"
   expect_batch_refusal 'interim batch refuses a malformed expiry timestamp' \
     'not well-formed UTC timestamps' "$FIXTURE_ROOT/batch-malformed-stamp.json"
 
   write_batch_fixture "$FIXTURE_ROOT/batch-future-issued.json" \
-    fixture-run 3600 7200 2026-09-07 "$POSITIVE_DIGEST"
+    fixture-run 3600 7200 "$FIXED_PROGRAM_SUNSET" "$POSITIVE_DIGEST"
   expect_batch_refusal 'interim batch refuses a future-issued authorization' \
     'issued in the future' "$FIXTURE_ROOT/batch-future-issued.json"
 
   write_batch_fixture "$FIXTURE_ROOT/batch-long-lifetime.json" \
-    fixture-run -60 90000 2026-09-07 "$POSITIVE_DIGEST"
+    fixture-run -60 90000 "$FIXED_PROGRAM_SUNSET" "$POSITIVE_DIGEST"
   expect_batch_refusal 'interim batch refuses a lifetime over 24 hours' \
     'lifetime exceeds the 24-hour maximum' "$FIXTURE_ROOT/batch-long-lifetime.json"
 
   write_batch_fixture "$FIXTURE_ROOT/batch-expired.json" \
-    fixture-run -7200 -3600 2026-09-07 "$POSITIVE_DIGEST"
+    fixture-run -7200 -3600 "$FIXED_PROGRAM_SUNSET" "$POSITIVE_DIGEST"
   expect_batch_refusal 'interim batch refuses an expired authorization' \
     'batch authorization is expired' "$FIXTURE_ROOT/batch-expired.json"
 
+  # Impossible calendar dates. A parser that only range-checks the fields
+  # accepts 2025-02-29 and 2026-04-31, and days-from-civil converts both into a
+  # real epoch -- so a date that never existed would become a usable
+  # authorization window. Seconds are capped at 59 for the same reason: this
+  # schema carries no leap second and :60 has no epoch here.
+  write_batch_fixture "$FIXTURE_ROOT/batch-nonexistent-leap-day.json" \
+    fixture-run -60 2025-02-29T00:00:00Z "$FIXED_PROGRAM_SUNSET" "$POSITIVE_DIGEST"
+  expect_batch_refusal 'interim batch refuses a non-existent leap day' \
+    'not well-formed UTC timestamps' "$FIXTURE_ROOT/batch-nonexistent-leap-day.json"
+
+  write_batch_fixture "$FIXTURE_ROOT/batch-short-month-overflow.json" \
+    fixture-run -60 2026-04-31T00:00:00Z "$FIXED_PROGRAM_SUNSET" "$POSITIVE_DIGEST"
+  expect_batch_refusal 'interim batch refuses a day past the end of a short month' \
+    'not well-formed UTC timestamps' "$FIXTURE_ROOT/batch-short-month-overflow.json"
+
+  write_batch_fixture "$FIXTURE_ROOT/batch-sixtieth-second.json" \
+    fixture-run -60 2026-08-08T00:00:60Z "$FIXED_PROGRAM_SUNSET" "$POSITIVE_DIGEST"
+  expect_batch_refusal 'interim batch refuses a sixtieth second' \
+    'not well-formed UTC timestamps' "$FIXTURE_ROOT/batch-sixtieth-second.json"
+
+  # ...and a GENUINE leap day must still parse. A parser that rejected valid
+  # leap days would fail closed on every legitimate batch issued on 2028-02-29
+  # and silently brick the mode -- a fail-closed bug is still a bug. Proof of
+  # acceptance is that the wrapper gets PAST timestamp parsing and refuses for
+  # the future-issued reason instead.
+  write_batch_fixture "$FIXTURE_ROOT/batch-real-leap-day.json" \
+    fixture-run 2028-02-29T00:00:00Z 2028-02-29T01:00:00Z \
+    "$FIXED_PROGRAM_SUNSET" "$POSITIVE_DIGEST"
+  expect_batch_refusal 'interim batch parses a genuine leap day' \
+    'issued in the future' "$FIXTURE_ROOT/batch-real-leap-day.json"
+
   # Run binding, enforced at the wrapper without any verify-batch step.
   write_batch_fixture "$FIXTURE_ROOT/batch-wrong-run.json" \
-    some-other-run -60 3600 2026-09-07 "$POSITIVE_DIGEST"
+    some-other-run -60 3600 "$FIXED_PROGRAM_SUNSET" "$POSITIVE_DIGEST"
   expect_batch_refusal 'interim batch refuses a batch issued for another run' \
     'issued for a different run' "$FIXTURE_ROOT/batch-wrong-run.json"
 
@@ -1059,7 +1121,7 @@ PY
       OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
       OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization-positive.json" \
       OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$POSITIVE_BATCH_DIGEST" \
-      "$WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT"
+      "$CLOCK_WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT"
 
   # Broker states. The shipped probe path is a non-overridable constant, which
   # is the correct production posture, so the fixture repoints that ONE
@@ -1074,7 +1136,7 @@ PY
   }
   wrapper_with_broker() {
     local dest="$1" broker="$2" path_override="${3:-}"
-    sed -e "s|^BROKER_CLIENT=.*|BROKER_CLIENT=\"$broker\"|" "$WRAPPER" > "$dest"
+    sed -e "s|^BROKER_CLIENT=.*|BROKER_CLIENT=\"$broker\"|" "$CLOCK_WRAPPER" > "$dest"
     if [ -n "$path_override" ]; then
       sed -e "s|^export PATH=.*|export PATH=\"$path_override\"|" "$dest" > "$dest.rewritten"
       mv "$dest.rewritten" "$dest"
@@ -1136,6 +1198,40 @@ PY
     'broker_present_not_ready' \
     "$FIXTURE_ROOT/batch-authorization-positive.json" \
     "$FIXTURE_ROOT/wrapper-broker-nojq.sh"
+
+  # The ONE genuinely date-dependent assertion: what the SHIPPED sunset
+  # constant does today, run against the SHIPPED wrapper. Both branches assert
+  # -- there is no silent skip, and there is no calendar date on which this
+  # harness stops checking something.
+  write_batch_fixture "$FIXTURE_ROOT/batch-shipped-sunset.json" \
+    fixture-run -60 3600 "$REAL_PROGRAM_SUNSET" "$POSITIVE_DIGEST"
+  SHIPPED_BATCH_DIGEST="$(shasum -a 256 \
+    "$FIXTURE_ROOT/batch-shipped-sunset.json" | awk '{print $1}')"
+  if [ "$(date -u +%Y-%m-%d)" \< "$REAL_PROGRAM_SUNSET" ]; then
+    expect_rc 1 'transport error' \
+      'shipped sunset constant still admits the interim mode today' \
+      env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+        OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+        OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+        OPENROUTER_BATCH_RUN_ID=fixture-run \
+        OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-shipped-sunset.json" \
+        OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$SHIPPED_BATCH_DIGEST" \
+        "$WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT"
+  else
+    printf '  NOTE  the interim operator-batch program sunset (%s) has passed.\n' \
+      "$REAL_PROGRAM_SUNSET" >&2
+    printf '        Remove the interim mode, or consciously re-issue the sunset in a\n' >&2
+    printf '        reviewed commit. The fixtures above keep running either way.\n' >&2
+    expect_rc 2 'past program sunset' \
+      'shipped sunset constant has passed and the interim mode is dead' \
+      env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+        OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+        OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+        OPENROUTER_BATCH_RUN_ID=fixture-run \
+        OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-shipped-sunset.json" \
+        OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$SHIPPED_BATCH_DIGEST" \
+        "$WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT"
+  fi
 fi
 
 # Broker-state case statements must both carry a fail-closed catch-all. An

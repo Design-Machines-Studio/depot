@@ -645,7 +645,13 @@ for phrase in \
   "interim batch refuses when the current run id is absent" \
   "interim batch refuses unapproved transmitted bytes" \
   "interim batch refuses a self-asserted program sunset" \
-  "interim batch accepts the exact ordered content snapshot approved"; do
+  "interim batch accepts the exact ordered content snapshot approved" \
+  "interim batch refuses a non-existent leap day" \
+  "interim batch refuses a day past the end of a short month" \
+  "interim batch refuses a sixtieth second" \
+  "interim batch parses a genuine leap day" \
+  "shipped sunset constant still admits the interim mode today" \
+  "shipped sunset constant has passed and the interim mode is dead"; do
   require_text "$openrouter_policy_fixtures" "$phrase" \
     "behavioral fixture retained: $phrase"
 done

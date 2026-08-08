@@ -109,7 +109,16 @@ is about to POST -- system, developer, assistant, and user turns, in
 transmission order -- and refuses unless that digest is already a member of the
 validated batch file's `payload_digests`. That check is at the point of
 disclosure, over the content bytes actually sent, and it does not depend on the
-lane having run `verify-batch` first. Message content that is not a plain
+lane having run `verify-batch` first. "Actually sent" is enforced by
+construction, not asserted: the private copy of the request body is opened on a
+dedicated file descriptor and its path is unlinked immediately, so no name
+resolves to those bytes any more; the contents are read once through that
+descriptor into process memory; and both the digest and curl are driven from
+that single in-memory copy, with curl fed the bytes on stdin
+(`--data-binary @-`) rather than any path. The per-message content parts the
+digest frames are extracted from the same in-memory copy and never written to
+disk. There is no second open of anything between the digest and the POST.
+Message content that is not a plain
 string (array-typed or otherwise structured content parts) has no framing that
 agrees with what `payload-authorization.sh snapshot` records, so the wrapper
 refuses it under interim mode rather than hash something different.
