@@ -13,7 +13,8 @@
     "absence": "No profile present means policy defaults and today's behavior.",
     "subscriptionSet": "Open: add a subscription rail with one profile entry, its windows, and its probe command; no routing contract edit is required.",
     "probeResolution": "Use the built-in probe for a known rail, otherwise the profile-declared probe, otherwise unknown. Every profile probe runs under usage-probe.sh's reset PATH and must map to the common state, remaining_pct, and window shape; unmappable output is unknown.",
-    "dataBoundary": "Profiles carry preferences and probe commands only, never credentials or account secrets."
+    "dataBoundary": "Profiles carry preferences and probe commands only, never credentials or account secrets.",
+    "consumerStatus": "usage-probe.sh consumes .subscriptions only -- it executes each rail's probe and emits headroom. familyPreferenceOrder and neverUse are validated for shape but are NOT yet read by any executable consumer: cascade-dispatch.sh selects rails from the policy ladder and does not load this profile. Until a selection-time consumer exists, a profile can shrink or reorder nothing at runtime, and an operator MUST NOT assume neverUse removes a provider from dispatch. The declared contract is the target shape; this field records how much of it is live, so the gap is visible rather than implied."
   },
   "targets": {
     "activeSubscriptionProfile": "codex-20x",

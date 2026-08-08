@@ -67,7 +67,7 @@ run_bounded() {
 
 unknown_json() {
   jq -cn --argjson threshold "$THRESHOLD" --arg window "${1:-unknown}" \
-    '{state:"unknown",remaining_pct:$threshold,window:$window}'
+    '{state:"unknown",remaining_pct:0,window:$window}'
 }
 
 aggregate_windows() {
@@ -77,10 +77,10 @@ aggregate_windows() {
       [ $required[] as $window
         | (($observations | map(select(.window == $window)) | first) // null) as $seen
         | if $seen == null then
-            {state:"unknown", remaining_pct:$threshold, window:$window}
+            {state:"unknown", remaining_pct:0, window:$window}
           elif (($seen.remaining_pct | type) != "number")
             or $seen.remaining_pct < 0 or $seen.remaining_pct > 100 then
-            {state:"unknown", remaining_pct:$threshold, window:$window}
+            {state:"unknown", remaining_pct:0, window:$window}
           else
             {state:(if $seen.remaining_pct <= $threshold then "limited" else "ok" end),
              remaining_pct:$seen.remaining_pct, window:$window}
@@ -186,8 +186,19 @@ openrouter_json() {
     fi
   fi
   case "$balance" in ''|*[!0-9.+-]*) balance="" ;; esac
-  jq -cn --arg balance "$balance" \
-    '{balance_usd:(if $balance == "" then null else ($balance | tonumber) end)}'
+  # `state` is load-bearing and must not be dropped. cascade-dispatch.sh's
+  # rail_has_headroom reads `.state` and `.remaining_pct`; it never reads
+  # `balance_usd`. Emitting balance alone made a known-low account read as an
+  # unconstrained rail, which is the optimistic direction this file exists to
+  # prevent. Preserve the pre-existing low/ok/unknown semantics alongside the
+  # balance.
+  local state="unknown"
+  if [ -n "$balance" ]; then
+    if awk -v b="$balance" 'BEGIN{exit !(b < 5)}'; then state="low"; else state="ok"; fi
+  fi
+  jq -cn --arg balance "$balance" --arg state "$state" \
+    '{state:$state,
+      balance_usd:(if $balance == "" then null else ($balance | tonumber) end)}'
 }
 
 normalize_profile_probe() {
@@ -202,7 +213,7 @@ normalize_profile_probe() {
           and ($window | type) == "string"
           and ($windows | index($window)) != null)
       | if .state == "unknown" then
-          {state:"unknown", remaining_pct:$threshold, window:.window}
+          {state:"unknown", remaining_pct:0, window:.window}
         elif ((.remaining_pct | type) == "number"
           and .remaining_pct >= 0 and .remaining_pct <= 100) then
           # An explicit "limited" is never upgraded to "ok". A provider hard

@@ -59,7 +59,9 @@ These agents launch based on which file types were changed.
 
 ## File Extension to Agent Mapping
 
-Quick reference for Phase 3 agent selection:
+Quick reference for Phase 3 agent selection (FULL mode). Quick mode runs its own dispatch list in
+`plugins/dm-review/skills/dm-review-quick/SKILL.md`; the two must agree on every shared trigger, and
+`migration-validator` is dispatched in BOTH modes on `.sql` under `migrations/` or `seeds/`.
 
 | Extension | Always-run | Conditional agents added |
 |-----------|-----------|------------------------|
