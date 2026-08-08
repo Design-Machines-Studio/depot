@@ -30,7 +30,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shape rather than the mandated unknown object. Absent jq is exactly the
 # "tool is absent" case, so answer it in jq-free literal form and stop.
 if ! command -v jq >/dev/null 2>&1; then
-  printf '%s\n' '{"codex":{"state":"unknown","remaining_pct":0,"window":"unknown"},"claude":{"state":"unknown","remaining_pct":0,"window":"unknown"},"openrouter":{"balance_usd":null}}'
+  printf '%s\n' '{"codex":{"state":"unknown","remaining_pct":0,"window":"unknown"},"claude":{"state":"unknown","remaining_pct":0,"window":"unknown"},"openrouter":{"state":"unknown","remaining_pct":0,"balance_usd":null}}'
   exit 0
 fi
 
