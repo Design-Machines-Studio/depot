@@ -82,7 +82,7 @@ require_before() {
   fi
 }
 
-tier_policy_section_is_exact() {
+section_is_unique_and_exact() {
   local file="$1"
   local section_start="$2"
   local section_end="$3"
@@ -117,14 +117,14 @@ tier_policy_section_is_exact() {
   ' "$file"
 }
 
-require_unique_exact_tier_policy_section() {
+require_unique_exact_section() {
   local file="$1"
   local section_start="$2"
   local section_end="$3"
   local expected="$4"
   local label="$5"
 
-  if tier_policy_section_is_exact "$file" "$section_start" "$section_end" "$expected"; then
+  if section_is_unique_and_exact "$file" "$section_start" "$section_end" "$expected"; then
     printf "  OK    %s\n" "$label"
   else
     printf "  FAIL  %s\n" "$label"
@@ -145,7 +145,9 @@ pipeline_run="$REPO_ROOT/plugins/pipeline/commands/pipeline-run.md"
 pipeline_prompts="$REPO_ROOT/plugins/pipeline/commands/pipeline-prompts.md"
 pipeline_fix="$REPO_ROOT/plugins/pipeline/commands/pipeline-fix.md"
 lifecycle="$REPO_ROOT/plugins/pipeline/references/artifact-lifecycle.md"
-review_skill="$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
+# The override is a test seam for adversarial copies of the selective-dispatch
+# contract without touching the working tree.
+review_skill="${WORKFLOW_CONTRACT_REVIEW_SKILL:-$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md}"
 review_cmd="$REPO_ROOT/plugins/dm-review/commands/dm-review.md"
 review_consolidator="$REPO_ROOT/plugins/dm-review/agents/workflow/review-consolidator.md"
 review_loop="$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md"
@@ -427,7 +429,7 @@ An adjacent `review_tier_reason:` line MUST name why: `ordinary chunk`, the exac
 
 EOF
 tier_policy_expected="${tier_policy_expected%$'\n'}"
-require_unique_exact_tier_policy_section "$orchestrator" "$tier_policy_start" "$tier_policy_end" "$tier_policy_expected" "orchestrator preserves the exact unique review-tier policy section"
+require_unique_exact_section "$orchestrator" "$tier_policy_start" "$tier_policy_end" "$tier_policy_expected" "orchestrator preserves the exact unique review-tier policy section"
 
 tier_policy_fixture="$(mktemp "${TMPDIR:-/tmp}/workflow-tier-policy.XXXXXX")"
 trap 'rm -f "$tier_policy_fixture"' EXIT
@@ -439,7 +441,7 @@ awk -v section_end="$tier_policy_end" -v exception="$tier_policy_exception" '
 if [ "$(grep -Fc -- "$tier_policy_exception" "$tier_policy_fixture" 2>/dev/null || true)" != "1" ]; then
   printf "  FAIL  appended-exception regression fixture builds\n"
   failures=1
-elif tier_policy_section_is_exact "$tier_policy_fixture" "$tier_policy_start" "$tier_policy_end" "$tier_policy_expected"; then
+elif section_is_unique_and_exact "$tier_policy_fixture" "$tier_policy_start" "$tier_policy_end" "$tier_policy_expected"; then
   printf "  FAIL  exact review-tier policy rejects an appended exception paragraph\n"
   failures=1
 else
@@ -474,6 +476,78 @@ for loop_contract in \
     require_text "$loop_contract" "\`$field\`" "$rel iteration receipt records $field"
   done
 done
+selective_dispatch_start='#### Selective dispatch input'
+selective_dispatch_end='#### Report Selection'
+IFS= read -r -d '' selective_dispatch_expected <<'EOF' || true
+#### Selective dispatch input
+
+After normal selection is complete, store its unique exact logical lane IDs as
+`selected_full_set`. Recompute `selected_full_set` without consulting
+`review_lane_allowlist`; the allowlist never selects the set against which it
+is validated.
+
+When `review_lane_allowlist` is present, validate that it is one unambiguous
+object with exactly `selected_full_set` and `lanes`; that
+`review_lane_allowlist.selected_full_set` exactly equals the recomputed set;
+and that `review_lane_allowlist.lanes` is a duplicate-free subset containing
+at least one exact logical lane ID from that set. An empty `lanes` list,
+aliases, criterion-level IDs,
+unknown IDs, duplicate IDs, missing or extra fields, multiple candidate
+objects, or any comparison failure make the input invalid.
+
+Consume a valid allowlist by dispatching only its `lanes`.
+If the input is absent, invalid, or ambiguous, fail open to unfiltered dispatch.
+Discard it and dispatch the unfiltered `selected_full_set`; never partially
+apply it or guess intent. The coverage
+receipt records whether selective input was applied and, when a supplied input
+was rejected, the exact stable validation reason as
+`selection_fallback_reason`. This is fail-open to full selected-lane coverage,
+not a clean or narrowed result.
+
+EOF
+selective_dispatch_expected="${selective_dispatch_expected%$'\n'}"
+require_unique_exact_section "$review_skill" "$selective_dispatch_start" "$selective_dispatch_end" "$selective_dispatch_expected" "dm-review preserves the exact unique selective-dispatch section"
+
+selective_dispatch_fixture="$(mktemp "${TMPDIR:-/tmp}/workflow-selective-dispatch.XXXXXX")"
+trap 'rm -f "$selective_dispatch_fixture"' EXIT
+
+awk '/^Consume a valid allowlist by dispatching only its `lanes`\.$/ { next } { print }' "$review_skill" >"$selective_dispatch_fixture"
+if section_is_unique_and_exact "$selective_dispatch_fixture" "$selective_dispatch_start" "$selective_dispatch_end" "$selective_dispatch_expected"; then
+  printf "  FAIL  exact selective-dispatch section rejects policy removal\n"
+  failures=1
+else
+  printf "  OK    exact selective-dispatch section rejects policy removal\n"
+fi
+
+awk '{ sub(/fail open to unfiltered dispatch\./, "fail closed to empty dispatch."); print }' "$review_skill" >"$selective_dispatch_fixture"
+if section_is_unique_and_exact "$selective_dispatch_fixture" "$selective_dispatch_start" "$selective_dispatch_end" "$selective_dispatch_expected"; then
+  printf "  FAIL  exact selective-dispatch section rejects fail-open reversal\n"
+  failures=1
+else
+  printf "  OK    exact selective-dispatch section rejects fail-open reversal\n"
+fi
+
+awk '{ sub(/a duplicate-free subset containing/, "a possibly empty duplicate-free subset containing"); print }' "$review_skill" >"$selective_dispatch_fixture"
+if section_is_unique_and_exact "$selective_dispatch_fixture" "$selective_dispatch_start" "$selective_dispatch_end" "$selective_dispatch_expected"; then
+  printf "  FAIL  exact selective-dispatch section rejects an empty lane set\n"
+  failures=1
+else
+  printf "  OK    exact selective-dispatch section rejects an empty lane set\n"
+fi
+
+selective_dispatch_exception='Exception: callers MAY dispatch no lanes when iteration work appears complete.'
+awk -v section_end="$selective_dispatch_end" -v exception="$selective_dispatch_exception" '
+  $0 == section_end { print exception; print "" }
+  { print }
+' "$review_skill" >"$selective_dispatch_fixture"
+if section_is_unique_and_exact "$selective_dispatch_fixture" "$selective_dispatch_start" "$selective_dispatch_end" "$selective_dispatch_expected"; then
+  printf "  FAIL  exact selective-dispatch section rejects an appended exception paragraph\n"
+  failures=1
+else
+  printf "  OK    exact selective-dispatch section rejects an appended exception paragraph\n"
+fi
+rm -f "$selective_dispatch_fixture"
+trap - EXIT
 require_text "$postmortem_schema" '`activeComputeSeconds`' "postmortem separates active compute from elapsed time"
 require_text "$postmortem_schema" '`waitSecondsByCategory`' "postmortem records typed waits"
 require_text "$orchestrator" "Measure the orchestrator-level non-overlapping interval" "orchestrator measures non-overlapping waits"
