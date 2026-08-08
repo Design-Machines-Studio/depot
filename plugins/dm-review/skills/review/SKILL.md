@@ -692,6 +692,16 @@ sign-off. OpenRouter lanes remain content-gated: file sections containing actual
 secret/private content stay local, while safe sections remain eligible
 regardless of path.
 
+#### Coding-lane exhaustion ask
+
+When a CODING lane finds its provider AND its declared fallback both unavailable, the lane is exhausted, not merely degraded. Do not silently record only the Coverage Gap: ask the operator first, exactly as the pipeline's rail-exhaustion ask gate does.
+
+Derive the offerable rails AT ASK TIME from the active host's `harness-profile.json` roles, live `usage-probe.sh` headroom, and the interactive paths this session can reach. No offerable provider list is hardcoded anywhere in the ask path; where a probe parser is a TODO stub the ask reports `unknown` rather than guessing. Show that per-rail status, then offer three options: (a) wait until the named reset, (b) authorize one operator-named fallback provider for THIS REVIEW RUN ONLY, or (c) record the Coverage Gap and continue -- the review equivalent of park.
+
+Option (b) appends an authorization receipt -- `{"scope": "<run_id>", "chunks": ["<lane-id>"], "provider": "<operator-named provider>", "authorized_by": "operator", "occurred_at": "<timezone-aware ISO-8601>"}` -- before the fallback lane runs. That lane's receipt leaves `requestedProvider` unchanged, sets `implementedBy` to the provider that actually produced the findings, sets `fallback: true`, and sets `fallbackReason: rail_exhausted_user_authorized`.
+
+Ask-then-default-park is the only headless behavior: a non-interactive session or an unanswered ask records the Coverage Gap and continues, and never assumes yes. The same exclusions are non-overridable -- the Workflow Authority broker gate is a security authorization boundary, not a capacity setting, so automated OpenRouter lanes stay fail-closed regardless of the operator's answer; `security-auditor-codex-signoff` still requires its own independent Codex sign-off and no authorization substitutes for it; and sensitive-path coverage is never satisfied by a fallback-authorized lane.
+
 A skipped lane is a coverage gap, and a coverage gap is reported. "All agents completed" while the Codex lane never ran is a false clean.
 
 Every lane receipt records `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. Preserve failed attempts across Codex, OpenRouter, optional non-coding Claude, and generic hosts.

@@ -177,6 +177,14 @@ configuration rather than restoring hardcoded Go/Docker commands.
 
 The Codex adapter does not get a weaker gate than the Claude path. If `codex_native` cannot execute the cleanup phase, that is a pipeline-blocking failure, not a degradation.
 
+## Rail-Exhaustion Ask Gate
+
+When every rail permitted for a chunk is exhausted or gated (cascade RC 76), the run pauses on a human gate instead of terminating BLOCKED. Capacity is recoverable; a terminal receipt is not. The orchestrator emits an authoritative `progress` receipt with `wait_category: human_gate`, derives the offerable rails AT ASK TIME from the active host's `harness-profile.json` roles plus live `usage-probe.sh` headroom plus the interactive paths this session can reach, shows the per-rail status (`capped until <time>` / `available this session` / `unknown`), and asks the operator to choose: (a) wait until reset, (b) authorize a named fallback provider for THIS RUN ONLY, or (c) park. No offerable provider list is hardcoded anywhere in the ask path -- rail availability is per-operator and time-varying. Where a `usage-probe.sh` parser is a TODO stub the ask reports `unknown` rather than guessing.
+
+Option (b) appends an authorization receipt -- `{"scope": "<run_id>", "chunks": ["<chunk-id>"], "provider": "<operator-named provider>", "authorized_by": "operator", "occurred_at": "<timezone-aware ISO-8601>"}` -- to the cumulative authoritative receipts BEFORE any fallback dispatch. Every chunk executed under it leaves `requestedProvider` unchanged, sets `implementedBy` to what actually produced the diff, sets `fallback: true`, and sets `fallbackReason: rail_exhausted_user_authorized`. The requested provider is never relabelled to match the actual one. This is never a silent fallback: the authorization receipt is its only source of permission.
+
+Ask-then-default-park is the only headless behavior: a non-interactive session or an unanswered ask parks resumable, never assumes yes. `PIPELINE_EXHAUSTION_ASK=0` restores the old hard block for headless CI and is a kill switch on the ASK, never an enabler of silent fallback. Three exclusions survive every operator answer: the Workflow Authority broker gate is a security authorization boundary, not a capacity setting, so automated OpenRouter lanes stay fail-closed regardless of the answer (the interactive exact-digest `/openrouter` path may still be offered because it carries its own per-payload approval); the final full dm-review is never waived and the branch waits for capped review rails; and sensitive-path chunks are never implemented under fallback authorization. The routing policy object is `exhaustionFallback` in `plugins/pipeline/references/routing-policy.json`.
+
 ## Process
 
 1. Read the manifest

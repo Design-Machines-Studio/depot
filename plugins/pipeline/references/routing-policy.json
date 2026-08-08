@@ -169,6 +169,20 @@
       "rationale": "Default adversarial review uses two non-Claude lenses; Claude plan-adversary is an optional third lens or tiebreak."
     }
   },
+  "exhaustionFallback": {
+    "_comment": "Fires when every rail permitted for a chunk is exhausted or gated (cascade RC 76). Rail availability is PER-OPERATOR and time-varying -- one developer has Claude headroom plus OpenRouter credits while Codex is capped, the next has no Codex at all, and subscriptions change. That is why no offerable provider list is hardcoded here. PIPELINE_EXHAUSTION_ASK=0 restores the old hard block for headless CI; it is a kill switch on the ASK, never an enabler of silent fallback.",
+    "mode": "ask",
+    "headlessDefault": "park",
+    "offerableDerivation": "at ask time, from the active host's harness-profile roles + live usage-probe headroom + interactive paths available in the current session (e.g. claude_native when the session itself is a Claude host with headroom; openrouter_interactive_exact_digest when credits and the wrapper are reachable)",
+    "neverOfferable": [
+      "openrouter_automated_lanes",
+      "any provider for sensitive-path chunks"
+    ],
+    "operatorOverride": "optional untracked local file may narrow or annotate the derived list (per-developer subscriptions differ); it can only REMOVE options, never add one the derivation did not find, and never anything in neverOfferable",
+    "authorization": "explicit per-run receipt, operator-named provider",
+    "liveStatusRequired": "the ask shows the derived status per rail (capped-until / available / unknown) so the operator decides from live facts; where usage-probe parsers are TODO stubs the ask says unknown rather than guessing",
+    "rationale": "The provider boundary forbids SILENT fallback; it must not forbid ASKING THE OWNER. Every fallback execution traces to an explicit operator authorization receipt and carries fallback: true with fallbackReason rail_exhausted_user_authorized."
+  },
   "invariants": {
     "crossProviderVerification": true,
     "finalReviewDifferentProvider": true,

@@ -374,6 +374,8 @@ require_text "$assembly_go_tests" "Batch all fixes from one review pass" "assemb
 require_text "$assembly_go_tests" "Preserve full race, security, container, browser," "assembly runner keeps expensive remote lanes explicit"
 require_text "$assembly_verification_profile" '"argv": [' "assembly publishes argv-array profile examples"
 require_text "$assembly_verification_profile" '"id": "go-full-race"' "assembly profile retains candidate race coverage"
+require_text "$orchestrator" "Ask-then-default-park is the only headless behavior" "orchestrator parks rather than assuming yes on rail exhaustion"
+require_text "$orchestrator" "The Workflow Authority broker gate is a security authorization boundary, not a" "orchestrator keeps the broker gate non-overridable by the exhaustion ask"
 
 # --------------------------------------------------------------------------
 # Group 6: dm-review quality-pulse contract
