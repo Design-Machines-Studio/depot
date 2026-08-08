@@ -90,6 +90,10 @@ contract="$REPO_ROOT/plugins/dm-review/skills/review/references/repo-cleanup-con
 orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
 pipeline_cmd="$REPO_ROOT/plugins/pipeline/commands/pipeline.md"
 pipeline_run="$REPO_ROOT/plugins/pipeline/commands/pipeline-run.md"
+# Defined here, not at first use in Group 7: Group 5 anchors these too, and a
+# variable assigned below its own use expands empty and reports "missing file".
+pipeline_run_skill="$REPO_ROOT/plugins/pipeline/skills/pipeline-run/SKILL.md"
+routing_policy="$REPO_ROOT/plugins/pipeline/references/routing-policy.json"
 pipeline_prompts="$REPO_ROOT/plugins/pipeline/commands/pipeline-prompts.md"
 pipeline_fix="$REPO_ROOT/plugins/pipeline/commands/pipeline-fix.md"
 lifecycle="$REPO_ROOT/plugins/pipeline/references/artifact-lifecycle.md"
@@ -374,6 +378,24 @@ require_text "$assembly_go_tests" "Batch all fixes from one review pass" "assemb
 require_text "$assembly_go_tests" "Preserve full race, security, container, browser," "assembly runner keeps expensive remote lanes explicit"
 require_text "$assembly_verification_profile" '"argv": [' "assembly publishes argv-array profile examples"
 require_text "$assembly_verification_profile" '"id": "go-full-race"' "assembly profile retains candidate race coverage"
+require_text "$orchestrator" "Ask-then-default-park is the only headless behavior" "orchestrator parks rather than assuming yes on rail exhaustion"
+require_text "$orchestrator" "The Workflow Authority broker gate is a security authorization boundary, not a" "orchestrator keeps the broker gate non-overridable by the exhaustion ask"
+require_text "$orchestrator" "never implemented under fallback authorization" "orchestrator excludes sensitive-path chunks from fallback"
+require_text "$orchestrator" "The final full dm-review is never waived" "orchestrator never waives the final review for capacity"
+require_text "$orchestrator" "Record the authorization before any fallback dispatch" "orchestrator receipts authorization before dispatch"
+require_text "$orchestrator" "ask_evidence_ref" "orchestrator binds the authorization receipt to a real ask exchange"
+# The bare field name above is satisfied by the JSON literal alone, so the
+# sentence that gives it force gets its own anchor.
+require_text "$orchestrator" "an invalid receipt authorizes nothing" "orchestrator voids an authorization receipt with no ask evidence"
+require_text "$routing_policy" '"exhaustionFallback"' "routing policy declares the exhaustion fallback object"
+require_text "$routing_policy" '"headlessDefault": "park"' "routing policy defaults headless exhaustion to park"
+require_text "$routing_policy" '"neverOfferable"' "routing policy pins the never-offerable rails"
+require_text "$routing_policy" "can only REMOVE options" "routing policy keeps the operator override remove-only"
+require_text "$pipeline_run_skill" "Rail-Exhaustion Ask Gate" "generated pipeline-run alias carries the ask gate section"
+require_text "$orchestrator" "are NOT operators and can" "orchestrator forbids agent self-authorization"
+require_text "$pipeline_run" "A fallback dispatch without a prior valid authorization receipt MUST be halted" "pipeline-run halts unauthorized fallback"
+require_text "$review_skill" "and never assumes yes" "dm-review never reads an unanswered lane ask as consent"
+require_text "$review_skill" "gap-and-continue default are all unavailable" "dm-review cannot gap-and-continue the pipeline final review"
 
 # --------------------------------------------------------------------------
 # Group 6: dm-review quality-pulse contract
