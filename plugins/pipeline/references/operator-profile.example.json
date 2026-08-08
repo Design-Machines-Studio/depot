@@ -18,7 +18,10 @@
         "five_hour",
         "weekly"
       ],
-      "probe": "moonshot-usage --json",
+      "probe": [
+        "moonshot-usage",
+        "--json"
+      ],
       "notes": "Example only. The command emits the conservative common probe shape and contains no credentials."
     }
   ],

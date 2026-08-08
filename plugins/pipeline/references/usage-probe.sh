@@ -229,13 +229,30 @@ normalize_profile_probe() {
 }
 
 operator_profile_path() {
-  local root=""
+  local root="" candidate=""
   if [ -n "${DM_OPERATOR_PROFILE_FILE:-}" ]; then
-    printf '%s\n' "$DM_OPERATOR_PROFILE_FILE"
-    return
+    candidate="$DM_OPERATOR_PROFILE_FILE"
+  else
+    root="$(git rev-parse --show-toplevel 2>/dev/null)" || root=""
+    [ -n "$root" ] || return 0
+    candidate="$root/.dm/operator-profile.local.json"
   fi
-  root="$(git rev-parse --show-toplevel 2>/dev/null)" || root=""
-  [ -n "$root" ] && printf '%s\n' "$root/.dm/operator-profile.local.json"
+  # A profile supplies probe argv that this script executes, so the file itself
+  # is a trust boundary. It is legitimate only as untracked developer-local
+  # config.
+  #
+  # Refuse a symlink: it can redirect the read outside the checkout.
+  [ -L "$candidate" ] && return 0
+  [ -f "$candidate" ] || return 0
+  # Refuse a git-TRACKED profile. This is the live vector, not a theoretical
+  # one: .gitignore is routinely defeated by `git add -f` in this repository
+  # (several plans/ subtrees are ignored and tracked anyway), so a branch could
+  # ship .dm/operator-profile.local.json and have every later run execute its
+  # probes. An ignored-but-committed file is not developer-local config.
+  if git ls-files --error-unmatch -- "$candidate" >/dev/null 2>&1; then
+    return 0
+  fi
+  printf '%s\n' "$candidate"
 }
 
 profile="$(operator_profile_path)"
@@ -254,24 +271,50 @@ if [ -n "$profile" ] && [ -r "$profile" ] \
      and (.subscriptions | type) == "array"
      and all(.subscriptions[];
        type == "object" and (.rail | type) == "string" and (.rail | length) > 0
-       and (.probe | type) == "string"
+       and ((.probe == "none")
+            or ((.probe | type) == "array" and (.probe | length) > 0
+                and all(.probe[]; type == "string" and length > 0)))
        and (.windows | type) == "array" and (.windows | length) > 0
        and all(.windows[]; type == "string" and length > 0))
      and ([.subscriptions[].rail] | length == (unique | length))' "$profile" >/dev/null 2>&1; then
   while IFS= read -r subscription; do
     rail="$(printf '%s' "$subscription" | jq -r '.rail // empty')"
-    probe="$(printf '%s' "$subscription" | jq -r '.probe // "none"')"
     windows="$(printf '%s' "$subscription" | jq -c '.windows // []')"
     [ -n "$rail" ] || continue
     case "$rail" in codex|claude|openrouter) continue ;; esac
 
     first_window="$(printf '%s' "$windows" | jq -r '.[0] // "unknown"')"
     value="$(unknown_json "$first_window")"
-    if [ "$probe" != "none" ] && [ -n "$probe" ]; then
-      # Bounded: a hanging profile probe must resolve to unknown, not block.
-      probe_output="$(run_bounded 20 sh -c "$probe" 2>/dev/null)" || probe_output=""
-      [ -n "$probe_output" ] \
-        && value="$(normalize_profile_probe "$probe_output" "$windows")"
+
+    # `probe` is an ARGV ARRAY, never a shell string, and it is never passed to
+    # `sh -c`. A profile is developer-local config, but it is still a file this
+    # script executes from, so it gets no shell: no metacharacters, no word
+    # splitting, no globbing, no chaining. Read the argv with a NUL-delimited
+    # loop -- bash 3.2 has no mapfile.
+    probe_argv=()
+    probe_is_none=1
+    if printf '%s' "$subscription" | jq -e '.probe != "none"' >/dev/null 2>&1; then
+      probe_is_none=0
+      while IFS= read -r -d '' probe_word; do
+        probe_argv[${#probe_argv[@]}]="$probe_word"
+      done < <(printf '%s' "$subscription" | jq -j '.probe[] | (. + "\u0000")' 2>/dev/null)
+    fi
+    if [ "$probe_is_none" -eq 0 ] && [ "${#probe_argv[@]}" -gt 0 ]; then
+      # The executable must resolve on the reset PATH, or be an absolute path
+      # to an existing regular file. Anything else stays unknown.
+      probe_bin="${probe_argv[0]}"
+      probe_ok=0
+      case "$probe_bin" in
+        /*) [ -f "$probe_bin" ] && [ -x "$probe_bin" ] && probe_ok=1 ;;
+        */*) probe_ok=0 ;;
+        *) command -v "$probe_bin" >/dev/null 2>&1 && probe_ok=1 ;;
+      esac
+      if [ "$probe_ok" -eq 1 ]; then
+        # Bounded: a hanging profile probe must resolve to unknown, not block.
+        probe_output="$(run_bounded 20 "${probe_argv[@]}" 2>/dev/null)" || probe_output=""
+        [ -n "$probe_output" ] \
+          && value="$(normalize_profile_probe "$probe_output" "$windows")"
+      fi
     fi
     result="$(printf '%s' "$result" \
       | jq -c --arg rail "$rail" --argjson value "$value" '. + {($rail):$value}')"
