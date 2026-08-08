@@ -293,6 +293,40 @@ openrouter_allowed() {
   return 1
 }
 
+# native_judgment exists because the 2026-08-08 capped-Codex and fail-closed
+# OpenRouter state produced a zero-chunk execution deadlock. It is gated because
+# silently spending Claude quota on coding work is a policy violation; an honest
+# deadlock report is better than a silent reroute.
+#
+# DM_NATIVE_JUDGMENT_AUTHORIZATION represents an explicit human grant. It is NOT
+# a self-service escape hatch: a caller-invented value is a policy violation, not
+# an authorization. The gate validates its shape, repository/run scope, and live
+# epoch-seconds expiry, and fails closed on every error.
+NATIVE_JUDGMENT_AUTHORIZATION_ID=""
+NATIVE_JUDGMENT_AUTHORIZATION_EXPIRES_AT_EPOCH=""
+native_judgment_allowed() {
+  local authorization="${DM_NATIVE_JUDGMENT_AUTHORIZATION:-}" now=""
+  NATIVE_JUDGMENT_AUTHORIZATION_ID=""
+  NATIVE_JUDGMENT_AUTHORIZATION_EXPIRES_AT_EPOCH=""
+  [ -n "$authorization" ] || return 1
+  [ -n "${DM_PROVIDER_REPOSITORY:-}" ] && [ -n "${DM_PROVIDER_RUN_ID:-}" ] || return 1
+  now="$(date -u +%s 2>/dev/null)" || return 1
+  case "$now" in ''|*[!0-9]*) return 1;; esac
+  printf '%s' "$authorization" | jq -e \
+    --arg repository "$DM_PROVIDER_REPOSITORY" --arg run_id "$DM_PROVIDER_RUN_ID" \
+    --argjson now "$now" '
+      type == "object" and
+      .humanGranted == true and
+      (.authorizationId | type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$")) and
+      (.repository | type == "string") and .repository == $repository and
+      (.runId | type == "string") and .runId == $run_id and
+      (.expiresAtEpoch | type == "number" and . == floor and . > $now and . <= 9223372036854775807)
+    ' >/dev/null 2>&1 || return 1
+  NATIVE_JUDGMENT_AUTHORIZATION_ID="$(printf '%s' "$authorization" | jq -r '.authorizationId')" || return 1
+  NATIVE_JUDGMENT_AUTHORIZATION_EXPIRES_AT_EPOCH="$(printf '%s' "$authorization" | jq -r '.expiresAtEpoch')" || return 1
+  return 0
+}
+
 probe_json() { [ -n "$PROBE_FILE" ] && cat "$PROBE_FILE" || { [ -x "$PROBE" ] && "$PROBE" || echo '{}'; }; }
 PROBES="$(probe_json)"
 FLOOR="$(jq -r --arg c "$CLASS" '.cascades[$c].quality_floor // 0' "$CASCADE")"
@@ -326,6 +360,7 @@ rail_has_headroom() {
 for role in $LADDER; do
   kind="$(jq -r --arg h "$HOST" --arg r "$role" '.hosts[$h].roles[$r].kind // "none"' "$PROFILE")"
   [ "$kind" = "none" ] && continue
+  [ "$role" = "native_judgment" ] && ! native_judgment_allowed && continue
   prail="$(jq -r --arg h "$HOST" --arg r "$role" '.hosts[$h].roles[$r].probe // "none"' "$PROFILE")"
   rail_has_headroom "$prail" || continue
   if [ "$prail" = "openrouter" ] && ! openrouter_allowed; then
@@ -350,14 +385,29 @@ for role in $LADDER; do
         fallback=true
         fallback_reason="${CLASS}-unavailable-or-below-floor"
       fi
-      jq -n --arg c "$CLASS" --arg h "$HOST" --arg role "$role" --arg k "$kind" \
-            --arg m "$model" --arg q "$q" --arg pr "$prail" \
-            --arg requested_model "$REQUESTED_MODEL" \
-            --arg fallback_reason "$fallback_reason" --argjson fallback "$fallback" \
-            '{class:$c,host:$h,role:$role,kind:$k,model:$m,quality:($q|tonumber),probe_rail:$pr,
-              requestedProvider:$c,requestedModel:$requested_model,
-              attemptedProvider:$pr,attemptedModel:$m,actualImplementer:$pr,actualModel:$m,
-              fallback:$fallback,fallbackReason:$fallback_reason,native_vendor_origin_invariant:"passed"}'
+      if [ "$role" = "native_judgment" ]; then
+        jq -n --arg c "$CLASS" --arg h "$HOST" --arg role "$role" --arg k "$kind" \
+              --arg m "$model" --arg q "$q" --arg pr "$prail" \
+              --arg requested_model "$REQUESTED_MODEL" \
+              --arg fallback_reason "$fallback_reason" --argjson fallback "$fallback" \
+              --arg authorization_id "$NATIVE_JUDGMENT_AUTHORIZATION_ID" \
+              --argjson authorization_expiry "$NATIVE_JUDGMENT_AUTHORIZATION_EXPIRES_AT_EPOCH" \
+              '{class:$c,host:$h,role:$role,kind:$k,model:$m,quality:($q|tonumber),probe_rail:$pr,
+                requestedProvider:$c,requestedModel:$requested_model,
+                attemptedProvider:$pr,attemptedModel:$m,actualImplementer:$pr,actualModel:$m,
+                fallback:$fallback,fallbackReason:$fallback_reason,native_vendor_origin_invariant:"passed",
+                nativeAuthorization:{authorizationId:$authorization_id,expiresAtEpoch:$authorization_expiry},
+                targetVariance:true,varianceReceiptRequired:true}'
+      else
+        jq -n --arg c "$CLASS" --arg h "$HOST" --arg role "$role" --arg k "$kind" \
+              --arg m "$model" --arg q "$q" --arg pr "$prail" \
+              --arg requested_model "$REQUESTED_MODEL" \
+              --arg fallback_reason "$fallback_reason" --argjson fallback "$fallback" \
+              '{class:$c,host:$h,role:$role,kind:$k,model:$m,quality:($q|tonumber),probe_rail:$pr,
+                requestedProvider:$c,requestedModel:$requested_model,
+                attemptedProvider:$pr,attemptedModel:$m,actualImplementer:$pr,actualModel:$m,
+                fallback:$fallback,fallbackReason:$fallback_reason,native_vendor_origin_invariant:"passed"}'
+      fi
       exit 0
     fi
     # Traversal intent per rung kind: codex_companion is single-attempt per role
@@ -373,13 +423,28 @@ for role in $LADDER; do
           fallback=true
           fallback_reason="${CLASS}-unavailable-or-below-floor"
         fi
-        jq -n --arg m "$model" --arg role "$role" --arg pr "$prail" \
-              --arg requested_provider "$CLASS" --arg requested_model "$REQUESTED_MODEL" \
-              --arg fallback_reason "$fallback_reason" --argjson fallback "$fallback" \
-              '{dispatch:"native",model:$m,role:$role,probe_rail:$pr,
-                requestedProvider:$requested_provider,requestedModel:$requested_model,
-                attemptedProvider:$pr,attemptedModel:$m,actualImplementer:$pr,actualModel:$m,
-                fallback:$fallback,fallbackReason:$fallback_reason,nativeVendorOriginInvariant:"passed"}'; exit 64;;
+        if [ "$role" = "native_judgment" ]; then
+          jq -n --arg m "$model" --arg role "$role" --arg pr "$prail" \
+                --arg requested_provider "$CLASS" --arg requested_model "$REQUESTED_MODEL" \
+                --arg fallback_reason "$fallback_reason" --argjson fallback "$fallback" \
+                --arg authorization_id "$NATIVE_JUDGMENT_AUTHORIZATION_ID" \
+                --argjson authorization_expiry "$NATIVE_JUDGMENT_AUTHORIZATION_EXPIRES_AT_EPOCH" \
+                '{dispatch:"native",model:$m,role:$role,probe_rail:$pr,
+                  requestedProvider:$requested_provider,requestedModel:$requested_model,
+                  attemptedProvider:$pr,attemptedModel:$m,actualImplementer:$pr,actualModel:$m,
+                  fallback:$fallback,fallbackReason:$fallback_reason,nativeVendorOriginInvariant:"passed",
+                  nativeAuthorization:{authorizationId:$authorization_id,expiresAtEpoch:$authorization_expiry},
+                  targetVariance:true,varianceReceiptRequired:true}'
+        else
+          jq -n --arg m "$model" --arg role "$role" --arg pr "$prail" \
+                --arg requested_provider "$CLASS" --arg requested_model "$REQUESTED_MODEL" \
+                --arg fallback_reason "$fallback_reason" --argjson fallback "$fallback" \
+                '{dispatch:"native",model:$m,role:$role,probe_rail:$pr,
+                  requestedProvider:$requested_provider,requestedModel:$requested_model,
+                  attemptedProvider:$pr,attemptedModel:$m,actualImplementer:$pr,actualModel:$m,
+                  fallback:$fallback,fallbackReason:$fallback_reason,nativeVendorOriginInvariant:"passed"}'
+        fi
+        exit 64;;
       codex_companion)
         out="$(dispatch_codex)"; rc=$?
         [ $rc -eq 127 ] && break                       # Codex absent -> next role

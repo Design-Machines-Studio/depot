@@ -3,7 +3,7 @@
   "routing_policy": "routing-policy.json",
 
   "class_from_kind": {
-    "_comment": "Coding kind -> cascade class. Config/docs go OpenRouter-primary; logic, ui, and integration go Codex-primary. Claude is non-coding-only and appears in no executable coding class.",
+    "_comment": "Coding kind -> cascade class. Config/docs go OpenRouter-primary; logic, ui, and integration go Codex-primary. Claude native is an authorization-gated LAST-RESORT coding rung below both external rails (see policy._comment_native_fallback).",
     "logic": "codex", "config": "openrouter", "docs": "openrouter", "ui": "codex", "integration": "codex"
   },
 
@@ -32,14 +32,14 @@
 
   "cascades": {
     "codex": {
-      "_comment": "Primary executor = Codex for logic, UI, and integration. When Codex caps, descend through agentic and wrapper OpenRouter models; Claude has no coding rung.",
+      "_comment": "Primary executor = Codex for logic, UI, and integration. When Codex caps, descend through agentic OpenRouter, then the authorization-gated native judgment rung, then wrapper models.",
       "quality_floor": 70,
-      "ladder": ["premium_sub", "openrouter_exec", "frontier_api", "cheap_api"]
+      "ladder": ["premium_sub", "openrouter_exec", "native_judgment", "frontier_api", "cheap_api"]
     },
     "openrouter": {
-      "_comment": "Primary executor = OpenRouter for config/docs/mechanical logic. Codex is the trusted coding fallback; Claude has no coding rung.",
+      "_comment": "Primary executor = OpenRouter for config/docs/mechanical logic. Codex is the trusted coding fallback, then the authorization-gated native judgment rung, then wrapper models.",
       "quality_floor": 70,
-      "ladder": ["openrouter_exec", "premium_sub", "frontier_api", "cheap_api"]
+      "ladder": ["openrouter_exec", "premium_sub", "native_judgment", "frontier_api", "cheap_api"]
     }
   },
 
@@ -49,9 +49,11 @@
     "reentry": "highest_quality",
     "_comment_reentry": "When an exhausted sub rail's resets_at passes it re-enters at its original ladder position (flat-rate and free again -- prefer quality).",
     "on_cap_error": ["airlift_checkpoint", "mark_exhausted_until_resets_at", "descend"],
-    "_comment_subscriptions": "Coding rails: Codex Pro 20x is the active flat-rate workhorse, with a named 5x profile; OpenRouter carries external agentic and mechanical work. Claude Pro is reserved for non-coding tasks and is absent from coding cascades.",
-    "_comment_fable": "Fable 5 keeps its quality score for research and non-coding comparison only. Claude is outside the executable coding graph, so availability never adds Fable or Opus to a coding ladder.",
-    "_comment_native_host_constraint": "GPT-5.6 Sol is native Codex only and remains the preferred coding head. Terra and Luna OpenRouter calls are explicit policy-routed review/direct workloads rather than replacements in the host fallback ladder. Claude aliases retained in harness-profile native_judgment are native Claude compatibility metadata for explicit non-coding workflows and are referenced by no coding cascade.",
+    "_comment_subscriptions": "Coding rails: Codex Pro 20x is the active flat-rate workhorse, with a named 5x profile; OpenRouter carries external agentic and mechanical work. Claude Pro sits below both as an authorization-gated native last-resort coding rung and is unselectable without a live human grant.",
+    "_comment_fable": "Fable 5 keeps its quality score for research, judgment, and review lanes. Opus heads the authorization-gated native_judgment coding rung; Fable is routed explicitly for adversarial plan review rather than by ladder descent.",
+    "_comment_native_fallback": "2026-08-08 user directive (Trav): user judgment overrides written routing policy. native_judgment is an authorization-gated executable coding rung, placed BELOW premium_sub and openrouter_exec in every class so it can fire only when both external rails are unavailable and a live, time-boxed human authorization permits it. Rationale: the automated OpenRouter rail fails closed on hosts without /usr/local/bin/workflow-authority, so a capped Codex sub previously produced a total execution deadlock (2026-08-08 zero-chunk BLOCKED run). Every dispatch on this rung is a target variance and must be receipted (routing-policy targets.enforcement.varianceReceiptRequired). Without a valid authorization the cascade behaves exactly as if the rung were absent and reports the deadlock honestly instead of silently routing coding work to Claude. Revisit when the broker lands (R3) and the interim macOS authorization retires.",
+    "_comment_native_authorization": "A human may grant a bounded native_judgment window for one repository and run. Only dispatches before the explicit epoch-seconds expiry may select the rung; every selected dispatch is a target variance and emits authorization evidence requiring a variance receipt. An absent, expired, malformed, or scope-mismatched authorization makes the rung unselectable. The gate always fails closed and never defaults open, including during dry runs.",
+    "_comment_native_host_constraint": "GPT-5.6 Sol is native Codex only and remains the preferred coding head. Terra and Luna OpenRouter calls are explicit policy-routed review/direct workloads rather than replacements in the host fallback ladder. Claude aliases retained in harness-profile native_judgment are native Claude compatibility metadata for explicit non-coding workflows; coding cascades may reference that role only through the fail-closed human authorization gate.",
     "privacy": "DEMOTED (2026-07-18, user directive): model selection priority is Quality > Price > Speed > Provider privacy. OPENROUTER_ZDR is OPT-IN, never a default pin -- Chinese first-party hosting (Moonshot/DeepSeek/Z.AI) is acceptable by default. Set OPENROUTER_ZDR=1 per-call only for genuinely sensitive material (client code under NDA, credentials-adjacent diffs); when set, a model with no eligible ZDR provider (e.g. moonshotai/kimi-k3 pre-weights) is a per-model failure and the ladder walks on.",
     "_comment_headroom_unknown": "usage-probe state 'unknown' is treated as HAS-headroom: dispatch plus reactive cap detection is preferred over falsely skipping a healthy Codex or OpenRouter rail.",
     "_comment_agentic_seam": "openrouter_exec is the agentic OpenRouter rung for config/docs/mechanical-logic. Wrapper rungs (cheap_api/frontier_api) remain single-turn analysis/text generation and are still invalid for complex logic/ui/integration implementation."
