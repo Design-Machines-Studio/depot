@@ -93,6 +93,19 @@ aggregate_windows() {
 }
 
 claude_statusline_input() {
+  # These three inputs are CALLER-SUPPLIED usage numbers, so they are test
+  # fixtures, not evidence. Accepting them in normal operation would let anyone
+  # who controls the environment assert used_percentage 0 for both windows,
+  # which also suppresses the ccusage fallback (it only runs when no five_hour
+  # observation exists) and reports Claude "ok" while its real headroom is
+  # unknown or exhausted. That is the optimistic direction this file exists to
+  # prevent, so they are honoured only under an explicit test mode.
+  #
+  # Outside test mode this probe has no live Claude source: it is not a
+  # statusLine command and cannot see the runtime's rate_limits payload. It
+  # therefore reports Claude as unknown, which resolves to no headroom. That is
+  # the truthful answer, not a degradation.
+  [ "${USAGE_PROBE_TEST_MODE:-0}" = "1" ] || return 0
   if [ -n "${USAGE_PROBE_CLAUDE_STATUSLINE_JSON:-}" ]; then
     printf '%s' "$USAGE_PROBE_CLAUDE_STATUSLINE_JSON"
   elif [ -n "${USAGE_PROBE_CLAUDE_STATUSLINE_FILE:-}" ] \
@@ -230,7 +243,12 @@ normalize_profile_probe() {
 
 operator_profile_path() {
   local root="" candidate=""
-  if [ -n "${DM_OPERATOR_PROFILE_FILE:-}" ]; then
+  # An environment-selected profile path is a test fixture, not production
+  # input: the profile supplies argv this script executes, so letting the
+  # environment point it at any untracked file defeats the "developer-local
+  # config" boundary the contract claims. In normal operation only the
+  # canonical repository path is resolved.
+  if [ "${USAGE_PROBE_TEST_MODE:-0}" = "1" ] && [ -n "${DM_OPERATOR_PROFILE_FILE:-}" ]; then
     candidate="$DM_OPERATOR_PROFILE_FILE"
   else
     root="$(git rev-parse --show-toplevel 2>/dev/null)" || root=""
@@ -308,6 +326,14 @@ if [ -n "$profile" ] && [ -r "$profile" ] \
         /*) [ -f "$probe_bin" ] && [ -x "$probe_bin" ] && probe_ok=1 ;;
         */*) probe_ok=0 ;;
         *) command -v "$probe_bin" >/dev/null 2>&1 && probe_ok=1 ;;
+      esac
+      # An argv array blocks IMPLICIT shell parsing; it does not stop a profile
+      # from naming a shell explicitly. Refuse interpreters outright, otherwise
+      # ["/bin/sh","-c","..."] walks straight back through the door this
+      # hardening closed.
+      case "${probe_bin##*/}" in
+        sh|bash|dash|zsh|ksh|csh|tcsh|fish|env|eval|xargs|perl|python|python3|ruby|node|osascript|awk|nohup|command|exec|su|sudo|doas)
+          probe_ok=0 ;;
       esac
       if [ "$probe_ok" -eq 1 ]; then
         # Bounded: a hanging profile probe must resolve to unknown, not block.
