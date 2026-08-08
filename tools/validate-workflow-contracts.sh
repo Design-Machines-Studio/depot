@@ -376,6 +376,14 @@ require_text "$assembly_verification_profile" '"argv": [' "assembly publishes ar
 require_text "$assembly_verification_profile" '"id": "go-full-race"' "assembly profile retains candidate race coverage"
 require_text "$orchestrator" "Ask-then-default-park is the only headless behavior" "orchestrator parks rather than assuming yes on rail exhaustion"
 require_text "$orchestrator" "The Workflow Authority broker gate is a security authorization boundary, not a" "orchestrator keeps the broker gate non-overridable by the exhaustion ask"
+require_text "$orchestrator" "never implemented under fallback authorization" "orchestrator excludes sensitive-path chunks from fallback"
+require_text "$orchestrator" "The final full dm-review is never waived" "orchestrator never waives the final review for capacity"
+require_text "$orchestrator" "Record the authorization before any fallback dispatch" "orchestrator receipts authorization before dispatch"
+require_text "$orchestrator" "ask_evidence_ref" "orchestrator binds the authorization receipt to a real ask exchange"
+require_text "$orchestrator" "are NOT operators and can" "orchestrator forbids agent self-authorization"
+require_text "$pipeline_run" "A fallback dispatch without a prior valid authorization receipt MUST be halted" "pipeline-run halts unauthorized fallback"
+require_text "$review_skill" "and never assumes yes" "dm-review never reads an unanswered lane ask as consent"
+require_text "$review_skill" "the headless gap-and-continue default are unavailable" "dm-review cannot gap-and-continue the pipeline final review"
 
 # --------------------------------------------------------------------------
 # Group 6: dm-review quality-pulse contract

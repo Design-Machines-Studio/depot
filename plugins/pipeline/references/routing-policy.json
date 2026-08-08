@@ -178,8 +178,9 @@
       "openrouter_automated_lanes",
       "any provider for sensitive-path chunks"
     ],
-    "operatorOverride": "optional untracked local file may narrow or annotate the derived list (per-developer subscriptions differ); it can only REMOVE options, never add one the derivation did not find, and never anything in neverOfferable",
-    "authorization": "explicit per-run receipt, operator-named provider",
+    "operatorOverride": "optional file OUTSIDE the workspace may narrow the derived list (per-developer subscriptions differ); it can only REMOVE options, never add one the derivation did not find, and never anything in neverOfferable. Remove-only is enforced by the dispatch script, never by the agent, and its annotations are never rendered into the ask -- an in-workspace override file could be rewritten by a prior chunk's output to steer the operator toward authorizing the orchestrator itself.",
+    "failClosed": "a missing routing-policy.json, a missing or malformed exhaustionFallback, or any mode other than ask restores the old hard block; no configuration read failure yields a path to fallback",
+    "authorization": "explicit per-run, per-chunk receipt carrying authorization_id, phase (execute|review), operator-selected exact rail identifier, and ask_evidence_ref binding it to a real ask exchange; consumed by one dispatch attempt and void once a permitted rail regains headroom",
     "liveStatusRequired": "the ask shows the derived status per rail (capped-until / available / unknown) so the operator decides from live facts; where usage-probe parsers are TODO stubs the ask says unknown rather than guessing",
     "rationale": "The provider boundary forbids SILENT fallback; it must not forbid ASKING THE OWNER. Every fallback execution traces to an explicit operator authorization receipt and carries fallback: true with fallbackReason rail_exhausted_user_authorized."
   },
