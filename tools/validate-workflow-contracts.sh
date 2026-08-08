@@ -549,6 +549,27 @@ for f in "$review_dispatch_skill" "$orchestrator"; do
   require_text "$f" "--agent-definition" "$rel names the input-bytes evidence path"
 done
 
+# The per-chunk review tier is a burn control, so it has to be receipt-evidenced
+# rather than advisory. Pin the required-field sentence: without it the
+# orchestrator can quietly dispatch the multi-agent suite for ordinary chunks and
+# leave no trace that the cheap default was skipped.
+require_text "$orchestrator" \
+  "MUST record \`review_tier:" \
+  "execution orchestrator requires the review_tier chunk-receipt field"
+
+# --------------------------------------------------------------------------
+# Group 8: subscription-first and family-independent routing
+# --------------------------------------------------------------------------
+
+printf "\nrouting invariants:\n"
+
+require_text "$review_skill" \
+  "The second-perspective reviewer model family MUST differ from the family that implemented the diff under review." \
+  "dm-review requires a family-independent second perspective"
+require_text "$review_skill" \
+  "Unknown subscription headroom is treated as at-threshold, never as available." \
+  "routing-policy consumers treat unknown subscription headroom conservatively"
+
 printf "\n"
 if [ "$failures" -ne 0 ]; then
   printf "FIX  restore the missing workflow-contract anchors (see docs and plugin sources above)\n"
