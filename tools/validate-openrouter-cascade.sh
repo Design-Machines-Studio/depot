@@ -30,9 +30,69 @@ wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/ope
 authorization="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
 security_policy="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
 model_selection="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-selection.md"
+model_matrix="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-matrix.json"
+model_cascade="${MODEL_CASCADE_FILE:-$REPO_ROOT/plugins/pipeline/references/model-cascade.json}"
+routing_policy="${ROUTING_POLICY_FILE:-$REPO_ROOT/plugins/pipeline/references/routing-policy.json}"
 orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
 
 any_failed=0
+
+if jq -e --slurpfile matrix "$model_matrix" '
+     $matrix[0].cascade_rank_slugs as $declared
+     | $matrix[0].models as $models
+     | ([$models[]
+         | select(.slug as $slug | $declared | index($slug))
+         | {slug: .slug, rank: .quality_rank}
+       ] | sort_by(.slug)) as $expected
+     | ([.quality_rank | to_entries[]
+         | select(.key | contains("/"))
+         | {slug: .key, rank: .value}
+       ] | sort_by(.slug)) as $actual
+     | ($declared | type) == "array"
+       and ($declared | length) > 0
+       and ($declared | length) == ($declared | unique | length)
+       and all($declared[]; type == "string" and length > 0)
+       and all($declared[]; . as $slug
+         | any($models[]; .slug == $slug and (.quality_rank | type) == "number"))
+       and $actual == $expected
+   ' "$model_cascade" >/dev/null 2>&1; then
+  pass "provider-qualified cascade quality ranks exactly match the matrix-declared set"
+else
+  fail "provider-qualified cascade quality ranks must exactly match the matrix-declared slug/rank set"
+  any_failed=1
+fi
+
+if jq -e --slurpfile matrix "$model_matrix" '
+     [.agentType | to_entries[] | select(.value.provider == "openrouter")] as $agents
+     | $matrix[0].models as $models
+     | ($agents | length) > 0
+       and all($agents[];
+         (.value.model | type) == "string"
+         and (.value.fallbackModel | type) == "string"
+         and (.value.model as $slug | any($models[]; .slug == $slug))
+         and (.value.fallbackModel as $slug | any($models[]; .slug == $slug)))
+   ' "$routing_policy" >/dev/null 2>&1; then
+  pass "every OpenRouter routing agent declares matrix-backed model and fallbackModel fields"
+else
+  fail "every OpenRouter routing agent must declare string model and fallbackModel fields present in the matrix"
+  any_failed=1
+fi
+
+matrix_snapshot_date="$(jq -r '
+  .snapshot_date as $snapshot
+  | if ($snapshot | type) == "string"
+      and ([.models[].snapshot_date] | unique) == [$snapshot]
+    then $snapshot
+    else empty
+    end
+' "$model_matrix" 2>/dev/null || true)"
+prose_snapshot_date="$(sed -n 's/^Prices below are a checked-in planning snapshot from \([0-9][0-9-]*\), in USD per$/\1/p' "$model_selection")"
+if [ -n "$matrix_snapshot_date" ] && [ "$matrix_snapshot_date" = "$prose_snapshot_date" ]; then
+  pass "model matrix snapshot date matches model-selection prose"
+else
+  fail "model matrix and every entry must share the snapshot date stated in model-selection.md"
+  any_failed=1
+fi
 
 if [ ! -x "$cascade" ]; then
   fail "cascade-dispatch.sh is missing or not executable"
