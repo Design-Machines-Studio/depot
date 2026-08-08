@@ -106,6 +106,14 @@ refuse_when_broker_ready() {
       echo "payload-authorization: broker_present_not_ready; broker client is installed but does not probe ready -- interim mode withheld" >&2
       exit 2
       ;;
+    absent)
+      : # the only state that leaves interim mode available
+      ;;
+    *)
+      # Empty or unrecognized. An unresolved state is not an absent broker.
+      echo "payload-authorization: broker state unresolved; interim mode withheld" >&2
+      exit 2
+      ;;
   esac
 }
 

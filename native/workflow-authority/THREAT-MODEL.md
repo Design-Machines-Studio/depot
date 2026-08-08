@@ -103,12 +103,31 @@ digests once at run start instead of confirming each payload immediately before
 its own transmission. The window between approval and transmission widens from
 one payload to one run, so a same-user process that can rewrite a lane's bytes
 after the snapshot has a longer opportunity to try. Rewriting bytes does not
-by itself get them transmitted: the wrapper recomputes the canonical exact
-ordered-content digest from the request body it is about to POST and refuses
-unless that digest is already a member of the validated batch file's
-`payload_digests`. That check is at the point of disclosure, over the bytes
-actually sent, and it does not depend on the lane having run `verify-batch`
-first. The residual weakening is that the operator's attention is spent once on
+by itself get them transmitted: the wrapper recomputes the canonical
+exact-ordered-content digest over ALL message contents in the request body it
+is about to POST -- system, developer, assistant, and user turns, in
+transmission order -- and refuses unless that digest is already a member of the
+validated batch file's `payload_digests`. That check is at the point of
+disclosure, over the content bytes actually sent, and it does not depend on the
+lane having run `verify-batch` first. Message content that is not a plain
+string (array-typed or otherwise structured content parts) has no framing that
+agrees with what `payload-authorization.sh snapshot` records, so the wrapper
+refuses it under interim mode rather than hash something different.
+
+**What the binding does NOT cover.** It covers ordered message CONTENT bytes
+and nothing else. The model slug, the fallback slug, the provider order, the
+`sort` preference, and every other routing field are caller-selected and sit
+outside the approved digest set; the batch schema records digests only, so
+covering them would require a schema change. Honestly assessed, routing
+metadata is a weak content-exfiltration channel -- the fields are constrained
+to short, validated slugs and orderings by routing policy, native-vendor
+rejection, and provider-order validation, so their capacity is a handful of
+bytes per request rather than an arbitrary payload -- but it is a real
+destination-selection channel: a lane that cannot change WHAT is sent can still
+influence WHERE approved content goes, within the set routing policy permits.
+Do not read the digest binding as approval of the route.
+
+The residual weakening is that the operator's attention is spent once on
 a summary (lane IDs, per-lane byte totals, grand total, digest count) rather
 than repeatedly on each payload -- the same user-presence limitation described
 above, applied to a batch.
@@ -124,8 +143,9 @@ run id, expiry, and sunset checks all validate data that such a forger supplies.
 The interactive confirmation is a control against ACCIDENTAL and AUTOMATED
 entry by this tooling; it is NOT a technical barrier against a same-user
 process that forges the artifact. What the mode still binds, even against a
-forger, is disclosure to digests recorded in the file at transmission time --
-it does not bind who wrote the file.
+forger, is disclosure of message content to digests recorded in the file at
+transmission time -- it does not bind who wrote the file, and it does not bind
+routing metadata.
 
 Closing that same-user gap is precisely what an out-of-process privileged
 broker exists to provide, and re-implementing a weak imitation in Bash (a

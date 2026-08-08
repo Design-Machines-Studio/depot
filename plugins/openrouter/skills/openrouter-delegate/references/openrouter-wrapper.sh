@@ -223,18 +223,24 @@ broker_state() {
   printf 'present_not_ready'
 }
 
-# Canonical exact-ordered-content-bytes digest, byte-identical to the framing
-# payload-authorization.sh uses when it snapshots a single content file:
-# sha256(index_be64 || length_be64 || bytes).
+# Canonical exact-ordered-content-bytes digest over an ORDERED LIST of content
+# entries, byte-identical to the framing `payload-authorization.sh snapshot`
+# produces: sha256 over the concatenation of index_be64 || length_be64 || bytes
+# for every entry, in order. The framing was always multi-entry. Hashing only
+# the first entry would leave every other transmitted message outside the
+# approved set, which is the whole point of the binding.
 canonical_content_digest() {
-  local file="$1" size="" index_escape="" length_escape=""
-  size="$(wc -c < "$file" | tr -d '[:space:]')"
-  index_escape="$(printf '%016x' 0 | sed 's/../\\x&/g')"
-  length_escape="$(printf '%016x' "$size" | sed 's/../\\x&/g')"
+  local file="" size="" index=0 index_escape="" length_escape=""
   {
-    printf '%b' "$index_escape"
-    printf '%b' "$length_escape"
-    cat "$file"
+    for file in "$@"; do
+      size="$(wc -c < "$file" | tr -d '[:space:]')"
+      index_escape="$(printf '%016x' "$index" | sed 's/../\\x&/g')"
+      length_escape="$(printf '%016x' "$size" | sed 's/../\\x&/g')"
+      printf '%b' "$index_escape"
+      printf '%b' "$length_escape"
+      cat "$file"
+      index=$((index + 1))
+    done
   } | shasum -a 256 | awk '{print $1}'
 }
 
@@ -247,6 +253,16 @@ if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
       ;;
     present_not_ready)
       echo "### RUNNER FAILURE: broker_present_not_ready; broker client is installed but does not probe ready -- interim mode withheld" >&2
+      exit 2
+      ;;
+    absent)
+      : # the only state that leaves interim mode available
+      ;;
+    *)
+      # Empty or unrecognized. A state that cannot be resolved is not a state
+      # that permits interim mode: a killed or truncated probe substitution
+      # must not fall through into an authorized lane.
+      echo "### RUNNER FAILURE: broker state unresolved; interim mode withheld" >&2
       exit 2
       ;;
   esac
@@ -526,13 +542,40 @@ if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
   # otherwise still be transmitted. The disclosed content is read back out of
   # the request body curl is about to POST and must already be a member of the
   # validated batch file's payload_digests.
-  transmitted_content_file="$RUN_ROOT/transmitted.content"
-  jq -j '[.messages[] | select(.role == "user") | .content] | add // ""' \
-    "$request_file" > "$transmitted_content_file" || {
+  # EVERY message content is bound, in transmission order -- system, developer,
+  # assistant, and user alike -- not only the user turn. Binding the user turn
+  # alone left an attached system prompt outside the approved set, which is a
+  # usable exfiltration channel for a compromised lane.
+  #
+  # `snapshot` frames raw file bytes, so it can only express STRING content.
+  # Structured or array-typed content parts have no byte framing that would
+  # agree with it, so they are REFUSED here rather than silently hashed into
+  # something the operator never approved.
+  jq -e '
+    (.messages | type) == "array"
+    and (.messages | length) > 0
+    and (all(.messages[]; (.content | type) == "string"))
+  ' "$request_file" >/dev/null 2>&1 || {
+    echo "### RUNNER FAILURE: non-string message content cannot be bound to the batch authorization; interim mode withheld" >&2
+    exit 2
+  }
+  transmitted_count="$(jq '.messages | length' "$request_file")" || {
     echo "### RUNNER FAILURE: could not read transmitted content for batch digest binding" >&2
     exit 2
   }
-  TRANSMITTED_PAYLOAD_SHA256="$(canonical_content_digest "$transmitted_content_file")"
+  transmitted_parts=()
+  transmitted_index=0
+  while [ "$transmitted_index" -lt "$transmitted_count" ]; do
+    transmitted_part_file="$RUN_ROOT/transmitted.$transmitted_index.content"
+    jq -j --argjson i "$transmitted_index" '.messages[$i].content' \
+      "$request_file" > "$transmitted_part_file" || {
+      echo "### RUNNER FAILURE: could not read transmitted content for batch digest binding" >&2
+      exit 2
+    }
+    transmitted_parts+=("$transmitted_part_file")
+    transmitted_index=$((transmitted_index + 1))
+  done
+  TRANSMITTED_PAYLOAD_SHA256="$(canonical_content_digest "${transmitted_parts[@]}")"
   [[ "$TRANSMITTED_PAYLOAD_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
     echo "### RUNNER FAILURE: could not compute the transmitted payload digest" >&2
     exit 2

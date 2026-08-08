@@ -351,10 +351,15 @@ Lanes dispatch with
 its digest, and each lane verifies its own exact payload digest against the
 batch through `payload-authorization.sh verify-batch` before transmission. The
 wrapper does not rely on that step having run: it recomputes the canonical
-exact-ordered-content digest from the request body it is about to POST and
-refuses unless that digest is already in the batch file's `payload_digests`. A
-payload whose digest is not in the batch falls back to the per-payload
-interactive path or fails closed. Interim mode is FORBIDDEN when a broker probe
+exact-ordered-content digest over ALL message contents of the request body it
+is about to POST -- system, developer, assistant, and user turns in
+transmission order -- and refuses unless that digest is already in the batch
+file's `payload_digests`. Non-string (structured or array-typed) message
+content is refused rather than hashed. The binding covers ordered message
+CONTENT bytes only: model, fallback, provider order, and sort are
+caller-selected routing metadata outside the approved set. A payload whose
+digest is not in the batch falls back to the per-payload interactive path or
+fails closed. Interim mode is FORBIDDEN when a broker probe
 on this host reports `ready`: both the batch path and the wrapper refuse with
 `broker available; interim mode retired on this host`. It is also WITHHELD when
 the broker client is installed but does not probe ready -- an unknown state
