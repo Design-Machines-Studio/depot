@@ -821,4 +821,148 @@ if grep -Eq 'eval.*RAW_OUT|bash.*RAW_OUT' "$EXEC_RUNNER"; then
   exit 1
 fi
 
+
+# --- Interim operator-batch: transmission-point digest binding --------------
+# Proves the WRAPPER refuses bytes that are not in payload_digests, at the point
+# of disclosure, without any verify-batch step having run. The batch file is
+# hand-written on purpose: that is exactly the unauthenticated, same-user
+# artifact the threat model now documents, and it is the reason the wrapper
+# cannot treat the file's existence as proof that the payload was approved.
+# Guarded by the program sunset -- after 2026-09-07 the mode itself is dead and
+# the wrapper refuses earlier, on the sunset check.
+if [ "$(date -u +%Y-%m-%d)" \< "2026-09-07" ]; then
+  python3 - "$FIXTURE_ROOT/batch-authorization.json" <<'PY'
+import json
+import sys
+from datetime import datetime, timedelta, timezone
+
+now = datetime.now(timezone.utc).replace(microsecond=0)
+document = {
+    "schema_version": 1,
+    "authorization_mode": "interim_operator_batch",
+    "run_id": "fixture-run",
+    "operator": "fixture-operator",
+    "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "expires_at": (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "payload_digests": ["0" * 64],
+    "scope_note": "fixture batch covering no real payload",
+    "program_sunset": "2026-09-07",
+}
+with open(sys.argv[1], "w", encoding="utf-8") as handle:
+    json.dump(document, handle, sort_keys=True)
+    handle.write("\n")
+PY
+  FIXTURE_BATCH_DIGEST="$(shasum -a 256 "$FIXTURE_ROOT/batch-authorization.json" | awk '{print $1}')"
+  expect_rc 2 'transmitted payload digest is not in the batch authorization' \
+    'interim batch refuses unapproved transmitted bytes' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization.json" \
+      OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$FIXTURE_BATCH_DIGEST" \
+      "$WRAPPER" moonshotai/kimi-k3 'payload bytes the operator never approved'
+
+  python3 - "$FIXTURE_ROOT/batch-authorization-sunset.json" <<'PY'
+import json
+import sys
+from datetime import datetime, timedelta, timezone
+
+now = datetime.now(timezone.utc).replace(microsecond=0)
+document = {
+    "schema_version": 1,
+    "authorization_mode": "interim_operator_batch",
+    "run_id": "fixture-run",
+    "operator": "fixture-operator",
+    "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "expires_at": (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "payload_digests": ["0" * 64],
+    "scope_note": "fixture batch asserting its own later sunset",
+    "program_sunset": "2099-01-01",
+}
+with open(sys.argv[1], "w", encoding="utf-8") as handle:
+    json.dump(document, handle, sort_keys=True)
+    handle.write("\n")
+PY
+  FIXTURE_SUNSET_DIGEST="$(shasum -a 256 "$FIXTURE_ROOT/batch-authorization-sunset.json" | awk '{print $1}')"
+  expect_rc 2 'sunset-mismatched' \
+    'interim batch refuses a self-asserted program sunset' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization-sunset.json" \
+      OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$FIXTURE_SUNSET_DIGEST" \
+      "$WRAPPER" moonshotai/kimi-k3 'payload bytes the operator never approved'
+
+  # POSITIVE fixture: framing parity between the wrapper and `snapshot`.
+  # Negative paths alone cannot tell a correct binding from a framing mismatch
+  # that silently bricks every legitimate interim lane -- that fails closed,
+  # but it leaves the mode dead and undetected. So build the batch through
+  # payload-authorization.sh's REAL digest path over the same ordered content
+  # the wrapper is about to transmit, then prove the wrapper clears the
+  # membership check and reaches the network stage.
+  #
+  # Two entries on purpose: the system turn is index 0 and the user turn is
+  # index 1. A wrapper that bound only the user turn, dropped the system turn,
+  # or framed the entries in the wrong order produces a different digest and
+  # fails here.
+  POSITIVE_SYSTEM='fixture system turn for ordered-content binding'
+  POSITIVE_PROMPT='fixture user turn for ordered-content binding'
+  printf '%s' "$POSITIVE_SYSTEM" > "$FIXTURE_ROOT/positive.system"
+  printf '%s' "$POSITIVE_PROMPT" > "$FIXTURE_ROOT/positive.user"
+  POSITIVE_DIGEST="$("$AUTHORIZATION" snapshot \
+    --manifest "$FIXTURE_ROOT/positive-manifest.json" \
+    --content-file "$FIXTURE_ROOT/positive.system" \
+    --content-file "$FIXTURE_ROOT/positive.user")"
+  case "$POSITIVE_DIGEST" in
+    [0-9a-f][0-9a-f]*) : ;;
+    *)
+      echo 'positive interim fixture: snapshot did not return a digest' >&2
+      exit 1
+      ;;
+  esac
+  python3 - "$FIXTURE_ROOT/batch-authorization-positive.json" "$POSITIVE_DIGEST" <<'PY'
+import json
+import sys
+from datetime import datetime, timedelta, timezone
+
+now = datetime.now(timezone.utc).replace(microsecond=0)
+document = {
+    "schema_version": 1,
+    "authorization_mode": "interim_operator_batch",
+    "run_id": "fixture-run",
+    "operator": "fixture-operator",
+    "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "expires_at": (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    "payload_digests": [sys.argv[2]],
+    "scope_note": "fixture batch covering the exact ordered content transmitted",
+    "program_sunset": "2026-09-07",
+}
+with open(sys.argv[1], "w", encoding="utf-8") as handle:
+    json.dump(document, handle, sort_keys=True)
+    handle.write("\n")
+PY
+  POSITIVE_BATCH_DIGEST="$(shasum -a 256 \
+    "$FIXTURE_ROOT/batch-authorization-positive.json" | awk '{print $1}')"
+  # Reaching the transport is the proof: the loopback fixture base refuses the
+  # connection, so curl fails with a transport error AFTER the membership check
+  # has already been cleared. No live API call is made.
+  expect_rc 1 'transport error' \
+    'interim batch accepts the exact ordered content snapshot approved' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+      OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization-positive.json" \
+      OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$POSITIVE_BATCH_DIGEST" \
+      "$WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT"
+  if grep -Eq 'transmitted payload digest is not in the batch authorization|could not compute the transmitted payload digest|could not read transmitted content|non-string message content' \
+      "$FIXTURE_ROOT/cmd.err"; then
+    echo 'positive interim fixture: approved ordered content was refused at the membership check' >&2
+    cat "$FIXTURE_ROOT/cmd.err" >&2
+    exit 1
+  fi
+fi
+
+# Broker-state case statements must both carry a fail-closed catch-all. An
+# empty or unexpected state is not an absent broker.
+grep -Fq 'broker state unresolved; interim mode withheld' "$WRAPPER"
+grep -Fq 'broker state unresolved; interim mode withheld' "$AUTHORIZATION"
+
 printf '  OK    OpenRouter threat/content and output-boundary fixtures pass\n'
