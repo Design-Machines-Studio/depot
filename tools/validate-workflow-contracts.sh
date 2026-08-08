@@ -150,7 +150,8 @@ lifecycle="$REPO_ROOT/plugins/pipeline/references/artifact-lifecycle.md"
 review_skill="${WORKFLOW_CONTRACT_REVIEW_SKILL:-$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md}"
 review_cmd="$REPO_ROOT/plugins/dm-review/commands/dm-review.md"
 review_consolidator="$REPO_ROOT/plugins/dm-review/agents/workflow/review-consolidator.md"
-review_loop="$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md"
+review_loop="${WORKFLOW_CONTRACT_REVIEW_LOOP:-$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md}"
+review_loop_skill="${WORKFLOW_CONTRACT_REVIEW_LOOP_SKILL:-$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md}"
 review_fix="$REPO_ROOT/plugins/dm-review/commands/dm-review-fix.md"
 output_format="$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md"
 kernel_skill="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/SKILL.md"
@@ -470,12 +471,56 @@ require_text "$review_cmd" "observation-only economics evidence" "dm-review cont
 require_text "$review_consolidator" "stable ID" "review consolidator preserves stable IDs"
 for loop_contract in \
   "$review_loop" \
-  "$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md"; do
+  "$review_loop_skill"; do
   rel="${loop_contract#$REPO_ROOT/}"
   for field in selective_rerun lanes_rerun lanes_skipped rerun_reasons selection_fallback_reason; do
     require_text "$loop_contract" "\`$field\`" "$rel iteration receipt records $field"
   done
 done
+security_loop_start='#### Security lane convergence invariant'
+security_loop_end='#### Selective input boundary'
+IFS= read -r -d '' security_loop_expected <<'EOF' || true
+#### Security lane convergence invariant
+
+On iteration 2+ after a non-empty fix commit, both
+`security-auditor-openrouter` and `security-auditor-codex-signoff` are exempt
+from selective re-run filtering. Add each security lane present in
+`selected_mode_lanes` to `rerun_lanes` even when it owns no prior finding and
+has no matching Phase 3 file trigger.
+
+Both security lanes receive the full Phase 3.5-approved review diff, never a
+per-lane scoped slice. For `security-auditor-openrouter`, the complete diff is
+input to the existing local content/disclosure boundary, and only eligible
+bytes may leave the host. A full or partial disclosure decline remains a
+recorded lane attempt followed by the required local completion or an explicit
+coverage gap; it never removes the lane from `rerun_lanes` or becomes a silent
+skip.
+
+EOF
+security_loop_expected="${security_loop_expected%$'\n'}"
+for loop_contract in "$review_loop" "$review_loop_skill"; do
+  rel="${loop_contract#$REPO_ROOT/}"
+  require_text "$loop_contract" 'if lane is one of ["security-auditor-openrouter", "security-auditor-codex-signoff"] and fix_files is not empty:' "$rel always selects both security lanes after a fix commit"
+  require_unique_exact_section "$loop_contract" "$security_loop_start" "$security_loop_end" "$security_loop_expected" "$rel preserves the exact security lane convergence invariant"
+done
+security_loop_fixture="$(mktemp "${TMPDIR:-/tmp}/workflow-security-loop.XXXXXX")"
+trap 'rm -f "$security_loop_fixture"' EXIT
+awk '{ sub(/"security-auditor-openrouter", /, ""); print }' "$review_loop" >"$security_loop_fixture"
+if grep -Fq -- 'if lane is one of ["security-auditor-openrouter", "security-auditor-codex-signoff"] and fix_files is not empty:' "$security_loop_fixture"; then
+  printf "  FAIL  security selection anchor rejects removal of the OpenRouter lane\n"
+  failures=1
+else
+  printf "  OK    security selection anchor rejects removal of the OpenRouter lane\n"
+fi
+awk '{ sub(/full Phase 3.5-approved review diff/, "scoped Phase 3.5-approved review diff"); print }' "$review_loop" >"$security_loop_fixture"
+if section_is_unique_and_exact "$security_loop_fixture" "$security_loop_start" "$security_loop_end" "$security_loop_expected"; then
+  printf "  FAIL  exact security invariant rejects full-diff narrowing\n"
+  failures=1
+else
+  printf "  OK    exact security invariant rejects full-diff narrowing\n"
+fi
+rm -f "$security_loop_fixture"
+trap - EXIT
 selective_dispatch_start='#### Selective dispatch input'
 selective_dispatch_end='#### Report Selection'
 IFS= read -r -d '' selective_dispatch_expected <<'EOF' || true

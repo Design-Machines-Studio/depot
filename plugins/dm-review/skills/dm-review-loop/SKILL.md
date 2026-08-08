@@ -132,8 +132,8 @@ while iteration < max_iterations:
           Add lane to rerun_lanes with reason "b_fix_file_trigger"
         # Always-run criteria have no implicit all-files trigger. They re-run
         # only through (a), unless a Phase 3 trigger is explicitly declared.
-        if lane == "security-auditor-codex-signoff" and fix_files is not empty:
-          Add lane to rerun_lanes with reason "security_signoff_fix_commit"
+        if lane is one of ["security-auditor-openrouter", "security-auditor-codex-signoff"] and fix_files is not empty:
+          Add lane to rerun_lanes with reason "security_lane_fix_commit"
       skipped_lanes = selected_mode_lanes - rerun_lanes
       selective_rerun = true
       review_lane_allowlist = {
@@ -172,7 +172,7 @@ while iteration < max_iterations:
   receipt to authoritative-receipts.json before observe-review. It records `selective_rerun`,
   `lanes_rerun`, `lanes_skipped`, `rerun_reasons`, and `selection_fallback_reason`.
   `lanes_rerun` is derived from attempted coverage rows; `lanes_skipped` is the selected full set
-  minus those rows. Each re-run lane records (a), (b), security-signoff, full-fan-out, or fallback
+  minus those rows. Each re-run lane records (a), (b), security-lane, full-fan-out, or fallback
   reasons; each skipped lane records "no_rule_a_or_b_match". Skipped lanes get no record-attempt call.
 
   # Check for findings
@@ -233,7 +233,23 @@ while iteration < max_iterations:
       STOP -- needs attention
 ```
 
-The selection rule applies to both security lanes, architecture-reviewer, pattern-recognition-specialist, code-simplicity-reviewer, and doc-sync-reviewer: each re-runs only for rule (a) or a declared Phase 3 rule (b) match. `security-auditor-codex-signoff` is the sole exception and re-runs whenever any fix commit exists, even without an (a) or (b) match.
+#### Security lane convergence invariant
+
+On iteration 2+ after a non-empty fix commit, both
+`security-auditor-openrouter` and `security-auditor-codex-signoff` are exempt
+from selective re-run filtering. Add each security lane present in
+`selected_mode_lanes` to `rerun_lanes` even when it owns no prior finding and
+has no matching Phase 3 file trigger.
+
+Both security lanes receive the full Phase 3.5-approved review diff, never a
+per-lane scoped slice. For `security-auditor-openrouter`, the complete diff is
+input to the existing local content/disclosure boundary, and only eligible
+bytes may leave the host. A full or partial disclosure decline remains a
+recorded lane attempt followed by the required local completion or an explicit
+coverage gap; it never removes the lane from `rerun_lanes` or becomes a silent
+skip.
+
+#### Selective input boundary
 
 `review_lane_allowlist` is an internal loop-to-review input, not a public flag. Review Phase 3 is its sole consumer. An absent or invalid input always means the original unfiltered review, never an empty or partially inferred lane set.
 
