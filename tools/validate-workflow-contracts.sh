@@ -82,21 +82,76 @@ require_before() {
   fi
 }
 
+section_is_unique_and_exact() {
+  local file="$1"
+  local section_start="$2"
+  local section_end="$3"
+  local expected="$4"
+
+  [ -f "$file" ] || return 1
+
+  SECTION_START="$section_start" SECTION_END="$section_end" EXPECTED="$expected" awk '
+    BEGIN { expected_count = split(ENVIRON["EXPECTED"], expected, "\n") }
+    $0 == ENVIRON["SECTION_START"] {
+      section_starts++
+      if (section_starts == 1) {
+        inside = 1
+        start_line = NR
+      }
+    }
+    inside && $0 == ENVIRON["SECTION_END"] {
+      section_ends++
+      end_line = NR
+      inside = 0
+      next
+    }
+    $0 == ENVIRON["SECTION_END"] { section_ends++ }
+    inside { actual[++actual_count] = $0 }
+    END {
+      if (section_starts != 1 || section_ends != 1 || start_line >= end_line ||
+          actual_count != expected_count) exit 1
+      for (line = 1; line <= expected_count; line++) {
+        if (actual[line] != expected[line]) exit 1
+      }
+    }
+  ' "$file"
+}
+
+require_unique_exact_section() {
+  local file="$1"
+  local section_start="$2"
+  local section_end="$3"
+  local expected="$4"
+  local label="$5"
+
+  if section_is_unique_and_exact "$file" "$section_start" "$section_end" "$expected"; then
+    printf "  OK    %s\n" "$label"
+  else
+    printf "  FAIL  %s\n" "$label"
+    failures=1
+  fi
+}
+
 # --------------------------------------------------------------------------
 # Group 1: Repository cleanup contract
 # --------------------------------------------------------------------------
 
 contract="$REPO_ROOT/plugins/dm-review/skills/review/references/repo-cleanup-contract.md"
-orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
+# The override is a test seam for running this validator against a copied,
+# adversarially mutated orchestrator without touching the working tree.
+orchestrator="${WORKFLOW_CONTRACT_ORCHESTRATOR:-$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md}"
 pipeline_cmd="$REPO_ROOT/plugins/pipeline/commands/pipeline.md"
 pipeline_run="$REPO_ROOT/plugins/pipeline/commands/pipeline-run.md"
 pipeline_prompts="$REPO_ROOT/plugins/pipeline/commands/pipeline-prompts.md"
 pipeline_fix="$REPO_ROOT/plugins/pipeline/commands/pipeline-fix.md"
 lifecycle="$REPO_ROOT/plugins/pipeline/references/artifact-lifecycle.md"
-review_skill="$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
+# The override is a test seam for adversarial copies of the selective-dispatch
+# contract without touching the working tree.
+review_skill="${WORKFLOW_CONTRACT_REVIEW_SKILL:-$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md}"
 review_cmd="$REPO_ROOT/plugins/dm-review/commands/dm-review.md"
 review_consolidator="$REPO_ROOT/plugins/dm-review/agents/workflow/review-consolidator.md"
-review_loop="$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md"
+review_loop="${WORKFLOW_CONTRACT_REVIEW_LOOP:-$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md}"
+review_loop_skill="${WORKFLOW_CONTRACT_REVIEW_LOOP_SKILL:-$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md}"
 review_fix="$REPO_ROOT/plugins/dm-review/commands/dm-review-fix.md"
 output_format="$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md"
 kernel_skill="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/SKILL.md"
@@ -330,6 +385,71 @@ printf "\nPipeline performance contract:\n"
 require_text "$pipeline_cmd" "focused Codex review for ordinary chunks" "pipeline command uses focused ordinary-chunk review"
 require_text "$pipeline_run" "For ordinary non-sensitive chunks, run one focused read-only Codex review" "Codex adapter uses one focused ordinary-chunk reviewer"
 require_text "$orchestrator" "Do not dispatch the 5-agent quick dm-review" "orchestrator avoids the old per-chunk review fanout"
+tier_policy_start='### Per-chunk review tier (focused by default; escalate sensitive paths)'
+tier_policy_end='### Why this matters for OpenRouter routing'
+IFS= read -r -d '' tier_policy_expected <<'EOF' || true
+### Per-chunk review tier (focused by default; escalate sensitive paths)
+
+Default the per-chunk review gate to one **focused Codex review** with at most
+one repair/recheck pass. Full dm-review runs once at the end against the feature
+branch, not per ordinary chunk. Do not dispatch the 5-agent quick dm-review
+suite for an ordinary chunk.
+
+If `PIPELINE_FULL_TIER_REVIEW=1`, fail open to more coverage: run full dm-review
+for every chunk. Record an ordinary forced chunk as
+`review_tier: full (override)`, retain `full (sensitive path)` for a matching
+chunk and `full (final gate)` for the final gate, and add
+`review_tier_override: PIPELINE_FULL_TIER_REVIEW=1` to every chunk receipt. The
+override never reduces sensitive-path or final-gate coverage.
+
+Do NOT dispatch the multi-agent dm-review suite for an ordinary, non-final
+chunk when the kill switch is inactive. Doing so is a policy violation, not a
+judgment call; the chunk receipt MUST confess it with
+`review_tier_violation: ordinary chunk received multi-agent dm-review suite`.
+
+**Sensitive-path exception.** Before the per-chunk review, classify the union of the chunk's declared `filesToModify` and every path in the authoritative chunk diff against the sensitive-path set; the declaration alone is never authoritative. Inspect added content under `migrations/**` for seed credentials rather than classifying migration sensitivity by path alone. If a path or migration addition matches, run **full** review for that chunk (`args="full <worktree-path>"`) so `security-auditor-codex-signoff` and all conditional agents engage, and record `review_tier: full (sensitive path)` in the chunk receipt. If classification cannot complete for any reason, including an unreadable or unparseable input or incomplete migration-addition inspection, fail closed to full review and record the classification failure as the reason:
+
+```
+internal/auth/**            internal/federation/**
+**/secretbox*               **/destructive_confirmation*
+internal/baseplate/email/settings*
+deploy/**                   *.env*
+migrations/** containing seed credentials
+```
+
+These chunks are never focused-only. Their mandatory full-diff Codex security
+signoff is never delegated to OpenRouter. After the content boundary holds any
+disclosure-risk sections locally, an eligible remainder may receive the
+supplementary Kimi security lens, but that external analysis cannot replace the
+Codex signoff. A chunk that touches auth/federation/secrets and did not receive
+full dm-review is a run-postmortem miss.
+
+Every chunk receipt MUST use exactly one closed-vocabulary value: `review_tier: focused-codex | full (sensitive path) | full (override) | full (final gate)`.
+
+An adjacent `review_tier_reason:` line MUST name why: `ordinary chunk`, the exact matched sensitive glob or migration seed-credential match, `PIPELINE_FULL_TIER_REVIEW=1`, `final gate`, or `classification unavailable: <stable reason>`. The final full-review receipt uses `full (final gate)`.
+
+EOF
+tier_policy_expected="${tier_policy_expected%$'\n'}"
+require_unique_exact_section "$orchestrator" "$tier_policy_start" "$tier_policy_end" "$tier_policy_expected" "orchestrator preserves the exact unique review-tier policy section"
+
+tier_policy_fixture="$(mktemp "${TMPDIR:-/tmp}/workflow-tier-policy.XXXXXX")"
+trap 'rm -f "$tier_policy_fixture"' EXIT
+tier_policy_exception='Ordinary chunks MAY use full dm-review when extra scrutiny seems useful.'
+awk -v section_end="$tier_policy_end" -v exception="$tier_policy_exception" '
+  $0 == section_end { print ""; print exception; print "" }
+  { print }
+' "$orchestrator" >"$tier_policy_fixture"
+if [ "$(grep -Fc -- "$tier_policy_exception" "$tier_policy_fixture" 2>/dev/null || true)" != "1" ]; then
+  printf "  FAIL  appended-exception regression fixture builds\n"
+  failures=1
+elif section_is_unique_and_exact "$tier_policy_fixture" "$tier_policy_start" "$tier_policy_end" "$tier_policy_expected"; then
+  printf "  FAIL  exact review-tier policy rejects an appended exception paragraph\n"
+  failures=1
+else
+  printf "  OK    exact review-tier policy rejects an appended exception paragraph\n"
+fi
+rm -f "$tier_policy_fixture"
+trap - EXIT
 require_text "$orchestrator" '`all-chunks-complete` boundary' "orchestrator batches intermediate shadow observation"
 require_text "$orchestrator" "Empty-plan fast path" "orchestrator skips no-op cleanup commands"
 require_text "$promptcraft" "Do not create an orchestrator-owned closeout chunk" "promptcraft excludes closeout-only chunks"
@@ -349,6 +469,130 @@ require_text "$review_cmd" "zero-deferral recommendation" "dm-review preserves z
 require_text "$review_cmd" "reported coverage gap" "dm-review preserves explicit coverage"
 require_text "$review_cmd" "observation-only economics evidence" "dm-review contributions remain observation-only"
 require_text "$review_consolidator" "stable ID" "review consolidator preserves stable IDs"
+for loop_contract in \
+  "$review_loop" \
+  "$review_loop_skill"; do
+  rel="${loop_contract#$REPO_ROOT/}"
+  for field in selective_rerun lanes_rerun lanes_skipped rerun_reasons selection_fallback_reason; do
+    require_text "$loop_contract" "\`$field\`" "$rel iteration receipt records $field"
+  done
+done
+security_loop_start='#### Security lane convergence invariant'
+security_loop_end='#### Selective input boundary'
+IFS= read -r -d '' security_loop_expected <<'EOF' || true
+#### Security lane convergence invariant
+
+On iteration 2+ after a non-empty fix commit, both
+`security-auditor-openrouter` and `security-auditor-codex-signoff` are exempt
+from selective re-run filtering. Add each security lane present in
+`selected_mode_lanes` to `rerun_lanes` even when it owns no prior finding and
+has no matching Phase 3 file trigger.
+
+Both security lanes receive the full Phase 3.5-approved review diff, never a
+per-lane scoped slice. For `security-auditor-openrouter`, the complete diff is
+input to the existing local content/disclosure boundary, and only eligible
+bytes may leave the host. A full or partial disclosure decline remains a
+recorded lane attempt followed by the required local completion or an explicit
+coverage gap; it never removes the lane from `rerun_lanes` or becomes a silent
+skip.
+
+EOF
+security_loop_expected="${security_loop_expected%$'\n'}"
+for loop_contract in "$review_loop" "$review_loop_skill"; do
+  rel="${loop_contract#$REPO_ROOT/}"
+  require_text "$loop_contract" 'if lane is one of ["security-auditor-openrouter", "security-auditor-codex-signoff"] and fix_files is not empty:' "$rel always selects both security lanes after a fix commit"
+  require_unique_exact_section "$loop_contract" "$security_loop_start" "$security_loop_end" "$security_loop_expected" "$rel preserves the exact security lane convergence invariant"
+done
+security_loop_fixture="$(mktemp "${TMPDIR:-/tmp}/workflow-security-loop.XXXXXX")"
+trap 'rm -f "$security_loop_fixture"' EXIT
+awk '{ sub(/"security-auditor-openrouter", /, ""); print }' "$review_loop" >"$security_loop_fixture"
+if grep -Fq -- 'if lane is one of ["security-auditor-openrouter", "security-auditor-codex-signoff"] and fix_files is not empty:' "$security_loop_fixture"; then
+  printf "  FAIL  security selection anchor rejects removal of the OpenRouter lane\n"
+  failures=1
+else
+  printf "  OK    security selection anchor rejects removal of the OpenRouter lane\n"
+fi
+awk '{ sub(/full Phase 3.5-approved review diff/, "scoped Phase 3.5-approved review diff"); print }' "$review_loop" >"$security_loop_fixture"
+if section_is_unique_and_exact "$security_loop_fixture" "$security_loop_start" "$security_loop_end" "$security_loop_expected"; then
+  printf "  FAIL  exact security invariant rejects full-diff narrowing\n"
+  failures=1
+else
+  printf "  OK    exact security invariant rejects full-diff narrowing\n"
+fi
+rm -f "$security_loop_fixture"
+trap - EXIT
+selective_dispatch_start='#### Selective dispatch input'
+selective_dispatch_end='#### Report Selection'
+IFS= read -r -d '' selective_dispatch_expected <<'EOF' || true
+#### Selective dispatch input
+
+After normal selection is complete, store its unique exact logical lane IDs as
+`selected_full_set`. Recompute `selected_full_set` without consulting
+`review_lane_allowlist`; the allowlist never selects the set against which it
+is validated.
+
+When `review_lane_allowlist` is present, validate that it is one unambiguous
+object with exactly `selected_full_set` and `lanes`; that
+`review_lane_allowlist.selected_full_set` exactly equals the recomputed set;
+and that `review_lane_allowlist.lanes` is a duplicate-free subset containing
+at least one exact logical lane ID from that set. An empty `lanes` list,
+aliases, criterion-level IDs,
+unknown IDs, duplicate IDs, missing or extra fields, multiple candidate
+objects, or any comparison failure make the input invalid.
+
+Consume a valid allowlist by dispatching only its `lanes`.
+If the input is absent, invalid, or ambiguous, fail open to unfiltered dispatch.
+Discard it and dispatch the unfiltered `selected_full_set`; never partially
+apply it or guess intent. The coverage
+receipt records whether selective input was applied and, when a supplied input
+was rejected, the exact stable validation reason as
+`selection_fallback_reason`. This is fail-open to full selected-lane coverage,
+not a clean or narrowed result.
+
+EOF
+selective_dispatch_expected="${selective_dispatch_expected%$'\n'}"
+require_unique_exact_section "$review_skill" "$selective_dispatch_start" "$selective_dispatch_end" "$selective_dispatch_expected" "dm-review preserves the exact unique selective-dispatch section"
+
+selective_dispatch_fixture="$(mktemp "${TMPDIR:-/tmp}/workflow-selective-dispatch.XXXXXX")"
+trap 'rm -f "$selective_dispatch_fixture"' EXIT
+
+awk '/^Consume a valid allowlist by dispatching only its `lanes`\.$/ { next } { print }' "$review_skill" >"$selective_dispatch_fixture"
+if section_is_unique_and_exact "$selective_dispatch_fixture" "$selective_dispatch_start" "$selective_dispatch_end" "$selective_dispatch_expected"; then
+  printf "  FAIL  exact selective-dispatch section rejects policy removal\n"
+  failures=1
+else
+  printf "  OK    exact selective-dispatch section rejects policy removal\n"
+fi
+
+awk '{ sub(/fail open to unfiltered dispatch\./, "fail closed to empty dispatch."); print }' "$review_skill" >"$selective_dispatch_fixture"
+if section_is_unique_and_exact "$selective_dispatch_fixture" "$selective_dispatch_start" "$selective_dispatch_end" "$selective_dispatch_expected"; then
+  printf "  FAIL  exact selective-dispatch section rejects fail-open reversal\n"
+  failures=1
+else
+  printf "  OK    exact selective-dispatch section rejects fail-open reversal\n"
+fi
+
+awk '{ sub(/a duplicate-free subset containing/, "a possibly empty duplicate-free subset containing"); print }' "$review_skill" >"$selective_dispatch_fixture"
+if section_is_unique_and_exact "$selective_dispatch_fixture" "$selective_dispatch_start" "$selective_dispatch_end" "$selective_dispatch_expected"; then
+  printf "  FAIL  exact selective-dispatch section rejects an empty lane set\n"
+  failures=1
+else
+  printf "  OK    exact selective-dispatch section rejects an empty lane set\n"
+fi
+
+selective_dispatch_exception='Exception: callers MAY dispatch no lanes when iteration work appears complete.'
+awk -v section_end="$selective_dispatch_end" -v exception="$selective_dispatch_exception" '
+  $0 == section_end { print exception; print "" }
+  { print }
+' "$review_skill" >"$selective_dispatch_fixture"
+if section_is_unique_and_exact "$selective_dispatch_fixture" "$selective_dispatch_start" "$selective_dispatch_end" "$selective_dispatch_expected"; then
+  printf "  FAIL  exact selective-dispatch section rejects an appended exception paragraph\n"
+  failures=1
+else
+  printf "  OK    exact selective-dispatch section rejects an appended exception paragraph\n"
+fi
+rm -f "$selective_dispatch_fixture"
+trap - EXIT
 require_text "$postmortem_schema" '`activeComputeSeconds`' "postmortem separates active compute from elapsed time"
 require_text "$postmortem_schema" '`waitSecondsByCategory`' "postmortem records typed waits"
 require_text "$orchestrator" "Measure the orchestrator-level non-overlapping interval" "orchestrator measures non-overlapping waits"
@@ -540,7 +784,6 @@ require_text "$measurement_doc" "attempt_unmeasured" "measurement CLI reference 
 # an instruction nobody executes during the run. Assert that the two consumers
 # that actually dispatch lanes name `record-attempt` where they dispatch them.
 review_dispatch_skill="$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
-orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
 for f in "$review_dispatch_skill" "$orchestrator"; do
   rel="${f#$REPO_ROOT/}"
   require_text "$f" "record-attempt" "$rel records each attempt through the kernel"

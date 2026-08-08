@@ -18,16 +18,24 @@ no more than 15 minutes apart and use it only before expiry.
 | Slug | Name | Input / output | Context | Quality and role |
 |------|------|----------------|---------|------------------|
 | `moonshotai/kimi-k3` | Kimi K3 | $3 / $15; $0.30 cache read | 1,048,576 | AA intelligence 57.1 / coding 76.2 / agentic 50.1; quality-first security and bulk-analysis head; reasoning efforts low/high/max |
-| `openai/gpt-5.6-terra` | GPT-5.6 Terra | $1 / $6; $0.10 cache read | 1,050,000 | AA intelligence 55.0 / coding 76.7 / agentic 47.4; high-quality OpenRouter backup; reasoning none through max |
-| `openai/gpt-5.6-luna` | GPT-5.6 Luna | $0.10 / $0.60; $0.01 cache read | 1,050,000 | AA intelligence 51.2 / coding 71.4 / agentic 45.6; low-cost mechanical and config/doc work; reasoning none through max |
+| `openai/gpt-5.6-terra` | GPT-5.6 Terra | $2.50 / $15; $0.10 cache read | 1,050,000 | AA intelligence 55.0 / coding 76.7 / agentic 47.4; high-quality OpenRouter backup; reasoning none through max |
+| `openai/gpt-5.6-luna` | GPT-5.6 Luna | $1 / $6; $0.01 cache read | 1,050,000 | AA intelligence 51.2 / coding 71.4 / agentic 45.6; low-cost mechanical and config/doc work; reasoning none through max |
 | `x-ai/grok-4.5` | Grok 4.5 | $2 / $6 | 500K | AA 54; near-frontier value fallback |
-| `z-ai/glm-5.2` | GLM-5.2 | catalog $1.19 / $3.74; lower-cost endpoints exist | 1M | AA intelligence 51.1 / coding 68.8 / agentic 43.1; third-party mechanical and security-capacity fallback |
+| `z-ai/glm-5.2` | GLM-5.2 | $1.19 / $2.86 | 1M | AA intelligence 51.1 / coding 68.8 / agentic 43.1; third-party mechanical and security-capacity fallback |
 | `meta/muse-spark-1.1` | Muse Spark 1.1 | $1.25 / $4.25 | 1M | AA 51; multimodal frontier value |
 | `google/gemini-3.5-flash` | Gemini 3.5 Flash | $1.50 / $9 | 1M | AA 50; multimodal frontier tail |
 | `deepseek/deepseek-v4-pro` | DeepSeek V4 Pro | $0.435 / $0.87 | 1M | AA 44; cheap code-analysis fallback through OpenRouter |
 | `minimax/minimax-m3` | MiniMax-M3 | $0.30 / $1.20 | 1M model; top endpoint about 524K | AA 44; multimodal cost workhorse |
 | `deepseek/deepseek-v4-flash` | DeepSeek V4 Flash | $0.098 / $0.196 | 1M | AA 40; cheapest mechanical checks |
 | `qwen/qwen3-coder` | Qwen3 Coder | $0.30 / $1 | 1M model; top endpoint about 262K | Lower-quality final bulk fallback; validate endpoint capacity before very large prompts |
+
+`model-matrix.json` is the data source of truth for these rows; this prose table remains the human-readable view, and on disagreement the JSON wins.
+
+## Refreshing the matrix
+
+Refresh the matrix on demand and before any paid or policy-changing run. Obtain price, context, and availability from the live OpenRouter API in a receipt with `observedAt` and a validity window no longer than 15 minutes. Obtain quality scores from the named evaluation source and record its version; a score without provenance does not enter the matrix. Every refresh updates `snapshot_date`. If a source is unreachable, keep its prior values and mark them stale -- never guess. Land every refresh as an ordinary reviewed commit so the drift validator re-fences downstream consumers.
+
+The matrix recommends, routing policy decides, and receipts record -- refreshing the matrix never auto-reroutes work. Every routing decision in a run receipt carries `matrix_snapshot_date` and a one-line `rung_rationale` naming the deciding axis: cost, context, strength, or availability.
 
 ## Native Codex execution
 

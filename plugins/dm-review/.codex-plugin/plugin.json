@@ -1,6 +1,6 @@
 {
   "name": "dm-review",
-  "version": "1.52.0",
+  "version": "1.55.1",
   "description": "Code review orchestrator with stable finding identities, disagreement synthesis, raw evidence, contribution receipts, zero-deferral, browser coverage, Codex judgment, and OpenRouter mechanical review",
   "author": {
     "name": "Design Machines",

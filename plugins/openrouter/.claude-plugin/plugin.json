@@ -1,7 +1,7 @@
 {
   "name": "openrouter",
   "description": "OpenRouter provider plugin with exact-digest direct interactive use, broker-pending automated routing, Kimi K3-led security and bulk analysis, Terra quality fallback, Luna economical mechanical routing, and an optional official MCP control plane.",
-  "version": "1.8.0",
+  "version": "1.9.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
