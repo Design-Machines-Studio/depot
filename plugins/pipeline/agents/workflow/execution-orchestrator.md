@@ -108,6 +108,42 @@ one repair/recheck pass. Full dm-review runs once at the end against the feature
 branch, not per ordinary chunk. Do not dispatch the 5-agent quick dm-review
 suite for an ordinary chunk.
 
+**Required receipt field.** Every chunk receipt MUST record `review_tier:
+focused-codex | full (sensitive path) | full (final gate)` plus a
+`review_tier_why` line naming why -- the sensitive glob that matched,
+`ordinary chunk` when none did, or `final merge gate` for the end-of-run gate.
+A chunk receipt without `review_tier` is incomplete, not merely terse: the tier
+is the only evidence that the cheap default was actually taken. Record the same
+value inside the chunk receipt JSON passed as the `record-attempt`
+`--authoritative-receipt`, which is the only place the closed
+`record-attempt` flag schema can carry it; the kernel has no tier flag, so do
+not invent one.
+
+**Forbidden action.** Do not dispatch the 5-agent quick dm-review suite, or a
+full multi-agent dm-review, for an ordinary chunk -- one that matches no
+sensitive path and is not the final merge gate. Dispatching either anyway is a
+policy violation the receipt MUST confess as
+`review_tier: focused-codex (VIOLATED -- multi-agent suite dispatched)`, with
+the reason recorded in `review_tier_why`, not a judgment call the orchestrator
+gets to make silently. That `(VIOLATED -- ...)` suffix on `focused-codex` is
+the only permitted extension of the three-value vocabulary.
+
+**Fail-open on uncertain tier evidence.** Tier selection is itself a
+coverage-reducing mechanic, so it fails OPEN. If `filesToModify` is missing,
+the sensitive-path set cannot be read, or glob matching errors, do NOT fall
+back to `focused-codex`: run **full** review for that chunk, record
+`review_tier: full (sensitive path)` with
+`review_tier_why: tier evidence unavailable -- <what failed>`. Never narrow a
+review tier on evidence you could not evaluate.
+
+**Kill switch.** `PIPELINE_FULL_TIER_REVIEW=1` forces full dm-review on every
+chunk. It fails open to MORE coverage, never less: it can escalate a
+focused-codex chunk to full, and it can never downgrade a sensitive-path or
+final-gate full review. When it is set to exactly `1`, each chunk receipt keeps
+the `review_tier` value the policy chose (so the ordinary/sensitive split stays
+measurable) and adds `forced_full_review: yes` naming the environment override;
+for any other value, including unset, receipts record `forced_full_review: no`.
+
 **Sensitive-path exception.** Before the per-chunk review, test the chunk's `filesToModify` against the sensitive-path set. If any path matches, run **full** review for that chunk (`args="full <worktree-path>"`) so `security-auditor-codex-signoff` and all conditional agents engage, and record `review_tier: full (sensitive path)` in the chunk receipt:
 
 ```
@@ -210,6 +246,9 @@ For each chunk, you MUST complete ALL applicable steps in order:
 [chunk-id] 10. Clean up worktree
 [chunk-id] executionMode: full_cli | codex_native | manual_walkthrough
 [chunk-id] isolationStrategy: per-chunk-worktree | sequential-on-branch
+[chunk-id] review_tier: focused-codex | focused-codex (VIOLATED -- multi-agent suite dispatched) | full (sensitive path) | full (final gate)
+[chunk-id] review_tier_why: <matched sensitive glob> | ordinary chunk | final merge gate | tier evidence unavailable -- <what failed>
+[chunk-id] forced_full_review: yes (PIPELINE_FULL_TIER_REVIEW=1) | no
 ```
 
 After all chunks:
