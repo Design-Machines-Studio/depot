@@ -37,9 +37,26 @@
 #   OPENROUTER_IDLE_TIMEOUT
 #                       maximum seconds without streamed progress (default 600)
 #   OPENROUTER_AUTHORIZATION_MODE
-#                       exact-digest|trusted-boundary|unspecified for receipts
+#                       exact-digest|trusted-boundary|interim-operator-batch|
+#                       unspecified for receipts
+#   OPENROUTER_BATCH_AUTHORIZATION_FILE
+#                       required when the mode is interim-operator-batch: the
+#                       run-scoped batch authorization file written by
+#                       payload-authorization.sh batch-approve
+#   OPENROUTER_BATCH_AUTHORIZATION_DIGEST
+#                       required when the mode is interim-operator-batch: the
+#                       sha256 of that file's exact bytes, receipted alongside
+#                       the mode
 #   OPENROUTER_RECEIPT_FILE
 #                       optional content-free success or failure receipt path
+#
+# Interim operator-batch mode is a temporary, sunset-bound loosening of approval
+# granularity. Setting these variables cannot create an authorization: the batch
+# file only exists after payload-authorization.sh read an operator confirmation
+# from the controlling terminal.
+# No environment variable substitutes for the interactive confirmation.
+# A ready broker retires the mode: this wrapper refuses with
+# "broker available; interim mode retired on this host".
 #
 # Exit codes:
 #   0  success   28 timeout   1 exhausted/error   2 bad args
@@ -156,9 +173,57 @@ case "$WORKLOAD" in
   *) echo "### RUNNER FAILURE: invalid OPENROUTER_WORKLOAD" >&2; exit 2 ;;
 esac
 case "$AUTHORIZATION_MODE" in
-  exact-digest|trusted-boundary|unspecified) ;;
+  exact-digest|trusted-boundary|interim-operator-batch|unspecified) ;;
   *) echo "### RUNNER FAILURE: invalid OPENROUTER_AUTHORIZATION_MODE" >&2; exit 2 ;;
 esac
+
+# Fixed, non-overridable probe path -- a caller-selected probe would let the
+# interim mode outlive a ready broker.
+BROKER_CLIENT="/usr/local/bin/workflow-authority"
+BATCH_AUTHORIZATION_SHA256=""
+broker_ready() {
+  [ -x "$BROKER_CLIENT" ] || return 1
+  local probe=""
+  probe="$("$BROKER_CLIENT" probe --format json 2>/dev/null)" || return 1
+  case "$probe" in
+    *'"status"'*'"ready"'*) return 0 ;;
+  esac
+  return 1
+}
+
+if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
+  if broker_ready; then
+    echo "### RUNNER FAILURE: broker available; interim mode retired on this host" >&2
+    exit 2
+  fi
+  BATCH_AUTHORIZATION_FILE="${OPENROUTER_BATCH_AUTHORIZATION_FILE:-}"
+  DECLARED_BATCH_DIGEST="${OPENROUTER_BATCH_AUTHORIZATION_DIGEST:-}"
+  [ -n "$BATCH_AUTHORIZATION_FILE" ] && [ -f "$BATCH_AUTHORIZATION_FILE" ] &&
+    [ -r "$BATCH_AUTHORIZATION_FILE" ] || {
+    echo "### RUNNER FAILURE: interim-operator-batch requires a readable batch authorization file" >&2
+    exit 2
+  }
+  [[ "$DECLARED_BATCH_DIGEST" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "### RUNNER FAILURE: interim-operator-batch requires the batch authorization digest" >&2
+    exit 2
+  }
+  BATCH_AUTHORIZATION_SHA256="$(shasum -a 256 "$BATCH_AUTHORIZATION_FILE" | awk '{print $1}')"
+  [ "$BATCH_AUTHORIZATION_SHA256" = "$DECLARED_BATCH_DIGEST" ] || {
+    echo "### RUNNER FAILURE: batch authorization file does not match its declared digest" >&2
+    exit 2
+  }
+  jq -e --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" '
+    .schema_version == 1
+    and .authorization_mode == "interim_operator_batch"
+    and (.run_id | type == "string" and length > 0)
+    and (.payload_digests | type == "array" and length > 0)
+    and (.expires_at > $now)
+    and ((.program_sunset + "T00:00:00Z") > $now)
+  ' "$BATCH_AUTHORIZATION_FILE" >/dev/null 2>&1 || {
+    echo "### RUNNER FAILURE: batch authorization is expired, past program sunset, or malformed" >&2
+    exit 2
+  }
+fi
 for configured_order in "$PROVIDER_ORDER" "$FALLBACK_PROVIDER_ORDER"; do
   [ -z "$configured_order" ] && continue
   case "$configured_order" in
@@ -256,7 +321,8 @@ write_failure_receipt() {
       --argjson candidates "$MODEL_CANDIDATES" \
       --arg workload "$WORKLOAD" \
       --arg sort "$EFFECTIVE_SORT" \
-      --arg authorization "$AUTHORIZATION_MODE" '
+      --arg authorization "$AUTHORIZATION_MODE" \
+      --arg batchdigest "$BATCH_AUTHORIZATION_SHA256" '
       {
         schemaVersion: 2,
         outcome: $outcome,
@@ -278,7 +344,10 @@ write_failure_receipt() {
           workload: $workload,
           sort: (if $sort == "" then null else $sort end)
         },
-        authorization: {mode: $authorization}
+        authorization: {
+          mode: $authorization,
+          batchSha256: (if $batchdigest == "" then null else $batchdigest end)
+        }
       }' > "$receipt_tmp"
   ) || {
     rm -f "$receipt_tmp"
@@ -301,7 +370,8 @@ write_success_receipt() {
       --argjson fallback "$fallback_used" \
       --arg workload "$WORKLOAD" \
       --arg sort "$EFFECTIVE_SORT" \
-      --arg authorization "$AUTHORIZATION_MODE" '
+      --arg authorization "$AUTHORIZATION_MODE" \
+      --arg batchdigest "$BATCH_AUTHORIZATION_SHA256" '
       {
         schemaVersion: 2,
         outcome: "success",
@@ -332,7 +402,10 @@ write_success_receipt() {
           workload: $workload,
           sort: (if $sort == "" then null else $sort end)
         },
-        authorization: {mode: $authorization}
+        authorization: {
+          mode: $authorization,
+          batchSha256: (if $batchdigest == "" then null else $batchdigest end)
+        }
       }' "$response_file" > "$receipt_tmp"
   ) || {
     rm -f "$receipt_tmp"

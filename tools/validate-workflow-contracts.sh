@@ -549,10 +549,38 @@ for f in "$review_dispatch_skill" "$orchestrator"; do
   require_text "$f" "--agent-definition" "$rel names the input-bytes evidence path"
 done
 
+# ---------------------------------------------------------------------------
+# Group 8: interim operator-batch authorization contract
+# ---------------------------------------------------------------------------
+printf "\nGroup 8: interim operator-batch authorization\n"
+
+payload_authorization="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
+openrouter_wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+
+# Anchor (a). The interim mode buys automation by widening approval
+# GRANULARITY. It must never buy it by removing the human. Anything that lets
+# an environment variable stand in for the terminal confirmation turns a
+# sunset-bound loosening into a permanent hole, so pin the sentence itself in
+# every file that teaches or implements the mode.
+for f in "$payload_authorization" "$openrouter_wrapper" "$review_skill" "$review_cmd"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "No environment variable substitutes for the interactive confirmation." \
+    "$rel forbids an env-only path into interim operator-batch mode"
+done
+
+# Anchor (b). The interim rung sits BETWEEN broker-ready and unavailable, never
+# above broker authority. A ready broker retires the mode on that host with no
+# migration step and no grace period.
+for f in "$payload_authorization" "$openrouter_wrapper" "$review_skill" "$review_cmd"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "broker available; interim mode retired on this host" \
+    "$rel retires interim mode when a broker probe reports ready"
+done
+
 printf "\n"
 if [ "$failures" -ne 0 ]; then
   printf "FIX  restore the missing workflow-contract anchors (see docs and plugin sources above)\n"
   exit 1
 fi
 
-printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission)\n"
+printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, interim operator-batch authorization)\n"

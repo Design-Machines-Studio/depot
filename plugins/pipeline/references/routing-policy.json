@@ -184,6 +184,41 @@
       "rationale": "Provider origin is receipted explicitly. OpenAI and third-party OpenRouter models remain eligible after disclosure and output controls; Anthropic remains native-only."
     }
   },
+  "authorization": {
+    "schemaVersion": 1,
+    "_comment": "How an automated OpenRouter lane becomes authorized. Resolved, never assumed. Ordered, fail-closed: broker-ready, then the interim operator batch, then unavailable. The interim rung never sits above broker authority.",
+    "resolutionOrder": ["broker", "interim_operator_batch", "unavailable"],
+    "modes": {
+      "broker": {
+        "status": "target",
+        "probe": "/usr/local/bin/workflow-authority probe --format json reports status ready",
+        "authority": "independent broker owns run-bound authorization, credential custody, and transport",
+        "permanent": true
+      },
+      "interim_operator_batch": {
+        "status": "interim",
+        "_comment": "Deliberate, owner-authorized loosening of approval GRANULARITY -- run-batch instead of per-payload -- not of approval EXISTENCE. Introduced 2026-08-08 because the Linux broker host is unavailable for about two weeks and per-payload interactive approval is too much friction for automated lanes.",
+        "authorizationFile": "plans/<feature>/openrouter-batch-authorization.json",
+        "schemaFields": ["schema_version", "authorization_mode", "run_id", "operator", "created_at", "expires_at", "payload_digests", "scope_note", "program_sunset"],
+        "maxLifetimeSeconds": 86400,
+        "programSunset": "2026-09-07",
+        "programSunsetRationale": "About four weeks. The darwin broker milestone is scheduled inside this window. After this date batch files fail validation and extending the program requires a reviewed commit that re-issues the sunset in the schema.",
+        "entryRequirement": "interactive operator confirmation on the controlling terminal showing lane list, byte totals, and digest count; no environment variable substitutes for the interactive confirmation",
+        "retiredWhen": "broker probe on the host reports ready",
+        "retirementMessage": "broker available; interim mode retired on this host",
+        "wrapperMode": "interim-operator-batch",
+        "receiptFields": ["authorization_mode", "batchSha256"],
+        "nonMatchingPayload": "per-payload interactive exact-digest path, else fail closed",
+        "permanent": false
+      },
+      "unavailable": {
+        "status": "default",
+        "reason": "host_authority_unavailable",
+        "exhaustionFallback": "codex",
+        "_comment": "On hosts with no broker and no valid batch authorization the external rail stays closed and the complete criterion runs on Codex. An available API key, runner, policy, or caller environment variable is not automated dispatch authority."
+      }
+    }
+  },
   "security": {
     "_comment": "Validated mirror of the OpenRouter-owned delegation policy. The canonical installed-runtime source is plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json. This block keeps pipeline planning self-contained and tools/validate-routing-economics.sh rejects drift.",
     "delegationSecurityPolicy": "../../openrouter/skills/openrouter-delegate/references/delegation-security-policy.json",
