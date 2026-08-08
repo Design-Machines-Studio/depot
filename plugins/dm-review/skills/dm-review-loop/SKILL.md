@@ -67,6 +67,7 @@ prior_findings_signature = null  # for stalled-convergence detection
 prior_review_head = null  # HEAD commit the prior iteration reviewed
 rerun_lanes = null  # null = full fan-out; a set = narrowed lane selection
 selective_rerun = false
+review_is_full_fanout = false
 full_fanout_override = true if DM_REVIEW_LOOP_FULL_FANOUT=1 in the environment, else false
 workflowClass = explicit request value, else "feature" with workflow_class_defaulted=true
 shadow_state = trusted runtime state directory, or "shadow unavailable"
@@ -96,22 +97,50 @@ while iteration < max_iterations:
   # iteration 2+ re-reviews only what the fixes could have affected.
   fallback_reason = null    # reset EVERY iteration -- never leak a stale reason
   promoted_to_full = false  # set only when a narrowed pass is promoted below
-  if iteration == 1 or full_fanout_override:
-    rerun_lanes = null  # full fan-out in the selected mode
-    selective_rerun = false
-  else:
-    try:
+  review_lane_allowlist = null
+  review_is_full_fanout = false
+  rerun_reasons = {}
+  try:
+    selected_full_set = the non-empty set of unique exact logical lane IDs
+                        Phase 3 selects for this mode, target, and current diff
+    Require every member of selected_full_set is an exact logical lane ID --
+      no aliases and no criterion-level ID shared by multiple logical lanes
+
+    if iteration == 1 or full_fanout_override:
+      rerun_lanes = null  # full fan-out in the selected mode
+      selective_rerun = false
+      rerun_reasons = every lane in selected_full_set -> ["initial_full_fanout"]
+    else:
       # (a) every lane owning a finding that is STILL PENDING after the prior
       #     iteration's fix step. dm-review-fix has already removed the
       #     resolved todos, so the surviving pending files ARE the unresolved
       #     set -- do not attempt to reconstruct the prior iteration's full
       #     finding list.
-      lanes_a = union of source_agents across todos/*-pending-*.md
+      For every pending finding, require source_agents is a non-empty list and
+        every named owner resolves to exactly one member of selected_full_set.
+        An unknown owner, alias, or criterion-level ID shared by multiple
+        logical lanes is a selection error. In particular, bare
+        security-auditor is ambiguous because security-auditor-codex-signoff
+        and security-auditor-openrouter are separate logical lanes.
+      lanes_a = union of the validated exact source_agents lane IDs
       # (b) every lane whose file-trigger set matches a file the fixes touched.
       #     dm-review-fix does not commit, so a committed-range diff alone
       #     would silently miss every uncommitted fix. Consult both.
-      changed_files = (git diff --name-only {prior_review_head}..HEAD)
-                      union (paths from git status --porcelain)
+      Require prior_review_head is non-null.
+      fix_head = git rev-parse HEAD
+      uncommitted_changed_files = paths from git status --porcelain
+      if fix_head != prior_review_head:
+        Require git merge-base --is-ancestor {prior_review_head} {fix_head}
+          succeeds; rewritten or reset history is a selection error.
+        committed_changed_files = git diff --name-only {prior_review_head}..{fix_head}
+      else if uncommitted_changed_files is not empty:
+        # The committed half did not advance, which is normal when
+        # dm-review-fix made only uncommitted edits. Do not interpret that as
+        # proof that no files changed; use the porcelain paths as the boundary.
+        committed_changed_files = empty
+      else:
+        Fail selection: "non-advancing fix boundary with no uncommitted fix paths"
+      changed_files = committed_changed_files union uncommitted_changed_files
       lanes_b = lanes whose MODE-APPROPRIATE file triggers match changed_files
                 (see "Selective Lane Re-run" below for which trigger source
                  applies in quick mode vs full mode)
@@ -121,29 +150,65 @@ while iteration < max_iterations:
         rerun_lanes = null
         selective_rerun = false
         fallback_reason = "empty selection -- no unresolved findings, no touched triggers"
+        rerun_reasons = every lane in selected_full_set -> ["selection_fail_open"]
       else:
         # The security sign-off is in EVERY narrowed lane set, unconditionally.
         # It is never gated on a diff being non-empty and never narrowed.
         rerun_lanes = lanes_a union lanes_b union {security-auditor-codex-signoff}
+        Require rerun_lanes is non-empty and is a unique subset containing only
+          exact logical lane IDs from selected_full_set. Never dispatch an
+          empty, aliased, criterion-level, unknown, or ambiguous allowlist.
+        for lane in rerun_lanes:
+          rerun_reasons[lane] includes "a_prior_unresolved_finding" if rule (a) selected it
+          rerun_reasons[lane] includes "b_fix_file_trigger" if rule (b) selected it
+          rerun_reasons[lane] includes "security_signoff" if it is security-auditor-codex-signoff
         selective_rerun = true
-    except selection error, prior-iteration lane attribution unavailable,
-           or a receiving review command that cannot honor a lane restriction:
-      rerun_lanes = null  # fail OPEN -- never narrow on uncertain evidence
-      selective_rerun = false
-      fallback_reason = "<what failed or was missing>"
+        review_lane_allowlist = {
+          selected_full_set: selected_full_set,
+          lanes: rerun_lanes,
+        }
+  except lane-discovery, lane-ID validation, attribution, repository-boundary,
+         or selection error:
+    rerun_lanes = null  # fail OPEN -- never narrow on uncertain evidence
+    selective_rerun = false
+    review_lane_allowlist = null
+    rerun_reasons = every known lane in selected_full_set -> ["selection_fail_open"]
+    fallback_reason = "<exact unknown, alias, ambiguity, empty-set, null-boundary, non-advancing-boundary, non-ancestor, or other failure reason>"
 
-  # Run review. The restriction is passed as an EXPLICIT lane-name set, and the
-  # receiving command must echo the set it actually dispatched. If it dispatches
-  # lanes outside the set, cannot accept a restriction, or does not report what
-  # it ran, treat that as a selection failure: re-run full and record
-  # fallback_reason. Never assume a restriction was honored.
+  # Run review. review_lane_allowlist is an internal loop-to-review input, never
+  # a public flag. The loop never assumes the receiver honored it.
   prior_review_head = git rev-parse HEAD
   if mode == "quick":
-    Run /dm-review-quick {target} restricted to rerun_lanes (every lane when null)
+    Run /dm-review-quick {target} with review_lane_allowlist when non-null
       with workflowClass and workflow_class_defaulted forwarded unchanged
   else:
-    Run /dm-review {target} restricted to rerun_lanes (every lane when null)
+    Run /dm-review {target} with review_lane_allowlist when non-null
       with workflowClass and workflow_class_defaulted forwarded unchanged
+
+  Consume and validate the nested review's authoritative coverage receipt: one
+    row per selected lane with requested, attempted, implemented-by, status,
+    finding count, and evidence reference, plus its REVIEW INCOMPLETE result.
+  if review_lane_allowlist was non-null and the coverage receipt reports the
+     selective input was absent, invalid, or not applied:
+    selective_rerun = false
+    fallback_reason = the coverage receipt's exact fallback reason
+    rerun_reasons = every lane in selected_full_set -> ["selection_fail_open"]
+  review_is_full_fanout = true ONLY IF:
+    selective input was not applied on this pass, AND
+    coverage receipt selected lanes exactly equal completed lanes, AND
+    the nested review did not return REVIEW INCOMPLETE
+
+  lanes_rerun = exact logical lane IDs in the coverage receipt's ATTEMPTED rows
+  lanes_skipped = selected_full_set minus lanes_rerun
+  For each lane in lanes_skipped, record reason "no_rule_a_or_b_match".
+  Do not issue a kernel record-attempt call for any lane in lanes_skipped.
+
+  iteration_receipt = .workflow-kernel/runs/<run-id>/dm-review-loop/iterations/<iteration>/iteration-receipt.json
+  After the coverage receipt validates, atomically emit iteration_receipt with
+    `selective_rerun`, `lanes_rerun`, `lanes_skipped`, `rerun_reasons`, and
+    `selection_fallback_reason`, then append it to authoritative-receipts.json
+    BEFORE invoking observe-review. The persisted receipt field
+    `selection_fallback_reason` is the loop-local fallback_reason value.
 
   # Check for findings
   Count findings in todos/*-pending-*.md
@@ -152,18 +217,28 @@ while iteration < max_iterations:
   # iteration that finds nothing is promoted to a full fan-out before the loop
   # is allowed to report clean.
   if findings == 0 and selective_rerun:
-    Emit the narrowed pass's own receipt first (selective_rerun: true, with its
-      lanes re-run and lanes skipped) -- the promotion must not erase the fact
-      that a narrowed pass ran.
+    The narrowed iteration-receipt.json was emitted first -- the promotion must
+      not erase the fact that a narrowed pass ran.
     Run review one more time (same mode) with rerun_lanes = null
       and workflowClass and workflow_class_defaulted forwarded unchanged
     promoted_to_full = true
     selective_rerun = false
+    Consume and validate the promotion pass's authoritative coverage receipt.
+    review_is_full_fanout = true ONLY IF selective input was not applied, its
+      selected lanes exactly equal its completed lanes, and it did not return
+      REVIEW INCOMPLETE.
+    Atomically emit clean-confirmation-receipt.json beside iteration_receipt,
+      with the same required receipt fields, selective_rerun: false, no skipped
+      lanes, and reason "clean_confirmation_full_fanout", after coverage
+      validates; append it to authoritative-receipts.json BEFORE observe-review.
     Recount findings in todos/*-pending-*.md
 
   current_signature = sorted list of pending todo filenames
 
   if findings == 0:
+    if review_is_full_fanout == false:
+      Report the nested review's REVIEW INCOMPLETE or exact coverage failure
+      STOP -- needs attention
     Report: "Clean after {iteration} iteration(s). Zero findings."
     STOP -- success
 
@@ -193,8 +268,20 @@ while iteration < max_iterations:
     Run review one more time (same mode) with rerun_lanes = null
       and workflowClass and workflow_class_defaulted forwarded unchanged
     selective_rerun = false
+    Consume and validate the verification pass's authoritative coverage receipt.
+    review_is_full_fanout = true ONLY IF selective input was not applied, its
+      selected lanes exactly equal its completed lanes, and it did not return
+      REVIEW INCOMPLETE.
+    Atomically emit max-iterations-verification-receipt.json beside
+      iteration_receipt, with the same required receipt fields,
+      selective_rerun: false, no skipped lanes, and reason
+      "max_iterations_full_fanout", after coverage validates; append it to
+      authoritative-receipts.json BEFORE observe-review.
     Count remaining findings
     if findings == 0:
+      if review_is_full_fanout == false:
+        Report the nested review's REVIEW INCOMPLETE or exact coverage failure
+        STOP -- needs attention
       Report: "Clean after {iteration} iteration(s) with fixes."
       STOP -- success
     else:
@@ -210,6 +297,10 @@ Iteration 1 is always a full fan-out in the selected mode. From iteration 2 onwa
 - **(a) Finding-owning lanes** -- every lane named in the `source_agents` frontmatter of a finding that is still pending after the prior iteration's fix step (see `plugins/dm-review/skills/review/references/issue-tracking.md`). Because `dm-review-fix` deletes the todo files it resolves, the surviving `todos/*-pending-*.md` set at selection time IS the unresolved set. Do not try to reconstruct the prior iteration's complete finding list; it is gone by design.
 - **(b) File-trigger lanes** -- every lane whose file-trigger set matches any file the fixes touched since the prior review. `dm-review-fix` does not commit, so the touched-file set is the union of `git diff --name-only <prior-review-head>..HEAD` and the paths reported by `git status --porcelain`. A committed-range diff alone would report an empty change set for a perfectly normal uncommitted fix pass, and would then narrow on false evidence.
 
+Before either rule may narrow coverage, recompute a non-empty `selected_full_set` containing only unique exact logical lane IDs. Every owner in every pending finding's `source_agents` must resolve to exactly one member of that set. Unknown owners, aliases, and criterion-level IDs shared by more than one logical lane are not narrowing signals; each fails open to full coverage with an explicit `fallback_reason`. The naming trap is deliberate: `security-auditor-codex-signoff` and `security-auditor-openrouter` are two logical lanes sharing one criterion, so bare `security-auditor` is ambiguous and fails open. An empty computed lane set is never dispatched.
+
+The committed half of changed-file discovery is boundary-guarded. `prior_review_head` must be non-null. When `HEAD` advanced, `fix_head` must differ from `prior_review_head` and `git merge-base --is-ancestor <prior_review_head> <fix_head>` must succeed before the committed diff is trusted. A reset, rewritten history, null boundary, or advanced non-ancestor boundary fails open with an explicit `fallback_reason`; it must never be read as "no files changed." When `HEAD` did not advance but `git status --porcelain` reports fix paths, the committed half contributes no paths and the uncommitted half remains valid narrowing evidence. When neither half advances, selection fails open. This preserves ordinary uncommitted-only `dm-review-fix` passes while applying the ancestry guard only to the committed half.
+
 **Which trigger source applies depends on the mode**, because the two modes run different rosters:
 
 - **quick mode** (the default): the eligible roster is the always-run criteria lanes plus `ui-standards-reviewer`, whose trigger is a `.templ`, `.twig`, `.html`, or `.css` file in the diff. Full-mode-only conditional agents are never added to a quick-mode re-run set.
@@ -219,11 +310,11 @@ Always-run criteria lanes -- `security-auditor-openrouter`, `architecture-review
 
 When both (a) and (b) come back empty there is nothing the fixes could have affected, so selection fails open to a full fan-out with `fallback_reason: empty selection` rather than running a near-empty pass that would have to be promoted to full anyway.
 
-The restriction is passed to the nested review as an explicit lane-name set, and the receiving command must report the set it actually dispatched. If it dispatches lanes outside the set, cannot accept a restriction, or does not report what it ran, that is a selection failure: re-run full and record `fallback_reason`. Never assume a restriction was honored.
+The restriction is passed as the internal loop-to-review input `review_lane_allowlist`, carrying both `selected_full_set` (the loop's recomputed full lane set) and `lanes` (the narrowed subset). It is not a public flag. Review Phase 3 recomputes its own selected full set and consumes the input only when that set exactly equals `selected_full_set` and `lanes` is a unique subset of exact logical lane IDs. Otherwise the receiver discards the input, runs the original unfiltered review, and returns the exact fallback reason in its authoritative coverage receipt. An absent or invalid input always means the original unfiltered review, never an empty or partially inferred lane set.
 
-**Current state of the receiving interface -- read this before claiming a saving.** Neither `/dm-review` nor `/dm-review-quick` exposes a lane-restriction input yet; their Phase 3 selection builds its normal roster regardless of what this loop passes. Until one of them accepts and echoes a restriction, every iteration therefore takes the fail-open path above: selection still runs, the intended lane set and the skipped lanes are still computed and receipted, and the review still executes as a FULL fan-out with `fallback_reason: receiver does not expose a lane-restriction input`. That is deliberate -- the safe half of the mechanic ships first, and the receipt records the saving that WOULD have been taken so the exit gate can measure it against real runs. Do not report an input-bytes reduction from selective re-run until a receiver exists; the receipts will show `selective_rerun: false` with that fallback reason for every iteration.
+**Current state of the receiving interface -- read this before claiming a saving.** Review Phase 3 now receives `review_lane_allowlist` under the validation contract above. The loop still never assumes that a restriction was honored: after every pass it consumes the authoritative coverage receipt and derives attempted and skipped lanes from that evidence. If the receiver reports the input absent, invalid, or not applied, the loop sets `selective_rerun` to false and persists the receiver's exact fallback reason. Input-byte savings may be claimed only from a receipt proving the narrowed input was applied.
 
-**A CLEAN verdict may only ever be issued by a full fan-out.** A narrowed iteration that finds nothing is promoted to a full fan-out in the same mode before the loop may report clean, and the `iteration == max_iterations` verification pass is always a full fan-out. Selection changes *when* lanes run, never whether findings get fixed: the zero-deferral policy above is untouched, and the stalled-convergence short-circuit is unchanged.
+**A CLEAN verdict may only ever be issued by a verified full fan-out.** Set `review_is_full_fanout` to true only when selective input was not applied, the authoritative coverage receipt's selected lanes exactly equal its completed lanes, and the nested review did not return `REVIEW INCOMPLETE`. A narrowed iteration that finds nothing is promoted to a full fan-out in the same mode before the loop may report clean, and the same assertion gates both that CLEAN-promotion pass and the `iteration == max_iterations` verification pass. Zero findings on an unverified pass reports `REVIEW INCOMPLETE` or the exact coverage failure and stops as needs attention. Selection changes *when* lanes run, never whether findings get fixed: the zero-deferral policy above is untouched, and the stalled-convergence short-circuit is unchanged.
 
 #### Selective Re-run Receipt
 
@@ -231,23 +322,26 @@ Skipped lanes get no kernel `record-attempt` call, because nothing ran. That is 
 
 Receipts are **per pass, not per iteration**. An iteration that ran narrowed and was then promoted to a full fan-out ran two passes and reports both, in order. Collapsing them into one row would erase the narrowed pass and make its skip list unrecoverable.
 
+The ordinary pass artifact is `.workflow-kernel/runs/<run-id>/dm-review-loop/iterations/<iteration>/iteration-receipt.json`. A CLEAN promotion atomically emits `clean-confirmation-receipt.json` beside it with artifact reason `clean_confirmation_full_fanout`. The last-iteration verification atomically emits `max-iterations-verification-receipt.json` beside it with artifact reason `max_iterations_full_fanout`. Emit each artifact only AFTER its nested coverage receipt validates, then append it to `authoritative-receipts.json` BEFORE the corresponding `observe-review` invocation. These named artifacts do not collapse the per-pass rule: a narrowed pass followed by its full confirmation emits the iteration receipt and confirmation receipt in that order.
+
 Each pass report carries:
 
-- `selective_rerun: true` on a pass that dispatched a narrowed lane set; `selective_rerun: false` on iteration 1, on any full fan-out, on a CLEAN promotion pass, on the `iteration == max_iterations` verification pass, and on any fail-open fallback. The value describes the pass that emitted it, never a sibling pass.
+- `selective_rerun: true` on a pass whose coverage receipt proves a narrowed lane set was applied; `selective_rerun: false` on iteration 1, on any full fan-out, on a CLEAN promotion pass, on the `iteration == max_iterations` verification pass, on any fail-open fallback, and whenever a passed selective input was absent, invalid, or not applied. The value describes the pass that emitted it, never a sibling pass.
 - `promoted_to_full: true` on the full pass that follows a narrowed zero-finding pass, so the pair is legible as one iteration.
-- **Lanes re-run** -- one line per lane with its reason: `(a) owns unresolved finding <todo-file>`, `(b) file trigger <pattern> matched <path>`, or `security-signoff (never narrowed)`. A lane selected by more than one rule lists every reason.
-- **Lanes skipped** -- one line per lane in the CURRENT pass's eligible set that was not re-run, with the reason `no unresolved finding and no matching file trigger`. The eligible set is computed for this pass from the mode's roster and every file changed since the loop started -- not from iteration 1's roster. A lane that only became eligible mid-loop (a first `.sql` file making `migration-validator` eligible in full mode, say) must appear as re-run or as skipped, never as neither.
-- `fallback_reason: <reason>` whenever selection failed open to a full fan-out, and `full_fanout_override: true` whenever `DM_REVIEW_LOOP_FULL_FANOUT=1` disabled selection. `fallback_reason` is reset at the start of every iteration so a fail-open on one iteration never leaks into the next iteration's receipt.
+- `lanes_rerun` -- the exact logical lane IDs from the coverage receipt's ATTEMPTED rows, not the loop's intended set. A receiver that silently drops an intended lane therefore cannot falsely report it as re-run.
+- `lanes_skipped` -- `selected_full_set` minus those ATTEMPTED rows. Each skipped lane records `no_rule_a_or_b_match` and receives no kernel `record-attempt` call. The eligible set is computed for this pass from the mode's roster and every file changed since the loop started -- not from iteration 1's roster. A lane that only became eligible mid-loop (a first `.sql` file making `migration-validator` eligible in full mode, say) must appear as re-run or as skipped, never as neither.
+- `rerun_reasons` -- a per-lane map using only `a_prior_unresolved_finding`, `b_fix_file_trigger`, `security_signoff`, `initial_full_fanout`, and `selection_fail_open`. A lane selected by more than one rule records every applicable reason. Full fan-outs use `initial_full_fanout`; fail-open full fan-outs use `selection_fail_open`.
+- `selection_fallback_reason: <reason>` whenever selection failed open to a full fan-out or the receiver rejected or ignored selective input, and `full_fanout_override: true` whenever `DM_REVIEW_LOOP_FULL_FANOUT=1` disabled selection. `selection_fallback_reason` is the persisted receipt field for the loop-local `fallback_reason`. The local variable resets at the start of every iteration so a fail-open on one iteration never leaks into the next iteration's receipt.
 
 Example (one iteration, two passes):
 
 ```
 Iteration 2, pass 1: selective_rerun: true
 Lanes re-run:
-- security-auditor-codex-signoff -- security-signoff (never narrowed)
-- code-simplicity-reviewer -- (a) owns unresolved finding 003-pending-p3-dead-branch.md
-- a11y-css-reviewer -- (b) file trigger .css matched src/css/6_components/card.css
-Lanes skipped (no unresolved finding and no matching file trigger):
+- security-auditor-codex-signoff -- security_signoff
+- code-simplicity-reviewer -- a_prior_unresolved_finding
+- a11y-css-reviewer -- b_fix_file_trigger
+Lanes skipped (no_rule_a_or_b_match):
 - architecture-reviewer, codex-perspective, doc-sync-reviewer, pattern-recognition-specialist, security-auditor-openrouter
 
 Iteration 2, pass 2: selective_rerun: false, promoted_to_full: true
