@@ -3,14 +3,30 @@
   "targets": {
     "activeSubscriptionProfile": "codex-20x",
     "subscriptionProfiles": {
-      "codex-20x": {"codex": 65, "claude": 0, "openrouter": 35},
-      "codex-5x": {"codex": 40, "claude": 0, "openrouter": 60}
+      "codex-20x": {
+        "codex": 65,
+        "claude": 0,
+        "openrouter": 35
+      },
+      "codex-5x": {
+        "codex": 40,
+        "claude": 0,
+        "openrouter": 60
+      }
     },
     "enforcement": {
       "scope": "eligible-chunks-per-run",
       "strategy": "deficit-round-robin",
-      "flexibleBuckets": ["config", "docs", "mechanical-logic"],
-      "fixedBuckets": ["logic", "ui", "integration"],
+      "flexibleBuckets": [
+        "config",
+        "docs",
+        "mechanical-logic"
+      ],
+      "fixedBuckets": [
+        "logic",
+        "ui",
+        "integration"
+      ],
       "securityOverridesTarget": true,
       "toolCapabilityOverridesTarget": true,
       "varianceReceiptRequired": true
@@ -19,7 +35,11 @@
   },
   "decisionLeverage": {
     "scope": "workflow-depth-only",
-    "allowedLevels": ["low", "medium", "high"],
+    "allowedLevels": [
+      "low",
+      "medium",
+      "high"
+    ],
     "legacyDefault": {
       "planningDepth": "current-standard-path",
       "verificationDepth": "current-standard-path",
@@ -28,25 +48,35 @@
     },
     "rules": {
       "lowLow": {
-        "when": {"uncertainty": "low", "consequence": "low"},
+        "when": {
+          "uncertainty": "low",
+          "consequence": "low"
+        },
         "planningDepth": "standard",
         "verificationDepth": "standard",
         "optimized": true
       },
       "highUncertainty": {
-        "when": {"uncertainty": "high"},
+        "when": {
+          "uncertainty": "high"
+        },
         "planningDepth": "one-independent-opinion-plus-bounded-synthesis",
         "verificationDepth": "standard-unless-high-consequence",
         "optimized": false
       },
       "highConsequence": {
-        "when": {"consequence": "high"},
+        "when": {
+          "consequence": "high"
+        },
         "planningDepth": "standard-unless-high-uncertainty",
         "verificationDepth": "stronger-existing-independent-seam",
         "optimized": false
       },
       "highHigh": {
-        "when": {"uncertainty": "high", "consequence": "high"},
+        "when": {
+          "uncertainty": "high",
+          "consequence": "high"
+        },
         "planningDepth": "one-independent-opinion-plus-bounded-synthesis",
         "verificationDepth": "stronger-existing-independent-seam",
         "optimized": false
@@ -163,7 +193,10 @@
       "rationale": "Research fan-out is read-heavy summarization; keep final synthesis on Claude."
     },
     "adversarialReview": {
-      "providers": ["codex", "openrouter"],
+      "providers": [
+        "codex",
+        "openrouter"
+      ],
       "optionalProvider": "claude",
       "optionalEnv": "PIPELINE_CLAUDE_ADVERSARY",
       "rationale": "Default adversarial review uses two non-Claude lenses; Claude plan-adversary is an optional third lens or tiebreak."
@@ -175,14 +208,43 @@
     "proposalOnlyEconomics": true,
     "providerOrigin": {
       "schemaVersion": 1,
-      "openrouterForbiddenModelPrefixes": ["anthropic/"],
+      "openrouterForbiddenModelPrefixes": [
+        "anthropic/"
+      ],
       "nativeOpenAIExecution": "codex-cli-preferred-or-openrouter-api",
       "nativeAnthropicExecution": "claude-cli-only",
       "genericNativeVendorFallback": "unavailable",
-      "appliesTo": ["primary", "fallback"],
+      "appliesTo": [
+        "primary",
+        "fallback"
+      ],
       "failureMode": "fail-closed-before-provider-contact",
       "rationale": "Provider origin is receipted explicitly. OpenAI and third-party OpenRouter models remain eligible after disclosure and output controls; Anthropic remains native-only."
     }
+  },
+  "matrixReceipt": {
+    "_comment": "Receipt contract for model selection. The canonical machine-readable model data lives in plugins/openrouter/skills/openrouter-delegate/references/model-matrix.json; tools/validate-openrouter-cascade.sh rejects drift between that matrix, model-cascade.json quality_rank, and the agentType slugs in this file. Same canonical-with-checked-mirror shape as .security above.",
+    "canonicalMatrix": "../../openrouter/skills/openrouter-delegate/references/model-matrix.json",
+    "statement": "Every routing decision recorded in a run receipt must carry matrix_snapshot_date and a one-line rung_rationale naming the deciding axis (cost, context, strength, or availability).",
+    "requiredReceiptFields": {
+      "matrix_snapshot_date": "The snapshot_date of the model-matrix.json revision the decision was made against.",
+      "rung_rationale": "One line naming the deciding axis for the chosen rung."
+    },
+    "rungRationaleAxes": [
+      "cost",
+      "context",
+      "strength",
+      "availability"
+    ],
+    "appliesTo": [
+      "chunkKind",
+      "agentType",
+      "phase",
+      "cascade rung selection"
+    ],
+    "failureMode": "receipt-incomplete",
+    "authority": "The matrix recommends, this policy decides, receipts record. A matrix refresh never re-routes anything on its own.",
+    "rationale": "Routing decisions were previously unattributable: the matrix was consumed by nothing at run time, so a receipt could not show which price/context/strength data a rung was chosen against. Naming the snapshot and the deciding axis makes the decision auditable and makes matrix drift visible in the receipt trail."
   },
   "security": {
     "_comment": "Validated mirror of the OpenRouter-owned delegation policy. The canonical installed-runtime source is plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json. This block keeps pipeline planning self-contained and tools/validate-routing-economics.sh rejects drift.",
