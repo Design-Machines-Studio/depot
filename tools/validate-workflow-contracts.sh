@@ -349,6 +349,14 @@ require_text "$review_cmd" "zero-deferral recommendation" "dm-review preserves z
 require_text "$review_cmd" "reported coverage gap" "dm-review preserves explicit coverage"
 require_text "$review_cmd" "observation-only economics evidence" "dm-review contributions remain observation-only"
 require_text "$review_consolidator" "stable ID" "review consolidator preserves stable IDs"
+for loop_contract in \
+  "$review_loop" \
+  "$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md"; do
+  rel="${loop_contract#$REPO_ROOT/}"
+  for field in selective_rerun lanes_rerun lanes_skipped rerun_reasons selection_fallback_reason; do
+    require_text "$loop_contract" "\`$field\`" "$rel iteration receipt records $field"
+  done
+done
 require_text "$postmortem_schema" '`activeComputeSeconds`' "postmortem separates active compute from elapsed time"
 require_text "$postmortem_schema" '`waitSecondsByCategory`' "postmortem records typed waits"
 require_text "$orchestrator" "Measure the orchestrator-level non-overlapping interval" "orchestrator measures non-overlapping waits"
