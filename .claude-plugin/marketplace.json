@@ -375,7 +375,7 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.12.0",
+      "version": "0.13.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -422,7 +422,7 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.10.0",
+      "version": "1.11.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

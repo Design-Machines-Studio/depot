@@ -19,6 +19,7 @@ import json
 from typing import Iterable, Mapping, Optional
 
 from .metrics import MetricsAggregator, USAGE_FIELDS, _number
+from .imputed_cost import impute_attempt_cost
 from .schema import WorkflowEvent
 
 
@@ -410,10 +411,27 @@ def _build_lane_rows(report: MetricsAggregator) -> list:
     return lanes
 
 
-def _build_totals(report: MetricsAggregator) -> dict:
+def _build_totals(report: MetricsAggregator, lanes: list, imputed_count: int) -> dict:
     usage_provenance = {
         field: report.usage_total_provenance.get(field) for field in USAGE_FIELDS
     }
+    cost_usd = report.cost_usd
+    cost_provenance = report.cost_total_provenance
+    if imputed_count and cost_provenance not in {
+        "authoritative_run_total", "legacy_unscoped_run_summary",
+    }:
+        coverage = report.cost_measurement_coverage
+        remaining_missing = max(0, coverage.get("missing", 0) - imputed_count)
+        if (
+            coverage.get("expected", 0) > 0
+            and remaining_missing == 0
+            and coverage.get("overlap", 0) == 0
+            and coverage.get("unassigned", 0) == 0
+            and len(lanes) == coverage.get("expected")
+            and all(row["cost_usd"] is not None for row in lanes)
+        ):
+            cost_usd = sum(row["cost_usd"] for row in lanes)
+            cost_provenance = "imputed_subscription_equivalent"
     return {
         "usage_count": report.usage_totals.get("usage_count"),
         "input_usage_count": report.usage_totals.get("input_usage_count"),
@@ -422,15 +440,15 @@ def _build_totals(report: MetricsAggregator) -> dict:
         "cache_write_usage_count": report.usage_totals.get("cache_write_usage_count"),
         "reasoning_usage_count": report.usage_totals.get("reasoning_usage_count"),
         "input_bytes": report.usage_totals.get("input_bytes"),
-        "cost_usd": report.cost_usd,
+        "cost_usd": cost_usd,
         "usage_provenance": usage_provenance,
-        "cost_provenance": report.cost_total_provenance,
+        "cost_provenance": cost_provenance,
     }
 
 
-def _build_measurement_coverage(report: MetricsAggregator) -> dict:
+def _build_measurement_coverage(report: MetricsAggregator, imputed_count: int) -> dict:
     fields = ("expected", "measured", "estimated", "missing", "overlap", "unassigned")
-    return {
+    result = {
         "usage": {
             field: report.usage_measurement_coverage.get(field, 0) for field in fields
         },
@@ -438,6 +456,13 @@ def _build_measurement_coverage(report: MetricsAggregator) -> dict:
             field: report.cost_measurement_coverage.get(field, 0) for field in fields
         },
     }
+    if imputed_count:
+        cost = result["cost"]
+        moved = min(imputed_count, cost["missing"])
+        cost["measured"] += moved
+        cost["estimated"] += moved
+        cost["missing"] -= moved
+    return result
 
 
 def _build_summary_identity(
@@ -462,6 +487,7 @@ def build_run_cost_summary(
     events: Iterable[WorkflowEvent], *,
     repository_commit: Optional[str] = None,
     dirty_state: bool = False,
+    matrix: Optional[dict] = None,
 ) -> dict:
     """Build a schema-bound run-cost-summary dict from workflow events.
 
@@ -481,6 +507,15 @@ def build_run_cost_summary(
     """
     values = tuple(events)
     report = MetricsAggregator().aggregate(values)
+    lanes = _build_lane_rows(report)
+    imputed_count = 0
+    if matrix is not None:
+        finalized_lanes = []
+        for row in lanes:
+            finalized = impute_attempt_cost(row, matrix)
+            imputed_count += int(finalized is not row)
+            finalized_lanes.append(finalized)
+        lanes = finalized_lanes
 
     summary = {
         "schema_version": COST_SUMMARY_SCHEMA_VERSION,
@@ -497,9 +532,9 @@ def build_run_cost_summary(
             "last_event_at": values[-1].occurred_at if values else None,
         },
         "phases": _build_phase_rows(values),
-        "lanes": _build_lane_rows(report),
-        "totals": _build_totals(report),
-        "measurement_coverage": _build_measurement_coverage(report),
+        "lanes": lanes,
+        "totals": _build_totals(report, lanes, imputed_count),
+        "measurement_coverage": _build_measurement_coverage(report, imputed_count),
         "volatile_fields": list(VOLATILE_FIELDS),
         "digest": None,
     }

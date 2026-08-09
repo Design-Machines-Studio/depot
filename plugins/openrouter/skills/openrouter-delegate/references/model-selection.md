@@ -45,9 +45,15 @@ declared as `matrixReceipt` in `plugins/pipeline/references/routing-policy.json`
 so the delegation skill and the cascade consumers share one contract.
 
 Native Codex identities (bare `gpt-*` names) and native Claude aliases are not
-OpenRouter models and are deliberately absent from the matrix; `anthropic/`
+OpenRouter routing models and are deliberately absent from the routing matrix; `anthropic/`
 slugs are rejected by `openrouter-wrapper.sh` before network contact and must
-never be added to it.
+never be added to it. The matrix's `native_api_equivalent_cost` object is a
+strictly observational exception: it maps a bare native identity to an explicit
+API-equivalent price for cost imputation. Its deterministic input estimate uses
+four UTF-8 input bytes per token, never populates token counter fields, and
+names that estimate in row provenance. It does not add the native identity to
+OpenRouter routing or assert billed spend. An alias absent from that object
+remains unpriceable.
 
 ## Refreshing the matrix
 

@@ -2111,14 +2111,44 @@ def _build_and_write_cost_summary(args):
     from .cost_summary import build_run_cost_summary, compute_cost_summary_digest
     from .redaction import sanitize_durable_payload
 
+    matrix = _load_cost_imputation_matrix(getattr(args, "matrix", None))
     summary = build_run_cost_summary(
         _read_receipt_events(args.events),
         repository_commit=getattr(args, "repository_commit", None),
         dirty_state=bool(getattr(args, "dirty_state", False)),
+        matrix=matrix,
     )
     sanitized = sanitize_durable_payload(summary)
     sanitized["digest"] = compute_cost_summary_digest(sanitized)
     _write_json(args.output, sanitized)
+
+
+_TRUSTED_MATRIX_SELECTOR = "trusted-openrouter-bundle"
+_MODEL_MATRIX_ASSET = (
+    "skills/openrouter-delegate/references/model-matrix.json"
+)
+
+
+def _load_cost_imputation_matrix(selector):
+    """Resolve and validate the optional matrix without trusting caller paths."""
+    if selector is None:
+        return None
+    try:
+        if selector != _TRUSTED_MATRIX_SELECTOR:
+            raise ValueError("untrusted matrix selector")
+        bundle = resolve_plugin_bundle(
+            "openrouter", [_MODEL_MATRIX_ASSET], minimum_version="1.11.0",
+        )
+        matrix = _load_json(bundle.root / _MODEL_MATRIX_ASSET)
+        from .imputed_cost import validate_model_matrix
+        validate_model_matrix(matrix)
+        return matrix
+    except Exception:  # noqa: BLE001 -- optional observation must not gate
+        sys.stderr.write(
+            "run-cost-summary: trusted matrix unavailable or invalid; "
+            "skipping imputation\n"
+        )
+        return None
 
 
 def command_emit_cost_summary(args):
@@ -3985,6 +4015,10 @@ def parser():
     run_cost_summary.add_argument("--events", required=True)
     run_cost_summary.add_argument("--output", required=True)
     run_cost_summary.add_argument("--repository-commit", default=None)
+    run_cost_summary.add_argument(
+        "--matrix", default=None,
+        help="optional trusted matrix selector: " + _TRUSTED_MATRIX_SELECTOR,
+    )
     run_cost_summary.add_argument("--dirty-state", action="store_true", default=False)
     run_cost_summary.add_argument(
         "--receipt-line", default=None,
@@ -4003,6 +4037,10 @@ def parser():
     emit_cost_summary.add_argument("--output", required=True)
     emit_cost_summary.add_argument("--receipt", required=True)
     emit_cost_summary.add_argument("--repository-commit", default=None)
+    emit_cost_summary.add_argument(
+        "--matrix", default=None,
+        help="optional trusted matrix selector: " + _TRUSTED_MATRIX_SELECTOR,
+    )
     emit_cost_summary.add_argument(
         "--dirty-state", action="store_true", default=False,
     )
