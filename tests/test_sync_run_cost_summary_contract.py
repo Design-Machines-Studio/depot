@@ -84,6 +84,37 @@ class SyncRunCostSummaryContractTests(unittest.TestCase):
             if "emit-cost-summary --events" in line
         )
 
+    def _consumer_bytes(self, root: Path):
+        return {
+            relative: (root / relative).read_bytes()
+            for relative in CONSUMERS
+        }
+
+    def _inject_failing_mv(self, root: Path, script: Path, fail_on: int):
+        test_bin = root / "test-bin"
+        test_bin.mkdir()
+        count_file = root / "mv-count"
+        wrapper = test_bin / "mv"
+        wrapper.write_text(
+            "#!/bin/sh\n"
+            f'count_file="{count_file}"\n'
+            'count=$(cat "$count_file" 2>/dev/null || printf 0)\n'
+            'count=$((count + 1))\n'
+            'printf "%s\\n" "$count" > "$count_file"\n'
+            f'if [ "$count" -eq {fail_on} ]; then exit 42; fi\n'
+            'exec /bin/mv "$@"\n',
+            encoding="utf-8",
+        )
+        wrapper.chmod(0o755)
+        script.write_text(
+            script.read_text(encoding="utf-8").replace(
+                'export PATH="/usr/bin:/bin:/usr/sbin:/sbin"',
+                f'export PATH="{test_bin}:/usr/bin:/bin:/usr/sbin:/sbin"',
+                1,
+            ),
+            encoding="utf-8",
+        )
+
     def test_consumer_mutation_is_detected_then_repeatably_repaired(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -210,6 +241,59 @@ class SyncRunCostSummaryContractTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("could not generate replacement", result.stderr)
             self.assertEqual(consumer.read_bytes(), before)
+
+    def test_late_prepare_failure_leaves_every_consumer_unchanged(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script, _canonical = self._fixture(root)
+            first = root / CONSUMERS[0]
+            last = root / CONSUMERS[-1]
+            first.write_text(
+                first.read_text(encoding="utf-8").replace(
+                    "one transaction: it owns", "one transaction: it drifts", 1,
+                ),
+                encoding="utf-8",
+            )
+            last.write_text(
+                last.read_text(encoding="utf-8").replace(
+                    " --repository-commit HEAD", "", 1,
+                ),
+                encoding="utf-8",
+            )
+            before = self._consumer_bytes(root)
+
+            result = subprocess.run(
+                [script], capture_output=True, text=True,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("could not generate replacement", result.stderr)
+            self.assertEqual(self._consumer_bytes(root), before)
+
+    def test_commit_move_failure_rolls_back_every_consumer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script, _canonical = self._fixture(root)
+            for relative in CONSUMERS[:2]:
+                consumer = root / relative
+                consumer.write_text(
+                    consumer.read_text(encoding="utf-8").replace(
+                        "one transaction: it owns",
+                        "one transaction: it drifts",
+                        1,
+                    ),
+                    encoding="utf-8",
+                )
+            before = self._consumer_bytes(root)
+            self._inject_failing_mv(root, script, fail_on=2)
+
+            result = subprocess.run(
+                [script], capture_output=True, text=True,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("could not replace", result.stderr)
+            self.assertEqual(self._consumer_bytes(root), before)
 
 
 if __name__ == "__main__":

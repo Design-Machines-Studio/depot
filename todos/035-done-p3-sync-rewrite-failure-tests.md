@@ -1,4 +1,13 @@
-# 022 P3: sync rewrite-stage failures need durable coverage
+---
+status: done
+priority: p3
+issue_id: "035"
+tags: [review, testing, synchronizer]
+source_agents: [test-coverage-reviewer]
+review_date: 2026-08-09
+---
+
+# Sync rewrite-stage failures need durable coverage
 
 - [x] Missing and duplicate invocation flags repair to one canonical flag.
 - [x] Missing and duplicate resolution lines repair to one canonical line.
@@ -13,4 +22,4 @@ of missing and duplicate flags and resolution lines. TDD exposed that duplicate
 flags and missing repository-commit markers were previously accepted as current;
 the synchronizer now counts literal flag occurrences and requires exactly one
 insertion marker. The missing-marker case exits 2 with the affected consumer
-byte-for-byte unchanged. All 44 focused tests and workflow contracts pass.
+byte-for-byte unchanged. All 44 focused tests and workflow contracts passed.

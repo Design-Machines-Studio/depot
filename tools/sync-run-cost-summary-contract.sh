@@ -36,7 +36,7 @@
 set -uo pipefail
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin"   # fixed PATH: prevent caller-controlled hijack
 
-REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)
 CANONICAL="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/run-cost-summary-contract.md"
 
 CHECK_ONLY=0
@@ -47,7 +47,7 @@ case "${1:-}" in
 esac
 
 if [ ! -f "$CANONICAL" ]; then
-  printf 'FAIL canonical source missing: %s\n' "${CANONICAL#$REPO_ROOT/}" >&2
+  printf 'FAIL canonical source missing: %s\n' "${CANONICAL#"$REPO_ROOT"/}" >&2
   exit 2
 fi
 
@@ -82,7 +82,8 @@ PARAGRAPH=$(awk '
 ' "$CANONICAL")
 
 if [ -z "$PARAGRAPH" ]; then
-  printf 'FAIL canonical paragraph block is empty in %s\n' "${CANONICAL#$REPO_ROOT/}" >&2
+  printf 'FAIL canonical paragraph block is empty in %s\n' \
+    "${CANONICAL#"$REPO_ROOT"/}" >&2
   exit 2
 fi
 if [ "$(printf '%s\n' "$PARAGRAPH" | wc -l | tr -d ' ')" != "1" ]; then
@@ -117,6 +118,8 @@ plugins/pipeline/skills/pipeline-run/SKILL.md
 
 # Every consumer's paragraph begins with this literal. It is the replacement
 # anchor, matched as a literal prefix -- never as a pattern.
+# Backticks are literal Markdown in this anchor.
+# shellcheck disable=SC2016
 ANCHOR='The `emit-cost-summary` command is one transaction'
 
 expected_consumers=0
@@ -129,11 +132,16 @@ cleanup_temporaries() {
     rm -f "$(dirname -- "$REPO_ROOT/$rel")"/.sync-rcs.* 2>/dev/null
   done
 }
-trap 'cleanup_temporaries; exit 130' INT TERM HUP
+trap 'cleanup_temporaries' EXIT
+trap 'exit 130' INT TERM HUP
 
 drift=0
 synced=0
 unusable=0
+prepared_rels=()
+prepared_targets=()
+prepared_temps=()
+prepared_backups=()
 
 for rel in $CONSUMERS; do
   f="$REPO_ROOT/$rel"
@@ -289,13 +297,17 @@ for rel in $CONSUMERS; do
     printf 'FAIL could not apply mode %s to the replacement for %s\n' "$mode" "$rel" >&2
     exit 2
   fi
-  if ! mv -f "$tmp" "$f"; then
+  backup=$(mktemp "$target_dir/.sync-rcs-backup.XXXXXX") || exit 2
+  if ! cp -p "$f" "$backup"; then
     rm -f "$tmp"
-    printf 'FAIL could not replace %s\n' "$rel" >&2
+    rm -f "$backup"
+    printf 'FAIL could not preserve the original %s\n' "$rel" >&2
     exit 2
   fi
-  synced=$((synced + 1))
-  printf 'SYNC  %s\n' "$rel"
+  prepared_rels+=("$rel")
+  prepared_targets+=("$f")
+  prepared_temps+=("$tmp")
+  prepared_backups+=("$backup")
 done
 
 if [ "$unusable" -ne 0 ]; then
@@ -313,6 +325,43 @@ if [ "$CHECK_ONLY" -eq 1 ]; then
     "$expected_consumers"
   exit 0
 fi
+
+commit_index=0
+while [ "$commit_index" -lt "${#prepared_temps[@]}" ]; do
+  if mv -f "${prepared_temps[$commit_index]}" \
+       "${prepared_targets[$commit_index]}"; then
+    synced=$((synced + 1))
+    commit_index=$((commit_index + 1))
+    continue
+  fi
+
+  failed_rel="${prepared_rels[$commit_index]}"
+  rollback_failed=0
+  rollback_index=0
+  while [ "$rollback_index" -lt "$synced" ]; do
+    if ! cp -p "${prepared_backups[$rollback_index]}" \
+         "${prepared_targets[$rollback_index]}"; then
+      rollback_failed=1
+      printf 'FAIL could not roll back %s\n' \
+        "${prepared_rels[$rollback_index]}" >&2
+    fi
+    rollback_index=$((rollback_index + 1))
+  done
+  printf 'FAIL could not replace %s; rolled back %s earlier replacement(s)\n' \
+    "$failed_rel" "$synced" >&2
+  if [ "$rollback_failed" -ne 0 ]; then
+    printf 'FAIL rollback was incomplete; restore the named consumers before continuing\n' >&2
+  fi
+  exit 2
+done
+
+if [ "$synced" -ne 0 ]; then
+  for rel in "${prepared_rels[@]}"; do
+    printf 'SYNC  %s\n' "$rel"
+  done
+fi
+cleanup_temporaries
+trap - EXIT
 
 printf '\nok    %s consumer(s) rewritten, %s already current\n' \
   "$synced" "$((expected_consumers - synced))"
