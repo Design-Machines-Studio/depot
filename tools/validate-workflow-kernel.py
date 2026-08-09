@@ -94,7 +94,9 @@ BEHAVIORAL_CLI_CASES = {
     "export-review-contributions": ("--request", "<missing>", "--decisions", "<missing>", "--raw-findings", "<missing>", "--lane-receipts", "<missing>", "--raw-lane-outputs", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>", "--output", "<output>"),
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
     "metrics": ("--events", "<missing>", "--output", "<output>"),
-    "run-cost-summary": ("--events", "<missing>", "--output", "<output>"),
+    "run-cost-summary": (
+        "--events", "<missing>", "--output", "<output>",
+    ),
     # --output and --receipt must be distinct paths: one file used for both
     # would be unlinked, written as JSON, then appended to as text, producing a
     # corrupt artifact. The command refuses that, so the always-zero probe below
@@ -113,6 +115,9 @@ BEHAVIORAL_CLI_CASES = {
     ),
     "emit-cost-summary": (
         "--events", "<missing>", "--output", "<output>", "--receipt", "<receipt>",
+    ),
+    "resolve-plugin-asset": (
+        "--plugin", "missing-plugin", "--asset", "references/missing.json",
     ),
     "openrouter-usage": (
         "--receipt", "<missing>", "--lane", "validator",
@@ -499,7 +504,8 @@ def check_cli(context):
         "plan-reconcile",
         "inspection-validate", "inspection-classify", "inspection-trend",
         "inspection-finalize", "inspection-render", "inspection-run",
-        "inspection-publish", "resolve-plugin-bundle", "kernel-info",
+        "inspection-publish", "resolve-plugin-bundle", "resolve-plugin-asset",
+        "kernel-info",
         "snapshot-files",
     }
     choices = next(

@@ -68,6 +68,22 @@ combines assets across roots. Semantic version outranks mtime, and active host
 breaks only equal-version ties. The result exposes a home-relative ephemeral
 root plus durable cache class, version, and reason.
 
+For callers that need one asset rather than bundle metadata, use the same
+coherent selection boundary through `resolve-plugin-asset`:
+
+```sh
+"$WORKFLOW_KERNEL" resolve-plugin-asset \
+  --plugin <name> --asset <readable-relative-path> \
+  [--minimum-version <semver>] [--active-host <claude|codex>]
+```
+
+The command applies the bundle containment, completeness, semantic-version,
+manifest, and host-tie-break rules above, then prints the selected asset's
+canonical absolute path followed by one newline. It never combines roots or
+falls back to the project, `PATH`, or caller-selected cache directories. If no
+compatible coherent bundle contains the asset, it emits the kernel's
+structured `plugin_bundle_unavailable` error and exits nonzero.
+
 ## Trust boundaries (fail closed)
 
 - Accept an in-repository runtime only beneath the same canonical Depot
@@ -78,7 +94,8 @@ root plus durable cache class, version, and reason.
   consuming workflow's declared floor. Existing inspection, retry, and
   behavioral-contract consumers may declare `>=0.5.0`; repository verification
   planning/execution consumers require `>=0.6.1`; provider-dispatch consumers
-  require `>=0.7.0`; run-cost-summary consumers require `>=0.8.0`.
+  require `>=0.7.0`; ordinary run-cost-summary consumers require `>=0.8.0`;
+  matrix-backed run-cost-summary consumers require `>=0.13.0`.
   Candidates are ordered by their parsed semver
   path segment, newest first, and the plugin manifest's declared name and
   version must match. Reject symlink escapes, project-cwd/PATH discovery,

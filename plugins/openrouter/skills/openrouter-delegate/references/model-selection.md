@@ -45,16 +45,25 @@ declared as `matrixReceipt` in `plugins/pipeline/references/routing-policy.json`
 so the delegation skill and the cascade consumers share one contract.
 
 Native Codex identities (bare `gpt-*` names) and native Claude aliases are not
-OpenRouter models and are deliberately absent from the matrix; `anthropic/`
+OpenRouter routing models and are deliberately absent from the routing matrix; `anthropic/`
 slugs are rejected by `openrouter-wrapper.sh` before network contact and must
-never be added to it.
+never be added to it. The matrix's `native_api_equivalent_cost` object is a
+strictly observational exception: it maps a bare native identity to an explicit
+API-equivalent slug whose entry carries the price used for cost imputation. Its
+deterministic input estimate uses
+four UTF-8 input bytes per token, never populates token counter fields, and
+names that estimate in row provenance. It does not add the native identity to
+OpenRouter routing or assert billed spend. An alias absent from that object
+remains unpriceable.
 
-## Refreshing the matrix
+## Refreshing the routing matrix
 
 Model preferences churn weekly with releases, so the matrix is a refreshable
 recommendation instrument grounded in named external sources -- never a frozen
 opinion. Refresh it on demand, and always before a paid or policy-changing run.
-This is a documented human procedure; nothing here is automated.
+This is a documented human procedure; nothing here is automated. Its
+machine-readable ownership and preservation paths live under
+`refresh_protocol.routing`.
 
 - **Price, context, and availability** come from the OpenRouter live API. Record
   a receipt whose `observedAt` and `expiresAt` are no more than 15 minutes apart
@@ -63,13 +72,32 @@ This is a documented human procedure; nothing here is automated.
 - **Quality scores** come from the named evaluation source with its dataset
   version recorded in `aa_scores.source` and `aa_scores.source_version`. A score
   without provenance does not enter the matrix.
-- **Every refresh bumps `snapshot_date`** -- both the top-level value and each
-  entry -- and the prose snapshot date above must move with it, because the
-  validator compares them.
+- **Every routing refresh bumps the routing `snapshot_date`** -- both the
+  top-level value and every entry under top-level `models` -- and the prose
+  snapshot date above must move with it, because the validator compares them.
+  Do not restamp `native_api_equivalent_cost`; it is a separate evidence domain.
 - **Where a source is unreachable, keep the prior value** and mark it stale in
   the refresh write-up. Never guess, interpolate, or backfill from memory.
 - **A refresh lands as an ordinary reviewed commit**, so the drift validator
   re-fences every downstream consumer against the new values.
+
+## Refreshing native API-equivalent cost evidence
+
+The `native_api_equivalent_cost` object is refreshed independently because it
+supports observation, not routing. Its machine-readable ownership and
+preservation paths live under `refresh_protocol.native_api_equivalent_cost`.
+Only when the corresponding evidence was actually refreshed, update its
+`snapshot_date`, the snapshot on each changed entry under its `models`, aliases,
+prices, bytes-per-token estimate, and cited sources. An alias that targets a
+top-level routing model uses that routing model's own price and snapshot; do not
+copy or restamp it into the native model list.
+
+Record the source and observation date in the reviewed change. A native-cost
+refresh never changes the top-level routing `snapshot_date`, routing-model
+entries, the prose routing snapshot above, or routing policy. Conversely, a
+routing refresh never restamps native-only evidence. If either source is
+unreachable, retain the prior value and mark it stale rather than claiming a
+fresh snapshot.
 
 The matrix recommends, routing policy decides, receipts record. Refreshing the
 matrix never re-routes anything on its own; a routing change is a separate,

@@ -15,7 +15,7 @@
 #   tools/sync-run-cost-summary-contract.sh            rewrite every consumer
 #   tools/sync-run-cost-summary-contract.sh --check     report drift, exit 1
 #
-# Dependencies: POSIX sh utilities only (awk, mktemp, mv, rm).
+# Dependencies: POSIX sh utilities only (awk, cp, mkdir, mktemp, mv, rm, rmdir).
 # Bash 3.2+ compatible for macOS.
 #
 # Two properties this script must never violate, because its targets are
@@ -36,7 +36,7 @@
 set -uo pipefail
 export PATH="/usr/bin:/bin:/usr/sbin:/sbin"   # fixed PATH: prevent caller-controlled hijack
 
-REPO_ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
+REPO_ROOT=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)
 CANONICAL="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/run-cost-summary-contract.md"
 
 CHECK_ONLY=0
@@ -47,7 +47,7 @@ case "${1:-}" in
 esac
 
 if [ ! -f "$CANONICAL" ]; then
-  printf 'FAIL canonical source missing: %s\n' "${CANONICAL#$REPO_ROOT/}" >&2
+  printf 'FAIL canonical source missing: %s\n' "${CANONICAL#"$REPO_ROOT"/}" >&2
   exit 2
 fi
 
@@ -82,11 +82,23 @@ PARAGRAPH=$(awk '
 ' "$CANONICAL")
 
 if [ -z "$PARAGRAPH" ]; then
-  printf 'FAIL canonical paragraph block is empty in %s\n' "${CANONICAL#$REPO_ROOT/}" >&2
+  printf 'FAIL canonical paragraph block is empty in %s\n' \
+    "${CANONICAL#"$REPO_ROOT"/}" >&2
   exit 2
 fi
 if [ "$(printf '%s\n' "$PARAGRAPH" | wc -l | tr -d ' ')" != "1" ]; then
   printf 'FAIL canonical paragraph must be exactly one line\n' >&2
+  exit 2
+fi
+
+INVOCATION_FLAG=$(sed -n 's/^<!-- CANONICAL-INVOCATION-FLAG: \(.*\) -->$/\1/p' "$CANONICAL")
+if [ -z "$INVOCATION_FLAG" ] || [ "$(printf '%s\n' "$INVOCATION_FLAG" | wc -l | tr -d ' ')" != "1" ]; then
+  printf 'FAIL canonical invocation flag must appear exactly once\n' >&2
+  exit 2
+fi
+MATRIX_RESOLUTION=$(sed -n 's/^<!-- CANONICAL-MATRIX-RESOLUTION: \(.*\) -->$/\1/p' "$CANONICAL")
+if [ -z "$MATRIX_RESOLUTION" ] || [ "$(printf '%s\n' "$MATRIX_RESOLUTION" | wc -l | tr -d ' ')" != "1" ]; then
+  printf 'FAIL canonical matrix resolution must appear exactly once\n' >&2
   exit 2
 fi
 
@@ -106,23 +118,80 @@ plugins/pipeline/skills/pipeline-run/SKILL.md
 
 # Every consumer's paragraph begins with this literal. It is the replacement
 # anchor, matched as a literal prefix -- never as a pattern.
+# Backticks are literal Markdown in this anchor.
+# shellcheck disable=SC2016
 ANCHOR='The `emit-cost-summary` command is one transaction'
 
 expected_consumers=0
 for _ in $CONSUMERS; do expected_consumers=$((expected_consumers + 1)); done
 
-# An interrupted run must not leave .sync-rcs.* files beside shipped plugin
-# sources; they would be picked up as plugin content on the next cache sync.
-cleanup_temporaries() {
-  for rel in $CONSUMERS; do
-    rm -f "$(dirname -- "$REPO_ROOT/$rel")"/.sync-rcs.* 2>/dev/null
-  done
-}
-trap 'cleanup_temporaries; exit 130' INT TERM HUP
-
 drift=0
 synced=0
+rollback_count=0
 unusable=0
+prepared_rels=()
+prepared_targets=()
+prepared_temps=()
+prepared_backups=()
+owned_paths=()
+lock_dir="$REPO_ROOT/.sync-rcs.lock"
+lock_owned=0
+
+cleanup_invocation_paths() {
+  cleanup_failed=0
+  cleanup_index=0
+  while [ "$cleanup_index" -lt "${#owned_paths[@]}" ]; do
+    if ! rm -f -- "${owned_paths[$cleanup_index]}"; then
+      cleanup_failed=1
+    fi
+    cleanup_index=$((cleanup_index + 1))
+  done
+  if [ "$lock_owned" -eq 1 ]; then
+    if rmdir -- "$lock_dir"; then
+      lock_owned=0
+    else
+      cleanup_failed=1
+    fi
+  fi
+  return "$cleanup_failed"
+}
+
+rollback_committed() {
+  rollback_failed=0
+  rollback_index=0
+  while [ "$rollback_index" -lt "$rollback_count" ]; do
+    if ! cp -p "${prepared_backups[$rollback_index]}" \
+         "${prepared_targets[$rollback_index]}"; then
+      rollback_failed=1
+      printf 'FAIL could not roll back %s\n' \
+        "${prepared_rels[$rollback_index]}" >&2
+    fi
+    rollback_index=$((rollback_index + 1))
+  done
+  return "$rollback_failed"
+}
+
+# Invoked indirectly by the signal trap below.
+# shellcheck disable=SC2329
+handle_signal() {
+  trap '' INT TERM HUP
+  if ! rollback_committed; then
+    printf 'FAIL rollback was incomplete after interruption\n' >&2
+  fi
+  printf 'FAIL interrupted; rolled back %s replacement(s)\n' \
+    "$rollback_count" >&2
+  exit 130
+}
+
+trap 'cleanup_invocation_paths || :' EXIT
+trap 'handle_signal' INT TERM HUP
+
+if mkdir -- "$lock_dir"; then
+  lock_owned=1
+else
+  printf 'FAIL contract synchronization is already running (lock: %s); after confirming no owner remains, recover with: rmdir -- %s\n' "$lock_dir" "$lock_dir" >&2
+  exit 2
+fi
 
 for rel in $CONSUMERS; do
   f="$REPO_ROOT/$rel"
@@ -140,6 +209,35 @@ for rel in $CONSUMERS; do
   ' "$f")
   hits=$(printf '%s' "$probe" | head -1)
   current=$(printf '%s' "$probe" | tail -n +2)
+  invocation_probe=$(awk -v flag="$INVOCATION_FLAG" '
+    function count_literal(text, needle, hits, at) {
+      while ((at = index(text, needle)) != 0) {
+        hits++
+        text = substr(text, at + length(needle))
+      }
+      return hits
+    }
+    index($0, "emit-cost-summary --events") {
+      flag_hits += count_literal($0, flag)
+      marker_hits += count_literal($0, " --repository-commit")
+    }
+    END { printf "%d %d", flag_hits + 0, marker_hits + 0 }
+  ' "$f")
+  invocation_hits=$(printf '%s' "$invocation_probe" | cut -d" " -f1)
+  repository_commit_hits=$(printf '%s' "$invocation_probe" | cut -d" " -f2)
+  resolution_hits=$(awk -v resolution="$MATRIX_RESOLUTION" '
+    $0 == resolution { hits++ } END { print hits + 0 }
+  ' "$f")
+  resolution_line_hits=$(awk '
+    index($0, "MODEL_MATRIX_ASSET=$(\"$WORKFLOW_KERNEL\" resolve-plugin-asset ") ||
+    index($0, "if MODEL_MATRIX_ASSET=$(\"$WORKFLOW_KERNEL\" resolve-plugin-asset ") { hits++ }
+    END { print hits + 0 }
+  ' "$f")
+  legacy_matrix_hits=$(awk '
+    index($0, "emit-cost-summary --events") &&
+    index($0, "--matrix trusted-openrouter-bundle") { hits++ }
+    END { print hits + 0 }
+  ' "$f")
 
   if [ "$hits" != "1" ]; then
     printf 'FAIL %s has %s paragraph anchors, expected exactly 1\n' "$rel" "$hits" >&2
@@ -147,7 +245,9 @@ for rel in $CONSUMERS; do
     continue
   fi
 
-  if [ "$current" = "$PARAGRAPH" ]; then
+  if [ "$current" = "$PARAGRAPH" ] && [ "$invocation_hits" = "1" ] \
+     && [ "$repository_commit_hits" = "1" ] \
+     && [ "$resolution_hits" = "1" ] && [ "$legacy_matrix_hits" = "0" ]; then
     continue
   fi
 
@@ -161,8 +261,26 @@ for rel in $CONSUMERS; do
   # filesystem and is therefore atomic.
   target_dir=$(dirname -- "$f")
   tmp=$(mktemp "$target_dir/.sync-rcs.XXXXXX") || exit 2
-  if ! PARA="$PARAGRAPH" ANCH="$ANCHOR" awk '
+  owned_paths+=("$tmp")
+  if ! PARA="$PARAGRAPH" ANCH="$ANCHOR" FLAG="$INVOCATION_FLAG" \
+       RESOLUTION="$MATRIX_RESOLUTION" awk '
+        function remove_literal(text, needle, at) {
+          while ((at = index(text, needle)) != 0) {
+            text = substr(text, 1, at - 1) substr(text, at + length(needle))
+          }
+          return text
+        }
         index($0, ENVIRON["ANCH"]) == 1 { print ENVIRON["PARA"]; next }
+        index($0, "MODEL_MATRIX_ASSET=$(\"$WORKFLOW_KERNEL\" resolve-plugin-asset ") ||
+        index($0, "if MODEL_MATRIX_ASSET=$(\"$WORKFLOW_KERNEL\" resolve-plugin-asset ") { next }
+        index($0, "emit-cost-summary --events") {
+          $0 = remove_literal($0, " --matrix trusted-openrouter-bundle")
+          $0 = remove_literal($0, " " ENVIRON["FLAG"])
+          marker = " --repository-commit"
+          if (!index($0, marker)) exit 3
+          sub(marker, " " ENVIRON["FLAG"] marker)
+          print ENVIRON["RESOLUTION"]
+        }
         { print }
       ' "$f" > "$tmp"; then
     rm -f "$tmp"
@@ -179,7 +297,37 @@ for rel in $CONSUMERS; do
     printf 'FAIL replacement for %s has %s anchors, expected 1\n' "$rel" "$replaced" >&2
     exit 2
   fi
-  if [ "$(wc -l < "$tmp" | tr -d ' ')" != "$(wc -l < "$f" | tr -d ' ')" ]; then
+  generated_flag_hits=$(awk -v flag="$INVOCATION_FLAG" '
+    function count_literal(text, needle, hits, at) {
+      while ((at = index(text, needle)) != 0) {
+        hits++
+        text = substr(text, at + length(needle))
+      }
+      return hits
+    }
+    index($0, "emit-cost-summary --events") {
+      hits += count_literal($0, flag)
+    }
+    END { print hits + 0 }
+  ' "$tmp")
+  if [ "$generated_flag_hits" != "1" ]; then
+    rm -f "$tmp"
+    printf 'FAIL replacement for %s has %s generated invocation flags, expected 1\n' \
+      "$rel" "$generated_flag_hits" >&2
+    exit 2
+  fi
+  generated_resolution_hits=$(awk -v resolution="$MATRIX_RESOLUTION" '
+    $0 == resolution { hits++ } END { print hits + 0 }
+  ' "$tmp")
+  if [ "$generated_resolution_hits" != "1" ]; then
+    rm -f "$tmp"
+    printf 'FAIL replacement for %s has %s matrix resolutions, expected 1\n' \
+      "$rel" "$generated_resolution_hits" >&2
+    exit 2
+  fi
+  source_lines=$(wc -l < "$f" | tr -d ' ')
+  expected_lines=$((source_lines + 1 - resolution_line_hits))
+  if [ "$(wc -l < "$tmp" | tr -d ' ')" != "$expected_lines" ]; then
     rm -f "$tmp"
     printf 'FAIL replacement for %s changed the line count\n' "$rel" >&2
     exit 2
@@ -200,13 +348,18 @@ for rel in $CONSUMERS; do
     printf 'FAIL could not apply mode %s to the replacement for %s\n' "$mode" "$rel" >&2
     exit 2
   fi
-  if ! mv -f "$tmp" "$f"; then
+  backup=$(mktemp "$target_dir/.sync-rcs-backup.XXXXXX") || exit 2
+  owned_paths+=("$backup")
+  if ! cp -p "$f" "$backup"; then
     rm -f "$tmp"
-    printf 'FAIL could not replace %s\n' "$rel" >&2
+    rm -f "$backup"
+    printf 'FAIL could not preserve the original %s\n' "$rel" >&2
     exit 2
   fi
-  synced=$((synced + 1))
-  printf 'SYNC  %s\n' "$rel"
+  prepared_rels+=("$rel")
+  prepared_targets+=("$f")
+  prepared_temps+=("$tmp")
+  prepared_backups+=("$backup")
 done
 
 if [ "$unusable" -ne 0 ]; then
@@ -216,14 +369,49 @@ fi
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
   if [ "$drift" -ne 0 ]; then
-    printf '\nFAIL %s consumer(s) drifted from the canonical paragraph\n' "$drift" >&2
+    printf '\nFAIL %s consumer(s) drifted from the canonical contract\n' "$drift" >&2
     printf 'FIX  tools/sync-run-cost-summary-contract.sh\n' >&2
     exit 1
   fi
-  printf 'ok    %s consumers match the canonical run-cost-summary paragraph\n' \
+  printf 'ok    %s consumers match the canonical run-cost-summary contract\n' \
     "$expected_consumers"
   exit 0
 fi
+
+commit_index=0
+while [ "$commit_index" -lt "${#prepared_temps[@]}" ]; do
+  rollback_count=$((synced + 1))
+  if mv -f "${prepared_temps[$commit_index]}" \
+       "${prepared_targets[$commit_index]}"; then
+    synced=$((synced + 1))
+    rollback_count="$synced"
+    commit_index=$((commit_index + 1))
+    continue
+  fi
+
+  failed_rel="${prepared_rels[$commit_index]}"
+  rollback_count="$synced"
+  rollback_committed
+  rollback_failed=$?
+  printf 'FAIL could not replace %s; rolled back %s earlier replacement(s)\n' \
+    "$failed_rel" "$synced" >&2
+  if [ "$rollback_failed" -ne 0 ]; then
+    printf 'FAIL rollback was incomplete; restore the named consumers before continuing\n' >&2
+  fi
+  exit 2
+done
+
+if [ "$synced" -ne 0 ]; then
+  for rel in "${prepared_rels[@]}"; do
+    printf 'SYNC  %s\n' "$rel"
+  done
+fi
+trap '' INT TERM HUP
+if ! cleanup_invocation_paths; then
+  printf 'FAIL could not remove synchronization staging files or lock\n' >&2
+  exit 2
+fi
+trap - EXIT
 
 printf '\nok    %s consumer(s) rewritten, %s already current\n' \
   "$synced" "$((expected_consumers - synced))"

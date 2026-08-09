@@ -139,6 +139,63 @@ disagreeing provenance yields `null` for that field with `null` provenance --
 never a partial sum presented as a whole. Per-lane rows stay fully populated
 regardless.
 
+### Optional API-equivalent cost imputation
+
+Both `run-cost-summary` and `emit-cost-summary` accept an optional
+`--matrix "$MODEL_MATRIX_ASSET"`. The caller selects the provider, resolves a
+coherent installed-plugin bundle, and sets `MODEL_MATRIX_ASSET` to that bundle's
+model-matrix asset; the kernel owns no provider dependency. It accepts the asset
+only when its real path, cache boundary, manifest name/version, and regular-file
+shape agree, then validates the matrix contract. An ordinary repository or
+temporary-file path is not pricing authority. An omitted or empty selector is
+expected matrix absence and emits no diagnostic. If a non-empty selector does
+not resolve to a trusted asset, or that trusted matrix is invalid, the command
+emits exactly one
+`run-cost-summary: trusted matrix unavailable or invalid; skipping imputation`
+line on stderr, emits the ordinary non-imputed summary, and preserves the
+observation-only success contract.
+
+Resolve the caller-selected asset from one coherent installed plugin bundle:
+
+```sh
+MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset \
+  --plugin openrouter \
+  --asset skills/openrouter-delegate/references/model-matrix.json \
+  --minimum-version 1.11.0)
+```
+
+`resolve-plugin-asset` uses the bundle-selection and containment contract in
+`runtime-resolution.md` and prints exactly one canonical absolute asset path.
+It exits nonzero with `plugin_bundle_unavailable` when no compatible complete
+bundle exists. Callers may then make that absence explicit and pass an empty
+selector to preserve the observation-only, no-imputation behavior; a non-empty
+selector that fails trust or matrix validation retains the diagnostic above.
+
+Existing billed costs always win. A missing attempt cost is priceable only
+when the matrix contains its exact model slug or explicitly maps a supported
+native Codex/Claude identity to an API-equivalent slug. Token counters retain
+their units. The matrix-owned bytes-per-token estimate applies only to a
+supported native alias whose provider and implementer identify Codex or Claude;
+a direct OpenRouter byte-only row remains unpriced. The estimate contributes
+input cost without populating `input_usage_count`. The row's
+`measurement_source` names the alias, byte estimate, and matrix snapshot through
+`model_alias(...)`, `estimated_input_tokens(...)`, and
+`imputed_cost(model-matrix@...)`; the row is also marked
+`usage_estimated: true`.
+
+The matrix currently prices input, output, and cache-read counters. If a row
+without billed cost also reports `cache_write_usage_count` or
+`reasoning_usage_count`, those counters are not silently assigned a zero price:
+the row remains unpriced, appends
+`cost_imputation_excluded(unpriced=...)` provenance, and keeps total cost
+coverage incomplete. A provider-reported billed cost remains authoritative.
+
+Each imputed row moves one cost-coverage attempt from `missing` to both
+`measured` and `estimated`. Only complete, non-overlapping, fully priced attempt
+coverage may produce a total with
+`cost_provenance: imputed_subscription_equivalent`. Unknown aliases,
+unmeasured attempts, and partial coverage remain visibly null.
+
 ## `emit-cost-summary`
 
 One command, one transaction: it owns the artifact path, clears any stale file
@@ -150,6 +207,7 @@ exactly one inventory line to the run receipt.
   --events <run-dir>/authoritative-receipts.json \
   --output <run-dir>/run-cost-summary.json \
   --receipt <run-dir>/run-receipt.md \
+  [--matrix "$MODEL_MATRIX_ASSET"] \
   [--repository-commit <sha>] [--dirty-state]
 ```
 
@@ -186,20 +244,14 @@ That leaves the fallback covering launcher exit 4 and the shell's own 126/127 --
 the cases no process inside the kernel can report.
 
 **A refused receipt path still exits 0.** It is the one case that also records
-nothing, and it is exempt on purpose: the caller's fallback is
-`|| printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> <receipt>`, so
-a non-zero exit would append through the very symlink the command just rejected
-and undo the refusal. The refusal goes to stderr alone. An operator who
-symlinked the receipt path gets no receipt line, and that is the correct
-outcome.
+nothing, and it is exempt on purpose: an ungated fallback would append through
+the very symlink the command just rejected and undo the refusal. The refusal
+goes to stderr alone. An operator who symlinked the receipt path gets no receipt
+line, and that is the correct outcome.
 
 The one case a caller still handles is the launcher itself failing to run, which
-no process inside it can report:
-
-```sh
-"$WORKFLOW_KERNEL" emit-cost-summary ... \
-  || printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> <receipt>
-```
+no process inside it can report. Use the status-gated chain above; never replace
+it with a bare `|| printf`.
 
 **Exactly one line, always.** Either
 `run-cost-summary: <artifact path> (usage measured <m>/<n>)` or

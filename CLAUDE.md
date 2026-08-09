@@ -62,7 +62,7 @@ Workflow Kernel is the neutral mechanics leaf beneath pipeline and dm-review.
 It owns deterministic run state, replay, receipts, verification evidence,
 shadow comparison, exact owned-resource cleanup, trusted inspection profiles,
 contained lanes, redaction, canonical output, and compatible trends. Version
-0.12.0 keeps workflow shadow as the default while allowing consumers to
+0.13.0 keeps workflow shadow as the default while allowing consumers to
 explicitly delegate bounded authoritative mechanics. See
 `docs/workflow-kernel.md` and `docs/quality-pulse.md`.
 
@@ -89,7 +89,20 @@ Before tagging or pushing a release, run the preflight. It is read-only and prin
 ./tools/check-release-preflight.sh
 ```
 
-It verifies a clean tree, marketplace/plugin version sync, Codex shim freshness, that every plugin changed since its last tag has been bumped, and that `origin` is reachable and authenticated. **Never claim a release, tag, or push completed unless this passed.** It is not part of `--all` -- release hygiene is separate from composition validity.
+It verifies a clean tree, marketplace/plugin version sync, Codex shim freshness,
+that every plugin changed since its last tag has been bumped, installed Codex
+plugin versions against the canonical marketplace, remote branches for
+independent equal-version plugin bumps, and that `origin` is reachable and
+authenticated. When Codex or its installed-cache evidence is unavailable,
+`REQ-CODEX-CACHE-GATE` reports an explicit `SKIP` rather than failing the
+preflight. That `SKIP` is a coverage gap: report it, and do not claim installed
+Codex-cache verification unless the receipt contains the corresponding `OK`.
+**Never claim a release, tag, or push completed unless the preflight passed, and
+always include its coverage gaps in the release evidence.** It is not part of
+`--all` -- release hygiene is separate from composition validity. `--no-net` is
+local-only evidence: it skips both the remote equal-bump inspection and the
+origin authentication probe, so neither push safety nor cross-lane
+version-collision safety is verified.
 
 ## Plugin Versioning
 
@@ -192,9 +205,9 @@ Claude model aliases remain in agent frontmatter for Claude Code compatibility a
 
 **Fable escalation (non-coding only):** Claude Fable 5 (`fable`) may be used for strategy, writing/voice, research synthesis, or optional plan critique when the current plan carries it. Never use Fable for implementation, code review, security, architecture, or the execution-orchestrator. Full rules are in `docs/opus-4-8-tuning.md`.
 
-**GPT-5.6 family (Jul 2026):** OpenAI's Sol/Terra/Luna tiers replace GPT-5.5 on the OpenAI rails. `gpt-5.6-sol` is rank 98 and leads OpenAI's paid and Codex-native ladders. Terra and GPT-5.5 tie at rank 94; Terra is attempted first on paid API rails because it costs half as much ($2.50/$15 versus $5/$30), while GPT-5.5 remains the older-CLI native fallback. Luna ties GLM-5.2 at rank 90 but stays at the **frontier tail, never on `cheap_api`**: its $1/$6 output price is about 2.1x GLM's live $2.86 rate, so price breaks the quality tie in GLM's favour. `cascade-dispatch.sh` emits the first floor-clearing model; the orchestrator's **Native Model Descent** (RC 64) walks later native models when a CLI rejects one. Sol leads `native_judgment` on the **codex** host only; see `docs/opus-4-8-tuning.md` for the host constraint. The Sol rail requires `codex-cli >= 0.144.x`, and `gpt-5.1-codex-mini` is unusable on a ChatGPT-sub account.
+**GPT-5.6 family (Jul 2026):** OpenAI's Sol/Terra/Luna tiers replace GPT-5.5 on the OpenAI rails. `gpt-5.6-sol` is rank 98 and leads OpenAI's paid and Codex-native ladders. In the checked-in 2026-08-03 planning snapshot, Terra is $1/$6 per million input/output tokens and Luna is $0.10/$0.60; these are not live telemetry, so obtain a fresh MCP price receipt before a paid or policy-changing run. Terra is the quality/direct OpenRouter fallback, while Luna is the economical mechanical and config/doc route. `cascade-dispatch.sh` emits the first floor-clearing model; the orchestrator's **Native Model Descent** (RC 64) walks later native models when a CLI rejects one. Sol leads `native_judgment` on the **codex** host only; see `docs/opus-4-8-tuning.md` for the host constraint. The Sol rail requires `codex-cli >= 0.144.x`, and `gpt-5.1-codex-mini` is unusable on a ChatGPT-sub account.
 
-**Kimi K3 (Jul 2026):** Moonshot AI's planned-open-weight, API-only-today model (`moonshotai/kimi-k3`, 2.8T-param MoE, 1M context, $3/$15 with $0.30 cache hits) is the quality-first OpenRouter security and bulk-analysis head at rank 97. Artificial Analysis v4.1 scores K3 at 57: behind Fable 5 (60) and GPT-5.6 Sol max (59), ahead of Opus 4.8 max (56), Terra/GPT-5.5 max (55), Sonnet 5 max (53), and GLM-5.2 max (51). GLM-5.2 heads `openrouter_exec`; Kimi K3 heads the security and bulk-analysis roles and remains a frontier/bulk wrapper model. Luna is the economical mechanical route, while Terra is the quality/direct fallback. OpenRouter currently warns that K3's sole upstream provider has limited capacity, so its ladders retain fallbacks. The wrapper is text-only despite upstream multimodal capabilities, and automated use remains broker-gated and fail-closed until production host authority is available.
+**Kimi K3 (Jul 2026):** Moonshot AI's planned-open-weight, API-only-today model (`moonshotai/kimi-k3`, 2.8T-param MoE, 1M context, $3/$15 with $0.30 cache hits) is the quality-first OpenRouter security and bulk-analysis head at rank 97. Artificial Analysis v4.1 scores K3 at 57: behind Fable 5 (60) and GPT-5.6 Sol max (59), ahead of Opus 4.8 max (56), Terra/GPT-5.5 max (55), Sonnet 5 max (53), and GLM-5.2 max (51). GLM-5.2 heads `openrouter_exec`; Kimi K3 heads the security and bulk-analysis roles and remains a frontier/bulk wrapper model. OpenRouter currently warns that K3's sole upstream provider has limited capacity, so its ladders retain fallbacks. The wrapper is text-only despite upstream multimodal capabilities, and automated use remains broker-gated and fail-closed until production host authority is available.
 
 **Coding subscription rails (Jul 2026):** Claude is moving from Max to Pro and is outside the coding graph. Codex Pro 20x is the active coding profile at a 65/0/35 Codex/Claude/OpenRouter target; the named Codex 5x profile shifts to 40/0/60. All implementation and code-review kinds, including UI, security, and architecture, route to Codex or OpenRouter. Claude remains available only for non-coding strategy, writing/voice, research synthesis, and optional plan critique.
 
