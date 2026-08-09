@@ -15,7 +15,7 @@
 #   tools/sync-run-cost-summary-contract.sh            rewrite every consumer
 #   tools/sync-run-cost-summary-contract.sh --check     report drift, exit 1
 #
-# Dependencies: POSIX sh utilities only (awk, mktemp, mv, rm).
+# Dependencies: POSIX sh utilities only (awk, cp, mkdir, mktemp, mv, rm, rmdir).
 # Bash 3.2+ compatible for macOS.
 #
 # Two properties this script must never violate, because its targets are
@@ -125,23 +125,73 @@ ANCHOR='The `emit-cost-summary` command is one transaction'
 expected_consumers=0
 for _ in $CONSUMERS; do expected_consumers=$((expected_consumers + 1)); done
 
-# An interrupted run must not leave .sync-rcs.* files beside shipped plugin
-# sources; they would be picked up as plugin content on the next cache sync.
-cleanup_temporaries() {
-  for rel in $CONSUMERS; do
-    rm -f "$(dirname -- "$REPO_ROOT/$rel")"/.sync-rcs.* 2>/dev/null
-  done
-}
-trap 'cleanup_temporaries' EXIT
-trap 'exit 130' INT TERM HUP
-
 drift=0
 synced=0
+rollback_count=0
 unusable=0
 prepared_rels=()
 prepared_targets=()
 prepared_temps=()
 prepared_backups=()
+owned_paths=()
+lock_dir="$REPO_ROOT/.sync-rcs.lock"
+lock_owned=0
+
+cleanup_invocation_paths() {
+  cleanup_failed=0
+  cleanup_index=0
+  while [ "$cleanup_index" -lt "${#owned_paths[@]}" ]; do
+    if ! rm -f -- "${owned_paths[$cleanup_index]}"; then
+      cleanup_failed=1
+    fi
+    cleanup_index=$((cleanup_index + 1))
+  done
+  if [ "$lock_owned" -eq 1 ]; then
+    if rmdir -- "$lock_dir"; then
+      lock_owned=0
+    else
+      cleanup_failed=1
+    fi
+  fi
+  return "$cleanup_failed"
+}
+
+rollback_committed() {
+  rollback_failed=0
+  rollback_index=0
+  while [ "$rollback_index" -lt "$rollback_count" ]; do
+    if ! cp -p "${prepared_backups[$rollback_index]}" \
+         "${prepared_targets[$rollback_index]}"; then
+      rollback_failed=1
+      printf 'FAIL could not roll back %s\n' \
+        "${prepared_rels[$rollback_index]}" >&2
+    fi
+    rollback_index=$((rollback_index + 1))
+  done
+  return "$rollback_failed"
+}
+
+# Invoked indirectly by the signal trap below.
+# shellcheck disable=SC2329
+handle_signal() {
+  trap '' INT TERM HUP
+  if ! rollback_committed; then
+    printf 'FAIL rollback was incomplete after interruption\n' >&2
+  fi
+  printf 'FAIL interrupted; rolled back %s replacement(s)\n' \
+    "$rollback_count" >&2
+  exit 130
+}
+
+trap 'cleanup_invocation_paths || :' EXIT
+trap 'handle_signal' INT TERM HUP
+
+if mkdir -- "$lock_dir"; then
+  lock_owned=1
+else
+  printf 'FAIL contract synchronization is already running\n' >&2
+  exit 2
+fi
 
 for rel in $CONSUMERS; do
   f="$REPO_ROOT/$rel"
@@ -211,6 +261,7 @@ for rel in $CONSUMERS; do
   # filesystem and is therefore atomic.
   target_dir=$(dirname -- "$f")
   tmp=$(mktemp "$target_dir/.sync-rcs.XXXXXX") || exit 2
+  owned_paths+=("$tmp")
   if ! PARA="$PARAGRAPH" ANCH="$ANCHOR" FLAG="$INVOCATION_FLAG" \
        RESOLUTION="$MATRIX_RESOLUTION" awk '
         function remove_literal(text, needle, at) {
@@ -298,6 +349,7 @@ for rel in $CONSUMERS; do
     exit 2
   fi
   backup=$(mktemp "$target_dir/.sync-rcs-backup.XXXXXX") || exit 2
+  owned_paths+=("$backup")
   if ! cp -p "$f" "$backup"; then
     rm -f "$tmp"
     rm -f "$backup"
@@ -328,25 +380,19 @@ fi
 
 commit_index=0
 while [ "$commit_index" -lt "${#prepared_temps[@]}" ]; do
+  rollback_count=$((synced + 1))
   if mv -f "${prepared_temps[$commit_index]}" \
        "${prepared_targets[$commit_index]}"; then
     synced=$((synced + 1))
+    rollback_count="$synced"
     commit_index=$((commit_index + 1))
     continue
   fi
 
   failed_rel="${prepared_rels[$commit_index]}"
-  rollback_failed=0
-  rollback_index=0
-  while [ "$rollback_index" -lt "$synced" ]; do
-    if ! cp -p "${prepared_backups[$rollback_index]}" \
-         "${prepared_targets[$rollback_index]}"; then
-      rollback_failed=1
-      printf 'FAIL could not roll back %s\n' \
-        "${prepared_rels[$rollback_index]}" >&2
-    fi
-    rollback_index=$((rollback_index + 1))
-  done
+  rollback_count="$synced"
+  rollback_committed
+  rollback_failed=$?
   printf 'FAIL could not replace %s; rolled back %s earlier replacement(s)\n' \
     "$failed_rel" "$synced" >&2
   if [ "$rollback_failed" -ne 0 ]; then
@@ -360,7 +406,11 @@ if [ "$synced" -ne 0 ]; then
     printf 'SYNC  %s\n' "$rel"
   done
 fi
-cleanup_temporaries
+trap '' INT TERM HUP
+if ! cleanup_invocation_paths; then
+  printf 'FAIL could not remove synchronization staging files or lock\n' >&2
+  exit 2
+fi
 trap - EXIT
 
 printf '\nok    %s consumer(s) rewritten, %s already current\n' \

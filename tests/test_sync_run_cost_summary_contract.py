@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 import unittest
 
 
@@ -90,21 +91,17 @@ class SyncRunCostSummaryContractTests(unittest.TestCase):
             for relative in CONSUMERS
         }
 
-    def _inject_failing_mv(self, root: Path, script: Path, fail_on: int):
+    def _sync_artifacts(self, root: Path):
+        return sorted(
+            path.relative_to(root).as_posix()
+            for path in root.rglob(".sync-rcs*")
+        )
+
+    def _install_mv_wrapper(self, root: Path, script: Path, body: str):
         test_bin = root / "test-bin"
         test_bin.mkdir()
-        count_file = root / "mv-count"
         wrapper = test_bin / "mv"
-        wrapper.write_text(
-            "#!/bin/sh\n"
-            f'count_file="{count_file}"\n'
-            'count=$(cat "$count_file" 2>/dev/null || printf 0)\n'
-            'count=$((count + 1))\n'
-            'printf "%s\\n" "$count" > "$count_file"\n'
-            f'if [ "$count" -eq {fail_on} ]; then exit 42; fi\n'
-            'exec /bin/mv "$@"\n',
-            encoding="utf-8",
-        )
+        wrapper.write_text("#!/bin/sh\n" + body, encoding="utf-8")
         wrapper.chmod(0o755)
         script.write_text(
             script.read_text(encoding="utf-8").replace(
@@ -113,6 +110,19 @@ class SyncRunCostSummaryContractTests(unittest.TestCase):
                 1,
             ),
             encoding="utf-8",
+        )
+
+    def _inject_failing_mv(self, root: Path, script: Path, fail_on: int):
+        count_file = root / "mv-count"
+        self._install_mv_wrapper(
+            root,
+            script,
+            f'count_file="{count_file}"\n'
+            'count=$(cat "$count_file" 2>/dev/null || printf 0)\n'
+            'count=$((count + 1))\n'
+            'printf "%s\\n" "$count" > "$count_file"\n'
+            f'if [ "$count" -eq {fail_on} ]; then exit 42; fi\n'
+            'exec /bin/mv "$@"\n',
         )
 
     def test_consumer_mutation_is_detected_then_repeatably_repaired(self):
@@ -143,6 +153,7 @@ class SyncRunCostSummaryContractTests(unittest.TestCase):
             self.assertEqual(subprocess.run(
                 [script, "--check"], capture_output=True, text=True,
             ).returncode, 0)
+            self.assertEqual(self._sync_artifacts(root), [])
 
     def test_invalid_canonical_markers_fail_without_mutating_consumers(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -269,6 +280,7 @@ class SyncRunCostSummaryContractTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("could not generate replacement", result.stderr)
             self.assertEqual(self._consumer_bytes(root), before)
+            self.assertEqual(self._sync_artifacts(root), [])
 
     def test_commit_move_failure_rolls_back_every_consumer(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -294,6 +306,86 @@ class SyncRunCostSummaryContractTests(unittest.TestCase):
             self.assertEqual(result.returncode, 2)
             self.assertIn("could not replace", result.stderr)
             self.assertEqual(self._consumer_bytes(root), before)
+            self.assertEqual(self._sync_artifacts(root), [])
+
+    def test_signal_after_first_move_rolls_back_and_cleans_own_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script, _canonical = self._fixture(root)
+            for relative in CONSUMERS[:2]:
+                consumer = root / relative
+                consumer.write_text(
+                    consumer.read_text(encoding="utf-8").replace(
+                        "one transaction: it owns",
+                        "one transaction: it drifts",
+                        1,
+                    ),
+                    encoding="utf-8",
+                )
+            before = self._consumer_bytes(root)
+            self._install_mv_wrapper(
+                root,
+                script,
+                '/bin/mv "$@" || exit $?\n'
+                'kill -TERM "$PPID"\n'
+                'exit 0\n',
+            )
+
+            result = subprocess.run(
+                [script], capture_output=True, text=True,
+            )
+
+            self.assertEqual(result.returncode, 130)
+            self.assertEqual(self._consumer_bytes(root), before)
+            self.assertEqual(self._sync_artifacts(root), [])
+
+    def test_concurrent_invocation_fails_closed_without_touching_owner_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script, _canonical = self._fixture(root)
+            consumer = root / CONSUMERS[0]
+            consumer.write_text(
+                consumer.read_text(encoding="utf-8").replace(
+                    "one transaction: it owns", "one transaction: it drifts", 1,
+                ),
+                encoding="utf-8",
+            )
+            entered = root / "move-entered"
+            release = root / "move-release"
+            self._install_mv_wrapper(
+                root,
+                script,
+                f'if [ ! -e "{entered}" ]; then\n'
+                f'  : > "{entered}"\n'
+                f'  while [ ! -e "{release}" ]; do sleep 0.05; done\n'
+                'fi\n'
+                'exec /bin/mv "$@"\n',
+            )
+            owner = subprocess.Popen(
+                [script], stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                text=True,
+            )
+            try:
+                deadline = time.monotonic() + 5
+                while not entered.exists() and time.monotonic() < deadline:
+                    time.sleep(0.02)
+                self.assertTrue(entered.exists(), "owner never reached commit move")
+
+                contender = subprocess.run(
+                    [script], capture_output=True, text=True, timeout=5,
+                )
+                release.touch()
+                owner_stdout, owner_stderr = owner.communicate(timeout=5)
+            finally:
+                release.touch()
+                if owner.poll() is None:
+                    owner.kill()
+                    owner.communicate()
+
+            self.assertEqual(contender.returncode, 2)
+            self.assertIn("already running", contender.stderr)
+            self.assertEqual(owner.returncode, 0, owner_stdout + owner_stderr)
+            self.assertEqual(self._sync_artifacts(root), [])
 
 
 if __name__ == "__main__":
