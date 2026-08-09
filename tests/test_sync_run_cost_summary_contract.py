@@ -65,6 +65,25 @@ class SyncRunCostSummaryContractTests(unittest.TestCase):
             )
         return script, canonical
 
+    def _canonical_values(self, canonical: Path):
+        text = canonical.read_text(encoding="utf-8")
+        flag = re.search(
+            r"^<!-- CANONICAL-INVOCATION-FLAG: (.*) -->$",
+            text, re.MULTILINE,
+        ).group(1)
+        resolution = re.search(
+            r"^<!-- CANONICAL-MATRIX-RESOLUTION: (.*) -->$",
+            text, re.MULTILINE,
+        ).group(1)
+        return flag, resolution
+
+    def _invocation_flag_count(self, consumer: Path, flag: str):
+        return sum(
+            line.count(flag)
+            for line in consumer.read_text(encoding="utf-8").splitlines()
+            if "emit-cost-summary --events" in line
+        )
+
     def test_consumer_mutation_is_detected_then_repeatably_repaired(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -111,6 +130,85 @@ class SyncRunCostSummaryContractTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 2)
             self.assertIn("exactly one start and one end marker", result.stderr)
+            self.assertEqual(consumer.read_bytes(), before)
+
+    def test_missing_or_duplicate_invocation_flag_is_repaired_once(self):
+        for mutation in ("missing", "duplicate"):
+            with (
+                self.subTest(mutation=mutation),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                script, canonical = self._fixture(root)
+                flag, _resolution = self._canonical_values(canonical)
+                consumer = root / CONSUMERS[0]
+                text = consumer.read_text(encoding="utf-8")
+                if mutation == "missing":
+                    text = text.replace(" " + flag, "", 1)
+                else:
+                    text = text.replace(" " + flag, " " + flag + " " + flag, 1)
+                consumer.write_text(text, encoding="utf-8")
+
+                self.assertEqual(subprocess.run(
+                    [script, "--check"], capture_output=True, text=True,
+                ).returncode, 1)
+                self.assertEqual(subprocess.run(
+                    [script], capture_output=True, text=True,
+                ).returncode, 0)
+                self.assertEqual(self._invocation_flag_count(consumer, flag), 1)
+
+    def test_missing_or_duplicate_resolution_line_is_repaired_once(self):
+        for mutation in ("missing", "duplicate"):
+            with (
+                self.subTest(mutation=mutation),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                root = Path(directory)
+                script, canonical = self._fixture(root)
+                _flag, resolution = self._canonical_values(canonical)
+                consumer = root / CONSUMERS[0]
+                text = consumer.read_text(encoding="utf-8")
+                if mutation == "missing":
+                    text = text.replace(resolution + "\n", "", 1)
+                else:
+                    text = text.replace(
+                        resolution + "\n",
+                        resolution + "\n" + resolution + "\n",
+                        1,
+                    )
+                consumer.write_text(text, encoding="utf-8")
+
+                self.assertEqual(subprocess.run(
+                    [script, "--check"], capture_output=True, text=True,
+                ).returncode, 1)
+                self.assertEqual(subprocess.run(
+                    [script], capture_output=True, text=True,
+                ).returncode, 0)
+                self.assertEqual(
+                    consumer.read_text(encoding="utf-8")
+                    .splitlines().count(resolution),
+                    1,
+                )
+
+    def test_missing_repository_commit_marker_fails_without_mutating_consumer(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            script, _canonical = self._fixture(root)
+            consumer = root / CONSUMERS[0]
+            consumer.write_text(
+                consumer.read_text(encoding="utf-8").replace(
+                    " --repository-commit HEAD", "", 1,
+                ),
+                encoding="utf-8",
+            )
+            before = consumer.read_bytes()
+
+            result = subprocess.run(
+                [script], capture_output=True, text=True,
+            )
+
+            self.assertEqual(result.returncode, 2)
+            self.assertIn("could not generate replacement", result.stderr)
             self.assertEqual(consumer.read_bytes(), before)
 
 

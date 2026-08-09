@@ -151,10 +151,22 @@ for rel in $CONSUMERS; do
   ' "$f")
   hits=$(printf '%s' "$probe" | head -1)
   current=$(printf '%s' "$probe" | tail -n +2)
-  invocation_hits=$(awk -v flag="$INVOCATION_FLAG" '
-    index($0, "emit-cost-summary --events") && index($0, flag) { hits++ }
-    END { print hits + 0 }
+  invocation_probe=$(awk -v flag="$INVOCATION_FLAG" '
+    function count_literal(text, needle, hits, at) {
+      while ((at = index(text, needle)) != 0) {
+        hits++
+        text = substr(text, at + length(needle))
+      }
+      return hits
+    }
+    index($0, "emit-cost-summary --events") {
+      flag_hits += count_literal($0, flag)
+      marker_hits += count_literal($0, " --repository-commit")
+    }
+    END { printf "%d %d", flag_hits + 0, marker_hits + 0 }
   ' "$f")
+  invocation_hits=$(printf '%s' "$invocation_probe" | cut -d" " -f1)
+  repository_commit_hits=$(printf '%s' "$invocation_probe" | cut -d" " -f2)
   resolution_hits=$(awk -v resolution="$MATRIX_RESOLUTION" '
     $0 == resolution { hits++ } END { print hits + 0 }
   ' "$f")
@@ -176,6 +188,7 @@ for rel in $CONSUMERS; do
   fi
 
   if [ "$current" = "$PARAGRAPH" ] && [ "$invocation_hits" = "1" ] \
+     && [ "$repository_commit_hits" = "1" ] \
      && [ "$resolution_hits" = "1" ] && [ "$legacy_matrix_hits" = "0" ]; then
     continue
   fi
@@ -226,7 +239,16 @@ for rel in $CONSUMERS; do
     exit 2
   fi
   generated_flag_hits=$(awk -v flag="$INVOCATION_FLAG" '
-    index($0, "emit-cost-summary --events") && index($0, flag) { hits++ }
+    function count_literal(text, needle, hits, at) {
+      while ((at = index(text, needle)) != 0) {
+        hits++
+        text = substr(text, at + length(needle))
+      }
+      return hits
+    }
+    index($0, "emit-cost-summary --events") {
+      hits += count_literal($0, flag)
+    }
     END { print hits + 0 }
   ' "$tmp")
   if [ "$generated_flag_hits" != "1" ]; then
