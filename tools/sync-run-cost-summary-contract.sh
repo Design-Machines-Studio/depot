@@ -90,6 +90,12 @@ if [ "$(printf '%s\n' "$PARAGRAPH" | wc -l | tr -d ' ')" != "1" ]; then
   exit 2
 fi
 
+INVOCATION_FLAG=$(sed -n 's/^<!-- CANONICAL-INVOCATION-FLAG: \(.*\) -->$/\1/p' "$CANONICAL")
+if [ -z "$INVOCATION_FLAG" ] || [ "$(printf '%s\n' "$INVOCATION_FLAG" | wc -l | tr -d ' ')" != "1" ]; then
+  printf 'FAIL canonical invocation flag must appear exactly once\n' >&2
+  exit 2
+fi
+
 CONSUMERS="
 plugins/dm-review/skills/review/SKILL.md
 plugins/dm-review/commands/dm-review.md
@@ -140,6 +146,10 @@ for rel in $CONSUMERS; do
   ' "$f")
   hits=$(printf '%s' "$probe" | head -1)
   current=$(printf '%s' "$probe" | tail -n +2)
+  invocation_hits=$(awk -v flag="$INVOCATION_FLAG" '
+    index($0, "emit-cost-summary --events") && index($0, flag) { hits++ }
+    END { print hits + 0 }
+  ' "$f")
 
   if [ "$hits" != "1" ]; then
     printf 'FAIL %s has %s paragraph anchors, expected exactly 1\n' "$rel" "$hits" >&2
@@ -147,7 +157,7 @@ for rel in $CONSUMERS; do
     continue
   fi
 
-  if [ "$current" = "$PARAGRAPH" ]; then
+  if [ "$current" = "$PARAGRAPH" ] && [ "$invocation_hits" = "1" ]; then
     continue
   fi
 
@@ -161,8 +171,13 @@ for rel in $CONSUMERS; do
   # filesystem and is therefore atomic.
   target_dir=$(dirname -- "$f")
   tmp=$(mktemp "$target_dir/.sync-rcs.XXXXXX") || exit 2
-  if ! PARA="$PARAGRAPH" ANCH="$ANCHOR" awk '
+  if ! PARA="$PARAGRAPH" ANCH="$ANCHOR" FLAG="$INVOCATION_FLAG" awk '
         index($0, ENVIRON["ANCH"]) == 1 { print ENVIRON["PARA"]; next }
+        index($0, "emit-cost-summary --events") && !index($0, ENVIRON["FLAG"]) {
+          marker = " --repository-commit"
+          if (!index($0, marker)) exit 3
+          sub(marker, " " ENVIRON["FLAG"] marker)
+        }
         { print }
       ' "$f" > "$tmp"; then
     rm -f "$tmp"
@@ -177,6 +192,16 @@ for rel in $CONSUMERS; do
   if [ "$replaced" != "1" ]; then
     rm -f "$tmp"
     printf 'FAIL replacement for %s has %s anchors, expected 1\n' "$rel" "$replaced" >&2
+    exit 2
+  fi
+  generated_flag_hits=$(awk -v flag="$INVOCATION_FLAG" '
+    index($0, "emit-cost-summary --events") && index($0, flag) { hits++ }
+    END { print hits + 0 }
+  ' "$tmp")
+  if [ "$generated_flag_hits" != "1" ]; then
+    rm -f "$tmp"
+    printf 'FAIL replacement for %s has %s generated invocation flags, expected 1\n' \
+      "$rel" "$generated_flag_hits" >&2
     exit 2
   fi
   if [ "$(wc -l < "$tmp" | tr -d ' ')" != "$(wc -l < "$f" | tr -d ' ')" ]; then
@@ -216,11 +241,11 @@ fi
 
 if [ "$CHECK_ONLY" -eq 1 ]; then
   if [ "$drift" -ne 0 ]; then
-    printf '\nFAIL %s consumer(s) drifted from the canonical paragraph\n' "$drift" >&2
+    printf '\nFAIL %s consumer(s) drifted from the canonical contract\n' "$drift" >&2
     printf 'FIX  tools/sync-run-cost-summary-contract.sh\n' >&2
     exit 1
   fi
-  printf 'ok    %s consumers match the canonical run-cost-summary paragraph\n' \
+  printf 'ok    %s consumers match the canonical run-cost-summary contract\n' \
     "$expected_consumers"
   exit 0
 fi

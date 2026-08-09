@@ -47,7 +47,11 @@ so the delegation skill and the cascade consumers share one contract.
 Native Codex identities (bare `gpt-*` names) and native Claude aliases are not
 OpenRouter models and are deliberately absent from the matrix; `anthropic/`
 slugs are rejected by `openrouter-wrapper.sh` before network contact and must
-never be added to it.
+never be added to it. The matrix's `native_api_equivalent_aliases` object is a
+strictly observational exception: it maps a bare native identity to an existing
+priced slug only for labeled API-equivalent cost imputation. It does not add the
+native identity to OpenRouter routing, assert billed spend, or convert bytes to
+tokens. An alias absent from that object remains unpriceable.
 
 ## Refreshing the matrix
 

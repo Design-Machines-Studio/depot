@@ -1,16 +1,31 @@
 """Tests for subscription-rail API-equivalent cost imputation."""
 
+import contextlib
+from datetime import datetime, timezone
+import io
+import json
+from pathlib import Path
+import tempfile
 import unittest
+from unittest import mock
 
+from workflow_kernel import cli
 from workflow_kernel.cost_summary import (
     build_run_cost_summary,
+    compute_cost_summary_digest,
     validate_run_cost_summary,
 )
-from workflow_kernel.imputed_cost import impute_attempt_cost
+from workflow_kernel.imputed_cost import (
+    impute_attempt_cost,
+    validate_model_matrix,
+)
+from workflow_kernel.pipeline_adapter import translate_pipeline_receipts
+from workflow_kernel.runtime_resolution import PluginBundle
 from workflow_kernel.schema import WorkflowEvent
 
 
 MATRIX = {
+    "schema_version": 1,
     "snapshot_date": "2026-08-03",
     "models": [{
         "slug": "openai/gpt-test",
@@ -20,6 +35,40 @@ MATRIX = {
         "snapshot_date": "2026-08-03",
     }],
 }
+REAL_MATRIX = json.loads((
+    Path(__file__).parents[1] / "plugins/openrouter/skills/openrouter-delegate"
+    / "references/model-matrix.json"
+).read_text(encoding="utf-8"))
+
+
+def _native_receipt(*, model="gpt-5.6-terra", cost_usd=None, byte_only=False):
+    receipt = {
+        "run_id": "native-cost-run", "sequence": 0,
+        "stage": "attempt_usage", "status": "observed",
+        "node_id": "chunk-1", "chunk_id": "chunk-1", "lane": "implementation",
+        "occurred_at": "2026-08-09T00:00:00Z",
+        "authoritative_receipt": "receipts/native-cost.json",
+        "attempt": 1, "usage_scope": "attempt", "host": "codex",
+        "provider": "codex", "model": model,
+        "requested_provider": "codex", "attempted_provider": "codex",
+        "implemented_by": "codex", "duration_seconds": 1.0,
+        "measurement_source": "estimated_input_bytes" if byte_only else "native_token_usage",
+        "usage_estimated": byte_only,
+    }
+    if byte_only:
+        receipt["input_bytes"] = 4096
+    else:
+        receipt.update(input_usage_count=1_000_000, output_usage_count=500_000)
+    if cost_usd is not None:
+        receipt["cost_usd"] = cost_usd
+    return receipt
+
+
+def _write_bundle(root: Path, matrix=REAL_MATRIX):
+    asset = root / "skills/openrouter-delegate/references/model-matrix.json"
+    asset.parent.mkdir(parents=True)
+    asset.write_text(json.dumps(matrix), encoding="utf-8")
+    return PluginBundle(root, "codex", "1.10.0", "highest_compatible_semver")
 
 
 def _row(**overrides):
@@ -107,6 +156,184 @@ class ImputedCostTests(unittest.TestCase):
         )
         self.assertEqual(summary["measurement_coverage"]["cost"]["estimated"], 1)
         self.assertEqual(summary["measurement_coverage"]["cost"]["missing"], 0)
+
+    def test_production_shaped_native_codex_alias_is_priceable(self):
+        events = translate_pipeline_receipts([_native_receipt()])
+        summary = build_run_cost_summary(events, matrix=REAL_MATRIX)
+        lane = summary["lanes"][0]
+        self.assertEqual(lane["cost_usd"], 4.0)
+        self.assertIn(
+            "+model_alias(gpt-5.6-terra->openai/gpt-5.6-terra)",
+            lane["measurement_source"],
+        )
+
+    def test_unsupported_native_alias_and_byte_only_row_stay_null(self):
+        for receipt in (
+            _native_receipt(model="gpt-5.6-sol"),
+            _native_receipt(byte_only=True),
+        ):
+            with self.subTest(model=receipt["model"], byte_only="input_bytes" in receipt):
+                events = translate_pipeline_receipts([receipt])
+                lane = build_run_cost_summary(events, matrix=REAL_MATRIX)["lanes"][0]
+                self.assertIsNone(lane["cost_usd"])
+
+    def test_claude_alias_prices_only_when_matrix_explicitly_maps_it(self):
+        matrix = json.loads(json.dumps(MATRIX))
+        matrix["models"][0]["slug"] = "vendor/opus-api-equivalent"
+        matrix["native_api_equivalent_aliases"] = {
+            "opus": "vendor/opus-api-equivalent",
+        }
+        row = _row(
+            model="opus", implemented_by="claude", provider="claude",
+        )
+        result = impute_attempt_cost(row, matrix)
+        self.assertEqual(result["cost_usd"], 2.125)
+        self.assertIn(
+            "+model_alias(opus->vendor/opus-api-equivalent)",
+            result["measurement_source"],
+        )
+
+    def test_matrix_validation_rejects_duplicate_or_mismatched_entries(self):
+        validate_model_matrix(MATRIX)
+        duplicate = json.loads(json.dumps(MATRIX))
+        duplicate["models"].append(dict(duplicate["models"][0]))
+        with self.assertRaises(ValueError):
+            validate_model_matrix(duplicate)
+        drifted = json.loads(json.dumps(MATRIX))
+        drifted["models"][0]["snapshot_date"] = "2026-08-04"
+        with self.assertRaises(ValueError):
+            validate_model_matrix(drifted)
+
+    def test_no_matrix_default_is_byte_identical_to_explicit_none(self):
+        events = translate_pipeline_receipts([_native_receipt()])
+
+        class FixedDatetime(datetime):
+            @classmethod
+            def now(cls, tz=None):
+                return cls(2026, 8, 9, tzinfo=timezone.utc)
+
+        with mock.patch("workflow_kernel.cost_summary.datetime", FixedDatetime):
+            implicit = build_run_cost_summary(events)
+            explicit = build_run_cost_summary(events, matrix=None)
+        encode = lambda value: json.dumps(value, sort_keys=True, separators=(",", ":"))
+        self.assertEqual(encode(implicit), encode(explicit))
+        self.assertIsNone(implicit["lanes"][0]["cost_usd"])
+
+    def test_both_cli_commands_use_trusted_matrix_and_recompute_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle = _write_bundle(root / "openrouter")
+            events = root / "events.json"
+            events.write_text(json.dumps([_native_receipt()]), encoding="utf-8")
+            for command in ("run-cost-summary", "emit-cost-summary"):
+                output = root / (command + ".json")
+                argv = [
+                    command, "--events", str(events), "--output", str(output),
+                    "--matrix", "trusted-openrouter-bundle",
+                ]
+                if command == "emit-cost-summary":
+                    argv += ["--receipt", str(root / "receipt.md")]
+                stdout, stderr = io.StringIO(), io.StringIO()
+                with mock.patch(
+                    "workflow_kernel.cli.resolve_plugin_bundle", return_value=bundle,
+                ), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
+                    self.assertEqual(cli.main(argv), 0)
+                self.assertEqual(stderr.getvalue(), "")
+                summary = json.loads(output.read_text(encoding="utf-8"))
+                self.assertEqual(summary["lanes"][0]["cost_usd"], 4.0)
+                self.assertEqual(summary["digest"], compute_cost_summary_digest(summary))
+
+    def test_both_cli_commands_skip_unreadable_matrix_once(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            missing_bundle = PluginBundle(
+                root / "missing", "codex", "1.10.0", "highest_compatible_semver",
+            )
+            events = root / "events.json"
+            events.write_text(json.dumps([_native_receipt()]), encoding="utf-8")
+            for command in ("run-cost-summary", "emit-cost-summary"):
+                output = root / (command + ".json")
+                argv = [
+                    command, "--events", str(events), "--output", str(output),
+                    "--matrix", "trusted-openrouter-bundle",
+                ]
+                if command == "emit-cost-summary":
+                    argv += ["--receipt", str(root / "receipt.md")]
+                stderr = io.StringIO()
+                with mock.patch(
+                    "workflow_kernel.cli.resolve_plugin_bundle",
+                    return_value=missing_bundle,
+                ), contextlib.redirect_stderr(stderr):
+                    self.assertEqual(cli.main(argv), 0)
+                self.assertEqual(stderr.getvalue().count("skipping imputation"), 1)
+                summary = json.loads(output.read_text(encoding="utf-8"))
+                self.assertIsNone(summary["lanes"][0]["cost_usd"])
+
+    def test_arbitrary_matrix_path_is_not_pricing_authority(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            hostile = root / "hostile.json"
+            hostile.write_text(json.dumps(REAL_MATRIX), encoding="utf-8")
+            events = root / "events.json"
+            events.write_text(json.dumps([_native_receipt()]), encoding="utf-8")
+            output = root / "summary.json"
+            stderr = io.StringIO()
+            with mock.patch(
+                "workflow_kernel.cli.resolve_plugin_bundle",
+            ) as resolver, contextlib.redirect_stderr(stderr):
+                self.assertEqual(cli.main([
+                    "run-cost-summary", "--events", str(events),
+                    "--output", str(output), "--matrix", str(hostile),
+                ]), 0)
+            resolver.assert_not_called()
+            self.assertEqual(stderr.getvalue().count("skipping imputation"), 1)
+            self.assertIsNone(
+                json.loads(output.read_text(encoding="utf-8"))["lanes"][0]["cost_usd"],
+            )
+
+    def test_invalid_trusted_matrix_content_skips_imputation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            invalid = json.loads(json.dumps(REAL_MATRIX))
+            invalid["models"][0]["snapshot_date"] = "2026-08-04"
+            bundle = _write_bundle(root / "openrouter", invalid)
+            events = root / "events.json"
+            events.write_text(json.dumps([_native_receipt()]), encoding="utf-8")
+            output = root / "summary.json"
+            stderr = io.StringIO()
+            with mock.patch(
+                "workflow_kernel.cli.resolve_plugin_bundle", return_value=bundle,
+            ), contextlib.redirect_stderr(stderr):
+                self.assertEqual(cli.main([
+                    "run-cost-summary", "--events", str(events),
+                    "--output", str(output),
+                    "--matrix", "trusted-openrouter-bundle",
+                ]), 0)
+            self.assertEqual(stderr.getvalue().count("skipping imputation"), 1)
+            self.assertIsNone(
+                json.loads(output.read_text(encoding="utf-8"))["lanes"][0]["cost_usd"],
+            )
+
+    def test_cli_keeps_present_billed_cost_authoritative(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            bundle = _write_bundle(root / "openrouter")
+            events = root / "events.json"
+            events.write_text(
+                json.dumps([_native_receipt(cost_usd=4.25)]), encoding="utf-8",
+            )
+            output = root / "summary.json"
+            with mock.patch(
+                "workflow_kernel.cli.resolve_plugin_bundle", return_value=bundle,
+            ):
+                self.assertEqual(cli.main([
+                    "run-cost-summary", "--events", str(events),
+                    "--output", str(output),
+                    "--matrix", "trusted-openrouter-bundle",
+                ]), 0)
+            lane = json.loads(output.read_text(encoding="utf-8"))["lanes"][0]
+            self.assertEqual(lane["cost_usd"], 4.25)
+            self.assertEqual(lane["measurement_source"], "native_token_usage")
 
 
 if __name__ == "__main__":

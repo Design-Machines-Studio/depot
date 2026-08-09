@@ -2,6 +2,10 @@
   "_comment": "CANONICAL machine-readable OpenRouter model matrix. This file is the data source of truth for the Available Models table in model-selection.md: on any disagreement between the prose table and this JSON, the JSON wins. Consumers are pinned to it by tools/validate-openrouter-cascade.sh, which rejects (a) a quality_rank in plugins/pipeline/references/model-cascade.json that disagrees with or is missing from this file, (b) a routing-policy.json agentType model or fallbackModel slug that is absent here, and (c) a snapshot_date that diverges from the prose snapshot date. Scope is the OpenRouter rail only: native Codex identities (bare gpt-* names) and native Claude aliases are not OpenRouter models and are deliberately absent. anthropic/* slugs are rejected by openrouter-wrapper.sh before network contact and must never be added.",
   "schema_version": 1,
   "snapshot_date": "2026-08-03",
+  "native_api_equivalent_aliases": {
+    "gpt-5.6-terra": "openai/gpt-5.6-terra",
+    "gpt-5.6-luna": "openai/gpt-5.6-luna"
+  },
   "freshness_rule_minutes": 15,
   "authority": "The matrix recommends, routing policy decides, receipts record. Nothing re-routes automatically when this file is refreshed.",
   "refresh_protocol": {

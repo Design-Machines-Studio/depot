@@ -96,7 +96,7 @@ BEHAVIORAL_CLI_CASES = {
     "metrics": ("--events", "<missing>", "--output", "<output>"),
     "run-cost-summary": (
         "--events", "<missing>", "--output", "<output>",
-        "--matrix", "<matrix>",
+        "--matrix", "trusted-openrouter-bundle",
     ),
     # --output and --receipt must be distinct paths: one file used for both
     # would be unlinked, written as JSON, then appended to as text, producing a
@@ -116,7 +116,7 @@ BEHAVIORAL_CLI_CASES = {
     ),
     "emit-cost-summary": (
         "--events", "<missing>", "--output", "<output>", "--receipt", "<receipt>",
-        "--matrix", "<matrix>",
+        "--matrix", "trusted-openrouter-bundle",
     ),
     "openrouter-usage": (
         "--receipt", "<missing>", "--lane", "validator",
@@ -535,10 +535,6 @@ def check_cli(context):
             "<run>": str(run_root), "<state>": str(state_dir),
             "<missing>": str(root / "missing.json"),
             "<receipt>": str(root / "emit-cost-summary-receipt.md"),
-            "<matrix>": str(
-                ROOT / "plugins" / "openrouter" / "skills"
-                / "openrouter-delegate" / "references" / "model-matrix.json"
-            ),
             "<event>": json.dumps({
                 "schema_version": 1, "sequence": 1, "run_id": "validator-cli",
                 "node_id": None, "kind": "run.started",
@@ -753,8 +749,7 @@ def check_cli(context):
         successful(
             "run-cost-summary", "--events", RECEIPTS / "pipeline-codex.json",
             "--output", root / "run-cost-summary.json",
-            "--matrix", ROOT / "plugins" / "openrouter" / "skills"
-            / "openrouter-delegate" / "references" / "model-matrix.json",
+            "--matrix", "trusted-openrouter-bundle",
         )
         record_attempt_stream = root / "record-attempt-receipts.json"
         successful(
