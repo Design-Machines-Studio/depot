@@ -384,6 +384,8 @@ class SyncRunCostSummaryContractTests(unittest.TestCase):
 
             self.assertEqual(contender.returncode, 2)
             self.assertIn("already running", contender.stderr)
+            self.assertIn(str(root / ".sync-rcs.lock"), contender.stderr)
+            self.assertIn("rmdir --", contender.stderr)
             self.assertEqual(owner.returncode, 0, owner_stdout + owner_stderr)
             self.assertEqual(self._sync_artifacts(root), [])
 

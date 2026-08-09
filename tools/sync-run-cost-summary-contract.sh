@@ -189,7 +189,7 @@ trap 'handle_signal' INT TERM HUP
 if mkdir -- "$lock_dir"; then
   lock_owned=1
 else
-  printf 'FAIL contract synchronization is already running\n' >&2
+  printf 'FAIL contract synchronization is already running (lock: %s); after confirming no owner remains, recover with: rmdir -- %s\n' "$lock_dir" "$lock_dir" >&2
   exit 2
 fi
 
