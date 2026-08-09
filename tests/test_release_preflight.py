@@ -102,6 +102,13 @@ class ReleasePreflightTests(unittest.TestCase):
             "[ \"$1\" = merge-base ]; then exit 128; fi\n"
             "if [ \"${PREFLIGHT_GIT_FAIL:-}\" = diff ] && "
             "[ \"$1\" = diff ] && [ \"${2:-}\" = --quiet ]; then exit 128; fi\n"
+            "if [ \"$1\" = ls-remote ] && [ \"${2:-}\" = --exit-code ]; then\n"
+            "  case \"${PREFLIGHT_GIT_MUTATE:-}\" in\n"
+            "    head) /usr/bin/git commit -q --allow-empty -m concurrent-head ;;\n"
+            "    branch) /usr/bin/git checkout -q -b concurrent-branch ;;\n"
+            "    worktree) printf '\\n' >> plugins/alpha/.claude-plugin/plugin.json ;;\n"
+            "  esac\n"
+            "fi\n"
             "exec /usr/bin/git \"$@\"\n",
             encoding="utf-8",
         )
@@ -139,7 +146,9 @@ class ReleasePreflightTests(unittest.TestCase):
             ],
         }
 
-    def _run_preflight(self, *, no_net=False, codex="fresh", git_fail=None):
+    def _run_preflight(
+        self, *, no_net=False, codex="fresh", git_fail=None, git_mutate=None,
+    ):
         codex_path = self.bin / "codex"
         if codex == "unavailable":
             codex_path.unlink(missing_ok=True)
@@ -165,6 +174,8 @@ class ReleasePreflightTests(unittest.TestCase):
         })
         if git_fail:
             env["PREFLIGHT_GIT_FAIL"] = git_fail
+        if git_mutate:
+            env["PREFLIGHT_GIT_MUTATE"] = git_mutate
         argv = [str(self.script)]
         if no_net:
             argv.append("--no-net")
@@ -294,6 +305,30 @@ class ReleasePreflightTests(unittest.TestCase):
         result = self._run_preflight()
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("1 remote changed-plugin manifest(s) checked", result.stdout)
+
+    def test_concurrent_head_change_blocks_terminal_ready_receipt(self):
+        self._make_divergence(remote_version="1.2.0")
+        start_sha = self._git("rev-parse", "HEAD").stdout.strip()
+        result = self._run_preflight(git_mutate="head")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("repository snapshot changed during preflight", result.stdout)
+        self.assertIn(f"Commit:      {start_sha[:7]}", result.stdout)
+        self.assertNotIn("READY:", result.stdout)
+
+    def test_concurrent_worktree_change_blocks_terminal_ready_receipt(self):
+        self._make_divergence(remote_version="1.2.0")
+        result = self._run_preflight(git_mutate="worktree")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("repository snapshot changed during preflight", result.stdout)
+        self.assertNotIn("READY:", result.stdout)
+
+    def test_concurrent_branch_change_blocks_terminal_ready_receipt(self):
+        self._make_divergence(remote_version="1.2.0")
+        result = self._run_preflight(git_mutate="branch")
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("repository snapshot changed during preflight", result.stdout)
+        self.assertIn("Branch:      feature", result.stdout)
+        self.assertNotIn("READY:", result.stdout)
 
     def test_same_name_divergent_branch_is_checked(self):
         self._make_divergence(remote_branch="feature")

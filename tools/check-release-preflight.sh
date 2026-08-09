@@ -49,6 +49,18 @@ pass() { printf "  OK    %s\n" "$1"; }
 fail() { printf "  FAIL  %s\n" "$1"; failures=1; }
 skip() { printf "  SKIP  %s\n" "$1"; }
 
+snapshot_head="$(git rev-parse --verify HEAD 2>/dev/null)"
+snapshot_head_rc=$?
+snapshot_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+snapshot_branch_rc=$?
+snapshot_status="$(git status --porcelain 2>/dev/null)"
+snapshot_status_rc=$?
+if [ "$snapshot_head_rc" -ne 0 ] || [ -z "$snapshot_head" ] \
+   || [ "$snapshot_branch_rc" -ne 0 ] || [ -z "$snapshot_branch" ] \
+   || [ "$snapshot_status_rc" -ne 0 ]; then
+  fail "cannot bind the starting repository snapshot"
+fi
+
 remote_object_dir=""
 repository_object_dir=""
 
@@ -106,7 +118,7 @@ printf "=================\n\n"
 # 1. Clean working tree
 # --------------------------------------------------------------------------
 printf "Working tree:\n"
-residue="$(git status --porcelain)"
+residue="$snapshot_status"
 if [ -z "$residue" ]; then
   pass "clean tree"
 else
@@ -229,7 +241,7 @@ while IFS='|' read -r status msg; do
   fi
 
   # Tag exists. Did anything under the plugin change since it was cut?
-  changed="$(git diff --name-only "$tag..HEAD" -- "plugins/$name" 2>/dev/null | wc -l | tr -d ' ')"
+  changed="$(git diff --name-only "$tag..$snapshot_head" -- "plugins/$name" 2>/dev/null | wc -l | tr -d ' ')"
   if [ "${changed:-0}" -gt 0 ]; then
     fail "$name: $changed file(s) changed since $tag but version is still $ver -- bump it"
   else
@@ -362,15 +374,14 @@ else
     remote_fetch_records=""
     equal_bump_checked=0
     equal_bump_failed=0
-    current_branch="$(git rev-parse --abbrev-ref HEAD)"
     while IFS='|' read -r status msg; do
       [ "${status:-}" != "OK" ] && continue
       name="${msg% *}"
       ver="${msg##* }"
       manifest="plugins/$name/.claude-plugin/plugin.json"
-      last_tag="$(git tag --merged HEAD --sort=-version:refname -l "${name}-v*" | head -1)"
+      last_tag="$(git tag --merged "$snapshot_head" --sort=-version:refname -l "${name}-v*" | head -1)"
       [ -z "$last_tag" ] && continue
-      git diff --quiet "$last_tag..HEAD" -- "plugins/$name"
+      git diff --quiet "$last_tag..$snapshot_head" -- "plugins/$name"
       local_plugin_diff_rc=$?
       case "$local_plugin_diff_rc" in
         0) continue ;;
@@ -407,25 +418,25 @@ else
         # A remote head already contained in the local branch is shared history,
         # not an independent lane. For divergent heads, both manifests must have
         # changed from their merge base for equal versions to be hazardous.
-        probe_git merge-base --is-ancestor "$remote_sha" HEAD
+        probe_git merge-base --is-ancestor "$remote_sha" "$snapshot_head"
         contained_remote_rc=$?
         case "$contained_remote_rc" in
           0) continue ;;
           1) ;;
           *)
-            fail "$name: cannot classify whether origin/$remote_branch is contained in HEAD (merge-base rc=$contained_remote_rc)"
+            fail "$name: cannot classify whether origin/$remote_branch is contained in the bound commit (merge-base rc=$contained_remote_rc)"
             equal_bump_failed=1
             continue
             ;;
         esac
-        lane_base="$(probe_git merge-base HEAD "$remote_sha")"
+        lane_base="$(probe_git merge-base "$snapshot_head" "$remote_sha")"
         lane_base_rc=$?
         if [ "$lane_base_rc" -ne 0 ] || [ -z "$lane_base" ]; then
           fail "$name: cannot establish a merge base with origin/$remote_branch"
           equal_bump_failed=1
           continue
         fi
-        probe_git diff --quiet "$lane_base..HEAD" -- "$manifest"
+        probe_git diff --quiet "$lane_base..$snapshot_head" -- "$manifest"
         local_manifest_diff_rc=$?
         probe_git diff --quiet "$lane_base..$remote_sha" -- "$manifest"
         remote_manifest_diff_rc=$?
@@ -455,7 +466,7 @@ else
 
         equal_bump_checked=$((equal_bump_checked + 1))
         if [ "$remote_ver" = "$ver" ]; then
-          fail "$name: local $current_branch and origin/$remote_branch both declare $ver after changing the plugin; keep both changes and re-bump one side above the other before merge"
+          fail "$name: local $snapshot_branch and origin/$remote_branch both declare $ver after changing the plugin; keep both changes and re-bump one side above the other before merge"
           equal_bump_failed=1
         fi
       done <<< "$remote_heads"
@@ -487,14 +498,29 @@ fi
 # --------------------------------------------------------------------------
 # Receipt
 # --------------------------------------------------------------------------
+receipt_new_tags="$(printf '%s\n' "$version_report" | awk -F'|' '$1=="OK"{split($2,a," "); print a[1]"-v"a[2]}' | while read -r t; do [ -z "$(git tag -l "$t")" ] && printf '%s ' "$t"; done)"
+terminal_head="$(git rev-parse --verify HEAD 2>/dev/null)"
+terminal_head_rc=$?
+terminal_branch="$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+terminal_branch_rc=$?
+terminal_status="$(git status --porcelain 2>/dev/null)"
+terminal_status_rc=$?
+if [ "$terminal_head_rc" -ne 0 ] || [ "$terminal_branch_rc" -ne 0 ] \
+   || [ "$terminal_status_rc" -ne 0 ] \
+   || [ "$terminal_head" != "$snapshot_head" ] \
+   || [ "$terminal_branch" != "$snapshot_branch" ] \
+   || [ "$terminal_status" != "$snapshot_status" ]; then
+  fail "repository snapshot changed during preflight -- rerun from the new state"
+fi
+
 printf "\n"
 printf '%s\n' "Release Receipt"
 printf '%s\n' "---------------"
-printf "  Commit:      %s\n" "$(git rev-parse --short HEAD 2>/dev/null || echo unknown)"
-printf "  Branch:      %s\n" "$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo unknown)"
+printf "  Commit:      %.7s\n" "${snapshot_head:-unknown}"
+printf "  Branch:      %s\n" "${snapshot_branch:-unknown}"
 printf "  Tree:        %s\n" "$([ -z "$residue" ] && echo clean || echo DIRTY)"
 printf "  Plugins:     %s version-synced\n" "$synced"
-printf "  New tags:    %s\n" "$(printf '%s\n' "$version_report" | awk -F'|' '$1=="OK"{split($2,a," "); print a[1]"-v"a[2]}' | while read -r t; do [ -z "$(git tag -l "$t")" ] && printf '%s ' "$t"; done)"
+printf "  New tags:    %s\n" "$receipt_new_tags"
 printf "\n"
 
 if [ "$failures" -ne 0 ]; then
