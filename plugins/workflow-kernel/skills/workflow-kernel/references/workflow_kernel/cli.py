@@ -2111,10 +2111,18 @@ def _build_and_write_cost_summary(args):
     from .cost_summary import build_run_cost_summary, compute_cost_summary_digest
     from .redaction import sanitize_durable_payload
 
+    matrix = None
+    matrix_path = getattr(args, "matrix", None)
+    if matrix_path is not None:
+        try:
+            matrix = _load_json(matrix_path)
+        except Exception:  # noqa: BLE001 -- optional observation must not gate
+            sys.stderr.write("run-cost-summary: matrix unreadable; skipping imputation\n")
     summary = build_run_cost_summary(
         _read_receipt_events(args.events),
         repository_commit=getattr(args, "repository_commit", None),
         dirty_state=bool(getattr(args, "dirty_state", False)),
+        matrix=matrix,
     )
     sanitized = sanitize_durable_payload(summary)
     sanitized["digest"] = compute_cost_summary_digest(sanitized)
@@ -3985,6 +3993,7 @@ def parser():
     run_cost_summary.add_argument("--events", required=True)
     run_cost_summary.add_argument("--output", required=True)
     run_cost_summary.add_argument("--repository-commit", default=None)
+    run_cost_summary.add_argument("--matrix", default=None)
     run_cost_summary.add_argument("--dirty-state", action="store_true", default=False)
     run_cost_summary.add_argument(
         "--receipt-line", default=None,
@@ -4003,6 +4012,7 @@ def parser():
     emit_cost_summary.add_argument("--output", required=True)
     emit_cost_summary.add_argument("--receipt", required=True)
     emit_cost_summary.add_argument("--repository-commit", default=None)
+    emit_cost_summary.add_argument("--matrix", default=None)
     emit_cost_summary.add_argument(
         "--dirty-state", action="store_true", default=False,
     )

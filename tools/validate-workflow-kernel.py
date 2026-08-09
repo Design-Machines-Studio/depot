@@ -94,7 +94,10 @@ BEHAVIORAL_CLI_CASES = {
     "export-review-contributions": ("--request", "<missing>", "--decisions", "<missing>", "--raw-findings", "<missing>", "--lane-receipts", "<missing>", "--raw-lane-outputs", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>", "--output", "<output>"),
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
     "metrics": ("--events", "<missing>", "--output", "<output>"),
-    "run-cost-summary": ("--events", "<missing>", "--output", "<output>"),
+    "run-cost-summary": (
+        "--events", "<missing>", "--output", "<output>",
+        "--matrix", "<matrix>",
+    ),
     # --output and --receipt must be distinct paths: one file used for both
     # would be unlinked, written as JSON, then appended to as text, producing a
     # corrupt artifact. The command refuses that, so the always-zero probe below
@@ -113,6 +116,7 @@ BEHAVIORAL_CLI_CASES = {
     ),
     "emit-cost-summary": (
         "--events", "<missing>", "--output", "<output>", "--receipt", "<receipt>",
+        "--matrix", "<matrix>",
     ),
     "openrouter-usage": (
         "--receipt", "<missing>", "--lane", "validator",
@@ -531,6 +535,10 @@ def check_cli(context):
             "<run>": str(run_root), "<state>": str(state_dir),
             "<missing>": str(root / "missing.json"),
             "<receipt>": str(root / "emit-cost-summary-receipt.md"),
+            "<matrix>": str(
+                ROOT / "plugins" / "openrouter" / "skills"
+                / "openrouter-delegate" / "references" / "model-matrix.json"
+            ),
             "<event>": json.dumps({
                 "schema_version": 1, "sequence": 1, "run_id": "validator-cli",
                 "node_id": None, "kind": "run.started",
@@ -745,6 +753,8 @@ def check_cli(context):
         successful(
             "run-cost-summary", "--events", RECEIPTS / "pipeline-codex.json",
             "--output", root / "run-cost-summary.json",
+            "--matrix", ROOT / "plugins" / "openrouter" / "skills"
+            / "openrouter-delegate" / "references" / "model-matrix.json",
         )
         record_attempt_stream = root / "record-attempt-receipts.json"
         successful(
