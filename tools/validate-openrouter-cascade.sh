@@ -839,6 +839,44 @@ check_matrix_readable() {
   return 0
 }
 
+check_refresh_provenance_domains() {
+  local routing_anchor native_anchor
+  if ! jq -e '
+    .refresh_protocol.routing as $routing
+    | .refresh_protocol.native_api_equivalent_cost as $native
+    | ($routing.owned_snapshot_paths == [
+        "snapshot_date", "models[*].snapshot_date"
+      ])
+    and ($routing.preserved_snapshot_paths == [
+        "native_api_equivalent_cost.snapshot_date",
+        "native_api_equivalent_cost.models[*].snapshot_date"
+      ])
+    and ($native.owned_snapshot_paths == [
+        "native_api_equivalent_cost.snapshot_date",
+        "native_api_equivalent_cost.models[*].snapshot_date"
+      ])
+    and ($native.preserved_snapshot_paths == [
+        "snapshot_date", "models[*].snapshot_date"
+      ])
+    and (($routing.owned_snapshot_paths - $routing.preserved_snapshot_paths) | length == 2)
+    and (($native.owned_snapshot_paths - $native.preserved_snapshot_paths) | length == 2)
+  ' "$model_matrix" >/dev/null 2>&1; then
+    fail "model-matrix.json refresh protocol must keep routing and native-cost snapshot provenance independent"
+    any_failed=1
+    return
+  fi
+
+  routing_anchor="$(jq -r '.refresh_protocol.routing.documented_in // empty' "$model_matrix")"
+  native_anchor="$(jq -r '.refresh_protocol.native_api_equivalent_cost.documented_in // empty' "$model_matrix")"
+  if [ "$routing_anchor" != "model-selection.md -- Refreshing the routing matrix" ] \
+     || [ "$native_anchor" != "model-selection.md -- Refreshing native API-equivalent cost evidence" ]; then
+    fail "model-matrix.json refresh protocol must point to both current model-selection headings"
+    any_failed=1
+    return
+  fi
+  pass "model-matrix.json keeps routing and native-cost refresh provenance independent"
+}
+
 # Drift check 1: every OpenRouter-slugged quality_rank in model-cascade.json must
 # exist in the matrix with the identical rank. Bare names (gpt-5.6-sol, opus,
 # sonnet, ...) are native Codex/Claude identities, not OpenRouter models, and are
@@ -989,6 +1027,7 @@ check_matrix_snapshot_date() {
 }
 
 if check_matrix_readable; then
+  check_refresh_provenance_domains
   check_quality_rank_drift
   check_routing_policy_slugs
   check_matrix_snapshot_date

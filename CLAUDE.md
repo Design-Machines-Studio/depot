@@ -93,11 +93,16 @@ It verifies a clean tree, marketplace/plugin version sync, Codex shim freshness,
 that every plugin changed since its last tag has been bumped, installed Codex
 plugin versions against the canonical marketplace, remote branches for
 independent equal-version plugin bumps, and that `origin` is reachable and
-authenticated. **Never claim a release, tag, or push completed unless this
-passed.** It is not part of `--all` -- release hygiene is separate from
-composition validity. `--no-net` is local-only evidence: it skips both the
-remote equal-bump inspection and the origin authentication probe, so neither
-push safety nor cross-lane version-collision safety is verified.
+authenticated. When Codex or its installed-cache evidence is unavailable,
+`REQ-CODEX-CACHE-GATE` reports an explicit `SKIP` rather than failing the
+preflight. That `SKIP` is a coverage gap: report it, and do not claim installed
+Codex-cache verification unless the receipt contains the corresponding `OK`.
+**Never claim a release, tag, or push completed unless the preflight passed, and
+always include its coverage gaps in the release evidence.** It is not part of
+`--all` -- release hygiene is separate from composition validity. `--no-net` is
+local-only evidence: it skips both the remote equal-bump inspection and the
+origin authentication probe, so neither push safety nor cross-lane
+version-collision safety is verified.
 
 ## Plugin Versioning
 

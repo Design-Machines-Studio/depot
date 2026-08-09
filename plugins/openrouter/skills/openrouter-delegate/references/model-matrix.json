@@ -27,14 +27,43 @@
   "authority": "The matrix recommends, routing policy decides, receipts record. Nothing re-routes automatically when this file is refreshed.",
   "refresh_protocol": {
     "cadence": "On demand, and before any paid or policy-changing run.",
-    "price_context_availability_source": "OpenRouter live API. Record a receipt whose observedAt and expiresAt are no more than freshness_rule_minutes apart, and use it only before expiry.",
-    "quality_source": "A named external evaluation source with its dataset version recorded in aa_scores.source and aa_scores.source_version. A score without provenance does not enter the matrix.",
-    "on_refresh": [
-      "Bump snapshot_date (top level and every entry) to the refresh date.",
-      "Where a source is unreachable, keep the prior value and mark it stale in the write-up -- never guess or interpolate.",
-      "Land the refresh as an ordinary reviewed commit so the drift validator re-fences every downstream consumer."
-    ],
-    "documented_in": "model-selection.md -- Refreshing the matrix"
+    "routing": {
+      "owned_snapshot_paths": [
+        "snapshot_date",
+        "models[*].snapshot_date"
+      ],
+      "preserved_snapshot_paths": [
+        "native_api_equivalent_cost.snapshot_date",
+        "native_api_equivalent_cost.models[*].snapshot_date"
+      ],
+      "price_context_availability_source": "OpenRouter live API. Record a receipt whose observedAt and expiresAt are no more than freshness_rule_minutes apart, and use it only before expiry.",
+      "quality_source": "A named external evaluation source with its dataset version recorded in aa_scores.source and aa_scores.source_version. A score without provenance does not enter the matrix.",
+      "on_refresh": [
+        "Bump the top-level snapshot_date and every entry under top-level models to the routing refresh date.",
+        "Do not restamp native_api_equivalent_cost snapshot evidence unless that evidence was independently refreshed.",
+        "Where a routing source is unreachable, keep the prior value and mark it stale in the write-up -- never guess or interpolate.",
+        "Land the routing refresh as an ordinary reviewed commit so the drift validator re-fences every downstream consumer."
+      ],
+      "documented_in": "model-selection.md -- Refreshing the routing matrix"
+    },
+    "native_api_equivalent_cost": {
+      "owned_snapshot_paths": [
+        "native_api_equivalent_cost.snapshot_date",
+        "native_api_equivalent_cost.models[*].snapshot_date"
+      ],
+      "preserved_snapshot_paths": [
+        "snapshot_date",
+        "models[*].snapshot_date"
+      ],
+      "price_source": "Use only the cited source for each changed price or alias and record the observation date.",
+      "on_refresh": [
+        "Bump native_api_equivalent_cost.snapshot_date and each changed native-only model entry only when its evidence was independently refreshed.",
+        "Do not restamp top-level routing snapshot evidence or change routing policy during a native-cost refresh.",
+        "Where a native-cost source is unreachable, keep the prior value and mark it stale in the write-up -- never guess or interpolate.",
+        "Land the native-cost refresh as an ordinary reviewed commit so the provenance fence stays reviewable."
+      ],
+      "documented_in": "model-selection.md -- Refreshing native API-equivalent cost evidence"
+    }
   },
   "receipt_contract": {
     "_comment": "Mirrored as routing-policy.json .matrixReceipt; tools/validate-openrouter-cascade.sh is the fence for the slug and rank data, and the receipt fields below are the shared contract text.",

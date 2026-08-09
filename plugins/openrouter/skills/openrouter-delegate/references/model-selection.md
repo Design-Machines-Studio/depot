@@ -60,7 +60,9 @@ remains unpriceable.
 Model preferences churn weekly with releases, so the matrix is a refreshable
 recommendation instrument grounded in named external sources -- never a frozen
 opinion. Refresh it on demand, and always before a paid or policy-changing run.
-This is a documented human procedure; nothing here is automated.
+This is a documented human procedure; nothing here is automated. Its
+machine-readable ownership and preservation paths live under
+`refresh_protocol.routing`.
 
 - **Price, context, and availability** come from the OpenRouter live API. Record
   a receipt whose `observedAt` and `expiresAt` are no more than 15 minutes apart
@@ -81,11 +83,13 @@ This is a documented human procedure; nothing here is automated.
 ## Refreshing native API-equivalent cost evidence
 
 The `native_api_equivalent_cost` object is refreshed independently because it
-supports observation, not routing. Update its `snapshot_date`, the snapshot on
-each changed entry under its `models`, aliases, prices, bytes-per-token estimate,
-and cited sources only when the corresponding evidence was actually refreshed.
-An alias that targets a top-level routing model uses that routing model's own
-price and snapshot; do not copy or restamp it into the native model list.
+supports observation, not routing. Its machine-readable ownership and
+preservation paths live under `refresh_protocol.native_api_equivalent_cost`.
+Update its `snapshot_date`, the snapshot on each changed entry under its
+`models`, aliases, prices, bytes-per-token estimate, and cited sources only when
+the corresponding evidence was actually refreshed. An alias that targets a
+top-level routing model uses that routing model's own price and snapshot; do not
+copy or restamp it into the native model list.
 
 Record the source and observation date in the reviewed change. A native-cost
 refresh never changes the top-level routing `snapshot_date`, routing-model
