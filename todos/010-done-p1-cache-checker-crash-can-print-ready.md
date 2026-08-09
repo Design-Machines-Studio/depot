@@ -38,6 +38,15 @@ itself exits unexpectedly so this gate can never vanish from the receipt.
 
 ## Acceptance Criteria
 
-- [ ] Object, array, scalar, and malformed JSON inputs each produce an explicit gate receipt
-- [ ] An unexpected checker exception makes the preflight non-zero rather than READY
-- [ ] Existing stale, fresh, and unavailable-Codex behavior remains unchanged
+- [x] Object, array, scalar, and malformed JSON inputs each produce an explicit gate receipt
+- [x] An unexpected checker exception makes the preflight non-zero rather than READY
+- [x] Existing stale, fresh, and unavailable-Codex behavior remains unchanged
+
+## Resolution
+
+Gate 6 now validates both decoded roots before `.get`, captures the Python
+checker status, and emits a blocking FAIL on unexpected non-zero exit. An
+ephemeral fake-Codex harness exercised fresh and stale objects, array, scalar,
+malformed JSON, and an in-memory forced `RuntimeError`; every case produced an
+explicit OK, FAIL, or SKIP receipt. The unavailable-Codex branches were not
+changed by this repair.

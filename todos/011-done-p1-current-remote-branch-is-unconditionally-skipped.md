@@ -35,6 +35,14 @@ merge-base checks exclude only genuinely shared history.
 
 ## Acceptance Criteria
 
-- [ ] A divergent `origin/<current-branch>` with an equal independent bump FAILs
-- [ ] An `origin/<current-branch>` already contained in HEAD is skipped as shared history
-- [ ] Differently named remote-branch behavior remains unchanged
+- [x] A divergent `origin/<current-branch>` with an equal independent bump FAILs
+- [x] An `origin/<current-branch>` already contained in HEAD is skipped as shared history
+- [x] Differently named remote-branch behavior remains unchanged
+
+## Resolution
+
+The branch-name bypass was removed; commit ancestry is now the only shared-tip
+exclusion. An isolated local remote advertised the current branch name first at
+a divergent equal-bump commit, which FAILed naming both branches, and then at
+the contained local HEAD, which passed with zero candidates. No differently
+named branch logic changed.

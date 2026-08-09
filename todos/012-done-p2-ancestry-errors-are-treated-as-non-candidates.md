@@ -36,6 +36,14 @@ otherwise be interpreted as ordinary comparison output.
 
 ## Acceptance Criteria
 
-- [ ] An ordinary non-ancestor remains an ignored out-of-scope branch
-- [ ] Missing/corrupt-object and other ancestry errors produce FAIL and a non-zero preflight
-- [ ] The receipt names the plugin and remote branch that could not be classified
+- [x] An ordinary non-ancestor remains an ignored out-of-scope branch
+- [x] Missing/corrupt-object and other ancestry errors produce FAIL and a non-zero preflight
+- [x] The receipt names the plugin and remote branch that could not be classified
+
+## Resolution
+
+Both ancestry predicates now distinguish rc 0, ordinary non-ancestor rc 1,
+and fatal statuses; both divergent manifest diffs likewise distinguish no
+change, change, and operational failure. An isolated ordinary non-ancestor
+passed with zero candidates, while an injected merge-base rc 128 emitted
+blocking FAIL receipts naming each affected plugin and remote branch.
