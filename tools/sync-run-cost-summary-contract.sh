@@ -95,6 +95,11 @@ if [ -z "$INVOCATION_FLAG" ] || [ "$(printf '%s\n' "$INVOCATION_FLAG" | wc -l | 
   printf 'FAIL canonical invocation flag must appear exactly once\n' >&2
   exit 2
 fi
+MATRIX_RESOLUTION=$(sed -n 's/^<!-- CANONICAL-MATRIX-RESOLUTION: \(.*\) -->$/\1/p' "$CANONICAL")
+if [ -z "$MATRIX_RESOLUTION" ] || [ "$(printf '%s\n' "$MATRIX_RESOLUTION" | wc -l | tr -d ' ')" != "1" ]; then
+  printf 'FAIL canonical matrix resolution must appear exactly once\n' >&2
+  exit 2
+fi
 
 CONSUMERS="
 plugins/dm-review/skills/review/SKILL.md
@@ -150,6 +155,19 @@ for rel in $CONSUMERS; do
     index($0, "emit-cost-summary --events") && index($0, flag) { hits++ }
     END { print hits + 0 }
   ' "$f")
+  resolution_hits=$(awk -v resolution="$MATRIX_RESOLUTION" '
+    $0 == resolution { hits++ } END { print hits + 0 }
+  ' "$f")
+  resolution_line_hits=$(awk '
+    index($0, "MODEL_MATRIX_ASSET=$(\"$WORKFLOW_KERNEL\" resolve-plugin-asset ") ||
+    index($0, "if MODEL_MATRIX_ASSET=$(\"$WORKFLOW_KERNEL\" resolve-plugin-asset ") { hits++ }
+    END { print hits + 0 }
+  ' "$f")
+  legacy_matrix_hits=$(awk '
+    index($0, "emit-cost-summary --events") &&
+    index($0, "--matrix trusted-openrouter-bundle") { hits++ }
+    END { print hits + 0 }
+  ' "$f")
 
   if [ "$hits" != "1" ]; then
     printf 'FAIL %s has %s paragraph anchors, expected exactly 1\n' "$rel" "$hits" >&2
@@ -157,7 +175,8 @@ for rel in $CONSUMERS; do
     continue
   fi
 
-  if [ "$current" = "$PARAGRAPH" ] && [ "$invocation_hits" = "1" ]; then
+  if [ "$current" = "$PARAGRAPH" ] && [ "$invocation_hits" = "1" ] \
+     && [ "$resolution_hits" = "1" ] && [ "$legacy_matrix_hits" = "0" ]; then
     continue
   fi
 
@@ -171,12 +190,24 @@ for rel in $CONSUMERS; do
   # filesystem and is therefore atomic.
   target_dir=$(dirname -- "$f")
   tmp=$(mktemp "$target_dir/.sync-rcs.XXXXXX") || exit 2
-  if ! PARA="$PARAGRAPH" ANCH="$ANCHOR" FLAG="$INVOCATION_FLAG" awk '
+  if ! PARA="$PARAGRAPH" ANCH="$ANCHOR" FLAG="$INVOCATION_FLAG" \
+       RESOLUTION="$MATRIX_RESOLUTION" awk '
+        function remove_literal(text, needle, at) {
+          while ((at = index(text, needle)) != 0) {
+            text = substr(text, 1, at - 1) substr(text, at + length(needle))
+          }
+          return text
+        }
         index($0, ENVIRON["ANCH"]) == 1 { print ENVIRON["PARA"]; next }
-        index($0, "emit-cost-summary --events") && !index($0, ENVIRON["FLAG"]) {
+        index($0, "MODEL_MATRIX_ASSET=$(\"$WORKFLOW_KERNEL\" resolve-plugin-asset ") ||
+        index($0, "if MODEL_MATRIX_ASSET=$(\"$WORKFLOW_KERNEL\" resolve-plugin-asset ") { next }
+        index($0, "emit-cost-summary --events") {
+          $0 = remove_literal($0, " --matrix trusted-openrouter-bundle")
+          $0 = remove_literal($0, " " ENVIRON["FLAG"])
           marker = " --repository-commit"
           if (!index($0, marker)) exit 3
           sub(marker, " " ENVIRON["FLAG"] marker)
+          print ENVIRON["RESOLUTION"]
         }
         { print }
       ' "$f" > "$tmp"; then
@@ -204,7 +235,18 @@ for rel in $CONSUMERS; do
       "$rel" "$generated_flag_hits" >&2
     exit 2
   fi
-  if [ "$(wc -l < "$tmp" | tr -d ' ')" != "$(wc -l < "$f" | tr -d ' ')" ]; then
+  generated_resolution_hits=$(awk -v resolution="$MATRIX_RESOLUTION" '
+    $0 == resolution { hits++ } END { print hits + 0 }
+  ' "$tmp")
+  if [ "$generated_resolution_hits" != "1" ]; then
+    rm -f "$tmp"
+    printf 'FAIL replacement for %s has %s matrix resolutions, expected 1\n' \
+      "$rel" "$generated_resolution_hits" >&2
+    exit 2
+  fi
+  source_lines=$(wc -l < "$f" | tr -d ' ')
+  expected_lines=$((source_lines + 1 - resolution_line_hits))
+  if [ "$(wc -l < "$tmp" | tr -d ' ')" != "$expected_lines" ]; then
     rm -f "$tmp"
     printf 'FAIL replacement for %s changed the line count\n' "$rel" >&2
     exit 2

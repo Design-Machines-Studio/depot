@@ -484,8 +484,9 @@ kernel_doc="$REPO_ROOT/docs/workflow-kernel.md"
 # byte-identity does not. Delegate to the generator's --check mode.
 require_text "$contract_canonical" "CANONICAL-PARAGRAPH-START" "canonical contract exposes a generated paragraph block"
 require_text "$contract_canonical" "CANONICAL-PARAGRAPH-END" "canonical contract closes the generated paragraph block"
-require_text "$contract_canonical" "CANONICAL-INVOCATION-FLAG: --matrix trusted-openrouter-bundle" "canonical contract owns the trusted matrix selector"
-require_text "$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/cli.py" 'minimum_version="1.11.0"' "cost imputation requires the first OpenRouter native-cost contract release"
+require_text "$contract_canonical" 'CANONICAL-INVOCATION-FLAG: --matrix "$MODEL_MATRIX_ASSET"' "canonical contract owns the caller-bound matrix asset"
+require_text "$contract_canonical" "CANONICAL-MATRIX-RESOLUTION:" "canonical contract owns coherent matrix resolution"
+require_text "$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/runtime_resolution.py" "def resolve_trusted_plugin_asset" "kernel validates generic installed-plugin assets"
 
 if [ -x "$contract_sync" ]; then
   if "$contract_sync" --check >/dev/null 2>&1; then
@@ -524,7 +525,12 @@ for f in "$review_skill" "$review_cmd" "$dm_review_skill_alias" "$review_loop" \
          "$pipeline_cmd" "$pipeline_skill" "$pipeline_run" "$pipeline_run_skill"; do
   rel="${f#$REPO_ROOT/}"
   require_text "$f" "emit-cost-summary --events" "$rel invokes the transactional emission command"
-  require_text "$f" "--matrix trusted-openrouter-bundle" "$rel passes the trusted model matrix selector"
+  require_text "$f" '--matrix "$MODEL_MATRIX_ASSET"' "$rel passes the caller-bound matrix asset"
+  require_text "$f" 'if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset' "$rel resolves the matrix through the coherent bundle boundary"
+  require_text "$f" 'then :; else MODEL_MATRIX_ASSET=""; fi' "$rel makes matrix-resolution failure explicit"
+  require_absent "$f" 'resolve-plugin-asset --plugin openrouter --asset skills/openrouter-delegate/references/model-matrix.json --minimum-version 1.11.0 2>/dev/null' "$rel preserves matrix resolver stderr"
+  require_absent "$f" 'minimum-version 1.11.0 || true' "$rel does not silently swallow matrix resolution failure"
+  require_absent "$f" "--matrix trusted-openrouter-bundle" "$rel removes the kernel-owned provider selector"
   # --receipt is argparse-required, so the command cannot run without it; what
   # needs pinning is that the consumer names a receipt at all.
   require_text "$f" "run-cost-summary: skipped" "$rel names a receipt skip line"

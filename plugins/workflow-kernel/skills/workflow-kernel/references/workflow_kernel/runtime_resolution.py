@@ -205,6 +205,43 @@ def resolve_plugin_bundle(plugin_name, required_assets=(), *, home=None,
     return PluginBundle(root, cache_class, version, reason)
 
 
+def resolve_trusted_plugin_asset(asset_path, *, home=None):
+    """Return a caller-selected asset only when it belongs to one valid bundle."""
+    if type(asset_path) is not str or not asset_path:
+        raise ValueError("invalid plugin asset path")
+    home = (
+        Path(pwd.getpwuid(os.getuid()).pw_dir)
+        if home is None else Path(home)
+    )
+    try:
+        requested = Path(asset_path).resolve(strict=True)
+    except (OSError, RuntimeError, ValueError):
+        raise FileNotFoundError("trusted plugin asset unavailable") from None
+    for cache_class in ("claude", "codex"):
+        boundary = home / f".{cache_class}/plugins/cache/depot"
+        try:
+            relative = requested.relative_to(boundary.resolve(strict=True))
+        except (OSError, RuntimeError, ValueError):
+            continue
+        if len(relative.parts) < 3:
+            continue
+        plugin_name, version, *asset_parts = relative.parts
+        if (
+            _PLUGIN_NAME.fullmatch(plugin_name) is None
+            or semantic_version(version) is None
+            or not asset_parts
+        ):
+            continue
+        asset = Path(*asset_parts).as_posix()
+        root = boundary / plugin_name / version
+        selected = _plugin_bundle_candidate(
+            root, boundary, plugin_name, version, cache_class, [asset], [],
+        )
+        if selected is not None and _asset_path(selected, asset) == requested:
+            return requested
+    raise FileNotFoundError("trusted plugin asset unavailable")
+
+
 def _contained(path: Path, boundary: Path) -> bool:
     try:
         return path.resolve(strict=True).is_relative_to(boundary.resolve(strict=True))

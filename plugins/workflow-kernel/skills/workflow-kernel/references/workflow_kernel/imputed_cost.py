@@ -14,6 +14,33 @@ _PRICE_FIELDS = {
 _SNAPSHOT_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
+def _validate_priced_models(models, snapshot, forbidden_slugs=()):
+    if type(models) is not list:
+        raise ValueError("invalid model matrix")
+    slugs = set()
+    for model in models:
+        if type(model) is not dict:
+            raise ValueError("invalid model matrix")
+        slug = model.get("slug")
+        if (
+            type(slug) is not str or not slug
+            or slug in forbidden_slugs or slug in slugs
+            or model.get("snapshot_date") != snapshot
+        ):
+            raise ValueError("invalid model matrix")
+        slugs.add(slug)
+        for field in _PRICE_FIELDS.values():
+            price = model.get(field)
+            if price is None and field == "cache_read_usd_per_m":
+                continue
+            if (
+                type(price) not in (int, float) or type(price) is bool
+                or price < 0 or not math.isfinite(price)
+            ):
+                raise ValueError("invalid model matrix")
+    return slugs
+
+
 def validate_model_matrix(matrix: dict) -> None:
     """Validate the pricing subset consumed by cost imputation."""
     if type(matrix) is not dict or matrix.get("schema_version") != 1:
@@ -25,25 +52,7 @@ def validate_model_matrix(matrix: dict) -> None:
         or type(models) is not list or not models
     ):
         raise ValueError("invalid model matrix")
-    slugs = set()
-    for model in models:
-        if type(model) is not dict:
-            raise ValueError("invalid model matrix")
-        slug = model.get("slug")
-        if type(slug) is not str or not slug or slug in slugs:
-            raise ValueError("invalid model matrix")
-        slugs.add(slug)
-        if model.get("snapshot_date") != snapshot:
-            raise ValueError("invalid model matrix")
-        for field in _PRICE_FIELDS.values():
-            price = model.get(field)
-            if price is None and field == "cache_read_usd_per_m":
-                continue
-            if (
-                type(price) not in (int, float) or type(price) is bool
-                or price < 0 or not math.isfinite(price)
-            ):
-                raise ValueError("invalid model matrix")
+    slugs = _validate_priced_models(models, snapshot)
     native = matrix.get("native_api_equivalent_cost")
     if (
         type(native) is not dict or native.get("schema_version") != 1
@@ -57,25 +66,9 @@ def validate_model_matrix(matrix: dict) -> None:
         or not math.isfinite(native["input_bytes_per_token_estimate"])
     ):
         raise ValueError("invalid model matrix")
-    native_slugs = set()
-    for model in native["models"]:
-        if type(model) is not dict:
-            raise ValueError("invalid model matrix")
-        slug = model.get("slug")
-        if type(slug) is not str or not slug or slug in slugs or slug in native_slugs:
-            raise ValueError("invalid model matrix")
-        native_slugs.add(slug)
-        if model.get("snapshot_date") != native["snapshot_date"]:
-            raise ValueError("invalid model matrix")
-        for field in _PRICE_FIELDS.values():
-            price = model.get(field)
-            if price is None and field == "cache_read_usd_per_m":
-                continue
-            if (
-                type(price) not in (int, float) or type(price) is bool
-                or price < 0 or not math.isfinite(price)
-            ):
-                raise ValueError("invalid model matrix")
+    native_slugs = _validate_priced_models(
+        native["models"], native["snapshot_date"], slugs,
+    )
     all_slugs = slugs | native_slugs
     for alias, slug in native["aliases"].items():
         if (
@@ -97,7 +90,9 @@ def _priced_identity(row: dict, matrix: dict, models: list):
         and row.get("implemented_by") in {"codex", "claude"}
         and row.get("provider") in {"codex", "openai", "claude", "anthropic"}
     ):
-        slug = matrix["native_api_equivalent_cost"]["aliases"].get(model)
+        native = matrix.get("native_api_equivalent_cost")
+        aliases = native.get("aliases") if type(native) is dict else None
+        slug = aliases.get(model) if type(aliases) is dict else None
         alias = next((item for item in models if item.get("slug") == slug), None)
         if alias is not None:
             return alias, slug
@@ -162,22 +157,23 @@ def impute_attempt_cost(row: dict, matrix: dict) -> dict:
         return row
     result = dict(row)
     result["cost_usd"] = cost
-    alias_provenance = ""
+    provenance = []
+    measurement_source = result.get("measurement_source")
+    if type(measurement_source) is str and measurement_source:
+        provenance.append(measurement_source)
     if normalized_slug is not None:
-        alias_provenance = (
-            "+model_alias(" + row["model"] + "->" + normalized_slug + ")"
+        provenance.append(
+            "model_alias(" + row["model"] + "->" + normalized_slug + ")"
         )
-    estimate_provenance = ""
     if byte_estimate:
         ratio = native["input_bytes_per_token_estimate"]
-        estimate_provenance = (
-            "+estimated_input_tokens(input_bytes/" + str(ratio)
+        provenance.append(
+            "estimated_input_tokens(input_bytes/" + str(ratio)
             + "_bytes_per_token)"
         )
-    result["measurement_source"] = (
-        result["measurement_source"] + alias_provenance
-        + estimate_provenance
-        + "+imputed_cost(model-matrix@" + snapshot_date + ")"
+    provenance.append(
+        "imputed_cost(model-matrix@" + snapshot_date + ")"
     )
+    result["measurement_source"] = "+".join(provenance)
     result["usage_estimated"] = True
     return result

@@ -7,6 +7,7 @@ import fcntl
 import hashlib
 import json
 import os
+import pwd
 import re
 import shutil
 import stat
@@ -23,7 +24,8 @@ from .inspection import InspectionError
 from .repository_scope import repository_scope as _repository_scope
 from .runtime_resolution import (
     KERNEL_VERSION, KERNEL_VERSION_FLOOR, compatible_kernel_version,
-    resolve_plugin_bundle, resolve_workflow_kernel_runtime, semantic_version,
+    resolve_plugin_bundle, resolve_trusted_plugin_asset,
+    resolve_workflow_kernel_runtime, semantic_version,
 )
 from .schema import (
     CorruptEventError, ErrorDetailKey, ErrorMessage, InvalidSchemaError, KernelError,
@@ -2123,23 +2125,17 @@ def _build_and_write_cost_summary(args):
     _write_json(args.output, sanitized)
 
 
-_TRUSTED_MATRIX_SELECTOR = "trusted-openrouter-bundle"
-_MODEL_MATRIX_ASSET = (
-    "skills/openrouter-delegate/references/model-matrix.json"
-)
+def _runtime_home():
+    return Path(pwd.getpwuid(os.getuid()).pw_dir)
 
 
 def _load_cost_imputation_matrix(selector):
-    """Resolve and validate the optional matrix without trusting caller paths."""
+    """Load a caller-selected matrix only from a coherent installed bundle."""
     if selector is None:
         return None
     try:
-        if selector != _TRUSTED_MATRIX_SELECTOR:
-            raise ValueError("untrusted matrix selector")
-        bundle = resolve_plugin_bundle(
-            "openrouter", [_MODEL_MATRIX_ASSET], minimum_version="1.11.0",
-        )
-        matrix = _load_json(bundle.root / _MODEL_MATRIX_ASSET)
+        asset = resolve_trusted_plugin_asset(selector, home=_runtime_home())
+        matrix = _load_json(asset)
         from .imputed_cost import validate_model_matrix
         validate_model_matrix(matrix)
         return matrix
@@ -3684,6 +3680,22 @@ def command_resolve_plugin_bundle(args):
     return 0
 
 
+def command_resolve_plugin_asset(args):
+    """Print one caller-bindable asset path from a coherent plugin bundle."""
+    try:
+        bundle = resolve_plugin_bundle(
+            args.plugin, [args.asset], active_host=args.active_host,
+            minimum_version=args.minimum_version,
+        )
+        asset = (bundle.root / args.asset).resolve(strict=True)
+    except (FileNotFoundError, OSError, RuntimeError, ValueError):
+        raise InvalidSchemaError(ErrorMessage.OPERATION_FAILED, {
+            ErrorDetailKey.REASON_CODE.value: "plugin_bundle_unavailable",
+        }) from None
+    sys.stdout.write(str(asset) + "\n")
+    return 0
+
+
 def _repository_profile_ref(repository_root, profile_path):
     repository = Path(repository_root).resolve(strict=True)
     if Path(profile_path).is_symlink():
@@ -4017,7 +4029,7 @@ def parser():
     run_cost_summary.add_argument("--repository-commit", default=None)
     run_cost_summary.add_argument(
         "--matrix", default=None,
-        help="optional trusted matrix selector: " + _TRUSTED_MATRIX_SELECTOR,
+        help="optional caller-selected installed-plugin matrix asset",
     )
     run_cost_summary.add_argument("--dirty-state", action="store_true", default=False)
     run_cost_summary.add_argument(
@@ -4039,7 +4051,7 @@ def parser():
     emit_cost_summary.add_argument("--repository-commit", default=None)
     emit_cost_summary.add_argument(
         "--matrix", default=None,
-        help="optional trusted matrix selector: " + _TRUSTED_MATRIX_SELECTOR,
+        help="optional caller-selected installed-plugin matrix asset",
     )
     emit_cost_summary.add_argument(
         "--dirty-state", action="store_true", default=False,
@@ -4529,6 +4541,16 @@ def parser():
     resolve_bundle.add_argument("--minimum-version")
     resolve_bundle.add_argument("--active-host", choices=("claude", "codex"))
     resolve_bundle.set_defaults(handler=command_resolve_plugin_bundle)
+
+    resolve_asset = commands.add_parser(
+        "resolve-plugin-asset",
+        help="resolve one caller-selected asset from a coherent plugin bundle",
+    )
+    resolve_asset.add_argument("--plugin", required=True)
+    resolve_asset.add_argument("--asset", required=True)
+    resolve_asset.add_argument("--minimum-version")
+    resolve_asset.add_argument("--active-host", choices=("claude", "codex"))
+    resolve_asset.set_defaults(handler=command_resolve_plugin_asset)
     return result
 
 

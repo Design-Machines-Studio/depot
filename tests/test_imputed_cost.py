@@ -77,6 +77,20 @@ def _write_bundle(root: Path, matrix=REAL_MATRIX):
     return PluginBundle(root, "codex", "1.11.0", "highest_compatible_semver")
 
 
+def _write_installed_asset(home: Path, *, plugin="pricing-provider", version="2.3.0",
+                           matrix=REAL_MATRIX):
+    root = home / ".codex/plugins/cache/depot" / plugin / version
+    asset = root / "references/model-matrix.json"
+    asset.parent.mkdir(parents=True)
+    asset.write_text(json.dumps(matrix), encoding="utf-8")
+    marker = root / ".codex-plugin/plugin.json"
+    marker.parent.mkdir(parents=True)
+    marker.write_text(json.dumps({
+        "name": plugin, "version": version,
+    }), encoding="utf-8")
+    return asset
+
+
 def _row(**overrides):
     row = {
         "model": "openai/gpt-test",
@@ -104,6 +118,23 @@ class ImputedCostTests(unittest.TestCase):
     def test_unpriceable_model_is_unchanged(self):
         row = _row(model="missing/model")
         self.assertIs(impute_attempt_cost(row, MATRIX), row)
+
+    def test_absent_native_section_is_an_unchanged_unpriceable_row(self):
+        row = _row(
+            model="missing/model", implemented_by="codex", provider="codex",
+        )
+        matrix = {"models": MATRIX["models"]}
+        self.assertIs(impute_attempt_cost(row, matrix), row)
+
+    def test_missing_measurement_source_still_gets_visible_provenance(self):
+        row = _row()
+        del row["measurement_source"]
+        result = impute_attempt_cost(row, MATRIX)
+        self.assertEqual(result["cost_usd"], 2.125)
+        self.assertEqual(
+            result["measurement_source"],
+            "imputed_cost(model-matrix@2026-08-03)",
+        )
 
     def test_missing_required_price_is_unchanged(self):
         row = _row()
@@ -239,6 +270,61 @@ class ImputedCostTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_model_matrix(drifted)
 
+    def test_matrix_validation_rejects_each_trust_boundary(self):
+        mutations = {
+            "schema": lambda matrix: matrix.update(schema_version=2),
+            "snapshot_date": lambda matrix: matrix.update(snapshot_date="2026-8-3"),
+            "price": lambda matrix: matrix["models"][0].update(input_usd_per_m=-1),
+            "ratio": lambda matrix: matrix["native_api_equivalent_cost"].update(
+                input_bytes_per_token_estimate=0,
+            ),
+            "cross_section_slug": lambda matrix: matrix[
+                "native_api_equivalent_cost"
+            ]["models"].append(dict(matrix["models"][0])),
+            "alias_target": lambda matrix: matrix[
+                "native_api_equivalent_cost"
+            ]["aliases"].update({"native-name": "missing/model"}),
+        }
+        for branch, mutate in mutations.items():
+            with self.subTest(branch=branch):
+                matrix = json.loads(json.dumps(MATRIX))
+                mutate(matrix)
+                with self.assertRaises(ValueError):
+                    validate_model_matrix(matrix)
+
+    def test_generic_installed_plugin_asset_is_accepted_without_provider_coupling(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            asset = _write_installed_asset(home)
+            with mock.patch("workflow_kernel.cli._runtime_home", return_value=home):
+                loaded = cli._load_cost_imputation_matrix(str(asset))
+        self.assertEqual(loaded, REAL_MATRIX)
+
+    def test_generic_bundle_command_emits_caller_bindable_asset_path(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "pricing-provider" / "2.3.0"
+            asset = root / "references/model-matrix.json"
+            asset.parent.mkdir(parents=True)
+            asset.write_text(json.dumps(REAL_MATRIX), encoding="utf-8")
+            bundle = PluginBundle(
+                root, "codex", "2.3.0", "highest_compatible_semver",
+            )
+            stdout = io.StringIO()
+            with mock.patch(
+                "workflow_kernel.cli.resolve_plugin_bundle", return_value=bundle,
+            ) as resolver, contextlib.redirect_stdout(stdout):
+                result = cli.main([
+                    "resolve-plugin-asset", "--plugin", "pricing-provider",
+                    "--asset", "references/model-matrix.json",
+                    "--minimum-version", "2.0.0",
+                ])
+        self.assertEqual(result, 0)
+        self.assertEqual(stdout.getvalue(), str(asset.resolve()) + "\n")
+        resolver.assert_called_once_with(
+            "pricing-provider", ["references/model-matrix.json"],
+            active_host=None, minimum_version="2.0.0",
+        )
+
     def test_no_matrix_cli_matches_frozen_pre_imputation_oracle(self):
         oracle = json.loads((
             Path(__file__).parent / "fixtures/run-cost-summary-no-matrix-v1.json"
@@ -259,23 +345,23 @@ class ImputedCostTests(unittest.TestCase):
             del emitted["invocation"]["emitted_at"]
         self.assertEqual(emitted, oracle)
 
-    def test_both_cli_commands_use_trusted_matrix_and_recompute_digest(self):
+    def test_both_cli_commands_use_installed_matrix_and_recompute_digest(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            bundle = _write_bundle(root / "openrouter")
+            asset = _write_installed_asset(root)
             events = root / "events.json"
             events.write_text(json.dumps([_native_receipt()]), encoding="utf-8")
             for command in ("run-cost-summary", "emit-cost-summary"):
                 output = root / (command + ".json")
                 argv = [
                     command, "--events", str(events), "--output", str(output),
-                    "--matrix", "trusted-openrouter-bundle",
+                    "--matrix", str(asset),
                 ]
                 if command == "emit-cost-summary":
                     argv += ["--receipt", str(root / "receipt.md")]
                 stdout, stderr = io.StringIO(), io.StringIO()
                 with mock.patch(
-                    "workflow_kernel.cli.resolve_plugin_bundle", return_value=bundle,
+                    "workflow_kernel.cli._runtime_home", return_value=root,
                 ), contextlib.redirect_stdout(stdout), contextlib.redirect_stderr(stderr):
                     self.assertEqual(cli.main(argv), 0)
                 self.assertEqual(stderr.getvalue(), "")
@@ -286,8 +372,9 @@ class ImputedCostTests(unittest.TestCase):
     def test_both_cli_commands_skip_unreadable_matrix_once(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            missing_bundle = PluginBundle(
-                root / "missing", "codex", "1.10.0", "highest_compatible_semver",
+            missing_asset = (
+                root / ".codex/plugins/cache/depot/pricing-provider/2.3.0"
+                / "references/model-matrix.json"
             )
             events = root / "events.json"
             events.write_text(json.dumps([_native_receipt()]), encoding="utf-8")
@@ -295,14 +382,13 @@ class ImputedCostTests(unittest.TestCase):
                 output = root / (command + ".json")
                 argv = [
                     command, "--events", str(events), "--output", str(output),
-                    "--matrix", "trusted-openrouter-bundle",
+                    "--matrix", str(missing_asset),
                 ]
                 if command == "emit-cost-summary":
                     argv += ["--receipt", str(root / "receipt.md")]
                 stderr = io.StringIO()
                 with mock.patch(
-                    "workflow_kernel.cli.resolve_plugin_bundle",
-                    return_value=missing_bundle,
+                    "workflow_kernel.cli._runtime_home", return_value=root,
                 ), contextlib.redirect_stderr(stderr):
                     self.assertEqual(cli.main(argv), 0)
                 self.assertEqual(stderr.getvalue().count("skipping imputation"), 1)
@@ -319,13 +405,12 @@ class ImputedCostTests(unittest.TestCase):
             output = root / "summary.json"
             stderr = io.StringIO()
             with mock.patch(
-                "workflow_kernel.cli.resolve_plugin_bundle",
-            ) as resolver, contextlib.redirect_stderr(stderr):
+                "workflow_kernel.cli._runtime_home", return_value=root,
+            ), contextlib.redirect_stderr(stderr):
                 self.assertEqual(cli.main([
                     "run-cost-summary", "--events", str(events),
                     "--output", str(output), "--matrix", str(hostile),
                 ]), 0)
-            resolver.assert_not_called()
             self.assertEqual(stderr.getvalue().count("skipping imputation"), 1)
             self.assertIsNone(
                 json.loads(output.read_text(encoding="utf-8"))["lanes"][0]["cost_usd"],
@@ -336,18 +421,18 @@ class ImputedCostTests(unittest.TestCase):
             root = Path(directory)
             invalid = json.loads(json.dumps(REAL_MATRIX))
             invalid["models"][0]["snapshot_date"] = "2026-08-04"
-            bundle = _write_bundle(root / "openrouter", invalid)
+            asset = _write_installed_asset(root, matrix=invalid)
             events = root / "events.json"
             events.write_text(json.dumps([_native_receipt()]), encoding="utf-8")
             output = root / "summary.json"
             stderr = io.StringIO()
             with mock.patch(
-                "workflow_kernel.cli.resolve_plugin_bundle", return_value=bundle,
+                "workflow_kernel.cli._runtime_home", return_value=root,
             ), contextlib.redirect_stderr(stderr):
                 self.assertEqual(cli.main([
                     "run-cost-summary", "--events", str(events),
                     "--output", str(output),
-                    "--matrix", "trusted-openrouter-bundle",
+                    "--matrix", str(asset),
                 ]), 0)
             self.assertEqual(stderr.getvalue().count("skipping imputation"), 1)
             self.assertIsNone(
@@ -386,19 +471,19 @@ class ImputedCostTests(unittest.TestCase):
     def test_cli_keeps_present_billed_cost_authoritative(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            bundle = _write_bundle(root / "openrouter")
+            asset = _write_installed_asset(root)
             events = root / "events.json"
             events.write_text(
                 json.dumps([_native_receipt(cost_usd=4.25)]), encoding="utf-8",
             )
             output = root / "summary.json"
             with mock.patch(
-                "workflow_kernel.cli.resolve_plugin_bundle", return_value=bundle,
+                "workflow_kernel.cli._runtime_home", return_value=root,
             ):
                 self.assertEqual(cli.main([
                     "run-cost-summary", "--events", str(events),
                     "--output", str(output),
-                    "--matrix", "trusted-openrouter-bundle",
+                    "--matrix", str(asset),
                 ]), 0)
             lane = json.loads(output.read_text(encoding="utf-8"))["lanes"][0]
             self.assertEqual(lane["cost_usd"], 4.25)
