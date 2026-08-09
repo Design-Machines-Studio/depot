@@ -12,7 +12,7 @@ review_date: 2026-08-09
 ## Problem
 
 The repair changes OpenRouter's canonical model-matrix contract by adding
-`native_api_equivalent_aliases`, but leaves the OpenRouter plugin and marketplace
+`native_api_equivalent_cost`, but leaves the OpenRouter plugin and marketplace
 at `1.10.0`. The workflow-kernel consumer also accepts any OpenRouter bundle at
 or above `1.8.0`. Installed caches can therefore resolve a valid older bundle
 without aliases and silently skip the native imputation the new kernel expects.
@@ -28,7 +28,7 @@ without aliases and silently skip the native imputation the new kernel expects.
 
 A real, unmocked `_load_cost_imputation_matrix("trusted-openrouter-bundle")`
 call succeeded but returned the installed `1.10.0` matrix with
-`native_api_equivalent_aliases: None`. The tests hide this deployment failure
+`native_api_equivalent_cost: None`. The tests hide this deployment failure
 by mocking the resolver to return a temporary bundle containing the worktree's
 modified matrix.
 
@@ -39,7 +39,7 @@ modified matrix.
    contract field.
 2. Regenerate both Codex shim sets.
 3. Raise the workflow-kernel resolver minimum to the first OpenRouter version
-   that guarantees `native_api_equivalent_aliases`.
+   that guarantees `native_api_equivalent_cost`.
 4. Add a version-contract check binding the consumer minimum to that release.
 
 ## Acceptance Criteria

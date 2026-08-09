@@ -48,10 +48,17 @@ that the native producer does not emit.
 
 - [x] A real-shaped Codex attempt gains visibly imputed API-equivalent cost
 - [x] A supported Claude attempt gains cost when its trusted price is present
-- [x] Unknown native aliases and byte-only rows remain honestly null
+- [x] At this repair stage, unknown native aliases and byte-only rows remained
+  honestly null; Todo 007 superseded the byte-only part of this criterion
 - [x] Existing billed OpenRouter receipt costs remain authoritative
 
 ## Resolution
 
-The trusted matrix now owns explicit native API-equivalent aliases. Provenance
-records the alias mapping and snapshot; no byte-to-token conversion was added.
+At this intermediate repair stage, the trusted matrix owned explicit native
+API-equivalent aliases and no byte-to-token estimate had been added.
+
+## Superseded by Todo 007
+
+Todo 007 completed the production-shaped repair. The final contract uses an
+explicit four-input-bytes-per-token estimate for supported `gpt-5.6-sol` rows,
+records that estimate in provenance, and leaves unknown identities null.

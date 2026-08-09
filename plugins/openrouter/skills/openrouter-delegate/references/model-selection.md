@@ -55,7 +55,7 @@ names that estimate in row provenance. It does not add the native identity to
 OpenRouter routing or assert billed spend. An alias absent from that object
 remains unpriceable.
 
-## Refreshing the matrix
+## Refreshing the routing matrix
 
 Model preferences churn weekly with releases, so the matrix is a refreshable
 recommendation instrument grounded in named external sources -- never a frozen
@@ -69,13 +69,30 @@ This is a documented human procedure; nothing here is automated.
 - **Quality scores** come from the named evaluation source with its dataset
   version recorded in `aa_scores.source` and `aa_scores.source_version`. A score
   without provenance does not enter the matrix.
-- **Every refresh bumps `snapshot_date`** -- both the top-level value and each
-  entry -- and the prose snapshot date above must move with it, because the
-  validator compares them.
+- **Every routing refresh bumps the routing `snapshot_date`** -- both the
+  top-level value and every entry under top-level `models` -- and the prose
+  snapshot date above must move with it, because the validator compares them.
+  Do not restamp `native_api_equivalent_cost`; it is a separate evidence domain.
 - **Where a source is unreachable, keep the prior value** and mark it stale in
   the refresh write-up. Never guess, interpolate, or backfill from memory.
 - **A refresh lands as an ordinary reviewed commit**, so the drift validator
   re-fences every downstream consumer against the new values.
+
+## Refreshing native API-equivalent cost evidence
+
+The `native_api_equivalent_cost` object is refreshed independently because it
+supports observation, not routing. Update its `snapshot_date`, the snapshot on
+each changed entry under its `models`, aliases, prices, bytes-per-token estimate,
+and cited sources only when the corresponding evidence was actually refreshed.
+An alias that targets a top-level routing model uses that routing model's own
+price and snapshot; do not copy or restamp it into the native model list.
+
+Record the source and observation date in the reviewed change. A native-cost
+refresh never changes the top-level routing `snapshot_date`, routing-model
+entries, the prose routing snapshot above, or routing policy. Conversely, a
+routing refresh never restamps native-only evidence. If either source is
+unreachable, retain the prior value and mark it stale rather than claiming a
+fresh snapshot.
 
 The matrix recommends, routing policy decides, receipts record. Refreshing the
 matrix never re-routes anything on its own; a routing change is a separate,

@@ -6,11 +6,11 @@ owned-resource cleanup. Pipeline and dm-review depend on it, while the kernel
 depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
-Version 0.8.0 retains the inspection, shadow-comparison, retry, redaction,
-authoritative JSON, derived Markdown, and compatible trend mechanics introduced
-in earlier releases. It adds the `run-cost-summary` command — a canonical,
-deterministic, schema-bound per-run cost artifact emitted alongside
-authoritative receipts (see [Run Cost Summary](#run-cost-summary) below).
+Version 0.13.0 adds optional, visibly imputed API-equivalent attempt costs from
+a trusted OpenRouter model matrix while preserving the observation-only summary
+contract. Version 0.8.0 added the `run-cost-summary` command — a canonical,
+deterministic, schema-bound per-run cost artifact emitted alongside authoritative
+receipts (see [Run Cost Summary](#run-cost-summary) below).
 Version 0.7.0 added authenticated repository verification with sealed
 profile approvals, exact-head provider evidence, contained Docker lanes, and
 canonical provider-dispatch construction and verification.
@@ -27,8 +27,8 @@ Depot checkout or a compatible same-major entry under the Claude cache, then
 the Codex cache, ordered by parsed semver (never mtime). Existing inspection,
 quality-pulse, behavioral-contract, validation-retry, and review-contribution
 consumers require `>=0.5.0`; repository-verification consumers require
-`>=0.6.1`; provider-dispatch consumers require `>=0.7.0`; run-cost-summary
-consumers require `>=0.8.0`. The
+`>=0.6.1`; provider-dispatch consumers require `>=0.7.0`; matrix-backed
+run-cost-summary consumers require `>=0.13.0`. The
 launcher verifies Python 3.12+, sets the module path, and execs the CLI. Never
 discover the runtime from the downstream project, `PATH`, or a symlink escape.
 The full consumer-facing contract is `references/runtime-resolution.md`; in
@@ -402,10 +402,38 @@ incomplete):
   present with no overlap, so the total is the sum of attempt values.
 - `provider_receipt` — per-attempt measurement from a provider receipt.
 - `billing_export` — per-attempt measurement from a billing export.
+- `imputed_subscription_equivalent` — a complete, non-overlapping total whose
+  missing attempt costs were filled from the trusted model matrix; it is an
+  API-equivalent planning estimate, never billed subscription spend.
 - `unavailable` — no usage telemetry exists for this row; usage fields are
   null, never zero-filled.
 - `unknown` — usage data is present but no explicit `measurement_source` was
   recorded in the event log.
+
+### Optional API-equivalent imputation
+
+Pass `--matrix "$MODEL_MATRIX_ASSET"` to `run-cost-summary` or
+`emit-cost-summary` to enable the Workflow Kernel 0.13.0 imputation path. The
+caller selects the provider, resolves one coherent installed-plugin bundle, and
+sets `MODEL_MATRIX_ASSET` to that bundle's model-matrix asset; the kernel owns
+no provider dependency. It accepts the asset only when its real path, cache
+boundary, manifest name/version, and regular-file shape agree, then validates
+the matrix contract. An ordinary repository or temporary-file path is not
+pricing authority. An unavailable or invalid matrix writes one diagnostic to
+stderr, skips imputation, and still emits the ordinary observation-only
+summary.
+
+The matrix may price an exact OpenRouter slug or explicitly map a supported
+native identity to an API-equivalent slug. Existing billed costs are never
+overwritten. For supported native rows with `input_bytes` but no input-token
+counter, the matrix-owned bytes-per-token estimate contributes input cost while
+the token fields remain null. Row provenance appends the exact model alias,
+byte estimate, and matrix snapshot, and sets `usage_estimated` true.
+
+Each imputed row moves one cost attempt from `missing` to `measured` and
+`estimated`. A total is labeled `imputed_subscription_equivalent` only when
+every expected lane has a cost and coverage has no overlap or unassigned rows;
+partial or unknown evidence remains null.
 
 ### Volatile fields and digest
 
