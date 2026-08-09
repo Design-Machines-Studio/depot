@@ -26,7 +26,7 @@ The CLI/VSCode and Desktop Cowork maintain **independent** plugin caches. Updati
 |--------|------------------|--------------|
 | CLI/VSCode | `~/.claude/plugins/marketplaces/depot/` | `~/.claude/plugins/cache/depot/` |
 | Desktop Cowork | `~/Library/Application Support/Claude/local-agent-mode-sessions/<session>/<account>/cowork_plugins/marketplaces/depot/` | Same path but `/cache/depot/` |
-| Codex | `~/.codex/plugins/marketplaces/depot/` | `~/.codex/plugins/cache/depot/` |
+| Codex | `~/.codex/.tmp/marketplaces/depot/` (see below -- NOT under `plugins/`) | `~/.codex/plugins/cache/depot/` |
 
 To fix stale Desktop plugins, pull the Desktop's marketplace clone directly:
 
@@ -36,23 +36,50 @@ cd ~/Library/Application\ Support/Claude/local-agent-mode-sessions/*/*/cowork_pl
 
 Then restart Claude Desktop for it to detect the new versions.
 
-To fix a stale Codex clone, pull it the same way:
+### Codex does not work like the other two
+
+Codex has no marketplace clone under `~/.codex/plugins/`. That directory holds only
+`cache/`, an appserver, and ephemeral `marketplace-plugin-source-*` staging dirs.
+Ask Codex where its snapshot actually lives rather than assuming a path:
 
 ```shell
-cd ~/.codex/plugins/marketplaces/depot && git pull origin main
+codex plugin marketplace list
 ```
 
-Codex resolves plugin assets from `~/.codex/plugins/cache/depot/<plugin>/<version>/`,
-so confirm the expected version directory exists after pulling:
+On this machine the depot root resolves to `~/.codex/.tmp/marketplaces/depot` -- under
+`.tmp/`, not `plugins/`. It is a real git clone, so it can be pulled, but confirm the
+root first because the path is Codex-managed and may move between versions.
+
+Refreshing the snapshot does NOT update the cache. These are two steps:
+
+```shell
+codex plugin marketplace upgrade          # refresh snapshots; may prompt, so run it interactively
+codex plugin add <plugin>@depot           # materialize the new version into the cache
+```
+
+If `upgrade` blocks on a prompt in an automated context, pull the resolved root directly
+and then run `codex plugin add`, which is non-interactive:
+
+```shell
+cd "$(codex plugin marketplace list | awk '$1=="depot"{print $2}')" && git pull origin main
+codex plugin add <plugin>@depot
+```
+
+Unlike the Claude cache, which accumulates version directories, **the Codex cache keeps
+exactly one version per plugin** -- `codex plugin add` installs the new version and prunes
+the old. A single directory there is normal, not evidence of a failed install. Confirm the
+expected version landed:
 
 ```shell
 ls ~/.codex/plugins/cache/depot/<plugin>/
 ```
 
 Agent and skill resolvers throughout the depot check `~/.claude/plugins/cache/depot`
-first and fall back to `~/.codex/plugins/cache/depot`. A Codex clone that is
-behind therefore goes unnoticed whenever the Claude cache happens to hold a
-usable copy -- check both when a version looks wrong.
+first and fall back to `~/.codex/plugins/cache/depot`. A stale Codex cache is therefore
+invisible whenever the Claude cache happens to hold a usable copy. **The silent fallback
+is the hazard, not the staleness** -- a Codex-hosted run can execute against plugin
+assets several versions behind while every Claude-side check looks current. Verify both
+caches whenever a version looks wrong, and after every release.
 
 ## Notion Manual Sync
 
