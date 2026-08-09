@@ -821,6 +821,179 @@ else
   any_failed=1
 fi
 
+model_matrix="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-matrix.json"
+model_cascade="$REPO_ROOT/plugins/pipeline/references/model-cascade.json"
+routing_policy="$REPO_ROOT/plugins/pipeline/references/routing-policy.json"
+
+check_matrix_readable() {
+  if [ ! -f "$model_matrix" ]; then
+    fail "model-matrix.json is missing -- it is the canonical OpenRouter model data source"
+    any_failed=1
+    return 1
+  fi
+  if ! jq -e '.models | type == "array" and length > 0' "$model_matrix" >/dev/null 2>&1; then
+    fail "model-matrix.json must parse as JSON with a non-empty .models array"
+    any_failed=1
+    return 1
+  fi
+  return 0
+}
+
+# Drift check 1: every OpenRouter-slugged quality_rank in model-cascade.json must
+# exist in the matrix with the identical rank. Bare names (gpt-5.6-sol, opus,
+# sonnet, ...) are native Codex/Claude identities, not OpenRouter models, and are
+# out of the matrix's scope by design.
+check_quality_rank_drift() {
+  local drift
+  # A drift fence must never report green because it could not evaluate. Guard
+  # the input shape first, then let jq's exit status fail loudly rather than
+  # swallowing it -- an empty result from a crashed filter is indistinguishable
+  # from "no drift" and would silently enforce nothing.
+  if ! jq -e '.quality_rank | type == "object"' "$model_cascade" >/dev/null 2>&1; then
+    fail "model-cascade.json must parse as JSON with a .quality_rank object before drift can be checked"
+    any_failed=1
+    return
+  fi
+  if ! drift="$(jq -r --slurpfile matrix "$model_matrix" '
+    ($matrix[0].models | map({key: .slug, value: .quality_rank}) | from_entries) as $m
+    | .quality_rank
+    | to_entries
+    | map(select(.key | contains("/")))
+    | map(
+        . as $e
+        | if ($m | has($e.key) | not) then
+            "\($e.key): present in model-cascade.json quality_rank but missing from model-matrix.json"
+          elif $m[$e.key] != $e.value then
+            "\($e.key): model-cascade.json rank \($e.value) disagrees with model-matrix.json rank \($m[$e.key])"
+          else
+            empty
+          end
+      )
+    | .[]
+  ' "$model_cascade" 2>/dev/null)"; then
+    fail "could not evaluate model-cascade.json quality_rank drift against model-matrix.json"
+    any_failed=1
+    return
+  fi
+  # Reverse leg. The forward pass above walks cascade -> matrix and only sees
+  # slugged keys, so a matrix entry whose cascade twin is stored under the bare
+  # native name (openai/gpt-5.6-terra in the matrix, gpt-5.6-terra in the
+  # cascade) is fenced by nothing. Pair them on the basename after the slash and
+  # require equal ranks when both exist.
+  local twin_drift
+  if ! twin_drift="$(jq -r --slurpfile matrix "$model_matrix" '
+    .quality_rank as $c
+    | $matrix[0].models
+    | map(select(.slug | contains("/")))
+    | map(
+        . as $e
+        | ($e.slug | split("/") | last) as $bare
+        | if ($c | has($bare)) and $c[$bare] != $e.quality_rank then
+            "\($e.slug): model-matrix.json rank \($e.quality_rank) disagrees with the native twin \($bare) rank \($c[$bare]) in model-cascade.json"
+          else
+            empty
+          end
+      )
+    | .[]
+  ' "$model_cascade" 2>/dev/null)"; then
+    fail "could not evaluate model-matrix.json ranks against their native cascade twins"
+    any_failed=1
+    return
+  fi
+  if [ -n "$twin_drift" ]; then
+    fail "model-matrix.json ranks disagree with their native twins in model-cascade.json"
+    printf '%s\n' "$twin_drift" | while IFS= read -r line; do
+      [ -n "$line" ] && printf "  ${YELLOW}DRIFT${RESET} %s\n" "$line"
+    done
+    any_failed=1
+    return
+  fi
+  if [ -z "$drift" ]; then
+    pass "model-cascade.json quality_rank matches model-matrix.json for every OpenRouter slug"
+  else
+    fail "model-cascade.json quality_rank has drifted from model-matrix.json"
+    printf '%s\n' "$drift" | while IFS= read -r line; do
+      [ -n "$line" ] && printf "  ${YELLOW}DRIFT${RESET} %s\n" "$line"
+    done
+    any_failed=1
+  fi
+}
+
+# Drift check 2: every model slug routing-policy.json names for an agentType
+# (primary or fallback) must exist in the matrix. agentType is deliberately
+# the only fenced location: today it holds every vendor/model slug in the
+# file. A slug added later to a phase override or chunkKind block would NOT
+# be fenced here -- widen this filter if that happens.
+check_routing_policy_slugs() {
+  local missing
+  # Same fail-loud discipline as the drift check above.
+  if ! jq -e '.agentType | type == "object"' "$routing_policy" >/dev/null 2>&1; then
+    fail "routing-policy.json must parse as JSON with an .agentType object before slugs can be checked"
+    any_failed=1
+    return
+  fi
+  if ! missing="$(jq -r --slurpfile matrix "$model_matrix" '
+    ($matrix[0].models | map(.slug)) as $slugs
+    | [.agentType | to_entries[] | .value | (.model, .fallbackModel)]
+    | map(select(. != null))
+    | unique
+    | map(select(. as $s | ($slugs | index($s)) == null))
+    | .[]
+  ' "$routing_policy" 2>/dev/null)"; then
+    fail "could not evaluate routing-policy.json model slugs against model-matrix.json"
+    any_failed=1
+    return
+  fi
+  if [ -z "$missing" ]; then
+    pass "every routing-policy.json agentType model and fallback exists in model-matrix.json"
+  else
+    fail "routing-policy.json names model slugs that are absent from model-matrix.json"
+    printf '%s\n' "$missing" | while IFS= read -r line; do
+      [ -n "$line" ] && printf "  ${YELLOW}MISSING${RESET} %s\n" "$line"
+    done
+    any_failed=1
+  fi
+}
+
+# Drift check 3: the matrix snapshot_date (top level and every entry) must match
+# the snapshot date stated in the model-selection.md prose.
+check_matrix_snapshot_date() {
+  local prose_date matrix_date entry_drift
+  prose_date="$(grep -Eo 'checked-in planning snapshot from [0-9]{4}-[0-9]{2}-[0-9]{2}' "$model_selection" \
+    | head -1 | grep -Eo '[0-9]{4}-[0-9]{2}-[0-9]{2}' || true)"
+  matrix_date="$(jq -r '.snapshot_date // empty' "$model_matrix" 2>/dev/null || true)"
+  if [ -z "$prose_date" ]; then
+    fail "model-selection.md must state a 'checked-in planning snapshot from YYYY-MM-DD' date"
+    any_failed=1
+    return
+  fi
+  if [ -z "$matrix_date" ] || [ "$matrix_date" != "$prose_date" ]; then
+    fail "model-matrix.json snapshot_date '${matrix_date:-<none>}' must match model-selection.md prose date '$prose_date'"
+    any_failed=1
+    return
+  fi
+  entry_drift="$(jq -r --arg d "$prose_date" '
+    .models
+    | map(select(.snapshot_date != $d) | "\(.slug): entry snapshot_date \(.snapshot_date // "<none>")")
+    | .[]
+  ' "$model_matrix" 2>/dev/null || true)"
+  if [ -n "$entry_drift" ]; then
+    fail "every model-matrix.json entry snapshot_date must match the shared snapshot date '$prose_date'"
+    printf '%s\n' "$entry_drift" | while IFS= read -r line; do
+      [ -n "$line" ] && printf "  ${YELLOW}DRIFT${RESET} %s\n" "$line"
+    done
+    any_failed=1
+    return
+  fi
+  pass "model-matrix.json snapshot_date matches the model-selection.md prose snapshot date"
+}
+
+if check_matrix_readable; then
+  check_quality_rank_drift
+  check_routing_policy_slugs
+  check_matrix_snapshot_date
+fi
+
 if grep -q -- '--exhausted-rail' "$orchestrator"; then
   pass "pipeline orchestrator passes observed exhausted rail into cascade"
 else

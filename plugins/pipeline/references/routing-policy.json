@@ -1,16 +1,49 @@
 {
   "_comment": "Single provider-routing policy shared by promptcraft, execution-orchestrator, cascade-dispatch, dm-review, assess, and research. Keep task-fit decisions here so provider routing does not drift across plugin docs.",
+  "subscriptionFirst": {
+    "invariant": "subscription rails first while live headroom clears the threshold for BOTH the weekly cap and the 5-hour window; API rails next by quality-per-price from the model matrix; never start planned multi-chunk work that projected spend would push below threshold mid-run",
+    "headroomSource": "usage-probe.sh live probe; unknown headroom is treated as at-threshold (conservative), never as available",
+    "thresholdRef": "model-cascade.json policy.headroom_threshold_pct"
+  },
+  "operatorProfile": {
+    "path": ".dm/operator-profile.local.json",
+    "schema": "operator-profile-schema.json",
+    "precedence": "The profile may RANK and REMOVE only among policy-derived routing options; it never adds a routing provider the derivation did not find, and never overrides neverOfferable, security invariants, or the family-independence rule. Declaring a subscription rail is NOT adding a routing option: a profile entry supplies observability only -- which windows a rail has and how to probe its headroom. A declared rail becomes eligible to route only if policy derivation already found that provider; if it did not, the entry still yields headroom readings and still routes nothing.",
+    "precedenceRef": "operator-profile-schema.json properties.precedence -- the tracked definition of remove-only precedence",
+    "absence": "No profile present means policy defaults and today's behavior.",
+    "subscriptionSet": "Open for OBSERVABILITY only: declare a new subscription rail with one profile entry, its windows, and its probe argv, and usage-probe.sh will report that rail's headroom with no contract edit. That alone can NEVER make the rail routable -- adding a routing option still requires a policy-ladder or derivation change, per precedence above. A profile entry for a provider the derivation did not find yields headroom readings and routes nothing.",
+    "probeResolution": "Use the built-in probe for a known rail, otherwise the profile-declared probe, otherwise unknown. Every profile probe runs under usage-probe.sh's reset PATH and must map to the common state, remaining_pct, and window shape; unmappable output is unknown.",
+    "dataBoundary": "Profiles carry preferences and probe commands only, never credentials or account secrets.",
+    "consumerStatus": "usage-probe.sh consumes .subscriptions only -- it executes each rail's probe and emits headroom. familyPreferenceOrder and neverUse are validated for shape but are NOT yet read by any executable consumer: cascade-dispatch.sh selects rails from the policy ladder and does not load this profile. Until a selection-time consumer exists, a profile can shrink or reorder nothing at runtime, and an operator MUST NOT assume neverUse removes a provider from dispatch. The declared contract is the target shape; this field records how much of it is live, so the gap is visible rather than implied.",
+    "probeExecution": "A profile probe is an argv ARRAY, never a shell string, and is executed without sh -c: no metacharacters, word splitting, globbing, or chaining. probe[0] must resolve on the reset PATH or be an absolute path to an executable regular file. A git-TRACKED profile is refused outright, because .gitignore is defeated by git add -f in this repository and a committed profile is not developer-local config. Symlinked profiles are refused."
+  },
   "targets": {
     "activeSubscriptionProfile": "codex-20x",
     "subscriptionProfiles": {
-      "codex-20x": {"codex": 65, "claude": 0, "openrouter": 35},
-      "codex-5x": {"codex": 40, "claude": 0, "openrouter": 60}
+      "codex-20x": {
+        "codex": 65,
+        "claude": 0,
+        "openrouter": 35
+      },
+      "codex-5x": {
+        "codex": 40,
+        "claude": 0,
+        "openrouter": 60
+      }
     },
     "enforcement": {
       "scope": "eligible-chunks-per-run",
       "strategy": "deficit-round-robin",
-      "flexibleBuckets": ["config", "docs", "mechanical-logic"],
-      "fixedBuckets": ["logic", "ui", "integration"],
+      "flexibleBuckets": [
+        "config",
+        "docs",
+        "mechanical-logic"
+      ],
+      "fixedBuckets": [
+        "logic",
+        "ui",
+        "integration"
+      ],
       "securityOverridesTarget": true,
       "toolCapabilityOverridesTarget": true,
       "varianceReceiptRequired": true
@@ -19,7 +52,11 @@
   },
   "decisionLeverage": {
     "scope": "workflow-depth-only",
-    "allowedLevels": ["low", "medium", "high"],
+    "allowedLevels": [
+      "low",
+      "medium",
+      "high"
+    ],
     "legacyDefault": {
       "planningDepth": "current-standard-path",
       "verificationDepth": "current-standard-path",
@@ -28,25 +65,35 @@
     },
     "rules": {
       "lowLow": {
-        "when": {"uncertainty": "low", "consequence": "low"},
+        "when": {
+          "uncertainty": "low",
+          "consequence": "low"
+        },
         "planningDepth": "standard",
         "verificationDepth": "standard",
         "optimized": true
       },
       "highUncertainty": {
-        "when": {"uncertainty": "high"},
+        "when": {
+          "uncertainty": "high"
+        },
         "planningDepth": "one-independent-opinion-plus-bounded-synthesis",
         "verificationDepth": "standard-unless-high-consequence",
         "optimized": false
       },
       "highConsequence": {
-        "when": {"consequence": "high"},
+        "when": {
+          "consequence": "high"
+        },
         "planningDepth": "standard-unless-high-uncertainty",
         "verificationDepth": "stronger-existing-independent-seam",
         "optimized": false
       },
       "highHigh": {
-        "when": {"uncertainty": "high", "consequence": "high"},
+        "when": {
+          "uncertainty": "high",
+          "consequence": "high"
+        },
         "planningDepth": "one-independent-opinion-plus-bounded-synthesis",
         "verificationDepth": "stronger-existing-independent-seam",
         "optimized": false
@@ -163,7 +210,10 @@
       "rationale": "Research fan-out is read-heavy summarization; keep final synthesis on Claude."
     },
     "adversarialReview": {
-      "providers": ["codex", "openrouter"],
+      "providers": [
+        "codex",
+        "openrouter"
+      ],
       "optionalProvider": "claude",
       "optionalEnv": "PIPELINE_CLAUDE_ADVERSARY",
       "rationale": "Default adversarial review uses two non-Claude lenses; Claude plan-adversary is an optional third lens or tiebreak."
@@ -187,17 +237,47 @@
   "invariants": {
     "crossProviderVerification": true,
     "finalReviewDifferentProvider": true,
+    "reviewerFamilyIndependent": true,
     "proposalOnlyEconomics": true,
     "providerOrigin": {
       "schemaVersion": 1,
-      "openrouterForbiddenModelPrefixes": ["anthropic/"],
+      "openrouterForbiddenModelPrefixes": [
+        "anthropic/"
+      ],
       "nativeOpenAIExecution": "codex-cli-preferred-or-openrouter-api",
       "nativeAnthropicExecution": "claude-cli-only",
       "genericNativeVendorFallback": "unavailable",
-      "appliesTo": ["primary", "fallback"],
+      "appliesTo": [
+        "primary",
+        "fallback"
+      ],
       "failureMode": "fail-closed-before-provider-contact",
       "rationale": "Provider origin is receipted explicitly. OpenAI and third-party OpenRouter models remain eligible after disclosure and output controls; Anthropic remains native-only."
     }
+  },
+  "matrixReceipt": {
+    "_comment": "Receipt contract for model selection. The canonical machine-readable model data lives in plugins/openrouter/skills/openrouter-delegate/references/model-matrix.json; tools/validate-openrouter-cascade.sh rejects drift between that matrix, model-cascade.json quality_rank, and the agentType slugs in this file. Same canonical-with-checked-mirror shape as .security above.",
+    "canonicalMatrix": "../../openrouter/skills/openrouter-delegate/references/model-matrix.json",
+    "statement": "Every routing decision recorded in a run receipt must carry matrix_snapshot_date and a one-line rung_rationale naming the deciding axis (cost, context, strength, or availability).",
+    "requiredReceiptFields": {
+      "matrix_snapshot_date": "The snapshot_date of the model-matrix.json revision the decision was made against.",
+      "rung_rationale": "One line naming the deciding axis for the chosen rung."
+    },
+    "rungRationaleAxes": [
+      "cost",
+      "context",
+      "strength",
+      "availability"
+    ],
+    "appliesTo": [
+      "chunkKind",
+      "agentType",
+      "phase",
+      "cascade rung selection"
+    ],
+    "failureMode": "receipt-incomplete",
+    "authority": "The matrix recommends, this policy decides, receipts record. A matrix refresh never re-routes anything on its own.",
+    "rationale": "Routing decisions were previously unattributable: the matrix was consumed by nothing at run time, so a receipt could not show which price/context/strength data a rung was chosen against. Naming the snapshot and the deciding axis makes the decision auditable and makes matrix drift visible in the receipt trail."
   },
   "authorization": {
     "schemaVersion": 1,

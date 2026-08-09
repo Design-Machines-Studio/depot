@@ -101,6 +101,7 @@ review_skill="$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
 review_cmd="$REPO_ROOT/plugins/dm-review/commands/dm-review.md"
 review_consolidator="$REPO_ROOT/plugins/dm-review/agents/workflow/review-consolidator.md"
 review_loop="$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md"
+review_loop_skill="$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md"
 review_fix="$REPO_ROOT/plugins/dm-review/commands/dm-review-fix.md"
 output_format="$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md"
 kernel_skill="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/SKILL.md"
@@ -353,6 +354,26 @@ require_text "$review_cmd" "zero-deferral recommendation" "dm-review preserves z
 require_text "$review_cmd" "reported coverage gap" "dm-review preserves explicit coverage"
 require_text "$review_cmd" "observation-only economics evidence" "dm-review contributions remain observation-only"
 require_text "$review_consolidator" "stable ID" "review consolidator preserves stable IDs"
+for loop_contract in "$review_loop" "$review_loop_skill"; do
+  loop_contract_relative="${loop_contract#$REPO_ROOT/}"
+  for receipt_field in selective_rerun lanes_rerun lanes_skipped rerun_reasons selection_fallback_reason; do
+    require_text "$loop_contract" "\`$receipt_field\`" "$loop_contract_relative preserves $receipt_field receipt field"
+  done
+  require_text "$loop_contract" '**A CLEAN verdict may only ever be issued by a verified full fan-out.** Set `review_is_full_fanout` to true only when selective input was not applied, the authoritative coverage receipt'"'"'s selected lanes exactly equal its completed lanes, and the nested review did not return `REVIEW INCOMPLETE`.' "$loop_contract_relative gates CLEAN on verified full fan-out coverage"
+  require_text "$loop_contract" "Security sign-off is never narrowed and is never made conditional on the touched-file set being non-empty." "$loop_contract_relative never narrows security sign-off"
+  require_text "$loop_contract" 'the touched-file set is the union of `git diff --name-only <prior-review-head>..HEAD` and the paths reported by `git status --porcelain`' "$loop_contract_relative unions committed and uncommitted changed paths"
+  require_text "$loop_contract" "An empty computed lane set is never dispatched." "$loop_contract_relative never dispatches an empty selection"
+  require_text "$loop_contract" 'selection fails open to a full fan-out with `fallback_reason: empty selection`' "$loop_contract_relative fails open on an empty selection"
+  require_text "$loop_contract" "iteration-receipt.json" "$loop_contract_relative names the iteration receipt artifact"
+  require_text "$loop_contract" '`clean-confirmation-receipt.json`' "$loop_contract_relative names the clean confirmation receipt artifact"
+  require_text "$loop_contract" '`max-iterations-verification-receipt.json`' "$loop_contract_relative names the max-iterations receipt artifact"
+done
+require_text "$review_skill" '`review_lane_allowlist`' "review receiver names the selective lane allowlist"
+require_text "$review_skill" "never relax this equality check to a subset check" "review receiver requires exact selected_full_set equality"
+require_text "$review_skill" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "review receiver fails open without partially honoring invalid input"
+require_text "$review_skill" 'It records the exact set of logical lanes actually `DISPATCHED` on this pass' "review receipt reports actually dispatched lanes"
+require_text "$review_skill" "A review that applied a selective allowlist is not a full fan-out and can never provide the evidence for a CLEAN verdict" "selective review cannot provide CLEAN evidence"
+require_text "$review_skill" 'The independent-family security sign-off, `security-auditor-codex-signoff`, is such a mandatory lane and is never removed by an allowlist.' "review allowlist never removes security sign-off"
 require_text "$postmortem_schema" '`activeComputeSeconds`' "postmortem separates active compute from elapsed time"
 require_text "$postmortem_schema" '`waitSecondsByCategory`' "postmortem records typed waits"
 require_text "$orchestrator" "Measure the orchestrator-level non-overlapping interval" "orchestrator measures non-overlapping waits"
@@ -571,10 +592,31 @@ for f in "$review_dispatch_skill" "$orchestrator"; do
   require_text "$f" "--agent-definition" "$rel names the input-bytes evidence path"
 done
 
+# The per-chunk review tier is a burn control, so it has to be receipt-evidenced
+# rather than advisory. Pin the required-field sentence: without it the
+# orchestrator can quietly dispatch the multi-agent suite for ordinary chunks and
+# leave no trace that the cheap default was skipped.
+require_text "$orchestrator" \
+  "MUST record \`review_tier:" \
+  "execution orchestrator requires the review_tier chunk-receipt field"
+
+# --------------------------------------------------------------------------
+# Group 8: subscription-first and family-independent routing
+# --------------------------------------------------------------------------
+
+printf "\nrouting invariants:\n"
+
+require_text "$review_skill" \
+  "The second-perspective reviewer model family MUST differ from the family that implemented the diff under review." \
+  "dm-review requires a family-independent second perspective"
+require_text "$review_skill" \
+  "Unknown subscription headroom is treated as at-threshold, never as available." \
+  "routing-policy consumers treat unknown subscription headroom conservatively"
+
 # ---------------------------------------------------------------------------
-# Group 8: interim operator-batch authorization contract
+# Group 9: interim operator-batch authorization contract
 # ---------------------------------------------------------------------------
-printf "\nGroup 8: interim operator-batch authorization\n"
+printf "\nGroup 9: interim operator-batch authorization\n"
 
 payload_authorization="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
 openrouter_wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
@@ -684,4 +726,4 @@ if [ "$failures" -ne 0 ]; then
   exit 1
 fi
 
-printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, interim operator-batch authorization)\n"
+printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, routing invariants, interim operator-batch authorization)\n"

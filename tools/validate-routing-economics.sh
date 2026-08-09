@@ -289,21 +289,17 @@ require_text "$orchestrator" "Claude JSONL delta" "postmortem measures Claude JS
 require_text "$orchestrator" "AWAITING APPROVAL" "postmortem recommendations are proposal-only"
 require_text "$model_cascade" '"openrouter"' "model cascade defines OpenRouter class"
 if [ -f "$model_cascade" ] && [ -f "$harness" ]; then
-  # 2026-08-08 user directive: native_judgment is an executable LAST-RESORT coding rung.
-  # Claude must still never be a cascade class of its own, and where the native rung is
-  # present it must rank below premium_sub and openrouter_exec so both external rails are
-  # tried first. This replaces the former absolute exclusion.
   jq -e '.cascades | has("claude") | not' "$model_cascade" >/dev/null || { printf "  FAIL  no Claude-native cascade class\n"; failures=1; }
   jq -e '
     [.cascades[]
-      | .ladder as $l
-      | select($l | index("native_judgment"))
-      | ($l | index("native_judgment")) as $n
-      | (($l | index("premium_sub")) // -1) as $p
-      | (($l | index("openrouter_exec")) // -1) as $o
-      | ($n > $p and $n > $o)]
+      | .ladder as $ladder
+      | select(($ladder | index("native_judgment")) != null)
+      | ($ladder | index("native_judgment")) as $native
+      | ($ladder | index("premium_sub")) as $premium
+      | ($ladder | index("openrouter_exec")) as $openrouter
+      | ($premium != null and $openrouter != null and $native > $premium and $native > $openrouter)]
     | all
-  ' "$model_cascade" >/dev/null || { printf "  FAIL  native_judgment ranks below premium_sub and openrouter_exec in every cascade\n"; failures=1; }
+  ' "$model_cascade" >/dev/null || { printf "  FAIL  native_judgment ranks below present premium_sub and openrouter_exec rails in every cascade\n"; failures=1; }
   jq -e '
     [.hosts[].roles | to_entries[]
       | select(.value.kind == "wrapper" or .value.kind == "openrouter_exec")
@@ -320,6 +316,23 @@ if [ -f "$model_cascade" ] && [ -f "$harness" ]; then
     printf "  FAIL  generic/native-vendor intent is unavailable rather than mapped to OpenRouter\n"
     failures=1
   fi
+  jq -e '.policy._comment_native_authorization | type == "string" and length > 0' "$model_cascade" >/dev/null || { printf "  FAIL  native_judgment authorization gate is documented in model-cascade policy\n"; failures=1; }
+fi
+require_text "$cascade" 'native_judgment_allowed() {' "native_judgment authorization gate function exists"
+require_text "$cascade" '[ "$role" = "native_judgment" ] && ! native_judgment_allowed && continue' "native_judgment refusal skips the gated rung in the ladder walk"
+require_text "$cascade" '(.expiresAtEpoch | type == "number" and . == floor and . > $now' "native_judgment authorization requires a live integer expiry"
+require_text "$cascade" '(.repository | type == "string") and .repository == $repository and' "native_judgment authorization binds the repository"
+require_text "$cascade" '.runId == $run_id and' "native_judgment authorization binds the run"
+if sed -n '/^native_judgment_allowed() {$/,/^}$/p' "$cascade" | grep -Fq -- 'DRYRUN'; then
+  printf "  FAIL  native_judgment authorization gate has no dry-run bypass\n"
+  failures=1
+else
+  printf "  OK    native_judgment authorization gate has no dry-run bypass\n"
+fi
+require_text "$cascade" 'nativeAuthorization:{authorizationId:$authorization_id,expiresAtEpoch:$authorization_expiry}' "native_judgment directive carries authorization evidence"
+require_text "$cascade" 'targetVariance:true,varianceReceiptRequired:true' "native_judgment directive requires a target-variance receipt"
+if [ -f "$routing" ]; then
+  jq -e '.targets.enforcement.varianceReceiptRequired == true' "$routing" >/dev/null || { printf "  FAIL  routing policy requires variance receipts\n"; failures=1; }
 fi
 # Note: the harness openrouter_exec rung and cascade dispatch are covered functionally by
 # validate-openrouter-cascade.sh (dry-run descent test); not re-grepped here to avoid double-reporting.
