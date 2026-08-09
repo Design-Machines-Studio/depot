@@ -419,16 +419,24 @@ sets `MODEL_MATRIX_ASSET` to that bundle's model-matrix asset; the kernel owns
 no provider dependency. It accepts the asset only when its real path, cache
 boundary, manifest name/version, and regular-file shape agree, then validates
 the matrix contract. An ordinary repository or temporary-file path is not
-pricing authority. An unavailable or invalid matrix writes one diagnostic to
-stderr, skips imputation, and still emits the ordinary observation-only
-summary.
+pricing authority. An omitted or empty selector is expected absence and emits
+no diagnostic. A non-empty selector that cannot resolve to a trusted asset, or
+a provided trusted matrix that fails validation, writes one diagnostic to
+stderr, skips imputation, and still emits the ordinary observation-only summary.
 
 The matrix may price an exact OpenRouter slug or explicitly map a supported
 native identity to an API-equivalent slug. Existing billed costs are never
-overwritten. For supported native rows with `input_bytes` but no input-token
-counter, the matrix-owned bytes-per-token estimate contributes input cost while
-the token fields remain null. Row provenance appends the exact model alias,
-byte estimate, and matrix snapshot, and sets `usage_estimated` true.
+overwritten. For supported native aliases whose provider and implementer are
+Codex or Claude, `input_bytes` with no input-token counter may use the
+matrix-owned bytes-per-token estimate while token fields remain null. A direct
+OpenRouter byte-only row stays unpriced. Row provenance appends the exact model
+alias, byte estimate, and matrix snapshot, and sets `usage_estimated` true.
+
+Only input, output, and cache-read counters currently have trusted matrix price
+fields. A missing-cost row with `cache_write_usage_count` or
+`reasoning_usage_count` therefore remains unpriced, appends explicit
+`cost_imputation_excluded(unpriced=...)` provenance, and leaves total cost
+coverage incomplete. Existing provider-billed cost still wins.
 
 Each imputed row moves one cost attempt from `missing` to `measured` and
 `estimated`. A total is labeled `imputed_subscription_equivalent` only when

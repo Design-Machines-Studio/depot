@@ -12,6 +12,10 @@ _PRICE_FIELDS = {
     "output_usage_count": "output_usd_per_m",
     "cache_read_usage_count": "cache_read_usd_per_m",
 }
+_UNPRICED_COST_COUNTER_FIELDS = (
+    "cache_write_usage_count",
+    "reasoning_usage_count",
+)
 _SNAPSHOT_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
 
 
@@ -129,6 +133,23 @@ def impute_attempt_cost(row: dict, matrix: dict) -> dict:
     if priced_model is None:
         return row
 
+    unpriced_counters = [
+        field for field in _UNPRICED_COST_COUNTER_FIELDS
+        if row.get(field) is not None
+    ]
+    if unpriced_counters:
+        result = dict(row)
+        provenance = []
+        measurement_source = result.get("measurement_source")
+        if type(measurement_source) is str and measurement_source:
+            provenance.append(measurement_source)
+        provenance.append(
+            "cost_imputation_excluded(unpriced="
+            + "+".join(unpriced_counters) + ")"
+        )
+        result["measurement_source"] = "+".join(provenance)
+        return result
+
     cost = 0.0
     observed_counter = False
     byte_estimate = False
@@ -145,7 +166,11 @@ def impute_attempt_cost(row: dict, matrix: dict) -> dict:
             return row
         observed_counter = True
         cost += counter * float(price) / 1_000_000
-    if row.get("input_usage_count") is None and row.get("input_bytes") is not None:
+    if (
+        normalized_slug is not None
+        and row.get("input_usage_count") is None
+        and row.get("input_bytes") is not None
+    ):
         input_bytes = row["input_bytes"]
         ratio = native.get("input_bytes_per_token_estimate") if type(native) is dict else None
         input_price = priced_model.get("input_usd_per_m")

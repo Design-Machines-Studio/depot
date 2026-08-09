@@ -147,8 +147,10 @@ coherent installed-plugin bundle, and sets `MODEL_MATRIX_ASSET` to that bundle's
 model-matrix asset; the kernel owns no provider dependency. It accepts the asset
 only when its real path, cache boundary, manifest name/version, and regular-file
 shape agree, then validates the matrix contract. An ordinary repository or
-temporary-file path is not pricing authority. If the asset is unavailable or
-the matrix is invalid, the command emits exactly one
+temporary-file path is not pricing authority. An omitted or empty selector is
+expected matrix absence and emits no diagnostic. If a non-empty selector does
+not resolve to a trusted asset, or that trusted matrix is invalid, the command
+emits exactly one
 `run-cost-summary: trusted matrix unavailable or invalid; skipping imputation`
 line on stderr, emits the ordinary non-imputed summary, and preserves the
 observation-only success contract.
@@ -156,12 +158,21 @@ observation-only success contract.
 Existing billed costs always win. A missing attempt cost is priceable only
 when the matrix contains its exact model slug or explicitly maps a supported
 native Codex/Claude identity to an API-equivalent slug. Token counters retain
-their units. For a supported native row that has `input_bytes` but no input
-token counter, the matrix-owned bytes-per-token estimate contributes input cost
-without populating `input_usage_count`. The row's `measurement_source` names
-the alias, byte estimate, and matrix snapshot through `model_alias(...)`,
-`estimated_input_tokens(...)`, and `imputed_cost(model-matrix@...)`; the row is
-also marked `usage_estimated: true`.
+their units. The matrix-owned bytes-per-token estimate applies only to a
+supported native alias whose provider and implementer identify Codex or Claude;
+a direct OpenRouter byte-only row remains unpriced. The estimate contributes
+input cost without populating `input_usage_count`. The row's
+`measurement_source` names the alias, byte estimate, and matrix snapshot through
+`model_alias(...)`, `estimated_input_tokens(...)`, and
+`imputed_cost(model-matrix@...)`; the row is also marked
+`usage_estimated: true`.
+
+The matrix currently prices input, output, and cache-read counters. If a row
+without billed cost also reports `cache_write_usage_count` or
+`reasoning_usage_count`, those counters are not silently assigned a zero price:
+the row remains unpriced, appends
+`cost_imputation_excluded(unpriced=...)` provenance, and keeps total cost
+coverage incomplete. A provider-reported billed cost remains authoritative.
 
 Each imputed row moves one cost-coverage attempt from `missing` to both
 `measured` and `estimated`. Only complete, non-overlapping, fully priced attempt

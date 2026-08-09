@@ -194,6 +194,35 @@ class ImputedCostTests(unittest.TestCase):
         self.assertEqual(summary["measurement_coverage"]["cost"]["estimated"], 1)
         self.assertEqual(summary["measurement_coverage"]["cost"]["missing"], 0)
 
+    def test_unpriced_cost_counters_keep_row_and_total_incomplete(self):
+        event = WorkflowEvent(
+            1, 0, "imputation-run", "chunk-1", "evidence.recorded",
+            "2026-08-09T00:00:00Z",
+            {
+                "stage": "attempt_usage", "status": "observed",
+                "chunk_id": "chunk-1", "lane": "implementation",
+                "attempt": 1, "usage_scope": "attempt",
+                "model": "openai/gpt-test", "host": "codex",
+                "input_usage_count": 1_000_000,
+                "cache_write_usage_count": 200_000,
+                "reasoning_usage_count": 300_000,
+                "measurement_source": "subscription_usage",
+                "usage_estimated": False,
+            },
+        )
+        summary = build_run_cost_summary((event,), matrix=MATRIX)
+        lane = summary["lanes"][0]
+        self.assertIsNone(lane["cost_usd"])
+        self.assertIn(
+            "cost_imputation_excluded(unpriced=cache_write_usage_count"
+            "+reasoning_usage_count)",
+            lane["measurement_source"],
+        )
+        self.assertIsNone(summary["totals"]["cost_usd"])
+        self.assertIsNone(summary["totals"]["cost_provenance"])
+        self.assertEqual(summary["measurement_coverage"]["cost"]["estimated"], 0)
+        self.assertEqual(summary["measurement_coverage"]["cost"]["missing"], 1)
+
     def test_production_shaped_native_codex_alias_is_priceable(self):
         events = translate_pipeline_receipts([_native_receipt()])
         summary = build_run_cost_summary(events, matrix=REAL_MATRIX)
@@ -222,6 +251,18 @@ class ImputedCostTests(unittest.TestCase):
             "+estimated_input_tokens(input_bytes/4_bytes_per_token)",
             lane["measurement_source"],
         )
+
+    def test_direct_openrouter_byte_only_row_stays_unpriced(self):
+        row = _row(
+            input_usage_count=None,
+            output_usage_count=None,
+            cache_read_usage_count=None,
+            input_bytes=4096,
+            provider="openrouter",
+            implemented_by="openrouter",
+        )
+        self.assertIs(impute_attempt_cost(row, MATRIX), row)
+        self.assertIsNone(row["cost_usd"])
 
     def test_unsupported_or_unmeasured_native_rows_stay_null(self):
         generic = _native_receipt(model="gpt-5.6", byte_only=True)
@@ -367,6 +408,27 @@ class ImputedCostTests(unittest.TestCase):
             emitted = json.loads(output.read_text(encoding="utf-8"))
             del emitted["invocation"]["emitted_at"]
         self.assertEqual(emitted, oracle)
+
+    def test_empty_matrix_selector_is_expected_absence_without_diagnostic(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            events = root / "events.json"
+            events.write_text(json.dumps([_native_receipt()]), encoding="utf-8")
+            for command in ("run-cost-summary", "emit-cost-summary"):
+                output = root / (command + ".json")
+                argv = [
+                    command, "--events", str(events), "--output", str(output),
+                    "--matrix", "",
+                ]
+                if command == "emit-cost-summary":
+                    argv += ["--receipt", str(root / "receipt.md")]
+                stderr = io.StringIO()
+                with contextlib.redirect_stderr(stderr):
+                    self.assertEqual(cli.main(argv), 0)
+                self.assertEqual(stderr.getvalue(), "")
+                self.assertIsNone(
+                    json.loads(output.read_text(encoding="utf-8"))["lanes"][0]["cost_usd"],
+                )
 
     def test_both_cli_commands_use_installed_matrix_and_recompute_digest(self):
         with tempfile.TemporaryDirectory() as directory:

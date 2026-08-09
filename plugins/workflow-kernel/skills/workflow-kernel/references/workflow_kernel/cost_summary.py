@@ -513,7 +513,10 @@ def build_run_cost_summary(
         finalized_lanes = []
         for row in lanes:
             finalized = impute_attempt_cost(row, matrix)
-            imputed_count += int(finalized is not row)
+            imputed_count += int(
+                row.get("cost_usd") is None
+                and finalized.get("cost_usd") is not None
+            )
             finalized_lanes.append(finalized)
         lanes = finalized_lanes
 

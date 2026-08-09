@@ -2131,7 +2131,7 @@ def _runtime_home():
 
 def _load_cost_imputation_matrix(selector):
     """Load a caller-selected matrix only from a coherent installed bundle."""
-    if selector is None:
+    if selector is None or selector == "":
         return None
     try:
         asset = resolve_trusted_plugin_asset(selector, home=_runtime_home())
