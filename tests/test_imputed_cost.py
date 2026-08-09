@@ -292,6 +292,29 @@ class ImputedCostTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_model_matrix(matrix)
 
+    def test_matrix_validation_rejects_impossible_calendar_snapshot(self):
+        matrix = json.loads(json.dumps(MATRIX))
+        matrix["snapshot_date"] = "2026-02-30"
+        for model in matrix["models"]:
+            model["snapshot_date"] = "2026-02-30"
+        native = matrix["native_api_equivalent_cost"]
+        native["snapshot_date"] = "2026-02-30"
+        for model in native["models"]:
+            model["snapshot_date"] = "2026-02-30"
+        with self.assertRaises(ValueError):
+            validate_model_matrix(matrix)
+
+    def test_matrix_validation_accepts_real_leap_day_snapshot(self):
+        matrix = json.loads(json.dumps(MATRIX))
+        matrix["snapshot_date"] = "2028-02-29"
+        for model in matrix["models"]:
+            model["snapshot_date"] = "2028-02-29"
+        native = matrix["native_api_equivalent_cost"]
+        native["snapshot_date"] = "2028-02-29"
+        for model in native["models"]:
+            model["snapshot_date"] = "2028-02-29"
+        validate_model_matrix(matrix)
+
     def test_generic_installed_plugin_asset_is_accepted_without_provider_coupling(self):
         with tempfile.TemporaryDirectory() as directory:
             home = Path(directory)

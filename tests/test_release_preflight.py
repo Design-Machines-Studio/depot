@@ -72,7 +72,10 @@ class ReleasePreflightTests(unittest.TestCase):
         )
 
     def _write_versions(self, versions):
-        marketplace = self.repo / ".claude-plugin/marketplace.json"
+        self._write_versions_at(self.repo, versions)
+
+    def _write_versions_at(self, root, versions):
+        marketplace = root / ".claude-plugin/marketplace.json"
         marketplace.parent.mkdir(parents=True, exist_ok=True)
         marketplace.write_text(json.dumps({
             "plugins": [
@@ -81,7 +84,7 @@ class ReleasePreflightTests(unittest.TestCase):
             ],
         }), encoding="utf-8")
         for name, version in versions.items():
-            manifest = self.repo / f"plugins/{name}/.claude-plugin/plugin.json"
+            manifest = root / f"plugins/{name}/.claude-plugin/plugin.json"
             manifest.parent.mkdir(parents=True, exist_ok=True)
             manifest.write_text(json.dumps({
                 "name": name, "version": version,
@@ -91,7 +94,8 @@ class ReleasePreflightTests(unittest.TestCase):
         wrapper = self.bin / "git"
         wrapper.write_text(
             "#!/bin/sh\n"
-            "if [ \"$1\" = fetch ]; then printf '%s\\n' \"$*\" >> \"$PREFLIGHT_GIT_LOG\"; fi\n"
+            "if [ \"$1\" = fetch ]; then printf '%s|%s\\n' "
+            "\"${GIT_OBJECT_DIRECTORY:-}\" \"$*\" >> \"$PREFLIGHT_GIT_LOG\"; fi\n"
             "if [ \"${PREFLIGHT_GIT_FAIL:-}\" = fetch ] && "
             "[ \"$1\" = fetch ]; then exit 42; fi\n"
             "if [ \"${PREFLIGHT_GIT_FAIL:-}\" = merge-base ] && "
@@ -203,6 +207,49 @@ class ReleasePreflightTests(unittest.TestCase):
         )
         return local_sha, remote_sha
 
+    def _make_remote_only_divergence(self):
+        self._git("push", "-q", "--force", "origin", f"{self.base}:refs/heads/base")
+        remote_work = self.temp / "remote-work"
+        subprocess.run(
+            [SYSTEM_GIT, "clone", "-q", "--no-checkout", str(self.origin),
+             str(remote_work)],
+            check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        self._git("config", "user.name", "Remote Release Test", cwd=remote_work)
+        self._git(
+            "config", "user.email", "remote-release-test@example.invalid",
+            cwd=remote_work,
+        )
+        self._git("checkout", "-q", "-b", "candidate", self.base, cwd=remote_work)
+        self._write_versions_at(remote_work, {"alpha": "1.1.0", "beta": "1.0.0"})
+        remote_content = remote_work / "plugins/alpha/content.txt"
+        remote_content.write_text("remote-only change\n", encoding="utf-8")
+        self._git("add", ".", cwd=remote_work)
+        self._git("commit", "-q", "-m", "remote-only change", cwd=remote_work)
+        remote_sha = self._git("rev-parse", "HEAD", cwd=remote_work).stdout.strip()
+        self._git(
+            "push", "-q", "--force", "origin", "HEAD:refs/heads/candidate",
+            cwd=remote_work,
+        )
+        self._git("checkout", "-q", "-B", "feature", self.base)
+        self._commit_plugin_change(("alpha",), "1.1.0", "local change")
+        missing = subprocess.run(
+            [SYSTEM_GIT, "cat-file", "-e", remote_sha], cwd=self.repo,
+            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        )
+        self.assertNotEqual(missing.returncode, 0)
+
+    def _repository_git_state(self):
+        refs = self._git("for-each-ref", "--format=%(refname) %(objectname)").stdout
+        fetch_head = self.repo / ".git/FETCH_HEAD"
+        fetch_head_bytes = fetch_head.read_bytes() if fetch_head.exists() else None
+        objects = {
+            path.relative_to(self.repo / ".git/objects").as_posix(): path.read_bytes()
+            for path in (self.repo / ".git/objects").rglob("*")
+            if path.is_file()
+        }
+        return refs, fetch_head_bytes, objects
+
     def test_fresh_codex_cache_passes(self):
         result = self._run_preflight(no_net=True, codex="fresh")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -283,6 +330,29 @@ class ReleasePreflightTests(unittest.TestCase):
         result = self._run_preflight()
         self.assertEqual(result.returncode, 1)
         self.assertEqual(fetch_head.read_bytes(), b"sentinel-fetch-head\n")
+
+    def test_remote_only_probe_preserves_refs_fetch_head_and_object_store(self):
+        self._make_remote_only_divergence()
+        fetch_head = self.repo / ".git/FETCH_HEAD"
+        fetch_head.write_bytes(b"sentinel-fetch-head\n")
+        before = self._repository_git_state()
+        result = self._run_preflight()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("both declare 1.1.0", result.stdout)
+        self.assertEqual(self._repository_git_state(), before)
+
+    def test_remote_probe_object_quarantine_is_removed_after_fetch_failure(self):
+        self._make_remote_only_divergence()
+        before = set(Path("/tmp").glob("release-preflight-objects.*"))
+        result = self._run_preflight(git_fail="fetch")
+        self.assertEqual(result.returncode, 1)
+        fetch_record = self.git_log.read_text(encoding="utf-8").splitlines()[0]
+        object_directory = Path(fetch_record.split("|", 1)[0])
+        self.assertNotEqual(str(object_directory), ".")
+        self.assertFalse(object_directory.exists())
+        self.assertEqual(
+            set(Path("/tmp").glob("release-preflight-objects.*")), before,
+        )
 
     def test_each_remote_sha_is_fetched_once_across_changed_plugins(self):
         self._make_divergence(

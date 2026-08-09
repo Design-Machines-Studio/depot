@@ -27,7 +27,7 @@
 #
 # USAGE
 #   ./tools/check-release-preflight.sh            # all checks
-#   ./tools/check-release-preflight.sh --no-net   # skip the ls-remote auth probe
+#   ./tools/check-release-preflight.sh --no-net   # skip remote branch and auth probes
 
 # Deliberately no `set -e`: we want every check to run and report, not abort on
 # the first failure. `set -u` and pipefail are safe and wanted.
@@ -49,6 +49,39 @@ pass() { printf "  OK    %s\n" "$1"; }
 fail() { printf "  FAIL  %s\n" "$1"; failures=1; }
 skip() { printf "  SKIP  %s\n" "$1"; }
 
+remote_object_dir=""
+repository_object_dir=""
+
+cleanup_remote_object_quarantine() {
+  cleanup_dir="${remote_object_dir:-}"
+  [ -z "$cleanup_dir" ] && return 0
+  case "$cleanup_dir" in
+    /tmp/release-preflight-objects.*) ;;
+    *) return 1 ;;
+  esac
+  if rm -rf -- "$cleanup_dir"; then
+    remote_object_dir=""
+    return 0
+  fi
+  return 1
+}
+
+trap 'cleanup_remote_object_quarantine || :' EXIT
+trap 'cleanup_remote_object_quarantine || :; exit 130' HUP INT TERM
+
+initialize_remote_object_quarantine() {
+  remote_object_dir="$(mktemp -d /tmp/release-preflight-objects.XXXXXX)" || return 1
+  repository_object_dir="$(git rev-parse --git-path objects)" || return 1
+  repository_object_dir="$(cd "$repository_object_dir" && pwd -P)" || return 1
+  [ -d "$repository_object_dir" ]
+}
+
+probe_git() {
+  GIT_OBJECT_DIRECTORY="$remote_object_dir" \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES="$repository_object_dir" \
+    git "$@"
+}
+
 # Cache remote object probes by advertised SHA. Bash 3.2 has no associative
 # arrays, so the small ls-remote set is stored as newline-delimited SHA|rc rows.
 # A cached failure is returned to every affected plugin without repeating the
@@ -61,7 +94,7 @@ fetch_remote_sha_once() {
     return 0
   fi
 
-  git fetch --no-tags --quiet --no-write-fetch-head origin "$fetch_sha"
+  probe_git fetch --no-tags --quiet --no-write-fetch-head origin "$fetch_sha"
   remote_fetch_rc=$?
   remote_fetch_records="${remote_fetch_records}${remote_fetch_records:+$'\n'}${fetch_sha}|${remote_fetch_rc}"
 }
@@ -322,6 +355,9 @@ else
   remote_heads_rc=$?
   if [ "$remote_heads_rc" -ne 0 ]; then
     fail "cannot list origin branches for equal-bump inspection (rc=$remote_heads_rc)"
+  elif ! initialize_remote_object_quarantine; then
+    fail "cannot create a temporary object quarantine for equal-bump inspection"
+    cleanup_remote_object_quarantine || :
   else
     remote_fetch_records=""
     equal_bump_checked=0
@@ -357,7 +393,7 @@ else
           equal_bump_failed=1
           continue
         fi
-        git merge-base --is-ancestor "$last_tag" "$remote_sha"
+        probe_git merge-base --is-ancestor "$last_tag" "$remote_sha"
         release_ancestor_rc=$?
         case "$release_ancestor_rc" in
           0) ;;
@@ -371,7 +407,7 @@ else
         # A remote head already contained in the local branch is shared history,
         # not an independent lane. For divergent heads, both manifests must have
         # changed from their merge base for equal versions to be hazardous.
-        git merge-base --is-ancestor "$remote_sha" HEAD
+        probe_git merge-base --is-ancestor "$remote_sha" HEAD
         contained_remote_rc=$?
         case "$contained_remote_rc" in
           0) continue ;;
@@ -382,16 +418,16 @@ else
             continue
             ;;
         esac
-        lane_base="$(git merge-base HEAD "$remote_sha")"
+        lane_base="$(probe_git merge-base HEAD "$remote_sha")"
         lane_base_rc=$?
         if [ "$lane_base_rc" -ne 0 ] || [ -z "$lane_base" ]; then
           fail "$name: cannot establish a merge base with origin/$remote_branch"
           equal_bump_failed=1
           continue
         fi
-        git diff --quiet "$lane_base..HEAD" -- "$manifest"
+        probe_git diff --quiet "$lane_base..HEAD" -- "$manifest"
         local_manifest_diff_rc=$?
-        git diff --quiet "$lane_base..$remote_sha" -- "$manifest"
+        probe_git diff --quiet "$lane_base..$remote_sha" -- "$manifest"
         remote_manifest_diff_rc=$?
         if [ "$local_manifest_diff_rc" -gt 1 ] || [ "$remote_manifest_diff_rc" -gt 1 ]; then
           fail "$name: cannot compare divergent manifests with origin/$remote_branch (local rc=$local_manifest_diff_rc, remote rc=$remote_manifest_diff_rc)"
@@ -402,7 +438,7 @@ else
           continue
         fi
 
-        remote_manifest="$(git show "$remote_sha:$manifest" 2>&1)"
+        remote_manifest="$(probe_git show "$remote_sha:$manifest" 2>&1)"
         remote_manifest_rc=$?
         if [ "$remote_manifest_rc" -ne 0 ]; then
           fail "$name: origin/$remote_branch changed $manifest but its manifest cannot be read"
@@ -425,6 +461,9 @@ else
       done <<< "$remote_heads"
     done <<< "$version_report"
     [ "$equal_bump_failed" -eq 0 ] && pass "$equal_bump_checked remote changed-plugin manifest(s) checked for equal bumps"
+    if ! cleanup_remote_object_quarantine; then
+      fail "cannot remove the temporary object quarantine"
+    fi
   fi
 fi
 }

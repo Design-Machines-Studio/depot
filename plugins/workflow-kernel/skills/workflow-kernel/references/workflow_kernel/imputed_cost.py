@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import math
 import re
+from datetime import date
 
 
 _PRICE_FIELDS = {
@@ -12,6 +13,16 @@ _PRICE_FIELDS = {
     "cache_read_usage_count": "cache_read_usd_per_m",
 }
 _SNAPSHOT_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}")
+
+
+def _valid_snapshot_date(value):
+    if type(value) is not str or _SNAPSHOT_DATE.fullmatch(value) is None:
+        return False
+    try:
+        date.fromisoformat(value)
+    except ValueError:
+        return False
+    return True
 
 
 def _validate_priced_models(models, snapshot, forbidden_slugs=()):
@@ -48,7 +59,7 @@ def validate_model_matrix(matrix: dict) -> None:
     snapshot = matrix.get("snapshot_date")
     models = matrix.get("models")
     if (
-        type(snapshot) is not str or _SNAPSHOT_DATE.fullmatch(snapshot) is None
+        not _valid_snapshot_date(snapshot)
         or type(models) is not list or not models
     ):
         raise ValueError("invalid model matrix")
@@ -56,8 +67,7 @@ def validate_model_matrix(matrix: dict) -> None:
     native = matrix.get("native_api_equivalent_cost")
     if (
         type(native) is not dict or native.get("schema_version") != 1
-        or type(native.get("snapshot_date")) is not str
-        or _SNAPSHOT_DATE.fullmatch(native["snapshot_date"]) is None
+        or not _valid_snapshot_date(native.get("snapshot_date"))
         or type(native.get("models")) is not list
         or type(native.get("aliases")) is not dict
         or type(native.get("input_bytes_per_token_estimate")) not in (int, float)
