@@ -49,6 +49,23 @@ pass() { printf "  OK    %s\n" "$1"; }
 fail() { printf "  FAIL  %s\n" "$1"; failures=1; }
 skip() { printf "  SKIP  %s\n" "$1"; }
 
+# Cache remote object probes by advertised SHA. Bash 3.2 has no associative
+# arrays, so the small ls-remote set is stored as newline-delimited SHA|rc rows.
+# A cached failure is returned to every affected plugin without repeating the
+# network operation, preserving per-plugin FAIL receipts.
+fetch_remote_sha_once() {
+  fetch_sha="$1"
+  cached_fetch_rc="$(printf '%s\n' "$remote_fetch_records" | awk -F'|' -v sha="$fetch_sha" '$1 == sha {print $2; exit}')"
+  if [ -n "$cached_fetch_rc" ]; then
+    remote_fetch_rc="$cached_fetch_rc"
+    return 0
+  fi
+
+  git fetch --no-tags --quiet --no-write-fetch-head origin "$fetch_sha"
+  remote_fetch_rc=$?
+  remote_fetch_records="${remote_fetch_records}${remote_fetch_records:+$'\n'}${fetch_sha}|${remote_fetch_rc}"
+}
+
 printf "Release Preflight\n"
 printf "=================\n\n"
 
@@ -198,6 +215,7 @@ done <<< "$version_report"
 # be inferred from a documented path. `plugin list --json` is the authoritative
 # installed-set view and avoids reconstructing a cache path from the snapshot.
 # --------------------------------------------------------------------------
+check_codex_cache_freshness() {
 printf "\nCodex cache freshness:\n"
 if ! command -v codex >/dev/null 2>&1; then
   skip "codex CLI not installed; Codex cache freshness not checked"
@@ -282,6 +300,9 @@ print(f"OK|{checked} installed Codex plugin(s) checked against {sys.argv[2]}")
     fi
   fi
 fi
+}
+
+check_codex_cache_freshness
 
 # --------------------------------------------------------------------------
 # 7. Cross-lane equal-bump guard
@@ -290,6 +311,7 @@ fi
 # conflict. Inspect only remote branches descended from the last plugin release
 # tag, and only their plugin manifest, so the network and object cost is bounded.
 # --------------------------------------------------------------------------
+check_cross_lane_bumps() {
 printf "\nCross-lane version bumps:\n"
 if [ "$SKIP_NET" -eq 1 ]; then
   skip "remote equal-bump probe skipped (--no-net)"
@@ -301,6 +323,7 @@ else
   if [ "$remote_heads_rc" -ne 0 ]; then
     fail "cannot list origin branches for equal-bump inspection (rc=$remote_heads_rc)"
   else
+    remote_fetch_records=""
     equal_bump_checked=0
     equal_bump_failed=0
     current_branch="$(git rev-parse --abbrev-ref HEAD)"
@@ -327,8 +350,8 @@ else
         [ -z "${remote_sha:-}" ] && continue
         remote_branch="${remote_ref#refs/heads/}"
 
-        git fetch --no-tags --quiet origin "$remote_sha"
-        fetch_rc=$?
+        fetch_remote_sha_once "$remote_sha"
+        fetch_rc="$remote_fetch_rc"
         if [ "$fetch_rc" -ne 0 ]; then
           fail "$name: cannot inspect origin/$remote_branch for an equal bump (fetch rc=$fetch_rc)"
           equal_bump_failed=1
@@ -404,6 +427,9 @@ else
     [ "$equal_bump_failed" -eq 0 ] && pass "$equal_bump_checked remote changed-plugin manifest(s) checked for equal bumps"
   fi
 fi
+}
+
+check_cross_lane_bumps
 
 # --------------------------------------------------------------------------
 # 8. Push auth
