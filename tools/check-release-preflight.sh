@@ -14,7 +14,9 @@
 #   3. Codex manifests are in sync   (generate-codex-manifests.py --check)
 #   4. Codex command skills are in sync (generate-codex-command-skills.py --check)
 #   5. Every plugin changed since its last tag has had its version bumped
-#   6. Push auth reachable (git ls-remote against origin)
+#   6. Installed Codex plugins match the canonical marketplace versions
+#   7. Remote branches do not carry equal versions for independently changed plugins
+#   8. Push auth reachable (git ls-remote against origin)
 #
 # READ-ONLY. Creates no tags, pushes nothing, writes nothing. Exit non-zero on
 # any failure -- a failing preflight means the release claim would be a lie.
@@ -189,7 +191,180 @@ done <<< "$version_report"
 [ "$unchanged" -gt 0 ] && pass "$unchanged plugin(s) already released and unchanged"
 
 # --------------------------------------------------------------------------
-# 6. Push auth
+# 6. Codex cache freshness
+#
+# Resolve the depot marketplace root through Codex itself. The root is managed
+# by Codex and has moved before, so neither the snapshot nor cache location may
+# be inferred from a documented path. `plugin list --json` is the authoritative
+# installed-set view and avoids reconstructing a cache path from the snapshot.
+# --------------------------------------------------------------------------
+printf "\nCodex cache freshness:\n"
+if ! command -v codex >/dev/null 2>&1; then
+  skip "codex CLI not installed; Codex cache freshness not checked"
+else
+  codex_marketplaces="$(codex plugin marketplace list)"
+  codex_marketplaces_rc=$?
+  codex_marketplace_root="$(printf '%s\n' "$codex_marketplaces" | awk '$1 == "depot" {$1=""; sub(/^[[:space:]]+/, ""); print; exit}')"
+
+  if [ "$codex_marketplaces_rc" -ne 0 ]; then
+    skip "codex plugin marketplace list failed (rc=$codex_marketplaces_rc); Codex cache freshness not checked"
+  elif [ -z "$codex_marketplace_root" ] || [ ! -d "$codex_marketplace_root" ]; then
+    skip "codex plugin marketplace list did not resolve a readable depot root; Codex cache freshness not checked"
+  else
+    codex_plugins="$(codex plugin list --marketplace depot --json)"
+    codex_plugins_rc=$?
+    if [ "$codex_plugins_rc" -ne 0 ]; then
+      skip "codex installed-plugin query failed (rc=$codex_plugins_rc); Codex cache freshness not checked"
+    else
+      codex_cache_report="$(printf '%s\n' "$codex_plugins" | python3 -c '
+import json, re, sys
+
+marketplace_path = sys.argv[1]
+name_re = re.compile(r"^[a-z][a-z0-9-]*$")
+try:
+    installed_doc = json.load(sys.stdin)
+    with open(marketplace_path) as fh:
+        canonical_doc = json.load(fh)
+except (OSError, ValueError) as exc:
+    print(f"SKIP|Codex cache data unreadable: {exc}")
+    raise SystemExit(0)
+
+installed = installed_doc.get("installed")
+plugins = canonical_doc.get("plugins")
+if not isinstance(installed, list) or not isinstance(plugins, list):
+    print("SKIP|Codex cache data has an unexpected JSON shape")
+    raise SystemExit(0)
+
+canonical = {
+    row.get("name"): row.get("version")
+    for row in plugins
+    if isinstance(row, dict)
+}
+checked = 0
+for row in installed:
+    if not isinstance(row, dict) or row.get("installed") is not True:
+        continue
+    name = row.get("name")
+    cached = row.get("version")
+    if not isinstance(name, str) or not name_re.match(name) or not isinstance(cached, str):
+        print("SKIP|Codex installed-plugin data contains an invalid name or version")
+        raise SystemExit(0)
+    expected = canonical.get(name)
+    if not isinstance(expected, str):
+        print(f"FAIL|{name}: Codex has {cached}, but the plugin is absent from canonical marketplace.json")
+    elif cached != expected:
+        print(f"FAIL|{name}: Codex cache={cached}, canonical marketplace={expected}; fix: run codex plugin marketplace upgrade interactively, then codex plugin add {name}@depot")
+    checked += 1
+print(f"OK|{checked} installed Codex plugin(s) checked against {sys.argv[2]}")
+' "$REPO_ROOT/.claude-plugin/marketplace.json" "$codex_marketplace_root")"
+
+      codex_cache_failed=0
+      codex_cache_ok=""
+      while IFS='|' read -r status msg; do
+        [ -z "${status:-}" ] && continue
+        case "$status" in
+          OK)   codex_cache_ok="$msg" ;;
+          FAIL) fail "$msg"; codex_cache_failed=1 ;;
+          SKIP) skip "$msg" ;;
+        esac
+      done <<< "$codex_cache_report"
+      [ "$codex_cache_failed" -eq 0 ] && [ -n "$codex_cache_ok" ] && pass "$codex_cache_ok"
+    fi
+  fi
+fi
+
+# --------------------------------------------------------------------------
+# 7. Cross-lane equal-bump guard
+#
+# A version that exceeds one parent but equals another can auto-merge without a
+# conflict. Inspect only remote branches descended from the last plugin release
+# tag, and only their plugin manifest, so the network and object cost is bounded.
+# --------------------------------------------------------------------------
+printf "\nCross-lane version bumps:\n"
+if [ "$SKIP_NET" -eq 1 ]; then
+  skip "remote equal-bump probe skipped (--no-net)"
+elif ! git remote get-url origin >/dev/null 2>&1; then
+  fail "no 'origin' remote configured; cannot inspect cross-lane version bumps"
+else
+  remote_heads="$(git ls-remote --heads origin 2>&1)"
+  remote_heads_rc=$?
+  if [ "$remote_heads_rc" -ne 0 ]; then
+    fail "cannot list origin branches for equal-bump inspection (rc=$remote_heads_rc)"
+  else
+    equal_bump_checked=0
+    equal_bump_failed=0
+    current_branch="$(git rev-parse --abbrev-ref HEAD)"
+    while IFS='|' read -r status msg; do
+      [ "${status:-}" != "OK" ] && continue
+      name="${msg% *}"
+      ver="${msg##* }"
+      manifest="plugins/$name/.claude-plugin/plugin.json"
+      last_tag="$(git tag --merged HEAD --sort=-version:refname -l "${name}-v*" | head -1)"
+      [ -z "$last_tag" ] && continue
+      if git diff --quiet "$last_tag..HEAD" -- "plugins/$name"; then
+        continue
+      fi
+
+      while IFS=$'\t' read -r remote_sha remote_ref; do
+        [ -z "${remote_sha:-}" ] && continue
+        remote_branch="${remote_ref#refs/heads/}"
+        [ "$remote_branch" = "$current_branch" ] && continue
+
+        git fetch --no-tags --quiet origin "$remote_sha"
+        fetch_rc=$?
+        if [ "$fetch_rc" -ne 0 ]; then
+          fail "$name: cannot inspect origin/$remote_branch for an equal bump (fetch rc=$fetch_rc)"
+          equal_bump_failed=1
+          continue
+        fi
+        if ! git merge-base --is-ancestor "$last_tag" "$remote_sha"; then
+          continue
+        fi
+        # A remote head already contained in the local branch is shared history,
+        # not an independent lane. For divergent heads, both manifests must have
+        # changed from their merge base for equal versions to be hazardous.
+        if git merge-base --is-ancestor "$remote_sha" HEAD; then
+          continue
+        fi
+        lane_base="$(git merge-base HEAD "$remote_sha")"
+        lane_base_rc=$?
+        if [ "$lane_base_rc" -ne 0 ] || [ -z "$lane_base" ]; then
+          fail "$name: cannot establish a merge base with origin/$remote_branch"
+          equal_bump_failed=1
+          continue
+        fi
+        if git diff --quiet "$lane_base..HEAD" -- "$manifest" || git diff --quiet "$lane_base..$remote_sha" -- "$manifest"; then
+          continue
+        fi
+
+        remote_manifest="$(git show "$remote_sha:$manifest" 2>&1)"
+        remote_manifest_rc=$?
+        if [ "$remote_manifest_rc" -ne 0 ]; then
+          fail "$name: origin/$remote_branch changed $manifest but its manifest cannot be read"
+          equal_bump_failed=1
+          continue
+        fi
+        remote_ver="$(printf '%s\n' "$remote_manifest" | python3 -c 'import json,sys; value=json.load(sys.stdin).get("version"); print(value if isinstance(value, str) else "")' 2>&1)"
+        remote_ver_rc=$?
+        if [ "$remote_ver_rc" -ne 0 ] || [ -z "$remote_ver" ]; then
+          fail "$name: origin/$remote_branch has an unreadable plugin version"
+          equal_bump_failed=1
+          continue
+        fi
+
+        equal_bump_checked=$((equal_bump_checked + 1))
+        if [ "$remote_ver" = "$ver" ]; then
+          fail "$name: local $current_branch and origin/$remote_branch both declare $ver after changing the plugin; keep both changes and re-bump one side above the other before merge"
+          equal_bump_failed=1
+        fi
+      done <<< "$remote_heads"
+    done <<< "$version_report"
+    [ "$equal_bump_failed" -eq 0 ] && pass "$equal_bump_checked remote changed-plugin manifest(s) checked for equal bumps"
+  fi
+fi
+
+# --------------------------------------------------------------------------
+# 8. Push auth
 # --------------------------------------------------------------------------
 printf "\nPush auth:\n"
 if [ "$SKIP_NET" -eq 1 ]; then
