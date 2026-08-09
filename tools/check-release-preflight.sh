@@ -229,6 +229,10 @@ except (OSError, ValueError) as exc:
     print(f"SKIP|Codex cache data unreadable: {exc}")
     raise SystemExit(0)
 
+if not isinstance(installed_doc, dict) or not isinstance(canonical_doc, dict):
+    print("SKIP|Codex cache data has an unexpected top-level JSON shape")
+    raise SystemExit(0)
+
 installed = installed_doc.get("installed")
 plugins = canonical_doc.get("plugins")
 if not isinstance(installed, list) or not isinstance(plugins, list):
@@ -257,17 +261,23 @@ for row in installed:
     checked += 1
 print(f"OK|{checked} installed Codex plugin(s) checked against {sys.argv[2]}")
 ' "$REPO_ROOT/.claude-plugin/marketplace.json" "$codex_marketplace_root")"
+      codex_cache_report_rc=$?
 
       codex_cache_failed=0
       codex_cache_ok=""
-      while IFS='|' read -r status msg; do
-        [ -z "${status:-}" ] && continue
-        case "$status" in
-          OK)   codex_cache_ok="$msg" ;;
-          FAIL) fail "$msg"; codex_cache_failed=1 ;;
-          SKIP) skip "$msg" ;;
-        esac
-      done <<< "$codex_cache_report"
+      if [ "$codex_cache_report_rc" -ne 0 ]; then
+        fail "Codex cache checker exited non-zero (rc=$codex_cache_report_rc) -- cannot certify installed plugin versions"
+        codex_cache_failed=1
+      else
+        while IFS='|' read -r status msg; do
+          [ -z "${status:-}" ] && continue
+          case "$status" in
+            OK)   codex_cache_ok="$msg" ;;
+            FAIL) fail "$msg"; codex_cache_failed=1 ;;
+            SKIP) skip "$msg" ;;
+          esac
+        done <<< "$codex_cache_report"
+      fi
       [ "$codex_cache_failed" -eq 0 ] && [ -n "$codex_cache_ok" ] && pass "$codex_cache_ok"
     fi
   fi
@@ -301,14 +311,21 @@ else
       manifest="plugins/$name/.claude-plugin/plugin.json"
       last_tag="$(git tag --merged HEAD --sort=-version:refname -l "${name}-v*" | head -1)"
       [ -z "$last_tag" ] && continue
-      if git diff --quiet "$last_tag..HEAD" -- "plugins/$name"; then
-        continue
-      fi
+      git diff --quiet "$last_tag..HEAD" -- "plugins/$name"
+      local_plugin_diff_rc=$?
+      case "$local_plugin_diff_rc" in
+        0) continue ;;
+        1) ;;
+        *)
+          fail "$name: cannot compare local plugin files with $last_tag (git diff rc=$local_plugin_diff_rc)"
+          equal_bump_failed=1
+          continue
+          ;;
+      esac
 
       while IFS=$'\t' read -r remote_sha remote_ref; do
         [ -z "${remote_sha:-}" ] && continue
         remote_branch="${remote_ref#refs/heads/}"
-        [ "$remote_branch" = "$current_branch" ] && continue
 
         git fetch --no-tags --quiet origin "$remote_sha"
         fetch_rc=$?
@@ -317,15 +334,31 @@ else
           equal_bump_failed=1
           continue
         fi
-        if ! git merge-base --is-ancestor "$last_tag" "$remote_sha"; then
-          continue
-        fi
+        git merge-base --is-ancestor "$last_tag" "$remote_sha"
+        release_ancestor_rc=$?
+        case "$release_ancestor_rc" in
+          0) ;;
+          1) continue ;;
+          *)
+            fail "$name: cannot classify origin/$remote_branch against $last_tag (merge-base rc=$release_ancestor_rc)"
+            equal_bump_failed=1
+            continue
+            ;;
+        esac
         # A remote head already contained in the local branch is shared history,
         # not an independent lane. For divergent heads, both manifests must have
         # changed from their merge base for equal versions to be hazardous.
-        if git merge-base --is-ancestor "$remote_sha" HEAD; then
-          continue
-        fi
+        git merge-base --is-ancestor "$remote_sha" HEAD
+        contained_remote_rc=$?
+        case "$contained_remote_rc" in
+          0) continue ;;
+          1) ;;
+          *)
+            fail "$name: cannot classify whether origin/$remote_branch is contained in HEAD (merge-base rc=$contained_remote_rc)"
+            equal_bump_failed=1
+            continue
+            ;;
+        esac
         lane_base="$(git merge-base HEAD "$remote_sha")"
         lane_base_rc=$?
         if [ "$lane_base_rc" -ne 0 ] || [ -z "$lane_base" ]; then
@@ -333,7 +366,16 @@ else
           equal_bump_failed=1
           continue
         fi
-        if git diff --quiet "$lane_base..HEAD" -- "$manifest" || git diff --quiet "$lane_base..$remote_sha" -- "$manifest"; then
+        git diff --quiet "$lane_base..HEAD" -- "$manifest"
+        local_manifest_diff_rc=$?
+        git diff --quiet "$lane_base..$remote_sha" -- "$manifest"
+        remote_manifest_diff_rc=$?
+        if [ "$local_manifest_diff_rc" -gt 1 ] || [ "$remote_manifest_diff_rc" -gt 1 ]; then
+          fail "$name: cannot compare divergent manifests with origin/$remote_branch (local rc=$local_manifest_diff_rc, remote rc=$remote_manifest_diff_rc)"
+          equal_bump_failed=1
+          continue
+        fi
+        if [ "$local_manifest_diff_rc" -eq 0 ] || [ "$remote_manifest_diff_rc" -eq 0 ]; then
           continue
         fi
 
