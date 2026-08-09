@@ -2137,7 +2137,7 @@ def _load_cost_imputation_matrix(selector):
         if selector != _TRUSTED_MATRIX_SELECTOR:
             raise ValueError("untrusted matrix selector")
         bundle = resolve_plugin_bundle(
-            "openrouter", [_MODEL_MATRIX_ASSET], minimum_version="1.8.0",
+            "openrouter", [_MODEL_MATRIX_ASSET], minimum_version="1.11.0",
         )
         matrix = _load_json(bundle.root / _MODEL_MATRIX_ASSET)
         from .imputed_cost import validate_model_matrix

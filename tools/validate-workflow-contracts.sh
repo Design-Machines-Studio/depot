@@ -485,6 +485,7 @@ kernel_doc="$REPO_ROOT/docs/workflow-kernel.md"
 require_text "$contract_canonical" "CANONICAL-PARAGRAPH-START" "canonical contract exposes a generated paragraph block"
 require_text "$contract_canonical" "CANONICAL-PARAGRAPH-END" "canonical contract closes the generated paragraph block"
 require_text "$contract_canonical" "CANONICAL-INVOCATION-FLAG: --matrix trusted-openrouter-bundle" "canonical contract owns the trusted matrix selector"
+require_text "$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/cli.py" 'minimum_version="1.11.0"' "cost imputation requires the first OpenRouter native-cost contract release"
 
 if [ -x "$contract_sync" ]; then
   if "$contract_sync" --check >/dev/null 2>&1; then

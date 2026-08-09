@@ -1,7 +1,6 @@
 """Tests for subscription-rail API-equivalent cost imputation."""
 
 import contextlib
-from datetime import datetime, timezone
 import io
 import json
 from pathlib import Path
@@ -20,7 +19,7 @@ from workflow_kernel.imputed_cost import (
     validate_model_matrix,
 )
 from workflow_kernel.pipeline_adapter import translate_pipeline_receipts
-from workflow_kernel.runtime_resolution import PluginBundle
+from workflow_kernel.runtime_resolution import PluginBundle, resolve_plugin_bundle
 from workflow_kernel.schema import WorkflowEvent
 
 
@@ -34,6 +33,13 @@ MATRIX = {
         "cache_read_usd_per_m": 0.5,
         "snapshot_date": "2026-08-03",
     }],
+    "native_api_equivalent_cost": {
+        "schema_version": 1,
+        "snapshot_date": "2026-08-03",
+        "input_bytes_per_token_estimate": 4,
+        "aliases": {},
+        "models": [],
+    },
 }
 REAL_MATRIX = json.loads((
     Path(__file__).parents[1] / "plugins/openrouter/skills/openrouter-delegate"
@@ -68,7 +74,7 @@ def _write_bundle(root: Path, matrix=REAL_MATRIX):
     asset = root / "skills/openrouter-delegate/references/model-matrix.json"
     asset.parent.mkdir(parents=True)
     asset.write_text(json.dumps(matrix), encoding="utf-8")
-    return PluginBundle(root, "codex", "1.10.0", "highest_compatible_semver")
+    return PluginBundle(root, "codex", "1.11.0", "highest_compatible_semver")
 
 
 def _row(**overrides):
@@ -167,20 +173,49 @@ class ImputedCostTests(unittest.TestCase):
             lane["measurement_source"],
         )
 
-    def test_unsupported_native_alias_and_byte_only_row_stay_null(self):
-        for receipt in (
-            _native_receipt(model="gpt-5.6-sol"),
-            _native_receipt(byte_only=True),
-        ):
-            with self.subTest(model=receipt["model"], byte_only="input_bytes" in receipt):
+    def test_production_baseline_sol_byte_row_is_priceable(self):
+        events = translate_pipeline_receipts([
+            _native_receipt(model="gpt-5.6-sol", byte_only=True),
+        ])
+        lane = build_run_cost_summary(events, matrix=REAL_MATRIX)["lanes"][0]
+        self.assertEqual(lane["cost_usd"], 0.00512)
+        self.assertIsNone(lane["input_usage_count"])
+        self.assertIsNone(lane["output_usage_count"])
+        self.assertIsNone(lane["cache_read_usage_count"])
+        self.assertTrue(lane["usage_estimated"])
+        self.assertIn(
+            "+model_alias(gpt-5.6-sol->openai/gpt-5.6-sol)",
+            lane["measurement_source"],
+        )
+        self.assertIn(
+            "+estimated_input_tokens(input_bytes/4_bytes_per_token)",
+            lane["measurement_source"],
+        )
+
+    def test_unsupported_or_unmeasured_native_rows_stay_null(self):
+        generic = _native_receipt(model="gpt-5.6", byte_only=True)
+        opus = _native_receipt(model="opus", byte_only=True)
+        opus.update(provider="claude", implemented_by="claude", host="claude")
+        for receipt in (generic, opus):
+            with self.subTest(model=receipt["model"], measured="input_bytes" in receipt):
                 events = translate_pipeline_receipts([receipt])
                 lane = build_run_cost_summary(events, matrix=REAL_MATRIX)["lanes"][0]
                 self.assertIsNone(lane["cost_usd"])
+        unmeasured = {
+            "model": "gpt-5.6-sol", "implemented_by": "codex",
+            "provider": "codex", "cost_usd": None,
+            "measurement_source": "attempt_unmeasured", "usage_estimated": False,
+        }
+        self.assertIs(impute_attempt_cost(unmeasured, REAL_MATRIX), unmeasured)
 
     def test_claude_alias_prices_only_when_matrix_explicitly_maps_it(self):
         matrix = json.loads(json.dumps(MATRIX))
-        matrix["models"][0]["slug"] = "vendor/opus-api-equivalent"
-        matrix["native_api_equivalent_aliases"] = {
+        native = matrix["native_api_equivalent_cost"]
+        native["models"] = [{
+            **matrix["models"][0],
+            "slug": "vendor/opus-api-equivalent",
+        }]
+        native["aliases"] = {
             "opus": "vendor/opus-api-equivalent",
         }
         row = _row(
@@ -204,20 +239,25 @@ class ImputedCostTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_model_matrix(drifted)
 
-    def test_no_matrix_default_is_byte_identical_to_explicit_none(self):
-        events = translate_pipeline_receipts([_native_receipt()])
-
-        class FixedDatetime(datetime):
-            @classmethod
-            def now(cls, tz=None):
-                return cls(2026, 8, 9, tzinfo=timezone.utc)
-
-        with mock.patch("workflow_kernel.cost_summary.datetime", FixedDatetime):
-            implicit = build_run_cost_summary(events)
-            explicit = build_run_cost_summary(events, matrix=None)
-        encode = lambda value: json.dumps(value, sort_keys=True, separators=(",", ":"))
-        self.assertEqual(encode(implicit), encode(explicit))
-        self.assertIsNone(implicit["lanes"][0]["cost_usd"])
+    def test_no_matrix_cli_matches_frozen_pre_imputation_oracle(self):
+        oracle = json.loads((
+            Path(__file__).parent / "fixtures/run-cost-summary-no-matrix-v1.json"
+        ).read_text(encoding="utf-8"))
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            events = root / "events.json"
+            events.write_text(
+                json.dumps([_native_receipt(model="gpt-5.6-sol", byte_only=True)]),
+                encoding="utf-8",
+            )
+            output = root / "summary.json"
+            self.assertEqual(cli.main([
+                "run-cost-summary", "--events", str(events),
+                "--output", str(output),
+            ]), 0)
+            emitted = json.loads(output.read_text(encoding="utf-8"))
+            del emitted["invocation"]["emitted_at"]
+        self.assertEqual(emitted, oracle)
 
     def test_both_cli_commands_use_trusted_matrix_and_recompute_digest(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -312,6 +352,35 @@ class ImputedCostTests(unittest.TestCase):
             self.assertEqual(stderr.getvalue().count("skipping imputation"), 1)
             self.assertIsNone(
                 json.loads(output.read_text(encoding="utf-8"))["lanes"][0]["cost_usd"],
+            )
+
+    def test_unmocked_resolver_selects_first_alias_contract_release(self):
+        with tempfile.TemporaryDirectory() as directory:
+            home = Path(directory)
+            for version, matrix in (("1.10.0", MATRIX), ("1.11.0", REAL_MATRIX)):
+                root = (
+                    home / ".codex/plugins/cache/depot/openrouter" / version
+                )
+                bundle = _write_bundle(root, matrix)
+                marker = bundle.root / ".codex-plugin/plugin.json"
+                marker.parent.mkdir(parents=True)
+                marker.write_text(json.dumps({
+                    "name": "openrouter", "version": version,
+                }), encoding="utf-8")
+            selected = resolve_plugin_bundle(
+                "openrouter",
+                ["skills/openrouter-delegate/references/model-matrix.json"],
+                home=home, minimum_version="1.11.0",
+            )
+            self.assertEqual(selected.version, "1.11.0")
+            selected_matrix = json.loads((
+                selected.root
+                / "skills/openrouter-delegate/references/model-matrix.json"
+            ).read_text(encoding="utf-8"))
+            validate_model_matrix(selected_matrix)
+            self.assertIn(
+                "gpt-5.6-sol",
+                selected_matrix["native_api_equivalent_cost"]["aliases"],
             )
 
     def test_cli_keeps_present_billed_cost_authoritative(self):
