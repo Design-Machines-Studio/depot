@@ -49,5 +49,8 @@ despite the new CLI option.
 
 ## Resolution
 
-The canonical generator now owns `--matrix trusted-openrouter-bundle`, injects
-it into all eleven executable invocations, and rejects drift in check mode.
+The canonical generator initially owned `--matrix trusted-openrouter-bundle`,
+injected it into all eleven executable invocations, and rejected drift in check
+mode. That selector was superseded by todo 013: callers now resolve a coherent
+installed-plugin asset into `MODEL_MATRIX_ASSET` and pass
+`--matrix "$MODEL_MATRIX_ASSET"`; the kernel remains provider-neutral.

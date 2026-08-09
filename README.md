@@ -232,9 +232,9 @@ Unified external-model provider for quality-first agentic work and lower-cost me
 - **openrouter-agent-runner** (agent) -- Runs dm-review mechanical agents through OpenRouter model slugs
 - `/openrouter` -- Delegate a task to any configured OpenRouter model
 
-OpenAI model slugs may run through OpenRouter and retain OpenRouter provider
-provenance; bare native OpenAI identities run through Codex. Anthropic-origin
-slugs remain prohibited through OpenRouter and use the native Claude CLI.
+OpenAI model slugs may run through OpenRouter; bare native OpenAI identities run
+through Codex. Anthropic models never route through OpenRouter; use the native
+Claude CLI.
 
 ### airlift
 

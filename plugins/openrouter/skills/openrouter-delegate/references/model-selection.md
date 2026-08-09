@@ -49,7 +49,8 @@ OpenRouter routing models and are deliberately absent from the routing matrix; `
 slugs are rejected by `openrouter-wrapper.sh` before network contact and must
 never be added to it. The matrix's `native_api_equivalent_cost` object is a
 strictly observational exception: it maps a bare native identity to an explicit
-API-equivalent price for cost imputation. Its deterministic input estimate uses
+API-equivalent slug whose entry carries the price used for cost imputation. Its
+deterministic input estimate uses
 four UTF-8 input bytes per token, never populates token counter fields, and
 names that estimate in row provenance. It does not add the native identity to
 OpenRouter routing or assert billed spend. An alias absent from that object
@@ -85,9 +86,9 @@ machine-readable ownership and preservation paths live under
 The `native_api_equivalent_cost` object is refreshed independently because it
 supports observation, not routing. Its machine-readable ownership and
 preservation paths live under `refresh_protocol.native_api_equivalent_cost`.
-Update its `snapshot_date`, the snapshot on each changed entry under its
-`models`, aliases, prices, bytes-per-token estimate, and cited sources only when
-the corresponding evidence was actually refreshed. An alias that targets a
+Only when the corresponding evidence was actually refreshed, update its
+`snapshot_date`, the snapshot on each changed entry under its `models`, aliases,
+prices, bytes-per-token estimate, and cited sources. An alias that targets a
 top-level routing model uses that routing model's own price and snapshot; do not
 copy or restamp it into the native model list.
 

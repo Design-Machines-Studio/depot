@@ -7,7 +7,7 @@ depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
 Version 0.13.0 adds optional, visibly imputed API-equivalent attempt costs from
-a trusted OpenRouter model matrix while preserving the observation-only summary
+a caller-supplied trusted model matrix while preserving the observation-only summary
 contract. Version 0.8.0 added the `run-cost-summary` command — a canonical,
 deterministic, schema-bound per-run cost artifact emitted alongside authoritative
 receipts (see [Run Cost Summary](#run-cost-summary) below).
@@ -27,8 +27,9 @@ Depot checkout or a compatible same-major entry under the Claude cache, then
 the Codex cache, ordered by parsed semver (never mtime). Existing inspection,
 quality-pulse, behavioral-contract, validation-retry, and review-contribution
 consumers require `>=0.5.0`; repository-verification consumers require
-`>=0.6.1`; provider-dispatch consumers require `>=0.7.0`; matrix-backed
-run-cost-summary consumers require `>=0.13.0`. The
+`>=0.6.1`; provider-dispatch consumers require `>=0.7.0`; ordinary
+run-cost-summary consumers require `>=0.8.0`; matrix-backed run-cost-summary
+consumers require `>=0.13.0`. The
 launcher verifies Python 3.12+, sets the module path, and execs the CLI. Never
 discover the runtime from the downstream project, `PATH`, or a symlink escape.
 The full consumer-facing contract is `references/runtime-resolution.md`; in

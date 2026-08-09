@@ -155,6 +155,22 @@ emits exactly one
 line on stderr, emits the ordinary non-imputed summary, and preserves the
 observation-only success contract.
 
+Resolve the caller-selected asset from one coherent installed plugin bundle:
+
+```sh
+MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset \
+  --plugin openrouter \
+  --asset skills/openrouter-delegate/references/model-matrix.json \
+  --minimum-version 1.11.0)
+```
+
+`resolve-plugin-asset` uses the bundle-selection and containment contract in
+`runtime-resolution.md` and prints exactly one canonical absolute asset path.
+It exits nonzero with `plugin_bundle_unavailable` when no compatible complete
+bundle exists. Callers may then make that absence explicit and pass an empty
+selector to preserve the observation-only, no-imputation behavior; a non-empty
+selector that fails trust or matrix validation retains the diagnostic above.
+
 Existing billed costs always win. A missing attempt cost is priceable only
 when the matrix contains its exact model slug or explicitly maps a supported
 native Codex/Claude identity to an API-equivalent slug. Token counters retain
