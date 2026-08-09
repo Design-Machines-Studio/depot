@@ -216,6 +216,6 @@ run, when a run misbehaves, or when writing a postmortem. Detailed root cause an
 in `docs/post-mortems/`.
 
 <!-- airlift:start -->
-An airlift handoff is available at .airlift/HANDOFF.md (checkpoint 5, 2026-07-27T01:58:26Z).
+An airlift handoff is available at .airlift/HANDOFF.md (checkpoint 13, 2026-08-07T16:10:17Z).
 Read it before continuing.
 <!-- airlift:end -->
