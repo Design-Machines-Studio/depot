@@ -1483,6 +1483,26 @@ class RepositoryVerificationTests(unittest.TestCase):
         )
         self.assertLessEqual(focused["stdout_bytes"], 65536)
 
+    def test_trusted_command_can_skip_recycled_post_reap_process_group(self):
+        real_killpg = os.killpg
+
+        def recycled_group(group_id, sent_signal):
+            if sent_signal == 0:
+                return None
+            return real_killpg(group_id, sent_signal)
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "workflow_kernel.verification_execution.os.killpg",
+            side_effect=recycled_group,
+        ):
+            repository, profile = self.repository(directory)
+            plan = build_plan(
+                profile, repository, ".dm/verification.json",
+                [], "merge_candidate", "high",
+            )
+
+        self.assertTrue(plan["lanes"])
+
     def test_output_limit_falls_back_when_group_signal_is_denied(self):
         real_killpg = os.killpg
 

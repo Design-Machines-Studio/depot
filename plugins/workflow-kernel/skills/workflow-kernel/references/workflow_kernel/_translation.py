@@ -67,6 +67,9 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "input_usage_count", "output_usage_count", "cache_read_usage_count",
     "cache_write_usage_count", "reasoning_usage_count", "input_bytes",
     "failure_kind", "identity_provenance", "source_receipt_digest",
+    "source_invocation_id", "source_request_digest", "implementer_family",
+    "reviewer_family",
+    "resolution_reason",
     "source_finding_id", "canonical_finding_id", "finding_disposition",
     "agreement", "decision_reason_code", "source_severity", "evidence_ref",
     "action",
@@ -624,6 +627,71 @@ def _nonnegative_number(value: object, field: str, *, integer: bool) -> object:
     return value
 
 
+_MODEL_FAMILY = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
+_INDEPENDENT_REVIEW_LANES = frozenset({
+    "security-auditor-codex-signoff", "second-perspective",
+})
+_NATIVE_MODEL_FAMILIES = (
+    ("openai", ("gpt-", "o1", "o3", "o4", "codex")),
+    ("anthropic", ("claude-", "opus", "sonnet", "haiku")),
+    ("google", ("gemini-",)),
+    ("moonshotai", ("kimi-",)),
+    ("z-ai", ("glm-",)),
+)
+
+
+def model_family_members(value: object, field: str) -> frozenset[str]:
+    """Validate normalized family provenance and return its atomic members."""
+    text = required_text(value, field)
+    if _MODEL_FAMILY.fullmatch(text):
+        return frozenset({text})
+    if not text.startswith("mixed(") or not text.endswith(")"):
+        raise ValueError("invalid " + field.replace("_", " "))
+    members = text[6:-1].split(",")
+    if (
+        len(members) < 2
+        or members != sorted(set(members))
+        or any(_MODEL_FAMILY.fullmatch(member) is None for member in members)
+    ):
+        raise ValueError("invalid " + field.replace("_", " "))
+    return frozenset(members)
+
+
+def reviewer_family_from_model(value: object) -> str:
+    """Derive one closed reviewer family from recorded model provenance."""
+    model = required_text(value, "model").lower()
+    if "/" in model:
+        if model.count("/") != 1:
+            raise ValueError("reviewer model has no recognized family")
+        family, model_name = model.split("/", 1)
+        if (
+            _MODEL_FAMILY.fullmatch(family) is None
+            or not model_name
+        ):
+            raise ValueError("reviewer model has no recognized family")
+        return family
+    for family, prefixes in _NATIVE_MODEL_FAMILIES:
+        if model.startswith(prefixes):
+            return family
+    raise ValueError("reviewer model has no recognized family")
+
+
+def validate_family_independence(receipt: Mapping[str, object]) -> None:
+    implementers = model_family_members(
+        receipt.get("implementer_family"), "implementer_family",
+    )
+    reviewers = model_family_members(
+        receipt.get("reviewer_family"), "reviewer_family",
+    )
+    required_text(receipt.get("resolution_reason"), "resolution reason")
+    if receipt.get("lane") in _INDEPENDENT_REVIEW_LANES:
+        derived_reviewer = reviewer_family_from_model(receipt.get("model"))
+        if reviewers != frozenset({derived_reviewer}):
+            raise ValueError("reviewer family does not match model")
+        if implementers & reviewers:
+            raise ValueError("independent review family overlap")
+
+
 def _validate_observation_receipt(receipt: dict) -> dict:
     """Validate optional telemetry without assigning it workflow authority."""
     receipt.pop("human_intervention", None)
@@ -786,6 +854,13 @@ def _validate_observation_receipt(receipt: dict) -> dict:
                 or not receipt["measurement_source"].startswith("openrouter_")
             ):
                 raise ValueError("invalid OpenRouter source receipt digest")
+        for field in ("source_invocation_id", "source_request_digest"):
+            if field in receipt and (
+                type(receipt[field]) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", receipt[field]) is None
+                or not receipt["measurement_source"].startswith("openrouter_")
+            ):
+                raise ValueError("invalid OpenRouter " + field.replace("_", " "))
         if receipt["usage_scope"] == "attempt":
             if (
                 "attempt" not in receipt or not receipt.get("node_id")
@@ -811,6 +886,7 @@ def _validate_observation_receipt(receipt: dict) -> dict:
             "finding_root_cause", "source_severity",
         ):
             required_text(receipt.get(field), field.replace("_", " "))
+        validate_family_independence(receipt)
         canonical_id, normalized_identity = canonical_finding_identity(
             receipt["finding_path"], receipt["finding_anchor"],
             receipt["finding_category"], receipt["finding_root_cause"],

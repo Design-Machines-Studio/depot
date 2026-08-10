@@ -159,9 +159,9 @@ codex_app_server_output() {
 }
 
 codex_json() {
-  local out="" rc=0 observations='[]'
+  local out="" observations='[]'
   if out="$(codex_app_server_output)"; then
-    if [ "$rc" -eq 0 ] && [ -n "$out" ]; then
+    if [ -n "$out" ]; then
       observations="$(printf '%s\n' "$out" | jq -sc '
         (map(select(.id == 7 and .result.rateLimits != null)) | last
           | .result.rateLimits // {}) as $limits
@@ -175,8 +175,6 @@ codex_json() {
              remaining_pct:([0, (100 - .usedPercent), 100] | sort | .[1])})
       ' 2>/dev/null)" || observations='[]'
     fi
-  else
-    rc=$?
   fi
   [ -n "$observations" ] || observations='[]'
   aggregate_windows '["five_hour","weekly"]' "$observations"

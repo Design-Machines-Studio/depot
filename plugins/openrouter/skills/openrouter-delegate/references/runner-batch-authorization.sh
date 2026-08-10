@@ -43,6 +43,44 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
+require_private_manifest_parent() {
+  python3 - "$MANIFEST" <<'PY'
+import os
+import stat
+import sys
+from pathlib import Path
+
+manifest = Path(sys.argv[1])
+if not manifest.is_absolute():
+    raise SystemExit(2)
+parent = manifest.parent
+current = Path(manifest.anchor)
+for part in parent.parts[1:]:
+    current /= part
+    if current.is_symlink():
+        raise SystemExit(2)
+try:
+    metadata = parent.lstat()
+except OSError:
+    raise SystemExit(2)
+if (
+    not stat.S_ISDIR(metadata.st_mode)
+    or stat.S_IMODE(metadata.st_mode) != 0o700
+    or metadata.st_uid != os.getuid()
+):
+    raise SystemExit(2)
+PY
+}
+
+REQUEST_FILE=""
+BATCH_SNAPSHOT=""
+cleanup() {
+  [ -z "$REQUEST_FILE" ] || rm -f "$REQUEST_FILE"
+  [ -z "$BATCH_SNAPSHOT" ] || rm -f "$BATCH_SNAPSHOT"
+}
+trap cleanup EXIT
+trap 'exit 1' HUP INT TERM
+
 [ -f "$WRAPPER" ] && [ -x "$AUTHORIZATION_HELPER" ] &&
   [ -r "$SYSTEM_FILE" ] && [ -r "$USER_FILE" ] &&
   [ -n "$MODEL" ] && [[ "$TIMEOUT" =~ ^[1-9][0-9]*$ ]] &&
@@ -51,7 +89,12 @@ done
   exit 2
 }
 case "$MODE" in
-  prepare) ;;
+  prepare)
+    require_private_manifest_parent || {
+      echo "runner-batch-authorization: manifest parent must be creator-owned mode 0700" >&2
+      exit 2
+    }
+    ;;
   verify)
     [ -r "$BATCH_FILE" ] && [[ "$BATCH_DIGEST" =~ ^[0-9a-f]{64}$ ]] &&
       [ -n "$RUN_ID" ] || {
@@ -66,13 +109,6 @@ REQUEST_FILE=$(mktemp) || {
   echo "runner-batch-authorization: could not allocate request envelope" >&2
   exit 2
 }
-BATCH_SNAPSHOT=""
-cleanup() {
-  rm -f "$REQUEST_FILE"
-  [ -z "$BATCH_SNAPSHOT" ] || rm -f "$BATCH_SNAPSHOT"
-}
-trap cleanup EXIT
-trap 'exit 1' HUP INT TERM
 
 if ! env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
     OPENROUTER_TARGET_AGENT_NAME="$TARGET_AGENT_NAME" \

@@ -39,6 +39,17 @@
 #   OPENROUTER_AUTHORIZATION_MODE
 #                       exact-digest|trusted-boundary|interim-operator-batch|
 #                       unspecified for receipts
+#   OPENROUTER_APPROVED_REQUEST_ENVELOPE_SHA256
+#                       optional exact request-envelope digest; required by the
+#                       dm-review exact-digest runner and rechecked immediately
+#                       before provider contact
+#   OPENROUTER_AUTHORIZATION_RUN_ID
+#                       optional authorization-run identity for non-batch modes;
+#                       automated runners supply it, while direct interactive
+#                       receipts represent its absence as null
+#   OPENROUTER_LANE_ID  optional authorization-lane identity; automated runners
+#                       supply it, while direct receipts fall back to the target
+#                       agent name when available
 #   OPENROUTER_BATCH_AUTHORIZATION_FILE
 #                       required when the mode is interim-operator-batch: the
 #                       run-scoped batch authorization file written by
@@ -167,7 +178,10 @@ CONNECT_TIMEOUT="${OPENROUTER_CONNECT_TIMEOUT:-30}"
 FIRST_BYTE_TIMEOUT="${OPENROUTER_FIRST_BYTE_TIMEOUT:-600}"
 IDLE_TIMEOUT="${OPENROUTER_IDLE_TIMEOUT:-600}"
 AUTHORIZATION_MODE="${OPENROUTER_AUTHORIZATION_MODE:-unspecified}"
+APPROVED_REQUEST_ENVELOPE_SHA256="${OPENROUTER_APPROVED_REQUEST_ENVELOPE_SHA256:-}"
+CURRENT_RUN_ID="${OPENROUTER_AUTHORIZATION_RUN_ID:-}"
 TARGET_AGENT_NAME="${OPENROUTER_TARGET_AGENT_NAME:-}"
+AUTHORIZATION_LANE_ID="${OPENROUTER_LANE_ID:-$TARGET_AGENT_NAME}"
 
 validate_positive_integer() {
   local name="$1" value="$2"
@@ -198,6 +212,17 @@ case "$AUTHORIZATION_MODE" in
   exact-digest|trusted-boundary|interim-operator-batch|unspecified) ;;
   *) echo "### RUNNER FAILURE: invalid OPENROUTER_AUTHORIZATION_MODE" >&2; exit 2 ;;
 esac
+if [ -n "$APPROVED_REQUEST_ENVELOPE_SHA256" ] &&
+   [[ ! "$APPROVED_REQUEST_ENVELOPE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "### RUNNER FAILURE: invalid approved request envelope digest" >&2
+  exit 2
+fi
+if [ "$AUTHORIZATION_MODE" = "exact-digest" ] &&
+   [ -z "$APPROVED_REQUEST_ENVELOPE_SHA256" ] &&
+   [ -z "${OPENROUTER_REQUEST_ENVELOPE_OUTPUT:-}" ]; then
+  echo "### RUNNER FAILURE: exact-digest requires an approved request envelope digest" >&2
+  exit 2
+fi
 case "$TARGET_AGENT_NAME" in
   "") ;;
   *[!a-z0-9-]*) echo "### RUNNER FAILURE: invalid OPENROUTER_TARGET_AGENT_NAME" >&2; exit 2 ;;
@@ -322,6 +347,7 @@ handle_signal() {
   trap '' HUP INT TERM
   terminate_transport
   if [ -n "${MODEL_CANDIDATES:-}" ] && [ -n "${EFFECTIVE_SORT:-}" ] &&
+      [[ "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] &&
       type write_failure_receipt >/dev/null 2>&1; then
     write_failure_receipt error interrupted "" || true
   fi
@@ -392,10 +418,9 @@ if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
   # One OpenRouter-owned typed validator owns schema, run, expiry, lifetime,
   # and sunset semantics. The wrapper passes its private immutable snapshot so
   # the helper and the later membership check inspect the same batch bytes.
-  BATCH_VALIDATION_RECEIPT="$RUN_ROOT/batch-validation.json"
   "$AUTHORIZATION_HELPER" validate-batch \
     --batch-file "$BATCH_AUTHORIZATION_SNAPSHOT" \
-    --run-id "$CURRENT_RUN_ID" > "$BATCH_VALIDATION_RECEIPT" || exit 2
+    --run-id "$CURRENT_RUN_ID" >/dev/null || exit 2
 fi
 for configured_order in "$PROVIDER_ORDER" "$FALLBACK_PROVIDER_ORDER"; do
   [ -z "$configured_order" ] && continue
@@ -490,7 +515,7 @@ write_failure_receipt() {
       --arg authorization "$AUTHORIZATION_MODE" \
       --arg batchdigest "$BATCH_AUTHORIZATION_SHA256" \
       --arg runid "${CURRENT_RUN_ID:-}" \
-      --arg lane "$TARGET_AGENT_NAME" \
+      --arg lane "$AUTHORIZATION_LANE_ID" \
       --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" '
       {
         schemaVersion: 2,
@@ -549,7 +574,7 @@ write_success_receipt() {
       --arg authorization "$AUTHORIZATION_MODE" \
       --arg batchdigest "$BATCH_AUTHORIZATION_SHA256" \
       --arg runid "${CURRENT_RUN_ID:-}" \
-      --arg lane "$TARGET_AGENT_NAME" \
+      --arg lane "$AUTHORIZATION_LANE_ID" \
       --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" '
       {
         schemaVersion: 2,
@@ -667,14 +692,17 @@ fi
 # stdin (`--data-binary @-`) and is never handed a path, so there is no reopen
 # between any check and the POST. Under interim mode this same in-memory copy
 # is what the payload digest is computed over.
-TRANSMIT_BYTES="$(cat "$request_file")" || {
-  echo "### RUNNER FAILURE: could not read the request body for transmission" >&2
-  exit 2
-}
-[ -n "$TRANSMIT_BYTES" ] || {
-  echo "### RUNNER FAILURE: could not read the request body for transmission" >&2
-  exit 2
-}
+TRANSMIT_BYTES=""
+if [ "$AUTHORIZATION_MODE" != "interim-operator-batch" ]; then
+  TRANSMIT_BYTES="$(cat "$request_file")" || {
+    echo "### RUNNER FAILURE: could not read the request body for transmission" >&2
+    exit 2
+  }
+  [ -n "$TRANSMIT_BYTES" ] || {
+    echo "### RUNNER FAILURE: could not read the request body for transmission" >&2
+    exit 2
+  }
+fi
 
 if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
   # Digest binding at the point of disclosure, over the bytes actually about to
@@ -730,14 +758,6 @@ if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
     echo "### RUNNER FAILURE: non-string message content cannot be bound to the batch authorization; interim mode withheld" >&2
     exit 2
   }
-  transmitted_count="$(printf '%s' "$TRANSMIT_BYTES" | jq '.messages | length')" || {
-    echo "### RUNNER FAILURE: could not read transmitted content for batch digest binding" >&2
-    exit 2
-  }
-  [[ "$transmitted_count" =~ ^[0-9]+$ ]] && [ "$transmitted_count" -gt 0 ] || {
-    echo "### RUNNER FAILURE: could not read transmitted content for batch digest binding" >&2
-    exit 2
-  }
   # The nonzero return is CHECKED, not inferred from the shape of the output: a
   # read or extraction failure inside the digest must fail closed rather than
   # yield a partial digest that happens to look like a sha256.
@@ -765,6 +785,24 @@ if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
   # the exact transmitted bytes have passed membership and immediately before
   # opening the provider connection.
   require_interim_broker_absent || exit $?
+fi
+
+if [ -z "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" ]; then
+  TRANSMITTED_REQUEST_ENVELOPE_SHA256="$(printf '%s' "$TRANSMIT_BYTES" | shasum -a 256 | awk '{print $1}')" || {
+    echo "### RUNNER FAILURE: could not compute the transmitted request envelope digest" >&2
+    exit 2
+  }
+  [[ "$TRANSMITTED_REQUEST_ENVELOPE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "### RUNNER FAILURE: could not compute the transmitted request envelope digest" >&2
+    exit 2
+  }
+fi
+
+if [ "$AUTHORIZATION_MODE" = "exact-digest" ]; then
+  if [ "$TRANSMITTED_REQUEST_ENVELOPE_SHA256" != "$APPROVED_REQUEST_ENVELOPE_SHA256" ]; then
+    echo "### RUNNER FAILURE: transmitted request envelope digest was not approved" >&2
+    exit 2
+  fi
 fi
 
 : > "$stream_file"

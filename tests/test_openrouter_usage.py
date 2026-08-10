@@ -4,9 +4,11 @@ import contextlib
 import dataclasses
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from workflow_kernel import cli
 from workflow_kernel._usage_identity import AttemptContext
@@ -834,10 +836,19 @@ class RecordAttemptTests(unittest.TestCase):
     """
 
     def _argv(self, receipts, lane, minute, **extra):
+        run_id = extra.pop("run_id", "record-attempt-1")
+        if "openrouter_receipt" in extra and "state_dir" not in extra:
+            scope_root = Path(extra.pop("_scope_root", Path(receipts).parent))
+            if not (scope_root / ".git").exists():
+                subprocess.run(["git", "init", "-q", scope_root], check=True)
+            scope = cli._repository_scope(scope_root, create=True)
+            state_dir = scope.lease_root / "runs" / run_id
+            state_dir.mkdir(parents=True, exist_ok=True)
+            extra["state_dir"] = state_dir
         argv = [
             "record-attempt",
             "--receipts", str(receipts),
-            "--run-id", "record-attempt-1",
+            "--run-id", run_id,
             "--occurred-at", "2026-08-07T09:%02d:00Z" % minute,
             "--authoritative-receipt", "receipts/%s.json" % lane,
             "--stage", "review_dispatch", "--status", "completed",
@@ -956,9 +967,19 @@ class RecordAttemptTests(unittest.TestCase):
         directory = tempfile.mkdtemp()
         receipts = os.path.join(directory, "authoritative-receipts.json")
         try:
+            wrapper_receipt = _receipt(SUCCESS_FIXTURE)
+            wrapper_receipt["authorization"] = {
+                "mode": "exact-digest", "runId": "record-attempt-1",
+                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
+            }
+            wrapper_receipt_path = Path(directory) / "openrouter-receipt.json"
+            wrapper_receipt_path.write_text(
+                json.dumps(wrapper_receipt), encoding="utf-8",
+            )
             code, _, err = _invoke(self._argv(
                 receipts, "security", 1,
-                openrouter_receipt=SUCCESS_FIXTURE,
+                openrouter_receipt=wrapper_receipt_path,
+                request_envelope_sha256="b" * 64,
             ))
             self.assertEqual(code, 0, err)
             code, _, err = _invoke(self._argv(
@@ -1093,6 +1114,197 @@ class RecordAttemptTests(unittest.TestCase):
                 request_envelope_sha256="b" * 64,
             ))
             self.assertEqual(code, 0, error)
+
+    def test_rejects_exact_digest_receipt_without_attempt_coordinates(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipts = os.path.join(directory, "authoritative-receipts.json")
+            code, _, _ = _invoke(self._argv(
+                receipts, "security", 1,
+                openrouter_receipt=SUCCESS_FIXTURE,
+                request_envelope_sha256="b" * 64,
+            ))
+            self.assertNotEqual(code, 0)
+            self.assertFalse(os.path.exists(receipts))
+
+    def test_exact_digest_receipt_is_consumed_once_across_streams(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = _receipt(SUCCESS_FIXTURE)
+            receipt["authorization"] = {
+                "mode": "exact-digest", "runId": "run-a",
+                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
+            }
+            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            first_directory = Path(directory) / "run-a"
+            second_directory = Path(directory) / "run-b"
+            first_directory.mkdir()
+            second_directory.mkdir()
+            first_stream = first_directory / "first-receipts.json"
+            second_stream = second_directory / "second-receipts.json"
+            first_code, _, first_error = _invoke(self._argv(
+                first_stream, "security", 1,
+                run_id="run-a", openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+                _scope_root=directory,
+            ))
+            self.assertEqual(first_code, 0, first_error)
+            ledger_path = (
+                Path(directory) / ".workflow-kernel" /
+                "openrouter-consumptions.json"
+            )
+            ledger = self._stream(ledger_path)
+            ledger["consumptions"][0]["status"] = "pending"
+            ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+            receipt["authorization"].update({"runId": "run-b", "laneId": "docs"})
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            second_code, _, _ = _invoke(self._argv(
+                second_stream, "docs", 2,
+                run_id="run-b", openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+                _scope_root=directory,
+            ))
+            self.assertNotEqual(second_code, 0)
+            self.assertFalse(os.path.exists(second_stream))
+            self.assertEqual(len(self._stream(first_stream)), 2)
+            self.assertEqual(
+                self._stream(ledger_path)["consumptions"][0]["status"],
+                "committed",
+            )
+
+    def test_failed_stream_append_does_not_consume_wrapper_evidence(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = _receipt(SUCCESS_FIXTURE)
+            receipt["authorization"] = {
+                "mode": "exact-digest", "runId": "record-attempt-1",
+                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
+            }
+            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            receipts = Path(directory) / "authoritative-receipts.json"
+            receipts.write_text("{}", encoding="utf-8")
+            argv = self._argv(
+                receipts, "security", 1, openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+            )
+
+            first_code, _, _ = _invoke(argv)
+            self.assertNotEqual(first_code, 0)
+            receipts.write_text("[]", encoding="utf-8")
+            retry_code, _, retry_error = _invoke(argv)
+
+            self.assertEqual(retry_code, 0, retry_error)
+            self.assertEqual(len(self._stream(receipts)), 2)
+
+    def test_crash_left_pending_without_receipt_allows_retry(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = _receipt(SUCCESS_FIXTURE)
+            receipt["authorization"] = {
+                "mode": "exact-digest", "runId": "record-attempt-1",
+                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
+            }
+            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            receipts = Path(directory) / "authoritative-receipts.json"
+            argv = self._argv(
+                receipts, "security", 1, openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+            )
+            first_code, _, first_error = _invoke(argv)
+            self.assertEqual(first_code, 0, first_error)
+
+            ledger_path = (
+                Path(directory) / ".workflow-kernel" /
+                "openrouter-consumptions.json"
+            )
+            ledger = self._stream(ledger_path)
+            ledger["consumptions"][0]["status"] = "pending"
+            ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+            os.unlink(receipts)
+
+            retry_code, _, retry_error = _invoke(argv)
+            self.assertEqual(retry_code, 0, retry_error)
+            self.assertEqual(len(self._stream(receipts)), 2)
+
+    def test_crash_left_pending_with_malformed_stream_fails_closed(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = _receipt(SUCCESS_FIXTURE)
+            receipt["authorization"] = {
+                "mode": "exact-digest", "runId": "record-attempt-1",
+                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
+            }
+            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            receipts = Path(directory) / "authoritative-receipts.json"
+            argv = self._argv(
+                receipts, "security", 1, openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+            )
+            first_code, _, first_error = _invoke(argv)
+            self.assertEqual(first_code, 0, first_error)
+
+            ledger_path = (
+                Path(directory) / ".workflow-kernel" /
+                "openrouter-consumptions.json"
+            )
+            ledger = self._stream(ledger_path)
+            ledger["consumptions"][0]["status"] = "pending"
+            ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+            receipts.write_text("{}", encoding="utf-8")
+
+            retry_code, _, _ = _invoke(argv)
+            self.assertNotEqual(retry_code, 0)
+            self.assertEqual(
+                self._stream(ledger_path)["consumptions"][0]["status"],
+                "pending",
+            )
+
+    def test_consumption_lock_failure_closes_open_descriptor(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = _receipt(SUCCESS_FIXTURE)
+            receipt["authorization"] = {
+                "mode": "exact-digest", "runId": "record-attempt-1",
+                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
+            }
+            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            descriptor = os.open(
+                Path(directory) / "consumption.lock", os.O_WRONLY | os.O_CREAT,
+                0o600,
+            )
+            argv = self._argv(
+                Path(directory) / "authoritative-receipts.json",
+                "security", 1, openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+            )
+            with (
+                mock.patch.object(
+                    cli, "_open_openrouter_consumption_lock",
+                    return_value=(str(Path(directory) / "ledger.json"), descriptor),
+                ),
+                mock.patch.object(
+                    cli.fcntl, "flock", side_effect=OSError("lock failed"),
+                ),
+                mock.patch.object(cli.os, "close", wraps=os.close) as close,
+            ):
+                code, _, _ = _invoke(argv)
+                self.assertNotEqual(code, 0)
+                close.assert_any_call(descriptor)
 
     def test_rejects_reusing_one_interim_openrouter_receipt_for_another_attempt(self):
         import os

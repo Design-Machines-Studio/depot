@@ -595,8 +595,9 @@ whole set:
 ```bash
 # First dispatch each lane's openrouter-agent-runner with
 # authorization_mode=prepare_interim_batch and a private, persistent
-# request_envelope_manifest path. The runner uses the wrapper's canonical
-# render-only mode and returns without network contact.
+# request_envelope_manifest path beneath a physical, creator-owned mode-0700
+# run directory. The runner uses the wrapper's canonical render-only mode and
+# returns without network contact.
 "$OPENROUTER_AUTHORIZATION_PATH" batch-approve \
   --batch-file "plans/$FEATURE_SLUG/openrouter-batch-authorization.json" \
   --run-id "$REVIEW_RUN_ID" --operator "$OPERATOR" \
@@ -623,6 +624,16 @@ equivalent file without ever showing the prompt. Treat interim mode as an
 operator-procedural control with a technical digest binding, not as proof of
 consent.
 
+The root keeps the exact manifest list and the private run directory it
+allocated as lifecycle state. The `verify` helper is strictly read-only toward
+persisted preparation artifacts, and no cross-process cleanup subcommand
+accepts a caller-selected manifest path. On refusal, interruption, failure, or
+completed redispatch, only the original trusted parent performs terminal
+deletion using its retained creator-side directory identity. If that parent
+cannot retain and revalidate the identity, preserve the artifacts and report a
+cleanup coverage gap; never infer deletion authority from a path, same-UID
+ownership, mode bits, a digest, or caller-adjacent metadata.
+
 Immediately before transmission, the redispatched runner invokes the shipped
 `runner-batch-authorization.sh verify` helper. The helper re-renders the
 request into its own private temporary file with the wrapper's canonical
@@ -645,8 +656,8 @@ manifest and the approved batch:
 ```
 
 The helper's canonical request file is copied to a 0600 inspection path beside
-the preparation manifest and retained only through `batch-approve`; the batch
-writer removes it after successfully persisting the lane-to-digest/model map.
+the preparation manifest. `batch-approve` treats both files as read-only input;
+the original trusted parent owns their terminal lifecycle as described above.
 Redispatch MUST
 pass the same preparation-manifest path that the preparation result reported;
 a content-mode payload receipt is not an envelope manifest.
@@ -963,7 +974,8 @@ terminal emission block.**
   [--fallback-reason <reason>] \
   # exactly one measurement source, in this order of preference:
   [--openrouter-receipt <wrapper receipt path> \
-   --request-envelope-sha256 <approved request envelope digest>] \
+   --request-envelope-sha256 <approved request envelope digest> \
+   --state-dir .workflow-kernel/runs/<run-id>] \
   [--agent-definition <path> --diff <path> [--boilerplate <path> ...] \
    --provider <p> --model <m>]
 ```
@@ -976,8 +988,9 @@ lane cannot go unmeasured by being forgotten.
 Supply the strongest evidence the lane actually has:
 
 - **OpenRouter lanes:** `--openrouter-receipt`, the wrapper's
-  `OPENROUTER_RECEIPT_FILE`. For an interim operator-batch attempt, also pass
-  `--request-envelope-sha256` from that attempt's preparation manifest. The
+  `OPENROUTER_RECEIPT_FILE`. Also pass `--request-envelope-sha256` from that
+  attempt's preparation manifest and the canonical
+  `--state-dir .workflow-kernel/runs/<run-id>`. The
   kernel requires exact equality with the digest in the wrapper receipt, so a
   receipt from another call in the same run and lane cannot be crossed in. The
   same wrapper receipt is one-use evidence and cannot be recorded for a retry;
@@ -1051,7 +1064,7 @@ Ask-then-default-gap is the only headless behavior for an ordinary standalone re
 
 A skipped lane is a coverage gap, and a coverage gap is reported. "All agents completed" while a required independent-family lane never ran is a false clean.
 
-Every lane receipt records `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. Second-perspective and sign-off receipts additionally record `implementer_family`, `reviewer_family`, and `resolution_reason`. Preserve failed attempts across Codex, OpenRouter, optional native Claude, and generic hosts.
+Every lane receipt records `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback`, and `fallbackReason`. Every machine-readable contribution decision and lane companion also records normalized `implementer_family`, `reviewer_family`, and `resolution_reason`; ordinary lanes may name the same family with an ordinary-lane resolution. Second-perspective and sign-off receipts require disjoint families, including no overlap with any member of `mixed(<sorted families>)`. Preserve failed attempts across Codex, OpenRouter, optional native Claude, and generic hosts.
 
 #### When the external-LLM retry triggers
 

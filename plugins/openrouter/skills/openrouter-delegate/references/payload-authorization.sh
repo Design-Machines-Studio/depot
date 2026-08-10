@@ -50,6 +50,8 @@
 #     --policy <p> --content-file <f>...
 #   payload-authorization.sh snapshot-envelope --output <manifest> \
 #     --request-file <exact-request.json>
+#   payload-authorization.sh verify-envelope --manifest <m> \
+#     --approved-sha256 <hex> --request-file <exact-request.json>
 #   payload-authorization.sh batch-approve --batch-file <out> --run-id <id> \
 #     --operator <name> --scope-note <text> \
 #     --lane <lane-id>=<lane-manifest> [--lane ...] [--expires-in <seconds>]
@@ -122,7 +124,7 @@ refuse_when_broker_ready() {
 
 MODE="${1:-}"
 [ -n "$MODE" ] || {
-  echo "payload-authorization: snapshot|snapshot-envelope|verify|verify-trusted-boundary|batch-approve|validate-batch|verify-batch required" >&2
+  echo "payload-authorization: snapshot|snapshot-envelope|verify-envelope|verify|verify-trusted-boundary|batch-approve|validate-batch|verify-batch required" >&2
   exit 2
 }
 shift
@@ -194,6 +196,13 @@ case "$MODE" in
       exit 2
     }
     ;;
+  verify-envelope)
+    [ -n "$MANIFEST" ] && [ -n "$APPROVED_SHA256" ] &&
+      [ -n "$REQUEST_FILE" ] || {
+      echo "payload-authorization: manifest, approved digest, and request file required" >&2
+      exit 2
+    }
+    ;;
   verify)
     [ -n "$MANIFEST" ] && [ -n "$APPROVED_SHA256" ] &&
       [ "${#CONTENT_FILES[@]}" -gt 0 ] || {
@@ -228,7 +237,7 @@ case "$MODE" in
       exit 2
     }
     ;;
-  *) echo "payload-authorization: snapshot|snapshot-envelope|verify|verify-trusted-boundary|batch-approve|validate-batch|verify-batch required" >&2; exit 2;;
+  *) echo "payload-authorization: snapshot|snapshot-envelope|verify-envelope|verify|verify-trusted-boundary|batch-approve|validate-batch|verify-batch required" >&2; exit 2;;
 esac
 
 if [ "${#CONTENT_FILES[@]}" -gt 0 ]; then
@@ -285,12 +294,10 @@ program_sunset = os.environ["PAYLOAD_AUTH_PROGRAM_SUNSET"]
 confirmation_phrase = os.environ["PAYLOAD_AUTH_CONFIRMATION"]
 MAX_LIFETIME_SECONDS = 86400
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
-inspection_paths = []
 persisted_batch = None
 temporary_handle = None
 temporary_path = None
 lifecycle_succeeded = False
-cleanup_attempt = 0
 handling_signal = False
 test_failure_stage = (
     os.environ.get("PAYLOAD_AUTH_TEST_FAILURE_STAGE", "")
@@ -299,26 +306,8 @@ test_failure_stage = (
 )
 
 
-def cleanup_inspections():
-    global cleanup_attempt
-    cleanup_attempt += 1
-    failures = []
-    for inspection_path in dict.fromkeys(inspection_paths):
-        if test_failure_stage == "transient-cleanup" and cleanup_attempt == 1:
-            failures.append(inspection_path)
-            continue
-        try:
-            Path(inspection_path).unlink()
-        except FileNotFoundError:
-            continue
-        except OSError:
-            failures.append(inspection_path)
-    return failures
-
-
 def cleanup_lifecycle():
     global temporary_handle, temporary_path
-    cleanup_failures = cleanup_inspections()
     temporary_failed = False
     if temporary_handle is not None:
         try:
@@ -341,11 +330,6 @@ def cleanup_lifecycle():
             pass
         except OSError:
             rollback_failed = True
-    if cleanup_failures:
-        print(
-            "payload-authorization: retained request envelope cleanup failed",
-            file=sys.stderr,
-        )
     if temporary_failed:
         print(
             "payload-authorization: temporary batch cleanup failed",
@@ -406,8 +390,8 @@ for spec in lane_specs:
     lane_id, manifest_path = spec.split("=", 1)
     if not lane_id or not manifest_path:
         fail("lane must be <lane-id>=<lane-manifest>")
-    # Once the lane spec itself is accepted, its private companion has an owner
-    # even if the manifest is truncated, invalid JSON, or unreadable.
+    # Lane artifacts remain caller-owned. This invocation validates and reads
+    # them but never infers deletion authority from a caller-selected path.
     expected_inspection_path = manifest_path + ".request.json"
     inspection_paths.append(expected_inspection_path)
     try:
@@ -415,8 +399,7 @@ for spec in lane_specs:
     except (OSError, json.JSONDecodeError):
         fail("lane authorization manifest unreadable")
     # The companion path is derived from the manifest path, never trusted from
-    # malformed manifest content. Register it before any later validation can
-    # fail so an existing private envelope always has one cleanup owner.
+    # manifest content.
     if recorded.get("schemaVersion") != 2:
         fail("lane authorization manifest schema unsupported")
     if recorded.get("authorizationScope") != "exact-request-envelope-bytes":
@@ -580,10 +563,6 @@ try:
         signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
 except Exception:
     fail("batch authorization could not be persisted")
-
-cleanup_failures = cleanup_inspections()
-if cleanup_failures:
-    fail("approved request envelope could not be removed after batch creation")
 
 if test_failure_stage == "final-read":
     raise OSError("injected final batch read failure")
@@ -867,7 +846,7 @@ def validate_batch(raw, expected_run_id, program_sunset):
 
 current = build_manifest()
 request_path = os.environ.get("PAYLOAD_AUTH_REQUEST_FILE", "")
-if mode in {"snapshot-envelope", "verify-batch"}:
+if mode in {"snapshot-envelope", "verify-envelope", "verify-batch"}:
     try:
         request_raw = Path(request_path).read_bytes()
     except OSError:
@@ -882,6 +861,8 @@ if mode == "snapshot-envelope":
     target = Path(manifest_path)
     target.parent.mkdir(parents=True, exist_ok=True)
     inspection_target = Path(request_manifest["inspectionPath"])
+    if inspection_target.exists() or inspection_target.is_symlink():
+        fail("request envelope inspection already exists")
     inspection_fd, inspection_temporary = tempfile.mkstemp(
         prefix=f".{inspection_target.name}.", dir=inspection_target.parent
     )
@@ -914,6 +895,29 @@ if mode == "snapshot-envelope":
             pass
         raise
     print(request_manifest["requestEnvelopeSha256"])
+    raise SystemExit(0)
+
+if mode == "verify-envelope":
+    try:
+        recorded_request = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        fail("authorization manifest unreadable")
+    recorded_core = {
+        key: value for key, value in recorded_request.items() if key != "inspectionPath"
+    }
+    if recorded_core != request_manifest:
+        fail("request envelope changed after authorization snapshot")
+    if not isinstance(approved, str) or not HEX64.match(approved.lower()):
+        fail("approved digest malformed")
+    if not hmac.compare_digest(
+        approved.lower(), request_manifest["requestEnvelopeSha256"]
+    ):
+        fail("request envelope digest was not approved")
+    print(json.dumps({
+        "authorizationMode": "exact-digest",
+        "authorizationScope": "operator-approved-exact-request-envelope-bytes",
+        "requestEnvelopeSha256": request_manifest["requestEnvelopeSha256"],
+    }, sort_keys=True))
     raise SystemExit(0)
 if mode == "snapshot":
     target = Path(manifest_path)

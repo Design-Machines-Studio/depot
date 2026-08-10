@@ -18,6 +18,7 @@ AUTHORIZATION="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/referenc
 RUNNER_BATCH_AUTHORIZATION="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/runner-batch-authorization.sh"
 
 FIXTURE_ROOT="$(mktemp -d)"
+FIXTURE_ROOT="$(cd "$FIXTURE_ROOT" && pwd -P)"
 trap 'rm -rf "$FIXTURE_ROOT"' EXIT
 
 expect_rc() {
@@ -1029,31 +1030,109 @@ SH
     "$RUNNER_BATCH_AUTHORIZATION" prepare --wrapper "$MOCK_RENDER_OK" \
       --authorization-helper "$MOCK_AUTH_FAIL" "${RUNNER_HELPER_COMMON[@]}" \
       --manifest "$FIXTURE_ROOT/mock-snapshot-fail.manifest"
+  NONPRIVATE_PARENT="$FIXTURE_ROOT/nonprivate-parent"
+  mkdir "$NONPRIVATE_PARENT"
+  chmod 755 "$NONPRIVATE_PARENT"
+  expect_rc 2 'manifest parent must be creator-owned mode 0700' \
+    'creator refuses a non-private manifest parent before snapshot' \
+    "$RUNNER_BATCH_AUTHORIZATION" prepare --wrapper "$MOCK_RENDER_OK" \
+      --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
+      --manifest "$NONPRIVATE_PARENT/refused.manifest"
+  [ ! -e "$NONPRIVATE_PARENT/refused.manifest" ] &&
+    [ ! -e "$NONPRIVATE_PARENT/refused.manifest.request.json" ] || {
+    echo 'non-private manifest parent received preparation bytes' >&2
+    exit 1
+  }
   expect_rc 0 '' 'shipped runner helper prepares a manifest without provider contact' \
     "$RUNNER_BATCH_AUTHORIZATION" prepare --wrapper "$MOCK_RENDER_OK" \
       --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
-      --manifest "$FIXTURE_ROOT/mock-success.manifest"
-  [ -s "$FIXTURE_ROOT/mock-success.manifest" ] || {
+      --manifest "$FIXTURE_ROOT/mock-cleanup.manifest"
+  [ -s "$FIXTURE_ROOT/mock-cleanup.manifest" ] || {
     echo 'shipped runner helper did not preserve its preparation manifest' >&2
+    exit 1
+  }
+  MOCK_SUCCESS_INSPECTION="$FIXTURE_ROOT/mock-cleanup.manifest.request.json"
+  [ -s "$MOCK_SUCCESS_INSPECTION" ] || {
+    echo 'shipped runner helper did not retain its inspectable envelope' >&2
+    exit 1
+  }
+  expect_rc 2 'required input unavailable or malformed' \
+    'cross-process prepared-artifact cleanup is unavailable' \
+    "$RUNNER_BATCH_AUTHORIZATION" cleanup \
+      --manifest "$FIXTURE_ROOT/mock-cleanup.manifest"
+  [ -e "$FIXTURE_ROOT/mock-cleanup.manifest" ] &&
+    [ -e "$MOCK_SUCCESS_INSPECTION" ] || {
+    echo 'rejected cross-process cleanup mutated preparation artifacts' >&2
     exit 1
   }
   printf '%s' '{"batch":"mock"}' > "$FIXTURE_ROOT/mock-batch.json"
   MOCK_BATCH_DIGEST="$(shasum -a 256 "$FIXTURE_ROOT/mock-batch.json" | awk '{print $1}')"
+  expect_rc 0 '' 'creator prepares the failure-path cleanup fixture' \
+    "$RUNNER_BATCH_AUTHORIZATION" prepare --wrapper "$MOCK_RENDER_OK" \
+      --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
+      --manifest "$FIXTURE_ROOT/mock-failure.manifest"
   expect_rc 2 'redispatch request envelope is not authorized' \
     'shipped runner helper compares redispatch with the preparation manifest' \
     "$RUNNER_BATCH_AUTHORIZATION" verify --wrapper "$MOCK_RENDER_DRIFT" \
       --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
-      --manifest "$FIXTURE_ROOT/mock-success.manifest" \
+      --manifest "$FIXTURE_ROOT/mock-failure.manifest" \
       --batch-file "$FIXTURE_ROOT/mock-batch.json" \
       --batch-digest "$MOCK_BATCH_DIGEST" --run-id fixture-run
+  [ -e "$FIXTURE_ROOT/mock-failure.manifest" ] &&
+    [ -e "$FIXTURE_ROOT/mock-failure.manifest.request.json" ] || {
+    echo 'failed redispatch mutated persisted preparation artifacts' >&2
+    exit 1
+  }
+  expect_rc 0 '' 'creator prepares the missing-input cleanup fixture' \
+    "$RUNNER_BATCH_AUTHORIZATION" prepare --wrapper "$MOCK_RENDER_OK" \
+      --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
+      --manifest "$FIXTURE_ROOT/mock-missing-input.manifest"
+  expect_rc 2 'required input unavailable or malformed' \
+    'verify cleanup runs when a required input is unavailable' \
+    "$RUNNER_BATCH_AUTHORIZATION" verify --wrapper "$MOCK_RENDER_OK" \
+      --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
+      --user-file "$FIXTURE_ROOT/missing-runner.user" \
+      --manifest "$FIXTURE_ROOT/mock-missing-input.manifest" \
+      --batch-file "$FIXTURE_ROOT/mock-batch.json" \
+      --batch-digest "$MOCK_BATCH_DIGEST" --run-id fixture-run
+  [ -e "$FIXTURE_ROOT/mock-missing-input.manifest" ] &&
+    [ -e "$FIXTURE_ROOT/mock-missing-input.manifest.request.json" ] || {
+    echo 'missing-input redispatch mutated persisted preparation artifacts' >&2
+    exit 1
+  }
+  expect_rc 0 '' 'creator prepares the render-failure cleanup fixture' \
+    "$RUNNER_BATCH_AUTHORIZATION" prepare --wrapper "$MOCK_RENDER_OK" \
+      --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
+      --manifest "$FIXTURE_ROOT/mock-verify-render-fail.manifest"
+  expect_rc 2 'request envelope rendering failed' \
+    'verify cleanup runs when request rendering fails' \
+    "$RUNNER_BATCH_AUTHORIZATION" verify --wrapper "$MOCK_RENDER_FAIL" \
+      --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
+      --manifest "$FIXTURE_ROOT/mock-verify-render-fail.manifest" \
+      --batch-file "$FIXTURE_ROOT/mock-batch.json" \
+      --batch-digest "$MOCK_BATCH_DIGEST" --run-id fixture-run
+  [ -e "$FIXTURE_ROOT/mock-verify-render-fail.manifest" ] &&
+    [ -e "$FIXTURE_ROOT/mock-verify-render-fail.manifest.request.json" ] || {
+    echo 'render-failed redispatch mutated persisted preparation artifacts' >&2
+    exit 1
+  }
+  expect_rc 0 '' 'creator prepares the completed-path cleanup fixture' \
+    "$RUNNER_BATCH_AUTHORIZATION" prepare --wrapper "$MOCK_RENDER_OK" \
+      --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
+      --manifest "$FIXTURE_ROOT/mock-completed.manifest"
   expect_rc 0 '' 'shipped runner helper verifies an immutable private batch snapshot' \
     env EXPECTED_ORIGINAL_BATCH="$FIXTURE_ROOT/mock-batch.json" \
       EXPECTED_BATCH_DIGEST="$MOCK_BATCH_DIGEST" \
       "$RUNNER_BATCH_AUTHORIZATION" verify --wrapper "$MOCK_RENDER_OK" \
       --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
-      --manifest "$FIXTURE_ROOT/mock-success.manifest" \
+      --manifest "$FIXTURE_ROOT/mock-completed.manifest" \
       --batch-file "$FIXTURE_ROOT/mock-batch.json" \
       --batch-digest "$MOCK_BATCH_DIGEST" --run-id fixture-run
+  [ -e "$FIXTURE_ROOT/mock-completed.manifest" ] &&
+    [ -e "$FIXTURE_ROOT/mock-completed.manifest.request.json" ] || {
+    echo 'completed redispatch mutated persisted preparation artifacts' >&2
+    exit 1
+  }
 
   # Schema-v2 request-envelope binding. The same approved message content sent
   # under a different model is a different authorization target: model and
@@ -1091,6 +1170,109 @@ SH
   ENVELOPE_INSPECTION="$(jq -er '.inspectionPath | select(type == "string" and length > 0)' \
     "$ENVELOPE_MANIFEST")" || {
     echo 'canonical envelope manifest did not retain an operator inspection path' >&2
+    exit 1
+  }
+
+  # Exact-digest approval is over the complete canonical request, not merely
+  # the system/user strings. A model swap with unchanged messages must fail
+  # before provider contact.
+  EXACT_DRIFT_REQUEST="$FIXTURE_ROOT/exact-digest-model-drift.json"
+  expect_rc 0 '' 'canonical wrapper renders a different-model request envelope' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_SYSTEM="$ENVELOPE_SYSTEM" \
+      OPENROUTER_REQUEST_ENVELOPE_OUTPUT="$EXACT_DRIFT_REQUEST" \
+      "$CLOCK_WRAPPER" openai/gpt-5.6-luna "$ENVELOPE_PROMPT"
+  expect_rc 0 '' 'exact-digest accepts the unchanged canonical request envelope' \
+    "$CLOCK_AUTHORIZATION" verify-envelope \
+      --manifest "$ENVELOPE_MANIFEST" --approved-sha256 "$ENVELOPE_DIGEST" \
+      --request-file "$ENVELOPE_REQUEST"
+  expect_rc 2 'request envelope changed after authorization snapshot' \
+    'exact-digest rejects a model-swapped canonical request envelope' \
+    "$CLOCK_AUTHORIZATION" verify-envelope \
+      --manifest "$ENVELOPE_MANIFEST" --approved-sha256 "$ENVELOPE_DIGEST" \
+      --request-file "$EXACT_DRIFT_REQUEST"
+  expect_rc 2 'transmitted request envelope digest was not approved' \
+    'wrapper rejects a model-swapped exact-digest request before contact' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_SYSTEM="$ENVELOPE_SYSTEM" \
+      OPENROUTER_AUTHORIZATION_MODE=exact-digest \
+      OPENROUTER_APPROVED_REQUEST_ENVELOPE_SHA256="$ENVELOPE_DIGEST" \
+      "$CLOCK_WRAPPER" openai/gpt-5.6-luna "$ENVELOPE_PROMPT"
+  expect_rc 1 'transport error' \
+    'exact-digest receipt preserves run lane invocation and envelope identity' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_SYSTEM="$ENVELOPE_SYSTEM" \
+      OPENROUTER_AUTHORIZATION_MODE=exact-digest \
+      OPENROUTER_AUTHORIZATION_RUN_ID=exact-fixture-run \
+      OPENROUTER_LANE_ID=exact-fixture-lane \
+      OPENROUTER_APPROVED_REQUEST_ENVELOPE_SHA256="$ENVELOPE_DIGEST" \
+      OPENROUTER_RECEIPT_FILE="$FIXTURE_ROOT/exact-digest.receipt.json" \
+      "$CLOCK_WRAPPER" moonshotai/kimi-k3 "$ENVELOPE_PROMPT"
+  jq -e --arg request "$ENVELOPE_DIGEST" '
+    .authorization.runId == "exact-fixture-run"
+    and .authorization.laneId == "exact-fixture-lane"
+    and .authorization.requestEnvelopeSha256 == $request
+    and (.invocationId | test("^[0-9a-f]{64}$"))
+  ' "$FIXTURE_ROOT/exact-digest.receipt.json" >/dev/null || {
+    echo 'exact-digest receipt lost authorization replay identity' >&2
+    exit 1
+  }
+  expect_rc 1 'transport error' \
+    'trusted-boundary receipt carries canonical request envelope identity' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_SYSTEM="$ENVELOPE_SYSTEM" \
+      OPENROUTER_AUTHORIZATION_MODE=trusted-boundary \
+      OPENROUTER_AUTHORIZATION_RUN_ID=trusted-fixture-run \
+      OPENROUTER_LANE_ID=trusted-fixture-lane \
+      OPENROUTER_RECEIPT_FILE="$FIXTURE_ROOT/trusted-boundary.receipt.json" \
+      "$CLOCK_WRAPPER" moonshotai/kimi-k3 "$ENVELOPE_PROMPT"
+  jq -e --arg request "$ENVELOPE_DIGEST" '
+    .authorization.runId == "trusted-fixture-run"
+    and .authorization.laneId == "trusted-fixture-lane"
+    and .authorization.requestEnvelopeSha256 == $request
+    and (.invocationId | test("^[0-9a-f]{64}$"))
+  ' "$FIXTURE_ROOT/trusted-boundary.receipt.json" >/dev/null || {
+    echo 'trusted-boundary receipt lost canonical envelope identity' >&2
+    exit 1
+  }
+
+  # A signal before canonical request bytes exist is a local preparation
+  # failure, not a provider attempt receipt with a null envelope identity.
+  PRE_ENVELOPE_WRAPPER="$FIXTURE_ROOT/wrapper-pre-envelope-signal.sh"
+  PRE_ENVELOPE_MARKER="$FIXTURE_ROOT/pre-envelope.marker"
+  PRE_ENVELOPE_RECEIPT="$FIXTURE_ROOT/pre-envelope.receipt.json"
+  sed -e '/^provider="$(build_provider)"$/a\
+: > "$PRE_ENVELOPE_MARKER"\
+while :; do :; done' "$CLOCK_WRAPPER" > "$PRE_ENVELOPE_WRAPPER"
+  chmod 755 "$PRE_ENVELOPE_WRAPPER"
+  set +e
+  env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+    OPENROUTER_SYSTEM="$ENVELOPE_SYSTEM" \
+    OPENROUTER_AUTHORIZATION_MODE=trusted-boundary \
+    OPENROUTER_AUTHORIZATION_RUN_ID=pre-envelope-run \
+    OPENROUTER_LANE_ID=pre-envelope-lane \
+    OPENROUTER_RECEIPT_FILE="$PRE_ENVELOPE_RECEIPT" \
+    PRE_ENVELOPE_MARKER="$PRE_ENVELOPE_MARKER" \
+    "$PRE_ENVELOPE_WRAPPER" moonshotai/kimi-k3 "$ENVELOPE_PROMPT" \
+    >"$FIXTURE_ROOT/pre-envelope.out" 2>"$FIXTURE_ROOT/pre-envelope.err" &
+  PRE_ENVELOPE_PID=$!
+  set -e
+  for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20; do
+    [ -e "$PRE_ENVELOPE_MARKER" ] && break
+    sleep 0.1
+  done
+  [ -e "$PRE_ENVELOPE_MARKER" ] || {
+    kill -KILL "$PRE_ENVELOPE_PID" 2>/dev/null || true
+    echo 'pre-envelope signal fixture never reached its injection point' >&2
+    exit 1
+  }
+  kill -TERM "$PRE_ENVELOPE_PID"
+  set +e
+  wait "$PRE_ENVELOPE_PID"
+  PRE_ENVELOPE_RC=$?
+  set -e
+  [ "$PRE_ENVELOPE_RC" -ne 0 ] && [ ! -e "$PRE_ENVELOPE_RECEIPT" ] || {
+    echo 'pre-envelope interruption emitted an unbound provider receipt' >&2
     exit 1
   }
 
@@ -1156,10 +1338,81 @@ SH
       exit 1
     }
   done
-  [ ! -e "$ENVELOPE_INSPECTION" ] && [ ! -e "$REAL_HELPER_INSPECTION" ] || {
-    echo 'successful batch approval retained a private inspection copy' >&2
+  [ -e "$ENVELOPE_INSPECTION" ] && [ -e "$REAL_HELPER_INSPECTION" ] || {
+    echo 'batch approval deleted caller-owned inspection input' >&2
     exit 1
   }
+  rm -f "$ENVELOPE_INSPECTION" "$REAL_HELPER_INSPECTION"
+
+  # A lane path is input, not ownership. An unreadable/nonexistent manifest
+  # must not make a similarly named pre-existing file eligible for cleanup.
+  CALLER_MANIFEST="$FIXTURE_ROOT/caller-owned"
+  CALLER_COMPANION="$CALLER_MANIFEST.request.json"
+  printf '%s' 'caller-owned bytes' > "$CALLER_COMPANION"
+  expect_rc 2 'lane authorization manifest unreadable' \
+    'invalid lane path preserves a caller-owned request companion' \
+    "$CLOCK_AUTHORIZATION" batch-approve \
+      --batch-file "$FIXTURE_ROOT/caller-owned-batch.json" \
+      --run-id caller-owned-run --operator fixture-operator \
+      --scope-note 'caller-owned cleanup refusal fixture' \
+      --lane "fixture-envelope=$CALLER_MANIFEST"
+  [ "$(cat "$CALLER_COMPANION")" = 'caller-owned bytes' ] || {
+    echo 'invalid lane path deleted or changed a caller-owned companion' >&2
+    exit 1
+  }
+
+  SYMLINK_REAL_PARENT="$FIXTURE_ROOT/symlink-real-parent"
+  SYMLINK_PARENT="$FIXTURE_ROOT/symlink-parent"
+  SYMLINK_VICTIM="$FIXTURE_ROOT/symlink-victim.json"
+  mkdir "$SYMLINK_REAL_PARENT"
+  ln -s "$SYMLINK_REAL_PARENT" "$SYMLINK_PARENT"
+  printf '%s' 'symlink-victim-bytes' > "$SYMLINK_VICTIM"
+  SYMLINK_MANIFEST="$SYMLINK_PARENT/missing.manifest.json"
+  ln -s "$SYMLINK_VICTIM" "$SYMLINK_MANIFEST.request.json"
+  expect_rc 2 'lane authorization manifest unreadable' \
+    'symlinked parent and companion remain outside batch cleanup authority' \
+    "$CLOCK_AUTHORIZATION" batch-approve \
+      --batch-file "$FIXTURE_ROOT/symlink-batch.json" \
+      --run-id symlink-run --operator fixture-operator \
+      --scope-note 'symlink cleanup refusal fixture' \
+      --lane "fixture-envelope=$SYMLINK_MANIFEST"
+  [ -L "$SYMLINK_MANIFEST.request.json" ] &&
+    [ "$(cat "$SYMLINK_VICTIM")" = 'symlink-victim-bytes' ] || {
+    echo 'batch refusal mutated a symlinked caller-owned path' >&2
+    exit 1
+  }
+
+  # Adjacent metadata is caller-controlled too. Matching inode/digest claims
+  # must not authorize deletion of a replacement companion.
+  FORGED_MANIFEST="$FIXTURE_ROOT/forged-owner.json"
+  FORGED_REQUEST="$ENVELOPE_REQUEST"
+  expect_rc 0 '' 'snapshot creates forged-owner fixture metadata' \
+    "$CLOCK_AUTHORIZATION" snapshot-envelope \
+      --output "$FORGED_MANIFEST" --request-file "$FORGED_REQUEST"
+  FORGED_COMPANION="$FORGED_MANIFEST.request.json"
+  cp "$FORGED_REQUEST" "$FORGED_COMPANION"
+  FORGED_DEVICE="$(stat -f '%d' "$FORGED_COMPANION")"
+  FORGED_INODE="$(stat -f '%i' "$FORGED_COMPANION")"
+  FORGED_DIGEST="$(shasum -a 256 "$FORGED_COMPANION" | awk '{print $1}')"
+  jq -n --arg manifest "$FORGED_MANIFEST" --arg inspection "$FORGED_COMPANION" \
+    --argjson device "$FORGED_DEVICE" --argjson inode "$FORGED_INODE" \
+    --arg digest "$FORGED_DIGEST" \
+    '{schemaVersion:1, manifestPath:$manifest, inspectionPath:$inspection,
+      device:$device, inode:$inode, requestEnvelopeSha256:$digest}' \
+    > "$FORGED_MANIFEST.ownership.json"
+  expect_rc 2 'lane authorization manifest unreadable' \
+    'forged ownership metadata cannot authorize caller companion cleanup' \
+    "$CLOCK_AUTHORIZATION" batch-approve \
+      --batch-file "$FIXTURE_ROOT/forged-owner-batch.json" \
+      --run-id forged-owner-run --operator fixture-operator \
+      --scope-note 'forged ownership cleanup refusal fixture' \
+      --lane "forged-owner=$FORGED_MANIFEST" \
+      --lane "missing=$FIXTURE_ROOT/forged-owner-missing.json"
+  [ -f "$FORGED_COMPANION" ] || {
+    echo 'forged ownership metadata deleted a caller-owned companion' >&2
+    exit 1
+  }
+  rm -f "$FORGED_COMPANION" "$FORGED_MANIFEST.ownership.json"
   jq -e --arg first "$ENVELOPE_DIGEST" --arg second "$REAL_HELPER_DIGEST" '
     [.lanes[].lane_id] == ["fixture-envelope", "security-auditor-codex-signoff"]
     and [.lanes[].requestEnvelopeSha256] == [$first, $second]
@@ -1171,7 +1424,8 @@ SH
     exit 1
   }
 
-  # Every unsuccessful approval path owns the same cleanup obligation.
+  # Approval consumes lane artifacts read-only. The creating context retains
+  # cleanup authority on both successful and unsuccessful paths.
   NO_TTY_MANIFEST="$FIXTURE_ROOT/no-tty.manifest.json"
   "$CLOCK_AUTHORIZATION" snapshot-envelope --output "$NO_TTY_MANIFEST" \
     --request-file "$ENVELOPE_REQUEST" >/dev/null
@@ -1182,10 +1436,11 @@ SH
       --batch-file "$FIXTURE_ROOT/no-tty-batch.json" --run-id no-tty-run \
       --operator fixture-operator --scope-note 'no tty cleanup fixture' \
       --lane "fixture-envelope=$NO_TTY_MANIFEST"
-  [ ! -e "$NO_TTY_INSPECTION" ] || {
-    echo 'no-TTY batch refusal retained a private inspection copy' >&2
+  [ -e "$NO_TTY_INSPECTION" ] || {
+    echo 'no-TTY batch refusal deleted caller-owned inspection input' >&2
     exit 1
   }
+  rm -f "$NO_TTY_INSPECTION"
 
   DECLINE_MANIFEST="$FIXTURE_ROOT/decline.manifest.json"
   "$CLOCK_AUTHORIZATION" snapshot-envelope --output "$DECLINE_MANIFEST" \
@@ -1202,11 +1457,12 @@ SH
   [ "$DECLINE_RC" -eq 2 ] &&
     grep -Fq 'interim batch authorization declined by operator' \
       "$FIXTURE_ROOT/decline.transcript" &&
-  [ ! -e "$DECLINE_INSPECTION" ] && [ ! -e "$FIXTURE_ROOT/declined-batch.json" ] || {
-    echo 'declined PTY approval did not fail closed and clean its inspection copy' >&2
+  [ -e "$DECLINE_INSPECTION" ] && [ ! -e "$FIXTURE_ROOT/declined-batch.json" ] || {
+    echo 'declined PTY approval mutated caller input or retained authorization' >&2
     cat "$FIXTURE_ROOT/decline.transcript" >&2
     exit 1
   }
+  rm -f "$DECLINE_INSPECTION"
 
   INTERRUPT_MANIFEST="$FIXTURE_ROOT/interrupt.manifest.json"
   "$CLOCK_AUTHORIZATION" snapshot-envelope --output "$INTERRUPT_MANIFEST" \
@@ -1225,12 +1481,13 @@ SH
       "$FIXTURE_ROOT/interrupt.transcript" &&
     [ "$(grep -Fc 'interactive batch authorization interrupted by signal' \
       "$FIXTURE_ROOT/interrupt.transcript")" -eq 1 ] &&
-    [ ! -e "$INTERRUPT_INSPECTION" ] && [ ! -e "$FIXTURE_ROOT/interrupted-batch.json" ] || {
-    echo 'interrupted PTY approval did not fail closed and clean its inspection copy' >&2
+    [ -e "$INTERRUPT_INSPECTION" ] && [ ! -e "$FIXTURE_ROOT/interrupted-batch.json" ] || {
+    echo 'interrupted PTY approval mutated caller input or retained authorization' >&2
     echo "interrupt rc=$INTERRUPT_RC inspection_exists=$([ -e "$INTERRUPT_INSPECTION" ] && echo yes || echo no) batch_exists=$([ -e "$FIXTURE_ROOT/interrupted-batch.json" ] && echo yes || echo no)" >&2
     cat "$FIXTURE_ROOT/interrupt.transcript" >&2
     exit 1
   }
+  rm -f "$INTERRUPT_INSPECTION"
 
   PARTIAL_MANIFEST="$FIXTURE_ROOT/partial.manifest.json"
   "$CLOCK_AUTHORIZATION" snapshot-envelope --output "$PARTIAL_MANIFEST" \
@@ -1244,16 +1501,17 @@ SH
     > "$FIXTURE_ROOT/malformed-second.tmp"
   mv "$FIXTURE_ROOT/malformed-second.tmp" "$MALFORMED_LANE_MANIFEST"
   expect_rc 2 'lane authorization manifest schema unsupported' \
-    'partial-lane validation cleans every existing private companion' \
+    'partial-lane validation preserves every caller-owned companion' \
     "$CLOCK_AUTHORIZATION" batch-approve \
       --batch-file "$FIXTURE_ROOT/partial-batch.json" --run-id partial-run \
       --operator fixture-operator --scope-note 'partial lane cleanup fixture' \
       --lane "fixture-envelope=$PARTIAL_MANIFEST" \
       --lane "malformed=$MALFORMED_LANE_MANIFEST"
-  [ ! -e "$PARTIAL_INSPECTION" ] && [ ! -e "$MALFORMED_LANE_INSPECTION" ] || {
-    echo 'partial-lane batch refusal retained a private inspection copy' >&2
+  [ -e "$PARTIAL_INSPECTION" ] && [ -e "$MALFORMED_LANE_INSPECTION" ] || {
+    echo 'partial-lane batch refusal deleted caller-owned inspection input' >&2
     exit 1
   }
+  rm -f "$PARTIAL_INSPECTION" "$MALFORMED_LANE_INSPECTION"
 
   for MANIFEST_FAILURE in invalid-json unreadable; do
     BROKEN_MANIFEST="$FIXTURE_ROOT/$MANIFEST_FAILURE.manifest.json"
@@ -1268,23 +1526,24 @@ SH
       BROKEN_REASON='lane authorization manifest unreadable'
     fi
     expect_rc 2 "$BROKEN_REASON" \
-      "$MANIFEST_FAILURE manifest cleanup removes its owned private companion" \
+      "$MANIFEST_FAILURE manifest refusal preserves caller-owned companion" \
       "$CLOCK_AUTHORIZATION" batch-approve \
         --batch-file "$FIXTURE_ROOT/$MANIFEST_FAILURE.batch.json" \
         --run-id "$MANIFEST_FAILURE-run" --operator fixture-operator \
         --scope-note "$MANIFEST_FAILURE cleanup fixture" \
         --lane "fixture-envelope=$BROKEN_MANIFEST"
-    [ ! -e "$BROKEN_INSPECTION" ] || {
-      echo "$MANIFEST_FAILURE manifest retained its private inspection copy" >&2
+    [ -e "$BROKEN_INSPECTION" ] || {
+      echo "$MANIFEST_FAILURE manifest deleted caller-owned inspection input" >&2
       exit 1
     }
+    rm -f "$BROKEN_INSPECTION"
     chmod 600 "$BROKEN_MANIFEST" 2>/dev/null || true
   done
 
   # Denial-only test stages exercise unexpected exceptions around each I/O
   # boundary. They can only abort and roll back; they cannot grant authority.
   for FAILURE_STAGE in tty-write mkdir mkstemp signal-before-temp-ownership \
-      signal-before-batch-ownership final-read canonical-validation transient-cleanup; do
+      signal-before-batch-ownership final-read canonical-validation; do
     FAILURE_MANIFEST="$FIXTURE_ROOT/failure-$FAILURE_STAGE.manifest.json"
     FAILURE_BATCH="$FIXTURE_ROOT/failure-$FAILURE_STAGE.batch.json"
     "$CLOCK_AUTHORIZATION" snapshot-envelope --output "$FAILURE_MANIFEST" \
@@ -1300,14 +1559,15 @@ SH
       >"$FIXTURE_ROOT/failure-$FAILURE_STAGE.transcript" 2>&1
     FAILURE_RC=$?
     set -e
-    [ "$FAILURE_RC" -ne 0 ] && [ ! -e "$FAILURE_INSPECTION" ] &&
+    [ "$FAILURE_RC" -ne 0 ] && [ -e "$FAILURE_INSPECTION" ] &&
       [ ! -e "$FAILURE_BATCH" ] &&
       ! find "$FIXTURE_ROOT" -maxdepth 1 -name ".$(basename "$FAILURE_BATCH").*" \
         -print -quit | grep -q . || {
-      echo "$FAILURE_STAGE failure retained an inspection copy or batch authorization" >&2
+      echo "$FAILURE_STAGE failure deleted caller input or retained batch authorization" >&2
       cat "$FIXTURE_ROOT/failure-$FAILURE_STAGE.transcript" >&2
       exit 1
     }
+    rm -f "$FAILURE_INSPECTION"
   done
   ENVELOPE_BATCH_DIGEST="$(shasum -a 256 "$FIXTURE_ROOT/batch-envelope-v2.json" | awk '{print $1}')"
   expect_rc 0 '' \

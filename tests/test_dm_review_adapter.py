@@ -17,6 +17,92 @@ FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
 
 
 class DmReviewAdapterTests(unittest.TestCase):
+    def independent_export_documents(
+        self, reviewer_family="z-ai", model="z-ai/glm-5.2",
+    ):
+        request = ReviewRequest(
+            "review-independent", ("security-auditor-codex-signoff",),
+        )
+        decision = {
+            "source_finding_id": "source-independent",
+            "finding_path": "internal/review.py",
+            "finding_anchor": "review.independent",
+            "finding_category": "family independence",
+            "finding_root_cause": "reviewer family overlaps implementer family",
+            "finding_disposition": "retained", "agreement": "unique",
+            "decision_reason_code": "retained-unique",
+            "reviewer": "security", "lane": "security-auditor-codex-signoff",
+            "requested_provider": "openrouter", "attempted_provider": "openrouter",
+            "implemented_by": "openrouter", "provider": "openrouter",
+            "model": model, "source_severity": "P1",
+            "evidence_ref": "raw/security.json", "attempt": 1,
+            "occurred_at": "2026-08-10T01:00:00Z",
+            "implementer_family": "mixed(moonshotai,openai)",
+            "reviewer_family": reviewer_family,
+            "resolution_reason": "subscription-headroom-independent-family",
+        }
+        raw = {key: decision[key] for key in {
+            "source_finding_id", "reviewer", "lane", "source_severity",
+            "evidence_ref", "finding_path", "finding_anchor",
+            "finding_category", "finding_root_cause",
+        }}
+        lane_output = {
+            "reviewer": decision["reviewer"], "lane": decision["lane"],
+            "findings": [copy.deepcopy(raw)],
+        }
+        lane_output_digest = hashlib.sha256(json.dumps(
+            lane_output, sort_keys=True, separators=(",", ":"),
+        ).encode()).hexdigest()
+        lane_receipt = {
+            **{key: decision[key] for key in {
+                "reviewer", "lane", "requested_provider", "attempted_provider",
+                "implemented_by", "provider", "model", "implementer_family",
+                "reviewer_family", "resolution_reason",
+            }},
+            "evidence_refs": [decision["evidence_ref"]],
+            "raw_output_ref": (
+                "contribution-inputs/raw-lane-output-sha256-"
+                + lane_output_digest + ".json"
+            ),
+            "raw_output_digest": "sha256:" + lane_output_digest,
+            "finding_count": 1,
+        }
+        documents = {
+            "decisions": {
+                "schema_version": 1, "artifact_role": "synthesis_decisions",
+                "run_id": request.run_id, "source_finding_count": 1,
+                "occurred_at": decision["occurred_at"], "decisions": [decision],
+            },
+            "raw_findings": {
+                "schema_version": 1, "artifact_role": "raw_finding_inventory",
+                "run_id": request.run_id, "findings": [raw],
+            },
+            "lane_receipts": {
+                "schema_version": 1, "artifact_role": "review_lane_receipts",
+                "run_id": request.run_id, "lanes": [lane_receipt],
+            },
+            "raw_lane_outputs": {
+                "schema_version": 1, "artifact_role": "review_lane_raw_outputs",
+                "run_id": request.run_id, "outputs": [lane_output],
+            },
+        }
+        references = {}
+        roles = {
+            "decisions": "synthesis-decisions",
+            "raw_findings": "raw-finding-inventory",
+            "lane_receipts": "lane-receipts",
+            "raw_lane_outputs": "raw-lane-outputs",
+        }
+        for key, document in documents.items():
+            digest = hashlib.sha256(json.dumps(
+                document, sort_keys=True, separators=(",", ":"),
+            ).encode()).hexdigest()
+            references[key] = (
+                "contribution-inputs/" + roles[key] + "-sha256-"
+                + digest + ".json"
+            )
+        return request, documents, references
+
     def test_request_translates_required_lanes_without_selecting_actions(self):
         request = ReviewRequest("review-1", ("security", "architecture", "visual"), "full", WorkflowClass.BUG, "codex_native", False)
         spec = translate_review(request, HostCapabilities("codex", frozenset()))
@@ -107,6 +193,8 @@ class DmReviewAdapterTests(unittest.TestCase):
             "lane": "security", "requested_provider": "openai",
             "attempted_provider": "openai", "implemented_by": "codex",
             "provider": "openai", "model": "gpt-5.6-sol",
+            "implementer_family": "openai", "reviewer_family": "openai",
+            "resolution_reason": "same-family-standard-review",
             "evidence_ref": "raw/security.json",
         }
         value.update(changes)
@@ -242,7 +330,8 @@ class DmReviewAdapterTests(unittest.TestCase):
                 "finding_disposition", "agreement", "decision_reason_code",
                 "reviewer", "lane", "requested_provider", "attempted_provider",
                 "implemented_by", "provider", "model", "source_severity", "evidence_ref",
-                "attempt", "occurred_at",
+                "attempt", "occurred_at", "implementer_family",
+                "reviewer_family", "resolution_reason",
             }
         }
         decisions = {
@@ -280,6 +369,7 @@ class DmReviewAdapterTests(unittest.TestCase):
                 **{key: decision[key] for key in {
                     "reviewer", "lane", "requested_provider",
                     "attempted_provider", "implemented_by", "provider", "model",
+                    "implementer_family", "reviewer_family", "resolution_reason",
                 }},
                 "evidence_refs": [decision["evidence_ref"]],
                 "raw_output_ref": lane_output_ref,
@@ -453,6 +543,41 @@ class DmReviewAdapterTests(unittest.TestCase):
         incomplete[0]["coverage_complete"] = False
         with self.assertRaisesRegex(ValueError, "incomplete finding contribution coverage"):
             require_complete_contribution_coverage(incomplete)
+
+    def test_independent_lane_family_provenance_is_closed_and_disjoint(self):
+        request, documents, references = self.independent_export_documents()
+        exported = export_finding_contributions(
+            request, documents["decisions"], documents["raw_findings"],
+            documents["lane_receipts"], documents["raw_lane_outputs"], (),
+            references,
+        )
+        self.assertEqual(exported[0]["implementer_family"], "mixed(moonshotai,openai)")
+        self.assertEqual(exported[0]["reviewer_family"], "z-ai")
+        self.assertEqual(
+            exported[0]["resolution_reason"],
+            "subscription-headroom-independent-family",
+        )
+
+        request, documents, references = self.independent_export_documents(
+            "openai", "openai/gpt-5.6",
+        )
+        with self.assertRaisesRegex(ValueError, "independent review family overlap"):
+            export_finding_contributions(
+                request, documents["decisions"], documents["raw_findings"],
+                documents["lane_receipts"], documents["raw_lane_outputs"], (),
+                references,
+            )
+
+    def test_independent_lane_rejects_reviewer_family_not_derived_from_model(self):
+        request, documents, references = self.independent_export_documents(
+            "anthropic", "moonshotai/kimi-k3",
+        )
+        with self.assertRaisesRegex(ValueError, "reviewer family does not match model"):
+            export_finding_contributions(
+                request, documents["decisions"], documents["raw_findings"],
+                documents["lane_receipts"], documents["raw_lane_outputs"], (),
+                references,
+            )
 
     def test_credential_shaped_free_form_values_are_not_durable(self):
         receipt = self.contribution(0, provider="sk-secret-provider")

@@ -164,6 +164,8 @@ class RuntimeCliTests(unittest.TestCase):
                     "requested_provider": "openai", "attempted_provider": "openai",
                     "implemented_by": "codex", "provider": "openai",
                     "model": "gpt-5.6-sol", "evidence_ref": "raw/security.md",
+                    "implementer_family": "openai", "reviewer_family": "openai",
+                    "resolution_reason": "same-family-standard-review",
                     "attempt": 1, "occurred_at": "2026-07-14T00:00:00Z",
                 }],
             }), encoding="utf-8")
@@ -199,6 +201,8 @@ class RuntimeCliTests(unittest.TestCase):
                     "requested_provider": "openai", "attempted_provider": "openai",
                     "implemented_by": "codex", "provider": "openai",
                     "model": "gpt-5.6-sol", "evidence_refs": ["raw/security.md"],
+                    "implementer_family": "openai", "reviewer_family": "openai",
+                    "resolution_reason": "same-family-standard-review",
                     "raw_output_ref": (
                         "contribution-inputs/raw-lane-output-sha256-"
                         + lane_output_digest + ".json"

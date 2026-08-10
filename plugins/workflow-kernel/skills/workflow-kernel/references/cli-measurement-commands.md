@@ -336,7 +336,8 @@ $(test -n "$(git status --porcelain)" && echo --dirty-state)
    --slice-status <sliced|not_sliced|unclassified|slice_failed|full_diff_override>] \
   [--fallback-reason <reason>] \
   [--openrouter-receipt <wrapper receipt> \
-   --request-envelope-sha256 <approved request envelope digest>] \
+   --request-envelope-sha256 <approved request envelope digest> \
+   --state-dir .workflow-kernel/runs/<run-id>] \
   [--agent-definition <path> --diff <path> [--boilerplate <path> ...] \
    --provider <p> --model <m>]
 ```
@@ -352,10 +353,13 @@ cost nothing. There is now no call that records a lane without its measurement.
 **Evidence, in order of preference.** Supply the strongest the attempt has:
 
 1. `--openrouter-receipt` -- the wrapper's `OPENROUTER_RECEIPT_FILE`. Real
-   provider counters and cost. An interim operator-batch receipt also requires
-   `--request-envelope-sha256`, taken from that attempt's preparation manifest;
-   it must exactly equal the digest bound into the wrapper receipt. Run and
-   lane equality alone are not enough because one lane may make several calls.
+   provider counters and cost. Every wrapper receipt also requires
+   `--request-envelope-sha256`, taken from that attempt's preparation manifest,
+   and the canonical `--state-dir` for the same run. The digest must exactly
+   equal the value bound into the wrapper receipt. Run and lane equality alone
+   are not enough because one lane may make several calls. The kernel derives
+   its one-use consumption registry from the repository lease root; callers
+   cannot select or replace that replay authority.
    Every wrapper receipt has a content-free per-invocation identity, including
    failures with no provider generation ID. The atomic append records a
    canonical digest of that receipt and refuses to reuse the evidence for

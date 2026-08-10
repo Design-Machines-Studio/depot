@@ -569,6 +569,7 @@ def _tree_input_digests(repository, commit, pattern_sets):
         ["git", "-C", str(repository), "ls-tree", "-r", "-z", commit],
         repository, {"PATH": FIXED_SUBPROCESS_PATH}, MAX_GIT_SECONDS,
         max_output_bytes=MAX_TREE_OUTPUT_BYTES,
+        inspect_descendants=False,
     )
     if result["exit_code"] != 0 or result["reason"] != "command_completed":
         raise VerificationPlannerError("unable to inspect trusted base commit")

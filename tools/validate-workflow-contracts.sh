@@ -850,6 +850,12 @@ for phrase in \
 done
 require_text "$runner_batch_authorization" 'cp "$BATCH_FILE" "$BATCH_SNAPSHOT"' \
   "runner-batch-authorization.sh snapshots the batch before digest and validation"
+require_text "$runner_batch_authorization" 'prepare|verify required' \
+  "runner-batch-authorization.sh limits itself to preparation and read-only verification"
+require_text "$runner_batch_authorization" 'manifest parent must be creator-owned mode 0700' \
+  "runner-batch-authorization.sh requires a private physical preparation parent"
+require_text "$review_skill" 'no cross-process cleanup subcommand' \
+  "dm-review forbids path-based cross-process preparation cleanup"
 require_text "$openrouter_agent_runner" '"$RUNNER_BATCH_HELPER" prepare' \
   "openrouter-agent-runner delegates preparation to the shipped helper"
 require_text "$openrouter_agent_runner" '"$RUNNER_BATCH_HELPER" verify' \
@@ -858,6 +864,12 @@ require_text "$openrouter_agent_runner" "could not report prepared request envel
   "openrouter-agent-runner checks preparation-result reporting"
 require_text "$review_skill" "broker_transport_unavailable" \
   "dm-review keeps a ready broker unavailable until broker-owned transport exists"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md" \
+  '`implementer_family`, `reviewer_family`, `resolution_reason`' \
+  "dm-review output contract requires family provenance on contribution decisions"
+require_text "$review_skill" \
+  'Every machine-readable contribution decision and lane companion also records normalized' \
+  "dm-review review contract requires family provenance on every contribution surface"
 for f in "$review_cmd" "$review_alias" "$review_skill"; do
   rel="${f#$REPO_ROOT/}"
   require_absent "$f" 'available, `authorization_mode: broker`' \
@@ -954,6 +966,18 @@ require_text "$REPO_ROOT/plugins/openrouter/README.md" \
 require_absent "$REPO_ROOT/docs/cascade-migration.md" \
   "future broker-ready host" \
   "cascade guidance does not treat readiness alone as transport authority"
+require_text "$REPO_ROOT/docs/cascade-migration.md" \
+  "dm-review may" \
+  "cascade guidance distinguishes dm-review interim batches from Pipeline implementation authority"
+require_text "$REPO_ROOT/docs/cascade-migration.md" \
+  "broker_transport_unavailable" \
+  "cascade guidance names the ready-broker transport gap"
+require_text "$REPO_ROOT/docs/cascade-migration.md" \
+  "read-only independent review" \
+  "cascade guidance preserves Claude's narrow independent review role"
+require_absent "$REPO_ROOT/docs/cascade-migration.md" \
+  "never for implementation or code review" \
+  "cascade guidance does not forbid the shipped independent Claude review role"
 require_text "$authority_threat_model" "lane-to-digest/model mapping" \
   "workflow-authority threat model documents schema-v2 lane membership"
 require_text "$authority_threat_model" "candidates, provider routing" \

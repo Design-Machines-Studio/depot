@@ -2445,6 +2445,112 @@ def _open_receipt_stream_lock(receipts_path):
     return os.open(lock_path, lock_flags, 0o600)
 
 
+def _open_openrouter_consumption_lock(state_dir, run_id):
+    scope = _repository_scope(state_dir)
+    requested = Path(os.path.abspath(str(state_dir)))
+    expected = scope.lease_root / "runs" / run_id
+    if requested.resolve(strict=True) != expected.resolve(strict=True):
+        raise ValueError(
+            "OpenRouter state directory is not the canonical run directory"
+        )
+    ledger_path = str(scope.lease_root / "openrouter-consumptions.json")
+    _reject_symlinked_components(ledger_path)
+    return ledger_path, _open_receipt_stream_lock(ledger_path)
+
+
+def _reserve_openrouter_invocation(
+    ledger_path, receipts_path, run_id, lane, usage, error_label,
+):
+    if os.path.exists(ledger_path):
+        ledger = _load_json(ledger_path)
+        if (
+            type(ledger) is not dict
+            or set(ledger) != {"schema_version", "consumptions"}
+            or ledger["schema_version"] != 1
+            or type(ledger["consumptions"]) is not list
+        ):
+            _invalid_append_argument(
+                error_label, "invalid OpenRouter consumption ledger",
+            )
+    else:
+        ledger = {"schema_version": 1, "consumptions": []}
+    consumptions = ledger["consumptions"]
+    if (
+        type(consumptions) is not list
+        or any(type(item) is not dict for item in consumptions)
+    ):
+        _invalid_append_argument(error_label, "invalid OpenRouter consumption ledger")
+    invocation_id = usage["source_invocation_id"]
+    receipt_digest = usage["source_receipt_digest"]
+    duplicates = [
+        item for item in consumptions if (
+        item.get("invocation_id") == invocation_id
+        or item.get("receipt_digest") == receipt_digest
+        )
+    ]
+    reconciled = False
+    blocking_duplicates = []
+    for item in duplicates:
+        if item.get("status") != "pending":
+            blocking_duplicates.append(item)
+            continue
+        receipt_stream = item.get("receipt_stream")
+        if type(receipt_stream) is not str or not receipt_stream:
+            blocking_duplicates.append(item)
+            continue
+        if not os.path.exists(receipt_stream):
+            consumptions.remove(item)
+            reconciled = True
+            continue
+        try:
+            bound_receipts = _load_json(receipt_stream)
+        except (InvalidSchemaError, OSError, TypeError, ValueError):
+            blocking_duplicates.append(item)
+            continue
+        if type(bound_receipts) is not list:
+            blocking_duplicates.append(item)
+            continue
+        if any(
+            type(receipt) is dict
+            and receipt.get("source_receipt_digest") == item.get("receipt_digest")
+            for receipt in bound_receipts
+        ):
+            item["status"] = "committed"
+            blocking_duplicates.append(item)
+            reconciled = True
+        else:
+            consumptions.remove(item)
+            reconciled = True
+    if reconciled:
+        _write_json(ledger_path, ledger)
+    if blocking_duplicates:
+        _invalid_append_argument(
+            error_label, "OpenRouter source receipt was already recorded",
+        )
+    reservation = {
+        "invocation_id": invocation_id,
+        "receipt_digest": receipt_digest,
+        "request_digest": usage["source_request_digest"],
+        "run_id": run_id,
+        "lane": lane,
+        "receipt_stream": os.path.abspath(receipts_path),
+        "status": "pending",
+    }
+    consumptions.append(reservation)
+    _write_json(ledger_path, ledger)
+    return ledger, reservation
+
+
+def _finish_openrouter_reservation(
+    ledger_path, ledger, reservation, *, committed,
+):
+    if committed:
+        reservation["status"] = "committed"
+    else:
+        ledger["consumptions"].remove(reservation)
+    _write_json(ledger_path, ledger)
+
+
 def _append_attempt_usage_receipt(receipts_path, payload, args, error_label):
     """Wrap one measurement payload as an attempt_usage receipt and append it.
 
@@ -2729,7 +2835,10 @@ def _attempt_usage_payload(args):
                 flag + " must match its paired executor identity"
             )
     if args.openrouter_receipt:
-        if args.attempted_executor != "openrouter" or args.implemented_by != "openrouter":
+        if (
+            args.attempted_executor != "openrouter"
+            or args.implemented_by != "openrouter"
+        ):
             raise ValueError(
                 "an OpenRouter receipt requires attempted and implementing executor openrouter"
             )
@@ -2737,31 +2846,34 @@ def _attempt_usage_payload(args):
             args.openrouter_receipt, "record-attempt",
         )
         authorization = receipt.get("authorization")
-        if isinstance(authorization, dict) and authorization.get("mode") == "interim-operator-batch":
-            request_digest = authorization.get("requestEnvelopeSha256")
-            expected_request_digest = args.request_envelope_sha256
-            if (
-                authorization.get("runId") != args.run_id
-                or authorization.get("laneId") != args.lane
-                or type(request_digest) is not str
-                or re.fullmatch(r"[0-9a-f]{64}", request_digest) is None
-                or type(expected_request_digest) is not str
-                or re.fullmatch(r"[0-9a-f]{64}", expected_request_digest) is None
-                or request_digest != expected_request_digest
-            ):
-                raise ValueError(
-                    "interim OpenRouter receipt does not match the recorded run, lane, and request envelope"
-                )
-        elif args.request_envelope_sha256 is not None:
+        request_digest = (
+            authorization.get("requestEnvelopeSha256")
+            if isinstance(authorization, dict) else None
+        )
+        if (
+            not isinstance(authorization, dict)
+            or authorization.get("runId") != args.run_id
+            or authorization.get("laneId") != args.lane
+            or type(request_digest) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", request_digest) is None
+            or type(args.request_envelope_sha256) is not str
+            or re.fullmatch(r"[0-9a-f]{64}", args.request_envelope_sha256) is None
+            or request_digest != args.request_envelope_sha256
+        ):
             raise ValueError(
-                "--request-envelope-sha256 is valid only for an interim OpenRouter receipt"
+                "OpenRouter receipt does not match the recorded run, lane, "
+                "and request envelope"
             )
+        if not args.state_dir:
+            raise ValueError("an OpenRouter receipt requires --state-dir")
         payload = translate_openrouter_receipt(receipt, context=context)
         # The request-envelope digest identifies authorized bytes, but retries
         # may legitimately send identical bytes. Bind the provider observation
         # itself so the same wrapper receipt cannot be appended as two attempts.
         # Deduplication happens later under the receipt-stream lock.
         payload["source_receipt_digest"] = _document_digest(receipt)
+        payload["source_invocation_id"] = receipt["invocationId"]
+        payload["source_request_digest"] = request_digest
         payload.update({
             "requested_provider": args.requested_executor,
             "attempted_provider": args.attempted_executor,
@@ -2900,15 +3012,47 @@ def command_record_attempt(args):
         **usage,
     }
 
-    lock_descriptor = _open_receipt_stream_lock(args.receipts)
+    consumption_lock = None
+    consumption_path = None
+    lock_descriptor = None
+    reservation = None
+    reservation_ledger = None
+    appended = False
     try:
+        if "source_invocation_id" in usage:
+            consumption_path, consumption_lock = _open_openrouter_consumption_lock(
+                args.state_dir, args.run_id,
+            )
+            fcntl.flock(consumption_lock, fcntl.LOCK_EX)
+        lock_descriptor = _open_receipt_stream_lock(args.receipts)
         fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+        if consumption_path is not None:
+            reservation_ledger, reservation = _reserve_openrouter_invocation(
+                consumption_path, args.receipts, args.run_id, args.lane,
+                usage, error_label,
+            )
         _append_receipts_locked(
             args.receipts, error_label, [lane_receipt, usage_receipt],
             args.run_id, args.occurred_at,
         )
+        appended = True
+        if reservation is not None:
+            _finish_openrouter_reservation(
+                consumption_path, reservation_ledger, reservation,
+                committed=True,
+            )
+    except BaseException:
+        if reservation is not None and not appended:
+            _finish_openrouter_reservation(
+                consumption_path, reservation_ledger, reservation,
+                committed=False,
+            )
+        raise
     finally:
-        os.close(lock_descriptor)
+        if lock_descriptor is not None:
+            os.close(lock_descriptor)
+        if consumption_lock is not None:
+            os.close(consumption_lock)
     sys.stdout.write(json.dumps({
         "recorded": 2,
         "lane": args.lane,
@@ -4301,6 +4445,7 @@ def parser():
     # files are measured; otherwise the row is recorded `attempt_unmeasured`.
     record_attempt.add_argument("--openrouter-receipt", default=None)
     record_attempt.add_argument("--request-envelope-sha256", default=None)
+    record_attempt.add_argument("--state-dir", default=None)
     record_attempt.add_argument("--agent-definition", default=None)
     record_attempt.add_argument("--diff", default=None)
     record_attempt.add_argument("--boilerplate", action="append", default=[])

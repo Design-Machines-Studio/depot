@@ -105,7 +105,7 @@ def resolve_executable(repository, value):
 
 def run_bounded_capture(
     argv, cwd, environment, timeout_seconds, *,
-    max_output_bytes=None,
+    max_output_bytes=None, inspect_descendants=True,
 ):
     """Run one argv array with bounded streams, time, and descendants."""
     if max_output_bytes is None:
@@ -196,7 +196,7 @@ def run_bounded_capture(
             exit_code = process.wait(timeout=2.0)
         except subprocess.TimeoutExpired:
             exit_code = None
-    if exit_code is not None:
+    if exit_code is not None and inspect_descendants:
         try:
             os.killpg(process.pid, 0)
         except ProcessLookupError:

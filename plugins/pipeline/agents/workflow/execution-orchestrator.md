@@ -310,7 +310,8 @@ satisfied by writing the chunk receipt alone.
   --rung-rationale <cost|context|strength|availability> \
   [--fallback-reason <cascade reason>] \
   [--openrouter-receipt <wrapper receipt path> \
-   --request-envelope-sha256 <approved request envelope digest>] \
+   --request-envelope-sha256 <approved request envelope digest> \
+   --state-dir .workflow-kernel/runs/<run-id>] \
   [--agent-definition <prompt path> --diff <diff path> --provider <p> --model <m>]
 ```
 
@@ -319,8 +320,10 @@ One call appends **two** receipts under one lock -- the chunk outcome and its
 that records a chunk without its measurement, which is what stops a chunk from
 going unmeasured by being forgotten.
 
-Supply the strongest evidence the attempt has: `--openrouter-receipt` for
-OpenRouter chunks, `--agent-definition`/`--diff` for Codex chunks (deterministic
+Supply the strongest evidence the attempt has: `--openrouter-receipt`,
+`--request-envelope-sha256`, and the canonical
+`--state-dir .workflow-kernel/runs/<run-id>` for OpenRouter chunks;
+`--agent-definition`/`--diff` for Codex chunks (deterministic
 input bytes, never a token count). When the host reports neither, omit both and
 the row records `attempt_unmeasured` -- an explicit statement that the chunk ran
 and nothing measured it. Record failed and fallen-back attempts too: a chunk
@@ -328,7 +331,9 @@ that burned a provider call and produced nothing still cost money, and
 `providerSplit` accounting that omits it is wrong in the direction that flatters
 the run. For an interim operator-batch OpenRouter attempt, also pass
 `--request-envelope-sha256` from that attempt's authoritative preparation
-manifest; it must exactly match the wrapper receipt.
+manifest; it must exactly match the wrapper receipt. The kernel derives the
+one-use receipt-consumption registry from the repository lease root rather than
+accepting a caller-selected ledger.
 Each wrapper receipt is one-use measurement evidence; a retry must record the
 new receipt produced by that provider attempt rather than replay the prior one.
 

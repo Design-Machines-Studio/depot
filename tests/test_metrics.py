@@ -31,6 +31,8 @@ CONTRIBUTION_PROVENANCE = {
     "lane": "security", "requested_provider": "openrouter",
     "attempted_provider": "openai", "implemented_by": "codex",
     "provider": "openai", "model": "gpt-5.6-sol", "source_severity": "P2",
+    "implementer_family": "openai", "reviewer_family": "openai",
+    "resolution_reason": "ordinary-lane-same-family-review",
 }
 
 

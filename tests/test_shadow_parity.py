@@ -276,6 +276,8 @@ class ShadowParityTests(unittest.TestCase):
             "lane": "security", "requested_provider": "openrouter",
             "attempted_provider": "openai", "implemented_by": "codex",
             "provider": "openai", "model": "gpt-5.6-sol",
+            "implementer_family": "openai", "reviewer_family": "openai",
+            "resolution_reason": "ordinary-lane-same-family-review",
             "evidence_ref": "raw/finding.json",
         }
         authoritative = ReceiptSet.from_events(translate_review_receipts([base]))

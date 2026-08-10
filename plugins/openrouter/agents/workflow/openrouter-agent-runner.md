@@ -34,13 +34,16 @@ The caller passes you these inputs in the prompt body:
 - `target_timeout` -- positive integer seconds, below dm-review's orchestrator timeout
 - `openrouter_bundle_ref` -- ephemeral home-relative selected root from the caller
 - `openrouter_bundle_version`, `cache_class`, and `resolution_reason` -- expected resolver identity
-- `approved_payload_sha256` -- optional exact digest copied from the user's
-  approval response; empty on the preparation pass
+- `approved_request_envelope_sha256` -- optional exact request-envelope digest
+  copied from the user's approval response; empty on the preparation pass
 - `authorization_mode` -- root-selected `prepare_interim_batch`,
   `interim_operator_batch`, `exact-digest`, or `trusted-boundary`; `broker` is
   intentionally not accepted until broker-owned transport is implemented
-- `batch_authorization_file`, `batch_authorization_digest`, and `review_run_id`
-  -- required together for `interim_operator_batch`
+- `review_run_id` -- optional for direct exact-digest use and required for
+  automated or `interim_operator_batch` dispatch; copied into the transport
+  receipt so replay identity is explicit
+- `batch_authorization_file` and `batch_authorization_digest` -- required
+  together with `review_run_id` for `interim_operator_batch`
 - `request_envelope_manifest` -- root-owned private preparation-manifest path
   required for both `prepare_interim_batch` and its later
   `interim_operator_batch` redispatch; preserved unchanged across approval
@@ -365,20 +368,37 @@ case "$target_agent_name" in
   *) OPENROUTER_WORKLOAD_CLASS="quality" ;;
 esac
 
-PAYLOAD_SHA256=$("$AUTHORIZATION_HELPER" snapshot \
-  --output "$AUTHORIZATION_RECEIPT" \
-  --content-file "$SYS_FILE" \
-  --content-file "$USER_FILE")
-
 AUTHORIZATION_MODE="${authorization_mode:-${OPENROUTER_PAYLOAD_AUTHORIZATION:-exact-digest}}"
-if [ "$AUTHORIZATION_MODE" = "exact-digest" ] && [ -z "${approved_payload_sha256:-}" ]; then
+if [ "$AUTHORIZATION_MODE" = "exact-digest" ]; then
+  REQUEST_ENVELOPE_FILE=$(mktemp)
+  if ! env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYS_FILE" \
+      OPENROUTER_TARGET_AGENT_NAME="$target_agent_name" \
+      OPENROUTER_WORKLOAD="$OPENROUTER_WORKLOAD_CLASS" \
+      OPENROUTER_REQUEST_ENVELOPE_OUTPUT="$REQUEST_ENVELOPE_FILE" \
+      bash "$WRAPPER_PATH" "$target_model" - "$target_timeout" "${fallback_model:-}" \
+      < "$USER_FILE"; then
+    echo "RUNNER FAILURE: exact request-envelope rendering failed" >&2
+    exit 2
+  fi
+  PAYLOAD_SHA256=$("$AUTHORIZATION_HELPER" snapshot-envelope \
+    --output "$AUTHORIZATION_RECEIPT" --request-file "$REQUEST_ENVELOPE_FILE")
+  # Exact-digest redispatch rebuilds the envelope and compares the human-bound
+  # digest, so it does not need the interim batch's persistent inspection copy.
+  rm -f "$AUTHORIZATION_RECEIPT.request.json"
+elif [ "$AUTHORIZATION_MODE" = "trusted-boundary" ]; then
+  PAYLOAD_SHA256=$("$AUTHORIZATION_HELPER" snapshot \
+    --output "$AUTHORIZATION_RECEIPT" \
+    --content-file "$SYS_FILE" \
+    --content-file "$USER_FILE")
+fi
+if [ "$AUTHORIZATION_MODE" = "exact-digest" ] && [ -z "${approved_request_envelope_sha256:-}" ]; then
   cat <<EOF
 ### PAYLOAD APPROVAL REQUIRED
 lane: \`${target_agent_name}\`
 requestedModel: \`${target_model}\`
 fallbackModel: \`${fallback_model:-none}\`
-payloadSha256: \`${PAYLOAD_SHA256}\`
-authorizationScope: \`exact-ordered-content-bytes\`
+requestEnvelopeSha256: \`${PAYLOAD_SHA256}\`
+authorizationScope: \`exact-request-envelope-bytes\`
 EOF
   exit 0
 fi
@@ -392,8 +412,8 @@ without invoking the wrapper:
 lane: `{target_agent_name}`
 requestedModel: `{target_model}`
 fallbackModel: `{fallback_model|none}`
-payloadSha256: `{PAYLOAD_SHA256}`
-authorizationScope: `exact-ordered-content-bytes`
+requestEnvelopeSha256: `{PAYLOAD_SHA256}`
+authorizationScope: `exact-request-envelope-bytes`
 ```
 
 The root orchestrator collects every such lane result, asks the user to approve
@@ -456,11 +476,14 @@ EOF
     exit 0
     ;;
   exact-digest)
-    "$AUTHORIZATION_HELPER" verify \
+    [ -n "${review_run_id:-}" ] || {
+      echo "RUNNER FAILURE: exact-digest redispatch requires review_run_id" >&2
+      exit 2
+    }
+    "$AUTHORIZATION_HELPER" verify-envelope \
       --manifest "$AUTHORIZATION_RECEIPT" \
-      --approved-sha256 "$approved_payload_sha256" \
-      --content-file "$SYS_FILE" \
-      --content-file "$USER_FILE"
+      --approved-sha256 "$approved_request_envelope_sha256" \
+      --request-file "$REQUEST_ENVELOPE_FILE"
     ;;
   trusted-boundary)
     "$AUTHORIZATION_HELPER" verify-trusted-boundary \
@@ -505,6 +528,9 @@ RESULT=$( \
   env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYS_FILE" \
   OPENROUTER_TARGET_AGENT_NAME="$target_agent_name" \
   OPENROUTER_AUTHORIZATION_MODE="$AUTHORIZATION_MODE" \
+  OPENROUTER_AUTHORIZATION_RUN_ID="${review_run_id:-}" \
+  OPENROUTER_LANE_ID="$target_agent_name" \
+  OPENROUTER_APPROVED_REQUEST_ENVELOPE_SHA256="${approved_request_envelope_sha256:-}" \
   OPENROUTER_BATCH_AUTHORIZATION_FILE="${batch_authorization_file:-}" \
   OPENROUTER_BATCH_AUTHORIZATION_DIGEST="${batch_authorization_digest:-}" \
   OPENROUTER_BATCH_RUN_ID="${review_run_id:-}" \
@@ -651,7 +677,7 @@ complete:
 5. **Keep consequence-appropriate review independent.** High-consequence security completion requires a reviewer family different from the implementer even when non-secret implementation content was eligible for OpenRouter.
 6. **Partial coverage is not full coverage.** When `DECLINED_CHANGED_FILES` is non-empty, emit `### CODEX PARTIAL COVERAGE REQUIRED` with path names only. dm-review completes ordinary lanes locally on Codex; `security-auditor-codex-signoff` must use a non-implementing family for every held path or remain `REVIEW INCOMPLETE`.
 7. **Preserve the provider receipt.** Report the generation ID, canonical response model, and serving-provider provenance. A missing provider field is `not_reported_by_completion`, never evidence of a verified provider. Never include prompt or completion content in receipt metadata.
-8. **Bind disclosure approval to bytes.** Invoke the wrapper only after the user approves the exact `payloadSha256` and the authorization helper verifies the unchanged payload immediately before transmission.
+8. **Bind disclosure approval to bytes.** Invoke the wrapper only after the user approves the exact `requestEnvelopeSha256` and the authorization helper verifies the unchanged canonical request envelope immediately before transmission.
 
 ## Why This Architecture
 
