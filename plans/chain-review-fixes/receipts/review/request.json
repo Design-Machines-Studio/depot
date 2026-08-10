@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "run_id": "chain-review-20260809",
+  "base_sha": "bec6485",
+  "head_sha": "094bdde981a4770c0ac620a9af5d2b68c4dee5f2",
+  "mode": "full",
+  "status": "superseded",
+  "scope": "iteration_1_head_only",
+  "diff_files": 148,
+  "diff_lines": 17719,
+  "large_diff_guardrail": true,
+  "shadow_prediction": "unavailable_post_dispatch_setup_ordering",
+  "coverage_note": "This 148-file request covers iteration 1 only and does not evidence the later staged aggregate.",
+  "superseded_by": ".claude/ux-review/chain-review/final-full exact-envelope review passes"
+}

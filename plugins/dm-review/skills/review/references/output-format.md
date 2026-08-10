@@ -14,7 +14,7 @@ The canonical unified report format produced by the review-consolidator after al
 **Mode:** [Full / Quick]
 **Project Type:** [Go+Templ+Datastar / Craft CMS / CSS Framework / Mixed]
 **Agents Launched:** X of Y applicable
-**Lanes:** codex: ran | openrouter: fallback:codex | claude-noncoding: ran | codex-perspective: skipped:cli-absent
+**Lanes:** codex: ran | openrouter: fallback:codex | claude-noncoding: ran | second-perspective: unavailable:no-independent-family
 **Evidence source:** PR threads | receipts | merge bodies | closed issues | verification files | none found
 
 ---
@@ -100,9 +100,16 @@ exactly one decision per raw source finding. Each decision contains:
 `source_finding_id`, `finding_path`, `finding_anchor`, `finding_category`,
 `finding_root_cause`, `finding_disposition`, `agreement`,
 `decision_reason_code`, `reviewer`, `lane`, `requested_provider`,
-`attempted_provider`, `implemented_by`, `provider`, `model`, `source_severity`,
+`attempted_provider`, `implemented_by`, `provider`, `model`,
+`implementer_family`, `reviewer_family`, `resolution_reason`, `source_severity`,
 `evidence_ref`, positive integer `attempt`, and `occurred_at`. Use literal provider/model values
 from the lane receipt; use `not_reported` when that receipt does not name one.
+Every decision records normalized family provenance. Ordinary lanes may record
+the same implementer and reviewer family with a resolution such as
+`ordinary-lane-same-family-review`; required independent lanes must use
+disjoint families, including disjoint members of `mixed(<sorted families>)`,
+and their `reviewer_family` must match the closed family derived from the
+recorded reviewer model.
 The kernel normalizes the four identity inputs, recomputes the exact
 `finding-v1:sha256(<64 lowercase hex>)` identifier, checks cardinality, and
 appends the ordered contribution receipts.
@@ -116,9 +123,11 @@ an exact object with `schema_version: 1`,
 `artifact_role: "review_lane_receipts"`, the same `run_id`, and one `lanes`
 entry for every required lane. Each entry has `reviewer`, `lane`,
 `requested_provider`, `attempted_provider`, `implemented_by`, `provider`,
-`model`, nonempty `evidence_refs`, nonnegative integer `finding_count`, and the
+`model`, `implementer_family`, `reviewer_family`, `resolution_reason`, nonempty
+`evidence_refs`, nonnegative integer `finding_count`, and the
 content-addressed `raw_output_ref` and `raw_output_digest`. Lane names and
-reviewer/lane identities must be unique. The raw-output companion is an exact
+reviewer/lane identities must be unique. Family values and resolution must
+exactly match every decision sourced from that lane. The raw-output companion is an exact
 object with `schema_version: 1`,
 `artifact_role: "review_lane_raw_outputs"`, the same `run_id`, and one
 `outputs` entry per requested lane. Each output contains only `reviewer`,

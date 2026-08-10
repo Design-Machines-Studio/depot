@@ -112,6 +112,58 @@ class SyncRunCostSummaryContractTests(unittest.TestCase):
             encoding="utf-8",
         )
 
+    def test_all_consumer_status_handlers_preserve_exit_semantics(self):
+        for relative in CONSUMERS:
+            with self.subTest(consumer=relative), tempfile.TemporaryDirectory() as directory:
+                root = Path(directory)
+                text = (REPOSITORY / relative).read_text(encoding="utf-8")
+                handlers = [
+                    line.strip().replace("<feature-slug>", "fixture-feature")
+                    .replace("<feature>", "fixture-feature")
+                    for line in text.splitlines()
+                    if line.lstrip().startswith("|| { s=$?;")
+                ]
+                self.assertEqual(len(handlers), 1)
+                handler = handlers[0]
+                receipt_matches = re.findall(r">> ([^;]+);", handler)
+                self.assertEqual(len(receipt_matches), 2)
+                self.assertEqual(receipt_matches[0], receipt_matches[1])
+                receipt = root / receipt_matches[0]
+                receipt.parent.mkdir(parents=True)
+
+                invalid = subprocess.run(
+                    ["/bin/bash", "-c", f'(exit 2) {handler}'], cwd=root,
+                )
+                self.assertEqual(invalid.returncode, 2)
+                self.assertFalse(receipt.exists())
+
+                receipt_failure = subprocess.run(
+                    ["/bin/bash", "-c", f'(exit 6) {handler}'], cwd=root,
+                )
+                self.assertEqual(receipt_failure.returncode, 0)
+                self.assertEqual(
+                    receipt.read_text(encoding="utf-8"),
+                    "run-cost-summary: skipped (receipt-write-failed)\n",
+                )
+
+                receipt.unlink()
+                unresolved = subprocess.run(
+                    ["/bin/bash", "-c", f'(exit 9) {handler}'], cwd=root,
+                )
+                self.assertEqual(unresolved.returncode, 0)
+                self.assertEqual(
+                    receipt.read_text(encoding="utf-8"),
+                    "run-cost-summary: skipped (kernel-unresolvable)\n",
+                )
+
+                receipt.unlink()
+                receipt.parent.rmdir()
+                append_failure = subprocess.run(
+                    ["/bin/bash", "-c", f'(exit 6) {handler}'], cwd=root,
+                    capture_output=True, text=True,
+                )
+                self.assertNotEqual(append_failure.returncode, 0)
+
     def _inject_failing_mv(self, root: Path, script: Path, fail_on: int):
         count_file = root / "mv-count"
         self._install_mv_wrapper(

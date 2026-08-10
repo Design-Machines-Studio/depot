@@ -529,17 +529,21 @@ class DenyMatrixTest(HarnessBase):
                 lambda: os.link(trust_path, hard),
                 lambda: hard.unlink(),
             )
+            def restore_trust():
+                trust_path.write_bytes(original_trust)
+                trust_path.chmod(0o644)
+
             # Corrupt trust must not degrade to "no credential, proceed".
             scenario(
                 "trust-corrupt",
                 lambda: trust_path.write_bytes(b"{not json"),
-                lambda: trust_path.write_bytes(original_trust),
+                restore_trust,
             )
             # A missing trust document is not an implicit allow.
             scenario(
                 "trust-missing",
                 lambda: trust_path.unlink(),
-                lambda: trust_path.write_bytes(original_trust) or trust_path.chmod(0o644),
+                restore_trust,
             )
 
             counters = daemon.counters()
@@ -613,31 +617,30 @@ class DenyMatrixTest(HarnessBase):
     # zero connections, so honoring any of them would be visible.
     def test_req_e2e_03_caller_overrides_are_inert(self):
         root = self.fixture_root()
-        probe = FixtureDaemon(self.binary, root)
-        with probe as daemon:
-            canary = daemon.ready["canary"]
-
-        hostile_root = self.fixture_root()
-        hostile = {
-            "OPENROUTER_API_KEY": "sk-or-v1-" + "caller-supplied-must-be-ignored",
-            "OPENROUTER_BASE_URL": "http://" + canary,
-            "OPENROUTER_API_BASE": "http://" + canary,
-            "HTTPS_PROXY": "http://" + canary,
-            "HTTP_PROXY": "http://" + canary,
-            "ALL_PROXY": "http://" + canary,
-            "WORKFLOW_AUTHORITY_SOCKET": str(hostile_root / "attacker.sock"),
-            "WORKFLOW_AUTHORITY_TRUST": str(hostile_root / "attacker-trust.json"),
-            "WORKFLOW_AUTHORITY_POLICY": str(hostile_root / "attacker-policy.json"),
-            "WORKFLOW_AUTHORITY_AUTHORIZATION_MODE": "none",
-            "WORKFLOW_AUTHORITY_APPROVED_DIGEST": "sha256:" + "0" * 64,
-        }
-        with FixtureDaemon(self.binary, hostile_root, extra_env=hostile) as daemon:
-            self.assertNotIn(
-                canary, daemon.ready["provider_origin"],
-                "an environment override redirected the provider origin",
-            )
-            attempts = self.dispatch(daemon, hostile_root)
-            counters = daemon.counters()
+        with FixtureDaemon(self.binary, root) as probe:
+            canary = probe.ready["canary"]
+            hostile_root = self.fixture_root()
+            hostile = {
+                "OPENROUTER_API_KEY": "sk-or-v1-" + "caller-supplied-must-be-ignored",
+                "OPENROUTER_BASE_URL": "http://" + canary,
+                "OPENROUTER_API_BASE": "http://" + canary,
+                "HTTPS_PROXY": "http://" + canary,
+                "HTTP_PROXY": "http://" + canary,
+                "ALL_PROXY": "http://" + canary,
+                "WORKFLOW_AUTHORITY_SOCKET": str(hostile_root / "attacker.sock"),
+                "WORKFLOW_AUTHORITY_TRUST": str(hostile_root / "attacker-trust.json"),
+                "WORKFLOW_AUTHORITY_POLICY": str(hostile_root / "attacker-policy.json"),
+                "WORKFLOW_AUTHORITY_AUTHORIZATION_MODE": "none",
+                "WORKFLOW_AUTHORITY_APPROVED_DIGEST": "sha256:" + "0" * 64,
+            }
+            with FixtureDaemon(self.binary, hostile_root, extra_env=hostile) as daemon:
+                self.assertNotIn(
+                    canary, daemon.ready["provider_origin"],
+                    "an environment override redirected the provider origin",
+                )
+                attempts = self.dispatch(daemon, hostile_root)
+                counters = daemon.counters()
+            probe_counters = probe.counters()
 
         self.assertTrue(
             attempts[0]["ok"],
@@ -645,7 +648,7 @@ class DenyMatrixTest(HarnessBase):
         )
         self.assertEqual(counters["provider_requests"], 1)
         self.assertEqual(
-            counters["canary_hits"], 0,
+            probe_counters["canary_hits"], 0,
             "an environment override was honored: the canary listener was contacted",
         )
         self.assertEqual(counters["provider_rejections"], 0)

@@ -48,11 +48,16 @@
 #     --content-file <f>...
 #   payload-authorization.sh verify-trusted-boundary --manifest <m> \
 #     --policy <p> --content-file <f>...
+#   payload-authorization.sh snapshot-envelope --output <manifest> \
+#     --request-file <exact-request.json>
+#   payload-authorization.sh verify-envelope --manifest <m> \
+#     --approved-sha256 <hex> --request-file <exact-request.json>
 #   payload-authorization.sh batch-approve --batch-file <out> --run-id <id> \
 #     --operator <name> --scope-note <text> \
 #     --lane <lane-id>=<lane-manifest> [--lane ...] [--expires-in <seconds>]
+#   payload-authorization.sh validate-batch --batch-file <b> --run-id <id>
 #   payload-authorization.sh verify-batch --batch-file <b> --run-id <id> \
-#     --manifest <m> --content-file <f>...
+#     --lane-id <lane-id> --manifest <m> --request-file <exact-request.json>
 
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
@@ -119,7 +124,7 @@ refuse_when_broker_ready() {
 
 MODE="${1:-}"
 [ -n "$MODE" ] || {
-  echo "payload-authorization: snapshot|verify|verify-trusted-boundary|batch-approve|verify-batch required" >&2
+  echo "payload-authorization: snapshot|snapshot-envelope|verify-envelope|verify|verify-trusted-boundary|batch-approve|validate-batch|verify-batch required" >&2
   exit 2
 }
 shift
@@ -128,7 +133,9 @@ MANIFEST=""
 APPROVED_SHA256=""
 POLICY=""
 BATCH_FILE=""
+REQUEST_FILE=""
 RUN_ID=""
+LANE_ID=""
 OPERATOR=""
 SCOPE_NOTE=""
 EXPIRES_IN="86400"
@@ -148,9 +155,15 @@ while [ "$#" -gt 0 ]; do
     --batch-file)
       [ "$#" -ge 2 ] || { echo "payload-authorization: missing argument" >&2; exit 2; }
       BATCH_FILE="$2"; shift 2;;
+    --request-file)
+      [ "$#" -ge 2 ] || { echo "payload-authorization: missing argument" >&2; exit 2; }
+      REQUEST_FILE="$2"; shift 2;;
     --run-id)
       [ "$#" -ge 2 ] || { echo "payload-authorization: missing argument" >&2; exit 2; }
       RUN_ID="$2"; shift 2;;
+    --lane-id)
+      [ "$#" -ge 2 ] || { echo "payload-authorization: missing argument" >&2; exit 2; }
+      LANE_ID="$2"; shift 2;;
     --operator)
       [ "$#" -ge 2 ] || { echo "payload-authorization: missing argument" >&2; exit 2; }
       OPERATOR="$2"; shift 2;;
@@ -177,6 +190,19 @@ case "$MODE" in
       exit 2
     }
     ;;
+  snapshot-envelope)
+    [ -n "$MANIFEST" ] && [ -n "$REQUEST_FILE" ] || {
+      echo "payload-authorization: output and request file required" >&2
+      exit 2
+    }
+    ;;
+  verify-envelope)
+    [ -n "$MANIFEST" ] && [ -n "$APPROVED_SHA256" ] &&
+      [ -n "$REQUEST_FILE" ] || {
+      echo "payload-authorization: manifest, approved digest, and request file required" >&2
+      exit 2
+    }
+    ;;
   verify)
     [ -n "$MANIFEST" ] && [ -n "$APPROVED_SHA256" ] &&
       [ "${#CONTENT_FILES[@]}" -gt 0 ] || {
@@ -200,12 +226,18 @@ case "$MODE" in
     ;;
   verify-batch)
     [ -n "$BATCH_FILE" ] && [ -n "$RUN_ID" ] && [ -n "$MANIFEST" ] &&
-      [ "${#CONTENT_FILES[@]}" -gt 0 ] || {
-      echo "payload-authorization: batch file, run id, manifest, and content files required" >&2
+      [ -n "$REQUEST_FILE" ] && [ -n "$LANE_ID" ] || {
+      echo "payload-authorization: batch file, run id, lane id, manifest, and request file required" >&2
       exit 2
     }
     ;;
-  *) echo "payload-authorization: snapshot|verify|verify-trusted-boundary|batch-approve|verify-batch required" >&2; exit 2;;
+  validate-batch)
+    [ -n "$BATCH_FILE" ] && [ -n "$RUN_ID" ] || {
+      echo "payload-authorization: batch file and run id required" >&2
+      exit 2
+    }
+    ;;
+  *) echo "payload-authorization: snapshot|snapshot-envelope|verify-envelope|verify|verify-trusted-boundary|batch-approve|validate-batch|verify-batch required" >&2; exit 2;;
 esac
 
 if [ "${#CONTENT_FILES[@]}" -gt 0 ]; then
@@ -215,6 +247,11 @@ if [ "${#CONTENT_FILES[@]}" -gt 0 ]; then
       exit 2
     }
   done
+fi
+
+if [ -n "$REQUEST_FILE" ] && [ ! -f "$REQUEST_FILE" ]; then
+  echo "payload-authorization: request file unavailable" >&2
+  exit 2
 fi
 
 if [ "$MODE" = "verify-trusted-boundary" ]; then
@@ -234,15 +271,21 @@ fi
 
 if [ "$MODE" = "batch-approve" ]; then
   refuse_when_broker_ready
+  if \
   PAYLOAD_AUTH_PROGRAM_SUNSET="$PROGRAM_SUNSET" \
   PAYLOAD_AUTH_CONFIRMATION="$BATCH_CONFIRMATION_PHRASE" \
+  PAYLOAD_AUTH_SELF="$0" \
   python3 - "$BATCH_FILE" "$RUN_ID" "$OPERATOR" "$SCOPE_NOTE" "$EXPIRES_IN" "${LANES[@]}" <<'PY'
 import hashlib
+import hmac
 import json
 import os
 import re
+import signal
+import subprocess
 import sys
 import tempfile
+import atexit
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -251,11 +294,75 @@ program_sunset = os.environ["PAYLOAD_AUTH_PROGRAM_SUNSET"]
 confirmation_phrase = os.environ["PAYLOAD_AUTH_CONFIRMATION"]
 MAX_LIFETIME_SECONDS = 86400
 HEX64 = re.compile(r"^[0-9a-f]{64}$")
+persisted_batch = None
+temporary_handle = None
+temporary_path = None
+lifecycle_succeeded = False
+handling_signal = False
+test_failure_stage = (
+    os.environ.get("PAYLOAD_AUTH_TEST_FAILURE_STAGE", "")
+    if os.environ.get("PAYLOAD_AUTH_TEST_MODE") == "1"
+    else ""
+)
+
+
+def cleanup_lifecycle():
+    global temporary_handle, temporary_path
+    temporary_failed = False
+    if temporary_handle is not None:
+        try:
+            temporary_handle.close()
+        except OSError:
+            temporary_failed = True
+        temporary_handle = None
+    if temporary_path is not None:
+        try:
+            temporary_path.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            temporary_failed = True
+    rollback_failed = False
+    if persisted_batch is not None and not lifecycle_succeeded:
+        try:
+            persisted_batch.unlink()
+        except FileNotFoundError:
+            pass
+        except OSError:
+            rollback_failed = True
+    if temporary_failed:
+        print(
+            "payload-authorization: temporary batch cleanup failed",
+            file=sys.stderr,
+        )
+    if rollback_failed:
+        print(
+            "payload-authorization: failed batch authorization rollback",
+            file=sys.stderr,
+        )
+
+
+atexit.register(cleanup_lifecycle)
 
 
 def fail(message):
     print(f"payload-authorization: {message}", file=sys.stderr)
     raise SystemExit(2)
+
+
+def interrupted(signum, _frame):
+    global handling_signal
+    if handling_signal:
+        return
+    handling_signal = True
+    for handled_signal in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+        signal.signal(handled_signal, signal.SIG_IGN)
+    cleanup_lifecycle()
+    fail(f"interactive batch authorization interrupted by signal {signum}")
+
+
+for handled_signal in (signal.SIGHUP, signal.SIGINT, signal.SIGTERM):
+    signal.signal(handled_signal, interrupted)
 
 
 try:
@@ -275,6 +382,7 @@ if now >= sunset:
 
 lanes = []
 digests = []
+inspection_paths = []
 total_bytes = 0
 for spec in lane_specs:
     if "=" not in spec:
@@ -282,25 +390,70 @@ for spec in lane_specs:
     lane_id, manifest_path = spec.split("=", 1)
     if not lane_id or not manifest_path:
         fail("lane must be <lane-id>=<lane-manifest>")
+    # Lane artifacts remain caller-owned. This invocation validates and reads
+    # them but never infers deletion authority from a caller-selected path.
+    expected_inspection_path = manifest_path + ".request.json"
+    inspection_paths.append(expected_inspection_path)
     try:
         recorded = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError):
         fail("lane authorization manifest unreadable")
-    if recorded.get("schemaVersion") != 1:
+    # The companion path is derived from the manifest path, never trusted from
+    # manifest content.
+    if recorded.get("schemaVersion") != 2:
         fail("lane authorization manifest schema unsupported")
-    digest = recorded.get("payloadSha256", "")
+    if recorded.get("authorizationScope") != "exact-request-envelope-bytes":
+        fail("lane authorization manifest scope unsupported")
+    digest = recorded.get("requestEnvelopeSha256", "")
     if not isinstance(digest, str) or not HEX64.match(digest):
         fail("lane authorization manifest digest malformed")
     lane_bytes = 0
-    for entry in recorded.get("files", []):
-        count = entry.get("byteCount")
-        if not isinstance(count, int) or count < 0:
-            fail("lane authorization manifest byte count malformed")
-        lane_bytes += count
+    count = recorded.get("byteCount")
+    if not isinstance(count, int) or count < 0:
+        fail("lane authorization manifest byte count malformed")
+    lane_bytes += count
+    models = recorded.get("modelCandidates")
+    provider = recorded.get("providerRouting")
+    role_bytes = recorded.get("messageRoleByteCounts")
+    inspection_path = recorded.get("inspectionPath")
+    if not isinstance(models, list) or not models or not all(
+        isinstance(model, str) and model for model in models
+    ):
+        fail("lane authorization manifest model candidates malformed")
+    if not isinstance(provider, dict):
+        fail("lane authorization manifest provider routing malformed")
+    if not isinstance(role_bytes, list) or not role_bytes or not all(
+        isinstance(item, dict)
+        and set(item) == {"role", "byteCount"}
+        and isinstance(item["role"], str)
+        and item["role"]
+        and isinstance(item["byteCount"], int)
+        and item["byteCount"] >= 0
+        for item in role_bytes
+    ):
+        fail("lane authorization manifest role byte counts malformed")
+    if not isinstance(inspection_path, str) or not inspection_path:
+        fail("lane authorization manifest inspection path missing")
+    if inspection_path != expected_inspection_path or Path(inspection_path).is_symlink():
+        fail("lane authorization manifest inspection path is not the owned companion path")
+    try:
+        inspection_raw = Path(inspection_path).read_bytes()
+    except OSError:
+        fail("lane request envelope is unavailable for operator inspection")
+    if not hmac.compare_digest(hashlib.sha256(inspection_raw).hexdigest(), digest):
+        fail("lane request envelope does not match its authorization manifest")
     if digest in digests:
         fail("duplicate lane payload digest")
     digests.append(digest)
-    lanes.append((lane_id, digest, lane_bytes))
+    lane_record = {
+        "lane_id": lane_id,
+        "requestEnvelopeSha256": digest,
+        "byteCount": lane_bytes,
+        "modelCandidates": models,
+        "providerRouting": provider,
+        "messageRoleByteCounts": role_bytes,
+    }
+    lanes.append(lane_record)
     total_bytes += lane_bytes
 
 expires_at = now + timedelta(seconds=lifetime)
@@ -314,6 +467,8 @@ except OSError:
     fail("interactive confirmation unavailable; interim batch mode fails closed")
 
 with tty_out, tty_in:
+    if test_failure_stage == "tty-write":
+        raise OSError("injected TTY write failure")
     tty_out.write("\n")
     tty_out.write("INTERIM operator-batch authorization for OpenRouter lanes\n")
     tty_out.write("This is a temporary, sunset-bound loosening of approval\n")
@@ -327,8 +482,26 @@ with tty_out, tty_in:
     tty_out.write(f"  digest count  : {len(digests)}\n")
     tty_out.write(f"  total bytes   : {total_bytes}\n\n")
     tty_out.write("Lanes covered by this single approval:\n")
-    for lane_id, digest, lane_bytes in lanes:
-        tty_out.write(f"  {lane_id}  {lane_bytes} bytes  sha256:{digest}\n")
+    for lane, inspection_path in zip(lanes, inspection_paths):
+        tty_out.write(
+            f"  {lane['lane_id']}  {lane['byteCount']} bytes  "
+            f"sha256:{lane['requestEnvelopeSha256']}\n"
+        )
+        tty_out.write(f"    models: {', '.join(lane['modelCandidates'])}\n")
+        tty_out.write(
+            "    provider: "
+            + json.dumps(lane["providerRouting"], sort_keys=True, separators=(",", ":"))
+            + "\n"
+        )
+        tty_out.write(
+            "    message bytes: "
+            + ", ".join(
+                f"{item['role']}={item['byteCount']}"
+                for item in lane["messageRoleByteCounts"]
+            )
+            + "\n"
+        )
+        tty_out.write(f"    inspect: {inspection_path}\n")
     tty_out.write(
         "\nOnly these exact digests become automated. Any other payload falls\n"
         "back to per-payload interactive approval or fails closed.\n"
@@ -341,36 +514,89 @@ if answer.strip() != confirmation_phrase:
     fail("interim batch authorization declined by operator")
 
 document = {
-    "schema_version": 1,
+    "schema_version": 2,
     "authorization_mode": "interim_operator_batch",
     "run_id": run_id,
     "operator": operator,
     "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
     "expires_at": expires_at.strftime("%Y-%m-%dT%H:%M:%SZ"),
-    "payload_digests": digests,
+    "request_envelope_digests": digests,
+    "lanes": lanes,
     "scope_note": scope_note,
     "program_sunset": program_sunset,
 }
 
 target = Path(batch_path)
+if test_failure_stage == "mkdir":
+    raise OSError("injected batch directory creation failure")
 target.parent.mkdir(parents=True, exist_ok=True)
-fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+if test_failure_stage == "mkstemp":
+    raise OSError("injected batch temporary-file failure")
+handled_signals = (signal.SIGHUP, signal.SIGINT, signal.SIGTERM)
+previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, handled_signals)
 try:
-    os.fchmod(fd, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        json.dump(document, handle, sort_keys=True)
-        handle.write("\n")
-    os.replace(temporary, target)
-except Exception:
+    temporary_handle = tempfile.NamedTemporaryFile(
+        mode="w", encoding="utf-8", prefix=f".{target.name}.",
+        dir=target.parent, delete=False,
+    )
+    if test_failure_stage == "signal-before-temp-ownership":
+        os.kill(os.getpid(), signal.SIGTERM)
+    temporary_path = Path(temporary_handle.name)
+    os.fchmod(temporary_handle.fileno(), 0o600)
+finally:
+    signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+try:
+    json.dump(document, temporary_handle, sort_keys=True)
+    temporary_handle.write("\n")
+    temporary_handle.close()
+    temporary_handle = None
+    # Replacement and rollback-ownership publication are one signal-atomic
+    # transition. A pending signal is delivered only after both facts agree.
+    previous_mask = signal.pthread_sigmask(signal.SIG_BLOCK, handled_signals)
     try:
-        os.unlink(temporary)
-    except OSError:
-        pass
-    raise
+        os.replace(temporary_path, target)
+        if test_failure_stage == "signal-before-batch-ownership":
+            os.kill(os.getpid(), signal.SIGTERM)
+        temporary_path = None
+        persisted_batch = target
+    finally:
+        signal.pthread_sigmask(signal.SIG_SETMASK, previous_mask)
+except Exception:
+    fail("batch authorization could not be persisted")
 
-print(hashlib.sha256(target.read_bytes()).hexdigest())
+if test_failure_stage == "final-read":
+    raise OSError("injected final batch read failure")
+batch_digest = hashlib.sha256(target.read_bytes()).hexdigest()
+# Canonical typed validation runs inside the same lifecycle-owning process, so
+# no shell handoff can leave an unvalidated batch behind on interruption.
+if test_failure_stage == "canonical-validation":
+    mutated = json.loads(target.read_text(encoding="utf-8"))
+    mutated["unexpected_test_field"] = True
+    target.write_text(json.dumps(mutated, sort_keys=True) + "\n", encoding="utf-8")
+validation = subprocess.run(
+    [
+        os.environ["PAYLOAD_AUTH_SELF"], "validate-batch",
+        "--batch-file", batch_path, "--run-id", run_id,
+    ],
+    stdout=subprocess.DEVNULL,
+    check=False,
+)
+if validation.returncode != 0:
+    fail("produced batch failed canonical typed validation")
+sys.stdout.write(batch_digest + "\n")
+sys.stdout.flush()
+lifecycle_succeeded = True
 PY
-  exit 0
+  then
+    exit 0
+  else
+    status=$?
+    exit "$status"
+  fi
+fi
+
+if [ "$MODE" = "validate-batch" ]; then
+  refuse_when_broker_ready
 fi
 
 if [ "$MODE" = "verify-batch" ]; then
@@ -380,7 +606,10 @@ fi
 PAYLOAD_AUTH_PROGRAM_SUNSET="$PROGRAM_SUNSET" \
 PAYLOAD_AUTH_BATCH_FILE="$BATCH_FILE" \
 PAYLOAD_AUTH_RUN_ID="$RUN_ID" \
-python3 - "$MODE" "$MANIFEST" "$APPROVED_SHA256" "${CONTENT_FILES[@]}" <<'PY'
+PAYLOAD_AUTH_LANE_ID="$LANE_ID" \
+PAYLOAD_AUTH_REQUEST_FILE="$REQUEST_FILE" \
+python3 - "$MODE" "$MANIFEST" "$APPROVED_SHA256" \
+  ${CONTENT_FILES[@]+"${CONTENT_FILES[@]}"} <<'PY'
 import hashlib
 import hmac
 import json
@@ -401,7 +630,8 @@ BATCH_KEYS = {
     "operator",
     "created_at",
     "expires_at",
-    "payload_digests",
+    "request_envelope_digests",
+    "lanes",
     "scope_note",
     "program_sunset",
 }
@@ -411,6 +641,49 @@ MAX_LIFETIME_SECONDS = 86400
 def fail(message):
     print(f"payload-authorization: {message}", file=sys.stderr)
     raise SystemExit(2)
+
+
+def summarize_request(raw, inspection_path=None):
+    try:
+        request = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        fail("request envelope is not valid UTF-8 JSON")
+    if not isinstance(request, dict):
+        fail("request envelope must be an object")
+    models = request.get("models")
+    if models is None and isinstance(request.get("model"), str):
+        models = [request["model"]]
+    if not isinstance(models, list) or not models or not all(
+        isinstance(model, str) and model for model in models
+    ):
+        fail("request envelope model candidates malformed")
+    provider = request.get("provider")
+    if not isinstance(provider, dict):
+        fail("request envelope provider routing malformed")
+    messages = request.get("messages")
+    if not isinstance(messages, list) or not messages:
+        fail("request envelope messages malformed")
+    role_bytes = []
+    for message in messages:
+        if not isinstance(message, dict) or not isinstance(message.get("role"), str) \
+                or not isinstance(message.get("content"), str):
+            fail("request envelope message malformed")
+        role_bytes.append({
+            "role": message["role"],
+            "byteCount": len(message["content"].encode("utf-8")),
+        })
+    summary = {
+        "schemaVersion": 2,
+        "authorizationScope": "exact-request-envelope-bytes",
+        "requestEnvelopeSha256": hashlib.sha256(raw).hexdigest(),
+        "byteCount": len(raw),
+        "modelCandidates": models,
+        "providerRouting": provider,
+        "messageRoleByteCounts": role_bytes,
+    }
+    if inspection_path is not None:
+        summary["inspectionPath"] = inspection_path
+    return summary
 
 
 def build_manifest():
@@ -445,10 +718,207 @@ def parse_stamp(value, label):
             tzinfo=timezone.utc
         )
     except ValueError:
-        fail(f"batch authorization {label} malformed")
+        fail("batch authorization timestamps are not well-formed UTC timestamps")
+
+
+def validate_lane_mapping(lane):
+    expected_keys = {
+        "lane_id", "requestEnvelopeSha256", "byteCount", "modelCandidates",
+        "providerRouting", "messageRoleByteCounts",
+    }
+    if not isinstance(lane, dict) or set(lane) != expected_keys:
+        fail("batch authorization lane mapping malformed")
+    lane_id = lane["lane_id"]
+    if not isinstance(lane_id, str) or not lane_id:
+        fail("batch authorization lane id malformed")
+    digest = lane["requestEnvelopeSha256"]
+    if not isinstance(digest, str) or not HEX64.match(digest):
+        fail("batch authorization lane digest malformed")
+    count = lane["byteCount"]
+    if isinstance(count, bool) or not isinstance(count, int) or count < 0:
+        fail("batch authorization lane byte count malformed")
+    models = lane["modelCandidates"]
+    if not isinstance(models, list) or not models or not all(
+        isinstance(model, str) and model for model in models
+    ) or len(set(models)) != len(models):
+        fail("batch authorization lane model candidates malformed")
+    provider = lane["providerRouting"]
+    allowed_provider_keys = {
+        "require_parameters", "allow_fallbacks", "data_collection", "zdr",
+        "order", "sort",
+    }
+    if not isinstance(provider, dict) or not {
+        "require_parameters", "allow_fallbacks",
+    }.issubset(provider) or not set(provider).issubset(allowed_provider_keys):
+        fail("batch authorization lane provider routing malformed")
+    if not isinstance(provider["require_parameters"], bool) \
+            or not isinstance(provider["allow_fallbacks"], bool):
+        fail("batch authorization lane provider routing malformed")
+    if "data_collection" in provider and provider["data_collection"] != "deny":
+        fail("batch authorization lane provider routing malformed")
+    if "zdr" in provider and not isinstance(provider["zdr"], bool):
+        fail("batch authorization lane provider routing malformed")
+    if "sort" in provider and (
+        not isinstance(provider["sort"], str) or not provider["sort"]
+    ):
+        fail("batch authorization lane provider routing malformed")
+    if "order" in provider and (
+        not isinstance(provider["order"], list) or not provider["order"]
+        or not all(isinstance(item, str) and item for item in provider["order"])
+    ):
+        fail("batch authorization lane provider routing malformed")
+    role_bytes = lane["messageRoleByteCounts"]
+    if not isinstance(role_bytes, list) or not role_bytes or not all(
+        isinstance(item, dict)
+        and set(item) == {"role", "byteCount"}
+        and isinstance(item["role"], str)
+        and item["role"]
+        and not isinstance(item["byteCount"], bool)
+        and isinstance(item["byteCount"], int)
+        and item["byteCount"] >= 0
+        for item in role_bytes
+    ):
+        fail("batch authorization lane role byte counts malformed")
+    return lane
+
+
+def validate_batch(raw, expected_run_id, program_sunset):
+    try:
+        batch = json.loads(raw.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        fail("batch authorization unreadable")
+    if not isinstance(batch, dict) or set(batch) != BATCH_KEYS:
+        fail("batch authorization schema unexpected")
+    if batch["schema_version"] != 2:
+        fail("batch authorization schema unsupported")
+    if batch["authorization_mode"] != "interim_operator_batch":
+        fail("batch authorization mode unexpected")
+    if not isinstance(batch["operator"], str) or not batch["operator"].strip():
+        fail("batch authorization operator missing")
+    if not isinstance(batch["scope_note"], str) or not batch["scope_note"].strip():
+        fail("batch authorization scope note missing")
+    if not isinstance(batch["run_id"], str) or not batch["run_id"]:
+        fail("batch authorization run id missing")
+    if not hmac.compare_digest(batch["run_id"], expected_run_id):
+        fail("batch authorization was issued for a different run")
+    if batch["program_sunset"] != program_sunset:
+        fail("batch authorization is sunset-mismatched")
+    created_at = parse_stamp(batch["created_at"], "created_at")
+    expires_at = parse_stamp(batch["expires_at"], "expires_at")
+    if expires_at <= created_at:
+        fail("batch authorization expiry precedes issuance")
+    if expires_at - created_at > timedelta(seconds=MAX_LIFETIME_SECONDS):
+        fail("batch authorization lifetime exceeds the 24-hour maximum")
+    sunset = datetime.strptime(program_sunset, "%Y-%m-%d").replace(
+        tzinfo=timezone.utc
+    )
+    now = datetime.now(timezone.utc)
+    if now >= sunset:
+        fail("interim operator-batch program sunset has passed")
+    if now >= expires_at:
+        fail("batch authorization is expired")
+    if now < created_at:
+        fail("batch authorization is issued in the future")
+    digests = batch["request_envelope_digests"]
+    if not isinstance(digests, list) or not digests:
+        fail("batch authorization carries no request envelope digests")
+    for digest in digests:
+        if not isinstance(digest, str) or not HEX64.match(digest):
+            fail("batch authorization request envelope digest malformed")
+    lanes = batch["lanes"]
+    if not isinstance(lanes, list) or len(lanes) != len(digests):
+        fail("batch authorization lane mapping malformed")
+    lane_ids = set()
+    mapped_digests = []
+    for lane in lanes:
+        validate_lane_mapping(lane)
+        lane_id = lane["lane_id"]
+        if lane_id in lane_ids:
+            fail("batch authorization lane id duplicated")
+        lane_ids.add(lane_id)
+        mapped_digests.append(lane["requestEnvelopeSha256"])
+        if lane["requestEnvelopeSha256"] not in digests:
+            fail("batch authorization lane digest is not in the approved set")
+    if sorted(mapped_digests) != sorted(digests):
+        fail("batch authorization lane mapping does not cover the approved digest set")
+    return batch, digests, lanes
 
 
 current = build_manifest()
+request_path = os.environ.get("PAYLOAD_AUTH_REQUEST_FILE", "")
+if mode in {"snapshot-envelope", "verify-envelope", "verify-batch"}:
+    try:
+        request_raw = Path(request_path).read_bytes()
+    except OSError:
+        fail("request file unreadable")
+    inspection_path = manifest_path + ".request.json" if mode == "snapshot-envelope" else None
+    request_manifest = summarize_request(request_raw, inspection_path)
+else:
+    request_raw = b""
+    request_manifest = None
+
+if mode == "snapshot-envelope":
+    target = Path(manifest_path)
+    target.parent.mkdir(parents=True, exist_ok=True)
+    inspection_target = Path(request_manifest["inspectionPath"])
+    if inspection_target.exists() or inspection_target.is_symlink():
+        fail("request envelope inspection already exists")
+    inspection_fd, inspection_temporary = tempfile.mkstemp(
+        prefix=f".{inspection_target.name}.", dir=inspection_target.parent
+    )
+    try:
+        os.fchmod(inspection_fd, 0o600)
+        with os.fdopen(inspection_fd, "wb") as inspection_handle:
+            inspection_handle.write(request_raw)
+        os.replace(inspection_temporary, inspection_target)
+    except Exception:
+        try:
+            os.unlink(inspection_temporary)
+        except OSError:
+            pass
+        raise
+    fd, temporary = tempfile.mkstemp(prefix=f".{target.name}.", dir=target.parent)
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(request_manifest, handle, sort_keys=True)
+            handle.write("\n")
+        os.replace(temporary, target)
+    except Exception:
+        try:
+            os.unlink(temporary)
+        except OSError:
+            pass
+        try:
+            inspection_target.unlink()
+        except OSError:
+            pass
+        raise
+    print(request_manifest["requestEnvelopeSha256"])
+    raise SystemExit(0)
+
+if mode == "verify-envelope":
+    try:
+        recorded_request = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        fail("authorization manifest unreadable")
+    recorded_core = {
+        key: value for key, value in recorded_request.items() if key != "inspectionPath"
+    }
+    if recorded_core != request_manifest:
+        fail("request envelope changed after authorization snapshot")
+    if not isinstance(approved, str) or not HEX64.match(approved.lower()):
+        fail("approved digest malformed")
+    if not hmac.compare_digest(
+        approved.lower(), request_manifest["requestEnvelopeSha256"]
+    ):
+        fail("request envelope digest was not approved")
+    print(json.dumps({
+        "authorizationMode": "exact-digest",
+        "authorizationScope": "operator-approved-exact-request-envelope-bytes",
+        "requestEnvelopeSha256": request_manifest["requestEnvelopeSha256"],
+    }, sort_keys=True))
+    raise SystemExit(0)
 if mode == "snapshot":
     target = Path(manifest_path)
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -468,6 +938,50 @@ if mode == "snapshot":
     print(current["payloadSha256"])
     raise SystemExit(0)
 
+if mode in {"validate-batch", "verify-batch"}:
+    batch_path = Path(os.environ["PAYLOAD_AUTH_BATCH_FILE"])
+    run_id = os.environ["PAYLOAD_AUTH_RUN_ID"]
+    program_sunset = os.environ["PAYLOAD_AUTH_PROGRAM_SUNSET"]
+    try:
+        raw = batch_path.read_bytes()
+    except OSError:
+        fail("batch authorization unreadable")
+    batch, digests, lanes = validate_batch(raw, run_id, program_sunset)
+    if mode == "validate-batch":
+        print(json.dumps({
+            "authorizationMode": "interim-operator-batch",
+            "batchSha256": hashlib.sha256(raw).hexdigest(),
+            "runId": batch["run_id"],
+            "expiresAt": batch["expires_at"],
+            "programSunset": program_sunset,
+            "requestEnvelopeDigestCount": len(digests),
+        }, sort_keys=True))
+        raise SystemExit(0)
+    try:
+        recorded_request = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        fail("authorization manifest unreadable")
+    recorded_core = {key: value for key, value in recorded_request.items() if key != "inspectionPath"}
+    if recorded_core != request_manifest:
+        fail("request envelope changed after authorization snapshot")
+    lane_id = os.environ.get("PAYLOAD_AUTH_LANE_ID", "")
+    approved_lane = next((lane for lane in lanes if lane["lane_id"] == lane_id), None)
+    if approved_lane is None:
+        fail("request envelope lane is not in this run's batch authorization")
+    if not hmac.compare_digest(
+        approved_lane["requestEnvelopeSha256"], request_manifest["requestEnvelopeSha256"]
+    ) or approved_lane["modelCandidates"] != request_manifest["modelCandidates"]:
+        fail("request envelope does not match its approved lane and model binding")
+    print(json.dumps({
+        "authorizationMode": "interim-operator-batch",
+        "authorizationScope": "operator-approved-run-batch-exact-request-envelope-bytes",
+        "requestEnvelopeSha256": request_manifest["requestEnvelopeSha256"],
+        "batchSha256": hashlib.sha256(raw).hexdigest(),
+        "runId": batch["run_id"],
+        "expiresAt": batch["expires_at"],
+        "programSunset": program_sunset,
+    }, sort_keys=True))
+    raise SystemExit(0)
 try:
     recorded = json.loads(Path(manifest_path).read_text(encoding="utf-8"))
 except (OSError, json.JSONDecodeError):
@@ -479,67 +993,6 @@ if mode == "verify-trusted-boundary":
         "authorizationMode": "trusted-boundary",
         "authorizationScope": "policy-accepted-unchanged-ordered-content-bytes",
         "payloadSha256": current["payloadSha256"],
-    }, sort_keys=True))
-    raise SystemExit(0)
-if mode == "verify-batch":
-    batch_path = Path(os.environ["PAYLOAD_AUTH_BATCH_FILE"])
-    run_id = os.environ["PAYLOAD_AUTH_RUN_ID"]
-    program_sunset = os.environ["PAYLOAD_AUTH_PROGRAM_SUNSET"]
-    try:
-        raw = batch_path.read_bytes()
-        batch = json.loads(raw.decode("utf-8"))
-    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-        fail("batch authorization unreadable")
-    if not isinstance(batch, dict) or set(batch) != BATCH_KEYS:
-        fail("batch authorization schema unexpected")
-    if batch["schema_version"] != 1:
-        fail("batch authorization schema unsupported")
-    if batch["authorization_mode"] != "interim_operator_batch":
-        fail("batch authorization mode unexpected")
-    if not isinstance(batch["operator"], str) or not batch["operator"].strip():
-        fail("batch authorization operator missing")
-    if not isinstance(batch["scope_note"], str) or not batch["scope_note"].strip():
-        fail("batch authorization scope note missing")
-    if not isinstance(batch["run_id"], str) or not batch["run_id"]:
-        fail("batch authorization run id missing")
-    if not hmac.compare_digest(batch["run_id"], run_id):
-        fail("batch authorization was issued for a different run")
-    if batch["program_sunset"] != program_sunset:
-        fail("batch authorization program sunset does not match this release")
-    created_at = parse_stamp(batch["created_at"], "created_at")
-    expires_at = parse_stamp(batch["expires_at"], "expires_at")
-    if expires_at <= created_at:
-        fail("batch authorization expiry precedes issuance")
-    if expires_at - created_at > timedelta(seconds=MAX_LIFETIME_SECONDS):
-        fail("batch authorization lifetime exceeds 24h")
-    sunset = datetime.strptime(program_sunset, "%Y-%m-%d").replace(
-        tzinfo=timezone.utc
-    )
-    now = datetime.now(timezone.utc)
-    if now >= sunset:
-        fail("interim operator-batch program sunset has passed")
-    if now >= expires_at:
-        fail("batch authorization expired")
-    if now < created_at:
-        fail("batch authorization issued in the future")
-    digests = batch["payload_digests"]
-    if not isinstance(digests, list) or not digests:
-        fail("batch authorization carries no payload digests")
-    for digest in digests:
-        if not isinstance(digest, str) or not HEX64.match(digest):
-            fail("batch authorization digest malformed")
-    if not any(
-        hmac.compare_digest(digest, current["payloadSha256"]) for digest in digests
-    ):
-        fail("payload digest is not in this run's batch authorization")
-    print(json.dumps({
-        "authorizationMode": "interim-operator-batch",
-        "authorizationScope": "operator-approved-run-batch-exact-content-bytes",
-        "payloadSha256": current["payloadSha256"],
-        "batchSha256": hashlib.sha256(raw).hexdigest(),
-        "runId": batch["run_id"],
-        "expiresAt": batch["expires_at"],
-        "programSunset": program_sunset,
     }, sort_keys=True))
     raise SystemExit(0)
 if not isinstance(approved, str) or len(approved) != 64:

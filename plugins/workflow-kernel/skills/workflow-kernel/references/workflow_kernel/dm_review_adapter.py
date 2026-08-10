@@ -11,7 +11,7 @@ from typing import Iterable, Mapping, Optional, Tuple
 from ._translation import (
     EXECUTION_MODES, RunSpec, canonical_finding_identity, dual_key,
     normalize_decision_profile, required_text, safe_reference,
-    translate_receipts,
+    translate_receipts, validate_family_independence,
 )
 from .model import HostCapabilities, NodeSpec, WorkflowClass
 from .redaction import contains_high_confidence_secret, normalize_durable_string
@@ -24,6 +24,7 @@ REVIEW_STAGES = frozenset({
     "repository_cleanup", "review_terminal",
     "finding_contribution", "finding_contribution_coverage",
     "attempt_usage", "browser_recovery",
+    "review_iteration",
 })
 REVIEW_MODES = frozenset({"full", "quick", "visual", "loop"})
 _CONTRIBUTION_DECISION_FIELDS = frozenset({
@@ -32,7 +33,8 @@ _CONTRIBUTION_DECISION_FIELDS = frozenset({
     "agreement", "decision_reason_code", "reviewer", "lane",
     "requested_provider", "attempted_provider", "implemented_by",
     "provider", "model", "source_severity", "evidence_ref", "attempt",
-    "occurred_at",
+    "occurred_at", "implementer_family", "reviewer_family",
+    "resolution_reason",
 })
 _RAW_FINDING_FIELDS = frozenset({
     "source_finding_id", "reviewer", "lane", "source_severity",
@@ -43,6 +45,7 @@ _LANE_FIELDS = frozenset({
     "reviewer", "lane", "requested_provider", "attempted_provider",
     "implemented_by", "provider", "model", "evidence_refs",
     "raw_output_ref", "raw_output_digest", "finding_count",
+    "implementer_family", "reviewer_family", "resolution_reason",
 })
 _RAW_LANE_OUTPUT_FIELDS = frozenset({"reviewer", "lane", "findings"})
 _DIGEST = "sha256:"
@@ -390,6 +393,7 @@ def export_finding_contributions(
             "evidence_refs", "finding_count", "raw_output_digest",
         }:
             required_text(lane_receipt[field], field.replace("_", " "))
+        validate_family_independence(lane_receipt)
         if (
             type(lane_receipt["finding_count"]) is not int
             or lane_receipt["finding_count"] < 0
@@ -465,6 +469,7 @@ def export_finding_contributions(
                 if field in {
                     "reviewer", "lane", "requested_provider",
                     "attempted_provider", "implemented_by", "provider", "model",
+                    "implementer_family", "reviewer_family", "resolution_reason",
                 }
             },
         }

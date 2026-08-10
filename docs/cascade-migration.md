@@ -1,17 +1,21 @@
 # Migration: OpenRouter Leaf Plugin + Usage-Aware Executor Cascade
 
-This note covers the `world-b-openrouter` changes: a shared `openrouter` provider plugin, a usage-aware model cascade wired into the pipeline executor handoff, and the removal of the Gemini and standalone DeepSeek plugins. Claude Code remains a compatible host, but Claude is now outside the executable coding graph.
+This note covers the `world-b-openrouter` changes: a shared `openrouter` provider plugin, a usage-aware model cascade wired into the pipeline executor handoff, and the removal of the Gemini and standalone DeepSeek plugins. Claude Code remains a compatible host, but Claude is outside the implementation graph.
 
-**Temporary authority mode:** the optimized matrix and dry-run decisions ship,
-but non-dry automated OpenRouter rungs are unavailable until external broker
-integration. They record `host_authority_unavailable` and descend to native
-Codex. Direct interactive `/openrouter` remains exact-digest gated.
+**Temporary authority mode:** Pipeline implementation rungs and dm-review
+review lanes have different authority contracts. Non-dry automated Pipeline
+OpenRouter rungs remain unavailable until external broker integration; they
+record `host_authority_unavailable` and descend to native Codex. dm-review may
+use a validated absent-broker interim batch for eligible read-only review
+lanes. Once a broker is ready, interim mode is retired and review remains
+`broker_transport_unavailable` until broker-owned transport exists. Direct
+interactive `/openrouter` remains exact-digest gated.
 
 ## What changed
 
 1. **Unified leaf plugin `plugins/openrouter`** -- the sole external-provider primitive. It owns the wrapper, bulk analyst, and generic mechanical-agent runner; DeepSeek V4 remains a model choice through OpenRouter, not a separate plugin.
 2. **Cascade in `execution-orchestrator.md` Step 3d** -- Codex and OpenRouter form the complete coding ladder (probe headroom -> on cap, Airlift checkpoint + descend). Legacy `executor: claude` manifests normalize to Codex.
-3. **Claude is non-coding-only** -- it remains available for strategy, writing/voice, research synthesis, and optional plan critique, but never for implementation or code review.
+3. **Claude has no implementation authority** -- it remains available for strategy, writing/voice, research synthesis, optional plan critique, and narrowly scoped read-only independent review when its family differs from the implementer. It never implements code, and it cannot satisfy an independent lane for a Claude-authored diff.
 4. **Provider provenance is explicit** -- native Codex remains the preferred OpenAI coding rail, while receipted `openai/*` OpenRouter models are eligible for economical API work and capacity fallback. Anthropic models execute only through Claude-native non-coding/compatibility rails and `anthropic/*` remains forbidden on every OpenRouter primary and fallback.
 5. **Installed assets resolve coherently** -- workflow-kernel `resolve-plugin-bundle` selects one highest compatible semantic-version root across Claude/Codex caches. Wrapper, boundary, policy, protocol, and template paths are derived from that root; assets are never combined by independent mtime lookup.
 
@@ -58,7 +62,7 @@ The cascade keys off the merged chunk vocabulary. `model-cascade.json` maps `kin
 Direct interactive use:
 
 ```bash
-export OPENROUTER_API_KEY="sk-or-..."   # direct /openrouter only
+export OPENROUTER_API_KEY="sk-or-..."   # required for live wrapper calls; never authority by itself
 # PIPELINE_CASCADE=1 may exercise dry-run/native reroute behavior; it cannot
 # enable automated external transport.
 ```
@@ -66,17 +70,18 @@ export OPENROUTER_API_KEY="sk-or-..."   # direct /openrouter only
 ## dm-review big-diff selection (>5000 lines)
 
 ```
-current automated dm-review  -> Codex-native review (`host_authority_unavailable`)
-future broker-ready host     -> openrouter-bulk-analyst (Kimi K3 primary, Terra fallback)
+valid absent-broker interim batch -> openrouter-bulk-analyst (Kimi K3 primary, Terra fallback)
+ready broker without transport    -> unavailable (`broker_transport_unavailable`)
 ```
 
-`OPENROUTER_API_KEY` enables only direct interactive `/openrouter`; it does not
-authorize automated review. The current automated dm-review path stays on Codex
-until the fixed broker reports production-ready. The future broker-enabled and
-dry-run topology sends mechanical review criteria through
+`OPENROUTER_API_KEY` is required for live wrapper transmission but does not
+authorize automated review. dm-review may use a valid interim batch only while
+the broker is absent; broker readiness alone remains unavailable until the
+broker owns transport. The future broker-enabled and dry-run topology sends mechanical review criteria through
 `openrouter-agent-runner`; policy selects each lane's primary and fallback.
 Security retains separate `security-auditor-openrouter` eligible-content
-analysis and mandatory `security-auditor-codex-signoff` full-diff completion.
+analysis and mandatory `security-auditor-codex-signoff` full-diff completion;
+the stable lane ID resolves to a family different from the implementer.
 
 ## Dry-run / verify (no API key needed)
 

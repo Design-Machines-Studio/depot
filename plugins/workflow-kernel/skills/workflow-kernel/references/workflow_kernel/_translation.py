@@ -66,7 +66,10 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "chunk_id", "usage_scope", "measurement_source", "usage_estimated",
     "input_usage_count", "output_usage_count", "cache_read_usage_count",
     "cache_write_usage_count", "reasoning_usage_count", "input_bytes",
-    "failure_kind", "identity_provenance",
+    "failure_kind", "identity_provenance", "source_receipt_digest",
+    "source_invocation_id", "source_request_digest", "implementer_family",
+    "reviewer_family",
+    "resolution_reason",
     "source_finding_id", "canonical_finding_id", "finding_disposition",
     "agreement", "decision_reason_code", "source_severity", "evidence_ref",
     "action",
@@ -79,6 +82,10 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "raw_lane_outputs_digest",
     "human_intervention_id", "human_intervention_reason",
     "human_intervention", "missing_case_ids", "recovery_receipt_digests",
+    "matrix_snapshot_date", "rung_rationale", "diff_scope",
+    "full_diff_override", "slice_status",
+    "selective_rerun", "lanes_rerun", "lanes_skipped", "rerun_reasons",
+    "selection_fallback_reason", "promoted_to_full", "full_fanout_override",
 })
 # Documented camelCase receipt spellings (pipeline and dm-review instruct
 # producers to emit these provider-evidence fields) mapped to the canonical
@@ -138,6 +145,11 @@ RECEIPT_FIELD_ALIASES = {
     "humanInterventionReason": "human_intervention_reason",
     "missingCaseIds": "missing_case_ids",
     "recoveryReceipts": "recovery_receipts",
+    "matrixSnapshotDate": "matrix_snapshot_date",
+    "rungRationale": "rung_rationale",
+    "diffScope": "diff_scope",
+    "fullDiffOverride": "full_diff_override",
+    "sliceStatus": "slice_status",
     # Legacy producer vocabulary. The durable kernel name is deliberately
     # neutral because not every provider reports tokens.
     "tokens": "usage_count",
@@ -177,6 +189,20 @@ _CREDENTIAL_LIKE = re.compile(
 )
 _USAGE_SCOPES = frozenset({"attempt", "run"})
 _WAIT_CATEGORIES = frozenset({"human_gate", "external_dependency", "capacity", "ci"})
+_RUNG_RATIONALE_AXES = frozenset({"cost", "context", "strength", "availability"})
+_SLICE_STATUSES = frozenset({
+    "sliced", "not_sliced", "unclassified", "slice_failed",
+    "full_diff_override",
+})
+_REVIEW_RERUN_REASONS = frozenset({
+    "a_prior_unresolved_finding", "b_fix_file_trigger", "security_signoff",
+    "initial_full_fanout", "selection_fail_open",
+})
+_REVIEW_ITERATION_FIELDS = frozenset({
+    "selective_rerun", "lanes_rerun", "lanes_skipped", "rerun_reasons",
+    "selection_fallback_reason", "promoted_to_full", "full_fanout_override",
+})
+_DIFF_SCOPE = re.compile(r"scoped\(([1-9][0-9]*) files of ([1-9][0-9]*)\)\Z")
 # Every field that counts *something* about an attempt. The set is named for
 # measurement rather than usage because `input_bytes` is a byte count, not a
 # token count: the previous name promised token semantics to anything iterating
@@ -601,6 +627,71 @@ def _nonnegative_number(value: object, field: str, *, integer: bool) -> object:
     return value
 
 
+_MODEL_FAMILY = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
+_INDEPENDENT_REVIEW_LANES = frozenset({
+    "security-auditor-codex-signoff", "second-perspective",
+})
+_NATIVE_MODEL_FAMILIES = (
+    ("openai", ("gpt-", "o1", "o3", "o4", "codex")),
+    ("anthropic", ("claude-", "opus", "sonnet", "haiku")),
+    ("google", ("gemini-",)),
+    ("moonshotai", ("kimi-",)),
+    ("z-ai", ("glm-",)),
+)
+
+
+def model_family_members(value: object, field: str) -> frozenset[str]:
+    """Validate normalized family provenance and return its atomic members."""
+    text = required_text(value, field)
+    if _MODEL_FAMILY.fullmatch(text):
+        return frozenset({text})
+    if not text.startswith("mixed(") or not text.endswith(")"):
+        raise ValueError("invalid " + field.replace("_", " "))
+    members = text[6:-1].split(",")
+    if (
+        len(members) < 2
+        or members != sorted(set(members))
+        or any(_MODEL_FAMILY.fullmatch(member) is None for member in members)
+    ):
+        raise ValueError("invalid " + field.replace("_", " "))
+    return frozenset(members)
+
+
+def reviewer_family_from_model(value: object) -> str:
+    """Derive one closed reviewer family from recorded model provenance."""
+    model = required_text(value, "model").lower()
+    if "/" in model:
+        if model.count("/") != 1:
+            raise ValueError("reviewer model has no recognized family")
+        family, model_name = model.split("/", 1)
+        if (
+            _MODEL_FAMILY.fullmatch(family) is None
+            or not model_name
+        ):
+            raise ValueError("reviewer model has no recognized family")
+        return family
+    for family, prefixes in _NATIVE_MODEL_FAMILIES:
+        if model.startswith(prefixes):
+            return family
+    raise ValueError("reviewer model has no recognized family")
+
+
+def validate_family_independence(receipt: Mapping[str, object]) -> None:
+    implementers = model_family_members(
+        receipt.get("implementer_family"), "implementer_family",
+    )
+    reviewers = model_family_members(
+        receipt.get("reviewer_family"), "reviewer_family",
+    )
+    required_text(receipt.get("resolution_reason"), "resolution reason")
+    if receipt.get("lane") in _INDEPENDENT_REVIEW_LANES:
+        derived_reviewer = reviewer_family_from_model(receipt.get("model"))
+        if reviewers != frozenset({derived_reviewer}):
+            raise ValueError("reviewer family does not match model")
+        if implementers & reviewers:
+            raise ValueError("independent review family overlap")
+
+
 def _validate_observation_receipt(receipt: dict) -> dict:
     """Validate optional telemetry without assigning it workflow authority."""
     receipt.pop("human_intervention", None)
@@ -632,6 +723,100 @@ def _validate_observation_receipt(receipt: dict) -> dict:
             required_text(receipt[field], field.replace("_", " "))
     if "wait_category" in receipt and receipt["wait_category"] not in _WAIT_CATEGORIES:
         raise ValueError("invalid wait category")
+    if "matrix_snapshot_date" in receipt:
+        value = required_text(receipt["matrix_snapshot_date"], "matrix snapshot date")
+        if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", value) is None:
+            raise ValueError("invalid matrix snapshot date")
+        try:
+            from datetime import datetime
+            datetime.strptime(value, "%Y-%m-%d")
+        except ValueError:
+            raise ValueError("invalid matrix snapshot date") from None
+    if "rung_rationale" in receipt and receipt["rung_rationale"] not in _RUNG_RATIONALE_AXES:
+        raise ValueError("invalid rung rationale")
+    iteration_fields = _REVIEW_ITERATION_FIELDS & set(receipt)
+    if iteration_fields and receipt.get("stage") != "review_iteration":
+        raise ValueError("review iteration fields on another stage")
+    if receipt.get("stage") == "review_iteration":
+        boolean_fields = (
+            "selective_rerun", "promoted_to_full", "full_fanout_override",
+        )
+        if any(type(receipt.get(field)) is not bool for field in boolean_fields):
+            raise ValueError("invalid review iteration selection")
+        lanes = {}
+        for field in ("lanes_rerun", "lanes_skipped"):
+            values = receipt.get(field)
+            if (
+                type(values) is not list
+                or any(type(value) is not str or not value for value in values)
+                or len(values) != len(set(values))
+            ):
+                raise ValueError("invalid review iteration lanes")
+            lanes[field] = values
+        if set(lanes["lanes_rerun"]) & set(lanes["lanes_skipped"]):
+            raise ValueError("invalid review iteration lanes")
+        reasons = receipt.get("rerun_reasons")
+        if type(reasons) is not dict or set(reasons) != set(lanes["lanes_rerun"]):
+            raise ValueError("invalid review iteration reasons")
+        for lane, values in reasons.items():
+            if (
+                type(lane) is not str or not lane
+                or type(values) is not list or not values
+                or len(values) != len(set(values))
+                or any(value not in _REVIEW_RERUN_REASONS for value in values)
+            ):
+                raise ValueError("invalid review iteration reasons")
+        fallback_reason = receipt.get("selection_fallback_reason")
+        if fallback_reason is not None:
+            receipt["selection_fallback_reason"] = required_text(
+                fallback_reason, "selection fallback reason",
+            )
+        lane_reasons_fail_open = any(
+            "selection_fail_open" in values for values in reasons.values()
+        )
+        selection_failed_open = fallback_reason is not None
+        if (
+            not selection_failed_open and lane_reasons_fail_open
+            or selection_failed_open and any(
+                "selection_fail_open" not in values
+                for values in reasons.values()
+            )
+            or selection_failed_open and receipt["selective_rerun"]
+            or lanes["lanes_skipped"] and not receipt["selective_rerun"]
+            or receipt["selective_rerun"] and not lanes["lanes_skipped"]
+            or receipt["selective_rerun"] and receipt["promoted_to_full"]
+            or receipt["full_fanout_override"] and (
+                receipt["selective_rerun"] or lanes["lanes_skipped"]
+            )
+            or receipt["promoted_to_full"] and lanes["lanes_skipped"]
+        ):
+            raise ValueError("incoherent review iteration selection")
+    scope_present = {"diff_scope", "full_diff_override", "slice_status"} & set(receipt)
+    if scope_present:
+        if scope_present != {"diff_scope", "full_diff_override", "slice_status"}:
+            raise ValueError("incomplete review diff scope")
+        scope = required_text(receipt["diff_scope"], "diff scope")
+        scoped = _DIFF_SCOPE.fullmatch(scope)
+        if scope != "full" and scoped is None:
+            raise ValueError("invalid review diff scope")
+        if scoped is not None and int(scoped.group(1)) > int(scoped.group(2)):
+            raise ValueError("invalid review diff scope")
+        override = receipt["full_diff_override"]
+        status = receipt["slice_status"]
+        if type(override) is not bool or status not in _SLICE_STATUSES:
+            raise ValueError("invalid review diff scope")
+        coherent = (
+            scoped is not None and not override and status == "sliced"
+        ) or (
+            scope == "full" and (
+                override and status == "full_diff_override"
+                or not override and status in {
+                    "not_sliced", "unclassified", "slice_failed",
+                }
+            )
+        )
+        if not coherent:
+            raise ValueError("invalid review diff scope")
 
     scoped = "usage_scope" in receipt
     detailed = bool((_MEASUREMENT_FIELDS - {"usage_count"}) & set(receipt))
@@ -661,6 +846,21 @@ def _validate_observation_receipt(receipt: dict) -> dict:
             required_text(receipt.get("failure_kind"), "failure kind")
         elif "failure_kind" in receipt:
             raise ValueError("failure kind on a non-failed usage row")
+        if "source_receipt_digest" in receipt:
+            digest = receipt["source_receipt_digest"]
+            if (
+                type(digest) is not str
+                or re.fullmatch(r"sha256:[0-9a-f]{64}", digest) is None
+                or not receipt["measurement_source"].startswith("openrouter_")
+            ):
+                raise ValueError("invalid OpenRouter source receipt digest")
+        for field in ("source_invocation_id", "source_request_digest"):
+            if field in receipt and (
+                type(receipt[field]) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", receipt[field]) is None
+                or not receipt["measurement_source"].startswith("openrouter_")
+            ):
+                raise ValueError("invalid OpenRouter " + field.replace("_", " "))
         if receipt["usage_scope"] == "attempt":
             if (
                 "attempt" not in receipt or not receipt.get("node_id")
@@ -686,6 +886,7 @@ def _validate_observation_receipt(receipt: dict) -> dict:
             "finding_root_cause", "source_severity",
         ):
             required_text(receipt.get(field), field.replace("_", " "))
+        validate_family_independence(receipt)
         canonical_id, normalized_identity = canonical_finding_identity(
             receipt["finding_path"], receipt["finding_anchor"],
             receipt["finding_category"], receipt["finding_root_cause"],

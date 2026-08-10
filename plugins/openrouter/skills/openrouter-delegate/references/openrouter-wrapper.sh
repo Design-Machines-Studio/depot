@@ -39,6 +39,17 @@
 #   OPENROUTER_AUTHORIZATION_MODE
 #                       exact-digest|trusted-boundary|interim-operator-batch|
 #                       unspecified for receipts
+#   OPENROUTER_APPROVED_REQUEST_ENVELOPE_SHA256
+#                       optional exact request-envelope digest; required by the
+#                       dm-review exact-digest runner and rechecked immediately
+#                       before provider contact
+#   OPENROUTER_AUTHORIZATION_RUN_ID
+#                       optional authorization-run identity for non-batch modes;
+#                       automated runners supply it, while direct interactive
+#                       receipts represent its absence as null
+#   OPENROUTER_LANE_ID  optional authorization-lane identity; automated runners
+#                       supply it, while direct receipts fall back to the target
+#                       agent name when available
 #   OPENROUTER_BATCH_AUTHORIZATION_FILE
 #                       required when the mode is interim-operator-batch: the
 #                       run-scoped batch authorization file written by
@@ -91,6 +102,10 @@ fi
 
 validate_model_slug() {
   local slug="$1"
+  [ "$(printf '%s' "$slug" | wc -c | tr -d '[:space:]')" -le 128 ] || {
+    echo "### RUNNER FAILURE: model slug exceeds 128 bytes" >&2
+    return 1
+  }
   [[ "$slug" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*/[A-Za-z0-9][A-Za-z0-9._:-]*$ ]] &&
     [[ "$slug" != *".."* ]]
 }
@@ -163,6 +178,10 @@ CONNECT_TIMEOUT="${OPENROUTER_CONNECT_TIMEOUT:-30}"
 FIRST_BYTE_TIMEOUT="${OPENROUTER_FIRST_BYTE_TIMEOUT:-600}"
 IDLE_TIMEOUT="${OPENROUTER_IDLE_TIMEOUT:-600}"
 AUTHORIZATION_MODE="${OPENROUTER_AUTHORIZATION_MODE:-unspecified}"
+APPROVED_REQUEST_ENVELOPE_SHA256="${OPENROUTER_APPROVED_REQUEST_ENVELOPE_SHA256:-}"
+CURRENT_RUN_ID="${OPENROUTER_AUTHORIZATION_RUN_ID:-}"
+TARGET_AGENT_NAME="${OPENROUTER_TARGET_AGENT_NAME:-}"
+AUTHORIZATION_LANE_ID="${OPENROUTER_LANE_ID:-$TARGET_AGENT_NAME}"
 
 validate_positive_integer() {
   local name="$1" value="$2"
@@ -192,6 +211,40 @@ esac
 case "$AUTHORIZATION_MODE" in
   exact-digest|trusted-boundary|interim-operator-batch|unspecified) ;;
   *) echo "### RUNNER FAILURE: invalid OPENROUTER_AUTHORIZATION_MODE" >&2; exit 2 ;;
+esac
+if [ -n "$APPROVED_REQUEST_ENVELOPE_SHA256" ] &&
+   [[ ! "$APPROVED_REQUEST_ENVELOPE_SHA256" =~ ^[0-9a-f]{64}$ ]]; then
+  echo "### RUNNER FAILURE: invalid approved request envelope digest" >&2
+  exit 2
+fi
+if [ "$AUTHORIZATION_MODE" = "exact-digest" ] &&
+   [ -z "$APPROVED_REQUEST_ENVELOPE_SHA256" ] &&
+   [ -z "${OPENROUTER_REQUEST_ENVELOPE_OUTPUT:-}" ]; then
+  echo "### RUNNER FAILURE: exact-digest requires an approved request envelope digest" >&2
+  exit 2
+fi
+case "$TARGET_AGENT_NAME" in
+  "") ;;
+  *[!a-z0-9-]*) echo "### RUNNER FAILURE: invalid OPENROUTER_TARGET_AGENT_NAME" >&2; exit 2 ;;
+  *) ;;
+esac
+if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ] && [ -z "$TARGET_AGENT_NAME" ]; then
+  echo "### RUNNER FAILURE: interim-operator-batch requires OPENROUTER_TARGET_AGENT_NAME" >&2
+  exit 2
+fi
+case "$TARGET_AGENT_NAME" in
+  security-auditor*)
+    # This caller label catches accidental role/model drift. It is not, by
+    # itself, an adversarial identity boundary. Interim mode additionally
+    # requires the transmitted digest and model candidates to match the
+    # durable operator-reviewed lane entry; exact-digest mode remains bounded
+    # by its per-payload human approval.
+    [ "$MODEL" = "moonshotai/kimi-k3" ] &&
+      [ "$FALLBACK" = "z-ai/glm-5.2" ] || {
+      echo "### RUNNER FAILURE: security review role requires Kimi K3 primary and GLM-5.2 fallback" >&2
+      exit 2
+    }
+    ;;
 esac
 
 # Fixed, non-overridable probe path -- a caller-selected probe would let the
@@ -230,98 +283,26 @@ broker_state() {
   printf 'present_not_ready'
 }
 
-# Canonical exact-ordered-content-bytes digest over the ORDERED message content
-# entries of a request body held IN MEMORY, byte-identical to the framing
-# `payload-authorization.sh snapshot` produces: sha256 over the concatenation of
-# index_be64 || length_be64 || bytes for every entry, in order. The framing was
-# always multi-entry. Hashing only the first entry would leave every other
-# transmitted message outside the approved set, which is the whole point of the
-# binding.
-# The body is passed BY VALUE, never by path. Extracting the content parts to
-# files and hashing those files would reintroduce the very window this binding
-# exists to close: the bytes hashed must be derived from the same single copy
-# curl is about to transmit, with nothing on disk in between.
-# Every read, format and hash step reports failure explicitly, and `pipefail`
-# carries a subshell failure out through the shasum pipeline. A swallowed
-# nonzero here would let a truncated extraction produce a valid-LOOKING digest
-# over fewer bytes than are actually transmitted, which is exactly the shape of
-# a membership check that passes for the wrong payload.
-canonical_content_digest() {
-  local body="${1:-}" count="${2:-}" digest=""
-  [[ "$count" =~ ^[0-9]+$ ]] && [ "$count" -gt 0 ] || return 1
-  digest="$(
-    {
-      local size="" index=0 index_escape="" length_escape=""
-      while [ "$index" -lt "$count" ]; do
-        size="$(printf '%s' "$body" |
-          jq -j --argjson i "$index" '.messages[$i].content' |
-          wc -c | tr -d '[:space:]')" || exit 1
-        [[ "$size" =~ ^[0-9]+$ ]] || exit 1
-        index_escape="$(printf '%016x' "$index" | sed 's/../\\x&/g')" || exit 1
-        length_escape="$(printf '%016x' "$size" | sed 's/../\\x&/g')" || exit 1
-        printf '%b' "$index_escape" || exit 1
-        printf '%b' "$length_escape" || exit 1
-        printf '%s' "$body" | jq -j --argjson i "$index" '.messages[$i].content' || exit 1
-        index=$((index + 1))
-      done
-    } | shasum -a 256 | awk '{print $1}'
-  )" || return 1
-  [[ "$digest" =~ ^[0-9a-f]{64}$ ]] || return 1
-  printf '%s' "$digest"
-}
-
-# Strict ISO-8601 UTC parser: exactly YYYY-MM-DDTHH:MM:SSZ, in-range fields,
-# converted to epoch seconds. A LEXICAL string comparison is not a safe
-# substitute -- "zzzz" sorts above every real timestamp, so `.expires_at > $now`
-# accepts a malformed value as a live authorization. Epoch comparison cannot be
-# fooled that way because a value that will not parse never becomes a number.
-iso8601_utc_to_epoch() {
-  local stamp="${1:-}"
-  [[ "$stamp" =~ ^([0-9]{4})-([0-9]{2})-([0-9]{2})T([0-9]{2}):([0-9]{2}):([0-9]{2})Z$ ]] || return 1
-  local year=$((10#${BASH_REMATCH[1]}))
-  local month=$((10#${BASH_REMATCH[2]}))
-  local day=$((10#${BASH_REMATCH[3]}))
-  local hour=$((10#${BASH_REMATCH[4]}))
-  local minute=$((10#${BASH_REMATCH[5]}))
-  local second=$((10#${BASH_REMATCH[6]}))
-  [ "$month" -ge 1 ] && [ "$month" -le 12 ] || return 1
-  [ "$hour" -le 23 ] && [ "$minute" -le 59 ] && [ "$second" -le 59 ] || return 1
-  # Days-per-month with the FULL Gregorian leap rule. A field-range check alone
-  # accepts dates that do not exist -- 2025-02-29, 2026-04-31 -- and
-  # days-from-civil happily converts them into a real epoch, so an impossible
-  # timestamp would become a usable authorization window. The century rule is
-  # part of the test, not an optimization: 1900 and 2100 are not leap years,
-  # 2000 and 2400 are. Seconds stop at 59: this schema carries no leap second,
-  # and :60 has no epoch this arithmetic can express.
-  local max_day=0
-  case "$month" in
-    1|3|5|7|8|10|12) max_day=31 ;;
-    4|6|9|11) max_day=30 ;;
-    2)
-      if [ $((year % 4)) -eq 0 ] &&
-         { [ $((year % 100)) -ne 0 ] || [ $((year % 400)) -eq 0 ]; }; then
-        max_day=29
-      else
-        max_day=28
-      fi
+require_interim_broker_absent() {
+  local state
+  state="$(broker_state)"
+  case "$state" in
+    ready)
+      echo "### RUNNER FAILURE: broker available; interim mode retired on this host" >&2
+      return 2
       ;;
-    *) return 1 ;;
+    present_not_ready)
+      echo "### RUNNER FAILURE: broker_present_not_ready; broker client is installed but does not probe ready -- interim mode withheld" >&2
+      return 2
+      ;;
+    absent)
+      return 0
+      ;;
+    *)
+      echo "### RUNNER FAILURE: broker state unresolved; interim mode withheld" >&2
+      return 2
+      ;;
   esac
-  [ "$day" -ge 1 ] && [ "$day" -le "$max_day" ] || return 1
-  # days-from-civil (proleptic Gregorian), no external date(1) parsing so the
-  # result is identical on BSD and GNU userlands.
-  local shifted=$year era yoe doy doe days
-  [ "$month" -le 2 ] && shifted=$((year - 1))
-  if [ "$shifted" -ge 0 ]; then era=$((shifted / 400)); else era=$(((shifted - 399) / 400)); fi
-  yoe=$((shifted - era * 400))
-  if [ "$month" -gt 2 ]; then
-    doy=$(((153 * (month - 3) + 2) / 5 + day - 1))
-  else
-    doy=$(((153 * (month + 9) + 2) / 5 + day - 1))
-  fi
-  doe=$((yoe * 365 + yoe / 4 - yoe / 100 + doy))
-  days=$((era * 146097 + doe - 719468))
-  printf '%d' $((days * 86400 + hour * 3600 + minute * 60 + second))
 }
 
 # The private working root is created BEFORE any authorization check so every
@@ -330,34 +311,53 @@ iso8601_utc_to_epoch() {
 # unswappable by the caller between validation and use.
 RUN_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/openrouter-wrapper.XXXXXX")" || exit 1
 chmod 700 "$RUN_ROOT"
+INVOCATION_ID="$(printf '%s' "$RUN_ROOT" | shasum -a 256 | awk '{print $1}')" || exit 1
+[[ "$INVOCATION_ID" =~ ^[0-9a-f]{64}$ ]] || {
+  echo "### RUNNER FAILURE: could not create invocation identity" >&2
+  exit 1
+}
+curl_pid=""
+transport_launching=0
+transport_signal_pending=0
+terminate_transport() {
+  [ -n "$curl_pid" ] || return 0
+  if kill -0 "$curl_pid" >/dev/null 2>&1; then
+    kill "$curl_pid" >/dev/null 2>&1 || true
+    local attempt=0
+    while kill -0 "$curl_pid" >/dev/null 2>&1 && [ "$attempt" -lt 20 ]; do
+      sleep 0.1
+      attempt=$((attempt + 1))
+    done
+    if kill -0 "$curl_pid" >/dev/null 2>&1; then
+      kill -KILL "$curl_pid" >/dev/null 2>&1 || true
+    fi
+  fi
+  wait "$curl_pid" >/dev/null 2>&1 || true
+  curl_pid=""
+}
 cleanup() {
+  terminate_transport
   rm -rf "$RUN_ROOT"
 }
+handle_signal() {
+  if [ "$transport_launching" -eq 1 ]; then
+    transport_signal_pending=1
+    return
+  fi
+  trap '' HUP INT TERM
+  terminate_transport
+  if [ -n "${MODEL_CANDIDATES:-}" ] && [ -n "${EFFECTIVE_SORT:-}" ] &&
+      [[ "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" =~ ^[0-9a-f]{64}$ ]] &&
+      type write_failure_receipt >/dev/null 2>&1; then
+    write_failure_receipt error interrupted "" || true
+  fi
+  exit 1
+}
 trap cleanup EXIT
-trap 'exit 1' HUP INT TERM
+trap handle_signal HUP INT TERM
 
 if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
-  BROKER_STATE="$(broker_state)"
-  case "$BROKER_STATE" in
-    ready)
-      echo "### RUNNER FAILURE: broker available; interim mode retired on this host" >&2
-      exit 2
-      ;;
-    present_not_ready)
-      echo "### RUNNER FAILURE: broker_present_not_ready; broker client is installed but does not probe ready -- interim mode withheld" >&2
-      exit 2
-      ;;
-    absent)
-      : # the only state that leaves interim mode available
-      ;;
-    *)
-      # Empty or unrecognized. A state that cannot be resolved is not a state
-      # that permits interim mode: a killed or truncated probe substitution
-      # must not fall through into an authorized lane.
-      echo "### RUNNER FAILURE: broker state unresolved; interim mode withheld" >&2
-      exit 2
-      ;;
-  esac
+  require_interim_broker_absent || exit $?
   BATCH_AUTHORIZATION_FILE="${OPENROUTER_BATCH_AUTHORIZATION_FILE:-}"
   DECLARED_BATCH_DIGEST="${OPENROUTER_BATCH_AUTHORIZATION_DIGEST:-}"
   CURRENT_RUN_ID="${OPENROUTER_BATCH_RUN_ID:-}"
@@ -374,6 +374,21 @@ if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
     echo "### RUNNER FAILURE: interim-operator-batch requires the current run id" >&2
     exit 2
   }
+  SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+  AUTHORIZATION_HELPER="$SCRIPT_DIR/payload-authorization.sh"
+  MODEL_MATRIX="$SCRIPT_DIR/model-matrix.json"
+  [ -x "$AUTHORIZATION_HELPER" ] && [ -r "$MODEL_MATRIX" ] || {
+    echo "### RUNNER FAILURE: interim authorization bundle is incomplete" >&2
+    exit 2
+  }
+  for candidate in "$MODEL" "$FALLBACK"; do
+    [ -z "$candidate" ] && continue
+    jq -e --arg candidate "$candidate" \
+      'any(.models[]; .slug == $candidate)' "$MODEL_MATRIX" >/dev/null 2>&1 || {
+      echo "### RUNNER FAILURE: interim model is absent from the installed model matrix" >&2
+      exit 2
+    }
+  done
   # SNAPSHOT ONCE. Everything below -- digest, schema, run binding, timestamps
   # and the later membership test -- reads this private copy, never the
   # caller-supplied path. Re-reading the original between the hash and the
@@ -395,83 +410,17 @@ if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
     echo "### RUNNER FAILURE: batch authorization file does not match its declared digest" >&2
     exit 2
   }
-  # The sunset is PINNED to this release's constant, not merely parsed as a
-  # future date. Pinning and expiry are different controls: pinning stops a
-  # hand-written batch file from asserting its own later backstop, expiry stops
-  # a stale one from being replayed. Timestamp shape is checked here and
-  # COMPARED as epoch seconds below -- jq's `>` on strings is a lexical test,
-  # and a lexical test treats garbage as a distant future.
-  jq -e --arg sunset "$INTERIM_PROGRAM_SUNSET" '
-    .schema_version == 1
-    and .authorization_mode == "interim_operator_batch"
-    and (.run_id | type == "string" and length > 0)
-    and (.payload_digests | type == "array" and length > 0)
-    and (all(.payload_digests[]; type == "string"))
-    and (.created_at | type == "string")
-    and (.expires_at | type == "string")
-    and .program_sunset == $sunset
-  ' "$BATCH_AUTHORIZATION_SNAPSHOT" >/dev/null 2>&1 || {
-    echo "### RUNNER FAILURE: batch authorization is past program sunset, sunset-mismatched, or malformed" >&2
+  jq -e --arg expected "$INTERIM_PROGRAM_SUNSET" \
+    '.program_sunset == $expected' "$BATCH_AUTHORIZATION_SNAPSHOT" >/dev/null 2>&1 || {
+    echo "### RUNNER FAILURE: batch program sunset does not match the wrapper release" >&2
     exit 2
   }
-  # Run binding. A batch approved for a DIFFERENT run must not authorize this
-  # transmission. `payload-authorization.sh verify-batch` checks this too, but
-  # this wrapper is a separate enforcement point and must hold even when no
-  # verify-batch step ran -- that independence is the point of enforcing at the
-  # moment of disclosure.
-  BATCH_RUN_ID="$(jq -r '.run_id' "$BATCH_AUTHORIZATION_SNAPSHOT")" || {
-    echo "### RUNNER FAILURE: could not read the batch authorization run id" >&2
-    exit 2
-  }
-  [ "$BATCH_RUN_ID" = "$CURRENT_RUN_ID" ] || {
-    echo "### RUNNER FAILURE: batch authorization was issued for a different run" >&2
-    exit 2
-  }
-  BATCH_CREATED_AT="$(jq -r '.created_at' "$BATCH_AUTHORIZATION_SNAPSHOT")" || {
-    echo "### RUNNER FAILURE: could not read the batch authorization timestamps" >&2
-    exit 2
-  }
-  BATCH_EXPIRES_AT="$(jq -r '.expires_at' "$BATCH_AUTHORIZATION_SNAPSHOT")" || {
-    echo "### RUNNER FAILURE: could not read the batch authorization timestamps" >&2
-    exit 2
-  }
-  BATCH_CREATED_EPOCH="$(iso8601_utc_to_epoch "$BATCH_CREATED_AT")" || {
-    echo "### RUNNER FAILURE: batch authorization timestamps are not well-formed UTC timestamps" >&2
-    exit 2
-  }
-  BATCH_EXPIRES_EPOCH="$(iso8601_utc_to_epoch "$BATCH_EXPIRES_AT")" || {
-    echo "### RUNNER FAILURE: batch authorization timestamps are not well-formed UTC timestamps" >&2
-    exit 2
-  }
-  SUNSET_EPOCH="$(iso8601_utc_to_epoch "${INTERIM_PROGRAM_SUNSET}T00:00:00Z")" || {
-    echo "### RUNNER FAILURE: batch authorization is past program sunset, sunset-mismatched, or malformed" >&2
-    exit 2
-  }
-  NOW_EPOCH="$(date -u +%s)" || {
-    echo "### RUNNER FAILURE: could not read the current time" >&2
-    exit 2
-  }
-  [ "$NOW_EPOCH" -lt "$SUNSET_EPOCH" ] || {
-    echo "### RUNNER FAILURE: batch authorization is past program sunset, sunset-mismatched, or malformed" >&2
-    exit 2
-  }
-  # A batch issued in the future is either a clock fault or a forged window.
-  # Neither is a state in which disclosure should proceed.
-  [ "$BATCH_CREATED_EPOCH" -le "$NOW_EPOCH" ] || {
-    echo "### RUNNER FAILURE: batch authorization is issued in the future" >&2
-    exit 2
-  }
-  [ "$NOW_EPOCH" -lt "$BATCH_EXPIRES_EPOCH" ] || {
-    echo "### RUNNER FAILURE: batch authorization is expired" >&2
-    exit 2
-  }
-  # The 24-hour ceiling is enforced HERE as well as in payload-authorization.sh:
-  # a hand-written batch could otherwise assert a year-long window and the
-  # transmission point would honour it.
-  [ $((BATCH_EXPIRES_EPOCH - BATCH_CREATED_EPOCH)) -le 86400 ] || {
-    echo "### RUNNER FAILURE: batch authorization lifetime exceeds the 24-hour maximum" >&2
-    exit 2
-  }
+  # One OpenRouter-owned typed validator owns schema, run, expiry, lifetime,
+  # and sunset semantics. The wrapper passes its private immutable snapshot so
+  # the helper and the later membership check inspect the same batch bytes.
+  "$AUTHORIZATION_HELPER" validate-batch \
+    --batch-file "$BATCH_AUTHORIZATION_SNAPSHOT" \
+    --run-id "$CURRENT_RUN_ID" >/dev/null || exit 2
 fi
 for configured_order in "$PROVIDER_ORDER" "$FALLBACK_PROVIDER_ORDER"; do
   [ -z "$configured_order" ] && continue
@@ -555,6 +504,7 @@ write_failure_receipt() {
     umask 077
     jq -n \
       --arg outcome "$outcome" \
+      --arg invocation "$INVOCATION_ID" \
       --arg failure "$failure_kind" \
       --arg timeout "$timeout_kind" \
       --arg http "$http_status" \
@@ -563,9 +513,13 @@ write_failure_receipt() {
       --arg workload "$WORKLOAD" \
       --arg sort "$EFFECTIVE_SORT" \
       --arg authorization "$AUTHORIZATION_MODE" \
-      --arg batchdigest "$BATCH_AUTHORIZATION_SHA256" '
+      --arg batchdigest "$BATCH_AUTHORIZATION_SHA256" \
+      --arg runid "${CURRENT_RUN_ID:-}" \
+      --arg lane "$AUTHORIZATION_LANE_ID" \
+      --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" '
       {
         schemaVersion: 2,
+        invocationId: $invocation,
         outcome: $outcome,
         failureKind: $failure,
         timeout: (if $timeout == "" then null else {kind: $timeout} end),
@@ -587,7 +541,12 @@ write_failure_receipt() {
         },
         authorization: {
           mode: $authorization,
-          batchSha256: (if $batchdigest == "" then null else $batchdigest end)
+          batchSha256: (if $batchdigest == "" then null else $batchdigest end),
+          runId: (if $runid == "" then null else $runid end),
+          laneId: (if $lane == "" then null else $lane end),
+          requestEnvelopeSha256: (
+            if $requestdigest == "" then null else $requestdigest end
+          )
         }
       }' > "$receipt_tmp"
   ) || {
@@ -606,15 +565,20 @@ write_success_receipt() {
     umask 077
     jq \
       --arg requested "$MODEL" \
+      --arg invocation "$INVOCATION_ID" \
       --arg attempted "$attempted_model" \
       --argjson candidates "$MODEL_CANDIDATES" \
       --argjson fallback "$fallback_used" \
       --arg workload "$WORKLOAD" \
       --arg sort "$EFFECTIVE_SORT" \
       --arg authorization "$AUTHORIZATION_MODE" \
-      --arg batchdigest "$BATCH_AUTHORIZATION_SHA256" '
+      --arg batchdigest "$BATCH_AUTHORIZATION_SHA256" \
+      --arg runid "${CURRENT_RUN_ID:-}" \
+      --arg lane "$AUTHORIZATION_LANE_ID" \
+      --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" '
       {
         schemaVersion: 2,
+        invocationId: $invocation,
         outcome: "success",
         failureKind: null,
         timeout: null,
@@ -645,7 +609,12 @@ write_success_receipt() {
         },
         authorization: {
           mode: $authorization,
-          batchSha256: (if $batchdigest == "" then null else $batchdigest end)
+          batchSha256: (if $batchdigest == "" then null else $batchdigest end),
+          runId: (if $runid == "" then null else $runid end),
+          laneId: (if $lane == "" then null else $lane end),
+          requestEnvelopeSha256: (
+            if $requestdigest == "" then null else $requestdigest end
+          )
         }
       }' "$response_file" > "$receipt_tmp"
   ) || {
@@ -699,36 +668,48 @@ else
     }' > "$request_file"
 fi
 
+# Preparation mode uses this same renderer without contacting the provider.
+# The caller can snapshot and approve these exact bytes, then invoke the
+# wrapper normally with unchanged inputs. Keeping rendering here prevents a
+# second implementation from drifting in whitespace, provider fields, model
+# versus models selection, or message ordering.
+if [ -n "${OPENROUTER_REQUEST_ENVELOPE_OUTPUT:-}" ]; then
+  RENDERED_REQUEST_BYTES="$(cat "$request_file")" || {
+    echo "### RUNNER FAILURE: could not read the rendered request envelope" >&2
+    exit 2
+  }
+  (
+    umask 077
+    printf '%s' "$RENDERED_REQUEST_BYTES" > "$OPENROUTER_REQUEST_ENVELOPE_OUTPUT"
+  ) || {
+    echo "### RUNNER FAILURE: could not materialize the request envelope" >&2
+    exit 2
+  }
+  exit 0
+fi
+
 # The bytes curl posts, held in process memory. curl is fed these bytes on
 # stdin (`--data-binary @-`) and is never handed a path, so there is no reopen
 # between any check and the POST. Under interim mode this same in-memory copy
 # is what the payload digest is computed over.
-TRANSMIT_BYTES="$(cat "$request_file")" || {
-  echo "### RUNNER FAILURE: could not read the request body for transmission" >&2
-  exit 2
-}
-[ -n "$TRANSMIT_BYTES" ] || {
-  echo "### RUNNER FAILURE: could not read the request body for transmission" >&2
-  exit 2
-}
+TRANSMIT_BYTES=""
+if [ "$AUTHORIZATION_MODE" != "interim-operator-batch" ]; then
+  TRANSMIT_BYTES="$(cat "$request_file")" || {
+    echo "### RUNNER FAILURE: could not read the request body for transmission" >&2
+    exit 2
+  }
+  [ -n "$TRANSMIT_BYTES" ] || {
+    echo "### RUNNER FAILURE: could not read the request body for transmission" >&2
+    exit 2
+  }
+fi
 
 if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
   # Digest binding at the point of disclosure, over the bytes actually about to
   # be sent. `verify-batch` runs in the calling lane, but this wrapper must not
-  # assume it ran, and must not rely on a digest taken over a separately
-  # snapshotted file: a payload swapped in after verify-batch passed would
-  # otherwise still be transmitted. The disclosed content is read back out of
-  # the request body curl is about to POST and must already be a member of the
-  # validated batch file's payload_digests.
-  # EVERY message content is bound, in transmission order -- system, developer,
-  # assistant, and user alike -- not only the user turn. Binding the user turn
-  # alone left an attached system prompt outside the approved set, which is a
-  # usable exfiltration channel for a compromised lane.
-  #
-  # `snapshot` frames raw file bytes, so it can only express STRING content.
-  # Structured or array-typed content parts have no byte framing that would
-  # agree with it, so they are REFUSED here rather than silently hashed into
-  # something the operator never approved.
+  # assume it ran. The exact request envelope curl is about to POST--including
+  # model(s), provider routing, streaming options, roles, and ordered message
+  # content--must already be bound to this lane in the validated batch.
   #
   # ONE OPEN, ONE COPY. Copying the request body to another path and handing
   # curl that path still leaves curl reopening a mutable name after the digest
@@ -777,36 +758,57 @@ if [ "$AUTHORIZATION_MODE" = "interim-operator-batch" ]; then
     echo "### RUNNER FAILURE: non-string message content cannot be bound to the batch authorization; interim mode withheld" >&2
     exit 2
   }
-  transmitted_count="$(printf '%s' "$TRANSMIT_BYTES" | jq '.messages | length')" || {
-    echo "### RUNNER FAILURE: could not read transmitted content for batch digest binding" >&2
-    exit 2
-  }
-  [[ "$transmitted_count" =~ ^[0-9]+$ ]] && [ "$transmitted_count" -gt 0 ] || {
-    echo "### RUNNER FAILURE: could not read transmitted content for batch digest binding" >&2
-    exit 2
-  }
   # The nonzero return is CHECKED, not inferred from the shape of the output: a
   # read or extraction failure inside the digest must fail closed rather than
   # yield a partial digest that happens to look like a sha256.
-  TRANSMITTED_PAYLOAD_SHA256="$(canonical_content_digest "$TRANSMIT_BYTES" "$transmitted_count")" || {
-    echo "### RUNNER FAILURE: could not compute the transmitted payload digest" >&2
+  TRANSMITTED_REQUEST_ENVELOPE_SHA256="$(printf '%s' "$TRANSMIT_BYTES" | shasum -a 256 | awk '{print $1}')" || {
+    echo "### RUNNER FAILURE: could not compute the transmitted request envelope digest" >&2
     exit 2
   }
-  [[ "$TRANSMITTED_PAYLOAD_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
-    echo "### RUNNER FAILURE: could not compute the transmitted payload digest" >&2
+  [[ "$TRANSMITTED_REQUEST_ENVELOPE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "### RUNNER FAILURE: could not compute the transmitted request envelope digest" >&2
     exit 2
   }
-  jq -e --arg digest "$TRANSMITTED_PAYLOAD_SHA256" '
-    (.payload_digests | index($digest)) != null
+  jq -e --arg digest "$TRANSMITTED_REQUEST_ENVELOPE_SHA256" \
+    --arg lane "$TARGET_AGENT_NAME" --argjson models "$MODEL_CANDIDATES" '
+    any(.lanes[];
+      .lane_id == $lane
+      and .requestEnvelopeSha256 == $digest
+      and .modelCandidates == $models)
   ' "$BATCH_AUTHORIZATION_SNAPSHOT" >/dev/null 2>&1 || {
-    echo "### RUNNER FAILURE: transmitted payload digest is not in the batch authorization" >&2
+    echo "### RUNNER FAILURE: transmitted request envelope is not bound to this approved lane and model set" >&2
     exit 2
   }
+  # Broker retirement is a disclosure-time invariant, not a process-start
+  # observation. Prompt ingestion and envelope validation can block long
+  # enough for the broker to appear after the first probe. Recheck only after
+  # the exact transmitted bytes have passed membership and immediately before
+  # opening the provider connection.
+  require_interim_broker_absent || exit $?
+fi
+
+if [ -z "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" ]; then
+  TRANSMITTED_REQUEST_ENVELOPE_SHA256="$(printf '%s' "$TRANSMIT_BYTES" | shasum -a 256 | awk '{print $1}')" || {
+    echo "### RUNNER FAILURE: could not compute the transmitted request envelope digest" >&2
+    exit 2
+  }
+  [[ "$TRANSMITTED_REQUEST_ENVELOPE_SHA256" =~ ^[0-9a-f]{64}$ ]] || {
+    echo "### RUNNER FAILURE: could not compute the transmitted request envelope digest" >&2
+    exit 2
+  }
+fi
+
+if [ "$AUTHORIZATION_MODE" = "exact-digest" ]; then
+  if [ "$TRANSMITTED_REQUEST_ENVELOPE_SHA256" != "$APPROVED_REQUEST_ENVELOPE_SHA256" ]; then
+    echo "### RUNNER FAILURE: transmitted request envelope digest was not approved" >&2
+    exit 2
+  fi
 fi
 
 : > "$stream_file"
 : > "$status_file"
 : > "$curl_error_file"
+transport_launching=1
 printf '%s' "$TRANSMIT_BYTES" | curl -N -sS -o "$stream_file" -w '%{http_code}' \
   "$BASE/chat/completions" \
   -H "Authorization: Bearer $OPENROUTER_API_KEY" \
@@ -818,6 +820,10 @@ printf '%s' "$TRANSMIT_BYTES" | curl -N -sS -o "$stream_file" -w '%{http_code}' 
   --data-binary @- \
   > "$status_file" 2> "$curl_error_file" &
 curl_pid=$!
+transport_launching=0
+if [ "$transport_signal_pending" -eq 1 ]; then
+  handle_signal
+fi
 started_at="$(date +%s)"
 last_progress_at="$started_at"
 last_size=0
@@ -843,8 +849,7 @@ while kill -0 "$curl_pid" >/dev/null 2>&1; do
     timeout_kind="idle"
   fi
   if [ -n "$timeout_kind" ]; then
-    kill "$curl_pid" >/dev/null 2>&1 || true
-    wait "$curl_pid" >/dev/null 2>&1 || true
+    terminate_transport
     write_failure_receipt timeout "stream_timeout" "$timeout_kind" || true
     echo "### RUNNER TIMEOUT ($MODEL, ${TIMEOUT}s, $timeout_kind)" >&2
     exit 28
@@ -853,6 +858,7 @@ done
 
 wait "$curl_pid"
 curl_rc=$?
+curl_pid=""
 http="$(cat "$status_file")"
 if [ "$curl_rc" -eq 28 ]; then
   write_failure_receipt timeout "curl_timeout" "overall" "$http" || true

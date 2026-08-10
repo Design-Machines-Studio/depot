@@ -139,7 +139,7 @@ these numbers to prove itself.
 
 - **Adversarial plan review (Phase 5) defaults to OpenRouter lenses** -- Kimi
   K3 primary, GLM 5.2 cross-check -- with the Codex lens reserved for
-  high-risk-tier plans. Codex sign-off for security stays mandatory; plan
+  high-risk-tier plans. Independent non-implementing-family sign-off for security stays mandatory; plan
   critique does not need sub-budget.
 - **Bulk/mechanical lanes default to DeepSeek V4 Flash 0731** (~$0.15/$0.29,
   agentic post-training, Codex-adapted) instead of climbing toward frontier

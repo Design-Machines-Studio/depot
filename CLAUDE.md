@@ -227,8 +227,3 @@ verification checklist. They live in the `pipeline-failure-modes` skill
 (`.claude/skills/pipeline-failure-modes/SKILL.md`) -- load it before starting a pipeline
 run, when a run misbehaves, or when writing a postmortem. Detailed root cause analysis is
 in `docs/post-mortems/`.
-
-<!-- airlift:start -->
-An airlift handoff is available at .airlift/HANDOFF.md (checkpoint 13, 2026-08-07T16:10:17Z).
-Read it before continuing.
-<!-- airlift:end -->

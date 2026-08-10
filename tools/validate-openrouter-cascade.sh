@@ -39,16 +39,18 @@ if [ ! -x "$cascade" ]; then
   any_failed=1
 else
   probe_fixture="$(mktemp "${TMPDIR:-/tmp}/openrouter-probe.json.XXXXXX")"
-  printf '%s\n' '{"codex":{"state":"ok","remaining_pct":100},"openrouter":{"state":"ok","remaining_pct":100}}' > "$probe_fixture"
+  printf '%s\n' '{"probe_source":"live","codex":{"state":"ok","remaining_pct":100},"openrouter":{"state":"ok","balance_usd":0.01}}' > "$probe_fixture"
   out="$(CASCADE_EXHAUSTED_RAILS= "$cascade" --kind logic --prompt test --host codex \
     --dry-run --probe-file "$probe_fixture" --exhausted-rail codex 2>/dev/null || true)"
   role="$(printf '%s' "$out" | jq -r '.role // empty' 2>/dev/null || true)"
   kind="$(printf '%s' "$out" | jq -r '.kind // empty' 2>/dev/null || true)"
   model="$(printf '%s' "$out" | jq -r '.model // empty' 2>/dev/null || true)"
-  if [ "$role" = "openrouter_exec" ] && [ "$kind" = "openrouter_exec" ] && [ "$model" = "z-ai/glm-5.2" ]; then
+  fixture_source="$(printf '%s' "$out" | jq -r '.probe_source // empty' 2>/dev/null || true)"
+  if [ "$role" = "openrouter_exec" ] && [ "$kind" = "openrouter_exec" ] &&
+     [ "$model" = "z-ai/glm-5.2" ] && [ "$fixture_source" = "fixture" ]; then
     pass "cascade skips explicitly exhausted Codex rail and descends to OpenRouter exec"
   else
-    fail "cascade should descend to economical openrouter_exec z-ai/glm-5.2 when --exhausted-rail codex is set"
+    fail "cascade should descend to economical OpenRouter and must label caller probe files as fixture, never live"
     printf "  ${YELLOW}GOT${RESET}   %s\n" "${out:-<empty>}"
     any_failed=1
   fi
@@ -63,6 +65,117 @@ else
     fail "UI coding must resolve to Codex-native execution, never Claude"
     any_failed=1
   fi
+
+  # Headroom is positive evidence, not an absence-of-error default. Every
+  # unknown, missing, malformed, or at-threshold Codex reading must skip the
+  # Codex rung while a separately healthy OpenRouter fixture remains eligible.
+  while IFS='|' read -r label codex_probe; do
+    printf '%s\n' "{\"codex\":$codex_probe,\"openrouter\":{\"state\":\"ok\",\"balance_usd\":0.01}}" > "$probe_fixture"
+    conservative_out="$(CASCADE_EXHAUSTED_RAILS= "$cascade" --kind logic --prompt test --host codex \
+      --dry-run --probe-file "$probe_fixture" 2>/dev/null || true)"
+    conservative_role="$(printf '%s' "$conservative_out" | jq -r '.role // empty' 2>/dev/null || true)"
+    if [ "$conservative_role" = "openrouter_exec" ]; then
+      pass "$label Codex headroom is unavailable"
+    else
+      fail "$label Codex headroom must fail closed to the healthy OpenRouter rung"
+      any_failed=1
+    fi
+  done <<'EOF'
+unknown|{"state":"unknown","remaining_pct":100}
+missing state|{"remaining_pct":100}
+missing percentage|{"state":"ok"}
+malformed percentage|{"state":"ok","remaining_pct":"100"}
+at-threshold|{"state":"ok","remaining_pct":8}
+EOF
+
+  printf '%s\n' '{"openrouter":{"state":"ok","balance_usd":0.01}}' > "$probe_fixture"
+  missing_rail_out="$(CASCADE_EXHAUSTED_RAILS= "$cascade" --kind logic --prompt test --host codex \
+    --dry-run --probe-file "$probe_fixture" 2>/dev/null || true)"
+  missing_rail_role="$(printf '%s' "$missing_rail_out" | jq -r '.role // empty' 2>/dev/null || true)"
+  if [ "$missing_rail_role" = "openrouter_exec" ]; then
+    pass "missing Codex probe record is unavailable"
+  else
+    fail "missing Codex probe record must fail closed to the healthy OpenRouter rung"
+    any_failed=1
+  fi
+
+  printf '%s\n' '{not-json' > "$probe_fixture"
+  set +e
+  malformed_probe_out="$(CASCADE_EXHAUSTED_RAILS= "$cascade" --kind logic --prompt test --host codex \
+    --dry-run --probe-file "$probe_fixture" 2>&1)"
+  malformed_probe_rc=$?
+  set -e
+  if [ "$malformed_probe_rc" -eq 76 ] &&
+     printf '%s' "$malformed_probe_out" | grep -Fq "ladder exhausted"; then
+    pass "malformed probe document makes every rail unavailable"
+  else
+    fail "malformed probe document must fail closed with exhausted-ladder exit 76"
+    any_failed=1
+  fi
+
+  # A caller-controlled JSON object cannot prove human origin. Until a trusted
+  # single-use issuer/consumer exists, even a perfectly shaped self-asserted
+  # object must leave native_judgment unavailable.
+  printf '%s\n' '{"codex":{"state":"ok","remaining_pct":0},"openrouter":{"state":"unknown"}}' > "$probe_fixture"
+  native_expiry="$(( $(date -u +%s) + 3600 ))"
+  native_authorization="$(jq -nc \
+    --arg repository "$REPO_ROOT" --arg run_id native-headroom-test \
+    --argjson expiry "$native_expiry" \
+    '{humanGranted:true,authorizationId:"native-test",repository:$repository,runId:$run_id,expiresAtEpoch:$expiry}')"
+  set +e
+  native_out="$(DM_PROVIDER_REPOSITORY="$REPO_ROOT" DM_PROVIDER_RUN_ID=native-headroom-test \
+    DM_NATIVE_JUDGMENT_AUTHORIZATION="$native_authorization" CASCADE_EXHAUSTED_RAILS= \
+    "$cascade" --kind logic --prompt test --host codex \
+    --probe-file "$probe_fixture" 2>&1)"
+  native_rc=$?
+  set -e
+  if [ "$native_rc" -eq 76 ] && printf '%s' "$native_out" | grep -Fq 'ladder exhausted'; then
+    pass "self-asserted native judgment authorization is not authority"
+  else
+    fail "caller-controlled native judgment authorization must be rejected"
+    any_failed=1
+  fi
+
+  while IFS='|' read -r label invalid_authorization; do
+    set +e
+    DM_PROVIDER_REPOSITORY="$REPO_ROOT" DM_PROVIDER_RUN_ID=native-headroom-test \
+      DM_NATIVE_JUDGMENT_AUTHORIZATION="$invalid_authorization" CASCADE_EXHAUSTED_RAILS= \
+      "$cascade" --kind logic --prompt test --host codex \
+      --probe-file "$probe_fixture" >/dev/null 2>&1
+    invalid_native_rc=$?
+    set -e
+    if [ "$invalid_native_rc" -eq 76 ]; then
+      pass "$label native judgment authorization fails closed"
+    else
+      fail "$label native judgment authorization must leave the ladder exhausted"
+      any_failed=1
+    fi
+  done <<EOF
+absent|
+expired|{"humanGranted":true,"authorizationId":"native-test","repository":"$REPO_ROOT","runId":"native-headroom-test","expiresAtEpoch":1}
+repository-mismatched|{"humanGranted":true,"authorizationId":"native-test","repository":"not-this-repository","runId":"native-headroom-test","expiresAtEpoch":$native_expiry}
+run-mismatched|{"humanGranted":true,"authorizationId":"native-test","repository":"$REPO_ROOT","runId":"not-this-run","expiresAtEpoch":$native_expiry}
+EOF
+
+  while IFS='|' read -r label openrouter_probe; do
+    printf '%s\n' "{\"codex\":{\"state\":\"ok\",\"remaining_pct\":100},\"openrouter\":$openrouter_probe}" > "$probe_fixture"
+    conservative_or_out="$(CASCADE_EXHAUSTED_RAILS= "$cascade" --kind docs --prompt test --host codex \
+      --dry-run --probe-file "$probe_fixture" 2>/dev/null || true)"
+    conservative_or_role="$(printf '%s' "$conservative_or_out" | jq -r '.role // empty' 2>/dev/null || true)"
+    if [ "$conservative_or_role" = "premium_sub" ]; then
+      pass "$label OpenRouter balance is unavailable"
+    else
+      fail "$label OpenRouter balance must fail closed to the healthy Codex rung"
+      any_failed=1
+    fi
+  done <<'EOF'
+unknown|{"state":"unknown","balance_usd":100}
+missing balance|{"state":"ok"}
+malformed balance|{"state":"ok","balance_usd":"100"}
+negative balance|{"state":"ok","balance_usd":-1}
+EOF
+
+  printf '%s\n' '{"codex":{"state":"ok","remaining_pct":100},"openrouter":{"state":"ok","balance_usd":0.01}}' > "$probe_fixture"
 
   or_out="$(CASCADE_EXHAUSTED_RAILS= "$cascade" --kind docs --prompt test --host codex \
     --dry-run --probe-file "$probe_fixture" --exhausted-rail openrouter 2>/dev/null || true)"

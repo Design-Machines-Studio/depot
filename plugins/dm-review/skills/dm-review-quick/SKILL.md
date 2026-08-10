@@ -27,14 +27,14 @@ Run a fast code review using the core agents plus ui-standards-reviewer for UI f
 
 Quick mode scales agent count by diff size:
 
-- **< 100 lines (lightweight):** 3 review criteria plus explicit security-lane separation -- `security-auditor-codex-signoff` always reviews the full diff, `security-auditor-openrouter` reviews eligible sections when available, plus pattern-recognition-specialist and code-simplicity-reviewer. Skips architecture-reviewer and doc-sync-reviewer. When OpenRouter is unavailable, the external security lane is not selected and all three criteria run on Codex.
+- **< 100 lines (lightweight):** 3 review criteria plus explicit security-lane separation -- `security-auditor-codex-signoff` is a stable ID for the implementer-independent full-diff sign-off, `security-auditor-openrouter` reviews eligible sections when available, plus pattern-recognition-specialist and code-simplicity-reviewer. Skips architecture-reviewer and doc-sync-reviewer. Other criteria may run on Codex when OpenRouter is unavailable, but the sign-off family must still differ from the implementer.
 - **100-500 lines (standard):** 5 core criteria: 6 logical lanes with OpenRouter, 5 without.
 - **> 500 lines (extended):** the same core logical lanes + applicable classification-aware agents.
 
 ## Core Agents (standard+ mode)
 
 1. code-simplicity-reviewer
-2. security-auditor-codex-signoff (required full-diff Codex lane) plus security-auditor-openrouter when available (eligible sections only)
+2. security-auditor-codex-signoff (stable ID; required full-diff independent-family lane) plus security-auditor-openrouter when available (eligible sections only)
 3. pattern-recognition-specialist
 4. architecture-reviewer
 5. doc-sync-reviewer

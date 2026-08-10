@@ -4,9 +4,11 @@ import contextlib
 import dataclasses
 import io
 import json
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from workflow_kernel import cli
 from workflow_kernel._usage_identity import AttemptContext
@@ -781,6 +783,25 @@ class OpenRouterUsageCliTests(unittest.TestCase):
                     self.assertFalse(output.exists())
                     self.assertTrue(stderr.strip())
 
+    def test_cli_rejects_missing_or_malformed_invocation_identity(self):
+        mutations = (
+            ("missing", lambda r: r.pop("invocationId", None)),
+            ("null", lambda r: r.update(invocationId=None)),
+            ("integer", lambda r: r.update(invocationId=7)),
+            ("short", lambda r: r.update(invocationId="a" * 63)),
+            ("nonhex", lambda r: r.update(invocationId="g" * 64)),
+        )
+        for label, mutate in mutations:
+            with self.subTest(label=label), tempfile.TemporaryDirectory() as directory:
+                receipt_path = Path(directory) / "receipt.json"
+                receipt = _receipt(SUCCESS_FIXTURE)
+                mutate(receipt)
+                receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+                output = Path(directory) / "out.json"
+                code, _, _ = _invoke(_cli_args(receipt_path, output))
+                self.assertNotEqual(code, 0)
+                self.assertFalse(output.exists())
+
     def test_cli_rejects_invalid_usage_values_without_writing_output(self):
         receipt = _receipt(SUCCESS_FIXTURE)
         receipt["usage"]["prompt_tokens"] = -5
@@ -815,10 +836,19 @@ class RecordAttemptTests(unittest.TestCase):
     """
 
     def _argv(self, receipts, lane, minute, **extra):
+        run_id = extra.pop("run_id", "record-attempt-1")
+        if "openrouter_receipt" in extra and "state_dir" not in extra:
+            scope_root = Path(extra.pop("_scope_root", Path(receipts).parent))
+            if not (scope_root / ".git").exists():
+                subprocess.run(["git", "init", "-q", scope_root], check=True)
+            scope = cli._repository_scope(scope_root, create=True)
+            state_dir = scope.lease_root / "runs" / run_id
+            state_dir.mkdir(parents=True, exist_ok=True)
+            extra["state_dir"] = state_dir
         argv = [
             "record-attempt",
             "--receipts", str(receipts),
-            "--run-id", "record-attempt-1",
+            "--run-id", run_id,
             "--occurred-at", "2026-08-07T09:%02d:00Z" % minute,
             "--authoritative-receipt", "receipts/%s.json" % lane,
             "--stage", "review_dispatch", "--status", "completed",
@@ -828,6 +858,11 @@ class RecordAttemptTests(unittest.TestCase):
             "--requested-executor", "codex",
             "--attempted-executor", "openrouter",
             "--implemented-by", "openrouter",
+            "--matrix-snapshot-date", "2026-08-03",
+            "--rung-rationale", "strength",
+            "--diff-scope", "full",
+            "--full-diff-override", "false",
+            "--slice-status", "not_sliced",
         ]
         for flag, value in extra.items():
             argv += ["--" + flag.replace("_", "-"), str(value)]
@@ -836,6 +871,92 @@ class RecordAttemptTests(unittest.TestCase):
     def _stream(self, path):
         with open(path, encoding="utf-8") as handle:
             return json.load(handle)
+
+    def test_review_iteration_receipt_survives_atomic_attempt_and_cost_observation(self):
+        """The loop's selection receipt must coexist with the atomic lane pair.
+
+        Translation is the schema-sensitive core used by observe-review, while
+        build_run_cost_summary is the same reader used by emit-cost-summary.
+        Exercising both over the post-record-attempt stream prevents a field
+        from being documented yet silently non-executable.
+        """
+        from workflow_kernel.dm_review_adapter import translate_review_receipts
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipts = Path(directory) / "authoritative-receipts.json"
+            receipts.write_text(json.dumps([{
+                "run_id": "record-attempt-1", "sequence": 0,
+                "stage": "review_iteration", "status": "observed",
+                "occurred_at": "2026-08-07T09:00:00Z",
+                "authoritative_receipt": "receipts/iteration-2.json",
+                "selective_rerun": True,
+                "lanes_rerun": ["security-auditor-codex-signoff"],
+                "lanes_skipped": ["voice-editor"],
+                "rerun_reasons": {
+                    "security-auditor-codex-signoff": ["security_signoff"],
+                },
+                "selection_fallback_reason": None,
+                "promoted_to_full": False,
+                "full_fanout_override": False,
+            }]), encoding="utf-8")
+
+            code, _, error = _invoke(self._argv(receipts, "security", 1))
+            self.assertEqual(code, 0, error)
+            stream = self._stream(receipts)
+            events = translate_review_receipts(stream)
+            summary = build_run_cost_summary(events)
+            validate_run_cost_summary(summary)
+            self.assertEqual(events[0].payload["stage"], "review_iteration")
+            self.assertEqual(
+                events[0].payload["lanes_skipped"], ("voice-editor",),
+            )
+            self.assertEqual(summary["lanes"][0]["lane"], "security")
+
+    def test_review_iteration_receipt_rejects_incoherent_selection(self):
+        from workflow_kernel.dm_review_adapter import translate_review_receipts
+
+        base = {
+            "run_id": "iteration-invalid", "sequence": 0,
+            "stage": "review_iteration", "status": "observed",
+            "occurred_at": "2026-08-07T09:00:00Z",
+            "authoritative_receipt": "receipts/iteration-invalid.json",
+            "selective_rerun": True, "lanes_rerun": ["security"],
+            "lanes_skipped": ["voice"],
+            "rerun_reasons": {"security": ["security_signoff"]},
+            "selection_fallback_reason": None,
+            "promoted_to_full": False, "full_fanout_override": False,
+        }
+        mutations = (
+            {"lanes_skipped": []},
+            {"rerun_reasons": {"security": ["unknown_reason"]}},
+            {"promoted_to_full": True},
+            {"full_fanout_override": True},
+            {"selection_fallback_reason": "receiver rejected selective input"},
+            {
+                "selective_rerun": False, "lanes_skipped": [],
+                "rerun_reasons": {"security": ["selection_fail_open"]},
+                "selection_fallback_reason": None,
+            },
+            {"selective_rerun": False, "lanes_skipped": ["voice"]},
+        )
+        for mutation in mutations:
+            with self.subTest(mutation=mutation), self.assertRaises(ValueError):
+                translate_review_receipts([{**base, **mutation}])
+
+        with self.assertRaises(ValueError):
+            translate_review_receipts([{**base, "stage": "review_dispatch"}])
+
+        zero_attempt_fail_open = {
+            **base,
+            "selective_rerun": False,
+            "lanes_rerun": [],
+            "lanes_skipped": [],
+            "rerun_reasons": {},
+            "selection_fallback_reason": "lane discovery failed before dispatch",
+        }
+        events = translate_review_receipts([zero_attempt_fail_open])
+        self.assertEqual(events[0].payload["lanes_rerun"], ())
+        self.assertEqual(events[0].payload["rerun_reasons"], {})
 
     def test_every_recorded_lane_carries_a_usage_row(self):
         """The whole point. Three evidence paths, no unpaired lane."""
@@ -846,9 +967,19 @@ class RecordAttemptTests(unittest.TestCase):
         directory = tempfile.mkdtemp()
         receipts = os.path.join(directory, "authoritative-receipts.json")
         try:
+            wrapper_receipt = _receipt(SUCCESS_FIXTURE)
+            wrapper_receipt["authorization"] = {
+                "mode": "exact-digest", "runId": "record-attempt-1",
+                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
+            }
+            wrapper_receipt_path = Path(directory) / "openrouter-receipt.json"
+            wrapper_receipt_path.write_text(
+                json.dumps(wrapper_receipt), encoding="utf-8",
+            )
             code, _, err = _invoke(self._argv(
                 receipts, "security", 1,
-                openrouter_receipt=SUCCESS_FIXTURE,
+                openrouter_receipt=wrapper_receipt_path,
+                request_envelope_sha256="b" * 64,
             ))
             self.assertEqual(code, 0, err)
             code, _, err = _invoke(self._argv(
@@ -878,8 +1009,427 @@ class RecordAttemptTests(unittest.TestCase):
             self.assertEqual(sources["security"], "openrouter_api_receipt")
             self.assertEqual(sources["docs"], "estimated_input_bytes")
             self.assertEqual(sources["architecture"], "attempt_unmeasured")
+            security_lane, security_usage = stream[:2]
+            self.assertEqual(
+                security_usage["requested_provider"],
+                security_lane["requested_executor"],
+            )
+            self.assertEqual(
+                security_usage["attempted_provider"],
+                security_lane["attempted_executor"],
+            )
+            self.assertEqual(
+                security_usage["implemented_by"],
+                security_lane["implemented_by"],
+            )
         finally:
             shutil.rmtree(directory, ignore_errors=True)
+
+    def test_rejects_conflicting_atomic_attempt_identity(self):
+        import os
+        import shutil
+        import tempfile
+
+        for field, value in (
+            ("requested_provider", "claude"),
+            ("attempted_provider", "codex"),
+        ):
+            with self.subTest(field=field):
+                directory = tempfile.mkdtemp()
+                receipts = os.path.join(directory, "authoritative-receipts.json")
+                try:
+                    code, _, _ = _invoke(self._argv(
+                        receipts, "security", 1, **{field: value},
+                    ))
+                    self.assertNotEqual(code, 0)
+                    self.assertFalse(os.path.exists(receipts))
+                finally:
+                    shutil.rmtree(directory, ignore_errors=True)
+
+    def test_rejects_openrouter_receipt_relabeling(self):
+        import os
+        import tempfile
+
+        for field in ("attempted_executor", "implemented_by"):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                receipts = os.path.join(directory, "authoritative-receipts.json")
+                code, _, _ = _invoke(self._argv(
+                    receipts, "security", 1,
+                    openrouter_receipt=SUCCESS_FIXTURE,
+                    **{field: "codex"},
+                ))
+                self.assertNotEqual(code, 0)
+                self.assertFalse(os.path.exists(receipts))
+
+    def test_rejects_crossed_interim_openrouter_receipt_identity(self):
+        import os
+        import tempfile
+
+        for field, value in (
+            ("runId", "other-run"),
+            ("laneId", "other-lane"),
+            ("requestEnvelopeSha256", "c" * 64),
+            ("requestEnvelopeSha256", None),
+            ("requestEnvelopeSha256", 7),
+            ("requestEnvelopeSha256", "not-a-sha256"),
+        ):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
+                receipt = _receipt(SUCCESS_FIXTURE)
+                receipt["authorization"] = {
+                    "mode": "interim-operator-batch",
+                    "batchSha256": "a" * 64,
+                    "runId": "record-attempt-1",
+                    "laneId": "security",
+                    "requestEnvelopeSha256": "b" * 64,
+                }
+                receipt["authorization"][field] = value
+                receipt_path = Path(directory) / "receipt.json"
+                receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+                receipts = os.path.join(directory, "authoritative-receipts.json")
+                code, _, _ = _invoke(self._argv(
+                    receipts, "security", 1, openrouter_receipt=receipt_path,
+                    request_envelope_sha256="b" * 64,
+                ))
+                self.assertNotEqual(code, 0)
+                self.assertFalse(os.path.exists(receipts))
+
+    def test_accepts_exact_interim_openrouter_receipt_identity(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = _receipt(SUCCESS_FIXTURE)
+            receipt["authorization"] = {
+                "mode": "interim-operator-batch",
+                "batchSha256": "a" * 64,
+                "runId": "record-attempt-1",
+                "laneId": "security",
+                "requestEnvelopeSha256": "b" * 64,
+            }
+            receipt_path = Path(directory) / "receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            receipts = os.path.join(directory, "authoritative-receipts.json")
+            code, _, error = _invoke(self._argv(
+                receipts, "security", 1, openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+            ))
+            self.assertEqual(code, 0, error)
+
+    def test_rejects_exact_digest_receipt_without_attempt_coordinates(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipts = os.path.join(directory, "authoritative-receipts.json")
+            code, _, _ = _invoke(self._argv(
+                receipts, "security", 1,
+                openrouter_receipt=SUCCESS_FIXTURE,
+                request_envelope_sha256="b" * 64,
+            ))
+            self.assertNotEqual(code, 0)
+            self.assertFalse(os.path.exists(receipts))
+
+    def test_exact_digest_receipt_is_consumed_once_across_streams(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = _receipt(SUCCESS_FIXTURE)
+            receipt["authorization"] = {
+                "mode": "exact-digest", "runId": "run-a",
+                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
+            }
+            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            first_directory = Path(directory) / "run-a"
+            second_directory = Path(directory) / "run-b"
+            first_directory.mkdir()
+            second_directory.mkdir()
+            first_stream = first_directory / "first-receipts.json"
+            second_stream = second_directory / "second-receipts.json"
+            first_code, _, first_error = _invoke(self._argv(
+                first_stream, "security", 1,
+                run_id="run-a", openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+                _scope_root=directory,
+            ))
+            self.assertEqual(first_code, 0, first_error)
+            ledger_path = (
+                Path(directory) / ".workflow-kernel" /
+                "openrouter-consumptions.json"
+            )
+            ledger = self._stream(ledger_path)
+            ledger["consumptions"][0]["status"] = "pending"
+            ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+            receipt["authorization"].update({"runId": "run-b", "laneId": "docs"})
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            second_code, _, _ = _invoke(self._argv(
+                second_stream, "docs", 2,
+                run_id="run-b", openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+                _scope_root=directory,
+            ))
+            self.assertNotEqual(second_code, 0)
+            self.assertFalse(os.path.exists(second_stream))
+            self.assertEqual(len(self._stream(first_stream)), 2)
+            self.assertEqual(
+                self._stream(ledger_path)["consumptions"][0]["status"],
+                "committed",
+            )
+
+    def test_failed_stream_append_does_not_consume_wrapper_evidence(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = _receipt(SUCCESS_FIXTURE)
+            receipt["authorization"] = {
+                "mode": "exact-digest", "runId": "record-attempt-1",
+                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
+            }
+            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            receipts = Path(directory) / "authoritative-receipts.json"
+            receipts.write_text("{}", encoding="utf-8")
+            argv = self._argv(
+                receipts, "security", 1, openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+            )
+
+            first_code, _, _ = _invoke(argv)
+            self.assertNotEqual(first_code, 0)
+            receipts.write_text("[]", encoding="utf-8")
+            retry_code, _, retry_error = _invoke(argv)
+
+            self.assertEqual(retry_code, 0, retry_error)
+            self.assertEqual(len(self._stream(receipts)), 2)
+
+    def test_crash_left_pending_without_receipt_allows_retry(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = _receipt(SUCCESS_FIXTURE)
+            receipt["authorization"] = {
+                "mode": "exact-digest", "runId": "record-attempt-1",
+                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
+            }
+            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            receipts = Path(directory) / "authoritative-receipts.json"
+            argv = self._argv(
+                receipts, "security", 1, openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+            )
+            first_code, _, first_error = _invoke(argv)
+            self.assertEqual(first_code, 0, first_error)
+
+            ledger_path = (
+                Path(directory) / ".workflow-kernel" /
+                "openrouter-consumptions.json"
+            )
+            ledger = self._stream(ledger_path)
+            ledger["consumptions"][0]["status"] = "pending"
+            ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+            os.unlink(receipts)
+
+            retry_code, _, retry_error = _invoke(argv)
+            self.assertEqual(retry_code, 0, retry_error)
+            self.assertEqual(len(self._stream(receipts)), 2)
+
+    def test_crash_left_pending_with_malformed_stream_fails_closed(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = _receipt(SUCCESS_FIXTURE)
+            receipt["authorization"] = {
+                "mode": "exact-digest", "runId": "record-attempt-1",
+                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
+            }
+            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            receipts = Path(directory) / "authoritative-receipts.json"
+            argv = self._argv(
+                receipts, "security", 1, openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+            )
+            first_code, _, first_error = _invoke(argv)
+            self.assertEqual(first_code, 0, first_error)
+
+            ledger_path = (
+                Path(directory) / ".workflow-kernel" /
+                "openrouter-consumptions.json"
+            )
+            ledger = self._stream(ledger_path)
+            ledger["consumptions"][0]["status"] = "pending"
+            ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+            receipts.write_text("{}", encoding="utf-8")
+
+            retry_code, _, _ = _invoke(argv)
+            self.assertNotEqual(retry_code, 0)
+            self.assertEqual(
+                self._stream(ledger_path)["consumptions"][0]["status"],
+                "pending",
+            )
+
+    def test_consumption_lock_failure_closes_open_descriptor(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = _receipt(SUCCESS_FIXTURE)
+            receipt["authorization"] = {
+                "mode": "exact-digest", "runId": "record-attempt-1",
+                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
+            }
+            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            descriptor = os.open(
+                Path(directory) / "consumption.lock", os.O_WRONLY | os.O_CREAT,
+                0o600,
+            )
+            argv = self._argv(
+                Path(directory) / "authoritative-receipts.json",
+                "security", 1, openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+            )
+            with (
+                mock.patch.object(
+                    cli, "_open_openrouter_consumption_lock",
+                    return_value=(str(Path(directory) / "ledger.json"), descriptor),
+                ),
+                mock.patch.object(
+                    cli.fcntl, "flock", side_effect=OSError("lock failed"),
+                ),
+                mock.patch.object(cli.os, "close", wraps=os.close) as close,
+            ):
+                code, _, _ = _invoke(argv)
+                self.assertNotEqual(code, 0)
+                close.assert_any_call(descriptor)
+
+    def test_rejects_reusing_one_interim_openrouter_receipt_for_another_attempt(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = _receipt(SUCCESS_FIXTURE)
+            receipt["authorization"] = {
+                "mode": "interim-operator-batch",
+                "batchSha256": "a" * 64,
+                "runId": "record-attempt-1",
+                "laneId": "security",
+                "requestEnvelopeSha256": "b" * 64,
+            }
+            receipt_path = Path(directory) / "receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            receipts = os.path.join(directory, "authoritative-receipts.json")
+            first_code, _, first_error = _invoke(self._argv(
+                receipts, "security", 1, openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+            ))
+            self.assertEqual(first_code, 0, first_error)
+            second_code, _, _ = _invoke(self._argv(
+                receipts, "security", 2, attempt=2,
+                openrouter_receipt=receipt_path,
+                request_envelope_sha256="b" * 64,
+            ))
+            self.assertNotEqual(second_code, 0)
+            self.assertEqual(len(self._stream(receipts)), 2)
+
+    def test_accepts_distinct_failed_retry_receipts_for_the_same_request_envelope(self):
+        import os
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipts = os.path.join(directory, "authoritative-receipts.json")
+            for attempt, invocation_id in ((1, "4" * 64), (2, "5" * 64)):
+                receipt = _receipt(FAILED_FIXTURE)
+                receipt["invocationId"] = invocation_id
+                receipt["authorization"] = {
+                    "mode": "interim-operator-batch",
+                    "batchSha256": "a" * 64,
+                    "runId": "record-attempt-1",
+                    "laneId": "security",
+                    "requestEnvelopeSha256": "b" * 64,
+                }
+                receipt_path = Path(directory) / ("failure-%d.json" % attempt)
+                receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+                code, _, error = _invoke(self._argv(
+                    receipts, "security", attempt, attempt=attempt,
+                    openrouter_receipt=receipt_path,
+                    request_envelope_sha256="b" * 64,
+                ))
+                self.assertEqual(code, 0, error)
+            self.assertEqual(len(self._stream(receipts)), 4)
+
+    def test_concurrent_replay_of_one_openrouter_receipt_appends_once(self):
+        import os
+        import subprocess
+        import sys
+        import tempfile
+        import time
+
+        with tempfile.TemporaryDirectory() as directory:
+            receipt = _receipt(SUCCESS_FIXTURE)
+            receipt["authorization"] = {
+                "mode": "interim-operator-batch",
+                "batchSha256": "a" * 64,
+                "runId": "record-attempt-1",
+                "laneId": "security",
+                "requestEnvelopeSha256": "b" * 64,
+            }
+            receipt_path = Path(directory) / "receipt.json"
+            receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+            receipts = os.path.join(directory, "authoritative-receipts.json")
+            gate = Path(directory) / "start"
+            launcher = Path(directory) / "launch.py"
+            launcher.write_text(
+                "import os, sys, time\n"
+                "open(sys.argv[2], 'w').close()\n"
+                "while not os.path.exists(sys.argv[1]): time.sleep(0.001)\n"
+                "os.execv(sys.executable, [sys.executable, '-m', "
+                "'workflow_kernel', *sys.argv[3:]])\n",
+                encoding="utf-8",
+            )
+            repo_root = Path(__file__).resolve().parents[1]
+            module_root = repo_root / (
+                "plugins/workflow-kernel/skills/workflow-kernel/references"
+            )
+            env = dict(os.environ, PYTHONPATH=str(module_root))
+            processes = []
+            ready_markers = []
+            for attempt in range(1, 9):
+                argv = self._argv(
+                    receipts, "security", attempt, attempt=attempt,
+                    openrouter_receipt=receipt_path,
+                    request_envelope_sha256="b" * 64,
+                )
+                ready = Path(directory) / ("ready-%d" % attempt)
+                ready_markers.append(ready)
+                processes.append(subprocess.Popen(
+                    [sys.executable, str(launcher), str(gate), str(ready), *argv],
+                    env=env, stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                ))
+            deadline = time.monotonic() + 5.0
+            while (
+                not all(marker.exists() for marker in ready_markers)
+                and time.monotonic() < deadline
+            ):
+                time.sleep(0.01)
+            if not all(marker.exists() for marker in ready_markers):
+                for process in processes:
+                    process.kill()
+                    process.wait(timeout=5)
+                self.fail("concurrent replay workers did not reach the barrier")
+            gate.touch()
+            return_codes = [process.wait(timeout=120) for process in processes]
+            self.assertEqual(return_codes.count(0), 1)
+            stream = self._stream(receipts)
+            self.assertEqual(len(stream), 2)
+            self.assertEqual(
+                [entry["stage"] for entry in stream],
+                ["review_dispatch", "attempt_usage"],
+            )
 
     def test_unmeasured_lane_still_reaches_the_cost_summary(self):
         """An `attempt_unmeasured` row is a claim, not a gap. It must survive
@@ -907,6 +1457,29 @@ class RecordAttemptTests(unittest.TestCase):
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 
+    def test_rejects_half_supplied_byte_measurement_atomically(self):
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        try:
+            for evidence in (
+                {"agent_definition": FIXTURES / "lane-bytes" / "agent-definition.md"},
+                {"diff": FIXTURES / "lane-bytes" / "diff.patch"},
+            ):
+                with self.subTest(evidence=evidence):
+                    receipts = os.path.join(
+                        directory, "authoritative-%s.json" % next(iter(evidence)),
+                    )
+                    code, _, error = _invoke(self._argv(
+                        receipts, "docs", 2, **evidence,
+                    ))
+                    self.assertNotEqual(code, 0, error)
+                    self.assertFalse(os.path.exists(receipts))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
     def test_a_rejected_measurement_appends_neither_receipt(self):
         """Both receipts land or neither does. A lane receipt written beside a
         failed measurement would be the unpaired state this command exists to
@@ -924,6 +1497,108 @@ class RecordAttemptTests(unittest.TestCase):
             code, _, _ = _invoke(self._argv(
                 receipts, "security", 1, openrouter_receipt=bad,
             ))
+            self.assertNotEqual(code, 0)
+            self.assertFalse(os.path.exists(receipts))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_rejects_malformed_openrouter_envelopes_atomically(self):
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts = os.path.join(directory, "authoritative-receipts.json")
+        try:
+            for name, mutation in (
+                ("wrong-version", {"schemaVersion": 1}),
+                ("missing-outcome", {"outcome": None}),
+            ):
+                source = _receipt(SUCCESS_FIXTURE)
+                source.update(mutation)
+                path = os.path.join(directory, name + ".json")
+                with open(path, "w", encoding="utf-8") as handle:
+                    json.dump(source, handle)
+                code, _, _ = _invoke(self._argv(
+                    receipts, "security", 1, openrouter_receipt=path,
+                ))
+                self.assertNotEqual(code, 0)
+                self.assertFalse(os.path.exists(receipts))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_routing_and_review_scope_are_bound_to_lane_receipt(self):
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts = os.path.join(directory, "authoritative-receipts.json")
+        try:
+            code, _, err = _invoke(self._argv(
+                receipts, "css", 1,
+                diff_scope="scoped(2 files of 5)",
+                full_diff_override="false", slice_status="sliced",
+                matrix_snapshot_date="2026-08-09",
+                rung_rationale="context",
+            ))
+            self.assertEqual(code, 0, err)
+            lane = self._stream(receipts)[0]
+            self.assertEqual(lane["matrix_snapshot_date"], "2026-08-09")
+            self.assertEqual(lane["rung_rationale"], "context")
+            self.assertEqual(lane["diff_scope"], "scoped(2 files of 5)")
+            self.assertFalse(lane["full_diff_override"])
+            self.assertEqual(lane["slice_status"], "sliced")
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_rejects_invalid_routing_or_scope_without_appending(self):
+        import os
+        import shutil
+        import tempfile
+
+        invalid = (
+            {"matrix_snapshot_date": "2026-02-30"},
+            {"rung_rationale": "preference"},
+            {"diff_scope": "scoped(6 files of 5)", "slice_status": "sliced"},
+            {"diff_scope": "full", "slice_status": "sliced"},
+            {"diff_scope": "scoped(1 files of 5)", "full_diff_override": "true",
+             "slice_status": "full_diff_override"},
+        )
+        for index, values in enumerate(invalid):
+            with self.subTest(values=values):
+                directory = tempfile.mkdtemp()
+                receipts = os.path.join(directory, "authoritative-receipts.json")
+                try:
+                    code, _, _ = _invoke(self._argv(
+                        receipts, "css", index + 1, **values,
+                    ))
+                    self.assertNotEqual(code, 0)
+                    self.assertFalse(os.path.exists(receipts))
+                finally:
+                    shutil.rmtree(directory, ignore_errors=True)
+
+    def test_review_scope_is_required_and_rejected_on_pipeline_attempts(self):
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts = os.path.join(directory, "authoritative-receipts.json")
+        try:
+            argv = self._argv(receipts, "security", 1)
+            for flag in (
+                "--diff-scope", "--full-diff-override", "--slice-status",
+            ):
+                index = argv.index(flag)
+                del argv[index:index + 2]
+            code, _, _ = _invoke(argv)
+            self.assertNotEqual(code, 0)
+            self.assertFalse(os.path.exists(receipts))
+
+            argv = self._argv(receipts, "chunk-a", 2)
+            argv[argv.index("review_dispatch")] = "progress"
+            code, _, _ = _invoke(argv)
             self.assertNotEqual(code, 0)
             self.assertFalse(os.path.exists(receipts))
         finally:

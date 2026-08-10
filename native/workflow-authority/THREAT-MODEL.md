@@ -98,63 +98,43 @@ it is documented here because honesty is the price of the mode existing.
 
 **What it weakens.** Two things, stated plainly.
 
-First, approval granularity. An operator now confirms a SET of exact payload
-digests once at run start instead of confirming each payload immediately before
-its own transmission. The window between approval and transmission widens from
-one payload to one run, so a same-user process that can rewrite a lane's bytes
-after the snapshot has a longer opportunity to try. Rewriting bytes does not
-by itself get them transmitted: the wrapper recomputes the canonical
-exact-ordered-content digest over ALL message contents in the request body it
-is about to POST -- system, developer, assistant, and user turns, in
-transmission order -- and refuses unless that digest is already a member of the
-validated batch file's `payload_digests`. That check is at the point of
-disclosure, over the content bytes actually sent, and it does not depend on the
-lane having run `verify-batch` first. "Actually sent" is enforced by
-construction, not asserted: the private copy of the request body is opened on a
-dedicated file descriptor and its path is unlinked immediately, so no name
-resolves to those bytes any more; the contents are read once through that
-descriptor into process memory; and both the digest and curl are driven from
-that single in-memory copy, with curl fed the bytes on stdin
-(`--data-binary @-`) rather than any path. The per-message content parts the
-digest frames are extracted from the same in-memory copy and never written to
-disk. There is no second open of anything between the digest and the POST.
-Message content that is not a plain
-string (array-typed or otherwise structured content parts) has no framing that
-agrees with what `payload-authorization.sh snapshot` records, so the wrapper
-refuses it under interim mode rather than hash something different.
+First, approval granularity. An operator now confirms a SET of exact schema-v2
+request-envelope digests once at run start instead of confirming each envelope
+immediately before transmission. The window between approval and transmission
+widens from one request to one run, so the wrapper must re-render and verify the
+complete envelope before every dispatch. The preparation manifest also retains
+a 0600 inspection copy until approval, and the terminal summary shows the model
+candidates, provider routing, per-role byte counts, exact digest, and inspection
+path for every lane. The batch persists that lane-to-digest/model mapping. The
+wrapper refuses unless the exact immutable request body it is about to POST is
+bound to the same lane and model candidates in that validated mapping.
 
-**What the binding does NOT cover.** It covers ordered message CONTENT bytes
-and nothing else. The model slug, the fallback slug, the provider order, the
-`sort` preference, and every other routing field are caller-selected and sit
-outside the approved digest set; the batch schema records digests only, so
-covering them would require a schema change. Honestly assessed, routing
-metadata is a weak content-exfiltration channel -- the fields are constrained
-to short, validated slugs and orderings by routing policy, native-vendor
-rejection, and provider-order validation, so their capacity is a handful of
-bytes per request rather than an arbitrary payload -- but it is a real
-destination-selection channel: a lane that cannot change WHAT is sent can still
-influence WHERE approved content goes, within the set routing policy permits.
-Do not read the digest binding as approval of the route.
+"Actually sent" is enforced by construction, not asserted: the private request
+body is opened on a dedicated file descriptor and its path is unlinked, the
+contents are read once into process memory, and both the digest and curl use
+that same in-memory copy with `--data-binary @-`. There is no second path open
+between membership verification and the POST. Any mutation to content, model,
+fallback, provider order, sort preference, or another request field changes the
+envelope digest and requires new operator approval.
 
-The residual weakening is that the operator's attention is spent once on
-a summary (lane IDs, per-lane byte totals, grand total, digest count) rather
-than repeatedly on each payload -- the same user-presence limitation described
-above, applied to a batch.
+The residual weakening is that the operator's attention is spent once on the
+inspectable batch summary rather than repeatedly immediately before each
+payload -- the same user-presence limitation described above, applied to a
+batch. The retained inspection copy is deleted after the batch is persisted.
 
 Second, and more seriously: **the batch artifact is procedural and
 unauthenticated.** `plans/<feature>/openrouter-batch-authorization.json` is bare
 JSON with no signature, no MAC, and no user-presence binding. Nothing in it
 proves that `batch-approve` -- or its `/dev/tty` confirmation -- ever ran. A
 process running as the same user, including the very agent this gate is meant
-to constrain, can hand-write a batch file carrying its own payload digests and
+to constrain, can hand-write a batch file carrying its own request-envelope digests and
 the known run id, and enter interim mode with zero interactive approval. The
 run id, expiry, and sunset checks all validate data that such a forger supplies.
 The interactive confirmation is a control against ACCIDENTAL and AUTOMATED
 entry by this tooling; it is NOT a technical barrier against a same-user
 process that forges the artifact. What the mode still binds, even against a
-forger, is disclosure of message content to digests recorded in the file at
-transmission time -- it does not bind who wrote the file, and it does not bind
-routing metadata.
+forger, is disclosure of the complete request envelope to digests recorded in
+the file at transmission time -- it does not bind who wrote the file.
 
 Closing that same-user gap is precisely what an out-of-process privileged
 broker exists to provide, and re-implementing a weak imitation in Bash (a
@@ -168,10 +148,11 @@ the caller's environment, read only by the wrapper's `Authorization` header. No
 change here places the key in argv, a receipt, a batch file, a new file, or a
 new process. If any future change to this mode would move the key, stop.
 
-**What it preserves.** Disclosure stays digest-bound: only exact ordered
-content bytes recorded in the batch file may be sent, the wrapper enforces that
-membership over the bytes it transmits, and a non-matching payload falls back
-to the per-payload interactive path or fails closed. Consent stays interactive
+**What it preserves.** Disclosure stays digest-bound: only complete exact
+request-envelope bytes recorded in the batch file may be sent, including model,
+provider routing, roles, and message content. The wrapper enforces membership
+over the immutable bytes it transmits, and a non-matching envelope fails closed.
+Consent stays interactive
 for every entry that goes through this tooling: the confirmation is read from
 `/dev/tty` and nothing else, no environment variable substitutes for the
 interactive confirmation, and an unavailable terminal fails closed -- with the

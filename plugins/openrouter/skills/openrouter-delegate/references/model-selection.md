@@ -2,11 +2,11 @@
 
 Decision tables for the three distinct routing systems that use these model names. Native Codex execution, dm-review/direct OpenRouter delegation, and the Pipeline cascade have different ordering and provenance; do not combine them into one fallback ladder.
 
-> **Current production mode:** only direct interactive `/openrouter` calls may
-> reach the API, after exact-digest approval. The dm-review and Pipeline tables
-> describe the broker-enabled target topology and dry-run decisions. Their
-> non-dry automated attempts currently record `host_authority_unavailable` and
-> complete on Codex.
+> **Current production mode:** direct interactive `/openrouter` calls require
+> exact-digest approval. dm-review may use the temporary sunset-bound operator
+> batch. A ready broker retires interim mode but remains
+> `broker_transport_unavailable` until broker-owned transport lands. Pipeline
+> retains its separate workflow-authority gate.
 
 ## Available Models
 
@@ -123,7 +123,7 @@ These calls use the OpenRouter API and retain `implementedBy: openrouter` even w
 | Direct `/openrouter` | Terra, unless `--model` overrides it | Kimi K3 | none implicit |
 | Mechanical dm-review lanes | Luna | GLM-5.2 | Codex if the OpenRouter attempt cannot complete |
 | Bulk / large-context dm-review | Kimi K3 | Terra | Codex if the OpenRouter attempt cannot complete |
-| Security dm-review lens | Kimi K3 | GLM-5.2 | same logical lane completes on Codex; independent full-diff Codex sign-off is always required |
+| Security dm-review lens | Kimi K3 | GLM-5.2 | same logical lane may complete locally; independent full-diff non-implementing-family sign-off is always required |
 | One-shot config / doc generation | Luna | Terra quality fallback | caller owns writing and verification |
 
 Review timeouts are 3600s, extended to 7200s for bulk diffs of at least 10K lines. One-shot config/doc generation uses 1800s.
@@ -154,7 +154,7 @@ issuing a second client request:
 ```
 bulk:       moonshotai/kimi-k3 -> openai/gpt-5.6-terra -> separate Codex fallback
 mechanical: openai/gpt-5.6-luna -> z-ai/glm-5.2 -> separate Codex fallback
-security:   moonshotai/kimi-k3 -> z-ai/glm-5.2 -> same-lane Codex completion + independent Codex sign-off
+security:   moonshotai/kimi-k3 -> z-ai/glm-5.2 -> same-lane local completion + independent non-implementing-family sign-off
 direct:     openai/gpt-5.6-terra -> moonshotai/kimi-k3 -> stop
 ```
 

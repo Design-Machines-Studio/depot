@@ -52,7 +52,7 @@
             }
           },
           "probe": {
-            "$comment": "ARGV ARRAY, never a shell string. usage-probe.sh executes this directly without sh -c: no metacharacters, no word splitting, no globbing, no chaining. probe[0] must resolve on the reset PATH or be an absolute path to an executable regular file. Use the literal string \"none\" for a rail with no probe.",
+            "$comment": "TRUSTED EXECUTABLE developer configuration expressed as an argv array, never implicitly parsed by a shell. A named program may implement its own command language. Production resolves this file only from the host-owned common checkout, never a linked chunk worktree. probe[0] must resolve on the reset PATH or be an absolute path to an executable regular file. Use the literal string \"none\" for a rail with no probe.",
             "oneOf": [
               {
                 "const": "none"

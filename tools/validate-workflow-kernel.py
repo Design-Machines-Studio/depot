@@ -111,7 +111,12 @@ BEHAVIORAL_CLI_CASES = {
         "--lane", "validator", "--chunk-id", "chunk", "--node-id", "node",
         "--attempt", "1", "--host", "validator", "--duration-seconds", "1.0",
         "--requested-executor", "codex", "--attempted-executor", "codex",
-        "--implemented-by", "codex", "--openrouter-receipt", "<missing>",
+        "--implemented-by", "codex",
+        "--matrix-snapshot-date", "2026-08-03",
+        "--rung-rationale", "strength",
+        "--diff-scope", "full", "--full-diff-override", "false",
+        "--slice-status", "not_sliced",
+        "--openrouter-receipt", "<missing>",
     ),
     "emit-cost-summary": (
         "--events", "<missing>", "--output", "<output>", "--receipt", "<receipt>",
@@ -644,6 +649,8 @@ def check_cli(context):
                 "requested_provider": "claude", "attempted_provider": "claude",
                 "implemented_by": "codex", "provider": "codex",
                 "model": "not_reported", "source_severity": "P1",
+                "implementer_family": "openai", "reviewer_family": "openai",
+                "resolution_reason": "ordinary-lane-same-family-review",
                 "evidence_ref": "receipts/review/security-finding.json",
                 "attempt": 2, "occurred_at": "2026-07-14T01:02:00Z",
             }],
@@ -695,6 +702,8 @@ def check_cli(context):
                     "requested_provider": "claude", "attempted_provider": "claude",
                     "implemented_by": "codex", "provider": "codex",
                     "model": "not_reported",
+                    "implementer_family": "openai", "reviewer_family": "openai",
+                    "resolution_reason": "ordinary-lane-same-family-review",
                     "evidence_refs": ["receipts/review/security-finding.json"],
                     **lane_output_bindings["security"],
                 },
@@ -703,6 +712,8 @@ def check_cli(context):
                     "requested_provider": "codex", "attempted_provider": "codex",
                     "implemented_by": "codex", "provider": "codex",
                     "model": "not_reported",
+                    "implementer_family": "openai", "reviewer_family": "openai",
+                    "resolution_reason": "ordinary-lane-same-family-review",
                     "evidence_refs": ["receipts/review/architecture.json"],
                     **lane_output_bindings["architecture"],
                 },
@@ -711,6 +722,8 @@ def check_cli(context):
                     "requested_provider": "codex", "attempted_provider": "codex",
                     "implemented_by": "codex", "provider": "codex",
                     "model": "not_reported",
+                    "implementer_family": "openai", "reviewer_family": "openai",
+                    "resolution_reason": "ordinary-lane-same-family-review",
                     "evidence_refs": ["receipts/review/visual-unavailable.json"],
                     **lane_output_bindings["visual"],
                 },
@@ -753,6 +766,20 @@ def check_cli(context):
             "--output", root / "run-cost-summary.json",
         )
         record_attempt_stream = root / "record-attempt-receipts.json"
+        record_attempt_receipt = root / "record-attempt-openrouter.json"
+        record_attempt_document = json.loads(
+            (Path(ROOT) / "tests" / "fixtures" /
+             "openrouter-receipt-success.json").read_text(encoding="utf-8")
+        )
+        record_attempt_document["authorization"] = {
+            "mode": "exact-digest",
+            "runId": "validator-cli",
+            "laneId": "validator",
+            "requestEnvelopeSha256": "b" * 64,
+        }
+        record_attempt_receipt.write_text(
+            json.dumps(record_attempt_document), encoding="utf-8",
+        )
         successful(
             "record-attempt",
             "--receipts", record_attempt_stream,
@@ -764,8 +791,13 @@ def check_cli(context):
             "--attempt", "1", "--host", "validator", "--duration-seconds", "1.0",
             "--requested-executor", "codex", "--attempted-executor", "openrouter",
             "--implemented-by", "openrouter",
-            "--openrouter-receipt",
-            Path(ROOT) / "tests" / "fixtures" / "openrouter-receipt-success.json",
+            "--matrix-snapshot-date", "2026-08-03",
+            "--rung-rationale", "strength",
+            "--diff-scope", "full", "--full-diff-override", "false",
+            "--slice-status", "not_sliced",
+            "--openrouter-receipt", record_attempt_receipt,
+            "--request-envelope-sha256", "b" * 64,
+            "--state-dir", run_root,
         )
         recorded = json.loads(record_attempt_stream.read_text(encoding="utf-8"))
         require(

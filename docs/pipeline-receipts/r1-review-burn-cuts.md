@@ -3,7 +3,8 @@
 - Date: 2026-08-08 (retry of the 2026-08-08 blocked run)
 - Branch: `bionic/r1-review-burn-cuts` -- delivered, NOT merged
 - Base: `main` @ `dedaee7`
-- Merge: **APPROVE WITH FIXES** (`noMergeOnCompletion: true`, so not merged)
+- Merge: **REVIEW INCOMPLETE** -- the implementation completed, but the
+  mixed-family full-diff sign-off requirement was not satisfied
 - Chunks: 6 of 6 executed, 0 parallel (manifest is strictly sequential, maxConcurrency 1)
 - Mode: `full_cli`
 - Isolation: `per-chunk-worktree`
@@ -15,7 +16,10 @@
 
 ## Outcome
 
-All six chunks implemented, reviewed, and merged into the feature branch. The
+All six chunks were implemented and merged into the feature branch. Available
+review lanes ran, but no full-diff reviewer outside both implementing families
+covered the final aggregate, so this receipt does not claim review completion.
+The
 prior run yielded zero chunks because both coding rails were capped
 simultaneously. This retry completed under an explicit, time-boxed human
 authorization to use alternate rails, and returned to the manifest's declared
@@ -72,23 +76,30 @@ No chunk matched the sensitive-path set, so none required full-tier escalation.
 Zero UI/Integration browser chunks, so the MCP pre-flight correctly recorded
 `not required` and no browser evidence was owed.
 
-**53 findings raised, 51 fixed, 1 rejected with justification, 1 deferred with
-justification.** Recorded in `todos/129-183`.
+**53 findings raised, 50 fixed, 1 rejected with justification, 2 deferred with
+justification.** These totals are the sum of the durable per-chunk table above;
+the run-local `todos/129-183` ledger was not committed and is not cited as
+durable evidence.
 
-## Review lanes and family independence
+## Review lanes and family-independence gap
 
-Claude implemented 01-05 and Codex implemented 06, so the diff is mixed-family.
-Per the family-independence rule this branch itself introduces, the reviewer had
-to sit outside both:
+Claude implemented 01-05 and Codex/OpenAI implemented 06, so the diff is
+mixed-family. Per the family-independence rule this branch itself introduces,
+the mandatory full-diff reviewer had to sit outside both families. That did
+not happen:
 
-- **Codex** full-diff branch review -- independent of the five Claude chunks.
-  Found the five cross-chunk integration defects no per-chunk gate could see.
-- **GPT-5.6 Terra via OpenRouter** -- independent of both families. Ran the
-  security sign-off across three passes and found all three security P1s.
+- **Codex/OpenAI** full-diff branch review was independent of the five Claude
+  chunks, but same-family for chunk 06. It found five cross-chunk defects.
+- **GPT-5.6 Terra via OpenRouter** ran the security analysis across three
+  passes, but OpenRouter is transport and Terra remains OpenAI family, so it
+  also cannot sign off the Codex/OpenAI portion.
 - **Kimi K3 via OpenRouter** -- independent-family reviewer on chunks 01, 02,
-  03, 05.
+  03, 05, but not a full-diff final sign-off.
 - **Fable** -- authorized extra lane; ran the chunk-04 parity audit and
   reviewed 01, 02, 03, 05, 06.
+
+The durable result is therefore a family-independence coverage gap for the
+final aggregate, not a CLEAN or approved security sign-off.
 
 ## The defects that mattered
 
@@ -109,7 +120,7 @@ Consumer simulation before the fixes: codex, claude, and openrouter all
 `HAS HEADROOM`. After: `REJECTED (pct=0 < 8)`, `REJECTED (pct=0 < 8)`,
 `REJECTED (state=low)`.
 
-Three security P1s in `usage-probe.sh`, all found by the independent lane:
+Three security P1s in `usage-probe.sh`, all found by the external security lane:
 profile probes executed through `sh -c`; forged statusline environment values
 accepted as authoritative usage; and an environment-selected profile path plus
 an explicitly-named interpreter defeating the argv hardening. All fixed and
@@ -227,8 +238,10 @@ receipts above and the Codex token counts. Honest absence, not fabricated zero.
 - Ephemeral removed: 0 (none created)
 - Docker resources: created 0, removed 0, retained/blocked 0
 - Reconciliation: not applicable -- zero registered Docker resources
-- Deferred findings: 1 (`todos/183`), justified below
-- Rejected findings: 1 (`todos/138`), justified below
+- Deferred findings: 2, recorded in the durable per-chunk table and disposition
+  section below
+- Rejected findings: 1, recorded in the durable per-chunk table and disposition
+  section below
 
 ### Branch and worktree inventory
 
@@ -271,7 +284,8 @@ and reported rather than silently absorbed.
 
 ## Deferred and rejected findings
 
-**DEFERRED -- `todos/183`, filed P1 by the security lane on verify pass 3.**
+**DEFERRED -- historical run-local todo 183 (uncommitted), filed P1 by the
+security lane on verify pass 3.**
 Claim: `USAGE_PROBE_TEST_MODE=1` together with `DM_OPERATOR_PROFILE_FILE` lets a
 caller point the profile outside `<repo>/.dm/` and execute an allowed
 executable. Specific technical reason for deferral, not a generic one:
@@ -292,12 +306,12 @@ executable. Specific technical reason for deferral, not a generic one:
 Carried to the post-mortem as an R3 hardening proposal, where the Workflow
 Authority Broker already owns this execution-authority boundary.
 
-**REJECTED -- `todos/138`.** A reviewer proposed splitting the R0 cost baseline
+**REJECTED -- historical run-local todo 138 (uncommitted).** A reviewer proposed splitting the R0 cost baseline
 into its own commit. The approved chunk prompt makes committing it Step 0 of
 chunk 01, and REQ-01 names it as an acceptance criterion. Splitting it would
 violate the approved contract. Not a defect.
 
-**DEFERRED -- `todos/172`, P3.** The `codex-perspective` row in
+**DEFERRED -- historical run-local todo 172 (uncommitted), P3.** The `codex-perspective` row in
 `docs/search-index.md` carries no `second-perspective` vocabulary. Regenerating
 the index does not fix it (those tags come from `plugin.json` capabilities) and
 does introduce an unrelated regression, dropping `test-batching,

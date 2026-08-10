@@ -156,6 +156,15 @@ if [ "$harness_executed" -lt 1 ]; then
   cat "$harness_log" >&2
   exit 1
 fi
+for substantive_class in WorkflowAuthorityIntegrationTest DenyMatrixTest ProcessHostilityTest; do
+  substantive_executed="$( { grep -E "\\.${substantive_class}\\.test_[^)]*\\) \\.\\.\\. ok$" "$harness_log" || true; } | wc -l | tr -d '[:space:]')"
+  if [ "$substantive_executed" -lt 1 ]; then
+    printf 'FAIL  acceptance harness executed no successful %s cases; ledger-only execution is not broker evidence\n' \
+      "$substantive_class" >&2
+    cat "$harness_log" >&2
+    exit 1
+  fi
+done
 printf 'OK    workflow authority acceptance harness executed %s cases (%s skipped)\n' "$harness_executed" "$harness_skipped"
 grep -E '^  GAP  ' "$harness_log" || true
 
