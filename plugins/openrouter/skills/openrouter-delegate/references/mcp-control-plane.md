@@ -23,7 +23,7 @@ The direct API runner remains authoritative for:
 - the team `OPENROUTER_API_KEY` and its workspace policy;
 - exact disclosure filtering and payload hashing;
 - large stdin payloads, timeouts, provider preferences, and model fallbacks;
-- bounded diff validation and independent Codex verification;
+- bounded diff validation and independent non-implementing-family verification;
 - content-free generation receipts returned with the workflow.
 
 The hosted MCP does not expose an authenticated workspace/identity inspection
@@ -82,4 +82,4 @@ Automated workflows MUST NOT call `send-message`; validators enforce that
 dm-review and pipeline contain no such invocation. For a user-requested ad-hoc
 comparison, first apply the same artifact-delegation boundary and byte-bound
 user authorization, send only the approved payload, record the generation ID,
-and retain independent Codex sign-off for consequential security work.
+and retain independent non-implementing-family sign-off for consequential security work.

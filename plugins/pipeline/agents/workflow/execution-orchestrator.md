@@ -154,11 +154,11 @@ deploy/**                   *.env*
 migrations/** containing seed credentials
 ```
 
-These chunks are never focused-only. Their mandatory full-diff Codex security
-signoff is never delegated to OpenRouter. After the content boundary holds any
-disclosure-risk sections locally, an eligible remainder may receive the
-supplementary Kimi security lens, but that external analysis cannot replace the
-Codex signoff. A chunk that touches auth/federation/secrets and did not receive
+These chunks are never focused-only. Their mandatory full-diff security
+signoff must use a reviewer family different from the implementer. After the
+content boundary holds any disclosure-risk sections locally, an eligible
+remainder may receive the supplementary Kimi security lens, but that external
+analysis cannot replace the independent signoff. A chunk that touches auth/federation/secrets and did not receive
 full dm-review is a run-postmortem miss.
 
 ### Why this matters for OpenRouter routing
@@ -166,7 +166,7 @@ full dm-review is a run-postmortem miss.
 The four mechanical review lanes (pattern-recognition, code-simplicity,
 doc-sync, test-coverage) plus Kimi-led security analysis route through
 OpenRouter only when `dm-review:review` is invoked and `OPENROUTER_API_KEY` is
-set. Kimi security analysis always pairs with independent Codex full-diff
+set. Kimi security analysis always pairs with independent non-implementing-family full-diff
 sign-off. GLM-5.2 and DeepSeek V4 are model fallbacks inside the OpenRouter
 rail, not separate plugins or credentials. If you skip the skill invocation,
 the routing never engages. You MUST invoke the skill.
@@ -306,8 +306,11 @@ satisfied by writing the chunk receipt alone.
   --requested-executor <policy executor> \
   --attempted-executor <what was dispatched> \
   --implemented-by <what produced the diff> \
+  --matrix-snapshot-date <model-matrix snapshot_date> \
+  --rung-rationale <cost|context|strength|availability> \
   [--fallback-reason <cascade reason>] \
-  [--openrouter-receipt <wrapper receipt path>] \
+  [--openrouter-receipt <wrapper receipt path> \
+   --request-envelope-sha256 <approved request envelope digest>] \
   [--agent-definition <prompt path> --diff <diff path> --provider <p> --model <m>]
 ```
 
@@ -323,7 +326,11 @@ the row records `attempt_unmeasured` -- an explicit statement that the chunk ran
 and nothing measured it. Record failed and fallen-back attempts too: a chunk
 that burned a provider call and produced nothing still cost money, and
 `providerSplit` accounting that omits it is wrong in the direction that flatters
-the run.
+the run. For an interim operator-batch OpenRouter attempt, also pass
+`--request-envelope-sha256` from that attempt's authoritative preparation
+manifest; it must exactly match the wrapper receipt.
+Each wrapper receipt is one-use measurement evidence; a retry must record the
+new receipt produced by that provider attempt rather than replay the prior one.
 
 A `lanes: 0` cost summary after a run that executed chunks means this step was
 skipped. The terminal `emit-cost-summary` reports the count on the receipt line
@@ -985,7 +992,7 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 | `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model` and `role`. **Re-dispatch IN-PROCESS through the current host's native path**, then apply **Native Model Descent** below. Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
 | `0` | `openrouter_exec`, wrapper, or codex-companion rung executed; stdout is produced text or a receipt. | If stdout includes `implementedBy: openrouter` or a JSON receipt with `"implementedBy": "openrouter"`, treat it as an agentic OpenRouter implementation receipt. Otherwise apply the **one-shot validity rule** below. |
 | `75` | Provider-terminal boundary. Nonempty stdout is the exact client-verified signed `provider_failure`/`unknown` receipt; empty stdout is an unsigned or unverifiable post-dial outcome. | Apply **Provider Terminal Persistence** below. Flag the lane failed and stop all model/provider traversal. Never retry, downgrade, or use Codex as completion. |
-| `76` | Ladder exhausted -- no rung above the quality floor had headroom, and no provider-terminal receipt exists. | Run **Step 3d.5 -- Rail-exhaustion ask gate** BEFORE any terminal receipt. It has four exits, and only one of them is a failure: **(a) wait** -> parked resumable, `wait_category: human_gate` receipt carries the named reset time and the resume instruction, dependents are held not skipped; **(b) authorized fallback** -> proceed to Step 3e under the authorization receipt; **(c) park, or `PIPELINE_EXHAUSTION_ASK=0`, or a fail-closed policy read** -> flag the chunk failed, record `cascade_exhausted: true`, skip dependent chunks, continue independent chunks (same as a Step 3e failure); **operator unreachable** -> stop with `human_help_required` and hand the ask to the reaching context. Do NOT silently ship partial output on any exit. |
+| `76` | Ladder exhausted -- no rung above the quality floor had headroom, and no provider-terminal receipt exists. | Run **Step 3d.5 -- Rail-exhaustion ask gate** BEFORE any terminal receipt. The current executable exits are: **(a) wait** -> parked resumable, `wait_category: human_gate` receipt carries the named reset time and resume instruction; **(c) park, `PIPELINE_EXHAUSTION_ASK=0`, or fail-closed policy read** -> flag the chunk failed and preserve resumable state; **operator unreachable with a reaching caller** -> stop with `human_help_required`; **fully headless** -> park resumable under step 6. Authorized native fallback is unavailable until trusted host authority can issue and consume a replay-resistant single-use capability. Do NOT silently ship partial output. |
 | `77` | Disclosure boundary, exact authorization, or trusted-boundary authorization declined. | Record `host_disclosure_declined` or `disclosure_declined` exactly, then use the Codex fallback. Do not classify this as provider exhaustion. |
 | `78` | Exact-digest mode only: payload changed after approval or still needs user authorization. | Stop with `human_help_required`, show the content-free digest, and do not dispatch or silently fall back. |
 | other | Bad args / engine error. | Fall back to Codex once. If Codex is unavailable, fail the chunk; do not route coding work to Claude. |
@@ -1053,9 +1060,7 @@ For complex `kind: logic`, `kind: ui`, or `kind: integration` chunks, a single-t
 After a valid Codex or OpenRouter path produces a commit, write a receipt with
 `requestedProvider`, `attemptedProvider`, `implementedBy: {codex|openrouter}`,
 boolean `fallback`, `fallbackReason`, verification, and usage, then proceed to
-Step 3e. The single exception to this enum is the rail-exhaustion authorization
-in Step 3d.5, which admits `implementedBy: claude` and only under an explicit
-operator authorization receipt.
+Step 3e. There is currently no executable `implementedBy: claude` exception.
 
 **Step 3d.5 -- Rail-exhaustion ask gate.** RC 76 means every rail permitted for
 this chunk is exhausted or gated. Capacity is recoverable; a terminal receipt is
@@ -1071,6 +1076,9 @@ subagent and whose asks do not reach a human on their own. An ask answered by
 any of them is an unanswered ask.
 
 0. **Fail closed before you pause.** In this order, before any pause or ask:
+   - The trusted issuer/consumer boundary for option (b) does not exist yet.
+     Omit option (b) for every chunk. RC 76 may wait, park, or return
+     `human_help_required`; it never authorizes an in-process fallback.
    - If `PIPELINE_EXHAUSTION_ASK=0`, do not pause and do not ask. Restore the old
      hard block immediately. The kill switch is evaluated first precisely so it
      cannot be reached after a dispatch has already happened.
@@ -1090,19 +1098,10 @@ any of them is an unanswered ask.
      the headless rule in step 6. Never treat the absence of a caller as
      permission.
 
-     **Delegated ask handoff.** This path is not a dead end, and it is the
-     normal path. The reaching context -- the top-level session that owns the
-     ask tool -- performs steps 2, 3, and 4 itself and appends the
-     authorization receipt with its OWN `ask_evidence_ref` from its OWN
-     exchange. It then resumes this orchestrator with the structured result:
-     `authorization_id`, question id, selected option, and the exact rail
-     identifier. The orchestrator accepts that handoff, validates the receipt
-     exists with a matching `authorization_id`, `phase`, `scope`, and chunk id,
-     and proceeds to step 5. A relayed answer is not an agent answering the ask:
-     the human answered it in the reaching context, and the receipt records that
-     context's evidence, not the orchestrator's assertion. What remains
-     forbidden is an agent inventing an answer nobody gave. Without a matching
-     receipt the orchestrator parks.
+     **Delegated ask handoff.** The reaching context may present only wait or
+     park. It never returns an authorization ID or rail for execution. A future
+     trusted host-authority protocol may replace this rule; a receipt written
+     by either agent is not that protocol.
 
      The step 1 pause receipt stays the orchestrator's own write even on this
      path: it appends it on resume, measuring its own stop-to-resume interval,
@@ -1111,26 +1110,21 @@ any of them is an unanswered ask.
 
 1. **Pause, and receipt the pause.** Append an authoritative `progress` receipt
    with `wait_category: human_gate` and the measured pause interval. The kernel
-   already accepts this category; no kernel change is required. When option (b)
-   is unavailable because the chunk is sensitive-path, record
-   `fallback_not_offerable: sensitive_path` in that receipt.
+   already accepts this category; no kernel change is required. Record
+   `fallback_not_offerable: trusted_authority_unavailable` for every chunk.
+   A sensitive-path classification remains an additional permanent exclusion;
+   it is not the reason option (b) is absent from the current all-chunk ask.
 
-2. **Derive the offerable rails at ask time.** Build the list from the active
+2. **Collect display-only rail status at ask time.** Build the status display
+   from the active
    host's `harness-profile.json` roles, live `usage-probe.sh` headroom, and the
    interactive paths this session can actually reach. Never read a hardcoded
    provider list -- rail availability is per-operator and time-varying, and last
    week's list is not today's facts. Where a probe parser is a TODO stub, the ask
-   reports `unknown`; an honest `unknown` beats a guessed `available`. Each entry
-   carries an exact rail identifier, because the operator's answer is matched
-   against those identifiers and nothing else.
-
-   Apply `exhaustionFallback.operatorOverride` last, and only to REMOVE entries.
-   The override file lives outside the workspace, its annotations are never
-   rendered into the ask, and any entry it names that the derivation did not
-   find is ignored rather than added -- an override can only ever shrink this
-   list. An in-workspace override could be rewritten by a prior chunk's own
-   output to strip every option but the orchestrator itself, which is why the
-   file is not permitted to live there.
+   reports `unknown`; an honest `unknown` beats a guessed `available`. This is
+   informational capacity telemetry for choosing when to resume. It is not an
+   offerable-provider list, does not consult `operatorOverride`, and grants no
+   execution authority.
 
 3. **Ask the operator.** Use `AskUserQuestion` on Claude Code or
    `request_user_input` on Codex, from a context that reaches the human. Show the
@@ -1142,16 +1136,16 @@ any of them is an unanswered ask.
    | Option | Consequence |
    |---|---|
    | (a) Wait until reset | Park resumable; record the named reset time. The receipt carries the resume instruction. |
-   | (b) Authorize fallback for THIS CHUNK in this run only | The operator selects one exact rail identifier from the derived offerable list. Omitted entirely for sensitive-path chunks. |
    | (c) Park | Current terminal-blocked behavior; resumable state preserved. |
 
-   The answer must be an exact identifier from the derived list. An ambiguous or
-   unlisted name -- `openrouter` alone, which does not distinguish the
-   never-offerable automated lane from the permitted interactive exact-digest
-   path -- is not a selection. Resolve it against the list or park.
+   Accept exactly `wait` or `park`. A provider or rail identifier is not a
+   current selection and must fail closed to `park`.
 
-4. **Record the authorization before any fallback dispatch.** Option (b) appends
-   this receipt to the cumulative authoritative receipts first:
+4. **Future receipt design -- non-executable.** Do not append or consume this
+   as authority today. A future trusted issuer may persist this informational
+   shape only after it also supplies a non-forgeable, single-use capability.
+   Provider selection, exact rail identifiers, and any remove-only operator
+   override belong only to that future trusted protocol:
 
    ```json
    {"authorization_id": "<stable unique id>",
@@ -1182,8 +1176,9 @@ any of them is an unanswered ask.
    while a rail was capped is void once that rail resets, because its premise is
    gone.
 
-5. **Execute with honest provider evidence.** Every chunk implemented under an
-   authorization leaves `requestedProvider` unchanged and records
+5. **Future provider evidence -- non-executable.** If the trusted boundary is
+   implemented later, every chunk implemented under its capability leaves
+   `requestedProvider` unchanged and records
    `attemptedProvider`, `implementedBy`, `fallback: true`, and
    `fallbackReason: rail_exhausted_user_authorized`, at one authoritative write
    point per chunk -- the authorizing context owns that write, so the ordinary
@@ -1191,13 +1186,8 @@ any of them is an unanswered ask.
    `fallback: true`. Never relabel the requested provider to match the actual
    one.
 
-   **Enum exception.** `implementedBy: {codex|openrouter}` and the surrounding
-   "do not route coding work to Claude" rules carry exactly one stated
-   exception: under a rail-exhaustion authorization receipt, `implementedBy:
-   claude` is legal and REQUIRED when a native Claude rung produced the diff.
-   Without this exception the only schema-legal value would be a false `codex`,
-   which is the relabeling this step forbids -- the enum would manufacture the
-   dishonesty it exists to prevent.
+   No such exception exists in the current executable workflow. A caller-owned
+   receipt never permits `implementedBy: claude`.
 
    A fallback dispatch without a prior valid authorization receipt MUST be
    halted, its output discarded and never merged, and the chunk flagged failed.
@@ -1212,7 +1202,9 @@ any of them is an unanswered ask.
    hard block for headless CI; it is a kill switch on the ASK, never an enabler
    of silent fallback.
 
-**Non-overridable exclusions.** No operator answer weakens any of these:
+**Non-overridable exclusions.** No operator answer weakens any of these. The
+current workflow has no executable fallback-authorization option; the
+provider-family rules below also constrain any future trusted implementation:
 
 - The Workflow Authority broker gate is a security authorization boundary, not a
   capacity setting: automated OpenRouter lanes stay fail-closed regardless of the
@@ -1222,18 +1214,14 @@ any of them is an unanswered ask.
   fallback-authorized provider outside its own policy. If the review rails are
   capped, the branch WAITS for them. A review carrying a coverage gap on a
   required lane never satisfies the final-review gate, and the coding-lane
-  exhaustion ask cannot convert one into a pass. The property is deliberate: a
-  chunk implemented under fallback and reviewed by Codex after reset gets a
-  genuinely independent second family -- implementation unblocks now, canonical
-  review is deferred, and zero-deferral is untouched.
+  exhaustion ask cannot convert one into a pass.
 - No fallback-authorized review lane may share a provider family with the
   chunk's implementer. Cross-provider verification is the reason the deferred
   review is worth waiting for; an authorization that lets one family mark its
   own homework destroys it.
 - Security-sensitive chunks -- the sensitive-path set in the per-chunk review
-  tier -- are never implemented under fallback authorization. Option (b) is
-  omitted from their ask entirely rather than offered and then refused. They
-  wait, or they park.
+  tier -- are never implemented under fallback authorization. Like every
+  current chunk, they may wait, park, or return `human_help_required`.
 
 #### 3d-LEGACY: Binary executor path (preserved verbatim)
 
@@ -1382,8 +1370,7 @@ or provider output order.
 The closed enums are `builder_session_continuity:
 proven|unavailable|invalid`, `action:
 resume|replace|human_help_required`, and `implementedBy: codex|openrouter|null`,
-which admits `claude` only under a Step 3d.5 rail-exhaustion authorization
-receipt; `fallback` is strictly boolean and is never a transition string or null. The
+with no current `claude` exception; `fallback` is strictly boolean and is never a transition string or null. The
 provider transition is carried only by `requestedProvider`, `attemptedProvider`,
 and `implementedBy`; `fallbackReason` is a stable reason when `fallback: true`
 and null otherwise. The human-help, prior-attempt, and resume-reason fields are

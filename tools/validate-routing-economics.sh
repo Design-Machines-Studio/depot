@@ -137,6 +137,7 @@ schema="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/manifest-schem
 promptcraft="$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
 orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
 cascade="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
+usage_probe="$REPO_ROOT/plugins/pipeline/references/usage-probe.sh"
 model_cascade="$REPO_ROOT/plugins/pipeline/references/model-cascade.json"
 harness="$REPO_ROOT/plugins/pipeline/references/harness-profile.json"
 runner="$REPO_ROOT/plugins/pipeline/references/openrouter-exec.sh"
@@ -158,6 +159,107 @@ pipeline_cmd="$REPO_ROOT/plugins/pipeline/commands/pipeline.md"
 postmortem_schema="$REPO_ROOT/plugins/pipeline/references/run-postmortem-schema.md"
 ledger="$REPO_ROOT/docs/pipeline-metrics/ledger.md"
 
+require_text "$usage_probe" 'select($data.total_credits | type == "number")' "OpenRouter probe requires numeric total credits"
+require_text "$usage_probe" 'select($data.total_usage | type == "number")' "OpenRouter probe requires numeric total usage"
+require_absent "$usage_probe" 'ccusage blocks --json' "Claude probe removes the incomplete ccusage fallback"
+require_absent "$usage_probe" 'suppresses the ccusage fallback' "Claude probe removes stale ccusage control-flow prose"
+require_text "$usage_probe" '.windowDurationMins == 10080' "Codex probe recognizes only the expected weekly duration"
+require_text "$usage_probe" 'TEST FIXTURE MODE active; headroom is not live capacity evidence' \
+  "usage probe visibly marks fixture-sourced capacity"
+
+codex_expected_windows='{"id":7,"result":{"rateLimits":{"primary":{"usedPercent":10,"windowDurationMins":300},"secondary":{"usedPercent":20,"windowDurationMins":10080}}}}'
+codex_expected_result="$(USAGE_PROBE_TEST_MODE=1 \
+  USAGE_PROBE_CODEX_APP_SERVER_JSON="$codex_expected_windows" \
+  OPENROUTER_API_KEY='' bash "$usage_probe")"
+if printf '%s' "$codex_expected_result" | jq -e '
+  .probe_source == "fixture"
+    and .codex.state == "ok"
+    and .codex.window == "weekly"
+    and .codex.windows.five_hour.remaining_pct == 90
+    and .codex.windows.weekly.remaining_pct == 80
+' >/dev/null; then
+  printf "  OK    Codex probe maps 300 and 10080 minute windows behaviorally\n"
+else
+  printf "  FAIL  Codex probe maps 300 and 10080 minute windows behaviorally\n"
+  failures=1
+fi
+
+profile_fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/routing-profile-symlink.XXXXXX")"
+trap 'rm -rf "$profile_fixture_root"' EXIT
+mkdir -p "$profile_fixture_root/repository/config"
+ln -s config "$profile_fixture_root/repository/.dm"
+cat > "$profile_fixture_root/repository/config/operator-profile.local.json" <<'JSON'
+{"operator":"fixture","updated":"2026-08-10","familyPreferenceOrder":[],"neverUse":[],"subscriptions":[{"rail":"escape","probe":["/usr/bin/printf","{\"state\":\"ok\",\"remaining_pct\":99,\"window\":\"weekly\"}"],"windows":["weekly"]}]}
+JSON
+(
+  cd "$profile_fixture_root/repository"
+  git init -q
+  # Track only the redirecting parent. The destination profile must stay
+  # untracked so the ordinary tracked-file guard cannot hide a regression in
+  # the physical-parent check this fixture isolates.
+  git add .dm
+)
+profile_symlink_result="$(cd "$profile_fixture_root/repository" && \
+  OPENROUTER_API_KEY='' bash "$usage_probe")"
+if printf '%s' "$profile_symlink_result" | jq -e 'has("escape") | not' >/dev/null; then
+  printf "  OK    tracked symlinked operator-profile parents are refused\n"
+else
+  printf "  FAIL  tracked symlinked operator-profile parents are refused\n"
+  failures=1
+fi
+
+# A linked worktree is pipeline output, not the owner of executable operator
+# configuration. The common checkout's untracked profile must win, and an
+# equally valid worktree-local profile must remain invisible.
+mkdir -p "$profile_fixture_root/common"
+(
+  cd "$profile_fixture_root/common"
+  git init -q
+  git -c user.name=fixture -c user.email=fixture@example.invalid \
+    commit --allow-empty -qm initial
+  git worktree add -qb chunk "$profile_fixture_root/chunk"
+)
+cat > "$profile_fixture_root/probe.sh" <<'SH'
+#!/bin/sh
+printf '%s\n' '{"state":"ok","remaining_pct":99,"window":"weekly"}'
+SH
+chmod 755 "$profile_fixture_root/probe.sh"
+mkdir -p "$profile_fixture_root/common/.dm" "$profile_fixture_root/chunk/.dm"
+cat > "$profile_fixture_root/common/.dm/operator-profile.local.json" <<JSON
+{"operator":"fixture","updated":"2026-08-10","familyPreferenceOrder":[],"neverUse":[],"subscriptions":[{"rail":"common","probe":["$profile_fixture_root/probe.sh"],"windows":["weekly"]}]}
+JSON
+cat > "$profile_fixture_root/chunk/.dm/operator-profile.local.json" <<JSON
+{"operator":"fixture","updated":"2026-08-10","familyPreferenceOrder":[],"neverUse":[],"subscriptions":[{"rail":"planted","probe":["$profile_fixture_root/probe.sh"],"windows":["weekly"]}]}
+JSON
+profile_worktree_result="$(cd "$profile_fixture_root/chunk" && \
+  USAGE_PROBE_TEST_MODE=1 \
+  USAGE_PROBE_CODEX_APP_SERVER_JSON="$codex_expected_windows" \
+  OPENROUTER_API_KEY='' bash "$usage_probe")"
+if printf '%s' "$profile_worktree_result" | jq -e '
+  .common.state == "ok" and (has("planted") | not)
+' >/dev/null; then
+  printf "  OK    operator profiles resolve from the common checkout, not chunk worktrees\n"
+else
+  printf "  FAIL  operator profiles resolve from the common checkout, not chunk worktrees\n"
+  failures=1
+fi
+
+codex_unrecognized_window='{"id":7,"result":{"rateLimits":{"primary":{"usedPercent":10,"windowDurationMins":300},"secondary":{"usedPercent":20,"windowDurationMins":1440}}}}'
+codex_unrecognized_result="$(USAGE_PROBE_TEST_MODE=1 \
+  USAGE_PROBE_CODEX_APP_SERVER_JSON="$codex_unrecognized_window" \
+  OPENROUTER_API_KEY='' bash "$usage_probe")"
+if printf '%s' "$codex_unrecognized_result" | jq -e '
+  .codex.state == "unknown"
+    and .codex.window == "weekly"
+    and .codex.windows.five_hour.remaining_pct == 90
+    and .codex.windows.weekly == {"state":"unknown","remaining_pct":0,"window":"weekly"}
+' >/dev/null; then
+  printf "  OK    Codex probe leaves unrecognized durations conservatively unknown\n"
+else
+  printf "  FAIL  Codex probe leaves unrecognized durations conservatively unknown\n"
+  failures=1
+fi
+
 [ -f "$routing" ] || { printf "  FAIL  shared routing-policy.json exists\n"; failures=1; }
 if [ -f "$routing" ]; then
   jq -e '.chunkKind.config.provider == "openrouter"' "$routing" >/dev/null || { printf "  FAIL  routing policy maps config chunks to OpenRouter\n"; failures=1; }
@@ -169,13 +271,23 @@ if [ -f "$routing" ]; then
       and $external.model == "moonshotai/kimi-k3"
       and $external.fallbackProvider == "codex"
       and $signoff == {
-        "provider":"codex",
+        "provider":"implementer-aware-independent-family",
+        "preferredProviderWhenIndependent":"codex",
+        "codexImplementerProvider":"openrouter",
+        "codexImplementerModel":"moonshotai/kimi-k3",
+        "codexImplementerFallbackModel":"z-ai/glm-5.2",
         "required":true,
         "inputScope":"full-diff",
-        "rationale":"Independent full-diff security completion is mandatory and cannot be satisfied by the external security lens."
+        "reviewerFamilyConstraint":"must-differ-from-implementer-family",
+        "failureResolution":{
+          "runner_failure":"remaining-non-implementing-family-or-review-incomplete",
+          "full_disclosure_decline":"remaining-non-implementing-family-or-review-incomplete",
+          "partial_coverage":"remaining-non-implementing-family-or-review-incomplete"
+        },
+        "rationale":"Independent full-diff security completion is mandatory. The stable lane id does not select Codex when Codex implemented the diff."
       }
       and .agentType["architecture-reviewer"].provider == "codex"
-  ' "$routing" >/dev/null || { printf "  FAIL  external security analysis and independent Codex sign-off have separate lane identities\n"; failures=1; }
+  ' "$routing" >/dev/null || { printf "  FAIL  external security analysis and implementer-aware sign-off have separate lane identities\n"; failures=1; }
   jq -e '.agentType["doc-sync-reviewer"].provider == "openrouter"' "$routing" >/dev/null || { printf "  FAIL  routing policy maps doc-sync-reviewer to OpenRouter\n"; failures=1; }
   jq -e '
     [
@@ -319,18 +431,26 @@ if [ -f "$model_cascade" ] && [ -f "$harness" ]; then
   jq -e '.policy._comment_native_authorization | type == "string" and length > 0' "$model_cascade" >/dev/null || { printf "  FAIL  native_judgment authorization gate is documented in model-cascade policy\n"; failures=1; }
 fi
 require_text "$cascade" 'native_judgment_allowed() {' "native_judgment authorization gate function exists"
-require_text "$cascade" '[ "$role" = "native_judgment" ] && ! native_judgment_allowed && continue' "native_judgment refusal skips the gated rung in the ladder walk"
-require_text "$cascade" '(.expiresAtEpoch | type == "number" and . == floor and . > $now' "native_judgment authorization requires a live integer expiry"
-require_text "$cascade" '(.repository | type == "string") and .repository == $repository and' "native_judgment authorization binds the repository"
-require_text "$cascade" '.runId == $run_id and' "native_judgment authorization binds the run"
+require_text "$cascade" 'native_judgment_allowed || continue' "native_judgment refusal skips the gated rung in the ladder walk"
+require_text "$cascade" 'Environment JSON is never treated as authority.' "native_judgment rejects caller-controlled authorization"
+if sed -n '/^native_judgment_allowed() {$/,/^}$/p' "$cascade" | grep -Fq -- 'DM_NATIVE_JUDGMENT_AUTHORIZATION'; then
+  printf "  FAIL  native_judgment gate consumes caller-controlled environment authority\n"
+  failures=1
+else
+  printf "  OK    native_judgment gate rejects environment authority\n"
+fi
 if sed -n '/^native_judgment_allowed() {$/,/^}$/p' "$cascade" | grep -Fq -- 'DRYRUN'; then
   printf "  FAIL  native_judgment authorization gate has no dry-run bypass\n"
   failures=1
 else
   printf "  OK    native_judgment authorization gate has no dry-run bypass\n"
 fi
-require_text "$cascade" 'nativeAuthorization:{authorizationId:$authorization_id,expiresAtEpoch:$authorization_expiry}' "native_judgment directive carries authorization evidence"
-require_text "$cascade" 'targetVariance:true,varianceReceiptRequired:true' "native_judgment directive requires a target-variance receipt"
+if grep -Fq -- 'nativeAuthorization' "$cascade"; then
+  printf "  FAIL  cascade retains the retired caller-owned native authorization directive\n"
+  failures=1
+else
+  printf "  OK    cascade removes the retired caller-owned native authorization directive\n"
+fi
 if [ -f "$routing" ]; then
   jq -e '.targets.enforcement.varianceReceiptRequired == true' "$routing" >/dev/null || { printf "  FAIL  routing policy requires variance receipts\n"; failures=1; }
 fi

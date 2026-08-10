@@ -125,7 +125,11 @@ while iteration < max_iterations:
         committed_changed_files = empty
       else:
         Fail selection: "non-advancing fix boundary with no uncommitted fix paths"
-      changed_files = committed_changed_files union uncommitted_changed_files
+      Remove self-authored review artifacts under `todos/`, `.workflow-kernel/`,
+        and `.claude/ux-review/` from both changed-file sets before trigger
+        matching or slicing. These are evidence about the review, not product
+        files changed by the fix.
+      changed_files = filtered committed_changed_files union filtered uncommitted_changed_files
       lanes_b = lanes whose MODE-APPROPRIATE file triggers match changed_files
                 (see "Selective Lane Re-run" below for which trigger source
                  applies in quick mode vs full mode)
@@ -143,21 +147,29 @@ while iteration < max_iterations:
         Require rerun_lanes is non-empty and is a unique subset containing only
           exact logical lane IDs from selected_full_set. Never dispatch an
           empty, aliased, criterion-level, unknown, or ambiguous allowlist.
-        for lane in rerun_lanes:
-          rerun_reasons[lane] includes "a_prior_unresolved_finding" if rule (a) selected it
-          rerun_reasons[lane] includes "b_fix_file_trigger" if rule (b) selected it
-          rerun_reasons[lane] includes "security_signoff" if it is security-auditor-codex-signoff
-        selective_rerun = true
-        review_lane_allowlist = {
-          selected_full_set: selected_full_set,
-          lanes: rerun_lanes,
-        }
+        if rerun_lanes equals selected_full_set:
+          # Equality is not a narrowed pass. Collapse it before dispatch so the
+          # receipt truthfully describes the full fan-out.
+          rerun_lanes = null
+          selective_rerun = false
+          review_lane_allowlist = null
+          rerun_reasons = every lane in selected_full_set -> ["initial_full_fanout"]
+        else:
+          for lane in rerun_lanes:
+            rerun_reasons[lane] includes "a_prior_unresolved_finding" if rule (a) selected it
+            rerun_reasons[lane] includes "b_fix_file_trigger" if rule (b) selected it
+            rerun_reasons[lane] includes "security_signoff" if it is security-auditor-codex-signoff
+          selective_rerun = true
+          review_lane_allowlist = {
+            selected_full_set: selected_full_set,
+            lanes: rerun_lanes,
+          }
   except lane-discovery, lane-ID validation, attribution, repository-boundary,
          or selection error:
     rerun_lanes = null  # fail OPEN -- never narrow on uncertain evidence
     selective_rerun = false
     review_lane_allowlist = null
-    rerun_reasons = every known lane in selected_full_set -> ["selection_fail_open"]
+    rerun_reasons = {}  # rebuilt from authoritative ATTEMPTED rows below
     fallback_reason = "<exact unknown, alias, ambiguity, empty-set, null-boundary, non-advancing-boundary, non-ancestor, or other failure reason>"
 
   # Run review. review_lane_allowlist is an internal loop-to-review input, never
@@ -183,15 +195,30 @@ while iteration < max_iterations:
     coverage receipt selected lanes exactly equal completed lanes, AND
     the nested review did not return REVIEW INCOMPLETE
 
-  lanes_rerun = exact logical lane IDs in the coverage receipt's ATTEMPTED rows
-  lanes_skipped = selected_full_set minus lanes_rerun
+  coverage_selected_set = exact logical lane IDs selected by the coverage receipt
+  lanes_rerun = exact logical lane IDs in the coverage receipt's ATTEMPTED rows;
+    ATTEMPTED means dispatch began, regardless of success or failure
+  if fallback_reason is non-null:
+    rerun_reasons = every lane in lanes_rerun -> ["selection_fail_open"]
+  else:
+    Remove any rerun_reasons entry whose lane is not in lanes_rerun.
+  if selective_rerun and the coverage receipt proves the allowlist was applied:
+    lanes_skipped = coverage_selected_set minus the applied allowlist
+  else:
+    lanes_skipped = []
+  A lane selected for a full fan-out or allowlisted for a selective pass that
+    fails before dispatch is not "skipped". Its absence from ATTEMPTED makes the
+    nested review REVIEW INCOMPLETE; it appears in neither lanes_rerun nor
+    lanes_skipped. Therefore `full_fanout_override: true` and
+    `promoted_to_full: true` receipts always carry an empty skip set.
   For each lane in lanes_skipped, record reason "no_rule_a_or_b_match".
   Do not issue a kernel record-attempt call for any lane in lanes_skipped.
 
   iteration_receipt = .workflow-kernel/runs/<run-id>/dm-review-loop/iterations/<iteration>/iteration-receipt.json
   After the coverage receipt validates, atomically emit iteration_receipt with
-    `selective_rerun`, `lanes_rerun`, `lanes_skipped`, `rerun_reasons`, and
-    `selection_fallback_reason`, then append it to authoritative-receipts.json
+    explicit booleans `selective_rerun`, `promoted_to_full`, and
+    `full_fanout_override` on every pass, plus `lanes_rerun`, `lanes_skipped`,
+    `rerun_reasons`, and `selection_fallback_reason`, then append it to authoritative-receipts.json
     BEFORE invoking observe-review. The persisted receipt field
     `selection_fallback_reason` is the loop-local fallback_reason value.
 
@@ -204,7 +231,9 @@ while iteration < max_iterations:
   if findings == 0 and selective_rerun:
     The narrowed iteration-receipt.json was emitted first -- the promotion must
       not erase the fact that a narrowed pass ran.
-    Run review one more time (same mode) with rerun_lanes = null
+    Set review_lane_allowlist = null and rerun_lanes = null before dispatch;
+      resetting only rerun_lanes leaves the actual receiver input narrowed.
+    Run review one more time (same mode) with no selective input
       and workflowClass and workflow_class_defaulted forwarded unchanged
     promoted_to_full = true
     selective_rerun = false
@@ -250,7 +279,9 @@ while iteration < max_iterations:
   # The verification pass is always a full fan-out -- it is the zero-deferral
   # escape-rate backstop and is never narrowed.
   if iteration == max_iterations:
-    Run review one more time (same mode) with rerun_lanes = null
+    Set review_lane_allowlist = null and rerun_lanes = null before dispatch;
+      the verification pass must not inherit a prior selective receiver input.
+    Run review one more time (same mode) with no selective input
       and workflowClass and workflow_class_defaulted forwarded unchanged
     selective_rerun = false
     Consume and validate the verification pass's authoritative coverage receipt.
@@ -291,7 +322,7 @@ The committed half of changed-file discovery is boundary-guarded. `prior_review_
 - **quick mode** (the default): the eligible roster is the always-run criteria lanes plus `ui-standards-reviewer`, whose trigger is a `.templ`, `.twig`, `.html`, or `.css` file in the diff. Full-mode-only conditional agents are never added to a quick-mode re-run set.
 - **full mode**: the trigger sets are the Phase 3 conditional-agents table in `plugins/dm-review/skills/review/SKILL.md`, plus the quick-mode UI trigger above.
 
-Always-run criteria lanes -- `security-auditor-openrouter`, `architecture-reviewer`, `pattern-recognition-specialist`, `code-simplicity-reviewer`, `doc-sync-reviewer`, and the default second-perspective lane `codex-perspective` -- follow the same rule: they re-run only when (a) or (b) applies to them, and they appear in the skipped-lanes receipt when they do not. The single exception is `security-auditor-codex-signoff`, which is in EVERY narrowed lane set unconditionally. Security sign-off is never narrowed and is never made conditional on the touched-file set being non-empty.
+Always-run criteria lanes -- `security-auditor-openrouter`, `architecture-reviewer`, `pattern-recognition-specialist`, `code-simplicity-reviewer`, `doc-sync-reviewer`, and `second-perspective` -- follow the same rule: they re-run only when (a) or (b) applies to them, and they appear in the skipped-lanes receipt when they do not. The single exception is `security-auditor-codex-signoff`, which is in EVERY narrowed lane set unconditionally. Security sign-off is never narrowed and is never made conditional on the touched-file set being non-empty.
 
 When both (a) and (b) come back empty there is nothing the fixes could have affected, so selection fails open to a full fan-out with `fallback_reason: empty selection` rather than running a near-empty pass that would have to be promoted to full anyway.
 
@@ -312,9 +343,10 @@ The ordinary pass artifact is `.workflow-kernel/runs/<run-id>/dm-review-loop/ite
 Each pass report carries:
 
 - `selective_rerun: true` on a pass whose coverage receipt proves a narrowed lane set was applied; `selective_rerun: false` on iteration 1, on any full fan-out, on a CLEAN promotion pass, on the `iteration == max_iterations` verification pass, on any fail-open fallback, and whenever a passed selective input was absent, invalid, or not applied. The value describes the pass that emitted it, never a sibling pass.
+- `promoted_to_full` and `full_fanout_override` are explicit booleans on every pass, including `false`; they are never omitted as present-when-true fields.
 - `promoted_to_full: true` on the full pass that follows a narrowed zero-finding pass, so the pair is legible as one iteration.
 - `lanes_rerun` -- the exact logical lane IDs from the coverage receipt's ATTEMPTED rows, not the loop's intended set. A receiver that silently drops an intended lane therefore cannot falsely report it as re-run.
-- `lanes_skipped` -- `selected_full_set` minus those ATTEMPTED rows. Each skipped lane records `no_rule_a_or_b_match` and receives no kernel `record-attempt` call. The eligible set is computed for this pass from the mode's roster and every file changed since the loop started -- not from iteration 1's roster. A lane that only became eligible mid-loop (a first `.sql` file making `migration-validator` eligible in full mode, say) must appear as re-run or as skipped, never as neither.
+- `lanes_skipped` -- for a proven selective pass only, `coverage_selected_set` minus the applied allowlist: the lanes deliberately omitted by narrowing. Each skipped lane records `no_rule_a_or_b_match` and receives no kernel `record-attempt` call. Every non-selective full fan-out reports an empty skip set. A lane selected or allowlisted but missing from ATTEMPTED because dispatch never began is neither re-run nor skipped; the nested review reports `REVIEW INCOMPLETE`.
 - `rerun_reasons` -- a per-lane map using only `a_prior_unresolved_finding`, `b_fix_file_trigger`, `security_signoff`, `initial_full_fanout`, and `selection_fail_open`. A lane selected by more than one rule records every applicable reason. Full fan-outs use `initial_full_fanout`; fail-open full fan-outs use `selection_fail_open`.
 - `selection_fallback_reason: <reason>` whenever selection failed open to a full fan-out or the receiver rejected or ignored selective input, and `full_fanout_override: true` whenever `DM_REVIEW_LOOP_FULL_FANOUT=1` disabled selection. `selection_fallback_reason` is the persisted receipt field for the loop-local `fallback_reason`. The local variable resets at the start of every iteration so a fail-open on one iteration never leaks into the next iteration's receipt.
 
@@ -327,7 +359,7 @@ Lanes re-run:
 - code-simplicity-reviewer -- a_prior_unresolved_finding
 - a11y-css-reviewer -- b_fix_file_trigger
 Lanes skipped (no_rule_a_or_b_match):
-- architecture-reviewer, codex-perspective, doc-sync-reviewer, pattern-recognition-specialist, security-auditor-openrouter
+- architecture-reviewer, second-perspective, doc-sync-reviewer, pattern-recognition-specialist, security-auditor-openrouter
 
 Iteration 2, pass 2: selective_rerun: false, promoted_to_full: true
 Lanes re-run: all (CLEAN promotion -- a clean verdict requires a full fan-out)
@@ -352,10 +384,10 @@ After authoritative cleanup receipts are appended, invoke exactly:
 "$WORKFLOW_KERNEL" metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
 if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrouter --asset skills/openrouter-delegate/references/model-matrix.json --minimum-version 1.11.0); then :; else MODEL_MATRIX_ASSET=""; fi
 "$WORKFLOW_KERNEL" emit-cost-summary --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/run-cost-summary.json --receipt .claude/ux-review/workflow-kernel/run-receipt.md --matrix "$MODEL_MATRIX_ASSET" --repository-commit "$(git rev-parse HEAD)" $(test -n "$(git status --porcelain)" && echo --dirty-state) \
-  || { s=$?; [ "$s" -eq 2 ] || [ "$s" -eq 6 ]; } || printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> .claude/ux-review/workflow-kernel/run-receipt.md
+  || { s=$?; if [ "$s" -eq 6 ]; then printf 'run-cost-summary: skipped (receipt-write-failed)\n' >> .claude/ux-review/workflow-kernel/run-receipt.md; elif [ "$s" -eq 2 ]; then exit "$s"; else printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> .claude/ux-review/workflow-kernel/run-receipt.md; fi; }
 ```
 
-The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file left there by an earlier run, writes a schema-bound `run-cost-summary.json` beside that run's own `authoritative-receipts.json`, and appends exactly one inventory line to the run receipt naming what actually happened -- the artifact path on success, or `run-cost-summary: skipped (<reason>)` on any internal failure. It exits 0 for every measurement outcome, because the artifact is observation-only: it never gates, blocks, waives, or alters a review, lane, or phase outcome, and its absence never fails one. It exits 6 in exactly one case -- the receipt path was accepted but the write failed -- because a receipt naming neither an artifact nor a skip is the silence the failure-modes checklist forbids, and reporting that it could not report is the command's last obligation. A *refused* receipt path is the deliberate exception and still exits 0: exiting non-zero would fire the caller's `||` fallback, which appends through the very symlink the command just rejected, so the refusal is reported on stderr alone. Exit 2 is the other non-zero outcome and means the invocation was wrong -- bad flags, or `--output` and `--receipt` pointing at one path -- so nothing ran and nothing is recorded. The `||` fallback beside it must be gated on the status (`|| { s=$?; [ "$s" -eq 2 ] || [ "$s" -eq 6 ]; } || printf ...`), because a bare `||` fires on every non-zero exit: after an exit 6 whose receipt line was already written it appends a second, contradicting skip line, and after an exit 2 it blames a launcher that demonstrably ran. Gated, the fallback covers only what no process inside the kernel can report -- the launcher itself failing to run. Receipt paths are fixed for a given receipt directory, so two concurrent runs sharing one directory overwrite each other: serialize them, or give each run its own directory. The command refuses a symlinked artifact or receipt path, and when the *receipt* path is the one refused it records nothing rather than writing the refusal through the symlink it just rejected. The caller resolves a coherent installed-plugin bundle and passes its model-matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; the kernel validates both bundle containment and matrix structure without owning a provider dependency. An unreadable or invalid matrix emits one stderr line, skips imputation, and never fails this observation-only emission. It does not inspect the working tree: the caller passes `--dirty-state`, and that flag is the artifact's only source of that fact. Populate the events it reads: after each lane attempt, translate that attempt's OpenRouter wrapper receipt with `openrouter-usage`, or that lane's Codex/Claude input files with `lane-input-bytes`, passing `--append-to <authoritative-receipts.json> --run-id <id> --occurred-at <ISO-8601> --authoritative-receipt <path>` so the translator wraps the payload as an `attempt_usage` receipt and appends it under an exclusive lock in one validated step. Emit a row for every attempt including failed ones -- an attempt missing from the receipt stream is indistinguishable from one that never ran, and its spend disappears with it. A `lanes: 0` artifact after a run that executed lanes means this boundary is not wired; a structurally valid artifact with zero measured lanes proves the command ran, never that lanes were measured. Full command reference, when the workflow-kernel plugin is installed alongside this one: `plugins/workflow-kernel/skills/workflow-kernel/references/cli-measurement-commands.md`; if that path is not readable from this cache, the flags named above are the complete required set.
+The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file left there by an earlier run, writes a schema-bound `run-cost-summary.json` beside that run's own `authoritative-receipts.json`, and appends exactly one inventory line to the run receipt naming what actually happened -- the artifact path on success, or `run-cost-summary: skipped (<reason>)` on any internal failure. It exits 0 for every measurement outcome, because the artifact is observation-only: it never gates, blocks, waives, or alters a review, lane, or phase outcome, and its absence never fails one. It exits 6 in exactly one case -- the receipt path was accepted but the write failed -- because a receipt naming neither an artifact nor a skip is the silence the failure-modes checklist forbids, and reporting that it could not report is the command's last obligation. A *refused* receipt path is the deliberate exception and still exits 0: exiting non-zero would fire the caller's `||` fallback, which appends through the very symlink the command just rejected, so the refusal is reported on stderr alone. Exit 2 is the other non-zero outcome and means the invocation was wrong -- bad flags, or `--output` and `--receipt` pointing at one path -- so nothing ran and nothing is recorded. The `||` fallback beside it must be status-aware: exit 6 triggers one final append of `skipped (receipt-write-failed)`, exit 2 is explicitly propagated as an invalid invocation, and every other non-zero status appends `skipped (kernel-unresolvable)`. If the final append also fails, its non-zero status remains visible instead of being erased. Receipt paths are fixed for a given receipt directory, so two concurrent runs sharing one directory overwrite each other: serialize them, or give each run its own directory. The command refuses a symlinked artifact or receipt path, and when the *receipt* path is the one refused it records nothing rather than writing the refusal through the symlink it just rejected. The caller resolves a coherent installed-plugin bundle and passes its model-matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; the kernel validates both bundle containment and matrix structure without owning a provider dependency. An unreadable or invalid matrix emits one stderr line, skips imputation, and never fails this observation-only emission. It does not inspect the working tree: the caller passes `--dirty-state`, and that flag is the artifact's only source of that fact. Populate the events it reads through `record-attempt` as each lane settles; that one atomic call appends the lane outcome and exactly one `attempt_usage` row under the same lock. Pass the OpenRouter wrapper receipt when present, otherwise pass the exact Codex/Claude input files for deterministic byte measurement; when neither exists, the paired row explicitly records `attempt_unmeasured`. Do not also call a standalone translator with `--append-to` for that attempt, because doing both double-counts it. A `lanes: 0` artifact after a run that executed lanes means this boundary is not wired; a structurally valid artifact with zero measured lanes proves the command ran, never that lanes were measured. Full command reference, when the workflow-kernel plugin is installed alongside this one: `plugins/workflow-kernel/skills/workflow-kernel/references/cli-measurement-commands.md`; if that path is not readable from this cache, the flags named above are the complete required set.
 
 The pre-action bind seals `review-shadow-prediction.json`; later authoritative observation only consumes it and cannot create or overwrite it. Keep the prediction source and bound artifact through comparison, and delete them only after semantic `match`. Missing or reused prediction evidence fails closed without changing convergence. The repository-lifetime scope file is never auto-deleted, and parity match alone never deletes terminal run state; retain the run directory or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches.
 

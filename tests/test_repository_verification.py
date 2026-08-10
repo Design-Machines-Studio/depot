@@ -1,5 +1,6 @@
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
@@ -1481,6 +1482,58 @@ class RepositoryVerificationTests(unittest.TestCase):
             focused["reason"], "command_output_limit_exceeded",
         )
         self.assertLessEqual(focused["stdout_bytes"], 65536)
+
+    def test_output_limit_falls_back_when_group_signal_is_denied(self):
+        real_killpg = os.killpg
+
+        def deny_group_signals(pid, sent_signal):
+            if sent_signal in (signal.SIGTERM, signal.SIGKILL):
+                raise PermissionError("group signalling denied")
+            return real_killpg(pid, sent_signal)
+
+        with tempfile.TemporaryDirectory() as directory:
+            pid_path = Path(directory) / "leader.pid"
+            command = (
+                "import os,time; from pathlib import Path; "
+                f"Path({str(pid_path)!r}).write_text(str(os.getpid())); "
+                "print('x' * 4096, flush=True); time.sleep(30)"
+            )
+            document = profile_document([
+                sys.executable, "-c", command, "{packages}",
+            ])
+            repository, profile = self.repository(directory, document)
+            plan = build_plan(
+                profile, repository, ".dm/verification.json",
+                ["internal/source/source.go"], "chunk", "low",
+            )
+            with patch(
+                "workflow_kernel.verification_execution.MAX_OUTPUT_BYTES", 32,
+            ), patch(
+                "workflow_kernel.verification_execution.os.killpg",
+                side_effect=deny_group_signals,
+            ):
+                receipts, outcome = execute(profile, repository, plan)
+            leader_pid = int(pid_path.read_text())
+            leader_gone = False
+            for _attempt in range(40):
+                try:
+                    os.kill(leader_pid, 0)
+                except ProcessLookupError:
+                    leader_gone = True
+                    break
+                time.sleep(0.05)
+            if not leader_gone:
+                os.kill(leader_pid, signal.SIGKILL)
+        self.assertEqual(outcome, "failed")
+        focused = [
+            receipt for receipt in receipts["receipts"]
+            if receipt["lane_id"] == "go-focused"
+        ][0]
+        self.assertEqual(
+            focused["reason"], "command_output_limit_exceeded",
+        )
+        self.assertLessEqual(focused["stdout_bytes"], 65536)
+        self.assertTrue(leader_gone)
 
     def test_symlinked_input_directory_and_unbounded_arrays_are_rejected(self):
         document = profile_document()

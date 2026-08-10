@@ -6,10 +6,10 @@ description: Use when the user explicitly asks to use, ask, send, delegate, or o
 # OpenRouter Delegation
 
 Use OpenRouter directly for explicitly requested, human-approved interactive
-analysis. Automated Pipeline and dm-review dispatch is temporarily unavailable:
-it records `host_authority_unavailable` and completes the lane on Codex until
-the external Workflow Authority Broker owns authorization, credential custody,
-and provider transport.
+analysis. dm-review automation may use a valid temporary sunset-bound operator
+batch only while the broker is absent. A ready Workflow Authority Broker
+retires interim mode but remains `broker_transport_unavailable` until its
+transport lands; variables and API-key presence never grant authority.
 
 OpenRouter exposes many models behind one OpenAI-compatible endpoint. This plugin uses **GPT-5.6 Terra** (`openai/gpt-5.6-terra`) for general quality work, **GPT-5.6 Luna** (`openai/gpt-5.6-luna`) for economical mechanical work, and **Kimi K3** (`moonshotai/kimi-k3`) as the security-analysis head. All three carry roughly 1M-token context.
 
@@ -32,29 +32,29 @@ native Codex performs config/docs/mechanical-logic chunks today.
 
 | Advantage | Use Case | Why OpenRouter |
 |-----------|----------|----------------|
-| **Quality-first analysis** | Security, big-diff review, pattern analysis, second opinions | Kimi K3 leads eligible OpenRouter analysis while independent Codex review remains the consequential sign-off. |
+| **Quality-first analysis** | Security, big-diff review, pattern analysis, second opinions | Kimi K3 leads eligible OpenRouter analysis while an independent non-implementing family remains the consequential sign-off. |
 | **1M-token context** | Bulk read, docs, config, and full-diff synthesis at any diff size | No truncation needed. Kimi K3, Terra, Luna, and GLM-5.2 all hold roughly 1M context. |
 | **Provider routing** | Privacy / throughput control | Per-request provider preferences (`OPENROUTER_ZDR=1` for no-train/no-retain providers). |
-| **Capacity relief** | Future broker-enabled Pipeline / review runs | The planned routing matrix preserves Codex subscription headroom; current automated lanes remain on Codex. |
+| **Capacity relief** | Authorized dm-review operator-batch runs | The temporary batch may preserve Codex subscription headroom; Pipeline automation remains unavailable. |
 
 ## When NOT to Delegate
 
 - Autonomous chunk implementation (single-turn; no file I/O or tool loop -- see above)
 - Tasks requiring Claude's conversation context (OpenRouter calls are stateless)
 - Tasks requiring MCP server access
-- Sole-provider security completion (Kimi may lead analysis, but Codex sign-off remains mandatory)
+- Sole-provider security completion (Kimi may lead analysis, but independent non-implementing-family sign-off remains mandatory)
 
 ### Security Boundary (hard rule)
 
-**Kimi K3 may lead security analysis, but never replaces the independent Codex security reviewer.** Enforce the OpenRouter-owned `references/delegation-security-policy.json` immediately before every delegation. Pipeline carries a validated mirror for self-contained planning, but the installed OpenRouter policy is authoritative at runtime:
+**Kimi K3 may lead security analysis, but never replaces the independent non-implementing-family security reviewer.** Enforce the OpenRouter-owned `references/delegation-security-policy.json` immediately before every delegation. Pipeline carries a validated mirror for self-contained planning, but the installed OpenRouter policy is authoritative at runtime:
 
 - **Threat/content boundary.** Inspect the exact bytes becoming OpenRouter system or user content. Decline high-confidence credentials, private keys, authenticated DSNs, access/session tokens, and explicitly classified private or regulated values. Recognized placeholders such as `<token>`, `REDACTED`, `example`, and environment-variable references are safe.
 - **No identity or path embargo.** Model nationality, vendor jurisdiction, security-looking directories, `.env` references, header names, and environment-variable names are not disclosure evidence. Non-secret auth, federation, deploy, and security code may pass.
 - **Execution mode -- bounded diffs only.** Accept only a non-empty validated unified diff whose normalized paths are all in the caller's exact owned-path list. The model has no command or verification authority. The runner performs only fixed structural Git checks; project build/test commands are deferred to the native Codex reviewer.
 - **Mechanical-review and artifact-review modes.** Mechanical review scans complete per-file diff sections (including removed lines), emits eligible sections, and returns declined path names for local Codex coverage. Artifact review scans exact bytes and remains all-or-nothing.
 - **Artifact-delegation mode.** Call `delegation-boundary.sh --mode artifact-delegation --policy POLICY --content-file FILE [--content-file FILE ...]` for arbitrary local text that will become OpenRouter content. Every explicit file is scanned byte-for-byte; the mode accepts no changed-file, diff, output-path, or execution authority.
-- **Independent sign-off.** High-consequence security work may use OpenRouter after these controls pass, but completion still requires independent Codex security approval.
-- **Intended lanes.** Security analysis with independent Codex sign-off, style, duplication, pattern-recognition, large-diff triage, and doc consistency.
+- **Independent sign-off.** High-consequence security work may use OpenRouter after these controls pass, but completion still requires a reviewer family different from the implementer.
+- **Intended lanes.** Security analysis with independent non-implementing-family sign-off, style, duplication, pattern-recognition, large-diff triage, and doc consistency.
 
 ## Invocation Protocol
 
@@ -85,9 +85,9 @@ documentation before changing the durable Matrix.
 The MCP is discovery/observability only for automated workflows. Do not replace
 the direct interactive API runner with `send-message`: `/openrouter` retains
 its exact-digest human gate, timeouts, provider controls, fallback chain, and
-content-free receipts. Automated Pipeline and dm-review dispatch is temporarily
-unavailable and returns to Codex until the external Workflow Authority Broker
-owns authorization, credential custody, and provider transport.
+content-free receipts. Pipeline dispatch remains unavailable. dm-review may use
+only a valid `interim_operator_batch` while the broker is absent; a ready broker
+retires interim but is unavailable until broker-owned transport lands.
 
 ## Prompt Engineering
 

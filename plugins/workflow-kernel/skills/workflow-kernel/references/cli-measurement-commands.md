@@ -37,8 +37,9 @@ Without `--output` or `--append-to` the payload goes to stdout as canonical
 JSON (sorted keys, no spaces, trailing newline), so two runs over the same
 receipt produce byte-identical bytes.
 
-**Receipt requirements.** `schemaVersion` must be the integer `2` and
-`outcome` must be a non-empty string. A counter that is negative, boolean,
+**Receipt requirements.** `schemaVersion` must be the integer `2`, `outcome`
+must be a non-empty string, and the wrapper-owned `invocationId` must be a
+64-character lowercase hexadecimal value. A counter that is negative, boolean,
 float, or string-typed is rejected outright rather than propagated.
 
 `outcome` is required rather than defaulted because the two available defaults
@@ -227,21 +228,25 @@ Exit 2 is the other non-zero outcome, and it means the invocation itself was
 wrong -- bad flags, or `--output` and `--receipt` pointing at one path. Nothing
 ran, so nothing is recorded.
 
-**The `||` fallback must be gated.** `||` fires on *any* non-zero status, so an
-ungated fallback appends `skipped (kernel-unresolvable)` after an exit 6 whose
-receipt line was already written -- producing the artifact-line-plus-skip-line
-state this command exists to make impossible -- and reports "unresolvable" for
-an exit 2 where the kernel demonstrably resolved and ran. Gate it so it fires
-only when the kernel never reported an outcome at all:
+**The `||` fallback must be status-aware.** Exit 6 means the accepted receipt
+path could not be written, so the caller makes one last append attempt with the
+specific `receipt-write-failed` reason. Exit 2 is an invalid invocation and is
+left alone. Every other non-zero status means the launcher itself failed before
+the kernel could report an outcome:
 
 ```sh
 "$WORKFLOW_KERNEL" emit-cost-summary ... \
-  || { s=$?; [ "$s" -eq 2 ] || [ "$s" -eq 6 ]; } \
-  || printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> <receipt>
+  || { s=$?; if [ "$s" -eq 6 ]; then \
+         printf 'run-cost-summary: skipped (receipt-write-failed)\n' >> <receipt>; \
+       elif [ "$s" -eq 2 ]; then \
+         exit "$s"; \
+       else \
+         printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> <receipt>; \
+       fi; }
 ```
 
-That leaves the fallback covering launcher exit 4 and the shell's own 126/127 --
-the cases no process inside the kernel can report.
+If the exit-6 append also fails, that non-zero status remains visible to the
+caller instead of being converted to success.
 
 **A refused receipt path still exits 0.** It is the one case that also records
 nothing, and it is exempt on purpose: an ungated fallback would append through
@@ -324,8 +329,14 @@ $(test -n "$(git status --porcelain)" && echo --dirty-state)
   --lane <id> --chunk-id <id> --node-id <id> --attempt <n> \
   --host <claude|codex> --duration-seconds <measured> \
   --requested-executor <x> --attempted-executor <y> --implemented-by <z> \
+  --matrix-snapshot-date <YYYY-MM-DD> \
+  --rung-rationale <cost|context|strength|availability> \
+  [--diff-scope <full|scoped(n files of total)> \
+   --full-diff-override <true|false> \
+   --slice-status <sliced|not_sliced|unclassified|slice_failed|full_diff_override>] \
   [--fallback-reason <reason>] \
-  [--openrouter-receipt <wrapper receipt>] \
+  [--openrouter-receipt <wrapper receipt> \
+   --request-envelope-sha256 <approved request envelope digest>] \
   [--agent-definition <path> --diff <path> [--boilerplate <path> ...] \
    --provider <p> --model <m>]
 ```
@@ -341,11 +352,35 @@ cost nothing. There is now no call that records a lane without its measurement.
 **Evidence, in order of preference.** Supply the strongest the attempt has:
 
 1. `--openrouter-receipt` -- the wrapper's `OPENROUTER_RECEIPT_FILE`. Real
-   provider counters and cost.
+   provider counters and cost. An interim operator-batch receipt also requires
+   `--request-envelope-sha256`, taken from that attempt's preparation manifest;
+   it must exactly equal the digest bound into the wrapper receipt. Run and
+   lane equality alone are not enough because one lane may make several calls.
+   Every wrapper receipt has a content-free per-invocation identity, including
+   failures with no provider generation ID. The atomic append records a
+   canonical digest of that receipt and refuses to reuse the evidence for
+   another attempt.
 2. `--agent-definition` and `--diff` (plus `--boilerplate`) -- deterministic
    input bytes for Codex and Claude lanes. Bytes, never a token count, never
    comparable to one.
 3. Neither -- the row records `measurement_source: attempt_unmeasured`.
+
+Every attempt binds the routing matrix snapshot and the single deciding axis.
+The date must be a real ISO calendar date and the rationale is the closed axis
+vocabulary above. A `review_dispatch` attempt additionally requires all three
+diff-scope flags. A successful slice uses `scoped(n files of total)`, `false`,
+and `sliced`; a normal full-diff lane uses `full`, `false`, and `not_sliced`.
+Classification gaps and slice failures use `unclassified` and `slice_failed`
+respectively, both with full scope. The kill switch uses `full`, `true`, and
+`full_diff_override`. Scope fields are rejected on non-review stages.
+
+The lane executor fields are the single authority for the paired usage row's
+requested, attempted, and implementing identities. The legacy
+`--requested-provider` and `--attempted-provider` flags are optional equality
+assertions only: when supplied they must match `--requested-executor` and
+`--attempted-executor`, and they cannot create a second account of the same
+atomic attempt. Provider receipts still retain their separately observed actual
+provider and model fields.
 
 **`attempt_unmeasured` is the point, not the fallback.** It states that the lane
 ran and nothing on this host reported usage for it. That is a claim a reader can
@@ -359,18 +394,15 @@ Do not pair this with `openrouter-usage --append-to` or `lane-input-bytes
 both double-counts. The standalone translators remain for measuring something
 that is not a recorded lane attempt.
 
-## The emission boundary
+## Standalone translation for legacy non-recorded attempts
 
-The translators are reachable only if something calls them. An orchestrator
-that runs lanes and never invokes them produces a structurally correct,
-permanently empty cost summary -- the exact failure this measurement backbone
-exists to end.
-
-After each lane attempt completes, before the run's terminal receipt, run the
-matching translator with `--append-to`. Pick it by rail: a lane that went
-through `openrouter-wrapper.sh` has a receipt, so use `openrouter-usage`; a
-Codex or Claude lane has none, so use `lane-input-bytes` with the exact files
-that lane was fed.
+The standalone translators remain for legacy attempts whose lane outcome is
+recorded outside `record-attempt`. Do not call them for an attempt already
+written by `record-attempt`; that would append a second `attempt_usage` row and
+double-count it. For the
+legacy case, choose the translator by the available evidence: an
+OpenRouter wrapper receipt uses `openrouter-usage`; deterministic prompt inputs
+use `lane-input-bytes`.
 
 ```sh
 "$WORKFLOW_KERNEL" openrouter-usage \
@@ -405,9 +437,7 @@ durable ledger; writing `--output` does not. Allowing both would mean an
 `--output` failure could report the command as failed over an attempt already
 recorded, and a retry would append it twice.
 
-Emit a row for **every** attempt, including failed ones. An attempt that
-vanishes from the receipt stream is indistinguishable from an attempt that
-never ran, and its spend disappears with it.
+Recorded attempts, including failures, always use `record-attempt` instead.
 
 What this boundary does not do: nothing forces an orchestrator to call it. The
 command exists so that wiring a lane is one invocation rather than a prose

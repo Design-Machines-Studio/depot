@@ -58,15 +58,15 @@
     }
   },
   "reviewControls": {
-    "highConsequenceSecuritySignoff": "independent-codex-required",
+    "highConsequenceSecuritySignoff": "independent-non-implementing-family-required",
     "modelNationalityEmbargo": false,
     "vendorJurisdictionEmbargo": false,
     "pathNameEmbargo": false,
-    "rationale": "Security-related implementation may be delegated after content and output validation; consequential security completion remains independently reviewed by Codex."
+    "rationale": "Security-related implementation may be delegated after content and output validation; consequential security completion requires a reviewer family different from the implementer."
   },
   "positiveRouting": {
     "intendedLanes": [
-      "security analysis with independent Codex sign-off",
+      "security analysis with independent non-implementing-family sign-off",
       "style / formatting",
       "duplication",
       "pattern-recognition",

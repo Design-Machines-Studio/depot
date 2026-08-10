@@ -33,7 +33,8 @@ Delegate a prompt directly to an OpenRouter model (single-turn completion).
 ```
 
 An OpenRouter security result is a preliminary external lens. Consequential
-security completion still requires a separate full-input Codex review.
+security completion still requires a full-input reviewer from a family other
+than the implementation family.
 
 ## Process
 

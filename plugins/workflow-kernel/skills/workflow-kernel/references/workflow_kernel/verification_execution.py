@@ -134,6 +134,17 @@ def run_bounded_capture(
             os.killpg(process.pid, sig)
         except ProcessLookupError:
             pass
+        except PermissionError:
+            # Some hosts allow the owned subprocess but deny process-group
+            # signalling. Preserve the bounded-output/timeout guarantee by
+            # signalling the leader directly; do not turn a cleanup-policy
+            # limitation into an unhandled verifier exception. This fallback
+            # does not claim descendant cleanup -- the command outcome remains
+            # failed and the normal bounded drain still applies.
+            try:
+                process.send_signal(sig)
+            except (ProcessLookupError, PermissionError):
+                pass
 
     while selector.get_map():
         now = time.monotonic()

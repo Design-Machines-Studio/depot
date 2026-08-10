@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
   "description": "Code review orchestrator with stable finding identities, disagreement synthesis, raw evidence, contribution receipts, zero-deferral, browser coverage, Codex judgment, and OpenRouter mechanical review",
-  "version": "1.58.1",
+  "version": "1.58.5",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -12,12 +12,12 @@
     "ghostwriter": ">=3.7.0",
     "council": ">=1.5.0",
     "ned": ">=1.4.0",
-    "workflow-kernel": ">=0.13.0"
+    "workflow-kernel": ">=0.13.6"
   },
   "optionalPluginDependencies": {
     "superpowers": ">=1.0.0",
     "airlift": ">=1.0.0",
-    "openrouter": ">=1.8.0"
+    "openrouter": ">=1.11.4"
   },
   "keywords": [
     "review",
@@ -245,9 +245,9 @@
       },
       {
         "id": "codex-perspective",
-        "name": "Codex Perspective Reviewer",
+        "name": "Second Perspective Reviewer",
         "category": "review",
-        "description": "Runs a read-only Codex second-opinion review and normalizes findings to P1/P2/P3",
+        "description": "Runs a read-only family-independent second-opinion review and normalizes findings to P1/P2/P3",
         "tags": [
           "codex",
           "second-opinion",

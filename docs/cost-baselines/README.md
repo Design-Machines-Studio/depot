@@ -11,8 +11,9 @@ file here as a reference for a comparison.
 Baseline files follow the pattern `<date>-<run_id>.json`, where `<date>` is the
 date the baseline was **captured** in `YYYY-MM-DD` form and `<run_id>` is the
 run identifier. The date a baseline was captured is often later than the date
-the run executed -- a backfilled baseline is normal. The run's own date lives in
-the artifact's `run_identity` block; read it there, never from the filename.
+the run executed -- a backfilled baseline is normal. The run's first recorded
+event time lives at `invocation.first_event_at`; use its calendar date for the
+run date, never the filename's capture date.
 
 Example: `2026-08-07-adaptive-fusion-verification.json` is the
 `adaptive-fusion-verification` run (executed 2026-07-22) captured as a baseline
@@ -35,6 +36,24 @@ Phase exit gates compare a later run's per-lane cost against a recorded
 baseline. A gate checks whether the later run's lane costs are within the
 baseline's recorded bounds. Baselines are the reference; the later run is the
 candidate.
+
+The baseline and candidate must describe comparable work: the same workflow
+boundary, logical lanes, measurement unit, and accounting method. In particular,
+implementation-chunk input bytes are not a baseline for selective review-loop
+passes. Compare a full `dm-review-loop` pass with a later selective pass from
+the same loop contract.
+
+The former `2026-08-08-r1-review-burn-cuts.json` was removed from `*.json`
+baseline discovery because it was unusable for this comparison. It was
+byte-identical to `plans/r1-review-burn-cuts/run4/run-cost-summary.json` and is
+reproducible from run4's receipts: Codex implemented chunks 01-05, chunk 06 was
+not started, and 5/5 coverage is correct for that attempt. The observation-only
+independent prediction forecast a separate six-chunk attempt using Claude Opus;
+it is not execution evidence for run4, even though both artifacts reuse the same
+run ID. The deleted baseline is excluded solely because implementation-chunk
+input bytes are not comparable to `dm-review-loop` lane input bytes. See the
+adjacent `.unusable.md` notice and do not use the removed rows or total for the
+R1 input-reduction gate.
 
 ## Honesty Rule
 

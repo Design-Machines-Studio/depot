@@ -8,7 +8,7 @@ decisions, and cleanup policy remain in their canonical Markdown workflows.
 
 Version 0.13.0 adds optional, visibly imputed API-equivalent attempt costs from
 a caller-supplied trusted model matrix while preserving the observation-only summary
-contract. Version 0.8.0 added the `run-cost-summary` command — a canonical,
+contract. Version 0.8.0 added the `run-cost-summary` command -- a canonical,
 deterministic, schema-bound per-run cost artifact emitted alongside authoritative
 receipts (see [Run Cost Summary](#run-cost-summary) below).
 Version 0.7.0 added authenticated repository verification with sealed
@@ -396,19 +396,19 @@ required top-level fields are: `schema_version`, `run_identity`, `versions`,
 Usage and cost totals carry a provenance string (or null when coverage is
 incomplete):
 
-- `authoritative_run_total` — a run-level usage receipt with `usage_scope: "run"`.
-- `legacy_unscoped_run_summary` — a legacy `tokens`/`cost_usd` field in a
+- `authoritative_run_total` -- a run-level usage receipt with `usage_scope: "run"`.
+- `legacy_unscoped_run_summary` -- a legacy `tokens`/`cost_usd` field in a
   `run_summary` receipt (pre-attempt-economics format).
-- `derived_complete_attempts` — all expected attempt-level receipts are
+- `derived_complete_attempts` -- all expected attempt-level receipts are
   present with no overlap, so the total is the sum of attempt values.
-- `provider_receipt` — per-attempt measurement from a provider receipt.
-- `billing_export` — per-attempt measurement from a billing export.
-- `imputed_subscription_equivalent` — a complete, non-overlapping total whose
+- `provider_receipt` -- per-attempt measurement from a provider receipt.
+- `billing_export` -- per-attempt measurement from a billing export.
+- `imputed_subscription_equivalent` -- a complete, non-overlapping total whose
   missing attempt costs were filled from the trusted model matrix; it is an
   API-equivalent planning estimate, never billed subscription spend.
-- `unavailable` — no usage telemetry exists for this row; usage fields are
+- `unavailable` -- no usage telemetry exists for this row; usage fields are
   null, never zero-filled.
-- `unknown` — usage data is present but no explicit `measurement_source` was
+- `unknown` -- usage data is present but no explicit `measurement_source` was
   recorded in the event log.
 
 ### Optional API-equivalent imputation

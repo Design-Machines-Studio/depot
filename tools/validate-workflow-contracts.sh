@@ -42,6 +42,47 @@ require_text() {
   fi
 }
 
+require_line() {
+  local file="$1"
+  local line="$2"
+  local label="$3"
+
+  if [ ! -f "$file" ]; then
+    printf "  FAIL  %s (missing file: %s)\n" "$label" "${file#$REPO_ROOT/}"
+    failures=1
+    return
+  fi
+  if grep -Fxq -- "$line" "$file"; then
+    printf "  OK    %s\n" "$label"
+  else
+    printf "  FAIL  %s\n" "$label"
+    failures=1
+  fi
+}
+
+require_line_mutation_sensitive() {
+  local file="$1"
+  local exact="$2"
+  local replacement="$3"
+  local label="$4"
+  local mutated
+
+  mutated=$(mktemp) || {
+    printf "  FAIL  %s (could not allocate fixture)\n" "$label"
+    failures=1
+    return
+  }
+  awk -v exact="$exact" -v replacement="$replacement" \
+    '{ print ($0 == exact ? replacement : $0) }' "$file" > "$mutated"
+  if cmp -s "$file" "$mutated" || grep -Fxq -- "$exact" "$mutated"; then
+    printf "  FAIL  %s\n" "$label"
+    failures=1
+  else
+    printf "  OK    %s\n" "$label"
+  fi
+  rm -f "$mutated"
+}
+
 require_absent() {
   local file="$1"
   local pattern="$2"
@@ -186,6 +227,16 @@ require_text "$review_skill" "Phase 8: Repository Cleanup" "dm-review runs a rep
 require_text "$review_skill" "Phase 1b: Evidence Source Fallback" "dm-review falls back when PR threads are empty"
 require_text "$review_skill" "repo-cleanup-contract.md" "dm-review review skill references the cleanup contract"
 require_text "$review_loop" "repo-cleanup-contract.md" "dm-review-loop runs the cleanup phase"
+require_text "$review_loop" 'if rerun_lanes equals selected_full_set:' "dm-review-loop collapses equal-set selection to full fan-out"
+require_text "$review_loop" 'rerun_reasons = every lane in selected_full_set -> ["initial_full_fanout"]' "dm-review-loop records equal-set collapse as full fan-out"
+require_text "$review_loop" 'rerun_reasons = every lane in lanes_rerun -> ["selection_fail_open"]' "dm-review-loop rebuilds fail-open reasons from authoritative attempted lanes"
+require_text "$review_loop" '`.workflow-kernel/`' "dm-review-loop excludes self-authored review artifacts from trigger matching"
+require_text "$review_loop" '`full_fanout_override: true` and' "dm-review-loop keeps full-fanout skip sets empty"
+require_text "$review_loop" 'explicit booleans `selective_rerun`, `promoted_to_full`, and' "dm-review-loop emits all required iteration booleans"
+require_text "$review_skill" 'caller-owned receipts authorize nothing' "dm-review rejects caller-owned exhaustion authority"
+require_absent "$review_skill" 'authorize one operator-selected fallback provider for THIS LANE' "dm-review removes executable exhaustion option b"
+require_absent "$review_loop" '`lanes_skipped` -- `selected_full_set` minus those ATTEMPTED rows.' "dm-review-loop removes the retired attempted-complement skip formula"
+require_absent "$review_loop_skill" '`lanes_skipped` -- `selected_full_set` minus those ATTEMPTED rows.' "generated dm-review-loop removes the retired attempted-complement skip formula"
 require_text "$review_fix" "repo-cleanup-contract.md" "dm-review-fix runs the cleanup phase"
 require_text "$output_format" "### Repository Cleanup" "review report carries the cleanup inventory"
 require_text "$output_format" "**Lanes:**" "review report names which lanes ran"
@@ -344,6 +395,23 @@ require_text "$pipeline_prompts" 'exact closed `decisionProfile`' "pipeline-prom
 require_text "$pipeline_prompts" '`bind-verification-contract`' "pipeline-prompts publishes contract binding"
 require_text "$pipeline_prompts" '`decide-validation-retry`' "pipeline-prompts publishes bounded validation feedback"
 require_text "$pipeline_prompts" "primary process/session quit" "pipeline-prompts publishes primary browser recovery"
+require_text "$orchestrator" 'Authorized native fallback is unavailable until trusted host authority' "orchestrator keeps RC76 native fallback unavailable"
+require_text "$orchestrator" 'Omit option (b) for every chunk.' "orchestrator omits caller-owned fallback authorization"
+require_text "$orchestrator" 'Future receipt design -- non-executable.' "orchestrator quarantines the future authorization receipt shape"
+require_text "$orchestrator" 'Collect display-only rail status at ask time.' "orchestrator keeps current rail status informational"
+require_text "$orchestrator" 'Accept exactly `wait` or `park`.' "orchestrator closes the current ask action vocabulary"
+if grep -Fq -- 'The answer must be an exact identifier from the derived list.' "$orchestrator"; then
+  printf "  FAIL  orchestrator still requires a provider identifier for the wait/park ask\n"
+  failures=1
+else
+  printf "  OK    orchestrator does not require a provider identifier for the wait/park ask\n"
+fi
+if grep -Fq -- '**(b) authorized fallback** -> proceed' "$orchestrator"; then
+  printf "  FAIL  orchestrator still executes caller-owned authorized fallback\n"
+  failures=1
+else
+  printf "  OK    orchestrator does not execute caller-owned authorized fallback\n"
+fi
 require_text "$pipeline_prompts" '`human_help_required`' "pipeline-prompts publishes human escalation"
 require_text "$pipeline_prompts" "optimized ordinary path" "pipeline-prompts preserves the optimized ordinary path"
 require_text "$review_cmd" "canonical finding IDs" "dm-review publishes stable finding identities"
@@ -367,8 +435,29 @@ for loop_contract in "$review_loop" "$review_loop_skill"; do
   require_text "$loop_contract" "iteration-receipt.json" "$loop_contract_relative names the iteration receipt artifact"
   require_text "$loop_contract" '`clean-confirmation-receipt.json`' "$loop_contract_relative names the clean confirmation receipt artifact"
   require_text "$loop_contract" '`max-iterations-verification-receipt.json`' "$loop_contract_relative names the max-iterations receipt artifact"
+  allowlist_reset_count=$(grep -Fc 'review_lane_allowlist = null' "$loop_contract" || true)
+  if [ "$allowlist_reset_count" -lt 5 ]; then
+    printf "  FAIL  %s resets the actual selective input before both required full passes\n" "$loop_contract_relative"
+    failures=1
+  else
+    printf "  OK    %s resets the actual selective input before both required full passes\n" "$loop_contract_relative"
+  fi
 done
 require_text "$review_skill" '`review_lane_allowlist`' "review receiver names the selective lane allowlist"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.13.6"' "dm-review requires the kernel release with bound OpenRouter receipt identity"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.58.5"' "pipeline requires the review release with full-pass allowlist reset"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'family-independent second-opinion review' "dm-review manifest describes family-independent perspective resolution"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'Full mode only.' "migration-validator registry limits the lane to full mode"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'quick mode does not add this lane' "migration-validator registry matches the executable quick roster"
+for stale_migration_claim in 'Also dispatched in quick mode' 'dispatched in BOTH modes'; do
+  if grep -Fq -- "$stale_migration_claim" "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md"; then
+    printf "  FAIL  migration-validator registry rejects stale quick-mode coverage\n"
+    failures=1
+  else
+    printf "  OK    migration-validator registry rejects stale quick-mode coverage\n"
+  fi
+done
 require_text "$review_skill" "never relax this equality check to a subset check" "review receiver requires exact selected_full_set equality"
 require_text "$review_skill" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "review receiver fails open without partially honoring invalid input"
 require_text "$review_skill" 'It records the exact set of logical lanes actually `DISPATCHED` on this pass' "review receipt reports actually dispatched lanes"
@@ -403,7 +492,7 @@ require_text "$orchestrator" "Ask-then-default-park is the only headless behavio
 require_text "$orchestrator" "The Workflow Authority broker gate is a security authorization boundary, not a" "orchestrator keeps the broker gate non-overridable by the exhaustion ask"
 require_text "$orchestrator" "never implemented under fallback authorization" "orchestrator excludes sensitive-path chunks from fallback"
 require_text "$orchestrator" "The final full dm-review is never waived" "orchestrator never waives the final review for capacity"
-require_text "$orchestrator" "Record the authorization before any fallback dispatch" "orchestrator receipts authorization before dispatch"
+require_text "$orchestrator" "Future receipt design -- non-executable" "orchestrator keeps fallback receipt design non-executable"
 require_text "$orchestrator" "ask_evidence_ref" "orchestrator binds the authorization receipt to a real ask exchange"
 # The bare field name above is satisfied by the JSON literal alone, so the
 # sentence that gives it force gets its own anchor.
@@ -414,9 +503,9 @@ require_text "$routing_policy" '"neverOfferable"' "routing policy pins the never
 require_text "$routing_policy" "can only REMOVE options" "routing policy keeps the operator override remove-only"
 require_text "$pipeline_run_skill" "Rail-Exhaustion Ask Gate" "generated pipeline-run alias carries the ask gate section"
 require_text "$orchestrator" "are NOT operators and can" "orchestrator forbids agent self-authorization"
-require_text "$pipeline_run" "A fallback dispatch without a prior valid authorization receipt MUST be halted" "pipeline-run halts unauthorized fallback"
-require_text "$review_skill" "and never assumes yes" "dm-review never reads an unanswered lane ask as consent"
-require_text "$review_skill" "gap-and-continue default are all unavailable" "dm-review cannot gap-and-continue the pipeline final review"
+require_text "$pipeline_run" "caller-owned receipt authorizes nothing" "pipeline-run rejects caller-owned fallback authority"
+require_text "$review_skill" "and never assumes authority" "dm-review never reads an unanswered lane ask as authority"
+require_text "$review_skill" "option (c) and the headless gap-and-continue default are unavailable" "dm-review cannot gap-and-continue the pipeline final review"
 
 # --------------------------------------------------------------------------
 # Group 6: dm-review quality-pulse contract
@@ -535,6 +624,7 @@ for f in "$review_skill" "$review_cmd" "$dm_review_skill_alias" "$review_loop" \
   # needs pinning is that the consumer names a receipt at all.
   require_text "$f" "run-cost-summary: skipped" "$rel names a receipt skip line"
   require_text "$f" "skipped (kernel-unresolvable)" "$rel handles an unresolvable launcher"
+  require_text "$f" "skipped (receipt-write-failed)" "$rel preserves receipt-write failure evidence"
   # The retired multi-command block must not come back in any consumer.
   require_absent "$f" "run-cost-summary: skipped (%s)\\n' \"kernel-unavailable-or-failed\"" \
     "$rel does not carry the retired shell fallback chain"
@@ -584,6 +674,8 @@ require_text "$measurement_doc" "lane-input-bytes" "measurement CLI reference do
 require_text "$measurement_doc" "input_bytes" "measurement CLI reference documents the byte-unit field"
 require_text "$measurement_doc" "record-attempt" "measurement CLI reference documents record-attempt"
 require_text "$measurement_doc" "attempt_unmeasured" "measurement CLI reference documents the explicit unmeasured claim"
+require_text "$measurement_doc" "--request-envelope-sha256" \
+  "measurement CLI reference documents exact interim request-envelope binding"
 
 # The emission boundary has to be wired at the DISPATCH site, not only described
 # in the terminal emission paragraph. Six review lanes and four production runs
@@ -597,6 +689,8 @@ for f in "$review_dispatch_skill" "$orchestrator"; do
   require_text "$f" "record-attempt" "$rel records each attempt through the kernel"
   require_text "$f" "attempt_unmeasured" "$rel names the explicit unmeasured claim"
   require_text "$f" "--openrouter-receipt" "$rel names the provider-receipt evidence path"
+  require_text "$f" "--request-envelope-sha256" \
+    "$rel binds interim provider receipts to the attempted request envelope"
   require_text "$f" "--agent-definition" "$rel names the input-bytes evidence path"
 done
 
@@ -620,6 +714,25 @@ require_text "$review_skill" \
 require_text "$review_skill" \
   "Unknown subscription headroom is treated as at-threshold, never as available." \
   "routing-policy consumers treat unknown subscription headroom conservatively"
+if jq -e '
+  .agentType["security-auditor-codex-signoff"] as $lane
+  | $lane.provider == "implementer-aware-independent-family"
+    and $lane.reviewerFamilyConstraint == "must-differ-from-implementer-family"
+    and $lane.preferredProviderWhenIndependent == "codex"
+    and $lane.codexImplementerProvider == "openrouter"
+    and ($lane.failureResolution | [
+      .runner_failure,
+      .full_disclosure_decline,
+      .partial_coverage
+    ] | all(. == "remaining-non-implementing-family-or-review-incomplete"))
+    and .security.reviewControls.highConsequenceSecuritySignoff
+      == "independent-non-implementing-family-required"
+' "$routing_policy" >/dev/null; then
+  printf "  OK    security sign-off route is implementer-aware and family-independent\n"
+else
+  printf "  FAIL  security sign-off route is implementer-aware and family-independent\n"
+  failures=1
+fi
 
 # ---------------------------------------------------------------------------
 # Group 9: interim operator-batch authorization contract
@@ -628,6 +741,10 @@ printf "\nGroup 9: interim operator-batch authorization\n"
 
 payload_authorization="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
 openrouter_wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+openrouter_agent_runner="$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md"
+runner_batch_authorization="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/runner-batch-authorization.sh"
+review_alias="$REPO_ROOT/plugins/dm-review/skills/dm-review/SKILL.md"
+authority_threat_model="$REPO_ROOT/native/workflow-authority/THREAT-MODEL.md"
 
 # Anchor (a). The interim mode buys automation by widening approval
 # GRANULARITY. It must never buy it by removing the human. Anything that lets
@@ -672,18 +789,184 @@ for f in "$review_skill" "$review_cmd"; do
     "$rel states that the batch artifact is unauthenticated"
 done
 
-# Anchor (e). The calendar backstop is pinned, not self-asserted: every
-# enforcement layer compares program_sunset against this release constant.
-for f in "$payload_authorization" "$openrouter_wrapper" "$review_skill"; do
-  rel="${f#$REPO_ROOT/}"
-  require_text "$f" "2026-09-07" \
-    "$rel pins the interim program sunset constant"
-done
+# Anchor (e). Pin executable assignments exactly: a bare date search can be
+# satisfied by explanatory prose after an enforcement constant drifts.
+require_line "$payload_authorization" 'PROGRAM_SUNSET="2026-09-07"' \
+  "payload authorization pins the executable interim sunset"
+require_line "$openrouter_wrapper" 'INTERIM_PROGRAM_SUNSET="2026-09-07"' \
+  "OpenRouter wrapper pins the executable interim sunset"
+require_line "$review_skill" 'OPENROUTER_INTERIM_PROGRAM_SUNSET=2026-09-07' \
+  "dm-review pins the executable interim sunset"
+require_text "$review_cmd" 'program_sunset` (2026-09-07)' \
+  "dm-review command documents the interim sunset"
+require_line_mutation_sensitive "$payload_authorization" \
+  'PROGRAM_SUNSET="2026-09-07"' 'PROGRAM_SUNSET="2099-01-01"' \
+  "payload authorization sunset anchor rejects assignment mutation"
+require_line_mutation_sensitive "$openrouter_wrapper" \
+  'INTERIM_PROGRAM_SUNSET="2026-09-07"' 'INTERIM_PROGRAM_SUNSET="2099-01-01"' \
+  "OpenRouter wrapper sunset anchor rejects assignment mutation"
+require_line_mutation_sensitive "$review_skill" \
+  'OPENROUTER_INTERIM_PROGRAM_SUNSET=2026-09-07' \
+  'OPENROUTER_INTERIM_PROGRAM_SUNSET=2099-01-01' \
+  "dm-review sunset anchor rejects assignment mutation"
+require_text "$openrouter_agent_runner" '--manifest "$request_envelope_manifest"' \
+  "openrouter-agent-runner redispatch preserves the preparation manifest"
+require_text "$review_skill" '--manifest "$request_envelope_manifest"' \
+  "dm-review redispatch preserves the preparation manifest"
+EM_DASH=$(printf '\342\200\224')
+require_absent "$review_skill" "about to POST${EM_DASH}including" \
+  "dm-review request-envelope prose remains ASCII"
+require_absent "$openrouter_wrapper" "about to POST${EM_DASH}including" \
+  "OpenRouter wrapper request-envelope prose remains ASCII"
 
 # Anchor (f). Transmission-point digest binding. The wrapper must not depend on
-# a separate verify-batch step having run over a separately snapshotted file.
-require_text "$openrouter_wrapper" "transmitted payload digest is not in the batch authorization" \
-  "openrouter-wrapper.sh binds transmitted bytes to the batch payload digests"
+# a separate verify-batch step and must bind the complete request envelope.
+require_text "$openrouter_wrapper" "transmitted request envelope is not bound to this approved lane and model set" \
+  "openrouter-wrapper.sh binds transmitted bytes to the approved lane and model set"
+require_text "$payload_authorization" '"lanes": lanes' \
+  "payload-authorization.sh persists the operator-reviewed lane mapping"
+require_text "$payload_authorization" 'summary["inspectionPath"] = inspection_path' \
+  "payload-authorization.sh retains an inspection path through approval"
+require_text "$openrouter_wrapper" '"$AUTHORIZATION_HELPER" validate-batch' \
+  "openrouter-wrapper.sh delegates typed batch validation to the shared helper"
+require_text "$openrouter_wrapper" '.program_sunset == $expected' \
+  "openrouter-wrapper.sh enforces its release sunset pin"
+require_text "$review_skill" '.programSunset == $expected' \
+  "dm-review enforces its release sunset pin"
+require_text "$payload_authorization" 'if [ "$MODE" = "validate-batch" ]; then' \
+  "payload-authorization.sh applies broker retirement to typed batch validation"
+
+# Anchor (f2). Preparation and redispatch treat every renderer/snapshot/verify
+# command as fallible, and only report a prepared envelope after checking the
+# exact digest plus readable, nonempty request and manifest artifacts.
+for phrase in \
+  "request envelope rendering failed" \
+  "request envelope snapshot failed" \
+  "request envelope snapshot is malformed or unavailable" \
+  "redispatch request envelope is not authorized" \
+  "redispatch authorization receipt is empty"; do
+  require_text "$runner_batch_authorization" "$phrase" \
+    "runner-batch-authorization.sh checks $phrase"
+done
+require_text "$runner_batch_authorization" 'cp "$BATCH_FILE" "$BATCH_SNAPSHOT"' \
+  "runner-batch-authorization.sh snapshots the batch before digest and validation"
+require_text "$openrouter_agent_runner" '"$RUNNER_BATCH_HELPER" prepare' \
+  "openrouter-agent-runner delegates preparation to the shipped helper"
+require_text "$openrouter_agent_runner" '"$RUNNER_BATCH_HELPER" verify' \
+  "openrouter-agent-runner delegates redispatch verification to the shipped helper"
+require_text "$openrouter_agent_runner" "could not report prepared request envelope" \
+  "openrouter-agent-runner checks preparation-result reporting"
+require_text "$review_skill" "broker_transport_unavailable" \
+  "dm-review keeps a ready broker unavailable until broker-owned transport exists"
+for f in "$review_cmd" "$review_alias" "$review_skill"; do
+  rel="${f#$REPO_ROOT/}"
+  require_absent "$f" 'available, `authorization_mode: broker`' \
+    "$rel does not advertise the unimplemented broker authorization mode as available"
+  require_absent "$f" 'authorization={broker|' \
+    "$rel does not include broker in the executable routing report"
+  require_text "$f" "broker_transport_unavailable" \
+    "$rel reports a ready broker as unavailable until broker-owned transport exists"
+done
+broker_surfaces=(
+  "$REPO_ROOT/plugins/openrouter/.claude-plugin/plugin.json"
+  "$REPO_ROOT/plugins/openrouter/.codex-plugin/plugin.json"
+  "$REPO_ROOT/plugins/openrouter/README.md"
+  "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/SKILL.md"
+  "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-selection.md"
+  "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/invocation-protocol.md"
+  "$openrouter_agent_runner"
+)
+for f in "${broker_surfaces[@]}"; do
+  rel="${f#$REPO_ROOT/}"
+  require_absent "$f" "available through a ready Workflow" \
+    "$rel does not advertise ready-broker automation"
+  require_absent "$f" "broker or sunset-bound operator-batch automation" \
+    "$rel does not advertise the unimplemented broker transport"
+done
+family_surfaces=(
+  "$REPO_ROOT/plugins/openrouter/commands/openrouter.md"
+  "$REPO_ROOT/plugins/openrouter/skills/openrouter/SKILL.md"
+  "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/SKILL.md"
+  "$openrouter_agent_runner"
+  "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-selection.md"
+  "$REPO_ROOT/plugins/dm-review/commands/dm-review-quick.md"
+  "$REPO_ROOT/plugins/dm-review/skills/dm-review-quick/SKILL.md"
+  "$REPO_ROOT/plugins/dm-review/skills/review/references/guardrails.md"
+  "$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
+  "$REPO_ROOT/docs/superpowers/specs/2026-08-06-delivery-throughput-token-plan.md"
+  "$REPO_ROOT/docs/cascade-migration.md"
+)
+for f in "${family_surfaces[@]}"; do
+  rel="${f#$REPO_ROOT/}"
+  for phrase in \
+    "Codex sign-off remains mandatory" \
+    "full-input Codex review" \
+    "full-diff Codex security" \
+    "required full-diff Codex lane" \
+    "requires a Codex security sign-off" \
+    "independent full-diff Codex sign-off" \
+    "independent local Codex security sign-off"; do
+    require_absent "$f" "$phrase" \
+      "$rel does not hard-wire the implementing Codex family into security sign-off"
+  done
+done
+require_text "$review_skill" "Resolve the lane before its provider." \
+  "dm-review resolves independent-lane fallback before generic provider fallback"
+require_text "$review_skill" "all three signals instead" \
+  "dm-review applies the sign-off exception to failures and disclosure markers"
+require_text "$review_skill" "do not complete the held" \
+  "dm-review forbids same-family partial-coverage completion for the sign-off lane"
+require_text "$openrouter_agent_runner" "continues only to a non-implementing family" \
+  "OpenRouter runner keeps full-decline sign-off fallback independent"
+require_text "$openrouter_agent_runner" "must use a non-implementing family for every held path" \
+  "OpenRouter runner keeps partial sign-off fallback independent"
+require_text "$review_skill" "[independent-family-fallback/{reviewer-family}/{agent-name}]" \
+  "dm-review attributes independent fallback to its actual reviewer family"
+require_text "$review_skill" "policy-derived non-implementing family at most once" \
+  "dm-review bounds independent-family fallback without a same-family retry"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
+  "Never same-family fallback completion" \
+  "graceful degradation keeps sign-off exhaustion review-incomplete"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
+  "| Second perspective |" \
+  "graceful degradation uses the provider-neutral second-perspective lane"
+require_absent "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
+  "| Codex perspective |" \
+  "graceful degradation removes the retired Codex-only perspective lane"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md" \
+  "second-perspective: unavailable:no-independent-family" \
+  "review output attributes perspective gaps to family resolution"
+require_absent "$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md" \
+  "codex-perspective: skipped:cli-absent" \
+  "review output removes the retired Codex-only perspective example"
+for f in \
+  "$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md" \
+  "$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "and \`second-perspective\`" \
+    "$rel uses the exact provider-neutral perspective lane in selective rosters"
+  require_absent "$f" "\`codex-perspective\`" \
+    "$rel rejects the retired perspective lane token while allowing its .md filename"
+done
+require_text "$REPO_ROOT/plugins/openrouter/README.md" \
+  "required for every live wrapper transmission" \
+  "OpenRouter README states the API-key requirement for automated live calls"
+require_absent "$REPO_ROOT/docs/cascade-migration.md" \
+  "future broker-ready host" \
+  "cascade guidance does not treat readiness alone as transport authority"
+require_text "$authority_threat_model" "lane-to-digest/model mapping" \
+  "workflow-authority threat model documents schema-v2 lane membership"
+require_text "$authority_threat_model" "candidates, provider routing" \
+  "workflow-authority threat model binds model and provider routing"
+require_absent "$authority_threat_model" 'payload_digests' \
+  "workflow-authority threat model removes retired content-only digest vocabulary"
+require_absent "$authority_threat_model" "only exact ordered content bytes" \
+  "workflow-authority threat model does not revert to content-only binding"
+for f in "$openrouter_agent_runner" "$openrouter_wrapper"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "security review role requires Kimi K3 primary and GLM-5.2 fallback" \
+    "$rel binds security review routing to the approved model pair"
+done
 
 # Anchor (g). The wrapper binds the batch to the CURRENT run and parses
 # timestamps strictly. A batch issued for another run, issued in the future, or
@@ -694,8 +977,8 @@ for phrase in \
   "batch authorization is issued in the future" \
   "batch authorization lifetime exceeds the 24-hour maximum" \
   "not well-formed UTC timestamps"; do
-  require_text "$openrouter_wrapper" "$phrase" \
-    "openrouter-wrapper.sh enforces \"$phrase\" at the transmission point"
+  require_text "$payload_authorization" "$phrase" \
+    "payload-authorization.sh enforces \"$phrase\" for every batch consumer"
 done
 
 # Anchor (h). Anchors (a)-(g) pin PROSE. Prose cannot fail when enforcement is
@@ -723,7 +1006,18 @@ for phrase in \
   "interim batch refuses a sixtieth second" \
   "interim batch parses a genuine leap day" \
   "shipped sunset constant still admits the interim mode today" \
-  "shipped sunset constant has passed and the interim mode is dead"; do
+  "shipped sunset constant has passed and the interim mode is dead" \
+  "runner preparation detects canonical renderer failure" \
+  "runner preparation detects request-envelope snapshot failure" \
+  "shipped runner helper detects renderer failure" \
+  "shipped runner helper detects snapshot failure" \
+  "shipped runner helper prepares a manifest without provider contact" \
+  "shipped runner helper verifies an immutable private batch snapshot" \
+  "typed batch validation retires interim mode when the broker is ready" \
+  "typed batch validation withholds interim mode when the broker is degraded" \
+  "security runner refuses a matrix-listed model assigned to the wrong role" \
+  "Codex-signoff security runner refuses a matrix-listed model assigned to the wrong role" \
+  "runner redispatch verifies the re-rendered request envelope against the batch"; do
   require_text "$openrouter_policy_fixtures" "$phrase" \
     "behavioral fixture retained: $phrase"
 done

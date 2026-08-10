@@ -58,7 +58,7 @@ The cascade keys off the merged chunk vocabulary. `model-cascade.json` maps `kin
 Direct interactive use:
 
 ```bash
-export OPENROUTER_API_KEY="sk-or-..."   # direct /openrouter only
+export OPENROUTER_API_KEY="sk-or-..."   # required for live wrapper calls; never authority by itself
 # PIPELINE_CASCADE=1 may exercise dry-run/native reroute behavior; it cannot
 # enable automated external transport.
 ```
@@ -66,17 +66,18 @@ export OPENROUTER_API_KEY="sk-or-..."   # direct /openrouter only
 ## dm-review big-diff selection (>5000 lines)
 
 ```
-current automated dm-review  -> Codex-native review (`host_authority_unavailable`)
-future broker-ready host     -> openrouter-bulk-analyst (Kimi K3 primary, Terra fallback)
+valid absent-broker interim batch -> openrouter-bulk-analyst (Kimi K3 primary, Terra fallback)
+ready broker without transport    -> unavailable (`broker_transport_unavailable`)
 ```
 
-`OPENROUTER_API_KEY` enables only direct interactive `/openrouter`; it does not
-authorize automated review. The current automated dm-review path stays on Codex
-until the fixed broker reports production-ready. The future broker-enabled and
-dry-run topology sends mechanical review criteria through
+`OPENROUTER_API_KEY` is required for live wrapper transmission but does not
+authorize automated review. dm-review may use a valid interim batch only while
+the broker is absent; broker readiness alone remains unavailable until the
+broker owns transport. The future broker-enabled and dry-run topology sends mechanical review criteria through
 `openrouter-agent-runner`; policy selects each lane's primary and fallback.
 Security retains separate `security-auditor-openrouter` eligible-content
-analysis and mandatory `security-auditor-codex-signoff` full-diff completion.
+analysis and mandatory `security-auditor-codex-signoff` full-diff completion;
+the stable lane ID resolves to a family different from the implementer.
 
 ## Dry-run / verify (no API key needed)
 

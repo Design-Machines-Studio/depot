@@ -71,10 +71,10 @@ Use these exact later observation interfaces:
 "$WORKFLOW_KERNEL" metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
 if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrouter --asset skills/openrouter-delegate/references/model-matrix.json --minimum-version 1.11.0); then :; else MODEL_MATRIX_ASSET=""; fi
 "$WORKFLOW_KERNEL" emit-cost-summary --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/run-cost-summary.json --receipt .claude/ux-review/workflow-kernel/run-receipt.md --matrix "$MODEL_MATRIX_ASSET" --repository-commit "$(git rev-parse HEAD)" $(test -n "$(git status --porcelain)" && echo --dirty-state) \
-  || { s=$?; [ "$s" -eq 2 ] || [ "$s" -eq 6 ]; } || printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> .claude/ux-review/workflow-kernel/run-receipt.md
+  || { s=$?; if [ "$s" -eq 6 ]; then printf 'run-cost-summary: skipped (receipt-write-failed)\n' >> .claude/ux-review/workflow-kernel/run-receipt.md; elif [ "$s" -eq 2 ]; then exit "$s"; else printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> .claude/ux-review/workflow-kernel/run-receipt.md; fi; }
 ```
 
-The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file left there by an earlier run, writes a schema-bound `run-cost-summary.json` beside that run's own `authoritative-receipts.json`, and appends exactly one inventory line to the run receipt naming what actually happened -- the artifact path on success, or `run-cost-summary: skipped (<reason>)` on any internal failure. It exits 0 for every measurement outcome, because the artifact is observation-only: it never gates, blocks, waives, or alters a review, lane, or phase outcome, and its absence never fails one. It exits 6 in exactly one case -- the receipt path was accepted but the write failed -- because a receipt naming neither an artifact nor a skip is the silence the failure-modes checklist forbids, and reporting that it could not report is the command's last obligation. A *refused* receipt path is the deliberate exception and still exits 0: exiting non-zero would fire the caller's `||` fallback, which appends through the very symlink the command just rejected, so the refusal is reported on stderr alone. Exit 2 is the other non-zero outcome and means the invocation was wrong -- bad flags, or `--output` and `--receipt` pointing at one path -- so nothing ran and nothing is recorded. The `||` fallback beside it must be gated on the status (`|| { s=$?; [ "$s" -eq 2 ] || [ "$s" -eq 6 ]; } || printf ...`), because a bare `||` fires on every non-zero exit: after an exit 6 whose receipt line was already written it appends a second, contradicting skip line, and after an exit 2 it blames a launcher that demonstrably ran. Gated, the fallback covers only what no process inside the kernel can report -- the launcher itself failing to run. Receipt paths are fixed for a given receipt directory, so two concurrent runs sharing one directory overwrite each other: serialize them, or give each run its own directory. The command refuses a symlinked artifact or receipt path, and when the *receipt* path is the one refused it records nothing rather than writing the refusal through the symlink it just rejected. The caller resolves a coherent installed-plugin bundle and passes its model-matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; the kernel validates both bundle containment and matrix structure without owning a provider dependency. An unreadable or invalid matrix emits one stderr line, skips imputation, and never fails this observation-only emission. It does not inspect the working tree: the caller passes `--dirty-state`, and that flag is the artifact's only source of that fact. Populate the events it reads: after each lane attempt, translate that attempt's OpenRouter wrapper receipt with `openrouter-usage`, or that lane's Codex/Claude input files with `lane-input-bytes`, passing `--append-to <authoritative-receipts.json> --run-id <id> --occurred-at <ISO-8601> --authoritative-receipt <path>` so the translator wraps the payload as an `attempt_usage` receipt and appends it under an exclusive lock in one validated step. Emit a row for every attempt including failed ones -- an attempt missing from the receipt stream is indistinguishable from one that never ran, and its spend disappears with it. A `lanes: 0` artifact after a run that executed lanes means this boundary is not wired; a structurally valid artifact with zero measured lanes proves the command ran, never that lanes were measured. Full command reference, when the workflow-kernel plugin is installed alongside this one: `plugins/workflow-kernel/skills/workflow-kernel/references/cli-measurement-commands.md`; if that path is not readable from this cache, the flags named above are the complete required set.
+The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file left there by an earlier run, writes a schema-bound `run-cost-summary.json` beside that run's own `authoritative-receipts.json`, and appends exactly one inventory line to the run receipt naming what actually happened -- the artifact path on success, or `run-cost-summary: skipped (<reason>)` on any internal failure. It exits 0 for every measurement outcome, because the artifact is observation-only: it never gates, blocks, waives, or alters a review, lane, or phase outcome, and its absence never fails one. It exits 6 in exactly one case -- the receipt path was accepted but the write failed -- because a receipt naming neither an artifact nor a skip is the silence the failure-modes checklist forbids, and reporting that it could not report is the command's last obligation. A *refused* receipt path is the deliberate exception and still exits 0: exiting non-zero would fire the caller's `||` fallback, which appends through the very symlink the command just rejected, so the refusal is reported on stderr alone. Exit 2 is the other non-zero outcome and means the invocation was wrong -- bad flags, or `--output` and `--receipt` pointing at one path -- so nothing ran and nothing is recorded. The `||` fallback beside it must be status-aware: exit 6 triggers one final append of `skipped (receipt-write-failed)`, exit 2 is explicitly propagated as an invalid invocation, and every other non-zero status appends `skipped (kernel-unresolvable)`. If the final append also fails, its non-zero status remains visible instead of being erased. Receipt paths are fixed for a given receipt directory, so two concurrent runs sharing one directory overwrite each other: serialize them, or give each run its own directory. The command refuses a symlinked artifact or receipt path, and when the *receipt* path is the one refused it records nothing rather than writing the refusal through the symlink it just rejected. The caller resolves a coherent installed-plugin bundle and passes its model-matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; the kernel validates both bundle containment and matrix structure without owning a provider dependency. An unreadable or invalid matrix emits one stderr line, skips imputation, and never fails this observation-only emission. It does not inspect the working tree: the caller passes `--dirty-state`, and that flag is the artifact's only source of that fact. Populate the events it reads through `record-attempt` as each lane settles; that one atomic call appends the lane outcome and exactly one `attempt_usage` row under the same lock. Pass the OpenRouter wrapper receipt when present, otherwise pass the exact Codex/Claude input files for deterministic byte measurement; when neither exists, the paired row explicitly records `attempt_unmeasured`. Do not also call a standalone translator with `--append-to` for that attempt, because doing both double-counts it. A `lanes: 0` artifact after a run that executed lanes means this boundary is not wired; a structurally valid artifact with zero measured lanes proves the command ran, never that lanes were measured. Full command reference, when the workflow-kernel plugin is installed alongside this one: `plugins/workflow-kernel/skills/workflow-kernel/references/cli-measurement-commands.md`; if that path is not readable from this cache, the flags named above are the complete required set.
 
 If review setup creates any Docker/Compose resource, invoke exactly one planning interface:
 
@@ -221,23 +221,27 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
   resolve_openrouter_bundle() {
     if [ -n "$OPENROUTER_ACTIVE_HOST" ]; then
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.8.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
+        --minimum-version 1.11.4 --active-host "$OPENROUTER_ACTIVE_HOST" \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
         --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
         --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
         --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
+        --required-executable skills/openrouter-delegate/references/runner-batch-authorization.sh \
+        --required-asset skills/openrouter-delegate/references/model-matrix.json \
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     else
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.8.0 \
+        --minimum-version 1.11.4 \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
         --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
         --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
         --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
+        --required-executable skills/openrouter-delegate/references/runner-batch-authorization.sh \
+        --required-asset skills/openrouter-delegate/references/model-matrix.json \
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     fi
   }
@@ -255,7 +259,9 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
   OPENROUTER_RESOLUTION_REASON=$(printf '%s' "$BUNDLE_JSON" | jq -r '.reason // empty' 2>/dev/null)
 fi
 # Availability is RESOLVED, never assumed. Three outcomes, evaluated in this
-# order, fail-closed: broker-ready > interim operator batch > unavailable.
+# order, fail-closed: broker-ready retires interim and remains unavailable until
+# broker-owned transport lands; an absent broker may permit the interim batch;
+# every other state is unavailable.
 OPENROUTER_AVAILABLE=false
 OPENROUTER_AUTHORIZATION_MODE=""
 OPENROUTER_BATCH_AUTHORIZATION_FILE=""
@@ -282,13 +288,13 @@ if [ -x "$OPENROUTER_BROKER_CLIENT" ]; then
   fi
 fi
 
-# Outcome 1 -- broker probe reports ready. This is the R3.1 target state and
-# the only permanent one. The rung cannot fire until a broker exists on a
-# supported host; it is written now so the interim rung never sits above it.
+# Outcome 1 -- broker probe reports ready, but the runner has no broker-owned
+# run-bound transport interface yet. Do not pass authorization_mode=broker to
+# the API-key wrapper; remain unavailable until that interface exists.
 if [ "$OPENROUTER_BROKER_STATUS" = ready ]; then
-  OPENROUTER_AVAILABLE=true
-  OPENROUTER_AUTHORIZATION_MODE=broker
-  OPENROUTER_UNAVAILABLE_REASON=""
+  OPENROUTER_AVAILABLE=false
+  OPENROUTER_AUTHORIZATION_MODE=""
+  OPENROUTER_UNAVAILABLE_REASON=broker_transport_unavailable
 # Outcome 2 -- INTERIM operator batch. Requires a valid, unexpired,
 # sunset-pinned batch authorization bound to THIS run. It is intended to be
 # created at run start by an interactive approval the operator typed on the
@@ -297,23 +303,25 @@ if [ "$OPENROUTER_BROKER_STATUS" = ready ]; then
 # client is ABSENT; present_not_ready falls through to Outcome 3.
 elif [ "$OPENROUTER_BROKER_STATUS" = absent ] &&
      [ -n "${OPENROUTER_API_KEY:-}" ] && [ -n "$OPENROUTER_BUNDLE_ROOT" ] &&
-     [ -f "plans/$FEATURE_SLUG/openrouter-batch-authorization.json" ] &&
-     jq -e --arg run "$REVIEW_RUN_ID" --arg now "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-        --arg sunset "$OPENROUTER_INTERIM_PROGRAM_SUNSET" '
-       .schema_version == 1
-       and .authorization_mode == "interim_operator_batch"
-       and .run_id == $run
-       and (.payload_digests | type == "array" and length > 0)
-       and (.expires_at > $now)
-       and .program_sunset == $sunset
-       and ((.program_sunset + "T00:00:00Z") > $now)
-     ' "plans/$FEATURE_SLUG/openrouter-batch-authorization.json" >/dev/null 2>&1; then
-  OPENROUTER_AVAILABLE=true
-  OPENROUTER_AUTHORIZATION_MODE=interim_operator_batch
+     [ -x "$OPENROUTER_AUTHORIZATION_PATH" ] &&
+     [ -f "plans/$FEATURE_SLUG/openrouter-batch-authorization.json" ]; then
   OPENROUTER_BATCH_AUTHORIZATION_FILE="plans/$FEATURE_SLUG/openrouter-batch-authorization.json"
-  OPENROUTER_BATCH_AUTHORIZATION_DIGEST=$(shasum -a 256 \
-    "$OPENROUTER_BATCH_AUTHORIZATION_FILE" | awk '{print $1}')
-  OPENROUTER_UNAVAILABLE_REASON=""
+  if OPENROUTER_BATCH_VALIDATION_JSON=$("$OPENROUTER_AUTHORIZATION_PATH" validate-batch \
+       --batch-file "$OPENROUTER_BATCH_AUTHORIZATION_FILE" \
+       --run-id "$REVIEW_RUN_ID") && \
+     printf '%s' "$OPENROUTER_BATCH_VALIDATION_JSON" | jq -e \
+       --arg expected "$OPENROUTER_INTERIM_PROGRAM_SUNSET" \
+       '.programSunset == $expected' >/dev/null 2>&1; then
+    OPENROUTER_AVAILABLE=true
+    OPENROUTER_AUTHORIZATION_MODE=interim_operator_batch
+    OPENROUTER_BATCH_AUTHORIZATION_DIGEST=$(shasum -a 256 \
+      "$OPENROUTER_BATCH_AUTHORIZATION_FILE" | awk '{print $1}')
+    OPENROUTER_UNAVAILABLE_REASON=""
+  else
+    OPENROUTER_AVAILABLE=false
+    OPENROUTER_AUTHORIZATION_MODE=""
+    OPENROUTER_UNAVAILABLE_REASON=host_authority_unavailable
+  fi
 # Outcome 3 -- unavailable. Unchanged from today on hosts with no broker and
 # no batch authorization, and the fail-closed landing spot for an installed
 # broker client that does not probe ready.
@@ -328,11 +336,11 @@ else
 fi
 ```
 
-**Outcome 1 -- `broker` (`OPENROUTER_AVAILABLE=true`):** the independent
-Workflow Authority Broker owns run-bound authorization, credential custody, and
-transport. Agents marked for OpenRouter MUST use `openrouter-agent-runner`.
-Mechanical orchestration runs on Codex or directly in the host; do not spend
-Claude coding quota to invoke the wrapper.
+**Outcome 1 -- broker present, transport unavailable
+(`OPENROUTER_AVAILABLE=false`):** a ready probe retires interim mode, but this
+release has no broker-owned run-bound transport interface. Record
+`broker_transport_unavailable` and keep the lane native. Never pass
+`authorization_mode=broker` into the API-key wrapper.
 
 **Outcome 2 -- `interim_operator_batch` (`OPENROUTER_AVAILABLE=true`,
 reason `interim_operator_batch`):** an explicitly temporary, sunset-bound mode
@@ -340,7 +348,8 @@ for hosts where no broker client is installed at all. It changes approval
 granularity from per-payload to per-run; for payloads that travel this path it
 does not change approval existence. The intended entry is
 `payload-authorization.sh batch-approve` showing the operator the lane list,
-byte totals, and digest count on the controlling terminal, with the operator
+model candidates, provider routing, per-role byte totals, inspection paths, and
+digest count on the controlling terminal, with the operator
 typing the confirmation phrase.
 **No environment variable substitutes for the interactive confirmation.**
 **The batch artifact is procedural and unauthenticated.** It is bare JSON with
@@ -353,17 +362,14 @@ that gap is what the out-of-process Workflow Authority Broker does, and it is
 the primary reason this mode is sunset-bound.
 Lanes dispatch with
 `OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch` plus the batch file and
-its digest, and each lane verifies its own exact payload digest against the
+its digest, and each lane verifies its complete request-envelope digest against the
 batch through `payload-authorization.sh verify-batch` before transmission. The
-wrapper does not rely on that step having run: it recomputes the canonical
-exact-ordered-content digest over ALL message contents of the request body it
-is about to POST -- system, developer, assistant, and user turns in
-transmission order -- and refuses unless that digest is already in the batch
-file's `payload_digests`. Non-string (structured or array-typed) message
-content is refused rather than hashed. The binding covers ordered message
-CONTENT bytes only: model, fallback, provider order, and sort are
-caller-selected routing metadata outside the approved set. A payload whose
-digest is not in the batch falls back to the per-payload interactive path or
+wrapper does not rely on that step having run: it hashes the exact request
+envelope it is about to POST--including model or fallback models, provider
+routing and sort, streaming options, roles, and ordered message content--and
+refuses unless that digest and model set are bound to the caller's lane in the
+batch file's durable `lanes` mapping. A request whose lane, digest, or model set
+does not match falls back to the per-payload interactive path or
 fails closed. Interim mode is FORBIDDEN when a broker probe
 on this host reports `ready`: both the batch path and the wrapper refuse with
 `broker available; interim mode retired on this host`. It is also WITHHELD when
@@ -565,7 +571,7 @@ When `routing-policy.json` supplies `model` and `fallbackModel`, those full Open
 **Routing report** -- print before Phase 4:
 
 ```
-Provider routing (OPENROUTER_AVAILABLE={true|false}, authorization={broker|interim_operator_batch|none}):
+Provider routing (OPENROUTER_AVAILABLE={true|false}, authorization={interim_operator_batch|none}):
 - N analyses -> OpenRouter (Kimi security, pattern-recognition, code-simplicity, doc-sync, test-coverage, openrouter-bulk-analyst when selected)
 - N native coding agents -> Codex (architecture, visual/UI, unavailable-provider and sensitive-section coverage)
 - 1 required security sign-off -> resolved independent family (full diff)
@@ -587,11 +593,10 @@ lane's exact outbound bytes, then take ONE interactive approval covering the
 whole set:
 
 ```bash
-for LANE in $OPENROUTER_LANES; do
-  "$OPENROUTER_AUTHORIZATION_PATH" snapshot \
-    --output ".claude/ux-review/openrouter/$LANE.manifest.json" \
-    --content-file ".claude/ux-review/openrouter/$LANE.payload"
-done
+# First dispatch each lane's openrouter-agent-runner with
+# authorization_mode=prepare_interim_batch and a private, persistent
+# request_envelope_manifest path. The runner uses the wrapper's canonical
+# render-only mode and returns without network contact.
 "$OPENROUTER_AUTHORIZATION_PATH" batch-approve \
   --batch-file "plans/$FEATURE_SLUG/openrouter-batch-authorization.json" \
   --run-id "$REVIEW_RUN_ID" --operator "$OPERATOR" \
@@ -599,8 +604,9 @@ done
   --lane "<lane-id>=.claude/ux-review/openrouter/<lane-id>.manifest.json"
 ```
 
-`batch-approve` prints the lane list, per-lane byte totals, the grand total,
-and the digest count on the controlling terminal and waits for the operator to
+`batch-approve` prints each lane's model candidates, provider routing, per-role
+byte totals, exact digest, and private inspection path on the controlling
+terminal and waits for the operator to
 type the confirmation phrase. It reads that answer from `/dev/tty` and nothing
 else, and an unavailable terminal fails closed:
 **No environment variable substitutes for the interactive confirmation.**
@@ -617,16 +623,33 @@ equivalent file without ever showing the prompt. Treat interim mode as an
 operator-procedural control with a technical digest binding, not as proof of
 consent.
 
-Immediately before transmission each lane re-verifies its own bytes against the
-batch:
+Immediately before transmission, the redispatched runner invokes the shipped
+`runner-batch-authorization.sh verify` helper. The helper re-renders the
+request into its own private temporary file with the wrapper's canonical
+render-only mode, requires the unchanged preparation manifest, checks the
+declared batch digest, and verifies the re-rendered bytes against both that
+manifest and the approved batch:
 
 ```bash
-"$OPENROUTER_AUTHORIZATION_PATH" verify-batch \
+"$RUNNER_BATCH_HELPER" verify \
+  --wrapper "$WRAPPER_PATH" \
+  --authorization-helper "$OPENROUTER_AUTHORIZATION_PATH" \
+  --system-file "$SYS_FILE" --user-file "$USER_FILE" \
+  --model "$target_model" --fallback "${fallback_model:-}" \
+  --timeout "$target_timeout" --workload "$OPENROUTER_WORKLOAD_CLASS" \
+  --target-agent-name "$target_agent_name" \
   --batch-file "$OPENROUTER_BATCH_AUTHORIZATION_FILE" \
+  --batch-digest "$OPENROUTER_BATCH_AUTHORIZATION_DIGEST" \
   --run-id "$REVIEW_RUN_ID" \
-  --manifest ".claude/ux-review/openrouter/$LANE.manifest.json" \
-  --content-file ".claude/ux-review/openrouter/$LANE.payload"
+  --manifest "$request_envelope_manifest"
 ```
+
+The helper's canonical request file is copied to a 0600 inspection path beside
+the preparation manifest and retained only through `batch-approve`; the batch
+writer removes it after successfully persisting the lane-to-digest/model map.
+Redispatch MUST
+pass the same preparation-manifest path that the preparation result reported;
+a content-mode payload receipt is not an envelope manifest.
 
 A non-zero exit means the payload is not covered: fall back to the per-payload
 interactive exact-digest path, or fail the lane closed to Codex. Never widen
@@ -737,17 +760,17 @@ Both A and B agents launch in parallel in the same message. The runner reads the
 3. Dispatch `security-auditor.md` with the complete unfiltered diff. The sign-off remains mandatory, full-diff, and zero-deferral regardless of which family performs it.
 4. Record `implementer_family`, `reviewer_family`, and `resolution_reason`, including every family swap and why it occurred. If no independent family can complete, the lane is incomplete and the review cannot be clean.
 
-**Authorization and failure handling:** Current automated OpenRouter selection
-must produce `host_authority_unavailable` before payload preparation. Ordinary
-logical criteria then launch on Codex; family-independent roles continue only
-through eligible non-implementing families and become incomplete if none can
-run. Treat any approval-required or successful OpenRouter child result as an
-invalid authority transition. If a future
-broker-backed routed agent emits `### RUNNER FAILURE`, Phase 4.5 retries on
-Codex before applying guardrails. If it emits
-`### CODEX PARTIAL COVERAGE REQUIRED`, Phase 4.5 completes the same criteria
-locally for the named paths. Do not mark the run clean until required local
-work completes.
+**Authorization and failure handling:** Automated OpenRouter selection may run
+only through a validated `interim_operator_batch` outcome from Phase 3. A ready
+broker retires interim mode but remains `broker_transport_unavailable` until
+the runner has a broker-owned transport interface; never pass
+`authorization_mode: broker` to the API-key wrapper. When no executable
+authorization path exists, fail before payload preparation and apply Phase 4.5
+lane-aware resolution. Ordinary lanes may retry on Codex. The
+`security-auditor-codex-signoff` compatibility lane is the exception: every
+retry and partial/full-decline completion must use a non-implementing family,
+and exhaustion is `REVIEW INCOMPLETE`. Do not mark the run clean until required
+independent work completes.
 
 **Example prompt structure for each agent:**
 
@@ -890,16 +913,13 @@ sent: `security-auditor-openrouter` and `openrouter-bulk-analyst` still receive
 only the eligible sections their runner's disclosure boundary approves. That is
 a separate, unchanged mechanism.
 
-**Receipt:** every lane records `diff_scope` -- `full` for an unscoped lane, or
-`scoped(<n> files of <total>)` for a sliced one, where `<n>` is the file count
-in the slice and `<total>` is the file count in the whole diff. Write it into
-the per-lane receipt JSON that the `record-attempt` call below passes as
-`--authoritative-receipt`. The kernel's `record-attempt` flag set is closed and
-has no scoping flag, so do not invent one and do not hand-write rows into the
-receipt array. Record `full_diff_override` and `slice_status` in that same
-per-lane receipt. Do not overload `--fallback-reason`, which already carries
-executor-fallback semantics: a lane can both fall back to another executor and
-hit a slice failure, and those are two independent facts.
+**Receipt:** every lane passes `diff_scope` to the kernel -- `full` for an
+unscoped lane, or `scoped(<n> files of <total>)` for a sliced one, where `<n>`
+is the slice count and `<total>` is the whole-diff count. Pass it with
+`--diff-scope`, `--full-diff-override`, and `--slice-status` on the
+`record-attempt` call below; the kernel validates and binds all three directly
+to the lane receipt. Do not hand-write rows into the receipt array or overload
+`--fallback-reason`, which carries independent executor-fallback semantics.
 
 **Kill switch:** `DM_REVIEW_FULL_DIFF=1` disables scoping entirely. Every lane
 receives the full diff, exactly as dispatch behaved before scoping existed, and
@@ -935,9 +955,15 @@ terminal emission block.**
   --requested-executor <codex|openrouter|claude> \
   --attempted-executor <what actually ran> \
   --implemented-by <what produced the output> \
+  --matrix-snapshot-date <model-matrix snapshot_date> \
+  --rung-rationale <cost|context|strength|availability> \
+  --diff-scope <full|scoped(n files of total)> \
+  --full-diff-override <true|false> \
+  --slice-status <sliced|not_sliced|unclassified|slice_failed|full_diff_override> \
   [--fallback-reason <reason>] \
   # exactly one measurement source, in this order of preference:
-  [--openrouter-receipt <wrapper receipt path>] \
+  [--openrouter-receipt <wrapper receipt path> \
+   --request-envelope-sha256 <approved request envelope digest>] \
   [--agent-definition <path> --diff <path> [--boilerplate <path> ...] \
    --provider <p> --model <m>]
 ```
@@ -950,7 +976,12 @@ lane cannot go unmeasured by being forgotten.
 Supply the strongest evidence the lane actually has:
 
 - **OpenRouter lanes:** `--openrouter-receipt`, the wrapper's
-  `OPENROUTER_RECEIPT_FILE`. Real provider counters and cost.
+  `OPENROUTER_RECEIPT_FILE`. For an interim operator-batch attempt, also pass
+  `--request-envelope-sha256` from that attempt's preparation manifest. The
+  kernel requires exact equality with the digest in the wrapper receipt, so a
+  receipt from another call in the same run and lane cannot be crossed in. The
+  same wrapper receipt is one-use evidence and cannot be recorded for a retry;
+  every real retry must supply its own wrapper receipt.
 - **Codex and Claude lanes:** `--agent-definition` and `--diff` (plus any
   `--boilerplate`). Deterministic input bytes -- never a token count, never
   comparable to one.
@@ -988,11 +1019,11 @@ A **lane** is a review path with its own provider and absence mode: Codex, OpenR
 
 | Lane | Failure signal | Resolution |
 |------|----------------|------------|
-| OpenRouter | `### RUNNER FAILURE` in agent output | Retry on Codex (procedure below) |
-| OpenRouter full disclosure decline | `### RUNNER DECLINED -- SENSITIVE CONTENT` or `host_disclosure_declined` | Run the complete same logical lane on Codex; preserve the declined external attempt |
-| OpenRouter partial | `### CODEX PARTIAL COVERAGE REQUIRED` in agent output | Run the same agent criteria on Codex for the named locally held paths |
+| Independent-family security sign-off | any failure, full decline, partial-coverage marker, or no non-implementing family completes | Continue only through remaining non-implementing families; otherwise REVIEW INCOMPLETE; never substitute the implementing family |
+| OpenRouter (ordinary lane) | `### RUNNER FAILURE` in agent output | Retry on Codex (procedure below) |
+| OpenRouter full disclosure decline (ordinary lane) | `### RUNNER DECLINED -- SENSITIVE CONTENT` or `host_disclosure_declined` | Run the complete same logical lane on Codex; preserve the declined external attempt |
+| OpenRouter partial (ordinary lane) | `### CODEX PARTIAL COVERAGE REQUIRED` in agent output | Run the same agent criteria on Codex for the named locally held paths |
 | Second perspective | disabled by `DM_REVIEW_SECOND_PERSPECTIVE=0` or legacy `DM_REVIEW_CODEX_PERSPECTIVE=0`, or no independent family completes | Lane skipped -- **must** appear in Coverage Gaps, not omitted |
-| Independent-family security sign-off | no non-implementing family completes | REVIEW INCOMPLETE; never substitute the implementing family |
 | Evidence (PR threads) | `gh pr view` returns no comments/reviews | Phase 1b source fallback; report which source was used |
 | Codex-native coding agent | Agent errored or timed out | No Claude retry; apply guardrails immediately |
 
@@ -1004,19 +1035,19 @@ regardless of path.
 
 #### Phase 4.5 coding-lane exhaustion ask
 
-When a CODING lane finds its provider AND its declared fallback both unavailable, the lane is exhausted, not merely degraded. Do not silently record only the Coverage Gap: ask the operator first.
+When a CODING lane finds its provider AND its declared fallback both unavailable, the lane is exhausted, not merely degraded. Do not invent authority: ask the operator whether to wait or record the Coverage Gap and continue.
 
-This gate mirrors the pipeline's rail-exhaustion ask gate but is not identical to it, so the differences are stated rather than incorporated by reference. What transfers: the ask-time derivation of offerable rails, the definition of operator, the authorization receipt shape, the honest provider evidence, the non-overridable exclusions, and the consumption and expiry semantics -- the receipt is consumed by exactly one attempt on the named lane, is void once a permitted rail regains headroom (re-probe before honoring a stored one), and never survives a resume under either the same or a new run id. What differs: dm-review's park equivalent is record-the-gap-and-continue rather than stop, and dm-review has no kill-switch variable of its own by design -- `PIPELINE_EXHAUSTION_ASK` governs the pipeline's gate and never this one.
+This gate mirrors the pipeline's current rail-exhaustion boundary: caller-owned receipts authorize nothing because no trusted replay-resistant single-use issuer/consumer exists. Live rail status is display-only. What differs is that dm-review's park equivalent may be record-the-gap-and-continue for an ordinary standalone review; the pipeline's final full review remains REVIEW INCOMPLETE.
 
 The operator is the human at the top-level interactive session. An agent, subagent, hook, auto-answer configuration, or automated harness is not an operator and can never authorize a fallback lane; an ask answered by any of them is an unanswered ask. When the reviewing context cannot reach the operator, do not fabricate the exchange -- record the gap and continue, or escalate `human_help_required` through the caller that can reach the human.
 
-Derive the offerable rails AT ASK TIME from the active host's `harness-profile.json` roles, live `usage-probe.sh` headroom, and the interactive paths this session can reach. No offerable provider list is hardcoded anywhere in the ask path; where a probe parser is a TODO stub the ask reports `unknown` rather than guessing. Show that per-rail status, then offer three options: (a) wait until the named reset, (b) authorize one operator-selected fallback provider for THIS LANE in this review run only, or (c) record the Coverage Gap and continue -- the review equivalent of park.
+Collect live rail status at ask time and display it only to inform timing. Offer exactly: (a) wait until the named reset, or (c) record the Coverage Gap and continue -- the review equivalent of park. A context that cannot reach the operator returns `human_help_required` through a reaching caller or records the gap under the headless rule. No provider identifier is an executable answer.
 
-Option (b) appends an authorization receipt -- `{"authorization_id": "<stable unique id>", "phase": "review", "scope": "<run_id>", "lanes": ["<lane-id>"], "provider": "<exact rail identifier the operator selected>", "authorized_by": "operator", "ask_evidence_ref": "<question id plus selected option>", "occurred_at": "<timezone-aware ISO-8601>"}` -- before the fallback lane runs. `phase: "review"` keeps a review grant from ever matching an implementation grant, and a receipt without `ask_evidence_ref` is invalid and authorizes nothing. That lane's receipt leaves `requestedProvider` unchanged, records `attemptedProvider`, sets `implementedBy` to the provider that actually produced the findings, sets `fallback: true`, and sets `fallbackReason: rail_exhausted_user_authorized`.
+Option (b) and its former authorization receipt are future design only and non-executable. A caller-owned receipt, including one carrying `ask_evidence_ref`, never authorizes a fallback lane or `fallbackReason: rail_exhausted_user_authorized` today.
 
-Ask-then-default-park is the only headless behavior: a non-interactive session or an unanswered ask records the Coverage Gap and continues, and never assumes yes. The same exclusions are non-overridable -- the Workflow Authority broker gate is a security authorization boundary, not a capacity setting, so automated OpenRouter lanes stay fail-closed regardless of the operator's answer; `security-auditor-codex-signoff` still requires its own independent Codex sign-off and no authorization substitutes for it; no fallback-authorized review lane may share a provider family with the implementer of the code it reviews; and sensitive-path coverage is never satisfied by a fallback-authorized lane.
+Ask-then-default-gap is the only headless behavior for an ordinary standalone review: a non-interactive session or unanswered ask records the Coverage Gap and continues, and never assumes authority. The Workflow Authority broker gate, independent-family sign-off, and sensitive-path rules remain non-overridable.
 
-**When this review is the pipeline's final full dm-review, options (b) and (c) and the headless gap-and-continue default are all unavailable for coding-lane exhaustion.** The only outcome is REVIEW INCOMPLETE, and the branch waits, per the pipeline's non-overridable exclusion that the final full dm-review is never waived. The branch waits absolutely: no exhaustion authorization can execute the final review, because the whole value of deferring it is that a genuinely independent family reviews the code once its rail returns. A review carrying a coverage gap on a required lane never satisfies that gate; without this carve-out the review's continue-default would quietly cancel the pipeline's wait-default exactly when the review rails are exhausted. Phase 4.5's ordinary OpenRouter/Codex lane fallback is unaffected -- that is in-policy lane routing, not an exhaustion authorization.
+**When this review is the pipeline's final full dm-review, option (c) and the headless gap-and-continue default are unavailable for coding-lane exhaustion.** The only outcome is REVIEW INCOMPLETE and the branch waits. Ordinary in-policy OpenRouter/Codex routing remains unaffected; it is not exhaustion authorization.
 
 A skipped lane is a coverage gap, and a coverage gap is reported. "All agents completed" while a required independent-family lane never ran is a false clean.
 
@@ -1024,33 +1055,48 @@ Every lane receipt records `requestedProvider`, `attemptedProvider`, `implemente
 
 #### When the external-LLM retry triggers
 
-Applies to agents routed through OpenRouter. `RUNNER FAILURE` and a full
-disclosure/host decline trigger a full Codex retry under the same logical lane
-ID; `CODEX PARTIAL COVERAGE REQUIRED` triggers a bounded Codex completion for
-the named paths. Codex-native agents that fail are classified immediately.
+Applies to agents routed through OpenRouter. For ordinary lanes, `RUNNER
+FAILURE` and a full disclosure/host decline trigger a full Codex retry under the
+same logical lane ID; `CODEX PARTIAL COVERAGE REQUIRED` triggers bounded Codex
+completion. For `security-auditor-codex-signoff`, all three signals instead
+continue only to another non-implementing family; if none can complete every
+required byte, the review is incomplete. Codex-native agents that fail are
+classified immediately.
 
 #### Retry procedure
 
 For each agent whose output contains `### RUNNER FAILURE`,
 `### RUNNER DECLINED -- SENSITIVE CONTENT`, or `host_disclosure_declined`:
 
-1. **Re-dispatch using Phase 4 Branch B** on Codex with the same agent definition, diff, and project context.
-2. **Tag fallback findings** with `[codex-fallback/{agent-name}]` for
-   traceability. For a disclosure decline, record
+1. **Resolve the lane before its provider.** If the lane is
+   `security-auditor-codex-signoff`, re-dispatch only to the next eligible
+   non-implementing family; if none exists, record `REVIEW INCOMPLETE`. For
+   every ordinary lane, re-dispatch using Phase 4 Branch B on Codex with the
+   same agent definition, diff, and project context.
+2. **Tag fallback findings with the provider that actually reviewed them.**
+   Ordinary Codex fallback uses `[codex-fallback/{agent-name}]`; independent
+   sign-off fallback uses `[independent-family-fallback/{reviewer-family}/{agent-name}]`.
+   For a disclosure decline, record
    `fallbackReason: disclosure-declined` or
    `fallbackReason: host-disclosure-declined`; never translate it into an
    OpenRouter success or omit the attempted lane.
-3. **Timeout:** Use the same 120s ceiling from guardrails.md. The fallback is a single retry, not a retry loop.
+3. **Timeout and attempt bound:** Use the same 120s ceiling from guardrails.md.
+   Ordinary fallback is a single retry. Independent sign-off may try each
+   policy-derived non-implementing family at most once, in order, and then is
+   `REVIEW INCOMPLETE`; it never loops or retries the implementing family.
 
 For each agent whose output contains `### CODEX PARTIAL COVERAGE REQUIRED`:
 
-1. Parse only normalized path names from the marker; never recover or forward
+1. If the lane is `security-auditor-codex-signoff`, do not complete the held
+   paths on the implementing Codex family. Resolve a non-implementing family
+   that can review the complete required bytes or record `REVIEW INCOMPLETE`.
+2. For ordinary lanes, parse only normalized path names from the marker; never recover or forward
    the declined bytes through OpenRouter.
-2. Re-dispatch the same agent definition on Codex with the full local diff
+3. Re-dispatch the same agent definition on Codex with the full local diff
    sections for those paths and the same project context.
-3. Tag findings `[codex-sensitive-section/{agent-name}]` and record both the
+4. Tag findings `[codex-sensitive-section/{agent-name}]` and record both the
    OpenRouter eligible-content receipt and Codex held-content receipt.
-4. Treat failure of this local completion exactly like failure of the original
+5. Treat failure of this local completion exactly like failure of the original
    agent lane.
 
 #### If fallback also fails

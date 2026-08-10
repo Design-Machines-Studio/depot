@@ -2506,7 +2506,24 @@ def _append_receipts_locked(receipts_path, error_label, bodies, run_id,
             })
     else:
         receipts = []
+    source_receipt_digests = {
+        receipt.get("source_receipt_digest")
+        for receipt in receipts
+        if type(receipt) is dict and "source_receipt_digest" in receipt
+    }
     for body in bodies:
+        source_receipt_digest = body.get("source_receipt_digest")
+        if source_receipt_digest is not None:
+            if source_receipt_digest in source_receipt_digests:
+                sys.stderr.write(
+                    error_label + ": OpenRouter source receipt was already recorded\n"
+                )
+                raise InvalidSchemaError(
+                    ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+                        ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+                    },
+                )
+            source_receipt_digests.add(source_receipt_digest)
         receipt = {
             "run_id": run_id,
             "sequence": len(receipts),
@@ -2604,7 +2621,20 @@ def _attempt_context(args):
 def command_openrouter_usage(args):
     from .openrouter_usage import translate_openrouter_receipt
 
-    receipt = _load_json(args.receipt)
+    receipt = _validated_openrouter_receipt(args.receipt, "openrouter-usage")
+    return _emit_measurement_payload(
+        lambda: translate_openrouter_receipt(
+            receipt, context=_attempt_context(args),
+        ),
+        args.output,
+        "openrouter-usage",
+        args,
+    )
+
+
+def _validated_openrouter_receipt(path, error_label):
+    """Load the closed wrapper envelope shared by both usage entry points."""
+    receipt = _load_json(path)
     if not isinstance(receipt, dict):
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
     schema_version = receipt.get("schemaVersion")
@@ -2620,20 +2650,24 @@ def command_openrouter_usage(args):
     # inventing failures. Reject it and say so.
     if type(receipt.get("outcome")) is not str or not receipt.get("outcome"):
         sys.stderr.write(
-            "openrouter-usage: receipt has no 'outcome'; a schemaVersion-2 "
+            error_label + ": receipt has no 'outcome'; a schemaVersion-2 "
             "receipt must state its outcome\n"
         )
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
             ErrorDetailKey.REASON_CODE.value: "invalid_argument",
         })
-    return _emit_measurement_payload(
-        lambda: translate_openrouter_receipt(
-            receipt, context=_attempt_context(args),
-        ),
-        args.output,
-        "openrouter-usage",
-        args,
-    )
+    invocation_id = receipt.get("invocationId")
+    if (
+        type(invocation_id) is not str
+        or re.fullmatch(r"[0-9a-f]{64}", invocation_id) is None
+    ):
+        sys.stderr.write(
+            error_label + ": receipt has no valid wrapper invocation identity\n"
+        )
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        })
+    return receipt
 
 
 def command_lane_input_bytes(args):
@@ -2680,19 +2714,74 @@ def _attempt_usage_payload(args):
     from .openrouter_usage import translate_openrouter_receipt
 
     context = _attempt_context(args)
+    # The lane outcome is authoritative for routing identity. Earlier versions
+    # accepted a second independently supplied requested/attempted provider
+    # tuple for the paired usage row, so one atomic append could still contain
+    # two contradictory accounts of the same attempt. Retain the legacy flags
+    # only as equality assertions, then derive the usage identity once from the
+    # executor fields.
+    for supplied, executor, flag in (
+        (args.requested_provider, args.requested_executor, "--requested-provider"),
+        (args.attempted_provider, args.attempted_executor, "--attempted-provider"),
+    ):
+        if supplied is not None and supplied != executor:
+            raise ValueError(
+                flag + " must match its paired executor identity"
+            )
     if args.openrouter_receipt:
-        receipt = _load_json(args.openrouter_receipt)
-        if not isinstance(receipt, dict):
-            raise ValueError("openrouter receipt is not an object")
-        return translate_openrouter_receipt(receipt, context=context)
+        if args.attempted_executor != "openrouter" or args.implemented_by != "openrouter":
+            raise ValueError(
+                "an OpenRouter receipt requires attempted and implementing executor openrouter"
+            )
+        receipt = _validated_openrouter_receipt(
+            args.openrouter_receipt, "record-attempt",
+        )
+        authorization = receipt.get("authorization")
+        if isinstance(authorization, dict) and authorization.get("mode") == "interim-operator-batch":
+            request_digest = authorization.get("requestEnvelopeSha256")
+            expected_request_digest = args.request_envelope_sha256
+            if (
+                authorization.get("runId") != args.run_id
+                or authorization.get("laneId") != args.lane
+                or type(request_digest) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", request_digest) is None
+                or type(expected_request_digest) is not str
+                or re.fullmatch(r"[0-9a-f]{64}", expected_request_digest) is None
+                or request_digest != expected_request_digest
+            ):
+                raise ValueError(
+                    "interim OpenRouter receipt does not match the recorded run, lane, and request envelope"
+                )
+        elif args.request_envelope_sha256 is not None:
+            raise ValueError(
+                "--request-envelope-sha256 is valid only for an interim OpenRouter receipt"
+            )
+        payload = translate_openrouter_receipt(receipt, context=context)
+        # The request-envelope digest identifies authorized bytes, but retries
+        # may legitimately send identical bytes. Bind the provider observation
+        # itself so the same wrapper receipt cannot be appended as two attempts.
+        # Deduplication happens later under the receipt-stream lock.
+        payload["source_receipt_digest"] = _document_digest(receipt)
+        payload.update({
+            "requested_provider": args.requested_executor,
+            "attempted_provider": args.attempted_executor,
+            "implemented_by": args.implemented_by,
+        })
+        return payload
 
     attribution = ProviderAttribution(
-        requested_provider=args.requested_provider,
-        attempted_provider=args.attempted_provider,
+        requested_provider=args.requested_executor,
+        attempted_provider=args.attempted_executor,
         implemented_by=args.implemented_by,
         provider=args.provider,
         model=args.model,
     )
+    if bool(args.agent_definition) != bool(args.diff):
+        missing = "--diff" if args.agent_definition else "--agent-definition"
+        raise ValueError(
+            "--agent-definition and --diff must be supplied together; missing "
+            + missing
+        )
     if args.agent_definition and args.diff:
         return measure_lane_inputs(
             args.agent_definition, args.diff, args.boilerplate,
@@ -2722,6 +2811,57 @@ def command_record_attempt(args):
     error_label = "record-attempt"
     _validate_append_envelope(args, error_label)
     _reject_symlinked_receipt_stream(args.receipts, error_label)
+    if re.fullmatch(r"[0-9]{4}-[0-9]{2}-[0-9]{2}", args.matrix_snapshot_date) is None:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        })
+    try:
+        datetime.strptime(args.matrix_snapshot_date, "%Y-%m-%d")
+    except ValueError:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        }) from None
+    scope_fields = (args.diff_scope, args.full_diff_override, args.slice_status)
+    if args.stage == "review_dispatch":
+        if any(value is None for value in scope_fields):
+            raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+                ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+            })
+        scoped = re.fullmatch(
+            r"scoped\(([1-9][0-9]*) files of ([1-9][0-9]*)\)",
+            args.diff_scope,
+        )
+        if args.diff_scope != "full" and scoped is None:
+            raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+                ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+            })
+        if scoped is not None and int(scoped.group(1)) > int(scoped.group(2)):
+            raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+                ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+            })
+        coherent = (
+            scoped is not None
+            and args.full_diff_override == "false"
+            and args.slice_status == "sliced"
+        ) or (
+            args.diff_scope == "full"
+            and (
+                args.full_diff_override == "true"
+                and args.slice_status == "full_diff_override"
+                or args.full_diff_override == "false"
+                and args.slice_status in {
+                    "not_sliced", "unclassified", "slice_failed",
+                }
+            )
+        )
+        if not coherent:
+            raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+                ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+            })
+    elif any(value is not None for value in scope_fields):
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "invalid_argument",
+        })
     try:
         usage = _attempt_usage_payload(args)
     except ValueError as error:
@@ -2742,7 +2882,15 @@ def command_record_attempt(args):
         "requested_executor": args.requested_executor,
         "attempted_executor": args.attempted_executor,
         "implemented_by": args.implemented_by,
+        "matrix_snapshot_date": args.matrix_snapshot_date,
+        "rung_rationale": args.rung_rationale,
     }
+    if args.stage == "review_dispatch":
+        lane_receipt.update({
+            "diff_scope": args.diff_scope,
+            "full_diff_override": args.full_diff_override == "true",
+            "slice_status": args.slice_status,
+        })
     if args.fallback_reason:
         lane_receipt["fallback_reason"] = args.fallback_reason
     usage_receipt = {
@@ -4131,15 +4279,33 @@ def parser():
     record_attempt.add_argument("--requested-executor", required=True)
     record_attempt.add_argument("--attempted-executor", required=True)
     record_attempt.add_argument("--implemented-by", required=True)
+    record_attempt.add_argument("--matrix-snapshot-date", required=True)
+    record_attempt.add_argument(
+        "--rung-rationale", required=True,
+        choices=("cost", "context", "strength", "availability"),
+    )
+    record_attempt.add_argument("--diff-scope", default=None)
+    record_attempt.add_argument(
+        "--full-diff-override", choices=("true", "false"), default=None,
+    )
+    record_attempt.add_argument(
+        "--slice-status",
+        choices=(
+            "sliced", "not_sliced", "unclassified", "slice_failed",
+            "full_diff_override",
+        ),
+        default=None,
+    )
     record_attempt.add_argument("--fallback-reason", default=None)
     # Measurement evidence. An OpenRouter receipt wins; otherwise the lane input
     # files are measured; otherwise the row is recorded `attempt_unmeasured`.
     record_attempt.add_argument("--openrouter-receipt", default=None)
+    record_attempt.add_argument("--request-envelope-sha256", default=None)
     record_attempt.add_argument("--agent-definition", default=None)
     record_attempt.add_argument("--diff", default=None)
     record_attempt.add_argument("--boilerplate", action="append", default=[])
-    record_attempt.add_argument("--requested-provider", default="not_reported")
-    record_attempt.add_argument("--attempted-provider", default="not_reported")
+    record_attempt.add_argument("--requested-provider", default=None)
+    record_attempt.add_argument("--attempted-provider", default=None)
     record_attempt.add_argument("--provider", default="not_reported")
     record_attempt.add_argument("--model", default="not_reported")
     record_attempt.set_defaults(handler=command_record_attempt)

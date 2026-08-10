@@ -2,7 +2,7 @@
   "_comment": "Single provider-routing policy shared by promptcraft, execution-orchestrator, cascade-dispatch, dm-review, assess, and research. Keep task-fit decisions here so provider routing does not drift across plugin docs.",
   "subscriptionFirst": {
     "invariant": "subscription rails first while live headroom clears the threshold for BOTH the weekly cap and the 5-hour window; API rails next by quality-per-price from the model matrix; never start planned multi-chunk work that projected spend would push below threshold mid-run",
-    "headroomSource": "usage-probe.sh live probe; unknown headroom is treated as at-threshold (conservative), never as available",
+    "headroomSource": "usage-probe.sh live probe; a subscription rail is available only when its record is well-formed, state is exactly ok, and numeric remaining_pct is above the threshold. Unknown, missing, malformed, at-threshold, limited, and low subscription readings are unavailable. OpenRouter is an auto-reloading API balance rail: it is available only when state is exactly ok and balance_usd is a finite non-negative number; it has no legacy $5 minimum.",
     "thresholdRef": "model-cascade.json policy.headroom_threshold_pct"
   },
   "operatorProfile": {
@@ -186,10 +186,20 @@
       "rationale": "Kimi K3 analyzes only content-boundary-eligible sections; full or partial declines are completed under this same logical lane on Codex."
     },
     "security-auditor-codex-signoff": {
-      "provider": "codex",
+      "provider": "implementer-aware-independent-family",
+      "preferredProviderWhenIndependent": "codex",
+      "codexImplementerProvider": "openrouter",
+      "codexImplementerModel": "moonshotai/kimi-k3",
+      "codexImplementerFallbackModel": "z-ai/glm-5.2",
       "required": true,
       "inputScope": "full-diff",
-      "rationale": "Independent full-diff security completion is mandatory and cannot be satisfied by the external security lens."
+      "reviewerFamilyConstraint": "must-differ-from-implementer-family",
+      "failureResolution": {
+        "runner_failure": "remaining-non-implementing-family-or-review-incomplete",
+        "full_disclosure_decline": "remaining-non-implementing-family-or-review-incomplete",
+        "partial_coverage": "remaining-non-implementing-family-or-review-incomplete"
+      },
+      "rationale": "Independent full-diff security completion is mandatory. The stable lane id does not select Codex when Codex implemented the diff."
     },
     "architecture-reviewer": {
       "provider": "codex",
@@ -220,19 +230,20 @@
     }
   },
   "exhaustionFallback": {
-    "_comment": "Fires when every rail permitted for a chunk is exhausted or gated (cascade RC 76). Rail availability is PER-OPERATOR and time-varying -- one developer has Claude headroom plus OpenRouter credits while Codex is capped, the next has no Codex at all, and subscriptions change. That is why no offerable provider list is hardcoded here. PIPELINE_EXHAUSTION_ASK=0 restores the old hard block for headless CI; it is a kill switch on the ASK, never an enabler of silent fallback.",
+    "_comment": "Fires when every rail permitted for a chunk is exhausted or gated (cascade RC 76). The current ask can wait or park only. Executable fallback authorization is unavailable until trusted host authority can issue and consume a replay-resistant single-use capability. PIPELINE_EXHAUSTION_ASK=0 restores the hard block for headless CI.",
     "mode": "ask",
     "headlessDefault": "park",
-    "offerableDerivation": "at ask time, from the active host's harness-profile roles + live usage-probe headroom + interactive paths available in the current session (e.g. claude_native when the session itself is a Claude host with headroom; openrouter_interactive_exact_digest when credits and the wrapper are reachable)",
+    "offerableDerivation": "none until trusted host authority exists; live rail status is still shown to inform wait versus park",
     "neverOfferable": [
       "openrouter_automated_lanes",
-      "any provider for sensitive-path chunks"
+      "any provider for sensitive-path chunks",
+      "every executable fallback provider until trusted single-use host authority exists"
     ],
     "operatorOverride": "optional file OUTSIDE the workspace may narrow the derived list (per-developer subscriptions differ). It is applied LAST in the ask-time derivation and can only REMOVE options: an entry it names that the derivation did not find is ignored rather than added, and nothing in neverOfferable is ever reachable through it. Its annotations are never rendered into the ask. It must not live in the workspace, because a prior chunk's own output could rewrite an in-workspace file to strip every option but the orchestrator itself.",
     "failClosed": "a missing routing-policy.json, a missing or malformed exhaustionFallback, or any mode other than ask restores the old hard block; no configuration read failure yields a path to fallback",
-    "authorization": "explicit per-run, per-chunk receipt carrying authorization_id, phase (execute|review), operator-selected exact rail identifier, and ask_evidence_ref binding it to a real ask exchange; consumed by one dispatch attempt and void once a permitted rail regains headroom",
+    "authorization": "future design only; caller-owned receipts authorize nothing until a trusted host issuer binds and consumes a replay-resistant capability for the ask, repository, run, chunk, provider, phase, and attempt",
     "liveStatusRequired": "the ask shows the derived status per rail (capped-until / available / unknown) so the operator decides from live facts; where usage-probe parsers are TODO stubs the ask says unknown rather than guessing",
-    "rationale": "The provider boundary forbids SILENT fallback; it must not forbid ASKING THE OWNER. Every fallback execution traces to an explicit operator authorization receipt and carries fallback: true with fallbackReason rail_exhausted_user_authorized."
+    "rationale": "The provider boundary forbids silent or caller-authorized fallback. The current ask supports wait or park; future executable fallback requires trusted host authority."
   },
   "invariants": {
     "crossProviderVerification": true,
@@ -281,32 +292,34 @@
   },
   "authorization": {
     "schemaVersion": 1,
-    "_comment": "How an automated OpenRouter lane becomes authorized. Resolved, never assumed. Ordered, fail-closed: broker-ready, then the interim operator batch, then unavailable. The interim rung never sits above broker authority. Broker presence has THREE states: ready (broker mode), present_not_ready (unknown -- resolves to unavailable, interim withheld), and absent (the only state where interim is reachable).",
-    "resolutionOrder": ["broker", "interim_operator_batch", "unavailable"],
+    "_comment": "How an automated OpenRouter lane becomes authorized. Resolved, never assumed. Ordered, fail-closed: broker-ready retires interim but remains unavailable until broker-owned transport lands; then the interim operator batch is considered only when the broker is absent; otherwise unavailable. Broker presence has THREE states: ready (broker_transport_unavailable), present_not_ready (unknown -- unavailable), and absent (the only state where interim is reachable).",
+    "resolutionOrder": ["broker_ready_unavailable", "interim_operator_batch", "unavailable"],
     "brokerStates": {
-      "ready": "probe parsed with jq -e '.status == \"ready\"' succeeds -- broker mode",
+      "ready": "probe parsed with jq -e '.status == \"ready\"' succeeds -- interim retired, automated dispatch unavailable with reason broker_transport_unavailable until broker-owned transport lands",
       "present_not_ready": "client installed but probe errors, is unparseable, or does not report ready -- unknown state, resolves to unavailable with reason broker_present_not_ready; interim mode is withheld",
       "absent": "client not installed or not executable -- the only state in which interim_operator_batch is reachable"
     },
     "modes": {
       "broker": {
-        "status": "target",
+        "status": "future-unimplemented",
         "probe": "/usr/local/bin/workflow-authority probe --format json reports status ready, parsed with jq -e '.status == \"ready\"' and never a substring match",
-        "authority": "independent broker owns run-bound authorization, credential custody, and transport",
-        "permanent": true
+        "authority": "future independent broker-owned run-bound authorization, credential custody, and transport",
+        "currentResolution": "unavailable",
+        "currentReason": "broker_transport_unavailable",
+        "permanentWhenImplemented": true
       },
       "interim_operator_batch": {
         "status": "interim",
         "_comment": "Deliberate, owner-authorized loosening of approval GRANULARITY -- run-batch instead of per-payload -- not of approval EXISTENCE. Introduced 2026-08-08 because the Linux broker host is unavailable for about two weeks and per-payload interactive approval is too much friction for automated lanes.",
         "authorizationFile": "plans/<feature>/openrouter-batch-authorization.json",
-        "schemaFields": ["schema_version", "authorization_mode", "run_id", "operator", "created_at", "expires_at", "payload_digests", "scope_note", "program_sunset"],
+        "schemaFields": ["schema_version", "authorization_mode", "run_id", "operator", "created_at", "expires_at", "request_envelope_digests", "lanes", "scope_note", "program_sunset"],
         "maxLifetimeSeconds": 86400,
         "programSunset": "2026-09-07",
         "programSunsetRationale": "About four weeks. The darwin broker milestone is scheduled inside this window. After this date batch files fail validation and extending the program requires a reviewed commit that re-issues the sunset in the schema.",
-        "entryRequirement": "interactive operator confirmation on the controlling terminal showing lane list, byte totals, and digest count; no environment variable substitutes for the interactive confirmation",
+        "entryRequirement": "interactive operator confirmation on the controlling terminal showing each lane's model candidates, provider routing, per-role byte totals, exact digest, and private inspection path; retained request bytes are 0600 and removed after the batch is persisted; no environment variable substitutes for the interactive confirmation",
         "artifactAuthentication": "none",
         "artifactHonesty": "The batch file is PROCEDURAL and UNAUTHENTICATED -- bare JSON with no signature, MAC, or user-presence binding. Nothing proves batch-approve or its /dev/tty confirmation ever ran, and a same-user process can hand-write an equivalent file carrying its own digests and the known run id. The confirmation is a control against accidental and automated entry by this tooling, NOT a technical barrier against same-user forgery. Closing that gap is what the out-of-process Workflow Authority Broker does, and it is the primary reason this mode carries a sunset. Do not substitute Keychain ACLs or a shared-secret MAC: same-user enforcement inside a user-readable script is theatre.",
-        "transmissionBinding": "openrouter-wrapper.sh recomputes the canonical exact-ordered-content digest over ALL message contents of the request body it is about to POST -- system, developer, assistant, and user turns in transmission order -- and refuses (exit 2) unless that digest is already a member of the validated batch file's payload_digests. Non-string (structured or array-typed) message content is refused rather than hashed, because it has no framing that agrees with payload-authorization.sh snapshot. The check is at the point of disclosure, over the content bytes actually sent, and does not depend on the lane having run verify-batch first. The hashed bytes and the transmitted bytes are the same bytes by construction: the private copy of the request body is opened on a dedicated file descriptor, its path is unlinked immediately so no name resolves to it, the contents are read once through that descriptor into process memory, the digest is framed over per-message content extracted from that in-memory copy without touching disk, and curl is fed the same in-memory copy on stdin (--data-binary @-) rather than any path. No path is reopened between the digest and the POST. The binding covers ordered message CONTENT bytes only: model slug, fallback slug, provider order, and sort are caller-selected routing metadata outside the approved set and cannot be covered without a batch schema change. Routing metadata is a weak content-exfiltration channel (short validated slugs, constrained by routing policy and provider-order validation) but a real destination-selection channel.",
+        "transmissionBinding": "openrouter-wrapper.sh hashes the exact request envelope it is about to POST and refuses (exit 2) unless the validated schema-v2 batch file's durable lanes mapping binds that lane id to the same digest and model candidates. The bound bytes include model or fallback models, provider routing and sort, streaming options, roles, and ordered message content. The check is at the point of disclosure and does not depend on the lane having run verify-batch first. The private request copy is opened on a dedicated file descriptor, its path is unlinked, its contents are read once into process memory, and curl receives those same in-memory bytes on stdin (--data-binary @-). No path is reopened between digest and POST.",
         "sunsetPinning": "All three enforcement layers (payload-authorization.sh PROGRAM_SUNSET, openrouter-wrapper.sh INTERIM_PROGRAM_SUNSET, the dm-review review skill's OPENROUTER_INTERIM_PROGRAM_SUNSET) compare program_sunset against this release constant; a file-asserted future date is not accepted on its own.",
         "retiredWhen": "broker probe on the host reports ready",
         "withheldWhen": "broker client is installed but does not probe ready (broker_present_not_ready)",
@@ -386,15 +399,15 @@
       }
     },
     "reviewControls": {
-      "highConsequenceSecuritySignoff": "independent-codex-required",
+      "highConsequenceSecuritySignoff": "independent-non-implementing-family-required",
       "modelNationalityEmbargo": false,
       "vendorJurisdictionEmbargo": false,
       "pathNameEmbargo": false,
-      "rationale": "Security-related implementation may be delegated after content and output validation; consequential security completion remains independently reviewed by Codex."
+      "rationale": "Security-related implementation may be delegated after content and output validation; consequential security completion requires a reviewer family different from the implementer."
     },
     "positiveRouting": {
       "intendedLanes": [
-        "security analysis with independent Codex sign-off",
+        "security analysis with independent non-implementing-family sign-off",
         "style / formatting",
         "duplication",
         "pattern-recognition",

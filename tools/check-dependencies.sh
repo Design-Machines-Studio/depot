@@ -262,9 +262,10 @@ elif kernel.get("pluginDependencies", {}) or kernel.get("optionalPluginDependenc
     errors.append("workflow-kernel must remain a leaf with no dependencies")
 
 consumer_floors = {
-    "pipeline": ">=0.13.0",
-    "dm-review": ">=0.13.0",
+    "pipeline": ">=0.13.6",
+    "dm-review": ">=0.13.6",
 }
+
 for consumer, expected in consumer_floors.items():
     manifest = manifests.get(consumer)
     actual = None if manifest is None else manifest.get("pluginDependencies", {}).get("workflow-kernel")
@@ -273,14 +274,30 @@ for consumer, expected in consumer_floors.items():
 
 pipeline = manifests.get("pipeline")
 dm_review_floor = None if pipeline is None else pipeline.get("pluginDependencies", {}).get("dm-review")
-if dm_review_floor != ">=1.48.0":
-    errors.append("pipeline must require dm-review >=1.48.0")
+if dm_review_floor != ">=1.58.5":
+    errors.append("pipeline must require dm-review >=1.58.5")
 
 if errors:
     for error in errors:
         print(f"  CONTRACT: {error}")
     sys.exit(1)
 PYEOF
+}
+
+# Keep the checked-in operator-facing graph bound to the same manifest parser
+# as validation. A dependency floor can be executable-correct while this
+# generated document remains stale unless the ordinary release gate compares
+# the two representations.
+check_dependency_graph_freshness() {
+  local checked_in="$REPO_ROOT/docs/dependency-graph.md"
+  local generated
+  generated="$(mktemp "${TMPDIR:-/tmp}/depot-dependency-graph.XXXXXX")"
+  generate_graph > "$generated"
+  if ! cmp -s "$generated" "$checked_in"; then
+    rm -f "$generated"
+    return 1
+  fi
+  rm -f "$generated"
 }
 
 # --------------------------------------------------------------------------
@@ -424,6 +441,13 @@ print('yes' if has else 'no')
     any_failed=1
   else
     printf "  ${GREEN}OK${RESET}    workflow-kernel is a leaf required by pipeline and dm-review\n"
+  fi
+
+  if ! check_dependency_graph_freshness; then
+    printf "  ${RED}FAIL${RESET}  docs/dependency-graph.md is stale; regenerate with ./tools/check-dependencies.sh --graph\n"
+    any_failed=1
+  else
+    printf "  ${GREEN}OK${RESET}    checked-in dependency graph is current\n"
   fi
 
   printf "\n${BOLD}%d plugins with dependencies checked${RESET}\n" "$checked"

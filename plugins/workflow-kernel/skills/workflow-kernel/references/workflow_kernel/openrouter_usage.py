@@ -36,7 +36,9 @@ Honesty rules:
   receipt rather than from trusted launch context, so a later audit can
   tell attributed identity from asserted identity.  Lane, chunk, node,
   attempt, and host never come from the receipt -- the caller supplies
-  them -- so lane attribution cannot be forged by editing a receipt.
+  them. Atomic ``record-attempt`` additionally requires an interim receipt's
+  wrapper-recorded run, lane, and request-envelope digest to match the lane
+  being appended; standalone translation remains observation-only.
 * Observation only -- nothing here gates, waives, selects, or alters any
   lane, phase, or review outcome.
 """

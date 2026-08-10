@@ -24,6 +24,7 @@ REVIEW_STAGES = frozenset({
     "repository_cleanup", "review_terminal",
     "finding_contribution", "finding_contribution_coverage",
     "attempt_usage", "browser_recovery",
+    "review_iteration",
 })
 REVIEW_MODES = frozenset({"full", "quick", "visual", "loop"})
 _CONTRIBUTION_DECISION_FIELDS = frozenset({

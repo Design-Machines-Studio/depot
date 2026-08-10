@@ -19,7 +19,7 @@ from pathlib import Path
 
 
 KERNEL_VERSION_FLOOR = (0, 5, 0)
-KERNEL_VERSION = (0, 13, 1)
+KERNEL_VERSION = (0, 13, 6)
 _KERNEL_SEMVER = re.compile(
     r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 )

@@ -15,6 +15,7 @@ EXEC_RUNNER="$REPO_ROOT/plugins/pipeline/references/openrouter-exec.sh"
 BOUNDARY="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-boundary.sh"
 WRAPPER="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 AUTHORIZATION="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
+RUNNER_BATCH_AUTHORIZATION="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/runner-batch-authorization.sh"
 
 FIXTURE_ROOT="$(mktemp -d)"
 trap 'rm -rf "$FIXTURE_ROOT"' EXIT
@@ -40,6 +41,58 @@ expect_rc() {
     cat "$FIXTURE_ROOT/cmd.err" >&2
     exit 1
   fi
+}
+
+run_pty_with_reply() {
+  local reply="$1"
+  local command_text=""
+  shift
+  command -v expect >/dev/null 2>&1 || {
+    echo 'PTY approval fixture requires expect' >&2
+    return 125
+  }
+  printf -v command_text '%s\034' "$@"
+  PTY_REPLY="$reply" PTY_COMMAND="$command_text" expect -c '
+    set timeout 15
+    set command [lrange [split $env(PTY_COMMAND) "\034"] 0 end-1]
+    spawn -noecho {*}$command
+    expect {
+      "Type exactly" {
+        send -- "$env(PTY_REPLY)\r"
+        exp_continue
+      }
+      eof {}
+      timeout { exit 124 }
+    }
+    set result [wait]
+    exit [lindex $result 3]
+  '
+}
+
+run_pty_and_interrupt() {
+  local command_text=""
+  command -v expect >/dev/null 2>&1 || return 125
+  printf -v command_text '%s\034' "$@"
+  PTY_COMMAND="$command_text" expect -c '
+    set timeout 15
+    set command [lrange [split $env(PTY_COMMAND) "\034"] 0 end-1]
+    spawn -noecho {*}$command
+    expect {
+      "Type exactly" {
+        set children [exec /usr/bin/pgrep -P [exp_pid]]
+        set child [lindex $children end]
+        exec /bin/kill -HUP $child
+        catch {exec /bin/kill -TERM $child}
+      }
+      timeout { exit 124 }
+    }
+    expect {
+      eof {}
+      timeout { exit 124 }
+    }
+    wait
+    exit 130
+  '
 }
 
 expect_rc 2 'native-vendor-origin invariant' 'mixed-case wrapper origin' \
@@ -521,16 +574,12 @@ chmod +x "$AUTH_ROOT/workflow-authority"
 printf '%s\n' workflow-authority-fixture-v1 > "$AUTH_ROOT/.workflow-authority-fixture"
 printf '%s\n' signed-success > "$AUTH_ROOT/case"
 
-# Pin the usage probe. cascade-dispatch.sh skips any rail whose probe reports
-# state "low" or "limited", so an unpinned probe couples this offline policy
-# gate to the live OpenRouter account balance: once real credit runs low the
-# terminal-outcome cases below fall through to the native rung and exit 64
-# instead of 75, failing validate-composition.sh on every machine regardless of
-# the code. validate-openrouter-cascade.sh pins --probe-file for the same
-# reason; PROBE_CMD covers every cascade invocation here without editing each.
+# Pin the usage probe so this offline policy gate does not depend on live
+# account state. Use the production OpenRouter API-balance shape; this account
+# auto-reloads, so a valid non-negative balance has no legacy $5 cutoff.
 cat > "$AUTH_ROOT/usage-probe.sh" <<'PROBE_EOF'
 #!/bin/sh
-printf '%s\n' '{"codex":{"state":"ok","remaining_pct":100},"claude":{"state":"ok","remaining_pct":100},"openrouter":{"state":"ok","remaining_pct":100}}'
+printf '%s\n' '{"codex":{"state":"ok","remaining_pct":100},"claude":{"state":"ok","remaining_pct":100},"openrouter":{"state":"ok","balance_usd":0.01}}'
 PROBE_EOF
 chmod +x "$AUTH_ROOT/usage-probe.sh"
 export PROBE_CMD="$AUTH_ROOT/usage-probe.sh"
@@ -616,6 +665,19 @@ for bad_case in forged-signature malformed-frame missing-result; do
     OPENROUTER_EXEC_ALLOWED_PATHS=auth/session.go \
     "$EXEC_RUNNER" < "$FIXTURE_ROOT/expected.prompt"
 done
+grep -Fq 'security-auditor-codex-signoff` retries only on a non-implementing family' "$RUNNER"
+grep -Fq 'continues only to a non-implementing family or `REVIEW INCOMPLETE`' "$RUNNER"
+grep -Fq 'must use a non-implementing family for every held path' "$RUNNER"
+grep -Fq 'Resolve the lane before its provider.' "$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
+grep -Fq '[independent-family-fallback/{reviewer-family}/{agent-name}]' \
+  "$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
+grep -Fq 'Never same-family fallback completion' \
+  "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md"
+jq -e '
+  .agentType["security-auditor-codex-signoff"].failureResolution
+  | [.runner_failure, .full_disclosure_decline, .partial_coverage]
+  | all(. == "remaining-non-implementing-family-or-review-incomplete")
+' "$REPO_ROOT/plugins/pipeline/references/routing-policy.json" >/dev/null
 for bad_case in wrong-scope wrong-response-length wrong-response-digest unknown-outcome wrong-body wrong-model-order wrong-selected-model; do
   printf '%s\n' "$bad_case" > "$AUTH_ROOT/case"
   expect_rc 2 'broker result scope mismatch' "$bad_case rejected" \
@@ -788,11 +850,25 @@ grep -Fq 'RUNNER DECLINED -- SENSITIVE CONTENT' "$RUNNER"
 grep -Fq '### CODEX PARTIAL COVERAGE REQUIRED' "$RUNNER"
 grep -Fq 'OpenRouter full disclosure decline' "$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
 grep -Fq 'fallbackReason: host-disclosure-declined' "$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
-grep -Fq 'independent Codex security' "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/SKILL.md"
+grep -Fq 'independent non-implementing-family security' "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/SKILL.md"
+for stale in \
+  'Codex sign-off remains mandatory' \
+  'requires a Codex security sign-off' \
+  'independent full-diff Codex sign-off' \
+  'available through a ready Workflow'; do
+  if rg -Fq -- "$stale" \
+    "$REPO_ROOT/plugins/openrouter" \
+    "$REPO_ROOT/plugins/dm-review/commands/dm-review-quick.md" \
+    "$REPO_ROOT/plugins/dm-review/skills/dm-review-quick/SKILL.md" \
+    "$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"; then
+    echo "stale security/broker contract survived: $stale" >&2
+    exit 1
+  fi
+done
 grep -Fq 'mcp-control-plane.md' "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/SKILL.md"
 grep -Fq 'OPENROUTER_RECEIPT_FILE' "$WRAPPER"
 grep -Fq 'payload-authorization.sh' "$RUNNER"
-grep -Fq 'AUTHORIZATION_MODE="${OPENROUTER_PAYLOAD_AUTHORIZATION:-exact-digest}"' "$RUNNER"
+grep -Fq 'AUTHORIZATION_MODE="${authorization_mode:-${OPENROUTER_PAYLOAD_AUTHORIZATION:-exact-digest}}"' "$RUNNER"
 grep -Fq 'case "$target_model_origin" in' "$RUNNER"
 grep -Fq 'case "$fallback_model_origin" in' "$RUNNER"
 grep -Fq 'anthropic/*)' "$RUNNER"
@@ -823,7 +899,7 @@ fi
 
 
 # --- Interim operator-batch: transmission-point digest binding --------------
-# Proves the WRAPPER refuses bytes that are not in payload_digests, at the point
+# Proves the WRAPPER refuses bytes absent from the approved lane/model mapping at the point
 # of disclosure, without any verify-batch step having run. The batch file is
 # hand-written on purpose: that is exactly the unauthenticated, same-user
 # artifact the threat model now documents, and it is the reason the wrapper
@@ -849,6 +925,7 @@ REAL_PROGRAM_SUNSET='2026-09-07'
 FIXED_PROGRAM_SUNSET='2099-01-01'
 MISMATCHED_PROGRAM_SUNSET='2098-01-01'
 CLOCK_WRAPPER="$FIXTURE_ROOT/wrapper-fixed-sunset.sh"
+CLOCK_AUTHORIZATION="$FIXTURE_ROOT/payload-authorization.sh"
 grep -Fq "INTERIM_PROGRAM_SUNSET=\"$REAL_PROGRAM_SUNSET\"" "$WRAPPER" || {
   echo 'fixed-sunset fixture: shipped wrapper no longer pins the expected sunset constant' >&2
   exit 1
@@ -856,11 +933,469 @@ grep -Fq "INTERIM_PROGRAM_SUNSET=\"$REAL_PROGRAM_SUNSET\"" "$WRAPPER" || {
 sed -e "s|^INTERIM_PROGRAM_SUNSET=.*|INTERIM_PROGRAM_SUNSET=\"$FIXED_PROGRAM_SUNSET\"|" \
   "$WRAPPER" > "$CLOCK_WRAPPER"
 chmod 755 "$CLOCK_WRAPPER"
+sed -e "s|^PROGRAM_SUNSET=.*|PROGRAM_SUNSET=\"$FIXED_PROGRAM_SUNSET\"|" \
+  "$AUTHORIZATION" > "$CLOCK_AUTHORIZATION"
+chmod 755 "$CLOCK_AUTHORIZATION"
+cp "$(dirname "$WRAPPER")/model-matrix.json" "$FIXTURE_ROOT/model-matrix.json"
 grep -Fq "INTERIM_PROGRAM_SUNSET=\"$FIXED_PROGRAM_SUNSET\"" "$CLOCK_WRAPPER" || {
   echo 'fixed-sunset fixture: could not repoint the wrapper sunset constant' >&2
   exit 1
 }
 if true; then
+  # Execute the shipped runner control flow with deterministic mocks. These
+  # fixtures fail if its renderer, snapshot, artifact, digest, or redispatch
+  # verification checks are removed; no provider transport exists in the mocks.
+  printf '%s' 'mock system' > "$FIXTURE_ROOT/runner.system"
+  printf '%s' 'mock user' > "$FIXTURE_ROOT/runner.user"
+  MOCK_RENDER_OK="$FIXTURE_ROOT/mock-render-ok.sh"
+  MOCK_RENDER_DRIFT="$FIXTURE_ROOT/mock-render-drift.sh"
+  MOCK_RENDER_FAIL="$FIXTURE_ROOT/mock-render-fail.sh"
+  MOCK_AUTH_OK="$FIXTURE_ROOT/mock-auth-ok.sh"
+  MOCK_AUTH_FAIL="$FIXTURE_ROOT/mock-auth-fail.sh"
+  cat > "$MOCK_RENDER_OK" <<'SH'
+#!/bin/sh
+printf '%s' '{"model":"mock/model","provider":{},"messages":[{"role":"user","content":"mock"}]}' > "$OPENROUTER_REQUEST_ENVELOPE_OUTPUT"
+SH
+  cat > "$MOCK_RENDER_FAIL" <<'SH'
+#!/bin/sh
+exit 7
+SH
+  cat > "$MOCK_RENDER_DRIFT" <<'SH'
+#!/bin/sh
+printf '%s' '{"model":"mock/model","messages":[{"role":"user","content":"drift"}]}' > "$OPENROUTER_REQUEST_ENVELOPE_OUTPUT"
+SH
+  cat > "$MOCK_AUTH_OK" <<'SH'
+#!/bin/sh
+mode="$1"; shift
+case "$mode" in
+  snapshot-envelope)
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --output|--manifest) output="$2"; shift 2 ;;
+        --request-file) request="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    digest="$(shasum -a 256 "$request" | awk '{print $1}')"
+    inspection="${output}.request.json"
+    cp "$request" "$inspection"
+    chmod 600 "$inspection"
+    printf '{"requestEnvelopeSha256":"%s","inspectionPath":"%s"}\n' \
+      "$digest" "$inspection" > "$output"
+    printf '%s\n' "$digest"
+    ;;
+  verify-batch)
+    batch="" manifest="" request=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in
+        --batch-file) batch="$2"; shift 2 ;;
+        --manifest) manifest="$2"; shift 2 ;;
+        --request-file) request="$2"; shift 2 ;;
+        *) shift ;;
+      esac
+    done
+    recorded="$(jq -r '.requestEnvelopeSha256 // empty' "$manifest")"
+    actual="$(shasum -a 256 "$request" | awk '{print $1}')"
+    [ -n "$recorded" ] && [ "$recorded" = "$actual" ] || exit 8
+    if [ -n "${EXPECTED_ORIGINAL_BATCH:-}" ]; then
+      [ "$batch" != "$EXPECTED_ORIGINAL_BATCH" ] || exit 9
+      printf '%s' '{"batch":"mutated-after-snapshot"}' > "$EXPECTED_ORIGINAL_BATCH"
+      [ "$(shasum -a 256 "$batch" | awk '{print $1}')" = "$EXPECTED_BATCH_DIGEST" ] || exit 10
+    fi
+    printf '%s\n' '{"authorizationMode":"interim-operator-batch"}'
+    ;;
+  *) exit 2 ;;
+esac
+SH
+  cat > "$MOCK_AUTH_FAIL" <<'SH'
+#!/bin/sh
+exit 8
+SH
+  chmod 755 "$MOCK_RENDER_OK" "$MOCK_RENDER_DRIFT" "$MOCK_RENDER_FAIL" "$MOCK_AUTH_OK" "$MOCK_AUTH_FAIL"
+  RUNNER_HELPER_COMMON=(
+    --system-file "$FIXTURE_ROOT/runner.system"
+    --user-file "$FIXTURE_ROOT/runner.user"
+    --model moonshotai/kimi-k3 --fallback z-ai/glm-5.2
+    --timeout 60 --workload security
+    --target-agent-name security-auditor-codex-signoff
+  )
+  expect_rc 2 'request envelope rendering failed' \
+    'shipped runner helper detects renderer failure' \
+    "$RUNNER_BATCH_AUTHORIZATION" prepare --wrapper "$MOCK_RENDER_FAIL" \
+      --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
+      --manifest "$FIXTURE_ROOT/mock-render-fail.manifest"
+  expect_rc 2 'request envelope snapshot failed' \
+    'shipped runner helper detects snapshot failure' \
+    "$RUNNER_BATCH_AUTHORIZATION" prepare --wrapper "$MOCK_RENDER_OK" \
+      --authorization-helper "$MOCK_AUTH_FAIL" "${RUNNER_HELPER_COMMON[@]}" \
+      --manifest "$FIXTURE_ROOT/mock-snapshot-fail.manifest"
+  expect_rc 0 '' 'shipped runner helper prepares a manifest without provider contact' \
+    "$RUNNER_BATCH_AUTHORIZATION" prepare --wrapper "$MOCK_RENDER_OK" \
+      --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
+      --manifest "$FIXTURE_ROOT/mock-success.manifest"
+  [ -s "$FIXTURE_ROOT/mock-success.manifest" ] || {
+    echo 'shipped runner helper did not preserve its preparation manifest' >&2
+    exit 1
+  }
+  printf '%s' '{"batch":"mock"}' > "$FIXTURE_ROOT/mock-batch.json"
+  MOCK_BATCH_DIGEST="$(shasum -a 256 "$FIXTURE_ROOT/mock-batch.json" | awk '{print $1}')"
+  expect_rc 2 'redispatch request envelope is not authorized' \
+    'shipped runner helper compares redispatch with the preparation manifest' \
+    "$RUNNER_BATCH_AUTHORIZATION" verify --wrapper "$MOCK_RENDER_DRIFT" \
+      --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
+      --manifest "$FIXTURE_ROOT/mock-success.manifest" \
+      --batch-file "$FIXTURE_ROOT/mock-batch.json" \
+      --batch-digest "$MOCK_BATCH_DIGEST" --run-id fixture-run
+  expect_rc 0 '' 'shipped runner helper verifies an immutable private batch snapshot' \
+    env EXPECTED_ORIGINAL_BATCH="$FIXTURE_ROOT/mock-batch.json" \
+      EXPECTED_BATCH_DIGEST="$MOCK_BATCH_DIGEST" \
+      "$RUNNER_BATCH_AUTHORIZATION" verify --wrapper "$MOCK_RENDER_OK" \
+      --authorization-helper "$MOCK_AUTH_OK" "${RUNNER_HELPER_COMMON[@]}" \
+      --manifest "$FIXTURE_ROOT/mock-success.manifest" \
+      --batch-file "$FIXTURE_ROOT/mock-batch.json" \
+      --batch-digest "$MOCK_BATCH_DIGEST" --run-id fixture-run
+
+  # Schema-v2 request-envelope binding. The same approved message content sent
+  # under a different model is a different authorization target: model and
+  # provider routing are transmitted bytes, not harmless local metadata.
+  ENVELOPE_SYSTEM='fixture system turn for full-envelope binding'
+  ENVELOPE_PROMPT='fixture user turn for full-envelope binding'
+  ENVELOPE_REQUEST="$FIXTURE_ROOT/approved-request-envelope.json"
+  expect_rc 0 '' 'canonical wrapper renders the approvable request envelope' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_SYSTEM="$ENVELOPE_SYSTEM" \
+      OPENROUTER_REQUEST_ENVELOPE_OUTPUT="$ENVELOPE_REQUEST" \
+      "$CLOCK_WRAPPER" moonshotai/kimi-k3 "$ENVELOPE_PROMPT"
+  expect_rc 2 'could not materialize the request envelope' \
+    'runner preparation detects canonical renderer failure' \
+    env OPENROUTER_API_KEY=test OPENROUTER_SYSTEM="$ENVELOPE_SYSTEM" \
+      OPENROUTER_REQUEST_ENVELOPE_OUTPUT="$FIXTURE_ROOT/missing/request.json" \
+      "$CLOCK_WRAPPER" moonshotai/kimi-k3 "$ENVELOPE_PROMPT"
+  expect_rc 2 'request file unavailable' \
+    'runner preparation detects request-envelope snapshot failure' \
+    "$CLOCK_AUTHORIZATION" snapshot-envelope \
+      --output "$FIXTURE_ROOT/unusable-manifest.json" \
+      --request-file "$FIXTURE_ROOT/missing-request.json"
+  ENVELOPE_MANIFEST="$FIXTURE_ROOT/approved-request-envelope.manifest.json"
+  if ! ENVELOPE_DIGEST=$("$CLOCK_AUTHORIZATION" snapshot-envelope \
+       --output "$ENVELOPE_MANIFEST" --request-file "$ENVELOPE_REQUEST"); then
+    echo 'runner preparation could not snapshot the rendered request envelope' >&2
+    exit 1
+  fi
+  [[ "$ENVELOPE_DIGEST" =~ ^[0-9a-f]{64}$ ]] &&
+    [ -r "$ENVELOPE_REQUEST" ] && [ -s "$ENVELOPE_REQUEST" ] &&
+    [ -r "$ENVELOPE_MANIFEST" ] && [ -s "$ENVELOPE_MANIFEST" ] || {
+    echo 'runner preparation did not produce a usable envelope and manifest' >&2
+    exit 1
+  }
+  ENVELOPE_INSPECTION="$(jq -er '.inspectionPath | select(type == "string" and length > 0)' \
+    "$ENVELOPE_MANIFEST")" || {
+    echo 'canonical envelope manifest did not retain an operator inspection path' >&2
+    exit 1
+  }
+
+  # Exercise the actual runner helper across both phases. This catches the
+  # production-callsite bug where redispatch accidentally substituted a
+  # content-mode authorization receipt for the preserved envelope manifest;
+  # the mock helper cannot distinguish those artifact schemas.
+  REAL_HELPER_MANIFEST="$FIXTURE_ROOT/real-helper-envelope.manifest.json"
+  expect_rc 0 '' \
+    'real runner helper prepares through the canonical wrapper and typed authorization helper' \
+    env OPENROUTER_API_KEY=test \
+      "$RUNNER_BATCH_AUTHORIZATION" prepare --wrapper "$CLOCK_WRAPPER" \
+      --authorization-helper "$CLOCK_AUTHORIZATION" "${RUNNER_HELPER_COMMON[@]}" \
+      --manifest "$REAL_HELPER_MANIFEST"
+  REAL_HELPER_DIGEST="$(jq -er '.requestEnvelopeSha256 | select(test("^[0-9a-f]{64}$"))' \
+    "$REAL_HELPER_MANIFEST")" || {
+    echo 'real runner helper did not preserve a valid preparation manifest' >&2
+    exit 1
+  }
+  REAL_HELPER_INSPECTION="$(jq -er '.inspectionPath | select(type == "string" and length > 0)' \
+    "$REAL_HELPER_MANIFEST")" || {
+    echo 'real runner helper did not retain an operator inspection path' >&2
+    exit 1
+  }
+  [ -r "$REAL_HELPER_INSPECTION" ] && [ -s "$REAL_HELPER_INSPECTION" ] &&
+    jq -e '
+      .modelCandidates == ["moonshotai/kimi-k3", "z-ai/glm-5.2"]
+      and (.providerRouting | type) == "object"
+      and [.messageRoleByteCounts[].role] == ["system", "user"]
+    ' "$REAL_HELPER_MANIFEST" >/dev/null || {
+    echo 'real runner helper did not preserve an inspectable model/provider/role summary' >&2
+    exit 1
+  }
+
+  [ -s "$ENVELOPE_INSPECTION" ] && [ -s "$REAL_HELPER_INSPECTION" ] || {
+    echo 'batch approval fixture lost an inspection copy before confirmation' >&2
+    exit 1
+  }
+  BATCH_TRANSCRIPT="$FIXTURE_ROOT/batch-approve.transcript"
+  if ! run_pty_with_reply 'APPROVE INTERIM BATCH' \
+      "$CLOCK_AUTHORIZATION" batch-approve \
+      --batch-file "$FIXTURE_ROOT/batch-envelope-v2.json" \
+      --run-id fixture-run --operator fixture-operator \
+      --scope-note 'fixture batch covering canonical and runner-helper request envelopes' \
+      --lane "fixture-envelope=$ENVELOPE_MANIFEST" \
+      --lane "security-auditor-codex-signoff=$REAL_HELPER_MANIFEST" \
+      >"$BATCH_TRANSCRIPT" 2>&1; then
+    echo 'real interactive batch approval failed under the PTY fixture' >&2
+    cat "$BATCH_TRANSCRIPT" >&2
+    exit 1
+  fi
+  for expected_summary in \
+      'fixture-envelope' \
+      'security-auditor-codex-signoff' \
+      'moonshotai/kimi-k3' \
+      '"require_parameters":true' \
+      'message bytes:' \
+      "$ENVELOPE_INSPECTION" \
+      "$REAL_HELPER_INSPECTION"; do
+    grep -Fq "$expected_summary" "$BATCH_TRANSCRIPT" || {
+      echo "interactive batch transcript omitted: $expected_summary" >&2
+      cat "$BATCH_TRANSCRIPT" >&2
+      exit 1
+    }
+  done
+  [ ! -e "$ENVELOPE_INSPECTION" ] && [ ! -e "$REAL_HELPER_INSPECTION" ] || {
+    echo 'successful batch approval retained a private inspection copy' >&2
+    exit 1
+  }
+  jq -e --arg first "$ENVELOPE_DIGEST" --arg second "$REAL_HELPER_DIGEST" '
+    [.lanes[].lane_id] == ["fixture-envelope", "security-auditor-codex-signoff"]
+    and [.lanes[].requestEnvelopeSha256] == [$first, $second]
+    and (.lanes[] | .modelCandidates | length > 0)
+    and (.lanes[] | .providerRouting.require_parameters | type == "boolean")
+    and (.lanes[] | .messageRoleByteCounts | length > 0)
+  ' "$FIXTURE_ROOT/batch-envelope-v2.json" >/dev/null || {
+    echo 'interactive batch approval did not persist the displayed lane mapping' >&2
+    exit 1
+  }
+
+  # Every unsuccessful approval path owns the same cleanup obligation.
+  NO_TTY_MANIFEST="$FIXTURE_ROOT/no-tty.manifest.json"
+  "$CLOCK_AUTHORIZATION" snapshot-envelope --output "$NO_TTY_MANIFEST" \
+    --request-file "$ENVELOPE_REQUEST" >/dev/null
+  NO_TTY_INSPECTION="$(jq -r '.inspectionPath' "$NO_TTY_MANIFEST")"
+  expect_rc 2 'interactive confirmation unavailable' \
+    'batch approval without a controlling terminal fails closed' \
+    "$CLOCK_AUTHORIZATION" batch-approve \
+      --batch-file "$FIXTURE_ROOT/no-tty-batch.json" --run-id no-tty-run \
+      --operator fixture-operator --scope-note 'no tty cleanup fixture' \
+      --lane "fixture-envelope=$NO_TTY_MANIFEST"
+  [ ! -e "$NO_TTY_INSPECTION" ] || {
+    echo 'no-TTY batch refusal retained a private inspection copy' >&2
+    exit 1
+  }
+
+  DECLINE_MANIFEST="$FIXTURE_ROOT/decline.manifest.json"
+  "$CLOCK_AUTHORIZATION" snapshot-envelope --output "$DECLINE_MANIFEST" \
+    --request-file "$ENVELOPE_REQUEST" >/dev/null
+  DECLINE_INSPECTION="$(jq -r '.inspectionPath' "$DECLINE_MANIFEST")"
+  set +e
+  run_pty_with_reply 'DECLINE' "$CLOCK_AUTHORIZATION" batch-approve \
+    --batch-file "$FIXTURE_ROOT/declined-batch.json" --run-id declined-run \
+    --operator fixture-operator --scope-note 'decline cleanup fixture' \
+    --lane "fixture-envelope=$DECLINE_MANIFEST" \
+    >"$FIXTURE_ROOT/decline.transcript" 2>&1
+  DECLINE_RC=$?
+  set -e
+  [ "$DECLINE_RC" -eq 2 ] &&
+    grep -Fq 'interim batch authorization declined by operator' \
+      "$FIXTURE_ROOT/decline.transcript" &&
+  [ ! -e "$DECLINE_INSPECTION" ] && [ ! -e "$FIXTURE_ROOT/declined-batch.json" ] || {
+    echo 'declined PTY approval did not fail closed and clean its inspection copy' >&2
+    cat "$FIXTURE_ROOT/decline.transcript" >&2
+    exit 1
+  }
+
+  INTERRUPT_MANIFEST="$FIXTURE_ROOT/interrupt.manifest.json"
+  "$CLOCK_AUTHORIZATION" snapshot-envelope --output "$INTERRUPT_MANIFEST" \
+    --request-file "$ENVELOPE_REQUEST" >/dev/null
+  INTERRUPT_INSPECTION="$(jq -r '.inspectionPath' "$INTERRUPT_MANIFEST")"
+  set +e
+  run_pty_and_interrupt "$CLOCK_AUTHORIZATION" batch-approve \
+    --batch-file "$FIXTURE_ROOT/interrupted-batch.json" --run-id interrupted-run \
+    --operator fixture-operator --scope-note 'signal cleanup fixture' \
+    --lane "fixture-envelope=$INTERRUPT_MANIFEST" \
+    >"$FIXTURE_ROOT/interrupt.transcript" 2>&1
+  INTERRUPT_RC=$?
+  set -e
+  [ "$INTERRUPT_RC" -ne 0 ] && [ "$INTERRUPT_RC" -ne 124 ] &&
+    grep -Fq 'interactive batch authorization interrupted by signal' \
+      "$FIXTURE_ROOT/interrupt.transcript" &&
+    [ "$(grep -Fc 'interactive batch authorization interrupted by signal' \
+      "$FIXTURE_ROOT/interrupt.transcript")" -eq 1 ] &&
+    [ ! -e "$INTERRUPT_INSPECTION" ] && [ ! -e "$FIXTURE_ROOT/interrupted-batch.json" ] || {
+    echo 'interrupted PTY approval did not fail closed and clean its inspection copy' >&2
+    echo "interrupt rc=$INTERRUPT_RC inspection_exists=$([ -e "$INTERRUPT_INSPECTION" ] && echo yes || echo no) batch_exists=$([ -e "$FIXTURE_ROOT/interrupted-batch.json" ] && echo yes || echo no)" >&2
+    cat "$FIXTURE_ROOT/interrupt.transcript" >&2
+    exit 1
+  }
+
+  PARTIAL_MANIFEST="$FIXTURE_ROOT/partial.manifest.json"
+  "$CLOCK_AUTHORIZATION" snapshot-envelope --output "$PARTIAL_MANIFEST" \
+    --request-file "$ENVELOPE_REQUEST" >/dev/null
+  PARTIAL_INSPECTION="$(jq -r '.inspectionPath' "$PARTIAL_MANIFEST")"
+  MALFORMED_LANE_MANIFEST="$FIXTURE_ROOT/malformed-second.manifest.json"
+  "$CLOCK_AUTHORIZATION" snapshot-envelope --output "$MALFORMED_LANE_MANIFEST" \
+    --request-file "$ENVELOPE_REQUEST" >/dev/null
+  MALFORMED_LANE_INSPECTION="$(jq -r '.inspectionPath' "$MALFORMED_LANE_MANIFEST")"
+  jq '.schemaVersion = 1' "$MALFORMED_LANE_MANIFEST" \
+    > "$FIXTURE_ROOT/malformed-second.tmp"
+  mv "$FIXTURE_ROOT/malformed-second.tmp" "$MALFORMED_LANE_MANIFEST"
+  expect_rc 2 'lane authorization manifest schema unsupported' \
+    'partial-lane validation cleans every existing private companion' \
+    "$CLOCK_AUTHORIZATION" batch-approve \
+      --batch-file "$FIXTURE_ROOT/partial-batch.json" --run-id partial-run \
+      --operator fixture-operator --scope-note 'partial lane cleanup fixture' \
+      --lane "fixture-envelope=$PARTIAL_MANIFEST" \
+      --lane "malformed=$MALFORMED_LANE_MANIFEST"
+  [ ! -e "$PARTIAL_INSPECTION" ] && [ ! -e "$MALFORMED_LANE_INSPECTION" ] || {
+    echo 'partial-lane batch refusal retained a private inspection copy' >&2
+    exit 1
+  }
+
+  for MANIFEST_FAILURE in invalid-json unreadable; do
+    BROKEN_MANIFEST="$FIXTURE_ROOT/$MANIFEST_FAILURE.manifest.json"
+    "$CLOCK_AUTHORIZATION" snapshot-envelope --output "$BROKEN_MANIFEST" \
+      --request-file "$ENVELOPE_REQUEST" >/dev/null
+    BROKEN_INSPECTION="$(jq -r '.inspectionPath' "$BROKEN_MANIFEST")"
+    if [ "$MANIFEST_FAILURE" = "invalid-json" ]; then
+      printf '%s\n' '{not-json' > "$BROKEN_MANIFEST"
+      BROKEN_REASON='lane authorization manifest unreadable'
+    else
+      chmod 000 "$BROKEN_MANIFEST"
+      BROKEN_REASON='lane authorization manifest unreadable'
+    fi
+    expect_rc 2 "$BROKEN_REASON" \
+      "$MANIFEST_FAILURE manifest cleanup removes its owned private companion" \
+      "$CLOCK_AUTHORIZATION" batch-approve \
+        --batch-file "$FIXTURE_ROOT/$MANIFEST_FAILURE.batch.json" \
+        --run-id "$MANIFEST_FAILURE-run" --operator fixture-operator \
+        --scope-note "$MANIFEST_FAILURE cleanup fixture" \
+        --lane "fixture-envelope=$BROKEN_MANIFEST"
+    [ ! -e "$BROKEN_INSPECTION" ] || {
+      echo "$MANIFEST_FAILURE manifest retained its private inspection copy" >&2
+      exit 1
+    }
+    chmod 600 "$BROKEN_MANIFEST" 2>/dev/null || true
+  done
+
+  # Denial-only test stages exercise unexpected exceptions around each I/O
+  # boundary. They can only abort and roll back; they cannot grant authority.
+  for FAILURE_STAGE in tty-write mkdir mkstemp signal-before-temp-ownership \
+      signal-before-batch-ownership final-read canonical-validation transient-cleanup; do
+    FAILURE_MANIFEST="$FIXTURE_ROOT/failure-$FAILURE_STAGE.manifest.json"
+    FAILURE_BATCH="$FIXTURE_ROOT/failure-$FAILURE_STAGE.batch.json"
+    "$CLOCK_AUTHORIZATION" snapshot-envelope --output "$FAILURE_MANIFEST" \
+      --request-file "$ENVELOPE_REQUEST" >/dev/null
+    FAILURE_INSPECTION="$(jq -r '.inspectionPath' "$FAILURE_MANIFEST")"
+    set +e
+    run_pty_with_reply 'APPROVE INTERIM BATCH' env \
+      PAYLOAD_AUTH_TEST_MODE=1 PAYLOAD_AUTH_TEST_FAILURE_STAGE="$FAILURE_STAGE" \
+      "$CLOCK_AUTHORIZATION" batch-approve \
+      --batch-file "$FAILURE_BATCH" --run-id "failure-$FAILURE_STAGE-run" \
+      --operator fixture-operator --scope-note "failure $FAILURE_STAGE fixture" \
+      --lane "fixture-envelope=$FAILURE_MANIFEST" \
+      >"$FIXTURE_ROOT/failure-$FAILURE_STAGE.transcript" 2>&1
+    FAILURE_RC=$?
+    set -e
+    [ "$FAILURE_RC" -ne 0 ] && [ ! -e "$FAILURE_INSPECTION" ] &&
+      [ ! -e "$FAILURE_BATCH" ] &&
+      ! find "$FIXTURE_ROOT" -maxdepth 1 -name ".$(basename "$FAILURE_BATCH").*" \
+        -print -quit | grep -q . || {
+      echo "$FAILURE_STAGE failure retained an inspection copy or batch authorization" >&2
+      cat "$FIXTURE_ROOT/failure-$FAILURE_STAGE.transcript" >&2
+      exit 1
+    }
+  done
+  ENVELOPE_BATCH_DIGEST="$(shasum -a 256 "$FIXTURE_ROOT/batch-envelope-v2.json" | awk '{print $1}')"
+  expect_rc 0 '' \
+    'real runner helper verifies redispatch with the preserved preparation manifest' \
+    env OPENROUTER_API_KEY=test \
+      "$RUNNER_BATCH_AUTHORIZATION" verify --wrapper "$CLOCK_WRAPPER" \
+      --authorization-helper "$CLOCK_AUTHORIZATION" "${RUNNER_HELPER_COMMON[@]}" \
+      --manifest "$REAL_HELPER_MANIFEST" \
+      --batch-file "$FIXTURE_ROOT/batch-envelope-v2.json" \
+      --batch-digest "$ENVELOPE_BATCH_DIGEST" --run-id fixture-run
+  expect_rc 0 '' \
+    'runner redispatch verifies the re-rendered request envelope against the batch' \
+    "$CLOCK_AUTHORIZATION" verify-batch \
+      --batch-file "$FIXTURE_ROOT/batch-envelope-v2.json" \
+      --run-id fixture-run --lane-id fixture-envelope --manifest "$ENVELOPE_MANIFEST" \
+      --request-file "$ENVELOPE_REQUEST"
+  expect_rc 1 'transport error' \
+    'interim batch accepts the exact complete request envelope approved' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_SYSTEM="$ENVELOPE_SYSTEM" \
+      OPENROUTER_TARGET_AGENT_NAME=fixture-envelope \
+      OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_BATCH_RUN_ID=fixture-run \
+      OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-envelope-v2.json" \
+      OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$ENVELOPE_BATCH_DIGEST" \
+      "$CLOCK_WRAPPER" moonshotai/kimi-k3 "$ENVELOPE_PROMPT"
+  expect_rc 2 'transmitted request envelope is not bound to this approved lane and model set' \
+    'interim batch refuses an unapproved model mutation with approved content' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_SYSTEM="$ENVELOPE_SYSTEM" \
+      OPENROUTER_TARGET_AGENT_NAME=fixture-envelope \
+      OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_BATCH_RUN_ID=fixture-run \
+      OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-envelope-v2.json" \
+      OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$ENVELOPE_BATCH_DIGEST" \
+      "$CLOCK_WRAPPER" z-ai/glm-5.2 "$ENVELOPE_PROMPT"
+  expect_rc 2 'transmitted request envelope is not bound to this approved lane and model set' \
+    'interim batch refuses an unapproved provider-routing mutation' \
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_SYSTEM="$ENVELOPE_SYSTEM" OPENROUTER_PROVIDER_SORT=throughput \
+      OPENROUTER_TARGET_AGENT_NAME=fixture-envelope \
+      OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_BATCH_RUN_ID=fixture-run \
+      OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-envelope-v2.json" \
+      OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$ENVELOPE_BATCH_DIGEST" \
+      "$CLOCK_WRAPPER" moonshotai/kimi-k3 "$ENVELOPE_PROMPT"
+
+  expect_rc 2 'model slug exceeds 128 bytes' \
+    'OpenRouter wrapper refuses oversized model metadata' \
+    env OPENROUTER_API_KEY=test \
+      "$WRAPPER" "vendor/$(printf 'a%.0s' {1..122})" ordinary
+  expect_rc 2 'security review role requires Kimi K3 primary and GLM-5.2 fallback' \
+    'security runner refuses a matrix-listed model assigned to the wrong role' \
+    env OPENROUTER_API_KEY=test OPENROUTER_TARGET_AGENT_NAME=security-auditor-openrouter \
+      "$WRAPPER" qwen/qwen3-coder ordinary 60 z-ai/glm-5.2
+  expect_rc 2 'security review role requires Kimi K3 primary and GLM-5.2 fallback' \
+    'Codex-signoff security runner refuses a matrix-listed model assigned to the wrong role' \
+    env OPENROUTER_API_KEY=test OPENROUTER_TARGET_AGENT_NAME=security-auditor-codex-signoff \
+      "$WRAPPER" qwen/qwen3-coder ordinary 60 z-ai/glm-5.2
+
+  expect_rc 0 '' \
+    'typed batch validator accepts a complete live schema-v2 batch' \
+    "$CLOCK_AUTHORIZATION" validate-batch \
+      --batch-file "$FIXTURE_ROOT/batch-envelope-v2.json" --run-id fixture-run
+
+  typed_batch_refusal() {
+    local name="$1" expression="$2" reason="$3"
+    local mutated="$FIXTURE_ROOT/typed-$name.json"
+    jq "$expression" "$FIXTURE_ROOT/batch-envelope-v2.json" > "$mutated"
+    expect_rc 2 "$reason" "typed batch rejects $name" \
+      "$CLOCK_AUTHORIZATION" validate-batch --batch-file "$mutated" --run-id fixture-run
+  }
+  typed_batch_refusal empty-model \
+    '.lanes[0].modelCandidates = [""]' \
+    'lane model candidates malformed'
+  typed_batch_refusal boolean-byte-count \
+    '.lanes[0].byteCount = true' \
+    'lane byte count malformed'
+  typed_batch_refusal string-provider-boolean \
+    '.lanes[0].providerRouting.require_parameters = "true"' \
+    'lane provider routing malformed'
+  typed_batch_refusal unknown-provider-key \
+    '.lanes[0].providerRouting.unknown = true' \
+    'lane provider routing malformed'
+  typed_batch_refusal malformed-role-record \
+    '.lanes[0].messageRoleByteCounts[0].unexpected = 1' \
+    'lane role byte counts malformed'
+
   python3 - "$FIXTURE_ROOT/batch-authorization.json" "$FIXED_PROGRAM_SUNSET" <<'PY'
 import json
 import sys
@@ -868,13 +1403,21 @@ from datetime import datetime, timedelta, timezone
 
 now = datetime.now(timezone.utc).replace(microsecond=0)
 document = {
-    "schema_version": 1,
+    "schema_version": 2,
     "authorization_mode": "interim_operator_batch",
     "run_id": "fixture-run",
     "operator": "fixture-operator",
     "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
     "expires_at": (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    "payload_digests": ["0" * 64],
+    "request_envelope_digests": ["0" * 64],
+    "lanes": [{
+        "lane_id": "fixture-lane",
+        "requestEnvelopeSha256": "0" * 64,
+        "byteCount": 0,
+        "modelCandidates": ["moonshotai/kimi-k3"],
+        "providerRouting": {"require_parameters": True, "allow_fallbacks": True},
+        "messageRoleByteCounts": [{"role": "user", "byteCount": 0}],
+    }],
     "scope_note": "fixture batch covering no real payload",
     "program_sunset": sys.argv[2],
 }
@@ -883,10 +1426,11 @@ with open(sys.argv[1], "w", encoding="utf-8") as handle:
     handle.write("\n")
 PY
   FIXTURE_BATCH_DIGEST="$(shasum -a 256 "$FIXTURE_ROOT/batch-authorization.json" | awk '{print $1}')"
-  expect_rc 2 'transmitted payload digest is not in the batch authorization' \
+  expect_rc 2 'transmitted request envelope is not bound to this approved lane and model set' \
     'interim batch refuses unapproved transmitted bytes' \
     env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
       OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_TARGET_AGENT_NAME=fixture-lane \
       OPENROUTER_BATCH_RUN_ID=fixture-run \
       OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization.json" \
       OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$FIXTURE_BATCH_DIGEST" \
@@ -899,13 +1443,21 @@ from datetime import datetime, timedelta, timezone
 
 now = datetime.now(timezone.utc).replace(microsecond=0)
 document = {
-    "schema_version": 1,
+    "schema_version": 2,
     "authorization_mode": "interim_operator_batch",
     "run_id": "fixture-run",
     "operator": "fixture-operator",
     "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
     "expires_at": (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    "payload_digests": ["0" * 64],
+    "request_envelope_digests": ["0" * 64],
+    "lanes": [{
+        "lane_id": "fixture-lane",
+        "requestEnvelopeSha256": "0" * 64,
+        "byteCount": 0,
+        "modelCandidates": ["moonshotai/kimi-k3"],
+        "providerRouting": {"require_parameters": True, "allow_fallbacks": True},
+        "messageRoleByteCounts": [{"role": "user", "byteCount": 0}],
+    }],
     "scope_note": "fixture batch asserting its own sunset",
     "program_sunset": sys.argv[2],
 }
@@ -914,16 +1466,18 @@ with open(sys.argv[1], "w", encoding="utf-8") as handle:
     handle.write("\n")
 PY
   FIXTURE_SUNSET_DIGEST="$(shasum -a 256 "$FIXTURE_ROOT/batch-authorization-sunset.json" | awk '{print $1}')"
-  expect_rc 2 'sunset-mismatched' \
+  expect_rc 2 'batch program sunset does not match the wrapper release' \
     'interim batch refuses a self-asserted program sunset' \
     env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
       OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_TARGET_AGENT_NAME=fixture-lane \
       OPENROUTER_BATCH_RUN_ID=fixture-run \
       OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization-sunset.json" \
       OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$FIXTURE_SUNSET_DIGEST" \
       "$CLOCK_WRAPPER" moonshotai/kimi-k3 'payload bytes the operator never approved'
 
-  # POSITIVE fixture: framing parity between the wrapper and `snapshot`.
+  # POSITIVE fixture: framing parity between the wrapper and
+  # `snapshot-envelope`.
   # Negative paths alone cannot tell a correct binding from a framing mismatch
   # that silently bricks every legitimate interim lane -- that fails closed,
   # but it leaves the mode dead and undetected. So build the batch through
@@ -937,12 +1491,13 @@ PY
   # fails here.
   POSITIVE_SYSTEM='fixture system turn for ordered-content binding'
   POSITIVE_PROMPT='fixture user turn for ordered-content binding'
-  printf '%s' "$POSITIVE_SYSTEM" > "$FIXTURE_ROOT/positive.system"
-  printf '%s' "$POSITIVE_PROMPT" > "$FIXTURE_ROOT/positive.user"
-  POSITIVE_DIGEST="$("$AUTHORIZATION" snapshot \
+  expect_rc 0 '' 'canonical wrapper renders the positive request envelope' \
+    env OPENROUTER_API_KEY=test OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+      OPENROUTER_REQUEST_ENVELOPE_OUTPUT="$FIXTURE_ROOT/positive-request.json" \
+      "$CLOCK_WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT"
+  POSITIVE_DIGEST="$("$CLOCK_AUTHORIZATION" snapshot-envelope \
     --manifest "$FIXTURE_ROOT/positive-manifest.json" \
-    --content-file "$FIXTURE_ROOT/positive.system" \
-    --content-file "$FIXTURE_ROOT/positive.user")"
+    --request-file "$FIXTURE_ROOT/positive-request.json")"
   case "$POSITIVE_DIGEST" in
     [0-9a-f][0-9a-f]*) : ;;
     *)
@@ -951,21 +1506,30 @@ PY
       ;;
   esac
   python3 - "$FIXTURE_ROOT/batch-authorization-positive.json" "$POSITIVE_DIGEST" \
-    "$FIXED_PROGRAM_SUNSET" <<'PY'
+    "$FIXED_PROGRAM_SUNSET" "$FIXTURE_ROOT/positive-manifest.json" <<'PY'
 import json
 import sys
 from datetime import datetime, timedelta, timezone
 
 now = datetime.now(timezone.utc).replace(microsecond=0)
+manifest = json.load(open(sys.argv[4], encoding="utf-8"))
 document = {
-    "schema_version": 1,
+    "schema_version": 2,
     "authorization_mode": "interim_operator_batch",
     "run_id": "fixture-run",
     "operator": "fixture-operator",
     "created_at": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
     "expires_at": (now + timedelta(hours=1)).strftime("%Y-%m-%dT%H:%M:%SZ"),
-    "payload_digests": [sys.argv[2]],
-    "scope_note": "fixture batch covering the exact ordered content transmitted",
+    "request_envelope_digests": [sys.argv[2]],
+    "lanes": [{
+        "lane_id": "fixture-lane",
+        "requestEnvelopeSha256": sys.argv[2],
+        "byteCount": manifest["byteCount"],
+        "modelCandidates": manifest["modelCandidates"],
+        "providerRouting": manifest["providerRouting"],
+        "messageRoleByteCounts": manifest["messageRoleByteCounts"],
+    }],
+    "scope_note": "fixture batch covering the exact request envelope transmitted",
     "program_sunset": sys.argv[3],
 }
 with open(sys.argv[1], "w", encoding="utf-8") as handle:
@@ -982,16 +1546,28 @@ PY
     env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
       OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
       OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_TARGET_AGENT_NAME=fixture-lane \
       OPENROUTER_BATCH_RUN_ID=fixture-run \
       OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization-positive.json" \
       OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$POSITIVE_BATCH_DIGEST" \
+      OPENROUTER_RECEIPT_FILE="$FIXTURE_ROOT/positive-interim.receipt.json" \
       "$CLOCK_WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT"
-  if grep -Eq 'transmitted payload digest is not in the batch authorization|could not compute the transmitted payload digest|could not read transmitted content|non-string message content' \
+  if grep -Eq 'transmitted request envelope is not bound to this approved lane and model set|could not compute the transmitted request envelope digest|could not read transmitted content|non-string message content' \
       "$FIXTURE_ROOT/cmd.err"; then
     echo 'positive interim fixture: approved ordered content was refused at the membership check' >&2
     cat "$FIXTURE_ROOT/cmd.err" >&2
     exit 1
   fi
+  jq -e --arg run fixture-run --arg lane fixture-lane \
+    --arg request "$POSITIVE_DIGEST" '
+      .authorization.runId == $run
+      and .authorization.laneId == $lane
+      and .authorization.requestEnvelopeSha256 == $request
+      and (.invocationId | test("^[0-9a-f]{64}$"))
+    ' "$FIXTURE_ROOT/positive-interim.receipt.json" >/dev/null || {
+    echo 'positive interim fixture: receipt lost run, lane, or envelope identity' >&2
+    exit 1
+  }
 
   # --- BEHAVIORAL fixtures for the interim-mode security properties ---------
   # These deliberately reuse the POSITIVE payload and the POSITIVE ordered
@@ -1022,13 +1598,21 @@ def stamp(spec):
 
 
 document = {
-    "schema_version": 1,
+    "schema_version": 2,
     "authorization_mode": "interim_operator_batch",
     "run_id": run_id,
     "operator": "fixture-operator",
     "created_at": stamp(created_spec),
     "expires_at": stamp(expires_spec),
-    "payload_digests": [digest],
+    "request_envelope_digests": [digest],
+    "lanes": [{
+        "lane_id": "fixture-lane",
+        "requestEnvelopeSha256": digest,
+        "byteCount": 0,
+        "modelCandidates": ["moonshotai/kimi-k3"],
+        "providerRouting": {"require_parameters": True, "allow_fallbacks": True},
+        "messageRoleByteCounts": [{"role": "user", "byteCount": 0}],
+    }],
     "scope_note": "behavioral fixture batch",
     "program_sunset": sunset,
 }
@@ -1047,6 +1631,7 @@ PY
     expect_rc 2 "$expected" "$label" \
       env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
         OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+        OPENROUTER_TARGET_AGENT_NAME=fixture-lane \
         OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
         OPENROUTER_BATCH_RUN_ID=fixture-run \
         OPENROUTER_BATCH_AUTHORIZATION_FILE="$path" \
@@ -1118,6 +1703,7 @@ PY
     'interim batch refuses when the current run id is absent' \
     env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
       OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+      OPENROUTER_TARGET_AGENT_NAME=fixture-lane \
       OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
       OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization-positive.json" \
       OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$POSITIVE_BATCH_DIGEST" \
@@ -1159,6 +1745,29 @@ PY
   make_broker_stub "$BROKER_STUB_DIR/failing" \
     'echo "probe failed" >&2; exit 1'
 
+  authorization_with_broker() {
+    local dest="$1" broker="$2"
+    sed -e "s|^BROKER_CLIENT=.*|BROKER_CLIENT=\"$broker\"|" \
+      "$CLOCK_AUTHORIZATION" > "$dest"
+    chmod 755 "$dest"
+    grep -Fq "BROKER_CLIENT=\"$broker\"" "$dest" || {
+      echo 'broker fixture: could not repoint the authorization helper probe path' >&2
+      exit 1
+    }
+  }
+
+  authorization_with_broker "$FIXTURE_ROOT/auth-broker-ready.sh" "$BROKER_STUB_DIR/ready"
+  expect_rc 2 'broker available; interim mode retired on this host' \
+    'typed batch validation retires interim mode when the broker is ready' \
+    "$FIXTURE_ROOT/auth-broker-ready.sh" validate-batch \
+      --batch-file "$FIXTURE_ROOT/batch-envelope-v2.json" --run-id fixture-run
+
+  authorization_with_broker "$FIXTURE_ROOT/auth-broker-degraded.sh" "$BROKER_STUB_DIR/degraded"
+  expect_rc 2 'broker_present_not_ready' \
+    'typed batch validation withholds interim mode when the broker is degraded' \
+    "$FIXTURE_ROOT/auth-broker-degraded.sh" validate-batch \
+      --batch-file "$FIXTURE_ROOT/batch-envelope-v2.json" --run-id fixture-run
+
   wrapper_with_broker "$FIXTURE_ROOT/wrapper-broker-ready.sh" "$BROKER_STUB_DIR/ready"
   expect_batch_refusal 'a ready broker retires interim mode at the wrapper' \
     'broker available; interim mode retired on this host' \
@@ -1176,6 +1785,222 @@ PY
     'broker_present_not_ready' \
     "$FIXTURE_ROOT/batch-authorization-positive.json" \
     "$FIXTURE_ROOT/wrapper-broker-failing.sh"
+
+  # The broker can appear while the wrapper is blocked ingesting a large
+  # prompt. The disclosure-time check must observe that transition rather than
+  # relying on the process-start sample. The fixture inserts only a marker
+  # immediately before the real stdin read so timing is deterministic; broker
+  # enforcement remains production code.
+  for TRANSITION_STATE in ready degraded; do
+    TRANSITION_BROKER="$BROKER_STUB_DIR/transition-$TRANSITION_STATE"
+    TRANSITION_WRAPPER="$FIXTURE_ROOT/wrapper-broker-transition-$TRANSITION_STATE.sh"
+    TRANSITION_MARKER="$FIXTURE_ROOT/broker-transition-$TRANSITION_STATE.marker"
+    TRANSITION_FIFO="$FIXTURE_ROOT/broker-transition-$TRANSITION_STATE.fifo"
+    wrapper_with_broker "$TRANSITION_WRAPPER" "$TRANSITION_BROKER"
+    sed -e "/^PROMPT_SOURCE_FILE=/a\\
+: > \"$TRANSITION_MARKER\"" "$TRANSITION_WRAPPER" > "$TRANSITION_WRAPPER.marked"
+    mv "$TRANSITION_WRAPPER.marked" "$TRANSITION_WRAPPER"
+    chmod 755 "$TRANSITION_WRAPPER"
+    mkfifo "$TRANSITION_FIFO"
+    set +e
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+      OPENROUTER_TARGET_AGENT_NAME=fixture-lane \
+      OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
+      OPENROUTER_BATCH_RUN_ID=fixture-run \
+      OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-authorization-positive.json" \
+      OPENROUTER_BATCH_AUTHORIZATION_DIGEST="$POSITIVE_BATCH_DIGEST" \
+      "$TRANSITION_WRAPPER" moonshotai/kimi-k3 - \
+      <"$TRANSITION_FIFO" >"$FIXTURE_ROOT/transition-$TRANSITION_STATE.out" \
+      2>"$FIXTURE_ROOT/transition-$TRANSITION_STATE.err" &
+    TRANSITION_PID=$!
+    set -e
+    exec 9>"$TRANSITION_FIFO"
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      [ -e "$TRANSITION_MARKER" ] && break
+      sleep 0.1
+    done
+    [ -e "$TRANSITION_MARKER" ] || {
+      echo "broker $TRANSITION_STATE transition never reached prompt ingestion" >&2
+      kill "$TRANSITION_PID" 2>/dev/null || true
+      exit 1
+    }
+    make_broker_stub "$TRANSITION_BROKER" \
+      "printf '{\"status\": \"$TRANSITION_STATE\"}\\n'"
+    printf '%s' "$POSITIVE_PROMPT" >&9
+    exec 9>&-
+    set +e
+    wait "$TRANSITION_PID"
+    TRANSITION_RC=$?
+    set -e
+    [ "$TRANSITION_RC" -eq 2 ] || {
+      echo "broker $TRANSITION_STATE transition was not refused before transport" >&2
+      cat "$FIXTURE_ROOT/transition-$TRANSITION_STATE.err" >&2
+      exit 1
+    }
+    case "$TRANSITION_STATE" in
+      ready) TRANSITION_REASON='broker available; interim mode retired on this host' ;;
+      degraded) TRANSITION_REASON='broker_present_not_ready' ;;
+    esac
+    grep -Fq "$TRANSITION_REASON" "$FIXTURE_ROOT/transition-$TRANSITION_STATE.err" || {
+      echo "broker $TRANSITION_STATE transition missed its stable refusal" >&2
+      exit 1
+    }
+  done
+
+  # Interrupting the wrapper must own the live provider child, not merely its
+  # temporary files. A sleeping fake curl makes natural child exit impossible.
+  SIGNAL_BIN="$FIXTURE_ROOT/signal-bin"
+  mkdir -p "$SIGNAL_BIN"
+  for tool in sh cat tr sed awk wc date mktemp chmod rm shasum sleep kill jq dirname pwd mv; do
+    tool_path="$(command -v "$tool" 2>/dev/null || true)"
+    [ -n "$tool_path" ] && ln -sf "$tool_path" "$SIGNAL_BIN/$tool"
+  done
+  cat > "$SIGNAL_BIN/curl" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$$" > "$FAKE_CURL_PID_FILE"
+sleep 30
+EOF
+  chmod 755 "$SIGNAL_BIN/curl"
+  SIGNAL_WRAPPER="$FIXTURE_ROOT/wrapper-signal-child.sh"
+  sed -e "s|^export PATH=.*|export PATH=\"$SIGNAL_BIN\"|" \
+    "$CLOCK_WRAPPER" > "$SIGNAL_WRAPPER"
+  chmod 755 "$SIGNAL_WRAPPER"
+  SIGNAL_CHILD_PID_FILE="$FIXTURE_ROOT/signal-child.pid"
+  SIGNAL_RECEIPT="$FIXTURE_ROOT/signal-child.receipt.json"
+  set +e
+  env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+    OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+    OPENROUTER_RECEIPT_FILE="$SIGNAL_RECEIPT" \
+    FAKE_CURL_PID_FILE="$SIGNAL_CHILD_PID_FILE" \
+    "$SIGNAL_WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT" \
+    >"$FIXTURE_ROOT/signal-child.out" 2>"$FIXTURE_ROOT/signal-child.err" &
+  SIGNAL_WRAPPER_PID=$!
+  set -e
+  for _ in 1 2 3 4 5 6 7 8 9 10 \
+      11 12 13 14 15 16 17 18 19 20 \
+      21 22 23 24 25 26 27 28 29 30 \
+      31 32 33 34 35 36 37 38 39 40 \
+      41 42 43 44 45 46 47 48 49 50; do
+    [ -s "$SIGNAL_CHILD_PID_FILE" ] && break
+    sleep 0.1
+  done
+  [ -s "$SIGNAL_CHILD_PID_FILE" ] || {
+    echo 'signal fixture never started its transport child' >&2
+    kill "$SIGNAL_WRAPPER_PID" 2>/dev/null || true
+    exit 1
+  }
+  SIGNAL_CHILD_PID="$(cat "$SIGNAL_CHILD_PID_FILE")"
+  kill -TERM "$SIGNAL_WRAPPER_PID"
+  set +e
+  wait "$SIGNAL_WRAPPER_PID"
+  SIGNAL_WRAPPER_RC=$?
+  set -e
+  [ "$SIGNAL_WRAPPER_RC" -ne 0 ] || {
+    echo 'interrupted wrapper returned success' >&2
+    exit 1
+  }
+  SIGNAL_CHILD_GONE=0
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    if ! kill -0 "$SIGNAL_CHILD_PID" 2>/dev/null; then
+      SIGNAL_CHILD_GONE=1
+      break
+    fi
+    sleep 0.1
+  done
+  if [ "$SIGNAL_CHILD_GONE" -ne 1 ]; then
+    kill -KILL "$SIGNAL_CHILD_PID" 2>/dev/null || true
+    echo 'interrupted wrapper left its transport child running' >&2
+    exit 1
+  fi
+  jq -e '.outcome == "error" and .failureKind == "interrupted"
+    and (.invocationId | test("^[0-9a-f]{64}$"))' \
+    "$SIGNAL_RECEIPT" >/dev/null || {
+    echo 'interrupted wrapper did not emit one terminal failure receipt' >&2
+    exit 1
+  }
+
+  # Move the signal into the exact launch-to-PID-publication window in a copy
+  # of the shipped wrapper. The handler defers cleanup until curl_pid is owned;
+  # deleting that handoff strands the sleeping child.
+  SIGNAL_WINDOW_WRAPPER="$FIXTURE_ROOT/wrapper-signal-window.sh"
+  sed -e "s|^export PATH=.*|export PATH=\"$SIGNAL_BIN\"|" \
+    -e 's/^curl_pid=\$!$/kill -TERM \$\$\ncurl_pid=\$!/' \
+    "$CLOCK_WRAPPER" > "$SIGNAL_WINDOW_WRAPPER"
+  chmod 755 "$SIGNAL_WINDOW_WRAPPER"
+  grep -Fq 'kill -TERM $$' "$SIGNAL_WINDOW_WRAPPER" || {
+    echo 'signal-window fixture could not inject before PID publication' >&2
+    exit 1
+  }
+  SIGNAL_WINDOW_PID_FILE="$FIXTURE_ROOT/signal-window-child.pid"
+  SIGNAL_WINDOW_RECEIPT="$FIXTURE_ROOT/signal-window.receipt.json"
+  SIGNAL_WINDOW_STARTED="$(date +%s)"
+  set +e
+  env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+    OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+    OPENROUTER_RECEIPT_FILE="$SIGNAL_WINDOW_RECEIPT" \
+    FAKE_CURL_PID_FILE="$SIGNAL_WINDOW_PID_FILE" \
+    "$SIGNAL_WINDOW_WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT" \
+    >"$FIXTURE_ROOT/signal-window.out" 2>"$FIXTURE_ROOT/signal-window.err"
+  SIGNAL_WINDOW_RC=$?
+  set -e
+  SIGNAL_WINDOW_ELAPSED=$(( $(date +%s) - SIGNAL_WINDOW_STARTED ))
+  [ "$SIGNAL_WINDOW_RC" -ne 0 ] && [ "$SIGNAL_WINDOW_ELAPSED" -lt 8 ] || {
+    echo 'launch-window signal fixture did not interrupt the wrapper promptly' >&2
+    exit 1
+  }
+  jq -e '.outcome == "error" and .failureKind == "interrupted"
+    and (.invocationId | test("^[0-9a-f]{64}$"))' \
+    "$SIGNAL_WINDOW_RECEIPT" >/dev/null || {
+    echo 'launch-window signal did not emit the interrupted receipt' >&2
+    exit 1
+  }
+  # The repaired wrapper may terminate the child before the fake curl gets
+  # scheduled to publish its PID. A broken handoff leaves it alive long enough
+  # to publish, so briefly wait for that observable before checking liveness.
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    [ -s "$SIGNAL_WINDOW_PID_FILE" ] && break
+    sleep 0.1
+  done
+  if [ -s "$SIGNAL_WINDOW_PID_FILE" ]; then
+    SIGNAL_WINDOW_CHILD="$(cat "$SIGNAL_WINDOW_PID_FILE")"
+    if kill -0 "$SIGNAL_WINDOW_CHILD" 2>/dev/null; then
+      kill -KILL "$SIGNAL_WINDOW_CHILD" 2>/dev/null || true
+      echo 'launch-window signal left its unowned transport child running' >&2
+      exit 1
+    fi
+  fi
+
+  # Timeout cleanup must remain bounded even when the transport ignores TERM.
+  cat > "$SIGNAL_BIN/curl" <<'EOF'
+#!/bin/sh
+printf '%s\n' "$$" > "$FAKE_CURL_PID_FILE"
+trap '' TERM
+sleep 5
+EOF
+  chmod 755 "$SIGNAL_BIN/curl"
+  TIMEOUT_CHILD_PID_FILE="$FIXTURE_ROOT/timeout-child.pid"
+  TIMEOUT_STARTED="$(date +%s)"
+  set +e
+  env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+    OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+    OPENROUTER_FIRST_BYTE_TIMEOUT=1 \
+    FAKE_CURL_PID_FILE="$TIMEOUT_CHILD_PID_FILE" \
+    "$SIGNAL_WRAPPER" moonshotai/kimi-k3 "$POSITIVE_PROMPT" 10 \
+    >"$FIXTURE_ROOT/timeout-child.out" 2>"$FIXTURE_ROOT/timeout-child.err"
+  TIMEOUT_RC=$?
+  set -e
+  TIMEOUT_ELAPSED=$(( $(date +%s) - TIMEOUT_STARTED ))
+  [ "$TIMEOUT_RC" -eq 28 ] && [ "$TIMEOUT_ELAPSED" -lt 5 ] || {
+    echo 'TERM-resistant timeout cleanup was not bounded' >&2
+    exit 1
+  }
+  TIMEOUT_CHILD_PID="$(cat "$TIMEOUT_CHILD_PID_FILE")"
+  ! kill -0 "$TIMEOUT_CHILD_PID" 2>/dev/null || {
+    kill -KILL "$TIMEOUT_CHILD_PID" 2>/dev/null || true
+    echo 'timeout cleanup left its TERM-resistant child running' >&2
+    exit 1
+  }
 
   # Missing jq must NOT make an installed broker look absent. Readiness is a jq
   # decision; if an absent jq collapsed to "absent broker" the interim mode
@@ -1212,6 +2037,7 @@ PY
       'shipped sunset constant still admits the interim mode today' \
       env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
         OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+        OPENROUTER_TARGET_AGENT_NAME=fixture-lane \
         OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
         OPENROUTER_BATCH_RUN_ID=fixture-run \
         OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-shipped-sunset.json" \
@@ -1226,6 +2052,7 @@ PY
       'shipped sunset constant has passed and the interim mode is dead' \
       env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
         OPENROUTER_SYSTEM="$POSITIVE_SYSTEM" \
+        OPENROUTER_TARGET_AGENT_NAME=fixture-lane \
         OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch \
         OPENROUTER_BATCH_RUN_ID=fixture-run \
         OPENROUTER_BATCH_AUTHORIZATION_FILE="$FIXTURE_ROOT/batch-shipped-sunset.json" \

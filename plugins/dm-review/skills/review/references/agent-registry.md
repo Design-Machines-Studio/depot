@@ -51,7 +51,7 @@ These agents launch based on which file types were changed.
 | 15 | visual-browser-tester | dm-review | `.templ`, `.twig`, `.html`, `.css` | Dev server running. Six phases: Baseline (A), Responsive (B), State Testing (C), Accessibility Runtime (D), Live Wires (E), Live Wires CSS Compliance (F). UX design and visual design quality review moved to ux-quality-reviewer. | scoped |
 | 16 | ux-quality-reviewer | dm-review | `.templ`, `.twig`, `.html`, `.css` | Dev server running. Nine phases: Information Hierarchy (1), Spacing & Alignment (2), UI State Completeness (3), Navigation & Wayfinding (4), Content Quality (5), Typography (6), Layout & Composition (7), Edge Case Resilience (8), Interaction Polish (9). Saves screenshots to `.claude/ux-review/`. | scoped |
 | 17 | ui-standards-reviewer | dm-review | `.templ`, `.twig`, `.html`, `.css` | Dev server running. Six phases: Component Quality (1), Spacing System (2), State Completeness (3), Visual Polish (4), Token Compliance (5), Comparative Assessment (6). Reads project CSS tokens in Phase 0 and evaluates against Stripe/Notion/Linear quality bar. Also runs in quick mode when UI files change. | scoped |
-| 18 | migration-validator | dm-review | `.sql` | File is under a migrations directory (`migrations/` or `seeds/`). Also dispatched in quick mode. | scoped |
+| 18 | migration-validator | dm-review | `.sql` | File is under a migrations directory (`migrations/` or `seeds/`). Full mode only. | scoped |
 
 **Trigger overlap note:** The visual-browser-tester, ux-quality-reviewer, and ui-standards-reviewer all share trigger extensions with a11y-html-reviewer (`.templ`, `.twig`, `.html`) and a11y-css-reviewer/css-reviewer (`.css`). This is intentional -- static agents analyze source code while the browser agents test rendered output. The visual-browser-tester owns rendering, responsive, and runtime a11y; the ux-quality-reviewer owns design philosophy and usability; the ui-standards-reviewer owns practical SaaS quality standards and token compliance. The ux-quality-reviewer and ui-standards-reviewer intentionally overlap on spacing auditing and state completeness (both evaluate these from different lenses -- theoretical vs practical). The consolidator deduplicates any overlapping findings at the file:line level.
 
@@ -61,7 +61,8 @@ These agents launch based on which file types were changed.
 
 Quick reference for Phase 3 agent selection (FULL mode). Quick mode runs its own dispatch list in
 `plugins/dm-review/skills/dm-review-quick/SKILL.md`; the two must agree on every shared trigger, and
-`migration-validator` is dispatched in BOTH modes on `.sql` under `migrations/` or `seeds/`.
+`migration-validator` is dispatched only in full mode on `.sql` under
+`migrations/` or `seeds/`; quick mode does not add this lane.
 
 | Extension | Always-run | Conditional agents added |
 |-----------|-----------|------------------------|

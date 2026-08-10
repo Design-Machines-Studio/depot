@@ -3,11 +3,10 @@
 OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to quality- and cost-ranked OpenRouter model slugs over one endpoint. The matrix includes GPT-5.6 Terra and Luna, GLM-5.2 (`z-ai/glm-5.2`), DeepSeek V4, and Kimi K3. OpenAI models may run through OpenRouter as an economical API rail; Anthropic remains native Claude-only.
 
 > **Current release mode:** direct interactive `/openrouter` remains available
-> behind exact-digest human approval. Automated Pipeline, dm-review,
-> assessment, research, and adversarial-review dispatch records
-> `host_authority_unavailable` and completes on Codex until the external
-> Workflow Authority Broker owns authorization, credential custody, and
-> transport. API-key presence does not enable automated dispatch.
+> behind exact-digest human approval. dm-review automation may use the
+> explicitly temporary, sunset-bound operator batch. A ready Workflow Authority
+> Broker retires interim mode but remains `broker_transport_unavailable` until
+> broker-owned transport lands; API-key presence alone never enables dispatch.
 
 The direct API runner is the execution data plane. The optional official
 OpenRouter MCP is a read-only-first control plane for live model/provider
@@ -28,10 +27,10 @@ run.
 
 ## What it routes
 
-Task-to-model routing is governed by `plugins/pipeline/references/routing-policy.json`; the installed OpenRouter delegation policy owns the security boundary. The following matrix is the intended broker-enabled topology and remains observable through dry-run routing. It is not live automated dispatch in the current release:
+Task-to-model routing is governed by `plugins/pipeline/references/routing-policy.json`; the installed OpenRouter delegation policy owns the security boundary. The following matrix is available to authorized dm-review dispatch and remains observable through dry-run routing. Pipeline execution retains its own workflow-authority gate:
 
 - **Primary external provider** for `pattern-recognition-specialist`, `code-simplicity-reviewer`, `doc-sync-reviewer`, and `test-coverage-reviewer`; each lane uses the model and fallback model selected by policy.
-- **Primary Kimi K3 security-analysis lens**, paired with mandatory independent Codex full-diff sign-off.
+- **Primary Kimi K3 security-analysis lens**, paired with mandatory independent non-implementing-family full-diff sign-off.
 - **Primary Kimi K3 bulk lane** for large-context / large-diff first-pass triage.
 - The GLM-5.2-headed cascade rail for `config` / `docs` / `mechanical-logic` chunk execution via `openrouter-exec`.
 
@@ -43,16 +42,17 @@ The canonical policy is `skills/openrouter-delegate/references/delegation-securi
 
 - **Threat/content classification.** High-confidence credentials, private keys, authenticated DSNs, access/session tokens, and explicitly classified private values keep that file-diff section local. Eligible sections continue to OpenRouter; security-looking paths, vendors, nationalities, jurisdictions, and placeholder names do not create an embargo.
 - **Bounded execution.** Model output is accepted only as a validated unified diff restricted to the caller's exact owned-path allowlist. The runner performs fixed structural Git validation and allowlist-only staging; executable project verification is deferred to native Codex review.
-- **Intended lanes.** Security analysis with independent Codex sign-off, style, duplication, pattern-recognition, large-diff first-pass triage, and doc consistency.
+- **Intended lanes.** Security analysis with independent non-implementing-family sign-off, style, duplication, pattern-recognition, large-diff first-pass triage, and doc consistency.
 
-High-consequence security completion still requires independent Codex review. GLM, DeepSeek, Kimi, and other third-party models are not banned by nationality.
+High-consequence security completion still requires a reviewer family different from the implementer. GLM, DeepSeek, Kimi, and other third-party models are not banned by nationality.
 
 Every live caller selects one coherent installed plugin root with workflow-kernel `resolve-plugin-bundle`, then derives its wrapper, policy, boundary, protocols, and templates from that root. Semantic version wins over mtime; the active host breaks only equal-version ties. Durable receipts keep the version, cache class, and reason, never the absolute home path.
 
 ## Requirements
 
-- `OPENROUTER_API_KEY` is required only for direct interactive calls. Its
-  presence never activates automated coding or review lanes.
+- `OPENROUTER_API_KEY` is required for every live wrapper transmission,
+  including an authorized dm-review operator-batch dispatch. Its presence alone
+  never activates automated coding or review lanes.
 - `OPENROUTER_ZDR=1` opt-in to pin zero-data-retention providers for genuinely sensitive material (privacy demoted by default: Quality > Price > Speed > Provider privacy).
 - `OPENROUTER_WORKLOAD=quality|security|direct|bulk|mechanical` selects the
   default provider-routing strategy; explicit provider sort/order overrides it.

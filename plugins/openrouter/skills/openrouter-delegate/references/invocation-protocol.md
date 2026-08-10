@@ -153,11 +153,12 @@ permission:
 4. Never retry around a denial or broaden a file-specific authorization. Record
    `host_disclosure_declined` and fall back to Codex.
 
-Automated Pipeline and dm-review lanes are temporarily unavailable and return
-to Codex with `host_authority_unavailable`. Neither an API key nor
-caller-selected authorization variables enable them. Re-enable only through an
-external broker that owns authorization, credential custody, and transport and
-binds the exact payload, destination, run, lane, candidate, and substrate.
+Automated dm-review lanes currently require the sunset-bound
+`interim_operator_batch` protocol. It binds the exact request envelope and run
+but remains procedural and unauthenticated. A ready external broker retires
+interim mode and resolves to `broker_transport_unavailable` until broker-owned
+transport lands. Neither an API key nor caller-selected authorization variables
+enable automation.
 
 ### Codex network allowlist
 
