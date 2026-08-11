@@ -1,0 +1,22 @@
+[
+  {"query": "Use NED to run this development task instead of my Mac", "should_trigger": true},
+  {"query": "Should this use the trav account or the ned account?", "should_trigger": true},
+  {"query": "SSH into ned9000 and inspect the service", "should_trigger": true},
+  {"query": "Run Codex on the Linux box under the safe user", "should_trigger": true},
+  {"query": "Make sure this T3 task executes remotely on NED", "should_trigger": true},
+  {"query": "Which Docker context should I use for this NED checkout?", "should_trigger": true},
+  {"query": "This change needs sudo on NED; which SSH alias is correct?", "should_trigger": true},
+  {"query": "Work on the project in /home/ned/assembly", "should_trigger": true},
+  {"query": "Fix the app as ned and then reload Caddy as trav", "should_trigger": true},
+  {"query": "Can an agent use the ned9000-plain operations account?", "should_trigger": true},
+  {"query": "What CPU and RAM are installed in my Linux workstation?", "should_trigger": false},
+  {"query": "Look up the current status of the Assembly project", "should_trigger": false},
+  {"query": "Capture this conversation in AI Memory", "should_trigger": false},
+  {"query": "Review this pull request for security problems", "should_trigger": false},
+  {"query": "Create a Docker Compose file for a generic web app", "should_trigger": false},
+  {"query": "Explain how Tailscale MagicDNS works", "should_trigger": false},
+  {"query": "Write a blog post about remote development", "should_trigger": false},
+  {"query": "Set up a local Codex project on this Mac", "should_trigger": false},
+  {"query": "How do Linux permissions work in general?", "should_trigger": false},
+  {"query": "Help choose a cloud VPS provider", "should_trigger": false}
+]

@@ -1,7 +1,7 @@
 {
   "name": "ned",
-  "description": "Personal knowledge graph and session capture for Travis Gertz",
-  "version": "1.7.1",
+  "description": "Personal knowledge graph, NED operations, and session capture for Travis Gertz",
+  "version": "1.8.0",
   "author": {
     "name": "Design Machines"
   },
@@ -33,6 +33,13 @@
         "mcpDependencies": ["ai-memory"],
         "triggers": ["codify", "compound", "capture the lessons", "what should we learn from this", "turn this into a rule", "make sure this never happens again", "never again"],
         "tags": ["compounding", "lessons", "codify", "guardrails", "continuous-improvement", "postmortem"]
+      },
+      {
+        "id": "operate-ned",
+        "name": "Operate NED",
+        "description": "Select and verify the safe NED account for development and bounded system operations",
+        "triggers": ["use NED", "run this on NED", "SSH to NED", "use the trav account", "use the ned account", "which NED user", "NED account matrix", "rootless Docker on NED", "system Docker on NED", "T3 NED environment"],
+        "tags": ["ned-operations", "remote-development", "ssh", "account-selection", "least-privilege", "rootless-docker", "tailscale"]
       }
     ],
     "agents": [],
