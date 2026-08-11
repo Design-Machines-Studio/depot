@@ -79,7 +79,7 @@ The operational implementation lives outside Depot at:
 /home/ned/ai/ned-ops/
   inventory.json
   nedctl
-  health/
+  nedops/health.py
   systemd/
   README.md
 ```
@@ -275,13 +275,14 @@ and is not routed through Cloudflare.
 
 The deployment uses:
 
-- a user-scoped current Node LTS runtime;
+- an administrator-installed, distro-signed system Node LTS runtime consumed by
+  `ned`;
 - a pinned, tested T3 Code package installation rather than an unbounded
   automatic update at every service start;
 - an explicit service working directory and PATH;
 - restart-on-failure with bounded backoff;
-- systemd lifecycle logging only; T3 application streams remain discarded until
-  a tested redacting logger and an audited host retention policy exist;
+- a tested, bounded redacting logging sink that retains lifecycle and
+  security-relevant events without retaining pairing or provider authority;
 - a pairing token handled as a credential and not copied into design docs,
   repositories, or agent prompts.
 
@@ -359,7 +360,7 @@ before the Tunnel forwards the request to the same Caddy hostname route.
 | Failure | Expected behavior | Recovery path |
 |---|---|---|
 | T3 desktop disconnects | NED session continues | Reopen and reconnect; use SSH/tmux if needed |
-| T3 server fails | Projects and SSH remain available | `systemctl --user status/restart`, inspect bounded journal |
+| T3 server fails | Projects and SSH remain available | Inspect `systemctl --user status` for lifecycle state, then use the approved bounded redacted-log audit/interface; do not treat the discarded application journal stream as diagnostic evidence |
 | Provider CLI auth expires | T3 remains reachable; provider reports auth failure | Re-authenticate that provider on NED |
 | OpenRouter cap is exhausted | Native Claude/Codex lanes remain usable | Use subscription lane or restore OpenRouter capacity |
 | Project health fails | Only that project is unhealthy | `nedctl doctor <id>`, then bounded project logs |
@@ -421,22 +422,28 @@ configuration.
 
 ## 19. Rollout order
 
-1. Remove the NED-only `designmachines` and `farewell` checkouts without
-   changing their upstream repositories or production deployments.
-2. Provision the Burnfund checkout and preserve its tracked nested plugin.
-3. Build the inventory and read-only `nedctl` commands.
-4. Add lifecycle operations and health checks.
-5. Add and validate `ned:operate` in Depot.
-6. Repair persistent project startup and verify reboot behavior.
-7. Add the Mac `ned-wiz` launcher and update the Stream Deck profile.
-8. Install the user-scoped Node runtime and pinned T3 server on NED.
-9. Create and validate the T3 systemd user service.
-10. Confirm and apply the Tailscale Serve change.
-11. Pair the Mac T3 app and validate remote provider execution.
-12. Install and verify released Depot plugins for both NED providers.
+Build and validate the replacement control plane before any destructive
+retirement. This preserves a tested recovery path and replacement evidence if a
+retirement gate fails.
+
+1. Provision the Burnfund checkout and preserve its tracked nested plugin.
+2. Build the inventory and read-only `nedctl` commands.
+3. Add lifecycle operations and health checks.
+4. Add and validate `ned:operate` in Depot.
+5. Repair persistent project startup and verify reboot behavior.
+6. Add the Mac `ned-wiz` launcher and update the Stream Deck profile.
+7. Install the administrator-owned, distro-signed system Node runtime and pinned
+   T3 server on NED.
+8. Create and validate the T3 systemd user service.
+9. Confirm and apply the Tailscale Serve change.
+10. Pair the Mac T3 app and validate remote provider execution.
+11. Install and verify released Depot plugins for both NED providers.
+12. Retire the NED-only `designmachines` and `farewell` checkouts only after the
+    replacement runtime/control-plane evidence and an immediate removal approval;
+    do not change their upstream repositories or production deployments.
 13. Configure Cloudflare Tunnel and Access one preview at a time.
 14. Retire replaced DigitalOcean resources only after explicit approval and
-    complete replacement evidence.
+   complete replacement evidence.
 
 ## 20. Acceptance criteria
 
