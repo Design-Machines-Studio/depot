@@ -152,8 +152,10 @@ The units must:
 - avoid shell evaluation of values taken from the inventory;
 - avoid automatic startup for ephemeral projects and one-shot tools.
 
-Project containers may use `restart: unless-stopped` when that matches the
-project runtime, but systemd remains the operator-facing lifecycle authority.
+Project containers do not carry host-level restart policies in the NED wrapper.
+Systemd owns desired startup and stop state. A separate project-health unit and
+`nedctl` report runtime health, because a completed lifecycle launcher is not
+evidence that its application remains healthy.
 
 ### Current-state audit at approval
 
@@ -278,7 +280,8 @@ The deployment uses:
   automatic update at every service start;
 - an explicit service working directory and PATH;
 - restart-on-failure with bounded backoff;
-- journal logging with bounded retention;
+- systemd lifecycle logging only; T3 application streams remain discarded until
+  a tested redacting logger and an audited host retention policy exist;
 - a pairing token handled as a credential and not copied into design docs,
   repositories, or agent prompts.
 
@@ -387,7 +390,8 @@ configuration.
 
 ### Operations
 
-- Validate inventory schema and reject duplicate IDs, domains, or ports.
+- Validate inventory schema and reject duplicate IDs, domains, or
+  project-owned ports; shared router endpoints are typed separately.
 - Prove all read-only `nedctl` commands and unknown-project failure behavior.
 - Start, stop, and restart one representative Compose, DDEV, and static runtime
   without affecting neighboring projects.
@@ -436,7 +440,7 @@ configuration.
 
 ## 20. Acceptance criteria
 
-The design is complete when:
+The implementation is accepted when:
 
 - NED reboots into the intended persistent application set.
 - `nedctl` accurately reports and controls every in-scope project without

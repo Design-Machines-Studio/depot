@@ -37,11 +37,11 @@
 - `nedops/health.py` — loopback and route probes.
 - `nedops/cli.py` — operator commands.
 - `tests/` — standard-library unit tests.
-- `projects/dm006/compose.override.yml` — NED-only restart policy for prototype services.
-- `projects/dm021/compose.override.yml` — NED-only restart policy for Baseplate services.
-- `projects/dm022/compose.override.yml` — NED-only restart policy for Baseplate 2 services.
+- `projects/dm006/compose.override.yml` — NED-only containment for prototype services.
+- `projects/dm021/compose.override.yml` — NED-only containment for Baseplate services.
+- `projects/dm022/compose.override.yml` — NED-only containment for Baseplate 2 services.
 - `projects/livewires/` — external static preview build; Live Wires checkout remains untouched.
-- `systemd/` — per-project user unit, target, and ordering drop-ins.
+- `systemd/` — per-project lifecycle and health units plus generated target.
 - `scripts/install-user-units.sh` — idempotent unit and launcher installer.
 
 ### `/home/ned/ai/depot`
@@ -101,13 +101,22 @@ nedctl = "nedops.cli:main"
 - [ ] **Step 2: Write failing validation tests**
 
 ```python
-def test_rejects_duplicate_domain_and_port(self):
+def test_rejects_duplicate_domain_and_exclusive_port(self):
     path = self.write_inventory([
         self.project("one", domain="one.example.test", port=8091),
         self.project("two", domain="one.example.test", port=8091),
     ])
     with self.assertRaisesRegex(ValueError, "duplicate domain.*duplicate port"):
         load_inventory(path)
+
+def test_allows_two_ddev_projects_on_one_shared_router(self):
+    path = self.write_inventory([
+        self.project("one", runtime="ddev", port=None,
+                     health_url="http://127.0.0.1:8080/"),
+        self.project("two", runtime="ddev", port=None,
+                     health_url="http://127.0.0.1:8080/"),
+    ])
+    self.assertEqual(len(load_inventory(path).projects), 2)
 
 def test_rejects_secret_shaped_environment_key(self):
     project = self.project("one", domain="one.example.test", port=8091)
@@ -137,7 +146,8 @@ class HealthProbe:
 @dataclass(frozen=True)
 class Project:
     id: str
-    path: Path
+    source_path: Path
+    runtime_path: Path
     runtime: str
     persistent: bool
     enabled: bool
@@ -162,8 +172,10 @@ class Inventory:
 `load_inventory()` accepts schema version 1 and runtime values `compose`,
 `ddev`, `static-compose`, `ephemeral`, `direct`, `deferred`, and `removed`.
 It rejects malformed IDs, relative paths, ports outside 1024-65535, duplicate
-IDs/domains/non-null ports, and environment keys containing `TOKEN`, `SECRET`,
-`PASSWORD`, `PASS`, `KEY`, or `CREDENTIAL`. Compose and static-compose records
+IDs/domains/non-null project-owned ports. Environment keys use a strict
+per-runtime allowlist (`ASSEMBLY_PORT`, `ASSEMBLY_DEV_PORT`, and
+`ASSEMBLY_DEV_CONTAINER_NAME` initially); arbitrary keys and URL userinfo are
+rejected. Compose and static-compose records
 must declare at least one absolute `compose_files` path; other runtimes reject
 non-empty `compose_files`.
 
@@ -253,13 +265,16 @@ def build_command(project: Project, operation: str, lines: int = 120) -> Command
         }[operation]
     else:
         raise RuntimeError(f"{project.runtime} has no persistent lifecycle")
-    return CommandSpec(argv, project.path, dict(project.environment))
+    return CommandSpec(argv, project.runtime_path, dict(project.environment))
 ```
 
-`run()` uses `subprocess.run(..., shell=False, capture_output=True, text=True,
-timeout=timeout)`, truncates each stream to 64 KiB, redacts assignment, bearer,
-and JSON credential shapes, and uses `fcntl.flock` at
-`/run/user/<uid>/nedctl-ddev.lock` for DDEV operations.
+`run()` uses `subprocess.Popen(..., shell=False)` and bounded streaming reads. It
+keeps at most 64 KiB total across stdout and stderr, terminates the process group
+at the timeout, and redacts incrementally with overlap between chunks so a
+split credential cannot bypass the filter. Tests cover multi-megabyte output,
+timeout output, cookies, query parameters, URL userinfo, bearer/assignment/JSON
+forms, and PEM material. DDEV operations use `fcntl.flock` at
+`/run/user/<uid>/nedctl-ddev.lock`.
 
 - [ ] **Step 4: Run tests and commit**
 
@@ -309,29 +324,40 @@ class ProbeResult:
 def probe_loopback(project: Project, timeout: float = 3.0) -> ProbeResult:
     headers = {"Host": project.health.host_header} if project.health.host_header else {}
     request = urllib.request.Request(project.health.url, headers=headers, method="GET")
+    opener = urllib.request.build_opener(NoRedirectHandler())
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
+        with opener.open(request, timeout=timeout) as response:
             return ProbeResult("loopback", response.status == project.health.expected_status, f"HTTP {response.status}")
+    except urllib.error.HTTPError as error:
+        return ProbeResult("loopback", False, f"HTTP {error.code}")
     except OSError as error:
         return ProbeResult("loopback", False, type(error).__name__)
 ```
 
-`doctor` reports lifecycle, loopback, private Caddy, and external lanes
-separately. The external lane prints `not configured in this plan` and never
-reports green. Unknown IDs exit 2 before a subprocess runs.
+`NoRedirectHandler` subclasses `urllib.request.HTTPRedirectHandler` and returns
+`None` from `redirect_request()`. Unit tests serve a redirect to an external URL
+and prove the probe returns the original 3xx as failed without making the second
+request.
+
+`doctor` reports lifecycle, loopback, local Caddy, tailnet, and external lanes
+separately. A NED-local run reports tailnet as `unproven from this host`; the
+Mac-side verification command writes a separate tailnet receipt. The external
+lane prints `not configured in this plan` and never reports green. Unknown IDs
+exit 2 before a subprocess runs. Layer-local HTTP probes disable redirects and
+report 3xx separately rather than following them to another evidence lane.
 
 - [ ] **Step 3: Populate enabled persistent inventory records**
 
 Use these exact identities:
 
-| ID | Runtime | Path | Domain | Port/env |
-|---|---|---|---|---|
-| `dm006` | compose | `/home/ned/assembly/assembly` | `dm006.asmbly.app` | `ASSEMBLY_PORT=8090` |
-| `dm021` | compose | `/home/ned/assembly/assembly-baseplate` | `dm021.asmbly.app` | `ASSEMBLY_DEV_PORT=8091`, container `assembly-baseplate-app` |
-| `dm022` | compose | `/home/ned/assembly/assembly-baseplate-2` | `dm022.asmbly.app` | `ASSEMBLY_DEV_PORT=8092`, container `assembly-baseplate-2-app` |
-| `travisgertz` | ddev | `/home/ned/sites/travisgertz` | `travisgertz.designmachines.xyz` | shared DDEV router 8080, Host header probe |
-| `burnfund` | ddev | `/home/ned/sites/burnfund` | `burnfund.designmachines.xyz` | shared DDEV router 8080, Host header probe |
-| `livewires` | static-compose | `/home/ned/ai/ned-ops/projects/livewires` | `livewires.designmachines.xyz` | 8083 |
+| ID | Runtime | Source path | Runtime path | Domain | Port/env |
+|---|---|---|---|---|---|
+| `dm006` | compose | `/home/ned/assembly/assembly` | same as source | `dm006.asmbly.app` | `ASSEMBLY_PORT=8090` |
+| `dm021` | compose | `/home/ned/assembly/assembly-baseplate` | same as source | `dm021.asmbly.app` | `ASSEMBLY_DEV_PORT=8091`, container `assembly-baseplate-app` |
+| `dm022` | compose | `/home/ned/assembly/assembly-baseplate-2` | same as source | `dm022.asmbly.app` | `ASSEMBLY_DEV_PORT=8092`, container `assembly-baseplate-2-app` |
+| `travisgertz` | ddev | `/home/ned/sites/travisgertz` | same as source | `travisgertz.designmachines.xyz` | no exclusive port; Host probe through shared router 8080 |
+| `burnfund` | ddev | `/home/ned/sites/burnfund` | same as source | `burnfund.designmachines.xyz` | no exclusive port; Host probe through shared router 8080 |
+| `livewires` | static-compose | `/home/ned/sites/livewires` | `/home/ned/ai/ned-ops/projects/livewires` | `livewires.designmachines.xyz` | 8083 |
 
 Each Assembly record declares its repository `docker-compose.yml` followed by
 `/home/ned/ai/ned-ops/projects/<id>/compose.override.yml`. Live Wires declares
@@ -370,41 +396,53 @@ git commit -m "feat: add NED operator CLI"
 - Create: `/home/ned/ai/ned-ops/projects/livewires/Dockerfile`
 - Create: `/home/ned/ai/ned-ops/projects/livewires/Dockerfile.dockerignore`
 - Create: `/home/ned/ai/ned-ops/projects/livewires/compose.yml`
+- Create: `/home/ned/ai/ned-ops/scripts/assert-loopback-ports.py`
 
 **Interfaces:**
 - Consumes: clean checkout `/home/ned/sites/livewires`.
 - Produces: loopback preview `127.0.0.1:8083` without changing the Live Wires repository or DigitalOcean workflow.
 
-- [ ] **Step 1: Write the three Assembly restart overrides**
+- [ ] **Step 1: Write the three Assembly containment overrides**
 
-Each override contains exactly:
+Each override replaces—not appends to—the base Compose `ports` lists using the
+installed Compose version's verified `!override` support. Every retained host
+publication binds to `127.0.0.1`; unused CSS/HMR publications are removed. It
+also disables container-owned restart so systemd remains the host persistence
+owner. After rendering, JSON assertions require every published-port
+`host_ip` to equal `127.0.0.1` and every service restart policy to equal `no`.
+The essential shape is:
 
 ```yaml
 services:
   app:
-    restart: unless-stopped
+    ports: !override
+      - "127.0.0.1:${ASSEMBLY_PORT:-8090}:8090"
+    restart: "no"
   css:
-    restart: unless-stopped
+    ports: !override []
+    restart: "no"
 ```
 
 - [ ] **Step 2: Write the external multi-stage build**
 
 ```dockerfile
-FROM node:22-alpine AS build
+FROM node:22-alpine@sha256:<reviewed-ned-architecture-digest> AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci
 COPY . .
 RUN npm run build
 
-FROM nginx:1.27-alpine
+FROM nginx:1.27-alpine@sha256:<reviewed-ned-architecture-digest>
 COPY --from=build /app/dist/ /usr/share/nginx/html/
 HEALTHCHECK --interval=30s --timeout=3s --retries=3 \
   CMD wget -q -O /dev/null http://127.0.0.1/ || exit 1
 ```
 
 `Dockerfile.dockerignore` contains `.git`, `node_modules`, and `dist`, one per
-line.
+line. Resolve both digest placeholders for NED's architecture, record them in
+the commit, and review them before the first build; mutable tags alone are not
+accepted.
 
 - [ ] **Step 3: Write the loopback-only Compose wrapper**
 
@@ -416,7 +454,7 @@ services:
       dockerfile: /home/ned/ai/ned-ops/projects/livewires/Dockerfile
     ports:
       - "127.0.0.1:8083:80"
-    restart: unless-stopped
+    restart: "no"
 ```
 
 - [ ] **Step 4: Validate overrides, build, and prove source checkouts stay unchanged**
@@ -426,7 +464,13 @@ cd /home/ned/ai/ned-ops/projects/livewires
 docker compose -f /home/ned/assembly/assembly/docker-compose.yml -f /home/ned/ai/ned-ops/projects/dm006/compose.override.yml config --quiet
 docker compose -f /home/ned/assembly/assembly-baseplate/docker-compose.yml -f /home/ned/ai/ned-ops/projects/dm021/compose.override.yml config --quiet
 ASSEMBLY_DEV_PORT=8092 ASSEMBLY_DEV_CONTAINER_NAME=assembly-baseplate-2-app docker compose -f /home/ned/assembly/assembly-baseplate-2/docker-compose.yml -f /home/ned/ai/ned-ops/projects/dm022/compose.override.yml config --quiet
+docker compose -f /home/ned/assembly/assembly/docker-compose.yml -f /home/ned/ai/ned-ops/projects/dm006/compose.override.yml config --format json > /private/tmp/ned-compose-dm006.json
+docker compose -f /home/ned/assembly/assembly-baseplate/docker-compose.yml -f /home/ned/ai/ned-ops/projects/dm021/compose.override.yml config --format json > /private/tmp/ned-compose-dm021.json
+ASSEMBLY_DEV_PORT=8092 ASSEMBLY_DEV_CONTAINER_NAME=assembly-baseplate-2-app docker compose -f /home/ned/assembly/assembly-baseplate-2/docker-compose.yml -f /home/ned/ai/ned-ops/projects/dm022/compose.override.yml config --format json > /private/tmp/ned-compose-dm022.json
 docker compose --project-name livewires config --quiet
+for rendered in /private/tmp/ned-compose-dm006.json /private/tmp/ned-compose-dm021.json /private/tmp/ned-compose-dm022.json; do
+  python3 /home/ned/ai/ned-ops/scripts/assert-loopback-ports.py "$rendered"
+done
 docker compose --project-name livewires up -d --build
 curl --fail --silent --show-error http://127.0.0.1:8083/ >/dev/null
 test -z "$(git -C /home/ned/sites/livewires status --short)"
@@ -436,8 +480,9 @@ test -z "$(git -C /home/ned/sites/livewires status --short)"
 
 ```bash
 cd /home/ned/ai/ned-ops
-git add projects/livewires
+git add projects/dm006 projects/dm021 projects/dm022 projects/livewires scripts/assert-loopback-ports.py
 git commit -m "feat: add Live Wires static preview runtime"
+git status --short
 ```
 
 ---
@@ -476,7 +521,8 @@ rsync -a --protect-args \
   --exclude='.ddev/.dbimageBuild/' \
   --exclude='.ddev/.webimageBuild/' \
   /Users/trav/Websites/burnfund/ ned-plain:/home/ned/sites/burnfund/
-scp /private/tmp/burnfund-ned.sql.gz ned-plain:/home/ned/sites/burnfund/.ddev/burnfund-ned.sql.gz
+scp /private/tmp/burnfund-ned.sql.gz ned-plain:/private/tmp/burnfund-ned.sql.gz
+ssh ned-plain 'chmod 600 /private/tmp/burnfund-ned.sql.gz'
 ```
 
 - [ ] **Step 3: Compare the nested plugin repository on both machines**
@@ -491,19 +537,19 @@ Expected: the HEADs match and the remote plugin retains its `.git` directory.
 - [ ] **Step 4: Start DDEV and import**
 
 ```bash
-ssh ned-plain 'cd /home/ned/sites/burnfund && ddev start && ddev import-db --file=.ddev/burnfund-ned.sql.gz && ddev wp option get home'
+ssh ned-plain 'cd /home/ned/sites/burnfund && ddev start && ddev import-db --file=/private/tmp/burnfund-ned.sql.gz && ddev wp option get home'
 ```
 
 If the imported home URL differs, run `ddev wp search-replace` using the exact
-URL recorded in Step 1 and `http://burnfund.designmachines.xyz`, with
-`--skip-columns=guid`, then re-read the option.
+URL recorded in Step 1 and `https://burnfund.designmachines.xyz`, with
+`--skip-columns=guid`, then re-read both `home` and `siteurl`.
 
-- [ ] **Step 5: Move transient exports to each user's trash**
+- [ ] **Step 5: Remove transient exports immediately after verified import**
 
 ```bash
-mkdir -p /Users/trav/.Trash
-mv /private/tmp/burnfund-ned.sql.gz /Users/trav/.Trash/burnfund-ned.sql.gz
-ssh ned-plain 'install -d /home/ned/.local/share/Trash/files && mv /home/ned/sites/burnfund/.ddev/burnfund-ned.sql.gz /home/ned/.local/share/Trash/files/burnfund-ned.sql.gz'
+test -f /private/tmp/burnfund-ned.sql.gz
+unlink /private/tmp/burnfund-ned.sql.gz
+ssh ned-plain 'test -f /private/tmp/burnfund-ned.sql.gz && unlink /private/tmp/burnfund-ned.sql.gz'
 ```
 
 - [ ] **Step 6: Verify the host-routed application**
@@ -519,13 +565,16 @@ ssh ned-plain 'cd /home/ned/sites/burnfund && ddev describe -j | python3 -m json
 **Files:**
 - Create: `/home/ned/ai/ned-ops/systemd/ned-project@.service`
 - Create: `/home/ned/ai/ned-ops/systemd/ned-projects.target`
-- Create: `/home/ned/ai/ned-ops/systemd/ned-project@dm006.service.d/ordering.conf`
-- Create: `/home/ned/ai/ned-ops/systemd/ned-project@burnfund.service.d/ordering.conf`
+- Create: `/home/ned/ai/ned-ops/systemd/ned-project-health@.service`
+- Create: `/home/ned/ai/ned-ops/systemd/ned-project-health@.timer`
+- Create: `/home/ned/ai/ned-ops/nedops/render.py`
+- Create: `/home/ned/ai/ned-ops/tests/test_render.py`
 - Create: `/home/ned/ai/ned-ops/scripts/install-user-units.sh`
 
 **Interfaces:**
 - Consumes: `/home/ned/.local/bin/nedctl` and enabled inventory IDs.
-- Produces: reboot-persistent `ned-projects.target` and isolated per-project control.
+- Produces: reboot-persistent `ned-projects.target`, isolated per-project
+  control, and separate post-start health evidence.
 
 - [ ] **Step 1: Write the template service**
 
@@ -548,26 +597,16 @@ TimeoutStopSec=120
 WantedBy=ned-projects.target
 ```
 
-- [ ] **Step 2: Write the target and ordering drop-ins**
+- [ ] **Step 2: Render target membership and health timers from inventory**
 
-```ini
-[Unit]
-Description=NED persistent project runtimes
-Wants=ned-project@travisgertz.service ned-project@burnfund.service
-Wants=ned-project@dm006.service ned-project@dm021.service
-Wants=ned-project@dm022.service ned-project@livewires.service
-After=docker.service
-
-[Install]
-WantedBy=default.target
-```
-
-The dm006 and Burnfund drop-ins each contain:
-
-```ini
-[Unit]
-After=ned-project@travisgertz.service
-```
+`nedops.render` reads the validated inventory and deterministically renders the
+target's `Wants=` membership plus one health timer per enabled persistent ID.
+The health service runs `nedctl health %i` and exits non-zero when required
+runtime lanes are unhealthy. No project-to-project ordering is emitted unless a
+future schema names a real prerequisite. Tests prove rendered unit membership
+equals the enabled persistent inventory exactly. A lifecycle unit's active
+state proves desired startup completed; only the health unit and `nedctl` prove
+continued application health.
 
 - [ ] **Step 3: Write the idempotent installer**
 
@@ -580,7 +619,7 @@ The installer sets a fixed PATH, verifies every source file, installs them mode
 
 ```bash
 cd /home/ned/ai/ned-ops
-systemd-analyze --user verify systemd/ned-project@.service systemd/ned-projects.target
+systemd-analyze --user verify systemd/ned-project@.service systemd/ned-projects.target systemd/ned-project-health@.service systemd/ned-project-health@.timer
 python3 -m unittest discover -s tests -v
 loginctl show-user ned -p Linger
 ./scripts/install-user-units.sh
@@ -607,15 +646,17 @@ systemctl --user --no-pager --full status ned-projects.target
 
 ```bash
 cd /home/ned/ai/ned-ops
-git add systemd scripts/install-user-units.sh
+git add systemd scripts/install-user-units.sh nedops/render.py tests/test_render.py
 git commit -m "feat: persist NED project lifecycles"
 ```
 
 ---
 
-### Task 7: Replace the permissive Caddy wildcard with explicit private routes
+### Task 7: Render and install explicit private Caddy routes
 
 **Files:**
+- Create: `/home/ned/ai/ned-ops/generated/designmachines-previews.caddy`
+- Install: `/etc/caddy/conf.d/designmachines-previews.caddy`
 - Modify: `/etc/caddy/Caddyfile`
 - Backup: `/etc/caddy/Caddyfile.pre-ned-runtime-20260811`
 
@@ -623,41 +664,32 @@ git commit -m "feat: persist NED project lifecycles"
 - Consumes: healthy loopback services.
 - Produces: explicit private routes and unknown-host 404 behavior.
 
-- [ ] **Step 1: Capture pre-change evidence and backup**
+- [ ] **Step 1: Render routes from inventory**
+
+`nedops.render` emits one exact host handler for each enabled
+`*.designmachines.xyz` project plus a final 404 handler. A test proves the
+fragment's host set equals the inventory's enabled Design Machines domains.
+The system Caddyfile imports the mode-0644 installed copy under
+`/etc/caddy/conf.d`; it does not maintain a second hand-written project list.
+
+- [ ] **Step 2: Capture pre-change evidence and an immutable backup**
 
 ```bash
-curl --insecure --silent --output /dev/null --write-out '%{http_code}\n' --resolve unknown.designmachines.xyz:443:100.77.82.93 https://unknown.designmachines.xyz/
+NED_TAILSCALE_IP="$(tailscale ip -4)"
+test -n "$NED_TAILSCALE_IP"
+curl --insecure --silent --output /dev/null --write-out '%{http_code}\n' --resolve "unknown.designmachines.xyz:443:$NED_TAILSCALE_IP" https://unknown.designmachines.xyz/
+test ! -e /etc/caddy/Caddyfile.pre-ned-runtime-20260811
 sudo install -m 0644 /etc/caddy/Caddyfile /etc/caddy/Caddyfile.pre-ned-runtime-20260811
 ```
 
-- [ ] **Step 2: Replace only the Design Machines wildcard block**
+- [ ] **Step 3: Replace only the Design Machines wildcard block**
 
-```caddyfile
-https://*.designmachines.xyz {
-	tls /etc/caddy/certs/designmachines.xyz.crt /etc/caddy/certs/designmachines.xyz.key
+Retain the wildcard block's TLS certificate lines and import
+`/etc/caddy/conf.d/designmachines-previews.caddy`. The installer copies the
+validated generated source there. Installation is a `trav` action and requires
+an immediate diff review before reload.
 
-	@travisgertz host travisgertz.designmachines.xyz
-	handle @travisgertz {
-		reverse_proxy 127.0.0.1:8080
-	}
-
-	@burnfund host burnfund.designmachines.xyz
-	handle @burnfund {
-		reverse_proxy 127.0.0.1:8080
-	}
-
-	@livewires host livewires.designmachines.xyz
-	handle @livewires {
-		reverse_proxy 127.0.0.1:8083
-	}
-
-	handle {
-		respond "No Design Machines preview at this hostname (NED 9000)" 404
-	}
-}
-```
-
-- [ ] **Step 3: Validate before reload**
+- [ ] **Step 4: Validate before reload**
 
 ```bash
 sudo caddy validate --config /etc/caddy/Caddyfile
@@ -667,13 +699,13 @@ systemctl is-active caddy
 
 If validation fails, restore the backup with `sudo install` and do not reload.
 
-- [ ] **Step 4: Prove known and unknown routes**
+- [ ] **Step 5: Prove known and unknown routes**
 
 ```bash
-curl --insecure --fail --silent --resolve travisgertz.designmachines.xyz:443:100.77.82.93 https://travisgertz.designmachines.xyz/ >/dev/null
-curl --insecure --fail --silent --resolve burnfund.designmachines.xyz:443:100.77.82.93 https://burnfund.designmachines.xyz/ >/dev/null
-curl --insecure --fail --silent --resolve livewires.designmachines.xyz:443:100.77.82.93 https://livewires.designmachines.xyz/ >/dev/null
-test "$(curl --insecure --silent --output /dev/null --write-out '%{http_code}' --resolve unknown.designmachines.xyz:443:100.77.82.93 https://unknown.designmachines.xyz/)" = "404"
+curl --insecure --location --max-redirs 3 --proto-redir =https --fail-with-body --silent --resolve "travisgertz.designmachines.xyz:443:$NED_TAILSCALE_IP" https://travisgertz.designmachines.xyz/ >/dev/null
+curl --insecure --location --max-redirs 3 --proto-redir =https --fail-with-body --silent --resolve "burnfund.designmachines.xyz:443:$NED_TAILSCALE_IP" https://burnfund.designmachines.xyz/ >/dev/null
+curl --insecure --location --max-redirs 3 --proto-redir =https --fail-with-body --silent --resolve "livewires.designmachines.xyz:443:$NED_TAILSCALE_IP" https://livewires.designmachines.xyz/ >/dev/null
+test "$(curl --insecure --silent --output /dev/null --write-out '%{http_code}' --resolve "unknown.designmachines.xyz:443:$NED_TAILSCALE_IP" https://unknown.designmachines.xyz/)" = "404"
 ```
 
 ---
@@ -817,15 +849,23 @@ git diff --check
 
 Expected: focused eval at least 70%; dual and full composition pass.
 
-- [ ] **Step 6: Commit without releasing**
+- [ ] **Step 6: Commit the reviewed plugin change**
 
 ```bash
 git add plugins/ned .claude-plugin/marketplace.json .agents/plugins/marketplace.json description-evals/ned-operate.json docs/search-index.md
 git commit -m "feat(ned): add guarded NED operations skill"
 ```
 
-Do not tag or push. Publication requires a fresh
-`./tools/check-release-preflight.sh` receipt and explicit authority.
+Do not tag or push in this step.
+
+- [ ] **Step 7: Request release authority, publish, and verify both providers**
+
+After a fresh exact-head review and `./tools/check-release-preflight.sh` receipt,
+request explicit authority for the push and `ned` 1.8.0 tag. If approved, push
+the reviewed commit, publish the tag on that exact commit, update the Depot
+marketplace in NED Codex and Claude, and prove both report `ned` 1.8.0 with the
+`operate` skill. If authority is not granted or publication fails, acceptance
+must say `ned:operate locally validated; released endpoint unavailable`.
 
 ---
 
@@ -857,8 +897,8 @@ systemctl --user --no-pager --full status ned-projects.target
 for id in dm006 dm021 dm022 travisgertz burnfund livewires; do /home/ned/.local/bin/nedctl doctor "$id"; done
 ```
 
-Expected: lifecycle, loopback, and private Caddy lanes pass; external Access is
-reported unconfigured.
+Expected: lifecycle, loopback, and local Caddy lanes pass; tailnet is reported
+separately from the Mac receipt, and external Access is unconfigured.
 
 - [ ] **Step 3: Prove reserved runtimes remain absent**
 
@@ -878,7 +918,7 @@ for url in \
   https://travisgertz.designmachines.xyz/ \
   https://burnfund.designmachines.xyz/ \
   https://livewires.designmachines.xyz/; do
-  curl --insecure --fail --silent --show-error "$url" >/dev/null
+  curl --insecure --location --max-redirs 3 --proto-redir =https --fail-with-body --silent --show-error "$url" >/dev/null
 done
 ```
 

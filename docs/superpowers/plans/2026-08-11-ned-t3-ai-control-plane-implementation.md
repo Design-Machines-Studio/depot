@@ -6,7 +6,9 @@
 
 **Architecture:** A pinned T3 installation and systemd user service run as `ned`. T3 uses its documented Tailscale Serve integration on port 8443; initial pairing happens interactively so the pairing credential is never captured in journals or agent output. T3 is the remote UI and provider transport, while released Depot plugins remain the cross-model workflow and subagent layer.
 
-**Tech Stack:** Node.js 24 LTS user installation, npm lockfile, T3 Code CLI/server, Tailscale Serve HTTPS, systemd user service, Claude Code 2.1.227+, Codex CLI 0.147.0+, Depot marketplace releases, macOS T3 Code desktop.
+**Tech Stack:** Ubuntu-signed Node.js 22 LTS and npm packages, npm lockfile,
+T3 Code CLI/server, Tailscale Serve HTTPS, systemd user service, Claude Code
+2.1.227+, Codex CLI 0.147.0+, Depot marketplace releases, macOS T3 Code desktop.
 
 ## Global Constraints
 
@@ -28,87 +30,72 @@
 
 ### NED
 
-- Node install directory printed by `printf '/home/ned/.local/lib/node-%s-linux-x64\n' "$NED_NODE_VERSION"` — checksum-verified Node LTS files.
-- `/home/ned/.local/node` — stable symlink used by systemd.
+- `/usr/bin/node`, `/usr/bin/npm`, and `/usr/bin/npx` — Ubuntu archive-signed
+  packages installed by `trav`, not downloaded archives extracted by `ned`.
 - `/home/ned/ai/t3-code/package.json` — private pinned T3 dependency.
 - `/home/ned/ai/t3-code/package-lock.json` — exact npm dependency graph.
 - `/home/ned/ai/t3-code/README.md` — upgrade, pairing, recovery, and log policy.
+- `/home/ned/ai/t3-code/scripts/check-serve-containment.py` — reads a protected
+  Serve config and emits only a boolean containment verdict.
 - `/home/ned/.config/systemd/user/ned-t3.service` — always-on T3 service.
 - `/home/ned/.config/systemd/user/default.target.wants/ned-t3.service` — enablement symlink created by systemd.
-- `/home/ned/.config/environment.d/20-ned-local-bin.conf` — stable user-service PATH.
 - `/home/ned/.codex/` and `/home/ned/.claude/` — existing provider state and released plugin caches.
 
 ### Mac
 
 - `/Applications/T3 Code (Alpha).app` — existing desktop client.
-- T3 application support — paired remote environment metadata only; pairing material is handled by the app.
+- T3 application support — the Mac app owns client-side pairing authority; the
+  implementation must verify its storage path and permissions without printing
+  values. NED owns server-side T3 state. Neither side may copy pairing authority
+  into repositories, service arguments, journals, or agent-visible output.
 
 ---
 
-### Task 1: Install a checksum-verified user-scoped Node 24 LTS runtime
+### Task 1: Install the Ubuntu archive-signed Node 22 LTS runtime
 
 **Files:**
-- Create: the exact Node directory printed from the verified `NED_NODE_VERSION` in Step 1.
-- Create: `/home/ned/.local/node`
-- Create: `/home/ned/.config/environment.d/20-ned-local-bin.conf`
+- Install: Ubuntu `nodejs` and `npm` packages through APT as `trav`.
 
 **Interfaces:**
-- Produces: `/home/ned/.local/node/bin/{node,npm,npx}` and a stable PATH for user services.
+- Produces: `/usr/bin/{node,npm,npx}` from NED's configured signed Ubuntu
+  archive, with no manually extracted remote archive.
 
-- [ ] **Step 1: Resolve the current Node 24 LTS patch from the official release index**
+- [ ] **Step 1: Verify the signed distro candidates without changing state**
 
 ```bash
-NED_NODE_VERSION="$(curl --fail --silent --show-error https://nodejs.org/dist/index.json | python3 -c 'import json,sys; print(next(x["version"] for x in json.load(sys.stdin) if x["version"].startswith("v24.") and x["lts"]))')"
-printf '%s\n' "$NED_NODE_VERSION"
+apt-cache policy nodejs npm
+apt-cache show nodejs | sed -n '1,30p'
 ```
 
-Expected: one `v24.x.y` value with a non-false LTS field. Stop if resolution is
-empty or returns a non-v24 value.
+Expected from the 2026-08-11 audit: Node `22.22.1` from Ubuntu `resolute` and
+npm `9.2.0`. Stop if the candidate origin is not a configured signed Ubuntu
+archive or Node is older than the minimum required by the current T3 package.
 
-- [ ] **Step 2: Download the archive and official checksum into a private temporary directory**
+- [ ] **Step 2: Request administrative approval and install exact candidates**
 
 ```bash
-NED_NODE_TMP="$(mktemp -d /tmp/ned-node.XXXXXX)"
-chmod 700 "$NED_NODE_TMP"
-curl --fail --location --output "$NED_NODE_TMP/node.tar.xz" "https://nodejs.org/dist/$NED_NODE_VERSION/node-$NED_NODE_VERSION-linux-x64.tar.xz"
-curl --fail --location --output "$NED_NODE_TMP/SHASUMS256.txt" "https://nodejs.org/dist/$NED_NODE_VERSION/SHASUMS256.txt"
+sudo apt-get update
+sudo apt-get install --yes nodejs npm
 ```
 
-- [ ] **Step 3: Verify the checksum before extraction**
+- [ ] **Step 3: Verify package provenance and runtime paths**
 
 ```bash
-cd "$NED_NODE_TMP"
-rg "  node-$NED_NODE_VERSION-linux-x64.tar.xz$" SHASUMS256.txt > node.sha256
-sed -i "s#node-$NED_NODE_VERSION-linux-x64.tar.xz#node.tar.xz#" node.sha256
-sha256sum --check node.sha256
+apt-cache policy nodejs npm
+dpkg-query -W -f='${Package} ${Version}\n' nodejs npm
+command -v node npm npx
+node --version
+npm --version
 ```
 
-Expected: `node.tar.xz: OK`.
+Expected: binaries resolve under `/usr/bin` and installed versions match the
+signed package records.
 
-- [ ] **Step 4: Install without sudo and create the stable symlink**
-
-```bash
-install -d /home/ned/.local/lib
-tar -C /home/ned/.local/lib -xJf "$NED_NODE_TMP/node.tar.xz"
-ln -sfn "/home/ned/.local/lib/node-$NED_NODE_VERSION-linux-x64" /home/ned/.local/node
-/home/ned/.local/node/bin/node --version
-/home/ned/.local/node/bin/npm --version
-```
-
-- [ ] **Step 5: Configure user-service PATH and remove temporary files**
+- [ ] **Step 4: Verify explicit user-service resolution**
 
 ```bash
-install -d /home/ned/.config/environment.d /home/ned/.local/share/Trash/files
-printf '%s\n' 'PATH=/home/ned/.local/node/bin:/home/ned/.local/bin:/usr/local/bin:/usr/bin:/bin' > /home/ned/.config/environment.d/20-ned-local-bin.conf
-systemctl --user set-environment PATH=/home/ned/.local/node/bin:/home/ned/.local/bin:/usr/local/bin:/usr/bin:/bin
-mv "$NED_NODE_TMP" /home/ned/.local/share/Trash/files/node-install-20260811
-```
-
-- [ ] **Step 6: Verify explicit and user-service resolution**
-
-```bash
-/home/ned/.local/node/bin/node --version
-systemd-run --user --wait --pipe /usr/bin/env PATH=/home/ned/.local/node/bin:/home/ned/.local/bin:/usr/bin:/bin node --version
+/usr/bin/node --version
+systemd-run --user --wait --pipe /usr/bin/node --version
 ```
 
 ---
@@ -124,18 +111,22 @@ systemd-run --user --wait --pipe /usr/bin/env PATH=/home/ned/.local/node/bin:/ho
 - Consumes: Node runtime from Task 1.
 - Produces: `/home/ned/ai/t3-code/node_modules/.bin/t3` pinned by lockfile.
 
-- [ ] **Step 1: Resolve and record the current published T3 version**
+- [ ] **Step 1: Resolve a candidate version and record immutable metadata without executing it**
 
 ```bash
 install -d -m 700 /home/ned/ai/t3-code
 cd /home/ned/ai/t3-code
-NED_T3_VERSION="$(/home/ned/.local/node/bin/npm view t3 version)"
+NED_T3_VERSION="$(/usr/bin/npm view t3 version)"
 printf '%s\n' "$NED_T3_VERSION"
+/usr/bin/npm view "t3@$NED_T3_VERSION" dist.integrity dist.tarball engines --json
 ```
 
-Stop if the result is empty or is not a valid semantic version.
+Stop if the result is empty or invalid. Record the exact version, integrity,
+tarball URL, engine requirement, query time, and registry in a review receipt.
+Confirm the package identity against T3's official documentation before any
+install command.
 
-- [ ] **Step 2: Write private package metadata and install exactly that version**
+- [ ] **Step 2: Fetch and inspect the exact package with lifecycle scripts disabled**
 
 ```json
 {
@@ -147,27 +138,43 @@ Stop if the result is empty or is not a valid semantic version.
 }
 ```
 
-Then run:
+Then fetch without installation:
 
 ```bash
 cd /home/ned/ai/t3-code
-/home/ned/.local/node/bin/npm install --save-exact "t3@$NED_T3_VERSION"
+umask 077
+NED_T3_PACK_DIR="$(mktemp -d /private/tmp/ned-t3-pack.XXXXXX)"
+cd "$NED_T3_PACK_DIR"
+/usr/bin/npm pack "t3@$NED_T3_VERSION" --ignore-scripts --json > pack.json
+/usr/bin/npm view "t3@$NED_T3_VERSION" dist.integrity --json > expected-integrity.json
+tar -tf ./*.tgz > archive-files.txt
 ```
 
-- [ ] **Step 3: Verify the lockfile and CLI without starting a server**
+Inspect the bounded file list, package manifest, declared scripts, archive paths,
+and npm-reported integrity. Reject absolute/traversal paths, unexpected native
+binaries, install scripts without a documented need, or a mismatch with the
+recorded metadata. The review receipt must approve the exact tarball digest
+before proceeding.
+
+- [ ] **Step 3: Create the lockfile and install with scripts disabled**
 
 ```bash
-/home/ned/.local/node/bin/npm ci --ignore-scripts=false
+/usr/bin/npm install --save-exact --ignore-scripts "t3@$NED_T3_VERSION"
+/usr/bin/npm ci --ignore-scripts
 ./node_modules/.bin/t3 --help
-/home/ned/.local/node/bin/npm ls t3 --depth=0
+/usr/bin/npm ls t3 --depth=0
 ```
 
-Expected: npm reports exactly one pinned `t3` version and the CLI help exits 0.
+Expected: npm reports exactly one pinned reviewed version and the CLI help exits
+0 without lifecycle scripts. If the CLI requires a script-generated artifact,
+stop and review that single script before executing it; never enable all scripts
+with `--ignore-scripts=false`.
 
 - [ ] **Step 4: Document bounded upgrade and recovery commands**
 
-`README.md` records: explicit Node/T3 paths; `npm ci`; manual version upgrades
-using `npm install --save-exact`; service status/restart; `tailscale serve
+`README.md` records: explicit Node/T3 paths; `npm ci --ignore-scripts`; manual
+version upgrades using the same fetch/inspect/approve/install sequence; service
+status/restart; `tailscale serve
 status`; `tailscale serve reset` as a confirmation-gated rollback; SSH/tmux
 fallback; and the rule that pairing output is interactive only.
 
@@ -205,21 +212,23 @@ Wants=network-online.target
 Type=simple
 WorkingDirectory=/home/ned/ai/t3-code
 Environment=HOME=/home/ned
-Environment=PATH=/home/ned/.local/node/bin:/home/ned/.local/bin:/usr/local/bin:/usr/bin:/bin
+Environment=PATH=/home/ned/.local/bin:/usr/local/bin:/usr/bin:/bin
 UMask=0077
 ExecStart=/home/ned/ai/t3-code/node_modules/.bin/t3 serve --tailscale-serve --tailscale-serve-port 8443
 Restart=on-failure
 RestartSec=5
 TimeoutStopSec=30
 StandardOutput=null
-StandardError=journal
+StandardError=null
 
 [Install]
 WantedBy=default.target
 ```
 
-`StandardOutput=null` prevents pairing URLs emitted on stdout from entering the
-journal. Pairing is performed interactively in Task 4.
+Both application streams are discarded so pairing or provider authority cannot
+enter the journal. systemd still records lifecycle transitions and exit status.
+Pairing is performed interactively in Task 4. A future redacting logger requires
+its own tests and an audited host journald retention policy before enablement.
 
 - [ ] **Step 2: Validate and install without enabling or starting**
 
@@ -268,24 +277,28 @@ Explain that the next command configures a tailnet-only HTTPS endpoint through
 Tailscale Serve, not a public Funnel. Do not continue until the user explicitly
 confirms this immediate action.
 
-- [ ] **Step 3: Run pairing interactively without tool capture or journaling**
+- [ ] **Step 3: Run pairing in a disposable non-recorded terminal**
 
-In NED's existing interactive `ned` tmux session, run:
+Open a dedicated interactive terminal whose scrollback and session recording are
+disabled. Do not use the existing persistent tmux session, an agent tool, shell
+history, or `script`. Run:
 
 ```bash
+umask 077
 cd /home/ned/ai/t3-code
 ./node_modules/.bin/t3 pair --tailscale
 ```
 
 Use the Mac T3 app to consume the displayed pairing URL/QR directly. Do not
 paste it into chat or a shell transcript. After the Mac confirms pairing, stop
-the interactive pair process cleanly.
+the interactive pair process cleanly, close the disposable terminal, and verify
+that no pairing material remains in shell history or tmux scrollback.
 
 - [ ] **Step 4: Enable and start the always-on service**
 
 ```bash
 systemctl --user enable --now ned-t3.service
-systemctl --user --no-pager --full status ned-t3.service
+systemctl --user is-active ned-t3.service
 tailscale serve status
 ```
 
@@ -296,7 +309,11 @@ Expected: service active and Tailscale Serve HTTPS present on port 8443.
 ```bash
 tailscale funnel status
 ss -ltnp | rg '8443|t3|node' || true
-tailscale serve get-config --all
+NED_SERVE_CONFIG="$(mktemp /private/tmp/ned-serve-config.XXXXXX)"
+chmod 600 "$NED_SERVE_CONFIG"
+tailscale serve get-config "$NED_SERVE_CONFIG" --all
+python3 /home/ned/ai/t3-code/scripts/check-serve-containment.py "$NED_SERVE_CONFIG"
+unlink "$NED_SERVE_CONFIG"
 ```
 
 Expected: no Funnel; no T3 process bound to `0.0.0.0` or `[::]`; Serve targets
@@ -305,13 +322,25 @@ the T3 local service.
 - [ ] **Step 6: Verify the journal contains no pairing authority**
 
 ```bash
-if journalctl --user -u ned-t3.service --since '10 minutes ago' --no-pager | rg -i 'pair|token|secret|credential|https://.*auth'; then
+if journalctl --user -u ned-t3.service --since '10 minutes ago' --no-pager -n 200 | rg -qi 'pair|token|secret|credential|https://.*auth'; then
+  printf '%s\n' 'credential-shaped T3 journal content detected' >&2
   exit 1
 fi
 ```
 
-Expected: no matching output. If authority appears, stop the service, rotate
-pairing through the T3 app, and fix logging before proceeding.
+Expected: no matching output. The predicate is quiet so a failure never prints
+the matching authority. If it fails, stop the service, rotate pairing through
+the T3 app, and fix logging before proceeding.
+
+- [ ] **Step 7: Verify pairing-state ownership without reading values**
+
+Before pairing, identify the exact Mac client-state and NED server-state paths
+from current T3 documentation or CLI help; do not guess or glob. After pairing,
+run value-free `stat` checks against those exact paths. Require the Mac state to
+be owned by `trav`, the NED state to be owned by `ned`, and neither to grant
+group or other access. Record only path, owner, and mode—never names or contents
+of credential-bearing child files. Stop the service and correct permissions if
+either check fails.
 
 ---
 
@@ -423,9 +452,10 @@ codex plugin list | rg '@depot|Marketplace `depot`'
 claude plugin list | sed -n '1,220p'
 ```
 
-Expected: the requested plugin set is enabled for both. `ned` remains 1.7.1
-until the separately validated `ned:operate` release is tagged and published;
-do not claim the unreleased 1.8.0 checkout is installed.
+Expected: the requested plugin set is enabled for both. If the separately
+reviewed `ned:operate` release was authorized and published, both report `ned`
+1.8.0. Otherwise both remain on 1.7.1 and this plan records the operations skill
+as an explicit unavailable lane.
 
 - [ ] **Step 4: Exercise one released workflow in each T3 provider**
 
@@ -524,9 +554,33 @@ Move them to `/home/ned/.local/share/Trash/files/` after recording the result.
 From the Mac:
 
 ```bash
-ssh ned9000 'hostname; tmux list-sessions'
 ssh ned-plain 'systemctl --user is-active ned-t3.service; tailscale serve status'
 ```
 
-Expected: tmux maintenance and plain automation paths both work independently
-of the T3 desktop UI.
+Separately open `ssh ned9000` with no remote command and confirm it attaches to
+the expected tmux session. The plain scripted alias and tmux-attached interactive
+alias must both work independently of the T3 desktop UI.
+
+---
+
+### Task 8: Prove tailnet containment and reboot persistence
+
+- [ ] **Step 1: Prove denial from outside the tailnet**
+
+From a controlled device with Tailscale disconnected, attempt the NED T3 HTTPS
+hostname and port. Record only the connection-failed verdict. Separately confirm
+no Caddy, cloudflared, Funnel, firewall, or NAT rule forwards port 8443. A local
+listener audit alone is not public-denial evidence.
+
+- [ ] **Step 2: Request immediate reboot approval**
+
+Present the service, provider, workspace, disconnection, recovery, and
+off-tailnet-denial evidence. Do not reboot until the user explicitly approves
+this immediate action.
+
+- [ ] **Step 3: Reboot and re-run acceptance**
+
+After approval, reboot NED, reconnect through `ned-plain`, and verify the T3
+service, Tailscale Serve mapping, no-Funnel state, both provider sessions, Mac
+reconnection, and SSH/tmux recovery. The always-on claim remains unproven until
+this reboot pass succeeds.

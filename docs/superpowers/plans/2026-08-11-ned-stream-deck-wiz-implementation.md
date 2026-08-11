@@ -10,7 +10,9 @@
 
 ## Global Constraints
 
-- Preserve all non-Wiz Stream Deck actions, images, coordinates, titles, device IDs, Key Light settings, and profile metadata byte-for-data-model.
+- Preserve every non-target JSON field and value. Parsing may change serialized
+  byte layout, so tests compare the parsed data model after removing only the
+  six explicitly targeted `shellCommand` values.
 - Back up the complete `.sdProfile` directory before modifying the manifest.
 - Update exactly six Run Shell actions: `video_night`, `morning`, `video_day`, `evening`, `writing`, and `away`.
 - Remove the erroneous literal `Command:` prefix from the writing action by replacing the entire command.
@@ -24,7 +26,6 @@
 
 - Create: `/home/ned/ai/ned-ops/mac/ned-wiz` — versioned launcher source.
 - Create: `/home/ned/ai/ned-ops/mac/update_streamdeck.py` — exact six-action updater.
-- Create: `/home/ned/ai/ned-ops/mac/__init__.py` — importable updater package for tests.
 - Create: `/home/ned/ai/ned-ops/tests/test_streamdeck_update.py` — mutation-count and preservation tests.
 - Install: `/Users/trav/.local/bin/ned-wiz` — executable Mac launcher.
 - Modify: `/Users/trav/Library/Application Support/com.elgato.StreamDeck/ProfilesV3/B22EB0C7-B569-4E1F-85A6-1555CE993C30.sdProfile/Profiles/A61C3F28-3C81-4824-8B42-23CAB335D6BF/manifest.json`.
@@ -47,7 +48,11 @@
 #!/bin/zsh
 set -eu
 
-readonly scene="${1:-}"
+if (( $# != 1 )); then
+  print -u2 "usage: ned-wiz {video_night|morning|video_day|evening|writing|away}"
+  exit 64
+fi
+readonly scene="$1"
 case "$scene" in
   video_night|morning|video_day|evening|writing|away) ;;
   *)
@@ -69,7 +74,9 @@ exec /usr/bin/ssh \
 
 ```bash
 /bin/zsh -n /home/ned/ai/ned-ops/mac/ned-wiz
+/bin/zsh /home/ned/ai/ned-ops/mac/ned-wiz; test "$?" -eq 64
 /bin/zsh /home/ned/ai/ned-ops/mac/ned-wiz invalid-scene; test "$?" -eq 64
+/bin/zsh /home/ned/ai/ned-ops/mac/ned-wiz morning extra; test "$?" -eq 64
 ```
 
 - [ ] **Step 3: Commit the launcher source**
@@ -95,7 +102,6 @@ chmod 0755 /Users/trav/.local/bin/ned-wiz
 
 **Files:**
 - Create: `/home/ned/ai/ned-ops/mac/update_streamdeck.py`
-- Create: `/home/ned/ai/ned-ops/mac/__init__.py`
 - Create: `/home/ned/ai/ned-ops/tests/test_streamdeck_update.py`
 
 **Interfaces:**
@@ -123,6 +129,13 @@ def test_preserves_non_shell_actions(self):
     before = collect_non_shell_actions(self.fixture)
     updated, _ = rewrite_manifest(self.fixture)
     self.assertEqual(collect_non_shell_actions(updated), before)
+
+def test_preserves_decoy_with_matching_suffix(self):
+    self.fixture["Actions"].append(decoy_run_shell_action(
+        "python scenes.py morning",
+    ))
+    updated, _ = rewrite_manifest(self.fixture)
+    self.assertEqual(last_shell_command(updated), "python scenes.py morning")
 ```
 
 - [ ] **Step 2: Prove the tests fail**
@@ -136,17 +149,23 @@ Expected: import failure for `mac.update_streamdeck` until the module exists.
 
 - [ ] **Step 3: Implement recursive exact matching**
 
-The updater walks dictionaries and lists, selects objects whose `UUID` is
-`com.thoughtasylum.macauto.runshell`, reads `Settings.shellCommand`, and maps
-only commands ending in `python scenes.py <scene>` for the six allowlisted
-scenes. It writes `/Users/trav/.local/bin/ned-wiz <scene>`, sorts the returned
-scene list, and raises `RuntimeError` unless each approved scene appears exactly
-once. JSON output uses `ensure_ascii=False` and compact separators to match the
-existing one-line manifest.
+Before implementation, capture the six audited full command strings from the
+backed-up manifest. The updater walks dictionaries and lists, selects objects
+whose `UUID` is `com.thoughtasylum.macauto.runshell`, and replaces a command
+only when the complete `Settings.shellCommand` value exactly matches one entry
+in that six-entry mapping. This includes the writing command's current literal
+`Command:` prefix. It writes `/Users/trav/.local/bin/ned-wiz <scene>`, sorts the
+returned scene list, and raises `RuntimeError` unless every mapping entry appears
+exactly once. A suffix-equivalent decoy must remain unchanged. JSON output uses
+`ensure_ascii=False` and compact separators to match the existing one-line
+manifest.
 
 ```python
-SCENES = {"video_night", "morning", "video_day", "evening", "writing", "away"}
 UUID = "com.thoughtasylum.macauto.runshell"
+COMMAND_MAP = {
+    # Populate with the six complete audited command strings from the backup.
+    # old_complete_command: scene_name
+}
 
 def rewrite_manifest(document: dict) -> tuple[dict, list[str]]:
     updated = copy.deepcopy(document)
@@ -155,13 +174,11 @@ def rewrite_manifest(document: dict) -> tuple[dict, list[str]]:
         if item.get("UUID") != UUID:
             continue
         settings = item.get("Settings", {})
-        command = settings.get("shellCommand", "")
-        for scene in SCENES:
-            if command.endswith(f"python scenes.py {scene}"):
-                settings["shellCommand"] = f"/Users/trav/.local/bin/ned-wiz {scene}"
-                changed.append(scene)
-                break
-    if sorted(changed) != sorted(SCENES):
+        scene = COMMAND_MAP.get(settings.get("shellCommand", ""))
+        if scene is not None:
+            settings["shellCommand"] = f"/Users/trav/.local/bin/ned-wiz {scene}"
+            changed.append(scene)
+    if sorted(changed) != sorted(COMMAND_MAP.values()):
         raise RuntimeError(f"expected six scenes, changed {sorted(changed)}")
     return updated, sorted(changed)
 ```
@@ -178,6 +195,7 @@ cd /home/ned/ai/ned-ops
 python3 -m unittest tests.test_streamdeck_update -v
 git add mac/update_streamdeck.py tests/test_streamdeck_update.py
 git commit -m "feat: add exact Stream Deck scene updater"
+git status --short
 ```
 
 ---
