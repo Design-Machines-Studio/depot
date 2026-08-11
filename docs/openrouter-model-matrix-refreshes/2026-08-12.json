@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "observedAt": "2026-08-11T22:42:37Z",
+  "expiresAt": "2026-08-11T22:57:37Z",
+  "observation_date_utc": "2026-08-11",
+  "matrix_snapshot_date": "2026-08-12",
+  "authority": "The matrix recommends, routing policy decides, receipts record.",
+  "sources": [
+    {"url": "https://openrouter.ai/api/v1/models", "observed_on": "2026-08-11", "kind": "official_catalog"},
+    {"url": "https://developers.openai.com/api/docs/guides/latest-model", "observed_on": "2026-08-12", "kind": "official_native_guidance"},
+    {"url": "https://developers.openai.com/api/docs/models", "observed_on": "2026-08-12", "kind": "official_native_catalog"},
+    {"url": "https://developers.openai.com/api/docs/models/gpt-5.6-sol", "observed_on": "2026-08-12", "kind": "official_native_model"},
+    {"url": "https://developers.openai.com/api/docs/models/gpt-5.6-terra", "observed_on": "2026-08-12", "kind": "official_native_model"},
+    {"url": "https://developers.openai.com/api/docs/models/gpt-5.6-luna", "observed_on": "2026-08-12", "kind": "official_native_model"},
+    {"url": "https://www.anthropic.com/claude/fable", "observed_on": "2026-08-12", "kind": "official_native_model"},
+    {"url": "https://www.anthropic.com/webinars/building-on-the-claude-platform-claude-fable-5-and-model-orchestration-patterns", "observed_on": "2026-08-12", "kind": "official_orchestration_guidance"},
+    {"url": "https://artificialanalysis.ai/models/kimi-k3", "observed_on": "2026-08-12", "kind": "independent_evaluation"},
+    {"url": "https://artificialanalysis.ai/models/deepseek-v4-flash", "observed_on": "2026-08-12", "kind": "independent_evaluation"},
+    {"url": "https://artificialanalysis.ai/models/grok-4-5", "observed_on": "2026-08-12", "kind": "independent_evaluation"},
+    {"url": "https://artificialanalysis.ai/articles/grok-4-5-brings-spacexai-to-the-the-intelligence-frontier", "observed_on": "2026-08-12", "kind": "independent_coding_agent_evaluation"},
+    {"url": "https://artificialanalysis.ai/models/glm-5-2/", "observed_on": "2026-08-12", "kind": "independent_evaluation"}
+  ],
+  "local_sources": [
+    "ai-memory:DepotMetrics",
+    "ai-memory:DepotPlugin:dm-review",
+    "ai-memory:Assembly Fixture Jig",
+    "docs/pipeline-receipts/r1-review-burn-cuts.md",
+    "docs/pipeline-receipts/rail-exhaustion-ask-gate.md",
+    "docs/pipeline-receipts/rail-exhaustion-ask-gate-postmortem.md"
+  ],
+  "inventory": {
+    "reviewed_slug_list": [
+      "moonshotai/kimi-k3",
+      "openai/gpt-5.6-terra",
+      "x-ai/grok-4.5",
+      "z-ai/glm-5.2",
+      "meta/muse-spark-1.1",
+      "openai/gpt-5.6-luna",
+      "google/gemini-3.5-flash",
+      "deepseek/deepseek-v4-pro",
+      "minimax/minimax-m3",
+      "deepseek/deepseek-v4-flash",
+      "qwen/qwen3-coder"
+    ],
+    "changed": [
+      "all routed entries: snapshot, availability, top-provider limits, tool/reasoning support, and recommendation metadata",
+      "z-ai/glm-5.2: price/cache/context",
+      "deepseek/deepseek-v4-pro: price/cache/context",
+      "deepseek/deepseek-v4-flash: resolved identity, price/cache/context, superseded status",
+      "qwen/qwen3-coder: context corrected from misleading 1M to 262144",
+      "x-ai/grok-4.5, meta/muse-spark-1.1, openai/gpt-5.6-luna, google/gemini-3.5-flash, minimax/minimax-m3: cache pricing added",
+      "current independent intelligence, effort, and evaluated-output evidence for Kimi K3, DeepSeek V4 Flash 0731, Grok 4.5, and GLM-5.2"
+    ],
+    "unchanged": [
+      "all 11 previously routed slugs remain catalog-available",
+      "moonshotai/kimi-k3 base price and context",
+      "openai/gpt-5.6-terra base price and context",
+      "openai/gpt-5.6-luna base price and context",
+      "x-ai/grok-4.5 base input/output price and context",
+      "meta/muse-spark-1.1 base input/output price and context",
+      "google/gemini-3.5-flash base input/output price and context",
+      "minimax/minimax-m3 base input/output price and model/top-provider context"
+    ],
+    "new_candidate": ["deepseek/deepseek-v4-flash-0731"],
+    "unavailable": [],
+    "aliased": ["~deepseek/deepseek-v4-flash-latest"],
+    "superseded": ["deepseek/deepseek-v4-flash resolves to DeepSeek V4 Flash 0423 and is superseded for new recommendations by deepseek/deepseek-v4-flash-0731"],
+    "stale": [
+      "all retained Artificial Analysis v4.1 coding and agentic scores",
+      "all Artificial Analysis v4.1 evidence for models not re-evaluated on model-specific current pages",
+      "the routed DeepSeek V4 Flash 0423 quality record"
+    ]
+  },
+  "catalog_evidence": {
+    "moonshotai/kimi-k3": {"name": "MoonshotAI: Kimi K3", "available": true, "created": 1784215858, "pricing": {"prompt": "0.000003", "completion": "0.000015", "input_cache_read": "0.0000003"}, "context_length": 1048576, "top_provider": {"context_length": 1048576, "max_completion_tokens": null, "is_moderated": false}, "modality": "text+image+video->text", "tools": true, "reasoning": true},
+    "openai/gpt-5.6-terra": {"name": "OpenAI: GPT-5.6 Terra", "available": true, "created": 1783590857, "pricing": {"prompt": "0.000001", "completion": "0.000006", "input_cache_read": "0.0000001", "input_cache_write": "0.00000125", "overrides": [{"min_prompt_tokens": 272000, "prompt": "0.000002", "completion": "0.000009", "input_cache_read": "0.0000002", "input_cache_write": "0.0000025"}]}, "context_length": 1050000, "top_provider": {"context_length": 1050000, "max_completion_tokens": 128000, "is_moderated": true}, "modality": "text+image+file->text", "tools": true, "reasoning": true},
+    "x-ai/grok-4.5": {"name": "SpaceXAI: Grok 4.5", "available": true, "created": 1783523154, "pricing": {"prompt": "0.000002", "completion": "0.000006", "input_cache_read": "0.0000003", "overrides": [{"min_prompt_tokens": 200000, "prompt": "0.000004", "completion": "0.000012", "input_cache_read": "0.0000006"}]}, "context_length": 500000, "top_provider": {"context_length": 500000, "max_completion_tokens": null, "is_moderated": false}, "modality": "text+image+file->text", "tools": true, "reasoning": true},
+    "z-ai/glm-5.2": {"name": "Z.ai: GLM 5.2", "available": true, "created": 1781631930, "pricing": {"prompt": "0.000000392", "completion": "0.000001232", "input_cache_read": "0.0000000728"}, "context_length": 1048576, "top_provider": {"context_length": 1048576, "max_completion_tokens": 131072, "is_moderated": false}, "modality": "text->text", "tools": true, "reasoning": true, "parallel_tool_calls": true},
+    "meta/muse-spark-1.1": {"name": "Meta: Muse Spark 1.1", "available": true, "created": 1784215741, "pricing": {"prompt": "0.00000125", "completion": "0.00000425", "input_cache_read": "0.00000015"}, "context_length": 1048576, "top_provider": {"context_length": 1048576, "max_completion_tokens": null, "is_moderated": true}, "modality": "text+image+file+audio+video->text", "tools": true, "reasoning": true},
+    "openai/gpt-5.6-luna": {"name": "OpenAI: GPT-5.6 Luna", "available": true, "created": 1783590864, "pricing": {"prompt": "0.0000001", "completion": "0.0000006", "input_cache_read": "0.00000001", "input_cache_write": "0.000000125", "overrides": [{"min_prompt_tokens": 272000, "prompt": "0.0000002", "completion": "0.0000009", "input_cache_read": "0.00000002", "input_cache_write": "0.00000025"}]}, "context_length": 1050000, "top_provider": {"context_length": 1050000, "max_completion_tokens": 128000, "is_moderated": true}, "modality": "text+image+file->text", "tools": true, "reasoning": true},
+    "google/gemini-3.5-flash": {"name": "Google: Gemini 3.5 Flash", "available": true, "created": 1779193800, "pricing": {"prompt": "0.0000015", "completion": "0.000009", "input_cache_read": "0.00000015", "input_cache_write": "0.0000000833333333333333"}, "context_length": 1048576, "top_provider": {"context_length": 1048576, "max_completion_tokens": 65536, "is_moderated": false}, "modality": "text+image+file+audio+video->text", "tools": true, "reasoning": true},
+    "deepseek/deepseek-v4-pro": {"name": "DeepSeek: DeepSeek V4 Pro", "available": true, "created": 1777000679, "pricing": {"prompt": "0.00000063168", "completion": "0.00000126336", "input_cache_read": "0.000000053298"}, "context_length": 1048576, "top_provider": {"context_length": 1048576, "max_completion_tokens": 393216, "is_moderated": false}, "modality": "text->text", "tools": true, "reasoning": true},
+    "minimax/minimax-m3": {"name": "MiniMax: MiniMax M3", "available": true, "created": 1780245374, "pricing": {"prompt": "0.0000003", "completion": "0.0000012", "input_cache_read": "0.00000006"}, "context_length": 1048576, "top_provider": {"context_length": 524288, "max_completion_tokens": 512000, "is_moderated": false}, "modality": "text+image+video->text", "tools": true, "reasoning": true},
+    "deepseek/deepseek-v4-flash": {"name": "DeepSeek: DeepSeek V4 Flash 0423", "available": true, "created": 1777000666, "pricing": {"prompt": "0.00000014", "completion": "0.00000028", "input_cache_read": "0.000000028"}, "context_length": 1048576, "top_provider": {"context_length": 1048576, "max_completion_tokens": 393216, "is_moderated": false}, "modality": "text->text", "tools": true, "reasoning": true},
+    "deepseek/deepseek-v4-flash-0731": {"name": "DeepSeek: DeepSeek V4 Flash 0731", "available": true, "created": 1785478908, "pricing": {"prompt": "0.00000008", "completion": "0.00000018", "input_cache_read": "0.000000016"}, "context_length": 1048576, "top_provider": {"context_length": 1048576, "max_completion_tokens": 384000, "is_moderated": false}, "modality": "text->text", "tools": true, "reasoning": true, "parallel_tool_calls": true},
+    "qwen/qwen3-coder": {"name": "Qwen: Qwen3 Coder 480B A35B", "available": true, "created": 1753230546, "pricing": {"prompt": "0.0000003", "completion": "0.000001", "input_cache_read": "0.0000001"}, "context_length": 262144, "top_provider": {"context_length": 262144, "max_completion_tokens": 65536, "is_moderated": false}, "modality": "text->text", "tools": true, "reasoning": false},
+    "~deepseek/deepseek-v4-flash-latest": {"name": "DeepSeek V4 Flash Latest", "available": true, "created": 1785606009, "pricing": {"prompt": "0.000000072", "completion": "0.000000144", "input_cache_read": "0.0000000144"}, "context_length": 1048576, "top_provider": {"context_length": 262144, "max_completion_tokens": 262144, "is_moderated": false}, "modality": "text->text", "tools": true, "reasoning": true, "parallel_tool_calls": true, "identity_policy": "do not route; non-durable alias"}
+  },
+  "quality_evidence": {
+    "source_version": "Artificial Analysis Intelligence Index v4.1.1",
+    "benchmark_components": ["GDPval-AA v2", "tau3-Banking", "Terminal-Bench v2.1", "SciCode", "Humanity's Last Exam", "GPQA Diamond", "CritPt", "AA-Omniscience", "AA-LCR"],
+    "models": {
+      "moonshotai/kimi-k3": {"status": "current-intelligence-only", "exact_variant": "Kimi K3 (max)", "effort": "max", "intelligence": 60, "coding": {"value": 76.2, "status": "stale-v4.1"}, "agentic": {"value": 50.1, "status": "stale-v4.1"}, "evaluated_output_tokens_m": 130, "speed_tokens_per_second": 42.5, "evaluation_cost_usd": 2425.11, "price_basis": "Kimi first-party API, not OpenRouter catalog"},
+      "deepseek/deepseek-v4-flash-0731": {"status": "current-intelligence-only", "exact_variant": "DeepSeek V4 Flash 0731 (reasoning, max effort)", "effort": "max", "intelligence": 52, "coding": null, "agentic": null, "evaluated_output_tokens_m": 210, "speed_tokens_per_second": 128.0, "price_basis": "DeepSeek first-party API, not OpenRouter catalog"},
+      "x-ai/grok-4.5": {"status": "current-intelligence-and-separate-coding-agent-evidence", "exact_variant": "Grok 4.5 (high)", "effort": "high", "intelligence": 56, "coding": {"score": 76, "exact_variant": "Grok 4.5 in Grok Build", "source_version": "Artificial Analysis Coding Agent Index reported 2026-07-08; DeepSWE, Terminal-Bench v2, SWE-Atlas QnA", "average_tokens_m": 1.9, "cost_status": "source conflict: summary says $2.59/task; detail says $2.49/task; neither canonicalized"}, "agentic": null, "evaluated_output_tokens_m": 60, "speed_tokens_per_second": 56.8, "evaluation_cost_usd": 579.21, "price_basis": "SpaceXAI first-party API, not OpenRouter catalog"},
+      "z-ai/glm-5.2": {"status": "current-intelligence-only", "exact_variant": "GLM-5.2 (max)", "effort": "max", "intelligence": 53, "coding": {"value": 68.8, "status": "stale-v4.1"}, "agentic": {"value": 43.1, "status": "stale-v4.1"}, "evaluated_output_tokens_m": 140, "speed_tokens_per_second": 132.0, "evaluation_cost_usd": 723.74, "price_basis": "median across providers, not OpenRouter catalog"}
+    },
+    "caveat": "Current model pages did not expose complete comparable coding and agentic index values in retrievable page content. Old fields remain explicitly stale rather than restamped."
+  },
+  "local_operator_evidence": [
+    {"model": "moonshotai/kimi-k3", "claim": "Effective at consequential focused security review.", "evidence": "2026-08-08 rail-exhaustion run: Kimi independently found the self-authorization P1 and additional fail-closed/cross-family policy defects."},
+    {"model": "moonshotai/kimi-k3", "claim": "Verbose and materially costly for broad routine review.", "evidence": "R1 review receipts show successful Kimi lanes around 16,625-25,773 tokens and $0.21065-$0.31859; the rail-exhaustion security lanes emitted 8,587 and 9,913 completion tokens at $0.1393479 and $0.16611795."},
+    {"model": "moonshotai/kimi-k3", "claim": "Large payload reliability needs bounding.", "evidence": "Two Kimi requests on 107KB and 271KB payloads ended incomplete_stream with no output; one security recheck also required a recorded retry."},
+    {"model": "z-ai/glm-5.2", "claim": "Can complete a mechanical lane but should not retain a default seat.", "evidence": "A 2026-08-08 mechanical review completed with 12,923 completion tokens at $0.0651352; repeated operator experience says GLM-5.2 needs too much handholding in this harness."},
+    {"model": "deepseek/deepseek-v4-flash-0731", "claim": "No local evidence yet.", "evidence": "Older DeepSeek V4 lanes had wrapper failures, hallucinated nonexistent paths, and false-positive test findings; those are not attributed to the 0731 refresh."},
+    {"model": "x-ai/grok-4.5", "claim": "No local Depot/Assembly execution receipt found.", "evidence": "Recommendation remains provisional and benchmark-led."},
+    {"model": "openai/gpt-5.6-sol", "claim": "Strong code-aware reviewer and hard-problem fallback, with overbuilding risk.", "evidence": "Depot review records identify the native Codex 5.6 Sol lane as strongest in hard reviews; operator instruction requires explicit simplicity and ergonomics checks."}
+  ],
+  "native_subscription_evidence": {
+    "openai": {
+      "models": {
+        "gpt-5.6-sol": {"role": "frontier complex reasoning and coding", "context_tokens": 1050000, "api_equivalent_usd_per_m": {"input": 5.0, "cached_input": 0.5, "output": 30.0}},
+        "gpt-5.6-terra": {"role": "balance intelligence and cost", "context_tokens": 1050000, "api_equivalent_usd_per_m": {"input": 2.0, "cached_input": 0.2, "output": 12.0}},
+        "gpt-5.6-luna": {"role": "cost-sensitive high-volume work", "context_tokens": 1050000, "api_equivalent_usd_per_m": {"input": 0.2, "cached_input": 0.02, "output": 1.2}}
+      },
+      "pricing_note": "Planning equivalents only; not measured subscription spend. API prices rise for prompts above 272K input tokens.",
+      "effort_guidance": "Preserve the current effort as baseline and compare one level lower. Medium is balanced, low is latency-sensitive, high/xhigh require measured gain, and max is reserved for the hardest quality-first tasks."
+    },
+    "anthropic": {
+      "model": "Claude Fable 5",
+      "boundary": "native subscription only; never add an anthropic/* OpenRouter slug",
+      "advisor_pattern": "Fable sets strategy while a smaller cheaper model performs bounded work",
+      "depot_mapping": "non-coding strategy checkpoint only; do not duplicate full code review"
+    }
+  },
+  "native_api_equivalent_cost": {
+    "status": "changed",
+    "changes": [
+      "refreshed Sol evidence date and replaced OpenRouter page with official OpenAI source; price unchanged at $5/$30 and $0.50 cached input",
+      "removed Terra and Luna native aliases because their OpenRouter prices differ from official native API equivalents and the existing schema cannot represent both without conflation"
+    ],
+    "preserved": ["schema_version 1", "four input bytes per token estimate", "observation-only and never billed subscription spend semantics"]
+  },
+  "proposed_workload_matrix": {
+    "moonshotai/kimi-k3": {"use": "focused security and difficult independent review", "avoid": "implementation or fixing its own findings", "supervision": "bounded output then cheaper executor handoff plus independent sign-off", "confidence": "high-security-medium-other"},
+    "deepseek/deepseek-v4-flash-0731": {"use": "default candidate for bounded low-cost execution", "avoid": "broad autonomous or security-critical work", "supervision": "Codex 5.6 scope/correctness/simplicity review", "confidence": "medium-provisional"},
+    "x-ai/grok-4.5": {"use": "more demanding bounded execution or escalation", "avoid": "unbounded work and >200K prompts without cost review", "supervision": "Codex 5.6 changed-surface review", "confidence": "medium-low-provisional"},
+    "z-ai/glm-5.2": {"use": "experimental last fallback or proven narrow exception", "avoid": "default seats", "supervision": "strong native supervision and explicit acceptance criteria", "confidence": "low-default"},
+    "fable-5-native": {"use": "non-coding strategy/advisor checkpoint", "avoid": "OpenRouter, implementation, duplicated full review", "supervision": "operator/Codex reduces advice to a small brief", "confidence": "high-boundary"},
+    "gpt-5.6-sol-native": {"use": "code-aware supervisor/reviewer and hard fallback", "avoid": "automatic full-task replay and habitual maximum effort", "supervision": "it is the supervisor; operator owns consequential authorization", "confidence": "high"}
+  },
+  "effort_recommendations": [
+    {"native_model_task": "Luna or Terra / mechanical verification and scoped work", "default": "low", "escalation_trigger": "named acceptance criterion missed"},
+    {"native_model_task": "Sol / ordinary code-aware supervision and review", "default": "medium", "escalation_trigger": "cross-component ambiguity, meaningful consequence, or failed medium attempt"},
+    {"native_model_task": "Sol / consequential security", "default": "high", "escalation_trigger": "unresolved attack path or failed high-effort verification; then xhigh"},
+    {"native_model_task": "Sol / hardest quality-first fallback", "default": "xhigh", "escalation_trigger": "failed xhigh or named high-consequence uncertainty; then max"},
+    {"native_model_task": "Fable 5 / non-coding advisor", "default": "lowest native setting adequate to frame direction", "escalation_trigger": "named strategic uncertainty remains unresolved"}
+  ],
+  "executable_routing_recommendations": [
+    "In chunk 00c, evaluate replacing the undated DeepSeek execution rung with deepseek/deepseek-v4-flash-0731 after local bounded-task trials.",
+    "Evaluate DeepSeek V4 Flash 0731 as bounded execution head and Grok 4.5 as demanding bounded escalation.",
+    "Remove Kimi K3 from implementation and self-fix positions; retain focused security review with output bounds and cheaper executor handoff.",
+    "Demote GLM-5.2 from default seats to experimental last fallback unless a narrow local task class earns an exception.",
+    "Keep Fable 5 native-only for non-coding strategy and Codex 5.6 native for code-aware supervision with measured effort escalation."
+  ],
+  "executable_routing_changed": false,
+  "executable_routing_statement": "No routing-policy value, model-cascade order, harness profile, agent card, executor default, authorization rule, provider gate, or executable routing identity was changed in this refresh."
+}
