@@ -920,7 +920,20 @@ def validate_fd3(fd: int, used_descriptors: set[int]) -> None:
         metadata = os.fstat(fd)
     except OSError:
         _fail("exchange_state_invalid")
-    if not stat.S_ISFIFO(metadata.st_mode) or metadata.st_nlink != 0:
+    if not stat.S_ISFIFO(metadata.st_mode):
+        _fail("exchange_state_invalid")
+    if metadata.st_nlink == 0:
+        return
+    # Linux reports one link for anonymous pipes, unlike macOS which reports
+    # zero. Bind the proc descriptor to this exact pipe inode so a named FIFO
+    # (also link count one) cannot satisfy the inherited-pipe contract.
+    if metadata.st_nlink != 1:
+        _fail("exchange_state_invalid")
+    try:
+        descriptor_target = os.readlink(f"/proc/self/fd/{fd}")
+    except OSError:
+        _fail("exchange_state_invalid")
+    if descriptor_target != f"pipe:[{metadata.st_ino}]":
         _fail("exchange_state_invalid")
 
 
