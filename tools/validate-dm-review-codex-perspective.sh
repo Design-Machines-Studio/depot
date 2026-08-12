@@ -15,7 +15,7 @@ require_text() {
   local pattern="$2"
   local label="$3"
 
-  if grep -Fq "$pattern" "$file"; then
+  if grep -Fq -- "$pattern" "$file"; then
     printf "  OK    %s\n" "$label"
   else
     printf "  FAIL  %s\n" "$label"
@@ -28,11 +28,45 @@ reject_text() {
   local pattern="$2"
   local label="$3"
 
-  if grep -Fq "$pattern" "$file"; then
+  if grep -Fq -- "$pattern" "$file"; then
     printf "  FAIL  %s\n" "$label"
     failures=1
   else
     printf "  OK    %s\n" "$label"
+  fi
+}
+
+security_path_requires_full() {
+  case "$1" in
+    internal/auth/*|*/internal/auth/*|internal/federation/*|*/internal/federation/*|*/security/*|*/middleware/auth*|*/middleware/security*|*/secretbox*|*/destructive_confirmation*|internal/baseplate/email/settings*|deploy/*|*/deploy/*|*.env*|*/.env*|*/openrouter-wrapper.sh|*/payload-authorization.sh|*/runner-batch-authorization.sh|*/delegation-boundary.sh|*/workflow-authority*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+full_allowlist_can_omit_security() {
+  local basis="$1"
+  local prior_full_complete="$2"
+  local security_boundary_changed="$3"
+  [ "$basis" = affected_lane_repair ] &&
+    [ "$prior_full_complete" = true ] &&
+    [ "$security_boundary_changed" = false ]
+}
+
+assert_fixture() {
+  local expected="$1"
+  local label="$2"
+  local actual
+  shift 2
+  if "$@"; then
+    actual=true
+  else
+    actual=false
+  fi
+  if [ "$actual" = "$expected" ]; then
+    printf "  OK    %s\n" "$label"
+  else
+    printf "  FAIL  %s\n" "$label"
+    failures=1
   fi
 }
 
@@ -223,6 +257,10 @@ guardrails="$REPO_ROOT/plugins/dm-review/skills/review/references/guardrails.md"
 output_format="$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md"
 issue_tracking="$REPO_ROOT/plugins/dm-review/skills/review/references/issue-tracking.md"
 graceful_degradation="$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md"
+review_loop="$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md"
+quick_command="$REPO_ROOT/plugins/dm-review/commands/dm-review-quick.md"
+generated_quick="$REPO_ROOT/plugins/dm-review/skills/dm-review-quick/SKILL.md"
+pipeline_orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
 
 require_text "$review_skill" "codex-perspective" "review skill selects codex-perspective reviewer"
 require_text "$review_skill" "codex exec -s read-only -c service_tier=fast --skip-git-repo-check" "review skill documents known-good Codex invocation"
@@ -270,7 +308,61 @@ require_text "$issue_tracking" 'source_agents:' "todo source_agents metadata rem
 require_text "$consolidator" 'Coverage Gaps' "coverage gaps remain explicit"
 require_text "$graceful_degradation" 'REVIEW INCOMPLETE' "core-lane incomplete behavior remains compatible"
 require_text "$graceful_degradation" 'Degraded: all conditional agents unavailable' "degraded-lane behavior remains compatible"
-require_text "$output_format" 'P3-only is NOT clean' "zero-deferral recommendation remains compatible"
+require_text "$output_format" 'if any P3 findings:' "P3-only recommendation retains advisory branch"
+require_text "$output_format" 'recommendation = "CLEAN"' "P3-only maps to CLEAN"
+require_text "$output_format" 'source identity, raw reference, evidence, synthesis disposition, counts, and provenance' "P3 report retains complete advisory evidence"
+require_text "$issue_tracking" 'P3 -- Advisory' "P3 is advisory in issue-tracking policy"
+require_text "$issue_tracking" 'No -- retain in report and receipts only' "P3 does not create todo or issue work"
+require_text "$review_loop" 'never enters the fix queue' "P3 does not enter convergence fix queue"
+require_text "$review_loop" 'required_finding_files = todos/*-pending-p1-*.md plus todos/*-pending-p2-*.md' "review loop excludes legacy P3 todos from convergence"
+require_text "$review_loop" 'prior_finding_owner_lanes = union of validated exact source_agents' "review loop preserves repaired finding owners"
+require_text "$review_loop" 'promoted_to_full = true' "review loop records full-review promotion"
+reject_text "$review_skill" 'Phase 5.5: Simplification Pass' "active simplification phase is retired"
+reject_text "$review_skill" 'refactor: simplify per dm-review pass' "automatic simplification commit is retired"
+reject_text "$review_skill" 'diff < 100 lines' "quick roster does not scale by diff size"
+require_text "$review_skill" 'Ordinary quick review always selects exactly these two core judgment lanes' "ordinary quick roster has exact core contract"
+require_text "$review_skill" '**pattern-recognition-specialist**' "quick roster includes pattern recognition"
+require_text "$review_skill" '**code-simplicity-reviewer**' "quick roster includes code simplicity"
+require_text "$review_skill" 'Do not add `second-perspective`' "quick roster excludes second perspective"
+require_text "$review_skill" 'quick mode escalates to the existing full mode' "security-sensitive quick review escalates to full"
+require_text "$review_skill" '`**/middleware/auth*`' "quick escalation covers auth middleware"
+require_text "$review_skill" '`payload-authorization.sh`' "quick escalation covers Depot credential transport"
+require_text "$review_skill" 'Do not widen this set to all handlers, shell scripts, dependency manifests, or' "quick escalation stays proportionally bounded"
+assert_fixture true "auth path escalates quick review" security_path_requires_full "internal/auth/session.go"
+assert_fixture true "Depot credential transport escalates quick review" security_path_requires_full "plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
+assert_fixture false "ordinary handler stays on quick review" security_path_requires_full "internal/members/handler.go"
+assert_fixture false "dependency manifest stays on quick review" security_path_requires_full "go.mod"
+assert_fixture true "proven ordinary repair may omit repeated security sign-off" full_allowlist_can_omit_security affected_lane_repair true false
+assert_fixture false "security-boundary repair cannot omit security sign-off" full_allowlist_can_omit_security affected_lane_repair true true
+assert_fixture false "missing full baseline cannot omit security sign-off" full_allowlist_can_omit_security affected_lane_repair false false
+require_text "$review_skill" 'mandatory full-diff independent-family security sign-off' "full review retains independent security sign-off"
+require_text "$review_skill" 'add **second-perspective** as a parallel read-only reviewer in full mode only' "full review retains second perspective"
+require_text "$quick_command" 'Ordinary quick review always selects exactly:' "canonical quick command has exact two-core contract"
+require_text "$generated_quick" 'Ordinary quick review always selects exactly:' "generated quick alias has exact two-core contract"
+reject_text "$quick_command" 'architecture-reviewer' "canonical ordinary quick roster excludes architecture"
+reject_text "$generated_quick" 'architecture-reviewer' "generated ordinary quick roster excludes architecture"
+for active_command in \
+  "$REPO_ROOT/plugins/dm-review/commands/dm-review.md" \
+  "$REPO_ROOT/plugins/dm-review/commands/dm-review-fix.md" \
+  "$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md" \
+  "$REPO_ROOT/plugins/dm-review/skills/dm-review/SKILL.md" \
+  "$REPO_ROOT/plugins/dm-review/skills/dm-review-fix/SKILL.md" \
+  "$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md"; do
+  reject_text "$active_command" '--allow-defer-p3' "${active_command#$REPO_ROOT/} retires allow-defer-p3"
+done
+require_text "$pipeline_orchestrator" 'one **focused Codex review**' "Pipeline keeps focused proportional per-chunk review"
+require_text "$pipeline_orchestrator" 'one final full dm-review fan-out' "Pipeline runs one final full fan-out"
+require_text "$pipeline_orchestrator" 'Re-run only the affected lanes' "Pipeline verifies repairs with affected lanes"
+require_text "$pipeline_orchestrator" 'prior full review was incomplete or the' "Pipeline limits repeated full fan-out"
+require_text "$pipeline_orchestrator" 'p3_advisories: [N]' "Pipeline evaluation receipt names P3 advisories"
+reject_text "$pipeline_orchestrator" 'findings_remaining: [N] | deferred: [N]' "Pipeline evaluation receipt retires undefined deferred count"
+require_text "$REPO_ROOT/README.md" 'Quick review with two core judgment lanes' "README describes proportional quick roster"
+require_text "$REPO_ROOT/README.md" 'P3 stays advisory' "README describes proportional convergence"
+reject_text "$REPO_ROOT/plugins/project-scaffolder/skills/scaffolding/references/claude-md-templates/dm-standard.md" '--allow-defer-p3' "scaffold template retires P3 deferral flag"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.59.0"' "canonical dm-review version is 1.59.0"
+require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.59.0"' "generated dm-review version is 1.59.0"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.46.0"' "canonical Pipeline version is 1.46.0"
+require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.59.0"' "generated Pipeline dependency floor is current"
 
 printf "Synthesis identity fixtures\n"
 base_id=$(fixture_finding_id \

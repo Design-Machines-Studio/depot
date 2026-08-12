@@ -146,11 +146,11 @@ references.
 
 **Review adapter:** Codex sessions do not expose a generic nested `Skill(skill="dm-review:review", ...)` callable. Use this risk-tiered contract in the current orchestrator context:
 
-- For ordinary non-sensitive chunks, run one focused read-only Codex review against the chunk diff and allow at most one repair/recheck pass. Preserve pending/done todo receipts and zero-deferral handling.
+- For ordinary non-sensitive chunks, run one focused read-only Codex review against the chunk diff and allow at most one P1/P2 repair/recheck pass. Preserve pending/done todo receipts.
 - For sensitive-path chunks, run the full inline `plugins/dm-review/skills/review/SKILL.md` protocol against the chunk worktree, with at most two passes.
-- For the final gate, run the review skill's full-mode protocol against the feature branch.
+- For the final gate, run one full fan-out using the review skill's full-mode protocol against the feature branch.
 - Use `multi_agent_v1.spawn_agent` for the focused Codex reviewer or for review agents selected by the full dm-review protocol when available.
-- Preserve zero-deferral: fix all P1, P2, and P3 findings or record an explicit deferred-finding justification after the documented convergence limits.
+- Fix P1/P2 findings and retain complete P3 advisory evidence. Verify repairs with affected lanes; repeat the full fan-out only if its coverage was incomplete or a repair changed a security-sensitive boundary.
 - Write/read the same `todos/*-pending-*.md` and `todos/*-done-*.md` receipts that dm-review uses.
 
 Do not report "Skill tool unavailable" in Codex when this adapter can run. That message is only valid if the session lacks both nested skill invocation and enough local access to execute the dm-review inline protocol.

@@ -8,18 +8,16 @@ argument-hint: "[optional: PR number, branch name, or file path]"
 
 Run a comprehensive code review using all applicable agents for the current project stack.
 
-## Zero-Deferral Policy (default)
+## Finding Policy
 
-All dm-review commands default to zero-deferral: P1, P2, AND P3 findings MUST be fixed before the branch is considered ready to merge. P3s fix band-aid solutions and tech debt -- deferring them is how debt compounds silently. `/dm-review` surfaces findings; `/dm-review-fix` resolves them; `/dm-review-loop` automates fix-until-clean.
+P1 blocks merge and P2 must be fixed before merge. P3 is advisory: retain its complete evidence, provenance, count, and detail, but do not create mandatory work, drive convergence, or prevent `CLEAN`. `/dm-review` surfaces all findings; `/dm-review-fix` resolves pending P1/P2 findings; `/dm-review-loop` automates fix-until-clean for required work.
 
 The merge recommendation reflects this policy:
 
 - **Zero findings:** `CLEAN` -- safe to merge.
-- **P3 only (no P1/P2):** `APPROVE WITH FIXES -- P3s mandatory under zero-deferral.` NOT clean. Run `/dm-review-fix` (or `/dm-review-loop`) to resolve before merging.
+- **P3 only (no P1/P2):** `CLEAN` -- retain every P3 as a visible advisory.
 - **P2 present:** `APPROVE WITH FIXES`. Must fix.
 - **P1 present:** `BLOCKS MERGE`. Must fix.
-
-To explicitly opt out of zero-deferral for a specific run (rare -- e.g. a P3 genuinely belongs in a different branch), pass `--allow-defer-p3`. Each deferred P3 must carry a written justification and a tracking destination.
 
 ## Process
 
@@ -29,7 +27,7 @@ To explicitly opt out of zero-deferral for a specific run (rare -- e.g. a P3 gen
    - PR number or URL: review that pull request
    - Branch name: review that branch vs main
    - File path: review that specific file or directory
-3. Output the unified review report with merge recommendation (per the zero-deferral policy above)
+3. Output the unified review report with merge recommendation (per the finding policy above)
 
 ## Synthesis and Contribution Contract
 
@@ -48,7 +46,7 @@ exact structured contracts. Then use only the trusted launcher command
 superseded, duplicate, resolved, and disagreement outcomes to the contributing
 attempts. These receipts are observation-only economics evidence: they cannot
 select a provider, change routing, invent a finding, waive coverage, or alter
-the zero-deferral recommendation. Missing raw evidence or any required lane or
+the finding-policy recommendation. Missing raw evidence or any required lane or
 browser case remains a reported coverage gap, never an implicit clean result.
 The exporter rejects credential-shaped content and credential-bearing URIs
 before hashing or persistence, descriptor-safely seals every raw output, and

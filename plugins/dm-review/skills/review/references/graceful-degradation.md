@@ -4,7 +4,7 @@ Decision table for classifying agent failures and determining review completenes
 
 ---
 
-## Minimum Viable Review
+## Minimum Viable Full Review
 
 All 5 core criteria must complete successfully. Security has two logical lanes
 when OpenRouter is selected: both must complete independently.
@@ -91,10 +91,10 @@ The standard merge recommendation logic (from severity-mapping.md §Escalation R
 ```text
 if any P1:
   BLOCKS MERGE
-elif any P2 or any P3:
-  APPROVE WITH FIXES   (P3-only is mandatory under zero-deferral; --allow-defer-p3 opts out)
+elif any P2:
+  APPROVE WITH FIXES
 else:
-  CLEAN
+  CLEAN   (including P3-only, with complete advisory evidence retained)
 ```
 
 Then overlay failure status:

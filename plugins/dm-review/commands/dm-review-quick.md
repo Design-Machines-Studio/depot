@@ -1,53 +1,55 @@
 ---
 name: dm-review-quick
-description: Quick code review with 5 core criteria (6 logical lanes when OpenRouter adds its security lens), plus ui-standards-reviewer for UI changes
+description: Quick code review with two core judgment lanes plus applicable UI, build, and domain verification
 argument-hint: "[optional: PR number, branch name, or file path]"
 ---
 
 # Quick Code Review
 
-Run a fast code review using the core agents plus ui-standards-reviewer for UI files.
+Run a fast applicability-driven code review. Security-sensitive changes escalate to full mode.
 
-## Diff-Size Scaling
+## Core Lanes
 
-Quick mode scales agent count by diff size:
+Ordinary quick review always selects exactly:
 
-- **< 100 lines (lightweight):** 3 review criteria plus explicit security-lane separation -- `security-auditor-codex-signoff` is a stable ID for the implementer-independent full-diff sign-off, `security-auditor-openrouter` reviews eligible sections when available, plus pattern-recognition-specialist and code-simplicity-reviewer. Skips architecture-reviewer and doc-sync-reviewer. Other criteria may run on Codex when OpenRouter is unavailable, but the sign-off family must still differ from the implementer.
-- **100-500 lines (standard):** 5 core criteria: 6 logical lanes with OpenRouter, 5 without.
-- **> 500 lines (extended):** the same core logical lanes + applicable classification-aware agents.
+1. `pattern-recognition-specialist`
+2. `code-simplicity-reviewer`
 
-## Core Agents (standard+ mode)
-
-1. code-simplicity-reviewer
-2. security-auditor-codex-signoff (stable ID; required full-diff independent-family lane) plus security-auditor-openrouter when available (eligible sections only)
-3. pattern-recognition-specialist
-4. architecture-reviewer
-5. doc-sync-reviewer
+Diff size never widens this roster by itself.
 
 ## Classification-Aware Agents (skip when not applicable)
 
 Each agent has a file-type trigger. Do NOT dispatch an agent whose trigger is absent from the diff -- it wastes tokens and may emit confused findings.
 
-- **go-build-verifier:** dispatch ONLY if `.go` files changed. Skip otherwise.
-- **craft-reviewer:** dispatch ONLY if `.twig`, `.php`, or Craft module config files changed. Skip otherwise.
-- **migration-validator:** dispatch ONLY if `.sql` files under a migrations directory changed. Skip otherwise.
+- **go-build-verifier:** dispatch ONLY if `.go` or `.templ` files changed and the project has `go.mod` + `docker-compose.yml`. Skip otherwise.
+- **craft-reviewer:** dispatch ONLY if `.twig`, `.php`, or Craft module config files changed and the project has `craft/` or `.ddev/`. Skip otherwise.
 - **ui-standards-reviewer:** dispatch when `.templ`, `.twig`, `.html`, or `.css` files changed. Evaluates rendered UI against Stripe/Notion/Linear quality bar with token discovery and Live Wires compliance.
 
-Compute the trigger set from the diff before dispatching. Skipped agents are logged in the report's Agent Summary as `<agent>: skipped (no matching files in diff)` so the zero-deferral audit can confirm nothing was overlooked by accident.
+Compute the trigger set from the diff before dispatching. Log applicable selected lanes and any triggered lane that was meaningfully unavailable. Do not manufacture skip rows for every agent in the plugin.
 
-## Zero-Deferral Policy (default)
+## Security Escalation
 
-Quick mode surfaces findings at the same P1/P2/P3 severities as full mode. The zero-deferral policy applies equally -- any P3 surfaced here is a mandatory fix before merge unless `--allow-defer-p3` is explicitly used (see `/dm-review`).
+If the diff touches the bounded security-sensitive path set named by the review
+skill, do not use this ordinary roster as a substitute for security review.
+Escalate to full mode, which retains the independent-family full-diff security
+sign-off, authorized external security lens, and full-only second perspective.
+Do not infer extra security triggers from generic handlers, shell scripts,
+dependency manifests, or configuration files. Quick review is early feedback;
+the one final full pre-merge review remains the complete security boundary.
+
+## Finding Policy
+
+Quick mode uses the same severities as full mode: P1 blocks merge, P2 must be fixed before merge, and P3 remains a fully detailed advisory that does not enter the fix queue or prevent `CLEAN`.
 
 ## Process
 
 1. Load the review skill from `plugins/dm-review/skills/review/SKILL.md`
-2. Compute the file-type trigger set from the diff (Go, Twig/PHP, SQL, UI)
-3. Execute in **Quick** mode with the provided argument:
+2. Check security-sensitive paths first; escalate to Full mode if any match
+3. Compute the file-type trigger set from the diff (Go, Twig/PHP, UI)
+4. Execute in **Quick** mode with the provided argument:
    - No argument: review uncommitted changes or current branch vs main
    - PR number or URL: review that pull request
    - Branch name: review that branch vs main
    - File path: review that specific file or directory
-4. Dispatch core agents + any classification-aware agents whose triggers match the diff
-5. Log skipped agents explicitly in the Agent Summary
-6. Output the unified review report with merge recommendation (per zero-deferral)
+5. Dispatch the two core lanes plus applicable existing UI/build/domain verification lanes
+6. Output the unified review report with the standard merge recommendation
