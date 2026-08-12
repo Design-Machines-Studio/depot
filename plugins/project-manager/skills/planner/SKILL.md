@@ -1,6 +1,6 @@
 ---
 name: planner
-description: Notion-integrated project planning and sprint management. Use at the START of every coding session to check assigned todos. Use at the END of every session to mark completed tasks. Trigger when Travis asks about sprint status, wants to see what's on his plate, needs to create a new todo, asks for planning help, says "what should I work on," "create a task," "what's in this sprint," or any variation of checking project status or tracking work. Also trigger when Travis mentions sprints, todos, Notion tasks, project capacity, prioritization, userback, feedback, bugs, calendar, meetings, meeting prep, content ideas, sprint stats, sprint review, or velocity. Reads project config from memory/project-notion.md.
+description: Explicit Notion sprint operations for Travis. Triggers include Notion todos, personal sprint planning, sprint-plan, Userback triage, personal sprint velocity or capacity, content planning, and meeting preparation.
 disable-model-invocation: true
 allowed-tools:
   # Notion (claude.ai integration)
@@ -38,6 +38,10 @@ Travis plans work in Notion (Projects, Todos, Sprints). This skill gives Claude 
 
 **Philosophy:** Travis plans, Claude executes. Read freely, write carefully.
 
+## Trigger Boundary
+
+Do not invoke this skill for ordinary coding sessions, general repository planning, preparing an implementation prompt, or coordination through GitHub Projects, Issues, or pull requests. Those workflows use repository instructions and GitHub-native evidence. Invoke this planner only for the explicit personal/client planning cases named in its description or through `/sprint-plan`.
+
 ## Quick Reference
 
 ### Database IDs
@@ -60,11 +64,13 @@ Look up all database data source IDs from the `DM Notion Workspace` entity in ai
 | Read Userback feedback | Always | During Userback triage (Phase 4) |
 
 
-## Session Workflow
+## Explicit Planning Session Workflow
 
-### At Session Start
+Run this workflow only when Travis explicitly invokes Notion or personal/client sprint planning. It is not a coding-session startup or shutdown requirement.
 
-1. **Read project config:** Check `memory/project-notion.md` for the Notion project URL and default role. If missing, ask Travis to set one up.
+### At Planning Start
+
+1. **Read project config when relevant:** Check `memory/project-notion.md` for the Notion project URL and default role. If the requested Notion workflow needs a project mapping and none exists, ask Travis to set one up.
 
 2. **Find active sprint:** Query Sprints DB for the sprint with Status = "In progress". Note the sprint name and date range.
 
@@ -74,17 +80,17 @@ Look up all database data source IDs from the `DM Notion Workspace` entity in ai
 
 5. **Brief Travis:** Share a concise summary: "Sprint 3 ends Feb 13. You have 4 open todos. Last session you worked on X. What should we focus on?"
 
-### During Session
+### During Planning
 
 - When starting work on an assigned todo, update its Status to "In progress"
 - When finishing a todo, update its Status to "Done"
 - Track what you're doing -- you'll summarize it in sessions.md at session end
 
-### At Session End
+### At Planning End
 
 1. **Update todo statuses:** Any todos that changed during the session
 
-2. **Append to sessions.md:** Write a brief session summary (see Session Memory Convention below)
+2. **Append to sessions.md when the explicitly requested planning workflow uses the session log:** Write a brief summary (see Session Memory Convention below)
 
 
 ## Sprint Planning Workflow

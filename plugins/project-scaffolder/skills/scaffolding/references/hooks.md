@@ -6,11 +6,10 @@ All hook scripts for Claude Code project scaffolding. Each template uses `{{PROJ
 
 - [General Notes](#general-notes) (line 15) -- Exit codes, stdin format, permissions
 - [1. block-bare-go.sh](#1-block-bare-gosh) (line 26) -- Prevents Go commands outside Docker
-- [2. session-start-gate.sh](#2-session-start-gatesh) (line 62) -- Blocks edits until planner workflow runs
-- [3. commit-push-reminder.sh](#3-commit-push-remindersh) (line 106) -- Nudges frequent commits and pushes
-- [4. post-edit-context.sh](#4-post-edit-contextsh) (line 182) -- Context-aware agent reminders after edits
-- [5. pre-stop-check.sh](#5-pre-stop-checksh) (line 290) -- Verifies commits and agents before stopping
-- [6. a11y-check.sh](#6-a11y-checksh) (line 396) -- Accessibility agent reminders for frontend files
+- [2. commit-push-reminder.sh](#2-commit-push-remindersh) -- Nudges frequent commits and pushes
+- [3. post-edit-context.sh](#3-post-edit-contextsh) -- Context-aware agent reminders after edits
+- [4. pre-stop-check.sh](#4-pre-stop-checksh) -- Verifies commits and agents before stopping
+- [5. a11y-check.sh](#5-a11y-checksh) -- Accessibility agent reminders for frontend files
 
 ## General Notes
 
@@ -59,50 +58,7 @@ exit 0
 
 ---
 
-## 2. session-start-gate.sh
-
-**Event:** PreToolUse | **Matcher:** Edit|Write | **Applies to:** Projects using the planner workflow (opt-in)
-
-Blocks file modifications until the planner session start workflow completes (sprint check, todos).
-
-```bash
-#!/bin/bash
-# session-start-gate.sh -- Block file changes until session workflow runs
-#
-# Marker: /tmp/{{PROJECT_PREFIX}}-session-YYYY-MM-DD
-# To manually clear: rm /tmp/{{PROJECT_PREFIX}}-session-$(date +%Y-%m-%d)
-#
-# Exit code 2 = block the tool call
-
-TODAY=$(date +%Y-%m-%d)
-MARKER="/tmp/{{PROJECT_PREFIX}}-session-${TODAY}"
-
-if [ -f "$MARKER" ]; then
-  exit 0
-fi
-
-echo "BLOCKED: Session workflow not completed." >&2
-echo "" >&2
-echo "Before making changes, complete the planner session start:" >&2
-echo "  1. Invoke the planner skill:" >&2
-echo "     /planner (or read the project-manager planner skill from depot)" >&2
-echo "  2. Check memory/sessions.md for last session context" >&2
-echo "  3. Query Sprints DB for active sprint (Status = In progress)" >&2
-echo "  4. Query Todos DB for this project's open sprint todos" >&2
-echo "  5. Brief the user on sprint status" >&2
-echo "" >&2
-echo "Then mark session started: touch ${MARKER}" >&2
-exit 2
-```
-
-### Customization
-- Replace `{{PROJECT_PREFIX}}` with the project's lowercase directory name
-- The planner skill is invoked via `/planner` (installed from the depot's project-manager plugin)
-- For projects without Notion/planner integration, skip this hook
-
----
-
-## 3. commit-push-reminder.sh
+## 2. commit-push-reminder.sh
 
 **Event:** PostToolUse | **Matcher:** Edit|Write | **Applies to:** ALL projects
 
@@ -178,7 +134,7 @@ exit 0
 
 ---
 
-## 4. post-edit-context.sh
+## 3. post-edit-context.sh
 
 **Event:** PostToolUse | **Matcher:** Edit|Write | **Applies to:** ALL projects (content varies by type)
 
@@ -272,7 +228,7 @@ Add project-specific blocks as needed (e.g., governance code detection for Assem
 
 ---
 
-## 5. pre-stop-check.sh
+## 4. pre-stop-check.sh
 
 **Event:** Stop | **Matcher:** -- (fires on all stops) | **Applies to:** ALL projects
 
@@ -377,7 +333,7 @@ exit 0
 
 ---
 
-## 6. a11y-check.sh
+## 5. a11y-check.sh
 
 **Event:** PostToolUse | **Matcher:** Edit|Write | **Applies to:** Frontend projects (go-templ-datastar, css-framework, craft-cms)
 

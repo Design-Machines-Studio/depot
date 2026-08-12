@@ -7,7 +7,7 @@ settings.json, CLAUDE.md, and starter files for each project type. Replace all `
   - go-templ-datastar (line 9), go-library (line 113), css-framework (line 148), craft-cms (line 183)
 - [CLAUDE.md Templates](#claudemd-templates) (line 234)
   - go-templ-datastar (line 236), go-library (line 345), css-framework (line 405), craft-cms (line 477)
-- [Starter Files](#starter-files) (line 558) -- todo.md, lessons.md, project-notion.md, sessions.md
+- [Starter Files](#starter-files) -- todo.md, lessons.md, sessions.md
 
 ---
 
@@ -28,16 +28,6 @@ settings.json, CLAUDE.md, and starter files for each project type. Replace all `
             "statusMessage": "Checking Docker safety..."
           }
         ]
-      },
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session-start-gate.sh",
-            "statusMessage": "Checking session workflow..."
-          }
-        ]
       }
     ],
     "PostToolUse": [
@@ -70,54 +60,7 @@ settings.json, CLAUDE.md, and starter files for each project type. Replace all `
 }
 ```
 
-**Without session-start-gate** (remove the Edit|Write PreToolUse entry):
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/block-bare-go.sh",
-            "statusMessage": "Checking Docker safety..."
-          }
-        ]
-      }
-    ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/post-edit-context.sh"
-          },
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/commit-push-reminder.sh",
-            "statusMessage": "Checking commit hygiene..."
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "\"$CLAUDE_PROJECT_DIR\"/.claude/hooks/pre-stop-check.sh"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
-
-### go-library (no Docker gate, no session gate)
+### go-library (no Docker gate)
 
 ```json
 {
@@ -253,22 +196,6 @@ This file is the routing document for Claude Code. Critical rules live here; det
 
 - **Local:** {{PROJECT_URL_LOCAL}}
 - **Production:** {{PROJECT_URL_PROD}}
-
-## Session Workflow (Planner Skill)
-
-> Remove this section if not using session-start-gate.sh
-
-At the **start of every session**, read the planner skill and follow its session start workflow.
-
-**The `session-start-gate` hook BLOCKS all Edit/Write calls until this workflow completes.**
-
-Planner skill: Invoke `/planner` (installed from the depot's project-manager plugin).
-
-Key files:
-- `memory/project-notion.md` -- maps this repo to the Notion project
-- `memory/sessions.md` -- append-only session log
-
-After completing: `touch /tmp/{{PROJECT_PREFIX}}-session-$(date +%Y-%m-%d)`
 
 ## Workflow Orchestration
 
@@ -734,22 +661,12 @@ Patterns and corrections from development sessions. Review at session start.
 <!-- Non-obvious behaviors, edge cases, workarounds -->
 ```
 
-### memory/project-notion.md (for projects using the planner)
-
-```markdown
-# Notion Project Config
-
-- **Project:** [Project Name](NOTION_PROJECT_URL)
-- **Default Role:** Production
-- **Notes:** [Context for time entries]
-```
-
-### memory/sessions.md (for projects using the planner)
+### memory/sessions.md
 
 ```markdown
 # Session Log
 
-Append-only log for continuity between sessions.
+Optional append-only repository-local log for continuity between sessions. It does not require an external planning service.
 
 <!-- Format:
 ## YYYY-MM-DD -- Brief description
