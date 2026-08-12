@@ -11,14 +11,12 @@ FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/airlift-openrouter.XXXXXX")"
 trap 'rm -rf "$FIXTURE"' EXIT
 
 HOME_FIXTURE="$FIXTURE/home"
-PLUGIN_ROOT="$HOME_FIXTURE/.codex/plugins/cache/depot/openrouter/1.13.0"
+PLUGIN_ROOT="$HOME_FIXTURE/.codex/plugins/cache/depot/openrouter/1.14.0"
 REFS="$PLUGIN_ROOT/skills/openrouter-delegate/references"
 mkdir -p "$REFS" "$FIXTURE/bundle"
 cp "$ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json" "$REFS/"
 cp "$ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-boundary.sh" \
   "$REFS/delegation-boundary.real.sh"
-cp "$ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh" \
-  "$REFS/payload-authorization.sh"
 cat > "$REFS/delegation-boundary.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -33,12 +31,10 @@ if [ "${MUTATE_AFTER_SCAN:-0}" = "1" ]; then
     '-----END PRIVATE KEY-----' > "$BUNDLE_DIR/HANDOFF.md"
 fi
 EOF
-chmod +x "$REFS/delegation-boundary.sh" "$REFS/delegation-boundary.real.sh" \
-  "$REFS/payload-authorization.sh"
+chmod +x "$REFS/delegation-boundary.sh" "$REFS/delegation-boundary.real.sh"
 
 cat > "$REFS/openrouter-wrapper.sh" <<'EOF'
 #!/usr/bin/env bash
-[ "${OPENROUTER_AUTHORIZATION_MODE:-}" = "trusted-boundary" ]
 touch "$AIRLIFT_WRAPPER_SENTINEL"
 [ -n "${OPENROUTER_SYSTEM_FILE:-}" ] && [ -z "${OPENROUTER_SYSTEM:-}" ]
 cp "$OPENROUTER_SYSTEM_FILE" "$AIRLIFT_WRAPPER_CAPTURE.resume"
@@ -55,7 +51,7 @@ case "${1:-}" in
     exec "$REAL_WORKFLOW_KERNEL" "$@"
     ;;
   resolve-plugin-bundle)
-    printf '{"selected_root":"~/.codex/plugins/cache/depot/openrouter/1.13.0","cache_class":"codex","version":"1.13.0","reason":"highest_compatible_semver"}\n'
+    printf '{"selected_root":"~/.codex/plugins/cache/depot/openrouter/1.14.0","cache_class":"codex","version":"1.14.0","reason":"highest_compatible_semver"}\n'
     ;;
   snapshot-files)
     exec "$REAL_WORKFLOW_KERNEL" "$@"
@@ -101,13 +97,13 @@ run_expect 0 "safe two-file delegation reaches wrapper without approval" env
 printf 'Continue the listed work safely.\n' > "$FIXTURE/bundle/RESUME_PROMPT.md"
 printf 'Objective: validate the handoff.\n' > "$FIXTURE/bundle/HANDOFF.md"
 rm -f "$FIXTURE/sentinel" "$FIXTURE"/captured.*
-run_expect 0 "post-scan source mutation cannot change delegated snapshots" \
+run_expect 0 "post-scan source mutation cannot change delegated private copies" \
   env MUTATE_AFTER_SCAN=1
 [ -e "$FIXTURE/sentinel" ]
 grep -Fxq 'Continue the listed work safely.' "$FIXTURE/captured.resume"
 grep -Fxq 'Objective: validate the handoff.' "$FIXTURE/captured.handoff"
 if grep -Eq 'sk-or-v1|PRIVATE KEY' "$FIXTURE"/captured.*; then
-  echo "  FAIL  mutable originals reached wrapper after snapshot validation" >&2
+  echo "  FAIL  mutable originals reached wrapper after private-copy screening" >&2
   exit 1
 fi
 

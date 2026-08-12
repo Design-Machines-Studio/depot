@@ -62,8 +62,7 @@ resolve_openrouter_root() {
     [ -n "$root" ] || continue
     [ -x "$root/skills/openrouter-delegate/references/openrouter-wrapper.sh" ] &&
       [ -r "$root/skills/openrouter-delegate/references/delegation-security-policy.json" ] &&
-      [ -x "$root/skills/openrouter-delegate/references/delegation-boundary.sh" ] &&
-      [ -x "$root/skills/openrouter-delegate/references/payload-authorization.sh" ] || continue
+      [ -x "$root/skills/openrouter-delegate/references/delegation-boundary.sh" ] || continue
     printf '%s' "${root%/}"
     return 0
   done
@@ -77,31 +76,27 @@ OPENROUTER_ROOT="$(resolve_openrouter_root)" || {
 WRAPPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 POLICY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
 BOUNDARY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
-AUTHORIZATION="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
 
 TASK_TMP_ROOT="${TMPDIR:-/tmp}"
 SYSTEM="You are an agentic coding runner. Return only a unified diff that applies cleanly to the current git worktree. No prose. No markdown fences."
 PROMPT_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.prompt.XXXXXX")"
 SYSTEM_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.system.XXXXXX")"
-AUTHORIZATION_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.authorization.XXXXXX")"
 ALLOWED_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.allowed.XXXXXX")"
 PATCH_PATHS_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.paths.XXXXXX")"
 RECEIPT_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.receipt.XXXXXX")"
 PATCH_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.patch.XXXXXX")"
 MSG_FILE=""
-trap 'rm -f "$PROMPT_FILE" "$SYSTEM_FILE" "$AUTHORIZATION_FILE" "$ALLOWED_FILE" "$PATCH_PATHS_FILE" "$RECEIPT_FILE" "$PATCH_FILE" "$MSG_FILE"' EXIT
+trap 'rm -f "$PROMPT_FILE" "$SYSTEM_FILE" "$ALLOWED_FILE" "$PATCH_PATHS_FILE" "$RECEIPT_FILE" "$PATCH_FILE" "$MSG_FILE"' EXIT
 
 cat > "$PROMPT_FILE"
 printf '%s' "$SYSTEM" > "$SYSTEM_FILE"
 [ -s "$PROMPT_FILE" ] || { echo "openrouter-exec: empty prompt" >&2; exit 2; }
 printf '%s\n' "$OPENROUTER_EXEC_ALLOWED_PATHS" > "$ALLOWED_FILE"
 
-# Automatic disclosure boundary plus unchanged-byte proof. This happens before
-# the wrapper can open a provider connection and requires no human interaction.
-"$AUTHORIZATION" snapshot --output "$AUTHORIZATION_FILE" \
-  --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE" >/dev/null
-if ! "$AUTHORIZATION" verify-trusted-boundary --manifest "$AUTHORIZATION_FILE" \
-    --policy "$POLICY" --content-file "$SYSTEM_FILE" \
+# Scan the private outbound files immediately before the wrapper reads those
+# same files. This requires no human interaction.
+if ! "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
+    --content-file "$SYSTEM_FILE" \
     --content-file "$PROMPT_FILE" >/dev/null; then
   echo "openrouter-exec: host_disclosure_declined; return to Codex" >&2
   exit 77
@@ -109,7 +104,6 @@ fi
 
 set +e
 env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
-  OPENROUTER_AUTHORIZATION_MODE=trusted-boundary \
   OPENROUTER_WORKLOAD=mechanical OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
   bash "$WRAPPER" "$MODEL" - "$TIMEOUT" "$FALLBACK_MODEL" \
   < "$PROMPT_FILE" > "$PATCH_FILE"
@@ -134,7 +128,6 @@ esac
 jq -e '
   .schemaVersion == 2 and .outcome == "success" and
   .requestedModel != null and .responseModel != null and
-  (.authorization.mode == "trusted-boundary") and
   (.authorization.requestEnvelopeSha256 | test("^[0-9a-f]{64}$")) and
   (.generationId | type == "string" and length > 0) and
   (.usage == null or (.usage | type == "object")) and

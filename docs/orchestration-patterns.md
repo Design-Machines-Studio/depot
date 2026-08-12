@@ -239,8 +239,8 @@ A task benefits from provider diversity, large context, or better quality-per-do
 ### How it works
 
 1. A lightweight runner is dispatched as part of a normal Multi-Agent Dispatch.
-2. It applies the OpenRouter-owned content boundary, constructs a self-contained prompt, and snapshots the exact ordered payload bytes.
-3. After the user approves that payload digest and an immediate unchanged-byte verification succeeds, it invokes `openrouter-wrapper.sh` with a timeout and optional single fallback model.
+2. It constructs a self-contained prompt in private files and runs the OpenRouter-owned content boundary over those files once.
+3. If the scan accepts the payload, it immediately invokes `openrouter-wrapper.sh` with those same files, a timeout, and an optional single fallback model.
 4. The wrapper requires response model provenance, extracts `.choices[0].message.content`, and writes a content-free receipt; the runner validates and formats the text.
 5. On timeout, refusal, empty output, or API failure, the lane reports a structured failure and follows its native fallback policy.
 
@@ -263,7 +263,7 @@ The external model is stateless -- each invocation is a fresh session with no me
 | API or wrapper timeout | Report a structured timeout and invoke the lane fallback |
 | Primary model HTTP 429/503 | Retry the configured single fallback model; the pipeline cascade owns any longer ladder |
 | Empty output or refusal | Report `RUNNER FAILURE`; never issue a clean review receipt |
-| Key, wrapper, runner, content boundary, or payload-authorization helper unavailable | Mark OpenRouter unavailable at source detection and run the native fallback |
+| Key, wrapper, runner, or content boundary unavailable | Mark OpenRouter unavailable at source detection and run the native fallback |
 
 ---
 

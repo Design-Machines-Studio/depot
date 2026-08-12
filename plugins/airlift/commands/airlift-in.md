@@ -54,8 +54,8 @@ Then continue from the `Next steps` section in `HANDOFF.md`.
 For `resume-via-deepseek`, require either `OPENROUTER_API_KEY` or the validated
 `OPENROUTER_API_KEY_FILE`. The target name remains stable for compatibility,
 but transport is through OpenRouter using `deepseek/deepseek-v4-pro`. Resolve
-one coherent OpenRouter bundle, then screen both resume artifacts together and
-invoke the wrapper without an approval pause:
+one coherent OpenRouter bundle, then privately copy and screen both resume
+artifacts together before invoking the wrapper immediately:
 
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
@@ -69,18 +69,16 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.13.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.14.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.13.0 \
+      --minimum-version 1.14.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
   fi
 }
 BUNDLE_JSON=$(resolve_bundle) || {
@@ -90,40 +88,34 @@ BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty')
 case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) echo "airlift-openrouter: bundle-invalid" >&2; exit 1;; esac
 WRAPPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 POLICY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
-AUTHORIZATION="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
+BOUNDARY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
 RESUME_FILE="$BUNDLE_DIR/RESUME_PROMPT.md"
 HANDOFF_FILE="$BUNDLE_DIR/HANDOFF.md"
-SNAPSHOT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/airlift-openrouter.XXXXXX") || {
-  echo "airlift-openrouter: snapshot-unavailable" >&2; exit 2;
+PRIVATE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/airlift-openrouter.XXXXXX") || {
+  echo "airlift-openrouter: private-copy-unavailable" >&2; exit 2;
 }
-trap 'rm -rf "$SNAPSHOT_DIR"' EXIT
-RESUME_SNAPSHOT="$SNAPSHOT_DIR/RESUME_PROMPT.md"
-HANDOFF_SNAPSHOT="$SNAPSHOT_DIR/HANDOFF.md"
-AUTHORIZATION_RECEIPT="$SNAPSHOT_DIR/payload-authorization.json"
+trap 'rm -rf "$PRIVATE_DIR"' EXIT
+RESUME_COPY="$PRIVATE_DIR/RESUME_PROMPT.md"
+HANDOFF_COPY="$PRIVATE_DIR/HANDOFF.md"
 "$WORKFLOW_KERNEL" snapshot-files \
   --source-root "$BUNDLE_DIR" \
-  --destination-root "$SNAPSHOT_DIR" \
+  --destination-root "$PRIVATE_DIR" \
   --name RESUME_PROMPT.md \
   --name HANDOFF.md >/dev/null || {
-  echo "airlift-openrouter: snapshot-invalid" >&2; exit 2;
+  echo "airlift-openrouter: private-copy-invalid" >&2; exit 2;
 }
-"$AUTHORIZATION" snapshot \
-  --output "$AUTHORIZATION_RECEIPT" \
-  --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT" >/dev/null
-"$AUTHORIZATION" verify-trusted-boundary --manifest "$AUTHORIZATION_RECEIPT" \
-  --policy "$POLICY" \
-  --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT"
-env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$RESUME_SNAPSHOT" \
-  OPENROUTER_AUTHORIZATION_MODE=trusted-boundary \
-  bash "$WRAPPER" "deepseek/deepseek-v4-pro" - 180 < "$HANDOFF_SNAPSHOT"
+"$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
+  --content-file "$RESUME_COPY" --content-file "$HANDOFF_COPY"
+env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$RESUME_COPY" \
+  bash "$WRAPPER" "deepseek/deepseek-v4-pro" - 180 < "$HANDOFF_COPY"
 ```
 
-The trusted workflow-kernel snapshot command opens each bundle file
+The trusted workflow-kernel copy command opens each bundle file
 descriptor-relatively with no-follow semantics, accepts only a stable,
 single-link regular file owned by the current account, and creates each private
-snapshot with mode `0600`. This makes the screened bytes exactly the bytes
+copy with mode `0600`. This makes the screened bytes exactly the bytes
 passed to the wrapper without allowing a bundle symlink or concurrent pathname
-swap to redirect disclosure. The unchanged-byte authorization verification is
-the final action before wrapper invocation. A user decline, boundary decline,
-malformed input, missing coherent bundle, or snapshot failure stops before
-wrapper/network contact and remains a distinct receipt outcome.
+swap to redirect disclosure. The secret scan runs once over those private
+copies immediately before wrapper invocation. A boundary decline, malformed
+input, missing coherent bundle, or copy failure stops before wrapper/network
+contact and remains a distinct receipt outcome.

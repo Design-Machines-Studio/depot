@@ -60,9 +60,9 @@ for relative in "${consumers[@]}"; do
   openrouter_calls="$(grep -Fc 'resolve-plugin-bundle --plugin openrouter' "$file" || true)"
   if [ "$openrouter_calls" -gt 0 ]; then
     case "$relative" in
-      plugins/openrouter/agents/workflow/openrouter-agent-runner.md|plugins/dm-review/skills/review/SKILL.md) openrouter_floor="1.13.0" ;;
-      plugins/openrouter/commands/openrouter.md|plugins/openrouter/skills/openrouter/SKILL.md|plugins/openrouter/skills/openrouter-delegate/SKILL.md|plugins/openrouter/skills/openrouter-delegate/references/invocation-protocol.md) openrouter_floor="1.13.0" ;;
-      plugins/airlift/*) openrouter_floor="1.13.0" ;;
+      plugins/openrouter/agents/workflow/openrouter-agent-runner.md|plugins/dm-review/skills/review/SKILL.md) openrouter_floor="1.14.0" ;;
+      plugins/openrouter/commands/openrouter.md|plugins/openrouter/skills/openrouter/SKILL.md|plugins/openrouter/skills/openrouter-delegate/SKILL.md|plugins/openrouter/skills/openrouter-delegate/references/invocation-protocol.md) openrouter_floor="1.14.0" ;;
+      plugins/airlift/*) openrouter_floor="1.14.0" ;;
       plugins/openrouter/*|plugins/pipeline/*) openrouter_floor="1.8.0" ;;
       *) openrouter_floor="1.7.0" ;;
     esac
@@ -94,13 +94,6 @@ for relative in "${consumers[@]}"; do
       failures=1
     }
   fi
-  if ! is_configured_key_script "$relative" && grep -Fq 'skills/openrouter-delegate/references/payload-authorization.sh' "$file"; then
-    grep -Fq -- '--required-executable skills/openrouter-delegate/references/payload-authorization.sh' "$file" &&
-    ! grep -Fq -- '--required-asset skills/openrouter-delegate/references/payload-authorization.sh' "$file" || {
-      echo "  FAIL  OpenRouter payload authorization is not declared executable-only: $relative"
-      failures=1
-    }
-  fi
   if [ "$pipeline_calls" -gt 0 ]; then
     for executable in \
       references/cascade-dispatch.sh \
@@ -118,7 +111,7 @@ done
 
 authorization_contract="$ROOT/plugins/pipeline/references/openrouter-authorization-contract.md"
 grep -Fq 'OPENROUTER_API_KEY_FILE' "$authorization_contract" &&
-grep -Fq 'verify-trusted-boundary' "$authorization_contract" &&
+grep -Fq 'delegation-boundary.sh --mode artifact-delegation' "$authorization_contract" &&
 grep -Fq 'has no effect on configured-key dispatch' "$authorization_contract" || {
   echo "  FAIL  configured-key OpenRouter authorization contract absent"
   failures=1
@@ -155,9 +148,9 @@ for relative in \
   plugins/openrouter/agents/workflow/openrouter-agent-runner.md
 do
   file="$ROOT/$relative"
-  grep -Fq 'payload-authorization.sh' "$file" &&
-  grep -Fq 'verify-trusted-boundary' "$file" || {
-    echo "  FAIL  wrapper consumer lacks byte-bound authorization: $relative"
+  grep -Fq 'delegation-boundary.sh' "$file" &&
+  grep -Fq -- '--mode artifact-delegation' "$file" || {
+    echo "  FAIL  wrapper consumer lacks automatic private-file screening: $relative"
     failures=1
   }
 done
@@ -168,8 +161,8 @@ for relative in \
 do
   file="$ROOT/$relative"
   grep -Fq 'OPENROUTER_API_KEY_FILE' "$file" &&
-  grep -Fq 'payload-authorization.sh' "$file" &&
-  grep -Fq 'OPENROUTER_AUTHORIZATION_MODE=trusted-boundary' "$file" &&
+  grep -Fq 'delegation-boundary.sh' "$file" &&
+  grep -Fq -- '--mode artifact-delegation' "$file" &&
   ! grep -Fq '/usr/local/bin/workflow-authority' "$file" &&
   ! grep -Fq 'dispatch-provider-request' "$file" &&
   ! grep -Fq 'OPENROUTER_PAYLOAD_AUTHORIZATION' "$file" &&
@@ -238,10 +231,10 @@ for file in \
   "$ROOT/plugins/airlift/commands/airlift-in.md" \
   "$ROOT/plugins/airlift/prompts/airlift-in.md"
 do
-  grep -Fq -- '--content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT"' "$file" &&
-  grep -Fq 'env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$RESUME_SNAPSHOT"' "$file" &&
-  grep -Fq '< "$HANDOFF_SNAPSHOT"' "$file" || {
-    echo "  FAIL  Airlift does not screen and delegate the same artifact snapshots: ${file#"$ROOT/"}"
+  grep -Fq -- '--content-file "$RESUME_COPY" --content-file "$HANDOFF_COPY"' "$file" &&
+  grep -Fq 'env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$RESUME_COPY"' "$file" &&
+  grep -Fq '< "$HANDOFF_COPY"' "$file" || {
+    echo "  FAIL  Airlift does not screen and delegate the same private copies: ${file#"$ROOT/"}"
     failures=1
   }
 done

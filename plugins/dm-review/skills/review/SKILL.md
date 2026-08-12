@@ -48,7 +48,6 @@ a chunk early only when a changed path matches this bounded deterministic set:
 - `**/secretbox*`, `**/destructive_confirmation*`,
   `internal/baseplate/email/settings*`, `deploy/**`, or `*.env*`
 - Depot credential-transport controls named `openrouter-wrapper.sh`,
-  `payload-authorization.sh`,
   `delegation-boundary.sh`, or `workflow-authority*`
 
 Do not widen this set to all handlers, shell scripts, dependency manifests, or
@@ -217,24 +216,22 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
   resolve_openrouter_bundle() {
     if [ -n "$OPENROUTER_ACTIVE_HOST" ]; then
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.13.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
+        --minimum-version 1.14.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
         --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
         --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-        --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
         --required-asset skills/openrouter-delegate/references/model-matrix.json \
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     else
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.13.0 \
+        --minimum-version 1.14.0 \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
         --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
         --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-        --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
         --required-asset skills/openrouter-delegate/references/model-matrix.json \
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     fi
@@ -255,7 +252,6 @@ fi
 # eligibility is decided automatically at dispatch time by the disclosure
 # boundary. Workflow Authority presence or status is irrelevant to this path.
 OPENROUTER_AVAILABLE=false
-OPENROUTER_AUTHORIZATION_MODE=trusted-boundary
 OPENROUTER_UNAVAILABLE_REASON=configured_key_or_bundle_unavailable
 if { [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; } &&
    [ -n "$OPENROUTER_BUNDLE_ROOT" ] && [ -f "$OPENROUTER_RUNNER_PATH" ] &&
@@ -266,8 +262,8 @@ fi
 ```
 
 When available, eligible mechanical, bulk, and supplementary security lanes
-dispatch immediately with `authorization_mode: trusted-boundary`. The runner
-screens the exact outbound bytes again immediately before the wrapper. A
+dispatch immediately. The runner materializes private outbound files, scans
+them once, and passes those same files to the wrapper. A
 missing/invalid key, unavailable bundle/provider, or automatic disclosure
 decline records the reason and retries the lane on Codex without asking the
 user. Broker presence, absence, readiness, or degradation is not consulted.
@@ -470,13 +466,12 @@ Provider routing (OPENROUTER_AVAILABLE={true|false}, authorization={trusted-boun
 #### Automatic disclosure boundary
 
 The configured key authorizes eligible development dispatch. Each runner
-materializes its exact system/user bytes, snapshots them, and immediately runs
-`verify-trusted-boundary` before invoking the wrapper. A credential/private-key
+materializes its exact system/user bytes, scans those private files once, and
+immediately invokes the wrapper. A credential/private-key
 match, authenticated DSN, access/session token, or explicitly classified
 private/regulated value declines automatically and returns that lane to Codex.
 There is no approval prompt, broker probe, or sunset. The wrapper receipt
-records `authorization.mode: trusted-boundary` and
-the request-envelope digest without prompt or response content.
+records a request-envelope digest without prompt or response content.
 
 ---
 
@@ -508,7 +503,6 @@ authorization, invocation, fallback, and provenance implementation.
      to bind runner execution to the definition that was loaded; never publish it
    - `openrouter_bundle_version`, `cache_class`, and `resolution_reason` --
      durable resolver evidence (never the selected root)
-   - `authorization_mode` -- `trusted-boundary`
    - The unfiltered list of changed files (the runner filters it before disclosure)
    - The full diff content (the runner invokes `delegation-boundary.sh --mode mechanical-review` and sends only the emitted safe remainder)
    - Project context

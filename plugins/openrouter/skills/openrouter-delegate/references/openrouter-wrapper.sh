@@ -40,13 +40,10 @@
 #                       maximum seconds before the first streamed byte (default 600)
 #   OPENROUTER_IDLE_TIMEOUT
 #                       maximum seconds without streamed progress (default 600)
-#   OPENROUTER_AUTHORIZATION_MODE
-#                       trusted-boundary|unspecified for receipts. Active
-#                       configured-key callers use trusted-boundary.
-#   OPENROUTER_AUTHORIZATION_RUN_ID
+#   OPENROUTER_RUN_ID
 #                       optional run identity; automated runners supply it,
 #                       while direct receipts represent its absence as null
-#   OPENROUTER_LANE_ID  optional authorization-lane identity; automated runners
+#   OPENROUTER_LANE_ID  optional receipt lane identity; automated runners
 #                       supply it, while direct receipts fall back to the target
 #                       agent name when available
 #   OPENROUTER_RECEIPT_FILE
@@ -188,10 +185,9 @@ WORKLOAD="${OPENROUTER_WORKLOAD:-quality}"
 CONNECT_TIMEOUT="${OPENROUTER_CONNECT_TIMEOUT:-30}"
 FIRST_BYTE_TIMEOUT="${OPENROUTER_FIRST_BYTE_TIMEOUT:-600}"
 IDLE_TIMEOUT="${OPENROUTER_IDLE_TIMEOUT:-600}"
-AUTHORIZATION_MODE="${OPENROUTER_AUTHORIZATION_MODE:-unspecified}"
-CURRENT_RUN_ID="${OPENROUTER_AUTHORIZATION_RUN_ID:-}"
+CURRENT_RUN_ID="${OPENROUTER_RUN_ID:-}"
 TARGET_AGENT_NAME="${OPENROUTER_TARGET_AGENT_NAME:-}"
-AUTHORIZATION_LANE_ID="${OPENROUTER_LANE_ID:-$TARGET_AGENT_NAME}"
+RECEIPT_LANE_ID="${OPENROUTER_LANE_ID:-$TARGET_AGENT_NAME}"
 
 validate_positive_integer() {
   local name="$1" value="$2"
@@ -217,10 +213,6 @@ esac
 case "$WORKLOAD" in
   quality|security|direct|bulk|mechanical) ;;
   *) echo "### RUNNER FAILURE: invalid OPENROUTER_WORKLOAD" >&2; exit 2 ;;
-esac
-case "$AUTHORIZATION_MODE" in
-  trusted-boundary|unspecified) ;;
-  *) echo "### RUNNER FAILURE: invalid OPENROUTER_AUTHORIZATION_MODE" >&2; exit 2 ;;
 esac
 case "$TARGET_AGENT_NAME" in
   "") ;;
@@ -380,9 +372,8 @@ write_failure_receipt() {
       --argjson candidates "$MODEL_CANDIDATES" \
       --arg workload "$WORKLOAD" \
       --arg sort "$EFFECTIVE_SORT" \
-      --arg authorization "$AUTHORIZATION_MODE" \
       --arg runid "${CURRENT_RUN_ID:-}" \
-      --arg lane "$AUTHORIZATION_LANE_ID" \
+      --arg lane "$RECEIPT_LANE_ID" \
       --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" '
       {
         schemaVersion: 2,
@@ -407,7 +398,6 @@ write_failure_receipt() {
           sort: (if $sort == "" then null else $sort end)
         },
         authorization: {
-          mode: $authorization,
           runId: (if $runid == "" then null else $runid end),
           laneId: (if $lane == "" then null else $lane end),
           requestEnvelopeSha256: (
@@ -437,9 +427,8 @@ write_success_receipt() {
       --argjson fallback "$fallback_used" \
       --arg workload "$WORKLOAD" \
       --arg sort "$EFFECTIVE_SORT" \
-      --arg authorization "$AUTHORIZATION_MODE" \
       --arg runid "${CURRENT_RUN_ID:-}" \
-      --arg lane "$AUTHORIZATION_LANE_ID" \
+      --arg lane "$RECEIPT_LANE_ID" \
       --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" '
       {
         schemaVersion: 2,
@@ -473,7 +462,6 @@ write_success_receipt() {
           sort: (if $sort == "" then null else $sort end)
         },
         authorization: {
-          mode: $authorization,
           runId: (if $runid == "" then null else $runid end),
           laneId: (if $lane == "" then null else $lane end),
           requestEnvelopeSha256: (

@@ -299,8 +299,7 @@
         "status": "active",
         "keyInputs": ["OPENROUTER_API_KEY", "OPENROUTER_API_KEY_FILE"],
         "bundleRequirement": "one coherent installed OpenRouter bundle",
-        "payloadRequirement": "snapshot plus verify-trusted-boundary over exact unchanged system/user files",
-        "wrapperMode": "trusted-boundary",
+        "payloadRequirement": "one automatic disclosure scan over private system/user files immediately before sending those same files",
         "receiptFields": ["provider", "model", "usage", "requestEnvelopeSha256"],
         "brokerIndependent": true,
         "costControl": "provider-side per-key spending limits"

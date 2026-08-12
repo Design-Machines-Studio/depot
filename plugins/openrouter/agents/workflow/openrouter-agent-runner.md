@@ -31,7 +31,6 @@ The caller passes you these inputs in the prompt body:
 - `target_timeout` -- positive integer seconds, below dm-review's orchestrator timeout
 - `openrouter_bundle_ref` -- ephemeral home-relative selected root from the caller
 - `openrouter_bundle_version`, `cache_class`, and `resolution_reason` -- expected resolver identity
-- `authorization_mode` -- `trusted-boundary`; any other active mode is rejected
 - `review_run_id` -- optional run identity copied into the content-free receipt
 - `diff_content` -- the diff to review
 - `changed_files` -- newline-delimited, normalized, unfiltered list of every changed file path
@@ -134,24 +133,22 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.13.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.14.0 --active-host "$ACTIVE_HOST" \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
       --required-asset skills/openrouter-delegate/references/model-matrix.json \
       --required-asset skills/openrouter-delegate/references/prompt-templates.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.13.0 \
+      --minimum-version 1.14.0 \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
       --required-asset skills/openrouter-delegate/references/model-matrix.json \
       --required-asset skills/openrouter-delegate/references/prompt-templates.md
   fi
@@ -223,7 +220,7 @@ BOUNDARY_CHANGED=$(mktemp)
 BOUNDARY_FILTERED=$(mktemp)
 BOUNDARY_PATHS=$(mktemp)
 BOUNDARY_DECLINED_PATHS=$(mktemp)
-trap 'rm -f "$BOUNDARY_DIFF" "$BOUNDARY_CHANGED" "$BOUNDARY_FILTERED" "$BOUNDARY_PATHS" "$BOUNDARY_DECLINED_PATHS" "${SYS_FILE:-/dev/null}" "${USER_FILE:-/dev/null}" "${REQUEST_ENVELOPE_FILE:-/dev/null}" "${WRAPPER_STDERR:-/dev/null}" "${WRAPPER_RECEIPT:-/dev/null}" "${AUTHORIZATION_RECEIPT:-/dev/null}"' EXIT
+trap 'rm -f "$BOUNDARY_DIFF" "$BOUNDARY_CHANGED" "$BOUNDARY_FILTERED" "$BOUNDARY_PATHS" "$BOUNDARY_DECLINED_PATHS" "${SYS_FILE:-/dev/null}" "${USER_FILE:-/dev/null}" "${REQUEST_ENVELOPE_FILE:-/dev/null}" "${WRAPPER_STDERR:-/dev/null}" "${WRAPPER_RECEIPT:-/dev/null}"' EXIT
 printf '%s' "$diff_content" > "$BOUNDARY_DIFF"
 printf '%s\n' "$changed_files" > "$BOUNDARY_CHANGED"
 if "$BOUNDARY_HELPER" --mode mechanical-review \
@@ -295,8 +292,7 @@ shell. The wrapper prints model text directly on stdout.
 
 ```bash
 WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
-AUTHORIZATION_HELPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
-if [ ! -x "$WRAPPER_PATH" ] || [ ! -x "$AUTHORIZATION_HELPER" ]; then
+if [ ! -x "$WRAPPER_PATH" ]; then
   cat <<EOF
 ## ${target_agent_name} Review (via OpenRouter ${target_model})
 
@@ -315,7 +311,6 @@ SYS_FILE=$(mktemp)
 USER_FILE=$(mktemp)
 WRAPPER_STDERR=$(mktemp)
 WRAPPER_RECEIPT=$(mktemp)
-AUTHORIZATION_RECEIPT=$(mktemp)
 printf '%s' "$TARGET_BODY" > "$SYS_FILE"
 printf '%s' "$USER_PROMPT" > "$USER_FILE"
 
@@ -351,25 +346,17 @@ case "$target_agent_name" in
   *) OPENROUTER_WORKLOAD_CLASS="quality" ;;
 esac
 
-AUTHORIZATION_MODE="${authorization_mode:-trusted-boundary}"
-[ "$AUTHORIZATION_MODE" = "trusted-boundary" ] || {
-  echo "RUNNER FAILURE: active dm-review authorization must be trusted-boundary" >&2
-  exit 2
-}
-"$AUTHORIZATION_HELPER" snapshot --output "$AUTHORIZATION_RECEIPT" \
-  --content-file "$SYS_FILE" --content-file "$USER_FILE" >/dev/null
-"$AUTHORIZATION_HELPER" verify-trusted-boundary \
-  --manifest "$AUTHORIZATION_RECEIPT" --policy "$SECURITY_POLICY_RESOLVED" \
-  --content-file "$SYS_FILE" --content-file "$USER_FILE" >/dev/null || {
-    echo "RUNNER FAILURE: automatic disclosure boundary declined; route to Codex" >&2
-    exit 0
-  }
+if ! "$BOUNDARY_HELPER" --mode artifact-delegation \
+    --policy "$SECURITY_POLICY_RESOLVED" \
+    --content-file "$SYS_FILE" --content-file "$USER_FILE" >/dev/null; then
+  echo "RUNNER FAILURE: automatic disclosure boundary declined; route to Codex" >&2
+  exit 0
+fi
 
 RESULT=$( \
   env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYS_FILE" \
   OPENROUTER_TARGET_AGENT_NAME="$target_agent_name" \
-  OPENROUTER_AUTHORIZATION_MODE="$AUTHORIZATION_MODE" \
-  OPENROUTER_AUTHORIZATION_RUN_ID="${review_run_id:-}" \
+  OPENROUTER_RUN_ID="${review_run_id:-}" \
   OPENROUTER_LANE_ID="$target_agent_name" \
   OPENROUTER_WORKLOAD="$OPENROUTER_WORKLOAD_CLASS" \
   OPENROUTER_RECEIPT_FILE="$WRAPPER_RECEIPT" \
@@ -514,8 +501,8 @@ complete:
 5. **Keep consequence-appropriate review independent.** High-consequence security completion requires a reviewer family different from the implementer even when non-secret implementation content was eligible for OpenRouter.
 6. **Partial coverage is not full coverage.** When `DECLINED_CHANGED_FILES` is non-empty, emit `### CODEX PARTIAL COVERAGE REQUIRED` with path names only. dm-review completes ordinary lanes locally on Codex; `security-auditor-codex-signoff` must use a non-implementing family for every held path or remain `REVIEW INCOMPLETE`.
 7. **Preserve the provider receipt.** Report the generation ID, canonical response model, and serving-provider provenance. A missing provider field is `not_reported_by_completion`, never evidence of a verified provider. Never include prompt or completion content in receipt metadata.
-8. **Screen unchanged bytes automatically.** Snapshot and verify the exact
-   system/user files with `verify-trusted-boundary` immediately before invoking
+8. **Screen the exact outbound bytes automatically.** Materialize private
+   system/user files, scan those files, and pass the same files immediately to
    the wrapper. Never ask the user to approve an OpenRouter call.
 
 ## Why This Architecture

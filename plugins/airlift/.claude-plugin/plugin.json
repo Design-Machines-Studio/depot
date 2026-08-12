@@ -17,7 +17,7 @@
     "deepseek"
   ],
   "optionalPluginDependencies": {
-    "openrouter": ">=1.13.0",
+    "openrouter": ">=1.14.0",
     "workflow-kernel": ">=0.5.0"
   },
   "capabilities": {

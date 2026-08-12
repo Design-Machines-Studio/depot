@@ -27,7 +27,7 @@ pass() {
 
 cascade="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
 wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
-authorization="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
+boundary="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-boundary.sh"
 security_policy="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
 model_selection="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-selection.md"
 orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
@@ -276,55 +276,27 @@ cleanup() {
 trap cleanup EXIT
 trusted_system="$fixture_root/trusted.system"
 trusted_prompt="$fixture_root/trusted.prompt"
-trusted_manifest="$fixture_root/trusted.authorization.json"
 printf '%s' 'You are a bounded test assistant.' > "$trusted_system"
 printf '%s' 'Review this public fixture.' > "$trusted_prompt"
-trusted_digest="$("$authorization" snapshot --output "$trusted_manifest" \
-  --content-file "$trusted_system" --content-file "$trusted_prompt")"
-trusted_receipt="$("$authorization" verify-trusted-boundary \
-  --manifest "$trusted_manifest" --policy "$security_policy" \
-  --content-file "$trusted_system" --content-file "$trusted_prompt")"
-if printf '%s' "$trusted_receipt" | jq -e \
-   --arg digest "$trusted_digest" '
-     .authorizationMode == "trusted-boundary"
-     and .authorizationScope == "policy-accepted-unchanged-ordered-content-bytes"
-     and .payloadSha256 == $digest
-   ' >/dev/null; then
-  pass "trusted-boundary mode accepts policy-screened unchanged bytes without user approval"
+if "$boundary" --mode artifact-delegation --policy "$security_policy" \
+   --content-file "$trusted_system" --content-file "$trusted_prompt" >/dev/null; then
+  pass "automatic boundary accepts harmless private outbound files"
 else
-  fail "trusted-boundary mode must retain policy scanning and exact-byte verification"
-  any_failed=1
-fi
-
-printf '%s' 'changed after snapshot' >> "$trusted_prompt"
-set +e
-"$authorization" verify-trusted-boundary \
-  --manifest "$trusted_manifest" --policy "$security_policy" \
-  --content-file "$trusted_system" --content-file "$trusted_prompt" \
-  >/dev/null 2>&1
-trusted_changed_rc=$?
-set -e
-if [ "$trusted_changed_rc" -eq 2 ]; then
-  pass "trusted-boundary mode rejects payload mutation after snapshot"
-else
-  fail "trusted-boundary mode must not authorize changed payload bytes"
+  fail "automatic boundary must accept harmless private outbound files"
   any_failed=1
 fi
 
 printf '%s' 'OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890' > "$trusted_prompt"
-"$authorization" snapshot --output "$trusted_manifest" \
-  --content-file "$trusted_system" --content-file "$trusted_prompt" >/dev/null
 set +e
-"$authorization" verify-trusted-boundary \
-  --manifest "$trusted_manifest" --policy "$security_policy" \
+"$boundary" --mode artifact-delegation --policy "$security_policy" \
   --content-file "$trusted_system" --content-file "$trusted_prompt" \
   >/dev/null 2>&1
 trusted_secret_rc=$?
 set -e
 if [ "$trusted_secret_rc" -eq 3 ]; then
-  pass "trusted-boundary mode still declines credential-class content"
+  pass "automatic boundary declines credential-class content"
 else
-  fail "trusted-boundary mode must not bypass the canonical disclosure scanner"
+  fail "automatic boundary must retain the canonical disclosure scanner"
   any_failed=1
 fi
 
@@ -782,7 +754,6 @@ direct_receipt="$fixture_root/direct-receipt.json"
 rm -f "$network_marker" "$request_file" "$direct_receipt"
 if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
    OPENROUTER_WORKLOAD=direct \
-   OPENROUTER_AUTHORIZATION_MODE=trusted-boundary \
    OPENROUTER_RECEIPT_FILE="$direct_receipt" \
    "$wrapper" moonshotai/kimi-k3 test 10 z-ai/glm-5.2 \
    >/dev/null 2>&1 &&
@@ -794,11 +765,11 @@ if OPENROUTER_API_KEY=test OPENROUTER_BASE="$sentinel_base" \
    jq -e '
      .routing.workload == "direct"
      and .routing.sort == "throughput"
-     and .authorization.mode == "trusted-boundary"
+     and (.authorization | has("mode") | not)
    ' "$direct_receipt" >/dev/null; then
-  pass "direct Kimi work prefers throughput and records authorization provenance"
+  pass "direct Kimi work prefers throughput and records request evidence"
 else
-  fail "direct workload routing must preserve fallbacks and authorization provenance"
+  fail "direct workload routing must preserve fallbacks and request evidence"
   any_failed=1
 fi
 

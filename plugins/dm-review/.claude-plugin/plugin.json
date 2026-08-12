@@ -17,7 +17,7 @@
   "optionalPluginDependencies": {
     "superpowers": ">=1.0.0",
     "airlift": ">=1.0.0",
-    "openrouter": ">=1.13.0"
+    "openrouter": ">=1.14.0"
   },
   "keywords": [
     "review",

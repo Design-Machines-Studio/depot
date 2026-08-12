@@ -57,8 +57,8 @@ emits a durable coverage receipt even when the raw inventory is empty.
 OpenRouter is available when one coherent installed OpenRouter bundle resolves
 and either `OPENROUTER_API_KEY` or the validated `OPENROUTER_API_KEY_FILE` input
 is configured. Eligible mechanical, bulk, and supplementary Kimi security lanes
-then dispatch non-interactively with the existing automatic disclosure scan and
-unchanged-byte check. No user approval, broker probe, FIDO interaction, or
+then dispatch non-interactively after one automatic disclosure scan over the
+private outbound files. No user approval, broker probe, FIDO interaction, or
 redispatch is part of the path.
 
 A missing or invalid key, unavailable bundle/provider, or automatically

@@ -97,7 +97,7 @@ resolve_openrouter_root() {
     [ -n "$root" ] || continue
     [ -x "$root/skills/openrouter-delegate/references/openrouter-wrapper.sh" ] &&
       [ -r "$root/skills/openrouter-delegate/references/delegation-security-policy.json" ] &&
-      [ -x "$root/skills/openrouter-delegate/references/payload-authorization.sh" ] || continue
+      [ -x "$root/skills/openrouter-delegate/references/delegation-boundary.sh" ] || continue
     printf '%s' "${root%/}"
     return 0
   done
@@ -105,7 +105,7 @@ resolve_openrouter_root() {
 }
 
 dispatch_wrapper() {
-  local model="$1" system task_tmp_root system_file prompt_file receipt_file authorization_file root response rc
+  local model="$1" system task_tmp_root system_file prompt_file receipt_file root response rc
   root="$(resolve_openrouter_root)" || return 77
   system="${OPENROUTER_SYSTEM:-You are a terse, precise coding assistant. Output only what was asked.}"
   task_tmp_root="${TMPDIR:-/tmp}"
@@ -116,41 +116,31 @@ dispatch_wrapper() {
   receipt_file="$(mktemp "$task_tmp_root/cascade-wrapper.result.XXXXXX")" || {
     rm -f "$system_file" "$prompt_file"; return 1;
   }
-  authorization_file="$(mktemp "$task_tmp_root/cascade-wrapper.authorization.XXXXXX")" || {
-    rm -f "$system_file" "$prompt_file" "$receipt_file"; return 1;
-  }
   printf '%s' "$system" > "$system_file"
   printf '%s' "$PROMPT" > "$prompt_file"
-  "$root/skills/openrouter-delegate/references/payload-authorization.sh" snapshot \
-    --output "$authorization_file" --content-file "$system_file" \
-    --content-file "$prompt_file" >/dev/null || {
-      rm -f "$system_file" "$prompt_file" "$receipt_file" "$authorization_file"; return 2;
-    }
-  "$root/skills/openrouter-delegate/references/payload-authorization.sh" verify-trusted-boundary \
-    --manifest "$authorization_file" \
+  "$root/skills/openrouter-delegate/references/delegation-boundary.sh" \
+    --mode artifact-delegation \
     --policy "$root/skills/openrouter-delegate/references/delegation-security-policy.json" \
     --content-file "$system_file" --content-file "$prompt_file" >/dev/null || {
-      rm -f "$system_file" "$prompt_file" "$receipt_file" "$authorization_file"; return 77;
+      rm -f "$system_file" "$prompt_file" "$receipt_file"; return 77;
     }
   response="$(env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$system_file" \
-    OPENROUTER_AUTHORIZATION_MODE=trusted-boundary \
     OPENROUTER_WORKLOAD="${DM_PROVIDER_WORKLOAD:-mechanical}" \
     OPENROUTER_RECEIPT_FILE="$receipt_file" \
     bash "$root/skills/openrouter-delegate/references/openrouter-wrapper.sh" \
       "$model" - "$TIMEOUT" < "$prompt_file")"; rc=$?
   [ "$rc" -eq 0 ] || {
-    rm -f "$system_file" "$prompt_file" "$receipt_file" "$authorization_file"
+    rm -f "$system_file" "$prompt_file" "$receipt_file"
     [ "$rc" -eq 2 ] && return 2
     return 1
   }
   jq -e '.schemaVersion == 2 and .outcome == "success" and
-    .authorization.mode == "trusted-boundary" and
     (.authorization.requestEnvelopeSha256 | test("^[0-9a-f]{64}$"))' \
     "$receipt_file" >/dev/null 2>&1 || {
-      rm -f "$system_file" "$prompt_file" "$receipt_file" "$authorization_file"; return 2;
+      rm -f "$system_file" "$prompt_file" "$receipt_file"; return 2;
     }
   printf '%s' "$response"
-  rm -f "$system_file" "$prompt_file" "$receipt_file" "$authorization_file"
+  rm -f "$system_file" "$prompt_file" "$receipt_file"
 }
 resolve_openrouter_exec() {
   [ -x "$DIR/openrouter-exec.sh" ] && printf '%s' "$DIR/openrouter-exec.sh"

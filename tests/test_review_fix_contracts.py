@@ -213,20 +213,21 @@ class ReviewFixContractTests(unittest.TestCase):
                 )
                 self.assertEqual(result.returncode, expected, result.stderr)
 
-    def test_airlift_delegation_uses_trusted_snapshot_command(self):
+    def test_airlift_delegation_uses_trusted_private_copy_command(self):
         for relative in (
             "plugins/airlift/commands/airlift-in.md",
             "plugins/airlift/prompts/airlift-in.md",
             "plugins/airlift/skills/airlift-in/SKILL.md",
         ):
             surface = (ROOT / relative).read_text()
-            delegation = surface.split("SNAPSHOT_DIR=", 1)[1]
+            delegation = surface.split("PRIVATE_DIR=", 1)[1]
             self.assertIn(
                 '"$WORKFLOW_KERNEL" snapshot-files',
                 delegation,
                 relative,
             )
             self.assertNotIn('cp "$RESUME_FILE"', delegation, relative)
+            self.assertNotIn("payload-authorization", delegation, relative)
 
     def test_dm_review_owns_fail_closed_result_policy(self):
         from tests.test_quality_pulse_kernel import result_policy_document

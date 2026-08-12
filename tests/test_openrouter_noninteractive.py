@@ -17,7 +17,7 @@ import unittest
 REPO = Path(__file__).resolve().parents[1]
 OPENROUTER = REPO / "plugins/openrouter"
 PIPELINE_EXEC = REPO / "plugins/pipeline/references/openrouter-exec.sh"
-AUTH = OPENROUTER / "skills/openrouter-delegate/references/payload-authorization.sh"
+BOUNDARY = OPENROUTER / "skills/openrouter-delegate/references/delegation-boundary.sh"
 POLICY = OPENROUTER / "skills/openrouter-delegate/references/delegation-security-policy.json"
 WRAPPER = OPENROUTER / "skills/openrouter-delegate/references/openrouter-wrapper.sh"
 
@@ -71,7 +71,7 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.home = self.root / "home"
-        installed = self.home / ".codex/plugins/cache/depot/openrouter/1.13.0"
+        installed = self.home / ".codex/plugins/cache/depot/openrouter/1.14.0"
         installed.parent.mkdir(parents=True)
         shutil.copytree(OPENROUTER, installed)
         self.installed = installed
@@ -87,19 +87,17 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
 
     def direct(self, prompt: str, bundle: Path | None = None) -> subprocess.CompletedProcess[str]:
         bundle = bundle or OPENROUTER
-        auth = bundle / "skills/openrouter-delegate/references/payload-authorization.sh"
+        boundary = bundle / "skills/openrouter-delegate/references/delegation-boundary.sh"
         policy = bundle / "skills/openrouter-delegate/references/delegation-security-policy.json"
         wrapper = bundle / "skills/openrouter-delegate/references/openrouter-wrapper.sh"
         system = self.root / "system"
         user = self.root / "user"
-        manifest = self.root / "manifest.json"
         receipt = self.root / "receipt.json"
         system.write_text("You are a fixture assistant.")
         user.write_text(prompt)
         script = f'''set -e
-"{auth}" snapshot --output "{manifest}" --content-file "{system}" --content-file "{user}" >/dev/null
-"{auth}" verify-trusted-boundary --manifest "{manifest}" --policy "{policy}" --content-file "{system}" --content-file "{user}" >/dev/null
-env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_AUTHORIZATION_MODE=trusted-boundary OPENROUTER_WORKLOAD=direct OPENROUTER_RECEIPT_FILE="{receipt}" bash "{wrapper}" openai/gpt-5.6-terra - 10 moonshotai/kimi-k3 < "{user}"
+"{boundary}" --mode artifact-delegation --policy "{policy}" --content-file "{system}" --content-file "{user}" >/dev/null
+env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=direct OPENROUTER_RECEIPT_FILE="{receipt}" bash "{wrapper}" openai/gpt-5.6-terra - 10 moonshotai/kimi-k3 < "{user}"
 '''
         result = subprocess.run(["bash", "-c", script], text=True, capture_output=True, env=self.env())
         result.receipt_path = receipt  # type: ignore[attr-defined]
@@ -111,7 +109,6 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_AUTHORIZAT
         self.assertEqual(FixtureHandler.contacts, 1)
         self.assertNotRegex(result.stdout + result.stderr, r"approval_required|APPROVAL REQUIRED|exit 78|batch|broker")
         receipt = json.loads(result.receipt_path.read_text())  # type: ignore[attr-defined]
-        self.assertEqual(receipt["authorization"]["mode"], "trusted-boundary")
         self.assertRegex(receipt["authorization"]["requestEnvelopeSha256"], r"^[0-9a-f]{64}$")
         self.assertEqual(receipt["usage"]["total_tokens"], 18)
         serialized = json.dumps(receipt).lower()
@@ -243,10 +240,11 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_AUTHORIZAT
         self.assertNotIn("interim-operator-batch", combined)
         self.assertNotIn("exact-digest", combined)
         self.assertFalse((OPENROUTER / "skills/openrouter-delegate/references/runner-batch-authorization.sh").exists())
+        self.assertFalse((OPENROUTER / "skills/openrouter-delegate/references/payload-authorization.sh").exists())
         review = active[2].read_text()
         self.assertIn('OPENROUTER_API_KEY_FILE', review)
         self.assertIn('OPENROUTER_AVAILABLE=true', review)
-        self.assertIn('OPENROUTER_AUTHORIZATION_MODE=trusted-boundary', review)
+        self.assertIn('OPENROUTER_BOUNDARY_PATH', review)
 
         for state in ("absent", "ready", "broken"):
             with self.subTest(authority_state=state):

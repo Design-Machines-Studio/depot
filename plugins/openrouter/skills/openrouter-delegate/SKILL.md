@@ -119,16 +119,16 @@ ACTIVE_HOST=""
 [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.13.0 --active-host "$ACTIVE_HOST" \
+    --minimum-version 1.14.0 --active-host "$ACTIVE_HOST" \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
-    --required-executable skills/openrouter-delegate/references/payload-authorization.sh)
+    --required-executable skills/openrouter-delegate/references/delegation-boundary.sh)
 else
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.13.0 \
+    --minimum-version 1.14.0 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
-    --required-executable skills/openrouter-delegate/references/payload-authorization.sh)
+    --required-executable skills/openrouter-delegate/references/delegation-boundary.sh)
 fi
 BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty')
 case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) exit 1;; esac

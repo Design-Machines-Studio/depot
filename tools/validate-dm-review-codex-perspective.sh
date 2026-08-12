@@ -38,7 +38,7 @@ reject_text() {
 
 security_path_requires_full() {
   case "$1" in
-    internal/auth/*|*/internal/auth/*|internal/federation/*|*/internal/federation/*|*/security/*|*/middleware/auth*|*/middleware/security*|*/secretbox*|*/destructive_confirmation*|internal/baseplate/email/settings*|deploy/*|*/deploy/*|*.env*|*/.env*|*/openrouter-wrapper.sh|*/payload-authorization.sh|*/delegation-boundary.sh|*/workflow-authority*) return 0 ;;
+    internal/auth/*|*/internal/auth/*|internal/federation/*|*/internal/federation/*|*/security/*|*/middleware/auth*|*/middleware/security*|*/secretbox*|*/destructive_confirmation*|internal/baseplate/email/settings*|deploy/*|*/deploy/*|*.env*|*/.env*|*/openrouter-wrapper.sh|*/delegation-boundary.sh|*/workflow-authority*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -326,10 +326,10 @@ require_text "$review_skill" '**code-simplicity-reviewer**' "quick roster includ
 require_text "$review_skill" 'Do not add `second-perspective`' "quick roster excludes second perspective"
 require_text "$review_skill" 'quick mode escalates to the existing full mode' "security-sensitive quick review escalates to full"
 require_text "$review_skill" '`**/middleware/auth*`' "quick escalation covers auth middleware"
-require_text "$review_skill" '`payload-authorization.sh`' "quick escalation covers Depot credential transport"
+require_text "$review_skill" '`delegation-boundary.sh`' "quick escalation covers Depot credential transport"
 require_text "$review_skill" 'Do not widen this set to all handlers, shell scripts, dependency manifests, or' "quick escalation stays proportionally bounded"
 assert_fixture true "auth path escalates quick review" security_path_requires_full "internal/auth/session.go"
-assert_fixture true "Depot credential transport escalates quick review" security_path_requires_full "plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
+assert_fixture true "Depot credential transport escalates quick review" security_path_requires_full "plugins/openrouter/skills/openrouter-delegate/references/delegation-boundary.sh"
 assert_fixture false "ordinary handler stays on quick review" security_path_requires_full "internal/members/handler.go"
 assert_fixture false "dependency manifest stays on quick review" security_path_requires_full "go.mod"
 assert_fixture true "proven ordinary repair may omit repeated security sign-off" full_allowlist_can_omit_security affected_lane_repair true false

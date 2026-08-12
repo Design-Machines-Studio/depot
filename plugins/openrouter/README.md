@@ -54,7 +54,7 @@ Every live caller selects one coherent installed plugin root with workflow-kerne
 - `OPENROUTER_WORKLOAD=quality|security|direct|bulk|mechanical` selects the
   default provider-routing strategy; explicit provider sort/order overrides it.
 - Canonical disclosure scanning rejects ineligible exact outbound bytes before
-  provider contact. Active callers snapshot and verify unchanged system/user
-  files with `trusted-boundary`; no human approval artifact is involved.
+  provider contact. Active callers scan private system/user files once and
+  immediately pass those same files to the wrapper.
 - Use provider-side per-key spending limits for runaway-cost control.
 - Optional OpenRouter MCP: `codex mcp add openrouter --url https://mcp.openrouter.ai/mcp`, then `codex mcp login openrouter`. Its expiring OAuth key does not replace the persistent team API key.

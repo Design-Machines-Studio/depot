@@ -8,8 +8,8 @@ recommended runaway-cost control.
 ## Coherent installed bundle
 
 Every active caller resolves one coherent installed OpenRouter bundle and
-derives its wrapper, disclosure policy, boundary, and authorization helper from
-that root. A partial or incoherent bundle makes OpenRouter unavailable and the
+derives its wrapper, disclosure policy, and boundary from that root. A partial
+or incoherent bundle makes OpenRouter unavailable and the
 caller falls back to native Codex without prompting.
 
 ## Automatic outbound boundary
@@ -17,13 +17,14 @@ caller falls back to native Codex without prompting.
 Direct `/openrouter`, eligible dm-review lanes, and the bounded Pipeline adapter
 all follow one non-interactive protocol:
 
-1. Materialize the exact ordered system and user files.
-2. Run `payload-authorization.sh snapshot` on those files.
-3. Immediately run `payload-authorization.sh verify-trusted-boundary` with the
-   installed disclosure policy and the unchanged files.
-4. On success invoke `openrouter-wrapper.sh` with
-   `OPENROUTER_AUTHORIZATION_MODE=trusted-boundary`; on decline contact no
-   provider and use the native fallback where applicable.
+1. Materialize the exact ordered system and user files in private storage.
+2. Run `delegation-boundary.sh --mode artifact-delegation` with the installed
+   disclosure policy over those files.
+3. On success immediately invoke `openrouter-wrapper.sh` with those same files;
+   on decline contact no provider and use the native fallback where applicable.
+
+There is no screening manifest or second hash comparison. Private copies keep
+the scan-and-send path proportionate to a trusted developer workstation.
 
 The boundary refuses unmistakable credentials, private keys, authenticated
 DSNs, access/session tokens, and explicitly classified private or regulated

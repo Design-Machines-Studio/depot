@@ -773,7 +773,6 @@ fi
 # ---------------------------------------------------------------------------
 printf "\nGroup 9: configured-key OpenRouter authorization\n"
 
-payload_authorization="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
 openrouter_wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 openrouter_agent_runner="$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md"
 review_alias="$REPO_ROOT/plugins/dm-review/skills/dm-review/SKILL.md"
@@ -785,19 +784,19 @@ noninteractive_fixtures="$REPO_ROOT/tests/test_openrouter_noninteractive.py"
 
 require_text "$authorization_contract" 'either `OPENROUTER_API_KEY` or the existing' \
   "configured-key contract accepts both supported key inputs"
-require_text "$authorization_contract" 'verify-trusted-boundary' \
-  "configured-key contract requires automatic unchanged-byte screening"
+require_text "$authorization_contract" 'delegation-boundary.sh --mode artifact-delegation' \
+  "configured-key contract requires one automatic private-file scan"
 require_text "$authorization_contract" 'has no effect on configured-key dispatch' \
   "configured-key contract ignores Workflow Authority status"
 require_text "$openrouter_exec" 'OPENROUTER_EXEC_ALLOWED_PATHS is required' \
   "bounded Pipeline adapter keeps the owned-path allowlist"
-require_text "$openrouter_exec" 'OPENROUTER_AUTHORIZATION_MODE=trusted-boundary' \
+require_text "$openrouter_exec" '--mode artifact-delegation' \
   "bounded Pipeline adapter uses configured-key wrapper transport"
 require_absent "$openrouter_exec" '/usr/local/bin/workflow-authority' \
   "bounded Pipeline adapter has no broker probe"
 require_absent "$cascade_dispatch" '/usr/local/bin/workflow-authority' \
   "Pipeline cascade has no broker probe"
-require_text "$review_skill" 'OPENROUTER_AUTHORIZATION_MODE=trusted-boundary' \
+require_text "$review_skill" 'dispatch immediately' \
   "dm-review resolves eligible configured-key lanes non-interactively"
 require_text "$review_skill" 'OPENROUTER_API_KEY_FILE' \
   "dm-review accepts the validated key-file input"
@@ -807,16 +806,20 @@ require_absent "$openrouter_wrapper" 'exact-digest' \
   "OpenRouter wrapper removes per-call digest approval"
 require_absent "$openrouter_wrapper" 'interim-operator-batch' \
   "OpenRouter wrapper removes batch authorization"
-require_absent "$payload_authorization" 'batch-approve' \
-  "payload helper exposes automatic screening only"
+if [ ! -e "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh" ]; then
+  printf "  OK    screening-manifest helper is deleted\n"
+else
+  printf "  FAIL  screening-manifest helper is deleted\n"
+  failures=1
+fi
 if [ ! -e "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/runner-batch-authorization.sh" ]; then
   printf "  OK    batch runner helper is deleted\n"
 else
   printf "  FAIL  batch runner helper is deleted\n"
   failures=1
 fi
-require_text "$openrouter_agent_runner" 'verify-trusted-boundary' \
-  "OpenRouter agent runner screens unchanged exact bytes automatically"
+require_text "$openrouter_agent_runner" '--mode artifact-delegation' \
+  "OpenRouter agent runner scans private exact outbound files once"
 require_absent "$openrouter_agent_runner" 'RUNNER_BATCH_HELPER' \
   "OpenRouter agent runner does not enter the batch path"
 require_text "$noninteractive_fixtures" 'test_direct_is_one_pass_and_receipt_is_content_free' \

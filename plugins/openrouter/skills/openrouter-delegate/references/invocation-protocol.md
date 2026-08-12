@@ -42,19 +42,17 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.13.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.14.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
       --required-asset skills/openrouter-delegate/references/mcp-control-plane.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.13.0 \
+      --minimum-version 1.14.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
       --required-asset skills/openrouter-delegate/references/mcp-control-plane.md
   fi
 }
@@ -64,9 +62,8 @@ case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) exit
 WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 SECURITY_POLICY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
 BOUNDARY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
-AUTHORIZATION_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
 [ -x "$WRAPPER_PATH" ] && [ -r "$SECURITY_POLICY_PATH" ] &&
-  [ -x "$BOUNDARY_PATH" ] && [ -x "$AUTHORIZATION_PATH" ] || exit 1
+  [ -x "$BOUNDARY_PATH" ] || exit 1
 ```
 
 Persist only `version`, `cache_class`, and `reason` from the resolver receipt. `selected_root` is for immediate local use and must not enter public durable receipts.
@@ -74,7 +71,7 @@ Persist only `version`, `cache_class`, and `reason` from the resolver receipt. `
 ## How to Invoke
 
 Use the canonical `/openrouter` workflow, which applies the automatic content
-boundary, unchanged-byte verification, and receipt handling
+boundary and receipt handling
 before it reaches this low-level wrapper:
 
 ```text
@@ -121,8 +118,6 @@ protocol below before invoking it.
 - `OPENROUTER_IDLE_TIMEOUT` (default `600`): maximum time without stream
   progress. Any streamed bytes reset this watchdog; only a completed, validated
   stream becomes review evidence.
-- `OPENROUTER_AUTHORIZATION_MODE` (`trusted-boundary|unspecified`): low-level
-  receipt vocabulary. Active configured-key callers use `trusted-boundary`.
 - `OPENROUTER_RECEIPT_FILE`: optional path for a content-free JSON success or
   failure receipt. Failure receipts record timeout/error classification without
   prompt, partial completion, inferred provider, or usage content.
@@ -147,12 +142,12 @@ all use one pass:
 
 1. Resolve one coherent installed bundle and materialize the exact system/user
    files.
-2. Run `payload-authorization.sh snapshot`, then
-   `verify-trusted-boundary` with the installed disclosure policy immediately
-   before wrapper invocation.
+2. Run `delegation-boundary.sh --mode artifact-delegation` with the installed
+   disclosure policy over those private files immediately before wrapper
+   invocation.
 3. On an automatic decline, contact no provider and fall back to Codex where a
-   native fallback exists. Otherwise invoke the wrapper with
-   `OPENROUTER_AUTHORIZATION_MODE=trusted-boundary`.
+   native fallback exists. Otherwise invoke the wrapper with those same private
+   files.
 
 No OpenRouter caller asks for user approval. Workflow Authority presence or
 status has no effect. Provider-side per-key spending limits are the recommended

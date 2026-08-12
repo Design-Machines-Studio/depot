@@ -74,18 +74,16 @@ ACTIVE_HOST=""
 resolve_openrouter_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.13.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.14.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.13.0 \
+      --minimum-version 1.14.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
   fi
 }
 BUNDLE_JSON=$(resolve_openrouter_bundle) || exit 1
@@ -94,27 +92,21 @@ case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) exit
 WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 POLICY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
 BOUNDARY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
-AUTHORIZATION_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
 
 PROMPT_FILE=$(mktemp)
 SYSTEM_FILE=$(mktemp)
 RECEIPT_FILE=$(mktemp)
-AUTHORIZATION_FILE=$(mktemp)
-trap 'rm -f "$PROMPT_FILE" "$SYSTEM_FILE" "$RECEIPT_FILE" "$AUTHORIZATION_FILE"' EXIT
+trap 'rm -f "$PROMPT_FILE" "$SYSTEM_FILE" "$RECEIPT_FILE"' EXIT
 printf '%s' "$USER_PROMPT" > "$PROMPT_FILE"
 printf '%s' "${OPENROUTER_SYSTEM:-You are a terse, precise coding assistant. Output only what was asked.}" > "$SYSTEM_FILE"
 
-"$AUTHORIZATION_PATH" snapshot --output "$AUTHORIZATION_FILE" \
-  --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE" >/dev/null
-if ! "$AUTHORIZATION_PATH" verify-trusted-boundary \
-    --manifest "$AUTHORIZATION_FILE" --policy "$POLICY_PATH" \
+if ! "$BOUNDARY_PATH" --mode artifact-delegation --policy "$POLICY_PATH" \
     --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE" >/dev/null; then
   echo "OpenRouter disclosure declined; no prompt bytes were sent."
   exit 1
 fi
 
 RESULT=$(env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
-  OPENROUTER_AUTHORIZATION_MODE=trusted-boundary \
   OPENROUTER_WORKLOAD=direct OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
   bash "$WRAPPER_PATH" "$MODEL" - "$TIMEOUT" "${FALLBACK_MODEL:-}" < "$PROMPT_FILE")
 ```
