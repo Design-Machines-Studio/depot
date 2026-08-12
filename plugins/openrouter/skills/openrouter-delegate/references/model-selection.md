@@ -96,7 +96,9 @@ Only when the corresponding evidence was actually refreshed, update its
 `snapshot_date`, the snapshot on each changed entry under its `models`, aliases,
 prices, bytes-per-token estimate, and cited sources. An alias that targets a
 top-level routing model uses that routing model's own price and snapshot; do not
-copy or restamp it into the native model list.
+copy or restamp it into the native model list. When native and OpenRouter prices
+differ, use a distinct native-only identity so cost imputation preserves the
+official API-equivalent price without turning that identity into a routing slug.
 
 Record the source and observation date in the reviewed change. A native-cost
 refresh never changes the top-level routing `snapshot_date`, routing-model
@@ -186,10 +188,10 @@ API-equivalent planning prices, not measured subscription spend, were verified
 from official OpenAI model pages on 2026-08-12: Sol $5/$30 with $0.50 cached
 input, Terra $2/$12 with $0.20 cached input, and Luna $0.20/$1.20 with $0.02
 cached input. Prompts above 272K input tokens carry higher API pricing. The
-matrix's native cost-imputation object continues to price only Sol: Terra and
-Luna aliases were removed because their OpenRouter catalog prices differ from
-official native API prices and the existing schema cannot represent both
-without conflation.
+matrix's native cost-imputation object prices all three through explicit
+aliases. Terra and Luna target distinct native-only identities so their official
+API-equivalent costs remain separate from the cheaper top-level OpenRouter
+catalog prices; those identities are observation-only and never route work.
 
 Sources: [OpenAI model guidance](https://developers.openai.com/api/docs/guides/latest-model),
 [Sol](https://developers.openai.com/api/docs/models/gpt-5.6-sol),

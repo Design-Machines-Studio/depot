@@ -127,7 +127,7 @@
     "status": "changed",
     "changes": [
       "refreshed Sol evidence date and replaced OpenRouter page with official OpenAI source; price unchanged at $5/$30 and $0.50 cached input",
-      "removed Terra and Luna native aliases because their OpenRouter prices differ from official native API equivalents and the existing schema cannot represent both without conflation"
+      "preserved Terra at $2/$12 and $0.20 cached input and Luna at $0.20/$1.20 and $0.02 cached input through distinct native-only aliases and model identities, keeping official native API-equivalent costs separate from cheaper OpenRouter catalog prices"
     ],
     "preserved": ["schema_version 1", "four input bytes per token estimate", "observation-only and never billed subscription spend semantics"]
   },

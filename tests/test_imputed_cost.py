@@ -227,9 +227,20 @@ class ImputedCostTests(unittest.TestCase):
         events = translate_pipeline_receipts([_native_receipt()])
         summary = build_run_cost_summary(events, matrix=REAL_MATRIX)
         lane = summary["lanes"][0]
-        self.assertEqual(lane["cost_usd"], 4.0)
+        self.assertEqual(lane["cost_usd"], 8.0)
         self.assertIn(
-            "+model_alias(gpt-5.6-terra->openai/gpt-5.6-terra)",
+            "+model_alias(gpt-5.6-terra->openai/gpt-5.6-terra-native-api-equivalent)",
+            lane["measurement_source"],
+        )
+
+    def test_native_luna_alias_is_priceable(self):
+        events = translate_pipeline_receipts([
+            _native_receipt(model="gpt-5.6-luna"),
+        ])
+        lane = build_run_cost_summary(events, matrix=REAL_MATRIX)["lanes"][0]
+        self.assertEqual(lane["cost_usd"], 0.8)
+        self.assertIn(
+            "+model_alias(gpt-5.6-luna->openai/gpt-5.6-luna-native-api-equivalent)",
             lane["measurement_source"],
         )
 
@@ -451,7 +462,7 @@ class ImputedCostTests(unittest.TestCase):
                     self.assertEqual(cli.main(argv), 0)
                 self.assertEqual(stderr.getvalue(), "")
                 summary = json.loads(output.read_text(encoding="utf-8"))
-                self.assertEqual(summary["lanes"][0]["cost_usd"], 4.0)
+                self.assertEqual(summary["lanes"][0]["cost_usd"], 8.0)
                 self.assertEqual(summary["digest"], compute_cost_summary_digest(summary))
 
     def test_both_cli_commands_skip_unreadable_matrix_once(self):
