@@ -88,7 +88,11 @@ Payload-Specific Host Authorization before invoking it.
 
 ## Environment Variables
 
-- `OPENROUTER_API_KEY` (required): your OpenRouter API key. Never commit it.
+- `OPENROUTER_API_KEY`: your OpenRouter API key. Never commit it. Mutually
+  exclusive with `OPENROUTER_API_KEY_FILE`.
+- `OPENROUTER_API_KEY_FILE`: preferred for non-interactive harnesses. The
+  wrapper accepts only a non-symlink regular file owned by the current UID with
+  mode 0600 and a single non-empty UTF-8 line.
 - `OPENROUTER_SYSTEM` (default: terse coding assistant): inline system prompt.
 - `OPENROUTER_SYSTEM_FILE`: readable regular file containing the exact system
   prompt bytes. It is mutually exclusive with `OPENROUTER_SYSTEM`; authorized
@@ -140,16 +144,19 @@ the direct API key's workspace.
 ## Host Authorization
 
 Direct interactive `/openrouter` requires user disclosure approval for the
-exact outbound payload. Treat it as byte-bound authority, separate from network
+exact outbound request envelope. Treat it as byte-bound authority, separate from network
 permission:
 
 1. Run `delegation-boundary.sh` first and materialize the exact eligible system
    and user prompt bytes in private temporary files.
-2. Run `payload-authorization.sh snapshot` over the ordered files and request
-   approval for its content-free combined `payloadSha256`.
-3. Immediately before transmission, run `payload-authorization.sh verify` with
-   the user-approved digest and the same ordered files. Any mutation,
-   reordering, or membership change requires fresh authorization.
+2. Run the wrapper with `OPENROUTER_REQUEST_ENVELOPE_OUTPUT` to render without
+   provider contact, then run `payload-authorization.sh snapshot-envelope` and
+   request approval for its content-free `requestEnvelopeSha256`.
+3. On resume, repeat the boundary check and rendering, then run
+   `payload-authorization.sh verify-envelope` with the user-approved digest.
+   Pass that digest as `OPENROUTER_APPROVED_REQUEST_ENVELOPE_SHA256`; the wrapper
+   compares it with the exact bytes supplied to curl immediately before contact.
+   Any prompt, model, fallback, routing, or stream-option change requires fresh authorization.
 4. Never retry around a denial or broaden a file-specific authorization. Record
    `host_disclosure_declined` and fall back to Codex.
 

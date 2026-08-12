@@ -16,6 +16,7 @@ BOUNDARY="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/de
 WRAPPER="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 AUTHORIZATION="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
 RUNNER_BATCH_AUTHORIZATION="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/runner-batch-authorization.sh"
+DIRECT_COMMAND="$REPO_ROOT/plugins/openrouter/commands/openrouter.md"
 
 FIXTURE_ROOT="$(mktemp -d)"
 FIXTURE_ROOT="$(cd "$FIXTURE_ROOT" && pwd -P)"
@@ -100,6 +101,25 @@ expect_rc 2 'native-vendor-origin invariant' 'mixed-case wrapper origin' \
   env OPENROUTER_API_KEY=fixture "$WRAPPER" Anthropic/claude-test prompt
 expect_rc 2 'native-vendor-origin invariant' 'mixed-case exec origin' \
   "$EXEC_RUNNER" --dry-run --model Anthropic/claude-test
+
+printf '%s\n' test > "$FIXTURE_ROOT/openrouter-api-key"
+chmod 600 "$FIXTURE_ROOT/openrouter-api-key"
+expect_rc 1 'transport error' 'secure API key file reaches the transport boundary' \
+  env -u OPENROUTER_API_KEY OPENROUTER_API_KEY_FILE="$FIXTURE_ROOT/openrouter-api-key" \
+    OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+    "$WRAPPER" moonshotai/kimi-k3 prompt
+expect_rc 2 'mutually exclusive' 'inline and file API keys cannot conflict' \
+  env OPENROUTER_API_KEY=test OPENROUTER_API_KEY_FILE="$FIXTURE_ROOT/openrouter-api-key" \
+    "$WRAPPER" moonshotai/kimi-k3 prompt
+chmod 644 "$FIXTURE_ROOT/openrouter-api-key"
+expect_rc 1 'mode 0600' 'API key file rejects broad permissions' \
+  env -u OPENROUTER_API_KEY OPENROUTER_API_KEY_FILE="$FIXTURE_ROOT/openrouter-api-key" \
+    "$WRAPPER" moonshotai/kimi-k3 prompt
+chmod 600 "$FIXTURE_ROOT/openrouter-api-key"
+ln -s "$FIXTURE_ROOT/openrouter-api-key" "$FIXTURE_ROOT/openrouter-api-key-link"
+expect_rc 1 'non-symlink regular file' 'API key file rejects symlinks' \
+  env -u OPENROUTER_API_KEY OPENROUTER_API_KEY_FILE="$FIXTURE_ROOT/openrouter-api-key-link" \
+    "$WRAPPER" moonshotai/kimi-k3 prompt
 
 printf '%s\n' 'plugins/openrouter/README.md' > "$FIXTURE_ROOT/safe-files"
 printf '%s\n' 'plugins/openrouter/README.md' '.airlift/uncommitted.patch' > "$FIXTURE_ROOT/mixed-files"
@@ -1167,6 +1187,38 @@ SH
     echo 'runner preparation did not produce a usable envelope and manifest' >&2
     exit 1
   }
+  jq -e '.stream == true and .stream_options.include_usage == true' \
+    "$ENVELOPE_REQUEST" >/dev/null || {
+    echo 'canonical envelope omitted fixed streaming parameters' >&2
+    exit 1
+  }
+
+  for mutation in prompt system fallback routing; do
+    MUTATED_REQUEST="$FIXTURE_ROOT/envelope-$mutation.json"
+    case "$mutation" in
+      prompt)
+        MUTATED_SYSTEM="$ENVELOPE_SYSTEM"; MUTATED_PROMPT="$ENVELOPE_PROMPT changed"
+        MUTATED_FALLBACK=""; MUTATED_SORT="" ;;
+      system)
+        MUTATED_SYSTEM="$ENVELOPE_SYSTEM changed"; MUTATED_PROMPT="$ENVELOPE_PROMPT"
+        MUTATED_FALLBACK=""; MUTATED_SORT="" ;;
+      fallback)
+        MUTATED_SYSTEM="$ENVELOPE_SYSTEM"; MUTATED_PROMPT="$ENVELOPE_PROMPT"
+        MUTATED_FALLBACK="z-ai/glm-5.2"; MUTATED_SORT="" ;;
+      routing)
+        MUTATED_SYSTEM="$ENVELOPE_SYSTEM"; MUTATED_PROMPT="$ENVELOPE_PROMPT"
+        MUTATED_FALLBACK=""; MUTATED_SORT="latency" ;;
+    esac
+    env OPENROUTER_API_KEY=test OPENROUTER_BASE=http://127.0.0.1:9/v1 \
+      OPENROUTER_SYSTEM="$MUTATED_SYSTEM" OPENROUTER_PROVIDER_SORT="$MUTATED_SORT" \
+      OPENROUTER_REQUEST_ENVELOPE_OUTPUT="$MUTATED_REQUEST" \
+      "$CLOCK_WRAPPER" moonshotai/kimi-k3 "$MUTATED_PROMPT" 3600 "$MUTATED_FALLBACK"
+    expect_rc 2 'request envelope changed after authorization snapshot' \
+      "exact-digest rejects a $mutation mutation" \
+      "$CLOCK_AUTHORIZATION" verify-envelope \
+        --manifest "$ENVELOPE_MANIFEST" --approved-sha256 "$ENVELOPE_DIGEST" \
+        --request-file "$MUTATED_REQUEST"
+  done
   ENVELOPE_INSPECTION="$(jq -er '.inspectionPath | select(type == "string" and length > 0)' \
     "$ENVELOPE_MANIFEST")" || {
     echo 'canonical envelope manifest did not retain an operator inspection path' >&2
@@ -2325,5 +2377,13 @@ fi
 # empty or unexpected state is not an absent broker.
 grep -Fq 'broker state unresolved; interim mode withheld' "$WRAPPER"
 grep -Fq 'broker state unresolved; interim mode withheld' "$AUTHORIZATION"
+grep -Fq 'OPENROUTER_REQUEST_ENVELOPE_OUTPUT="$REQUEST_ENVELOPE_FILE"' "$DIRECT_COMMAND"
+grep -Fq 'snapshot-envelope' "$DIRECT_COMMAND"
+grep -Fq 'verify-envelope' "$DIRECT_COMMAND"
+grep -Fq 'OPENROUTER_APPROVED_REQUEST_ENVELOPE_SHA256="$approved_request_envelope_sha256"' "$DIRECT_COMMAND"
+if grep -Fq 'approved_payload_sha256' "$DIRECT_COMMAND"; then
+  echo 'direct OpenRouter command still documents the obsolete prompt-only approval' >&2
+  exit 1
+fi
 
 printf '  OK    OpenRouter threat/content and output-boundary fixtures pass\n'

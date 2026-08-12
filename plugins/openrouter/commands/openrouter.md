@@ -34,11 +34,13 @@ Extract the prompt and optional `--model` flag from the user's input.
 
 ### Step 2: Check Prerequisites
 
-Verify `OPENROUTER_API_KEY` is set:
+Verify either `OPENROUTER_API_KEY` or `OPENROUTER_API_KEY_FILE` is set. The
+file form is preferred for non-interactive harnesses and is validated by the
+wrapper as a non-symlink regular file owned by the current UID with mode 0600:
 
 ```bash
-if [ -z "${OPENROUTER_API_KEY:-}" ]; then
-  echo "OPENROUTER_API_KEY not set. Export it before using /openrouter."
+if [ -z "${OPENROUTER_API_KEY:-}" ] && [ -z "${OPENROUTER_API_KEY_FILE:-}" ]; then
+  echo "OPENROUTER_API_KEY or OPENROUTER_API_KEY_FILE required."
   exit 1
 fi
 ```
@@ -90,7 +92,8 @@ PROMPT_FILE=$(mktemp)
 SYSTEM_FILE=$(mktemp)
 RECEIPT_FILE=$(mktemp)
 AUTHORIZATION_FILE=$(mktemp)
-trap 'rm -f "$PROMPT_FILE" "$SYSTEM_FILE" "$RECEIPT_FILE" "$AUTHORIZATION_FILE"' EXIT
+REQUEST_ENVELOPE_FILE=$(mktemp)
+trap 'rm -f "$PROMPT_FILE" "$SYSTEM_FILE" "$RECEIPT_FILE" "$AUTHORIZATION_FILE" "$REQUEST_ENVELOPE_FILE"' EXIT
 printf '%s' "$USER_PROMPT" > "$PROMPT_FILE"
 printf '%s' "${OPENROUTER_SYSTEM:-You are a terse, precise coding assistant. Output only what was asked.}" > "$SYSTEM_FILE"
 if ! "$BOUNDARY_PATH" --mode artifact-delegation \
@@ -100,33 +103,38 @@ if ! "$BOUNDARY_PATH" --mode artifact-delegation \
   exit 1
 fi
 
-PAYLOAD_SHA256=$("$AUTHORIZATION_PATH" snapshot \
-  --output "$AUTHORIZATION_FILE" \
-  --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE")
+env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
+  OPENROUTER_AUTHORIZATION_MODE=exact-digest \
+  OPENROUTER_WORKLOAD=direct \
+  OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
+  OPENROUTER_REQUEST_ENVELOPE_OUTPUT="$REQUEST_ENVELOPE_FILE" \
+  bash "$WRAPPER_PATH" "${MODEL}" - "${TIMEOUT}" "${FALLBACK_MODEL:-}" < "$PROMPT_FILE"
+REQUEST_ENVELOPE_SHA256=$("$AUTHORIZATION_PATH" snapshot-envelope \
+  --output "$AUTHORIZATION_FILE" --request-file "$REQUEST_ENVELOPE_FILE")
 ```
 
 Direct interactive `/openrouter` supports only `exact-digest` until the
 external Workflow Authority Broker is installed and integrated. Immediately
-before calling the wrapper, authorize the unchanged payload through the
-payload-specific human gate. Caller-selected `trusted-boundary` is unavailable
+before provider contact, authorize the exact rendered request envelope through
+the payload-specific human gate. The envelope binds the system/user bytes,
+model candidates, provider routing, and streaming parameters. Caller-selected `trusted-boundary` is unavailable
 and must not be treated as authority.
 
 In `exact-digest` mode this is a two-pass workflow:
 
-1. **Preparation pass:** Materialize, disclosure-screen, and snapshot the exact
-   ordered bytes. If no recorded human decision exists for that digest, emit
+1. **Preparation pass:** Materialize, disclosure-screen, render, and snapshot
+   the exact request-envelope bytes. If no recorded human decision exists, emit
    `approval_required` with status/exit `78`, stop before the wrapper, and ask
-   the human with `AskUserQuestion` (or a normal chat question when that tool is
-   unavailable) to approve or decline that exact digest. End the current turn;
+   the human with `AskUserQuestion` (or a normal chat question when unavailable)
+   to approve or decline that `requestEnvelopeSha256`. End the current turn;
    approval pending is neither success nor provider failure.
 2. **Resume/re-dispatch pass:** Continue only after a recorded human response.
    A decline records `host_disclosure_declined`, returns status/exit `77`, and
    sends nothing. On approval, copy only the digest from that human response
-   into `approved_payload_sha256`, then rerun Step 4 from payload
-   materialization. Rebuild, rescan, and snapshot the same ordered bytes and
-   verify them against the recorded approved digest immediately before contact.
+   into `approved_request_envelope_sha256`, then rerun Step 4. Rebuild, rescan,
+   rerender, and verify the envelope immediately before contact.
 
-Never self-populate `approved_payload_sha256` from `PAYLOAD_SHA256`, infer
+Never self-populate `approved_request_envelope_sha256` from the rendered digest, infer
 approval from general OpenRouter permission, or continue to the wrapper during
 the preparation pass. The recorded human response, not the command or child
 runner, is the authority.
@@ -135,20 +143,21 @@ runner, is the authority.
 AUTHORIZATION_MODE=exact-digest
 case "$AUTHORIZATION_MODE" in
   exact-digest)
-    [ -n "${approved_payload_sha256:-}" ] || {
-      printf '{"status":"approval_required","payloadSha256":"%s","authority":"user"}\n' \
-        "$PAYLOAD_SHA256"
+    [ -n "${approved_request_envelope_sha256:-}" ] || {
+      printf '{"status":"approval_required","requestEnvelopeSha256":"%s","authority":"user"}\n' \
+        "$REQUEST_ENVELOPE_SHA256"
       exit 78
     }
-    "$AUTHORIZATION_PATH" verify --manifest "$AUTHORIZATION_FILE" \
-      --approved-sha256 "$approved_payload_sha256" \
-      --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE"
+    "$AUTHORIZATION_PATH" verify-envelope --manifest "$AUTHORIZATION_FILE" \
+      --approved-sha256 "$approved_request_envelope_sha256" \
+      --request-file "$REQUEST_ENVELOPE_FILE"
     ;;
   *) echo "OpenRouter host authority unavailable" >&2; exit 77 ;;
 esac
 
 RESULT=$(env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
   OPENROUTER_AUTHORIZATION_MODE="$AUTHORIZATION_MODE" \
+  OPENROUTER_APPROVED_REQUEST_ENVELOPE_SHA256="$approved_request_envelope_sha256" \
   OPENROUTER_WORKLOAD=direct \
   OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
   bash "$WRAPPER_PATH" "${MODEL}" - "${TIMEOUT}" "${FALLBACK_MODEL:-}" < "$PROMPT_FILE")

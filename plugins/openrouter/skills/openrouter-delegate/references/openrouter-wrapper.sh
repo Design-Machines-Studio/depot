@@ -10,7 +10,11 @@
 #     <prompt|->  literal prompt, or "-" to read prompt from stdin
 #
 # Env:
-#   OPENROUTER_API_KEY   required
+#   OPENROUTER_API_KEY   required unless OPENROUTER_API_KEY_FILE is used
+#   OPENROUTER_API_KEY_FILE
+#                       optional regular, non-symlink key file owned by the
+#                       current UID with mode 0600; mutually exclusive with
+#                       OPENROUTER_API_KEY
 #   OPENROUTER_SYSTEM    optional system prompt (default: terse coding assistant)
 #   OPENROUTER_SYSTEM_FILE
 #                       optional byte-preserving system prompt file; mutually
@@ -132,10 +136,55 @@ for candidate in "$MODEL" "$FALLBACK"; do
       ;;
   esac
 done
-[ -z "${OPENROUTER_API_KEY:-}" ] && {
-  echo "### RUNNER FAILURE: OPENROUTER_API_KEY unset" >&2
-  exit 1
-}
+if [ -n "${OPENROUTER_API_KEY:-}" ] && [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; then
+  echo "### RUNNER FAILURE: OPENROUTER_API_KEY and OPENROUTER_API_KEY_FILE are mutually exclusive" >&2
+  exit 2
+fi
+if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+  [ -n "${OPENROUTER_API_KEY_FILE:-}" ] || {
+    echo "### RUNNER FAILURE: OPENROUTER_API_KEY or OPENROUTER_API_KEY_FILE required" >&2
+    exit 1
+  }
+  [ -x /usr/bin/python3 ] || {
+    echo "### RUNNER FAILURE: /usr/bin/python3 required to validate OPENROUTER_API_KEY_FILE" >&2
+    exit 1
+  }
+  OPENROUTER_API_KEY="$(/usr/bin/python3 -I - "$OPENROUTER_API_KEY_FILE" <<'PY'
+import os
+import stat
+import sys
+
+path = sys.argv[1]
+try:
+    metadata = os.lstat(path)
+    if not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
+        raise ValueError
+    if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600:
+        raise ValueError
+    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
+    try:
+        opened = os.fstat(descriptor)
+        if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
+            raise ValueError
+        value = os.read(descriptor, 8193)
+    finally:
+        os.close(descriptor)
+    if value.endswith(b"\r\n"):
+        value = value[:-2]
+    elif value.endswith(b"\n"):
+        value = value[:-1]
+    if not value or len(value) > 8192 or b"\n" in value or b"\r" in value or b"\0" in value:
+        raise ValueError
+    sys.stdout.write(value.decode("utf-8"))
+except (OSError, UnicodeDecodeError, ValueError):
+    raise SystemExit(1)
+PY
+)" || {
+    echo "### RUNNER FAILURE: OPENROUTER_API_KEY_FILE must be a non-symlink regular file owned by the current UID with mode 0600 and one non-empty line" >&2
+    exit 1
+  }
+fi
+export OPENROUTER_API_KEY
 
 PRODUCTION_BASE="https://openrouter.ai/api/v1"
 BASE="${OPENROUTER_BASE:-$PRODUCTION_BASE}"

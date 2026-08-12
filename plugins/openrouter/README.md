@@ -50,7 +50,7 @@ Every live caller selects one coherent installed plugin root with workflow-kerne
 
 ## Requirements
 
-- `OPENROUTER_API_KEY` is required for every live wrapper transmission,
+- `OPENROUTER_API_KEY` or a validated `OPENROUTER_API_KEY_FILE` is required for every live wrapper transmission,
   including an authorized dm-review operator-batch dispatch. Its presence alone
   never activates automated coding or review lanes.
 - `OPENROUTER_ZDR=1` opt-in to pin zero-data-retention providers for genuinely sensitive material (privacy demoted by default: Quality > Price > Speed > Provider privacy).
@@ -58,6 +58,6 @@ Every live caller selects one coherent installed plugin root with workflow-kerne
   default provider-routing strategy; explicit provider sort/order overrides it.
 - Canonical disclosure scanning rejects ineligible bytes before direct
   interactive authorization. `/openrouter` requires approval of the unchanged
-  exact digest; automated child modes remain disabled regardless of
+  exact rendered request-envelope digest; automated child modes remain disabled regardless of
   `OPENROUTER_PAYLOAD_AUTHORIZATION`.
 - Optional OpenRouter MCP: `codex mcp add openrouter --url https://mcp.openrouter.ai/mcp`, then `codex mcp login openrouter`. Its expiring OAuth key does not replace the persistent team API key.
