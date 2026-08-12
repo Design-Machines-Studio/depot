@@ -336,7 +336,7 @@ for rel in $CONSUMERS; do
   # `chmod --reference` is GNU-only; macOS has no such flag, so the previous
   # fallback silently reset every consumer to 644 on the platform this repo is
   # developed on. Read the mode portably and fail closed rather than guessing.
-  mode=$(stat -f '%Lp' "$f" 2>/dev/null || stat -c '%a' "$f" 2>/dev/null)
+  mode=$(stat -c '%a' "$f" 2>/dev/null || stat -f '%Lp' "$f" 2>/dev/null)
   case "$mode" in
     [0-7][0-7][0-7]|[0-7][0-7][0-7][0-7]) ;;
     *) rm -f "$tmp"

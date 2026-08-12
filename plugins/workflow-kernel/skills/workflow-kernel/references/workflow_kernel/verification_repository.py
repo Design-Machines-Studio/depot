@@ -449,7 +449,12 @@ def _hash_repository_contents(repository_fd, relative, object_format):
             if not chunk:
                 break
             digest.update(chunk)
-        return stat.S_IMODE(metadata.st_mode), digest.hexdigest()
+        # Git records regular files as either 100644 or 100755; group/other
+        # write bits are not part of a tree entry. Normalize the live mode to
+        # the same representation so cooperative umasks (for example 0002)
+        # do not make an unchanged checkout differ from its committed tree.
+        git_mode = 0o755 if metadata.st_mode & stat.S_IXUSR else 0o644
+        return git_mode, digest.hexdigest()
     except (FileNotFoundError, NotADirectoryError, OSError):
         raise VerificationPlannerError(
             "verification input identity changed during hashing",

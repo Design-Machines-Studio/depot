@@ -47,15 +47,18 @@ and `dm-review:dm-review-fix`.
 
 ## Plugins
 
-18 plugins | 39 domain-facing skills + 1 internal workflow-kernel skill + 34 generated Codex command-skill aliases | 38 agents | 34 commands
+18 plugins | 40 domain-facing skills + 1 internal workflow-kernel skill = 41 total skills | 34 generated Codex command-skill aliases | 38 agents | 34 commands
 
 ### ned
 
-Personal knowledge graph and session capture. 2 skills, 2 commands.
+Personal knowledge graph, session capture, compounding, and NED account routing. 4 skills, 3 commands.
 
 - **ai-memory** -- Interface to the ai-memory knowledge graph (~5,850 entities)
 - **recorder** -- Captures conversation sessions into structured summaries, pushes to ai-memory and Notion
+- **codify** -- Turns completed work into durable rules, tests, guardrails, and defaults
+- **operate-ned** -- Routes NED work to the least-privileged account and effective Docker daemon
 - `/capture` -- Quick observation capture to ai-memory
+- `/compound` -- Turn a finished work session into permanent encoded improvements
 - `/depot-metrics` -- Track and report plugin usage metrics via ai-memory
 
 ### craft-developer

@@ -12,13 +12,13 @@
     {
       "name": "ned",
       "source": "./plugins/ned",
-      "version": "1.7.1",
+      "version": "1.8.0",
       "author": {
         "name": "Design Machines"
       },
-      "description": "Personal knowledge graph and session capture",
+      "description": "Personal knowledge graph, NED operations, and session capture",
       "capabilities_summary": {
-        "skills": 3,
+        "skills": 4,
         "agents": 0,
         "commands": 3,
         "tags": [
@@ -31,7 +31,10 @@
           "relationships",
           "metrics",
           "codify",
-          "compounding"
+          "compounding",
+          "ned-operations",
+          "remote-development",
+          "ssh"
         ]
       }
     },
@@ -375,7 +378,7 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.13.6",
+      "version": "0.13.7",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

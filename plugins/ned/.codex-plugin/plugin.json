@@ -1,7 +1,7 @@
 {
   "name": "ned",
-  "version": "1.7.1",
-  "description": "Personal knowledge graph and session capture for Travis Gertz",
+  "version": "1.8.0",
+  "description": "Personal knowledge graph, NED operations, and session capture for Travis Gertz",
   "author": {
     "name": "Design Machines"
   },
@@ -80,6 +80,32 @@
           "continuous-improvement",
           "postmortem"
         ]
+      },
+      {
+        "id": "operate-ned",
+        "name": "Operate NED",
+        "description": "Select and verify the safe NED account for development and bounded system operations",
+        "triggers": [
+          "use NED",
+          "run this on NED",
+          "SSH to NED",
+          "use the trav account",
+          "use the ned account",
+          "which NED user",
+          "NED account matrix",
+          "rootless Docker on NED",
+          "system Docker on NED",
+          "T3 NED environment"
+        ],
+        "tags": [
+          "ned-operations",
+          "remote-development",
+          "ssh",
+          "account-selection",
+          "least-privilege",
+          "rootless-docker",
+          "tailscale"
+        ]
       }
     ],
     "agents": [],
@@ -109,8 +135,8 @@
   },
   "interface": {
     "displayName": "Ned",
-    "shortDescription": "Personal knowledge graph and session capture for Travis Gertz",
-    "longDescription": "Personal knowledge graph and session capture for Travis Gertz",
+    "shortDescription": "Personal knowledge graph, NED operations, and session capture for Travis Gertz",
+    "longDescription": "Personal knowledge graph, NED operations, and session capture for Travis Gertz",
     "developerName": "Design Machines",
     "category": "Knowledge",
     "capabilities": [

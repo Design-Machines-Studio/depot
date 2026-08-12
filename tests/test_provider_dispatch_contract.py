@@ -959,6 +959,14 @@ class ProviderDispatchContractTests(unittest.TestCase):
             reject_at_fd3(left.fileno())
         finally:
             left.close(); right.close()
+        with tempfile.TemporaryDirectory() as directory:
+            named_pipe = os.path.join(directory, "named-pipe")
+            os.mkfifo(named_pipe)
+            named_fd = os.open(named_pipe, os.O_RDWR | os.O_NONBLOCK)
+            try:
+                reject_at_fd3(named_fd)
+            finally:
+                os.close(named_fd)
 
 
 if __name__ == "__main__":

@@ -1391,8 +1391,8 @@ while :; do :; done' "$CLOCK_WRAPPER" > "$PRE_ENVELOPE_WRAPPER"
       --output "$FORGED_MANIFEST" --request-file "$FORGED_REQUEST"
   FORGED_COMPANION="$FORGED_MANIFEST.request.json"
   cp "$FORGED_REQUEST" "$FORGED_COMPANION"
-  FORGED_DEVICE="$(stat -f '%d' "$FORGED_COMPANION")"
-  FORGED_INODE="$(stat -f '%i' "$FORGED_COMPANION")"
+  FORGED_DEVICE="$(stat -c '%d' "$FORGED_COMPANION" 2>/dev/null || stat -f '%d' "$FORGED_COMPANION")"
+  FORGED_INODE="$(stat -c '%i' "$FORGED_COMPANION" 2>/dev/null || stat -f '%i' "$FORGED_COMPANION")"
   FORGED_DIGEST="$(shasum -a 256 "$FORGED_COMPANION" | awk '{print $1}')"
   jq -n --arg manifest "$FORGED_MANIFEST" --arg inspection "$FORGED_COMPANION" \
     --argjson device "$FORGED_DEVICE" --argjson inode "$FORGED_INODE" \
