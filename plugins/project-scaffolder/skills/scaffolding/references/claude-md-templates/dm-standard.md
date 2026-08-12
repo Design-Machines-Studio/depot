@@ -31,9 +31,12 @@ Turn every task into a verifiable outcome before you start. "Make it work" is no
 
 This project uses the [Live Wires CSS framework](https://github.com/Design-Machines-Studio/live-wires) -- cascade layers, baseline rhythm tokens, container queries, editorial-first primitives. Use the existing primitives and utilities. Do not invent new class names when a token or primitive already covers the need.
 
-### Zero-deferral review
+### Proportional review
 
-When a code review produces findings, fix every finding before merge -- P1, P2, and P3. The `--allow-defer-p3` opt-in needs written justification and a tracking ID per item. "Good enough" is not a valid reason.
+When a code review produces findings, fix P1 and P2 before merge. Preserve P3
+with its evidence and provenance as advisory guidance; it does not enter the
+fix queue or require a deferral mechanism. Use the smallest applicable review
+roster during development and one full review at the final integration boundary.
 
 ### Brainstorm trigger
 

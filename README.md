@@ -172,10 +172,10 @@ quality pulses. 3 skills, 15 agents, 6 commands.
 - 1 second-opinion review agent: codex-perspective
 - 2 workflow agents: review-consolidator, review-memory-recorder
 - `/dm-review` -- Full review with all applicable agents
-- `/dm-review-quick` -- Quick review with 5 core criteria (6 logical lanes when OpenRouter adds its security lens)
+- `/dm-review-quick` -- Quick review with two core judgment lanes plus applicable UI/build/domain verification; bounded security-sensitive paths escalate to full review
 - `/dm-review-fix` -- Resolve pending review findings from todos/
 - `/dm-review-visual` -- Visual browser testing on rendered pages
-- `/dm-review-loop` -- Review-fix convergence loop until zero findings
+- `/dm-review-loop` -- Review-fix convergence until no P1/P2 findings remain; P3 stays advisory
 - `/dm-review-quality-pulse` -- Run the repository quality-pulse workflow
 
 ### the-local
@@ -209,7 +209,7 @@ Autonomous feature development pipeline. 4 skills, 2 agents, 5 commands.
 - **promptcraft** -- Generates self-contained execution prompts with overlap-aware dependency ordering
 - **eval-sweep** -- Ledger-first system-wide route, breakpoint, and accessibility evaluation
 - **plan-adversary** (agent) -- Adversarial review of plans and prompts, iterating to convergence
-- **execution-orchestrator** (agent) -- Autonomous worktree execution with batched review fixes, tiered tests, authenticated receipt reuse, and zero-deferral policy
+- **execution-orchestrator** (agent) -- Autonomous worktree execution with batched P1/P2 review fixes, advisory P3 evidence, tiered tests, and authenticated receipt reuse
 - `/pipeline` -- Full autonomous pipeline: assess, research, plan, prompt, review, execute, deliver
 - `/pipeline-assess` -- Pre-plan assessment of current state
 - `/pipeline-prompts` -- Generate execution prompts from an existing plan

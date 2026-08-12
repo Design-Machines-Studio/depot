@@ -9,9 +9,9 @@ argument-hint: "[scope: PR number, branch, path, or blank]"
 
 A single-command code review system that launches parallel specialized agents tailored to Design Machines stacks: Go+Templ+Datastar, Craft CMS+Twig, and Live Wires CSS.
 
-## Zero-Deferral Policy (default)
+## Finding Policy
 
-This plugin defaults to zero-deferral: P1, P2, AND P3 findings are mandatory fixes before merge. The opt-out is `--allow-defer-p3` with a written justification and tracking destination. See `${CLAUDE_SKILL_DIR}/references/severity-mapping.md` for the decision tree and `${CLAUDE_SKILL_DIR}/references/output-format.md` for the merge-recommendation logic.
+P1 blocks merge and P2 must be fixed before merge. P3 is advisory: preserve its complete evidence, provenance, count, and detail in the report, but do not create mandatory work, drive convergence, or prevent `CLEAN`. See `${CLAUDE_SKILL_DIR}/references/severity-mapping.md` for the decision tree and `${CLAUDE_SKILL_DIR}/references/output-format.md` for the merge-recommendation logic.
 
 ## Reviewer Output Style (applies to all review agents)
 
@@ -26,7 +26,7 @@ Every review agent dispatched by this skill operates under a terse-output contra
 ## Usage
 
 - `/dm-review` -- Full review: all applicable agents + memory capture
-- `/dm-review quick` -- Quick review: 5 core criteria (6 logical lanes when OpenRouter is available), plus one UI lane when triggered
+- `/dm-review quick` -- Quick review: 2 core judgment lanes, plus applicable existing UI/build/domain verification lanes
 
 ## Review Tiers (token-economy policy)
 
@@ -34,17 +34,28 @@ Match the review depth to the moment. Running full multi-round review on every c
 
 | When | Tier | What runs |
 |------|------|-----------|
-| **Per chunk during pipeline execution** | `dm-review-quick` | 5 core criteria: 6 logical lanes with OpenRouter, 5 without (+ ui-standards-reviewer when UI files changed). |
+| **Per chunk during pipeline execution** | `dm-review-quick` | 2 core judgment lanes, plus applicable existing UI/build/domain verification lanes. |
 | **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + memory capture. Run once, not per chunk. |
 | **Bulk second opinions / large-diff first pass** | Model selected by `routing-policy.json` | Family-independent security analysis plus style, duplication, pattern, and doc-consistency lanes. The exact diff is content-scanned immediately before external disclosure; sensitive file sections stay local while eligible sections proceed. Security completion always includes mandatory full-diff independent-family sign-off. |
 | **Adversarial multi-round review** | full + iterate | Reserve for P1 findings and plan reviews. Do NOT multi-round every chunk. |
 
-**Escalation exception:** when a chunk touches auth, federation, or
-security-related paths (`internal/auth/**`, `internal/federation/**`,
-`**/secretbox*`, `**/destructive_confirmation*`,
-`internal/baseplate/email/settings*`, `deploy/**`, `*.env*`), skip the quick
-tier and run both the matrix-selected `security-auditor` analysis (for eligible
-file sections) and the mandatory full-diff independent-family security sign-off.
+**Escalation exception:** quick review is an early feedback gate, not the final
+security boundary. Every PR still receives one full pre-merge review. Escalate
+a chunk early only when a changed path matches this bounded deterministic set:
+
+- `internal/auth/**`, `internal/federation/**`, `**/security/**`,
+  `**/middleware/auth*`, or `**/middleware/security*`
+- `**/secretbox*`, `**/destructive_confirmation*`,
+  `internal/baseplate/email/settings*`, `deploy/**`, or `*.env*`
+- Depot credential-transport controls named `openrouter-wrapper.sh`,
+  `payload-authorization.sh`, `runner-batch-authorization.sh`,
+  `delegation-boundary.sh`, or `workflow-authority*`
+
+Do not widen this set to all handlers, shell scripts, dependency manifests, or
+configuration files. For these small self-hosted applications, that would turn
+ordinary quick review back into a security fan-out. A matching chunk skips the
+quick tier and runs both the matrix-selected `security-auditor` analysis (for
+eligible file sections) and the mandatory full-diff independent-family security sign-off.
 File sections containing actual secret/private data stay on an eligible native
 family; path names alone never decline disclosure.
 
@@ -173,23 +184,9 @@ If reviewing the depot itself, project type is "Plugin Marketplace (Markdown+JSO
 
 ---
 
-### Phase 2.5: Diff Size Classification
-
-Count diff lines from Phase 1. Classify:
-
-| Diff lines | Classification |
-|---|---|
-| < 100 | `lightweight` |
-| 100-500 | `standard` |
-| > 500 | `extended` |
-
-This classification scales agent count in Phase 3. Only applies to quick mode -- full mode ignores this and always dispatches all applicable agents.
-
----
-
 ### Phase 3: Agent Selection
 
-Select which agents to launch based on mode, diff classification, changed file extensions, and project type. Resolve each agent's path via the plugin cache (see conditional agents table below for the canonical resolver pattern).
+Select which agents to launch based on mode, changed file extensions, and project type. Resolve each agent's path via the plugin cache (see conditional agents table below for the canonical resolver pattern). Diff size may inform existing budgets, but never widens the quick roster by itself.
 
 **Coding-provider boundary:** Claude is not a coding implementation rail. Core code review, security, architecture, UI, and test review use policy-derived families regardless of legacy agent frontmatter. A native Claude family may run the read-only `second-perspective` or independent-family security sign-off only when the implementing family is different. Claude may also run clearly non-coding lanes such as voice/editorial review, research synthesis, or strategy.
 
@@ -388,24 +385,24 @@ authority. Non-coding agents may still use Claude. Direct interactive
 `/openrouter` is a separate exact-digest workflow and does not enable these
 child lanes.
 
-#### Quick mode with `lightweight` classification (diff < 100 lines)
+#### Quick Mode
 
-Run 3 review criteria as 4 logical lanes when OpenRouter is available:
+Ordinary quick review always selects exactly these two core judgment lanes:
 
-1. **security-auditor-codex-signoff** -- compatibility lane ID for `dm-review/*/agents/review/security-auditor.md` -- **independent family, full diff, always required**
-2. **security-auditor-openrouter** -- same criteria -- **Kimi K3, eligible sections only, selected only when OpenRouter is available**
-3. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
-4. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md` -- **OpenRouter when available** (`routing-policy.json` model ladder)
+1. **pattern-recognition-specialist** -- `dm-review/*/agents/review/pattern-recognition-specialist.md`
+2. **code-simplicity-reviewer** -- `dm-review/*/agents/review/code-simplicity-reviewer.md`
 
-Skip architecture-reviewer and doc-sync-reviewer. With OpenRouter available,
-this is 3 OpenRouter lanes plus the independent-family security-signoff lane. If
-OpenRouter is unavailable, the external security lane is not selected and the
-remaining criteria use their policy-derived native routes. The sign-off still
-uses its family-aware route and never returns to the implementing family.
+Add only applicable lanes using their existing triggers:
 
-Skip to Phase 4 with the selected logical lanes.
+- **ui-standards-reviewer** when `.templ`, `.twig`, `.html`, or `.css` files changed.
+- **go-build-verifier** when `.go` or `.templ` files changed and the project has `go.mod` + `docker-compose.yml`.
+- **craft-reviewer** when `.twig` or `.php` files changed and the project has `craft/` or `.ddev/`.
 
-#### Always-Run Agents (quick `standard`/`extended`, or full mode)
+Do not add `second-perspective`, security, architecture, documentation, or full-mode conditional lanes to an ordinary quick review. When a security-sensitive path from the escalation exception is present, quick mode escalates to the existing full mode instead of dispatching this roster.
+
+Log the selected applicable lanes. Log an unavailable or skipped lane only when its trigger made it required; do not manufacture rows for every agent in the plugin.
+
+#### Always-Run Agents (Full mode)
 
 These 5 review criteria run as 6 logical lanes when OpenRouter is available:
 
@@ -420,22 +417,11 @@ These 5 review criteria run as 6 logical lanes when OpenRouter is available:
 
 `DM_REVIEW_SECOND_PERSPECTIVE` fails OPEN: when it is unset, empty, unreadable, or any value other than exactly `0`, launch second-perspective. Only exactly `0` disables it, and a disabled lane must be receipted in Coverage Gaps. The legacy name `DM_REVIEW_CODEX_PERSPECTIVE` is still honoured for back-compat -- exactly `0` in EITHER variable disables the lane -- so an operator who had it switched off before the role was renamed does not get it silently switched back on.
 
-When the lane is enabled, add **second-perspective** as a parallel read-only reviewer in both quick and full mode. This is the default dual-perspective review lane; it caught distinct blockers in real pipeline closeout runs. Independence is the property that caught those blockers, so this role is not tied to the orchestrating harness or a named provider.
+When the lane is enabled, add **second-perspective** as a parallel read-only reviewer in full mode only. This is the default dual-perspective review lane at the integration boundary; it caught distinct blockers in real pipeline closeout runs. Independence is the property that caught those blockers, so this role is not tied to the orchestrating harness or a named provider.
 
 Resolve the role by the subscription-first family rules above. When the implementer is OpenAI/Codex, select native Claude if both subscription windows have headroom; otherwise select the highest matrix quality-per-price eligible OpenRouter frontier family through its authorized path. Never resolve back to OpenAI/Codex for that diff. When another family implemented the diff, Codex is the preferred resolution when its subscription has headroom, followed by the remaining policy-derived families.
 
 Use `dm-review/*/agents/review/codex-perspective.md` as the compatibility-named default agent definition for the role. Dispatch it on the resolved family, normalize output to P1/P2/P3, and let the consolidator merge every finding as in-scope. The filename does not select the provider.
-
-**If mode is "quick" AND no UI files changed, stop here. Skip to Phase 4 with
-the selected core logical lanes plus `second-perspective` when enabled.**
-
-**If mode is "quick" AND UI files changed** (`.templ`, `.twig`, `.html`, or `.css` in the diff), add one more agent:
-
-Add **ui-standards-reviewer** as one additional logical lane.
-
-This ensures per-chunk pipeline reviews catch design quality issues, not just
-code quality. Skip to Phase 4 with the selected core lanes, this UI lane, and
-`second-perspective` when enabled.
 
 #### Conditional Agents (Full mode only)
 
@@ -477,13 +463,28 @@ Build the normal roster first, exactly as the Phase 3 subsections above require.
 
 `review_lane_allowlist` is an internal loop-to-review input passed only by `dm-review-loop`. It is not a user-facing flag, is not an environment variable, and cannot be set by a user. When it is absent, run the recomputed selected full set exactly as before and record `selective_input_absent`.
 
-Consume `review_lane_allowlist` only when both validations succeed: the recomputed selected full set exactly equals the caller's declared `selected_full_set`, with the same members, no more and no fewer, regardless of order; and the caller's `lanes` is a non-empty subset of that set containing only unique exact logical lane IDs. Duplicates, aliases, unknown IDs, and criterion-level IDs shared by more than one logical lane are invalid. In particular, `security-auditor-codex-signoff` and `security-auditor-openrouter` are distinct logical lanes that share one criterion, so bare `security-auditor` is a criterion-level ID and is invalid. Exact equality for `selected_full_set` is mandatory: it proves the caller and receiver agree on the full roster at this moment. If the diff changed between the caller's computation and Phase 3 recomputation, the sets differ and the receiver discards the input; never relax this equality check to a subset check.
+Consume `review_lane_allowlist` only when the recomputed selected full set exactly equals the caller's declared `selected_full_set`, with the same members, no more and no fewer, regardless of order; and the caller's `lanes` is a non-empty subset of that set containing only unique exact logical lane IDs. Duplicates, aliases, unknown IDs, and criterion-level IDs shared by more than one logical lane are invalid. In particular, `security-auditor-codex-signoff` and `security-auditor-openrouter` are distinct logical lanes that share one criterion, so bare `security-auditor` is a criterion-level ID and is invalid. Exact equality for `selected_full_set` is mandatory: it proves the caller and receiver agree on the full roster at this moment. If the diff changed between the caller's computation and Phase 3 recomputation, the sets differ and the receiver discards the input; never relax this equality check to a subset check.
+
+For a full-mode allowlist that omits `security-auditor-codex-signoff`, also
+require the internal input to carry all three exact fields:
+`verification_basis: "affected_lane_repair"`,
+`prior_full_review_complete: true`, and
+`security_boundary_changed: false`. Only `dm-review-loop` produces this input.
+These fields prove that the integration boundary already completed and that
+the repair did not touch the bounded escalation set above. Missing, false, or
+malformed proof discards the allowlist and runs the full roster.
 
 Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder. Use only this closed reason set, applying the first matching reason in the order listed: `selective_input_absent` when no input was received; `selective_input_malformed` when the input is not an object with string-array `selected_full_set` and `lanes` members; `selected_full_set_mismatch` when the declared and recomputed full sets are unequal; `selective_lanes_empty` when `lanes` is empty; `selective_lanes_duplicated` when `lanes` contains duplicates; `selective_lanes_ambiguous_or_aliased` when `lanes` contains an alias or a criterion-level ID; `selective_lanes_not_subset` when `lanes` contains an unknown ID or a lane outside the recomputed selected full set; and `selective_lanes_omit_required_lane` when `lanes` omits a mandatory lane that the unfiltered review would require. The coverage receipt returns this exact reason, never a generic invalid-input reason.
 
-The independent-family security sign-off, `security-auditor-codex-signoff`, is such a mandatory lane and is never removed by an allowlist. If the recomputed selected full set requires it but `lanes` omits it, discard the entire allowlist, dispatch the unfiltered roster, and report `selective_lanes_omit_required_lane`. Never silently drop a required lane and never silently add it back to an otherwise honored allowlist.
+The independent-family security sign-off, `security-auditor-codex-signoff`, is
+mandatory for the initial full review, incomplete full-review recovery, and
+security-boundary repairs. It may be omitted only by the proven affected-lane
+repair case above. Otherwise, if the recomputed selected full set requires it
+but `lanes` omits it, discard the entire allowlist, dispatch the unfiltered
+roster, and report `selective_lanes_omit_required_lane`. Never silently drop a
+required lane and never silently add it back to an otherwise honored allowlist.
 
-When the input is honored, dispatch only the exact lanes in `lanes`. Every member of the recomputed selected full set outside `lanes` is a deliberate selective non-dispatch, not a failed lane, and must be identified that way in the coverage receipt. A review that applied a selective allowlist is not a full fan-out and can never provide the evidence for a CLEAN verdict; the caller enforces that rule from the receiver's receipt.
+When the input is honored, dispatch only the exact lanes in `lanes`. Every member of the recomputed selected full set outside `lanes` is a deliberate selective non-dispatch, not a failed lane, and must be identified that way in the coverage receipt. A selective affected-lane repair verification can support `CLEAN` only after an earlier complete full review, when no P1/P2 findings remain and every required selected verification lane completes. It never substitutes for the initial full-review boundary.
 
 #### Report Selection
 
@@ -768,7 +769,7 @@ Both A and B agents launch in parallel in the same message. The runner reads the
 
 1. The compatibility lane ID remains stable, but provider resolution is family-aware. Codex is preferred when Codex did not implement the diff.
 2. When Codex is the implementer, use the strongest available non-implementing family under subscription-first resolution. After eligible subscription rails, use the matrix security head, currently Kimi K3, only through its authorized path. Never fall back to Codex for this sign-off.
-3. Dispatch `security-auditor.md` with the complete unfiltered diff. The sign-off remains mandatory, full-diff, and zero-deferral regardless of which family performs it.
+3. Dispatch `security-auditor.md` with the complete unfiltered diff. The sign-off remains mandatory and full-diff regardless of which family performs it.
 4. Record `implementer_family`, `reviewer_family`, and `resolution_reason`, including every family swap and why it occurred. If no independent family can complete, the lane is incomplete and the review cannot be clean.
 
 **Authorization and failure handling:** Automated OpenRouter selection may run
@@ -1186,9 +1187,10 @@ Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
    Reproducible test/runtime evidence outranks direct HEAD evidence, diff/context
    evidence, standards-based reasoning, and reviewer consensus.
 4. **Map severity** using the rules in `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`
-5. **Determine merge recommendation** using the zero-deferral logic from `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic. In summary:
+5. **Determine merge recommendation** using `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic. In summary:
    - Any P1 -> "BLOCKS MERGE"
-   - Any P2 OR any P3 -> "APPROVE WITH FIXES" (P3-only is NOT clean under zero-deferral; use `--allow-defer-p3` to explicitly opt out with justification)
+   - Any P2 -> "APPROVE WITH FIXES"
+   - P3 only -> "CLEAN" with every P3 retained as a visible advisory
    - Zero findings -> "CLEAN"
 6. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`, including the compact required `Synthesis Decisions` section and full raw agent reports.
 
@@ -1242,7 +1244,7 @@ Acceptable evidence:
 - A focused test/build command that exercises the cited path.
 - Direct file inspection at the current `HEAD` showing the finding no longer applies.
 
-If evidence is missing or points the other way, keep the finding open and route it through the normal P1/P2/P3 fix flow. Record the command or file evidence in the report when marking anything stale or already fixed.
+If evidence is missing or points the other way, keep the finding open. Route P1/P2 through the normal fix flow and retain P3 as advisory evidence. Record the command or file evidence in the report when marking anything stale or already fixed.
 
 **Airlift checkpoint (`dm-review-consolidation`):** Fire a tier-1 airlift checkpoint once the consolidated report exists so partially-complete review findings survive a usage cap, rate limit, or model switch. This is a guarded resolve-from-cache: it is tier-1 deterministic (pure local file + git work, NO model budget, no agent call, no network) and is skipped silently when airlift is absent (OPTIONAL dependency). On an early-warning trip (e.g. a budget threshold crossed mid-run), do not wait for the next phase boundary -- flush this checkpoint immediately so the consolidated findings are not lost.
 
@@ -1259,38 +1261,13 @@ The `[ -n "$ENGINE" ]` guard covers "airlift not installed"; the `[ -x "$ENGINE"
 
 ---
 
-### Phase 5.5: Simplification Pass
-
-After outputting the review report, perform a simplification pass on the changed files. This catches complexity, redundancy, and over-engineering that the code-simplicity-reviewer identified -- and applies fixes automatically rather than just reporting them.
-
-**Execution:**
-
-1. Review each changed file for simplification opportunities: dead code removal, redundant abstractions, overly complex logic, unused imports/variables, unnecessary indirection, functions that can be inlined, and patterns that can be consolidated. Focus on the specific findings from the code-simplicity-reviewer agent, but also look for anything it missed.
-2. Apply simplification edits directly -- this is not a report, it's an active refactoring pass. Make the code simpler, clearer, and shorter while preserving behavior.
-3. After making changes, verify the build still passes:
-   - Go projects: `docker compose exec app templ generate && docker compose exec app go build ./cmd/api`
-   - CSS projects: `npm run build` (or equivalent)
-   - Craft projects: clear caches if needed
-4. If no simplification opportunities exist, note "Simplification pass: clean" and continue.
-
-**Commit simplification changes separately** from the reviewed code:
-
-```bash
-git add -- [list only the specific files you modified during simplification]
-git commit -m "refactor: simplify per dm-review pass"
-```
-
-This phase mirrors Claude Code's built-in `/simplify` command. If `/simplify` is available, you can invoke it directly instead of performing the pass manually.
-
----
-
 ### Phase 6: Issue Tracking (Full mode only)
 
 **Skip this phase in Quick mode.**
 
 After outputting the report, determine tracking method automatically:
 
-**1. If `todos/` directory exists** in the project root -- use text file tracking automatically. Do NOT ask the user. Create todo files for all P1, P2, and P3 findings.
+**1. If `todos/` directory exists** in the project root -- use text file tracking automatically. Do NOT ask the user. Create todo files for P1 and P2 findings only. P3 advisories remain in the report and receipts.
 
 **2. If `todos/` does not exist** -- ask the user:
 
@@ -1309,7 +1286,7 @@ Before creating new todo files, clean up stale completed files from previous ses
 rm -- todos/*-done-*.md 2>/dev/null
 ```
 
-Create `todos/` directory if it doesn't exist. For each P1, P2, and P3 finding, create a file following the template in `${CLAUDE_SKILL_DIR}/references/issue-tracking.md`:
+Create `todos/` directory if it doesn't exist. For each P1 and P2 finding, create a file following the template in `${CLAUDE_SKILL_DIR}/references/issue-tracking.md`:
 
 ```
 todos/{id}-pending-{priority}-{slug}.md
@@ -1319,7 +1296,6 @@ Examples:
 ```
 todos/001-pending-p1-sql-injection-in-search.md
 todos/002-pending-p2-missing-csrf-protection.md
-todos/003-pending-p3-heading-hierarchy-polish.md
 ```
 
 After creating all files, summarize what was created:
@@ -1327,14 +1303,13 @@ After creating all files, summarize what was created:
 Created N todo files in todos/:
 - 001-pending-p1-... (description)
 - 002-pending-p2-... (description)
-- 003-pending-p3-... (description)
 
 Resolve with: /dm-review-fix
 ```
 
 **GitHub Issues:**
 
-For each P1, P2, and P3 finding, create a GitHub Issue using `gh issue create`:
+For each P1 and P2 finding, create a GitHub Issue using `gh issue create`:
 
 ```bash
 gh issue create --title "[P1] Finding title" \
@@ -1380,7 +1355,6 @@ Official and third-party Claude Code plugins that complement this skill:
 
 | Plugin | Tool | When to Use |
 |--------|------|-------------|
-| **code-simplifier** | `/simplify` | Phase 5.5 simplification pass (can replace manual) |
 | **compound-engineering** | `/lint` | Supplement code-simplicity-reviewer findings |
 | **pr-review-toolkit** | `/review-pr` | PR-specific deep analysis (comments, error handling, types) |
 | **superpowers** | `/verify` | After applying review fixes, verify nothing broke |
@@ -1524,6 +1498,6 @@ See `${CLAUDE_SKILL_DIR}/references/agent-registry.md` for the complete agent ca
 ## Notes
 
 - Agent definition files are read at runtime from the depot. If the exact path is not accessible (e.g., installed as a remote plugin), search for the file by name.
-- The maximum number of parallel agents is 16 (full mode, all triggers hit). The minimum is 5 (quick mode, no UI files) or 6 (quick mode with UI files).
+- The maximum number of parallel agents is 16 (full mode, all triggers hit). Ordinary quick mode always has 2 core lanes and adds only triggered UI/build/domain verification lanes.
 - Agents default to `sonnet`. Agents that declare `model:` in their frontmatter use that model instead (e.g., go-build-verifier uses `haiku` for mechanical build checks).
 - The consolidator and memory recorder run after all review agents complete -- they are not launched in parallel with the review agents.

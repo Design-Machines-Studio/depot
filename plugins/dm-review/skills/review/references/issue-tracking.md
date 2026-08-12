@@ -80,7 +80,7 @@ Examples:
 |----------------|---------------|----------|
 | P1 -- Critical | `p1` | Yes -- always |
 | P2 -- Should Fix | `p2` | Yes -- always |
-| P3 -- Fix Before Merge | `p3` | Yes -- always |
+| P3 -- Advisory | -- | No -- retain in report and receipts only |
 
 ---
 
@@ -139,7 +139,7 @@ OWASP/WCAG/pattern reference.
 
 ## Promoting a Finding to a Durable GitHub Issue
 
-The zero-deferral policy (see `severity-mapping.md`) governs findings **in scope for the current branch**: those are fixed before merge, not deferred. A separate case is a valid finding whose fix is a **structural refactor larger than the change under review** (a domain-model change, or splitting oversized files) -- new, durable work to track as a GitHub issue rather than smuggle into the branch or drop into an ephemeral todo file. This is not a deferral loophole: it applies only when the fix is out-of-scope work newly surfaced, never to in-scope work owed.
+Required P1/P2 findings **in scope for the current branch** are fixed before merge. A separate case is a valid P1/P2 finding whose fix is a **structural refactor larger than the change under review** (a domain-model change, or splitting oversized files) -- new, durable work to track as a GitHub issue rather than smuggle into the branch or drop into an ephemeral todo file. P3 advisories are retained in the report and receipts and do not create issues or todos.
 
 Promote a finding to a GitHub issue (instead of a `todos/` file) when **all** of these hold:
 
@@ -166,7 +166,7 @@ Conventions for a batch cleanup PR:
 
 - Reference every closed issue in the PR body (`Closes #106, Closes #109, ...`) so the tracker stays accurate.
 - Group the commits by finding or by surface, the same way feature PRs group by concern.
-- Run `/dm-review-loop` on the cleanup branch -- a cleanup PR is still subject to zero-deferral on any *new* findings it introduces.
+- Run `/dm-review-loop` on the cleanup branch -- any new P1/P2 findings still require resolution.
 - Schedule cleanup passes around natural milestones (here: before federation work) so debt does not cross a major boundary.
 - Dispose of the cleanup branch under `repo-cleanup-contract.md`. It is the one branch dm-review creates, so it is the one branch dm-review may delete -- and only once `git merge-base --is-ancestor <branch> main` exits 0. An unmerged cleanup branch is kept and reported, never force-deleted.
 
@@ -185,4 +185,4 @@ Reconcile all eight before declaring closure:
 7. **Changed-files vs claimed scope** -- diff the actual changed files (`gh pr view <n> --json files`) against what the PR body says it did. A "federation trust hardening" PR whose diff never touches `federation/` did not do what it claims; a reorg-only PR with logic edits in the diff broke its own contract.
 8. **Open-issue sweep on the surface** -- before claiming a *surface* (federation, install, membership) is done, list every open issue touching it, not just the ones this PR named. Closing the PR's three issues while five surface issues stay open is "this PR merged," not "this surface is done."
 
-**Worked example (federation):** Baseplate PR #252 (Session 2.9a federation backend) merged with green checks, but #253, #254, #255, #258, and #259 remain open follow-on issues. PR #271 (federation trust hardening / delivery repair) then merged but left #255 (key-rotation detection), #258 (federation file decomposition), and #270 (federation P3 review rollup) open. "Federation trust hardening merged" is true; "federation review findings closed" is false. **#270 specifically is the P3 rollup -- under the zero-deferral default it must be reconciled and burned down, not silently carried across the next milestone** (see `severity-mapping.md`). Reconciliation is what keeps "PR merged" and "surface done" distinct.
+**Worked example (federation):** Baseplate PR #252 (Session 2.9a federation backend) merged with green checks, but #253, #254, #255, #258, and #259 remain open follow-on issues. PR #271 (federation trust hardening / delivery repair) then merged but left #255 (key-rotation detection), #258 (federation file decomposition), and #270 (a user-owned historical P3 rollup) open. "Federation trust hardening merged" is true; "federation review findings closed" is false. Existing user-owned trackers remain owner-managed; the advisory policy does not delete them.

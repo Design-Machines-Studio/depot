@@ -1,6 +1,6 @@
 ---
 name: execution-orchestrator
-description: Autonomously executes sub-prompts in worktrees with risk-tiered Codex review, final full dm-review, and zero-deferral policy
+description: Autonomously executes sub-prompts with focused proportional review and one final full dm-review fan-out
 model: opus
 tools: Bash, Read, Write, Edit, Glob, Grep, Agent, TodoWrite, Skill
 ---
@@ -105,7 +105,7 @@ The stalled-convergence check is critical -- without it, the orchestrator can lo
 
 Default the per-chunk review gate to one **focused Codex review** with at most
 one repair/recheck pass. Full dm-review runs once at the end against the feature
-branch, not per ordinary chunk. Do not dispatch the 5-agent quick dm-review
+branch, not per ordinary chunk. Do not dispatch a multi-agent quick dm-review
 suite for an ordinary chunk.
 
 **Required receipt field.** Every chunk receipt MUST record `review_tier:
@@ -119,7 +119,7 @@ value inside the chunk receipt JSON passed as the `record-attempt`
 `record-attempt` flag schema can carry it; the kernel has no tier flag, so do
 not invent one.
 
-**Forbidden action.** Do not dispatch the 5-agent quick dm-review suite, or a
+**Forbidden action.** Do not dispatch a multi-agent quick dm-review suite, or a
 full multi-agent dm-review, for an ordinary chunk -- one that matches no
 sensitive path and is not the final merge gate. Dispatching either anyway is a
 policy violation the receipt MUST confess as
@@ -423,7 +423,7 @@ verification seam and blocks on degraded/missing lane coverage. High/high does
 both; other combinations retain standard depth. Never use the profile to
 select a provider/model/executor, create a routing override, relax security,
 alter workflow class, reduce browser/persona cases, skip focused/sensitive/final
-review, weaken zero-deferral or cleanup, alter economics, or add full review to
+review, weaken required P1/P2 resolution or cleanup, alter economics, or add full review to
 every ordinary chunk.
 
 **Bootstrap limitation:** If this current bootstrap manifest predates
@@ -1614,25 +1614,25 @@ Same as above, but after Codex review passes, also check cross-chunk wiring: are
 
 Run `/codex:review` once. If zero findings, proceed. If findings, fix and re-run once. No full loop.
 
-**Zero-deferral policy (all chunk types):** ALL findings MUST be fixed -- P1, P2, AND P3:
+**Finding policy (all chunk types):** P1/P2 findings must be fixed. P3 is advisory and remains visible in the chunk receipt without entering the repair queue:
 
 - **P1:** Security vulnerabilities, data corruption, breaking changes
 - **P2:** Performance issues, architectural concerns, reliability
-- **P3:** Simplification, cleanup, minor improvements
+- **P3:** Simplification, cleanup, minor improvements (advisory)
 
-**If findings remain after max iterations, do NOT silently continue.** Instead:
+**If P1/P2 findings remain after max iterations, do NOT silently continue.** Instead:
 
 1. STOP chunk processing. Do NOT proceed to merge.
 2. Read each remaining finding and apply targeted fixes to the specific lines cited in the worktree -- do not re-implement sections wholesale or launch another subagent.
 3. Re-run `/codex:review` to verify manual fixes (or dm-review Skill pattern if Codex unavailable).
-4. If findings STILL remain after this manual pass, you MUST log each one as DEFERRED with an explicit justification explaining why it cannot be fixed now. Generic justifications like "max iterations reached" are not acceptable -- state the specific technical reason.
-5. The Summary Report (Step 5) MUST list every DEFERRED finding with its justification in a dedicated "Deferred Findings" section. The user will see this.
-6. Only then continue to the next step.
+4. If P1/P2 findings STILL remain after this manual pass, stop the run as needs attention. P2 cannot be deferred past merge.
+
+P3 advisories never trigger the manual repair pass or another review iteration.
 
 **Evaluation receipt (structural interlock):** After completing the evaluation gate, you MUST output this exact line:
 
 ```text
-EVAL_GATE_PASSED: [chunk-id] | classification: [type] | iterations: [N] | findings_remaining: [N] | deferred: [N]
+EVAL_GATE_PASSED: [chunk-id] | classification: [type] | iterations: [N] | findings_remaining: [N] | p3_advisories: [N]
 ```
 
 Append `requestedProvider: <provider>`, `attemptedProvider: <provider>`,
@@ -1769,7 +1769,7 @@ After completing all checks, output this structured receipt:
 BROWSER_VERIFIED: [chunk-id] | screenshots: [N] | element_screenshots: [N] | spec_checks: [N passed]/[N total] | visual_criteria: [N passed]/[N total] | issues: [list or "none"]
 ```
 
-Report all findings as P1 (spec deviation, page doesn't load), P2 (visual criterion failure, console errors, broken interactions), or P3 (minor visual friction). Add findings to the review fix queue.
+Report all findings as P1 (spec deviation, page doesn't load), P2 (visual criterion failure, console errors, broken interactions), or P3 (minor visual friction). Add only P1/P2 findings to the review fix queue; retain P3 in the evidence.
 
 For required browser-tooling failure, first persist safe attempt evidence, then quit the primary browser process/engine session (closing a tab is insufficient), launch a fresh primary profile with a changed session identity and retry once, then recheck the target and try a genuinely different configured engine. If restart or alternate launch cannot be proved, record that explicitly. Exhaustion ends `human_help_required` with all attempts and exact missing case IDs; it is never skipped, approved, empty coverage, or curl-verified. Product/application assertion failures are terminal findings and do not trigger browser restart. Curl and reachability are diagnostics only and never satisfy `BROWSER_VERIFIED`.
 
@@ -1973,7 +1973,7 @@ In addition to code quality, check: does this code actually implement what was r
 
 This catches cross-chunk integration issues that focused per-chunk reviews miss.
 
-Apply zero-deferral: fix ALL findings at every severity.
+Fix every P1/P2 finding. Preserve each P3 with full evidence and provenance as an advisory.
 
 The review output follows the unified format (per `plugins/dm-review/skills/review/references/output-format.md`):
 
@@ -1981,7 +1981,7 @@ The review output follows the unified format (per `plugins/dm-review/skills/revi
 - **Findings by severity:** P1, P2, P3 with file:line references
 - **Agent Summary:** agents run, status, finding counts
 
-If issues found:
+If P1/P2 issues are found:
 
 1. Collect the complete finding set from the review pass and fix it as one
    revision batch on the feature branch.
@@ -1991,12 +1991,13 @@ If issues found:
 3. Invoke `revision_batch` once for the affected paths, then
    `merge_candidate` once for the new exact tree. Do not test after every
    finding edit.
-4. Re-run a full-mode review
-   (`Skill(skill="dm-review:review", args="full <feature-branch>")`) on the exact
-   newly tested SHA.
-5. Max 2 full review iterations.
+4. Re-run only the affected lanes on the exact newly tested SHA. Repeat the
+   whole full fan-out only when the prior full review was incomplete or the
+   repair changed a security-sensitive boundary.
+5. Stop when no P1/P2 findings remain and every required affected lane and
+   repository/browser/remote verification gate is complete.
 
-If findings remain after 2 full review iterations, apply the same deferred-findings protocol from Step 3g: fix manually, re-verify, log any remaining as DEFERRED with explicit justification.
+If P1/P2 findings remain after the bounded repair pass, stop as needs attention. P3 advisories do not participate in convergence.
 
 **Verification:** You MUST be able to state: "Final dm-review completed. Result: [CLEAN/N findings]."
 
@@ -2013,9 +2014,9 @@ if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "revi
 
 **Merge recommendation emission:** After the final review, emit ONE of these recommendation strings:
 
-- `CLEAN` -- zero findings at any severity, dev server verified, all chunks passed visual verification.
-- `APPROVE WITH FIXES` -- zero P1, any P2/P3 findings resolved before this line is emitted (zero-deferral). Emit only when every finding from the final review is resolved.
-- `BLOCKS MERGE` -- any P1 remains, or any finding could not be resolved.
+- `CLEAN` -- no P1/P2 findings remain; P3 advisories may remain visible. Dev server and all required visual/verification coverage passed.
+- `APPROVE WITH FIXES` -- zero P1 and at least one P2 remains. P2 must be fixed before merge.
+- `BLOCKS MERGE` -- any P1 remains.
 - `BLOCKED PENDING CALLER VERIFICATION` -- any required browser case has a `human_help_required` receipt or lacks complete passing browser evidence. Emit this regardless of review findings. The caller must resolve the blocked case and complete browser verification before merge is considered safe. Do NOT use the phrase "merge is safe", "ready to merge", or equivalent in any output while this flag is set.
 - `BLOCKED PENDING REMOTE VERIFICATION` -- any non-browser lane with
   `required: true` is `remote_pending`, `failed`, `blocked`, or `unavailable`.
@@ -2104,7 +2105,7 @@ If ai-memory unavailable, skip silently.
 
 ### 5.2 Codify (run only if the run had friction)
 
-A clean run with zero findings, one review iteration per chunk, and no resolved ambiguities needs no
+A clean run with no P1/P2 findings, one review iteration per chunk, and no resolved ambiguities needs no
 codify -- skip to the mark below. Otherwise run the codify loop so this run's lessons harden the next
 one. **Trigger codify when ANY of:** a chunk took >1 review iteration, the final review surfaced
 findings, a subagent emitted an `ambiguity_resolved` receipt flag, or a guardrail/lint guard had to
@@ -2486,8 +2487,8 @@ ref carries the exact follow-up command. Never report a blocked ref as deleted.]
 ## Evaluation Receipts
 [List every EVAL_GATE_PASSED line, proving each chunk was evaluated]
 
-## Deferred Findings
-[List every DEFERRED finding with its explicit justification. If none, state "None -- all findings resolved."]
+## Advisory Findings
+[List retained P3 advisories with their evidence references. If none, state "None."]
 
 ## Codify Proposals
 [From Step 5.2. List each lesson and where it should be encoded. For any NOVEL pipeline failure pattern,

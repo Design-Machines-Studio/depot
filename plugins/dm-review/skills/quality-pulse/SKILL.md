@@ -15,8 +15,8 @@ canonical JSON, classification mechanics, redaction, trend compatibility, and
 rendering inputs.
 
 A quality pulse is **not a merge recommendation**. Informational telemetry is
-not a deferred P3 finding and must not be added to the normal dm-review
-zero-deferral ledger.
+not an interactive review finding and must not be added to the normal dm-review
+P1/P2 fix ledger or P3 advisory report.
 
 ## Inputs
 

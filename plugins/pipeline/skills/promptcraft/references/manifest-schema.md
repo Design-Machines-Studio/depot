@@ -175,7 +175,7 @@ Decision leverage never selects a provider or model, changes an executor,
 creates a routing override, relaxes a security rule, changes `workflowClass`,
 reduces browser/persona coverage, skips review, changes cleanup, or changes run
 economics. It does not authorize open debate or a full review for every chunk.
-All existing sensitive-path, browser recovery, final review, zero-deferral,
+All existing sensitive-path, browser recovery, final review, required P1/P2 resolution,
 run-size, and exact-owned Docker cleanup rules remain authoritative.
 
 Bootstrap limitation: a run whose already-approved/current manifest predates

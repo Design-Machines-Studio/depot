@@ -1,24 +1,16 @@
 ---
 name: dm-review-fix
 description: Resolve pending review findings from todos/ directory
-argument-hint: "[optional: specific todo ID, priority like p1, or --allow-defer-p3]"
+argument-hint: "[optional: specific todo ID or priority like p1]"
 ---
 
 # Resolve Review Findings
 
 Fix pending review findings tracked in `todos/` from a previous `/dm-review` run.
 
-## Zero-Deferral Policy (default)
+## Finding Policy
 
-This command fixes ALL pending findings -- P1, P2, AND P3. Do not mark the run complete while pending P3s remain.
-
-To opt out for a specific P3 (rare), pass `--allow-defer-p3`. Skipping requires:
-
-1. A written justification recorded in the finding's todo file under a `Deferred:` heading explaining why this P3 cannot be fixed in this branch.
-2. A tracking destination: an issue tracker ID, a scheduled fix-pass pipeline run, or a TODO comment in code with the ticket ID. "Will do later" is not valid.
-3. Rename the todo file: `pending` -> `deferred` (NOT `done`).
-
-Generic reasons ("not enough time", "out of scope") are not valid. Zero-deferral exists because those reasons never translate into later fixes.
+This command fixes pending P1 and P2 findings. P3 advisories remain visible in the review report and receipts but never enter this fix queue.
 
 ## Process
 
@@ -32,8 +24,12 @@ written. See `docs/skill-authoring.md`.
 ### 1. Find Pending Findings
 
 ```bash
-ls todos/*-pending-*.md 2>/dev/null
+ls todos/*-pending-p1-*.md todos/*-pending-p2-*.md 2>/dev/null
 ```
+
+Historical `todos/*-pending-p3-*.md` files from releases before 1.59.0 are
+advisory artifacts. Leave them owner-managed and report them separately; they
+do not enter this fix queue or block completion.
 
 If no pending findings exist, tell the user and stop.
 
@@ -54,7 +50,7 @@ Group related findings that touch the same files -- fix them together.
 
 ### 3. Implement Fixes
 
-Fix all findings in priority order: P1 first, then P2, then P3. Do not mark the run complete while pending P3s remain (zero-deferral default).
+Fix all pending findings in priority order: P1 first, then P2.
 
 For each finding:
 
@@ -62,14 +58,6 @@ For each finding:
 2. Follow the Fix Philosophy (see dm-review skill). Never apply band-aid fixes.
 3. Verify the acceptance criteria
 4. Rename the todo file: `pending` -> `done`
-
-If `--allow-defer-p3` is passed and a P3 cannot be fixed in this branch, the deferral process is:
-
-1. Add a `Deferred:` heading to the todo file with the written justification.
-2. Record the tracking destination (ticket ID, follow-up pipeline run slug, etc.).
-3. Rename the todo file: `pending` -> `deferred` (NOT `done`).
-
-The Summary (step 4) distinguishes `done` from `deferred`. Deferred todos persist in `todos/` so the tracking loop is closed explicitly.
 
 ```bash
 mv todos/001-pending-p1-description.md todos/001-done-p1-description.md
@@ -83,13 +71,9 @@ After resolving all findings:
 Resolved N of M findings:
 - [done] 001-p1-description
 - [done] 002-p2-description
-- [done] 003-p3-description
-- [deferred] 004-p3-description -- justification: <reason>. Tracked: <ticket-or-fix-pass-slug>
 
 Remaining: X pending findings
 ```
-
-If any `[deferred]` entries appear WITHOUT `--allow-defer-p3` having been passed, the run is invalid -- re-run with the flag if deferral was intentional, or fix the P3 if it was not.
 
 If all findings are resolved, suggest committing:
 ```

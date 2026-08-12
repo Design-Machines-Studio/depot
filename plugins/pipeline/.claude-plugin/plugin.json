@@ -1,13 +1,13 @@
 {
   "name": "pipeline",
   "description": "Autonomous feature development pipeline with executable tiered verification, exact receipt reuse, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
-  "version": "1.45.0",
+  "version": "1.46.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
   },
   "pluginDependencies": {
-    "dm-review": ">=1.58.6",
+    "dm-review": ">=1.59.0",
     "ned": ">=1.4.0",
     "workflow-kernel": ">=0.13.6"
   },
@@ -29,6 +29,8 @@
     "worktree",
     "execution",
     "review-loop",
+    "proportional-review",
+    "token-efficiency",
     "prompt-generation",
     "multi-agent"
   ],
@@ -132,12 +134,14 @@
         "id": "execution-orchestrator",
         "name": "Execution Orchestrator",
         "category": "workflow",
-        "description": "Autonomously executes sub-prompts in worktrees with focused Codex review, sensitive-path escalation, final full review, and zero-deferral policy",
+        "description": "Autonomously executes sub-prompts with focused proportional review, sensitive-path escalation, and one final full review fan-out",
         "tags": [
           "orchestration",
           "worktrees",
           "autonomous",
           "execution",
+          "proportional-review",
+          "token-efficiency",
           "review-loop"
         ]
       }

@@ -367,7 +367,7 @@ Do not turn high uncertainty into debate or a full review per chunk. Decision
 leverage never selects a provider/model/executor, creates a routing override,
 relaxes security, alters `workflowClass`, overrides browser/persona coverage,
 changes cleanup, or changes economics. The existing quick/focused review,
-sensitive-path, final-review, zero-deferral, run-size, and exact-owned Docker
+sensitive-path, final-review, required P1/P2 resolution, run-size, and exact-owned Docker
 rules remain unchanged.
 
 **Plan self-review (before presenting):** Re-read your own plan and check:
@@ -459,7 +459,7 @@ Mark item 11 when AskUserQuestion returns the user's explicit approval.
 
 ## Phase 6: Execute
 
-**Budget nudge (before pre-flight):** If the Progress Ledger shows more than 10 completed items AND the session has been running over 90 minutes of wall-clock time, pause and use AskUserQuestion: "Pipeline has been running a while. Continue with full scope (zero-deferral default), or break remaining work into a follow-up fix-pass run? Zero-deferral is the default; a split is the exception." This is a soft nudge, not a hard gate -- the default answer is "continue."
+**Budget nudge (before pre-flight):** If the Progress Ledger shows more than 10 completed items AND the session has been running over 90 minutes of wall-clock time, pause and use AskUserQuestion: "Pipeline has been running a while. Continue with full scope, or break remaining work into a follow-up fix-pass run?" This is a soft nudge, not a hard gate -- the default answer is "continue."
 
 **Pre-flight check:**
 

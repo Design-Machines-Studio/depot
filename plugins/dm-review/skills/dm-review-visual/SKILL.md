@@ -25,7 +25,7 @@ Run the visual testing protocol on rendered web pages using Playwright browser t
 
 ## Zero-Deferral Policy (default)
 
-Visual findings at any severity (P1/P2/P3) are mandatory fixes before merge. See `plugins/dm-review/skills/review/references/severity-mapping.md` for the policy and `--allow-defer-p3` opt-out.
+Visual P1/P2 findings require fixes before merge. P3 remains fully detailed advisory evidence and does not prevent `CLEAN`. See `plugins/dm-review/skills/review/references/severity-mapping.md` for the policy.
 
 ## Process
 

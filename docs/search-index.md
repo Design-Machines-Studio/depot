@@ -140,9 +140,9 @@ Common questions mapped to the right skill:
 | craft-developer | /craft-query | -- | Build complex Craft CMS element queries |
 | dm-review | /dm-review | [optional: PR number, branch name, or file path] | Full code review with all applicable agents including visual browser testing |
 | dm-review | /dm-review-fix | [optional: specific todo ID or priority like p1] | Resolve pending review findings from todos/ directory |
-| dm-review | /dm-review-quick | [optional: PR number, branch name, or file path] | Quick code review with 5 core criteria (6 logical lanes when OpenRouter adds its security lens), plus ui-standards-reviewer when UI files changed |
+| dm-review | /dm-review-quick | [optional: PR number, branch name, or file path] | Quick code review with two core judgment lanes plus applicable UI, build, and domain verification |
 | dm-review | /dm-review-visual | [optional: URL to test, --states, or --a11y] | Run visual browser testing on rendered pages |
-| dm-review | /dm-review-loop | [optional: --full, --max-iterations N, PR/branch/path] | Run dm-review then dm-review-fix in a convergence loop until zero findings remain |
+| dm-review | /dm-review-loop | [optional: --full, --max-iterations N, PR/branch/path] | Run dm-review then dm-review-fix until no P1/P2 findings remain and required verification is complete |
 | dm-review | /dm-review-quality-pulse | [optional: --profile <path>] | Run the repository quality-pulse workflow |
 | ghostwriter | /voice-check | [paste text or provide file path] | Check text against Travis Gertz's writing voice |
 | ned | /capture | <entity name> <observation text> | Quick capture an observation to ai-memory |

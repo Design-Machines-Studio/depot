@@ -32,7 +32,7 @@ This axis matters for **discipline skills** -- the ones that enforce behavior ra
 reference knowledge:
 
 - pipeline gates (assess/research/plan/review GATEs, the self-audit)
-- zero-deferral and severity policy (`dm-review`)
+- proportional severity and required-coverage policy (`dm-review`)
 - the codify loop (`ned:codify`)
 - council compliance (BC Act thresholds, decolonial language rules)
 - any "always / never / must" rule

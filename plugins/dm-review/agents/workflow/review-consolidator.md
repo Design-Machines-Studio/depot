@@ -146,7 +146,7 @@ Free-form reason codes are invalid. Every merge or discard names the retained
 canonical finding (when one exists), cites the evidence, and explains the
 decision. `not-reproducible` requires the Phase 5 verify-before-close evidence
 at HEAD. `out-of-scope` records a rejected reviewer input; it never defers an
-in-scope P1/P2/P3 finding or changes zero-deferral recommendations.
+in-scope P1/P2 finding or changes the recommendation. P3 remains advisory.
 
 Exact duplicates merge without count inflation. Findings at the same location
 with distinct root causes remain separate. Same-line and adjacent-line rules
@@ -207,7 +207,7 @@ If there are no gaps, state `Coverage Gaps: none -- all lanes completed within b
 6. Include agents that found nothing in the summary table with "Clean" status
 7. Include skipped agents in the summary table with "Skipped" status and reason; include dead/capped agents with "Died" or "Partial" status and never relaunch them
 8. Count deduplicated findings, not raw findings (don't double-count)
-9. **P3 findings get full detail blocks** -- same format as P1/P2 (file, issue, fix, reference). Never abbreviate P3 to one-liners.
+9. **P3 findings get full detail blocks** -- same format as P1/P2 (file, issue, fix, reference), with source identity, raw reference, evidence, synthesis disposition, counts, and provenance. Never abbreviate P3 to one-liners or send it to the fix queue.
 10. **Flag band-aid recommendations** -- if any agent recommends a quick fix, compatibility wrapper, or workaround that preserves broken patterns, escalate it to P2 and note "Band-aid fix recommended -- replace with proper solution." All fixes must follow the Fix Philosophy: right approach over quick fix, best practices first, replace don't preserve.
 11. **Dual-perspective findings are additive** -- Codex-native and OpenRouter review lanes are peers. Dedup overlapping findings; never discard a unique finding merely because the other coding provider did not mention it. Optional Claude voice/editorial findings remain additive but are non-coding.
 12. **Contradictions are reportable evidence** -- never flatten disagreement
