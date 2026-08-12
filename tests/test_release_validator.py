@@ -24,8 +24,7 @@ class ReleaseValidatorTests(unittest.TestCase):
         expected = {
             "init", "validate", "append", "replay", "status",
             "decide-validation-retry", "bind-prediction",
-            "authorize-verification-contract-revision",
-            "bind-verification-contract", "revise-verification-contract",
+            "bind-verification-contract",
             "observe-pipeline", "observe-review", "export-review-contributions",
             "compare", "metrics", "run-cost-summary", "emit-cost-summary",
             "resolve-plugin-asset",
@@ -35,8 +34,7 @@ class ReleaseValidatorTests(unittest.TestCase):
             "plan-create", "plan-compose", "record-create", "plan-cleanup",
             "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
             "plan-reconcile",
-            "approve-verification-profile", "plan-verification",
-            "run-verification", "record-verification-result",
+            "plan-verification", "run-verification",
         }
         self.assertEqual(set(VALIDATOR.BEHAVIORAL_CLI_CASES), expected)
         self.assertEqual(set(VALIDATOR.SUCCESSFUL_CLI_COMMANDS), expected)
@@ -45,18 +43,10 @@ class ReleaseValidatorTests(unittest.TestCase):
     def test_schema_inventory_is_exactly_the_released_documents(self):
         expected = {
             "behavioral-verification-contract-schema.json",
-            "verification-contract-approval-schema.json",
             "browser-recovery-schema.json",
             "cleanup-plan-schema.json",
             "cleanup-receipt-schema.json",
-            "provider-dispatch-allocation-schema.json",
-            "provider-dispatch-exchange-schema.json",
-            "provider-dispatch-request-schema.json",
-            "provider-dispatch-result-schema.json",
-            "provider-dispatch-status-schema.json",
             "repository-verification-plan-schema.json",
-            "repository-verification-approval-schema.json",
-            "repository-verification-provider-attestation-schema.json",
             "repository-verification-profile-schema.json",
             "repository-verification-receipts-schema.json",
             "resource-registry-schema.json",

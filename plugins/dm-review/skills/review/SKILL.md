@@ -47,8 +47,8 @@ a chunk early only when a changed path matches this bounded deterministic set:
   `**/middleware/auth*`, or `**/middleware/security*`
 - `**/secretbox*`, `**/destructive_confirmation*`,
   `internal/baseplate/email/settings*`, `deploy/**`, or `*.env*`
-- Depot credential-transport controls named `openrouter-wrapper.sh`,
-  `delegation-boundary.sh`, or `workflow-authority*`
+- Depot credential-transport controls named `openrouter-wrapper.sh` or
+  `delegation-boundary.sh`
 
 Do not widen this set to all handlers, shell scripts, dependency manifests, or
 configuration files. For these small self-hosted applications, that would turn
@@ -252,7 +252,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
 fi
 # Availability is configured-key plus one coherent installed bundle. Payload
 # eligibility is decided automatically at dispatch time by the disclosure
-# boundary. Workflow Authority presence or status is irrelevant to this path.
+# boundary. This path has no broker dependency.
 OPENROUTER_AVAILABLE=false
 OPENROUTER_UNAVAILABLE_REASON=configured_key_or_bundle_unavailable
 if { [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; } &&
@@ -837,15 +837,11 @@ regardless of path.
 
 #### Phase 4.5 coding-lane exhaustion ask
 
-When a CODING lane finds its provider AND its declared fallback both unavailable, the lane is exhausted, not merely degraded. Do not invent authority: ask the operator whether to wait or record the Coverage Gap and continue.
-
-This gate mirrors the pipeline's current rail-exhaustion boundary: caller-owned receipts authorize nothing because no trusted replay-resistant single-use issuer/consumer exists. Live rail status is display-only. What differs is that dm-review's park equivalent may be record-the-gap-and-continue for an ordinary standalone review; the pipeline's final full review remains REVIEW INCOMPLETE.
+When a CODING lane finds its provider AND its declared fallback both unavailable, the lane is exhausted, not merely degraded. Ask the operator whether to wait or record the Coverage Gap and continue. There is no additional authorization or fallback rail.
 
 The operator is the human at the top-level interactive session. An agent, subagent, hook, auto-answer configuration, or automated harness is not an operator and can never authorize a fallback lane; an ask answered by any of them is an unanswered ask. When the reviewing context cannot reach the operator, do not fabricate the exchange -- record the gap and continue, or escalate `human_help_required` through the caller that can reach the human.
 
 Collect live rail status at ask time and display it only to inform timing. Offer exactly: (a) wait until the named reset, or (c) record the Coverage Gap and continue -- the review equivalent of park. A context that cannot reach the operator returns `human_help_required` through a reaching caller or records the gap under the headless rule. No provider identifier is an executable answer.
-
-Option (b) and its former authorization receipt are future design only and non-executable. A caller-owned receipt, including one carrying `ask_evidence_ref`, never authorizes a fallback lane or `fallbackReason: rail_exhausted_user_authorized` today.
 
 Ask-then-default-gap is the only headless behavior for an ordinary standalone review: a non-interactive session or unanswered ask records the Coverage Gap and continues. Independent-family sign-off and sensitive-path rules remain non-overridable; configured-key OpenRouter lanes never enter this approval path.
 

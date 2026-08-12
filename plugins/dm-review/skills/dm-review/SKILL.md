@@ -77,10 +77,10 @@ private outbound files. No user approval, broker probe, FIDO interaction, or
 redispatch is part of the path.
 
 A missing or invalid key, unavailable bundle/provider, or automatically
-declined payload falls back to Codex without prompting. Workflow Authority
-presence, absence, readiness, or degradation does not change configured-key
-availability. Receipts remain content-free and record provider, model, usage,
-and request-envelope digest metadata. Recommend provider-side per-key spending
+declined payload falls back to Codex without prompting. Configured-key input
+and one coherent installed bundle determine availability. Receipts remain
+content-free and record provider, model, usage, and request-envelope digest
+metadata. Recommend provider-side per-key spending
 limits as the runaway-cost control.
 
 ## Shadow Workflow Kernel Lifecycle

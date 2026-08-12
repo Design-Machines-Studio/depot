@@ -6,7 +6,7 @@ This note covers the `world-b-openrouter` changes: a shared `openrouter` provide
 input makes eligible direct, dm-review, and bounded Pipeline lanes available
 after automatic exact-byte screening. Missing/invalid credentials, provider
 unavailability, or a declined payload descends to native Codex without a
-prompt. Workflow Authority status is not consulted.
+prompt. The configured-key path has no broker dependency.
 
 ## What changed
 

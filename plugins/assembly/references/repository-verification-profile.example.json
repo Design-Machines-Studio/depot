@@ -15,7 +15,7 @@
       "owner": "local",
       "argv": ["git", "diff", "--check"],
       "input_paths": [".dm/verification.json"],
-      "authority_paths": [".dm/verification.json"],
+      "execution_paths": [".dm/verification.json"],
       "cache": "never"
     },
     {
@@ -46,7 +46,7 @@
         ".dockerignore",
         ".dm/verification.json"
       ],
-      "authority_paths": [
+      "execution_paths": [
         "compose.yaml",
         "docker-compose.yml",
         "Dockerfile",
@@ -57,7 +57,7 @@
       "cache": "never",
       "cache_environment": ["DOCKER_HOST", "DM_VERIFICATION_SUBSTRATE"],
       "required_environment": ["DM_VERIFICATION_SUBSTRATE"],
-      "authority_environment": ["DM_VERIFICATION_SUBSTRATE"],
+      "execution_environment": ["DM_VERIFICATION_SUBSTRATE"],
       "mutates_repository": true
     },
     {
@@ -97,7 +97,7 @@
         ".dockerignore",
         ".dm/verification.json"
       ],
-      "authority_paths": [
+      "execution_paths": [
         "compose.yaml",
         "docker-compose.yml",
         "Dockerfile",
@@ -112,7 +112,7 @@
         "DOCKER_HOST", "GOFLAGS", "GOWORK", "DM_VERIFICATION_SUBSTRATE"
       ],
       "required_environment": ["DM_VERIFICATION_SUBSTRATE"],
-      "authority_environment": ["DM_VERIFICATION_SUBSTRATE"],
+      "execution_environment": ["DM_VERIFICATION_SUBSTRATE"],
       "after": ["templ-generate"]
     },
     {
@@ -152,7 +152,7 @@
         ".dockerignore",
         ".dm/verification.json"
       ],
-      "authority_paths": [
+      "execution_paths": [
         "compose.yaml",
         "docker-compose.yml",
         "Dockerfile",
@@ -165,7 +165,7 @@
         "DOCKER_HOST", "GOFLAGS", "GOWORK", "DM_VERIFICATION_SUBSTRATE"
       ],
       "required_environment": ["DM_VERIFICATION_SUBSTRATE"],
-      "authority_environment": ["DM_VERIFICATION_SUBSTRATE"]
+      "execution_environment": ["DM_VERIFICATION_SUBSTRATE"]
     },
     {
       "id": "go-full-race",
@@ -199,7 +199,7 @@
         ".dockerignore",
         ".dm/verification.json"
       ],
-      "authority_paths": [
+      "execution_paths": [
         ".github/workflows/**",
         "Dockerfile",
         "Dockerfile.*",
@@ -211,7 +211,7 @@
         "GOFLAGS", "GOWORK", "DM_VERIFICATION_SUBSTRATE"
       ],
       "required_environment": ["DM_VERIFICATION_SUBSTRATE"],
-      "authority_environment": ["DM_VERIFICATION_SUBSTRATE"]
+      "execution_environment": ["DM_VERIFICATION_SUBSTRATE"]
     }
   ]
 }

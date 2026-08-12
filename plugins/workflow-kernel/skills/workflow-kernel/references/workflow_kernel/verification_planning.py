@@ -3,20 +3,49 @@
 from __future__ import annotations
 
 import os
+import subprocess
 from pathlib import Path
 
-from .verification_authority import (
-    checkout_changed_paths, validate_profile_approval,
-)
 from .verification_contract import BOUNDARIES
 from .verification_errors import VerificationPlannerError
 from .verification_repository import (
-    PLAN_SCHEMA_VERSION, RISKS, authority_digest, authority_patterns,
-    environment_digest, expanded_argv, input_digests, matches,
-    normalize_changed_paths, repository_file, resolve_commit,
+    PLAN_SCHEMA_VERSION, RISKS, execution_digest, execution_patterns,
+    environment_digest, expanded_argv, git_changed_paths, input_digests,
+    matches, normalize_changed_paths, repository_file,
+    repository_scope_digest, resolve_commit,
     tree_input_digests, validate_profile,
 )
 from .verification_receipts import digest, receipt_index
+
+
+def checkout_changed_paths(
+    repository, base_commit, head_commit, include_worktree,
+):
+    """Derive the exact candidate range from the current local checkout."""
+    if type(include_worktree) is not bool:
+        raise VerificationPlannerError("include_worktree must be boolean")
+    if resolve_commit(repository, "HEAD", "HEAD") != head_commit:
+        raise VerificationPlannerError(
+            "current HEAD differs from the requested candidate commit",
+        )
+    committed = git_changed_paths(repository, base_commit, head_ref=head_commit)
+    complete = git_changed_paths(
+        repository, base_commit, head_ref=head_commit, include_worktree=True,
+    )
+    status = subprocess.run(
+        [
+            "git", "-C", str(repository), "status", "--porcelain=v1", "-z",
+            "--untracked-files=all",
+        ],
+        capture_output=True, check=False,
+    )
+    if status.returncode != 0:
+        raise VerificationPlannerError("unable to inspect candidate checkout")
+    if not include_worktree and status.stdout:
+        raise VerificationPlannerError(
+            "exact-SHA verification requires a clean index and worktree",
+        )
+    return complete if include_worktree else committed
 
 
 def _select_lane(lane, changed_paths, boundary, risk):
@@ -91,7 +120,7 @@ def _plan_selected_lane(
             )
         ):
             disposition = "reuse"
-            reason = "matching_authenticated_receipt"
+            reason = "matching_passing_receipt"
         elif lane["owner"] == "local":
             disposition = "run"
             reason = "scheduled_local_lane"
@@ -119,8 +148,9 @@ def _plan_selected_lane(
 
 
 def build_plan(profile_document, repository_root, profile_ref, changed_paths,
-               boundary, risk, *, receipt_ledger=None, receipt_key=None,
-               approval=None, head_commit="unresolved", environment=None,
+               boundary, risk, *, receipt_ledger=None, base_commit=None,
+               head_commit="unresolved",
+               include_worktree=False, environment=None,
                _allow_declared_mutation=False):
     """Build the exact tiered verification plan for one workflow boundary."""
     profile = validate_profile(profile_document)
@@ -135,36 +165,34 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
             "repository verification requires an exact candidate commit",
         )
     head_commit = resolve_commit(repository, head_commit, "head_commit")
+    if base_commit is None:
+        raise VerificationPlannerError(
+            "repository verification requires an exact base commit",
+        )
+    base_commit = resolve_commit(repository, base_commit, "base_commit")
     if boundary not in BOUNDARIES or risk not in RISKS:
         raise VerificationPlannerError("invalid verification boundary or risk")
     changed_paths = normalize_changed_paths(changed_paths)
-    if approval is None:
-        raise VerificationPlannerError("verification profile approval is required")
-    if (
-        boundary in {"merge_candidate", "post_merge"}
-        and approval.get("include_worktree") is not False
-    ):
+    if type(include_worktree) is not bool:
+        raise VerificationPlannerError("include_worktree must be boolean")
+    if boundary in {"merge_candidate", "post_merge"} and include_worktree:
         raise VerificationPlannerError(
             "exact-SHA terminal verification requires a clean committed candidate",
         )
     authoritative_changed_paths = (
         checkout_changed_paths(
-            repository, approval.get("trusted_base_commit", ""),
-            approval.get("candidate_commit", ""),
-            True,
+            repository, base_commit, head_commit, True,
         )
         if _allow_declared_mutation
-        else normalize_changed_paths(approval.get("changed_paths"))
-    )
-    if head_commit != approval.get("candidate_commit"):
-        raise VerificationPlannerError(
-            "verification request differs from the host-approved candidate",
+        else checkout_changed_paths(
+            repository, base_commit, head_commit, include_worktree,
         )
+    )
     if _allow_declared_mutation:
         changed_paths = authoritative_changed_paths
     elif changed_paths != authoritative_changed_paths:
         raise VerificationPlannerError(
-            "verification request differs from the host-approved candidate",
+            "verification changed paths differ from the current candidate",
         )
     environment = dict(os.environ if environment is None else environment)
     profile_digest = digest(profile)
@@ -177,8 +205,8 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
         for lane, disposition, _reason, _argv, _packages in selections
         if disposition == "selected" and lane["input_paths"]
     }
-    authority_path_patterns = authority_patterns(profile)
-    pattern_sets.add(authority_path_patterns)
+    execution_path_patterns = execution_patterns(profile)
+    pattern_sets.add(execution_path_patterns)
     input_digest_map = input_digests(repository, pattern_sets)
     if boundary in {"merge_candidate", "post_merge"}:
         committed_input_digests = tree_input_digests(
@@ -189,23 +217,11 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
                 "terminal verification inputs differ from the candidate commit",
             )
         input_digest_map = committed_input_digests
-    approval = validate_profile_approval(
-        approval, profile_document, repository, profile_ref, receipt_key,
-        environment=environment,
-        authority_digest=authority_digest(
-            profile, repository, environment,
-            path_digest=input_digest_map[authority_path_patterns],
-        ),
-        allow_declared_mutation=_allow_declared_mutation,
+    execution_closure_digest = execution_digest(
+        profile, repository, environment,
+        path_digest=input_digest_map[execution_path_patterns],
     )
-    if (
-        not _allow_declared_mutation
-        and approval["changed_paths_digest"] != digest(changed_paths)
-    ):
-        raise VerificationPlannerError(
-            "verification changed paths differ from the sealed approval",
-        )
-    prior = receipt_index(receipt_ledger, receipt_key)
+    prior = receipt_index(receipt_ledger)
     lanes = []
     blocked = False
     for lane, disposition, reason, argv, packages in selections:
@@ -244,15 +260,14 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
         "profile_id": profile["profile_id"],
         "profile_ref": profile_ref,
         "profile_digest": profile_digest,
-        "approval_digest": digest(approval),
-        "repository_scope_digest": approval["repository_scope_digest"],
-        "run_id": approval["run_id"],
-        "trusted_base_commit": approval["trusted_base_commit"],
+        "execution_closure_digest": execution_closure_digest,
+        "repository_scope_digest": repository_scope_digest(repository),
         "request": {
             "boundary": boundary,
             "risk": risk,
-            "base_commit": approval["trusted_base_commit"],
+            "base_commit": base_commit,
             "head_commit": head_commit,
+            "include_worktree": include_worktree,
             "changed_paths": changed_paths,
         },
         "status": "blocked" if blocked else "ready",
@@ -265,11 +280,11 @@ def validate_plan_identity(plan, expected):
         raise VerificationPlannerError("verification plan must be an object")
     for field in (
         "schema_version", "artifact_role", "profile_id", "profile_ref",
-        "profile_digest", "approval_digest", "repository_scope_digest",
-        "run_id", "trusted_base_commit", "request",
+        "profile_digest", "execution_closure_digest",
+        "repository_scope_digest", "request",
     ):
         if plan.get(field) != expected.get(field):
-            raise VerificationPlannerError("verification plan authority is stale")
+            raise VerificationPlannerError("verification plan identity is stale")
     actual_lanes = plan.get("lanes")
     if type(actual_lanes) is not list or len(actual_lanes) != len(expected["lanes"]):
         raise VerificationPlannerError("verification plan lane set is stale")
@@ -281,7 +296,7 @@ def validate_plan_identity(plan, expected):
         if type(actual) is not dict or any(
             actual.get(field) != current.get(field) for field in immutable
         ):
-            raise VerificationPlannerError("verification plan lane authority is stale")
+            raise VerificationPlannerError("verification plan lane identity is stale")
         dispositions = {actual.get("disposition"), current.get("disposition")}
         if len(dispositions) > 1 and dispositions != {"run", "reuse"}:
             raise VerificationPlannerError("verification plan disposition is stale")

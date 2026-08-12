@@ -80,6 +80,6 @@ pipeline and dm-review payloads continue through the direct runner.
 
 Automated workflows MUST NOT call `send-message`; validators enforce that
 dm-review and pipeline contain no such invocation. For a user-requested ad-hoc
-comparison, first apply the same artifact-delegation boundary and byte-bound
-user authorization, send only the approved payload, record the generation ID,
+comparison, first apply the same artifact-delegation boundary and automatic
+byte screening, send only the eligible payload, record the generation ID,
 and retain independent non-implementing-family sign-off for consequential security work.

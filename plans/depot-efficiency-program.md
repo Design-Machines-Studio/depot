@@ -14,7 +14,9 @@ The current priority order is:
    broker and repeated human approvals with a trusted-workstation path where a
    configured OpenRouter key authorizes non-interactive use. Retain automatic
    refusal of unmistakable credential/private-key payloads, cost receipts, and
-   native Codex supervision. The broker becomes optional parked work.
+   native Codex supervision. Workflow Authority and its broker architecture are
+   removed; reintroduction requires a new owner decision backed by a
+   demonstrated threat or operational need.
 2. **P1 -- prove the cheaper path.** Run one bounded non-sensitive canary and
    compare elapsed time, tokens, cost, and actionable defects with the native
    fallback before expanding automated routing.
@@ -69,7 +71,7 @@ the preferred runaway-cost control.
 | 9 | R4 static run report | LATER / REWRITE | a current failed run supplies a diagnosis specimen |
 | 10 | R5 Agent Plugins interop | PARK | a named client or distribution target exists |
 | 11 | Harness lessons: budgets then memory/codify | HOLD / REWRITE | current run evidence justifies the exact change |
-| 12 | Workflow Authority install, integration, and Darwin port | **PARK / OPTIONAL** | a demonstrated need for unattended untrusted workers, regulated material, or unapproved-spend prevention outweighs its operator cost |
+| 12 | Workflow Authority install, integration, and Darwin port | **REMOVED** | reintroduction requires a new owner decision backed by a demonstrated threat or operational need |
 
 The Fixture-development handoff remains an external P2 lane and may advance in
 parallel when its Baseplate/Jig dependency chain clears; it does not displace
@@ -105,10 +107,9 @@ unrelated Depot Issues #25-#28.
 - A deliberately configured OpenRouter key is authorization on a trusted
   developer workstation. Do not add a second human-approval ceremony. Keep
   obvious-secret refusal automatic and use provider-side key limits for spend.
-- Workflow Authority remains dormant optional code. Do not install it on NED,
-  build a Darwin version, or make it a prerequisite for Pipeline or dm-review
-  without a new owner decision backed by a demonstrated threat or operational
-  need.
+- Workflow Authority has been removed. Do not reintroduce a provider broker or
+  make one a prerequisite for Pipeline or dm-review without a new owner decision
+  backed by a demonstrated threat or operational need.
 - R2 is closed rather than run as authored; R4 waits for a real diagnostic
   specimen; R5 waits for a real consumer. Old prompts remain historical inputs
   until explicitly refreshed and marked NEXT.

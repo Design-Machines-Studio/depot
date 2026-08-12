@@ -151,8 +151,8 @@ all use one pass:
    native fallback exists. Otherwise invoke the wrapper with those same private
    files.
 
-No OpenRouter caller asks for user approval. Workflow Authority presence or
-status has no effect. Provider-side per-key spending limits are the recommended
+No OpenRouter caller asks for user approval. The configured-key path has no
+broker dependency. Provider-side per-key spending limits are the recommended
 runaway-cost control.
 
 ### Codex network allowlist

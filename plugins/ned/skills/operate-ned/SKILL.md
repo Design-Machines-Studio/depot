@@ -152,10 +152,6 @@ to `trav`, present the exact operations command and stop rather than manufacturi
 - Never use `sudo docker` or the `default` Docker context for a development checkout.
 - Never add `ned` or `trav` to the `docker` group. Membership is root-equivalent; keep the group
   empty.
-- Never run `workflow-authorityd`, installation, enrollment, credential provisioning, recovery, or
-  administrative commands as `ned`; those belong to the reviewed root-owned service boundary.
-  `ned` may invoke only the installed unprivileged `workflow-authority` client, and only after a
-  separate review explicitly grants it membership in the restricted socket group.
 - Never collapse the two phases because a demo, deadline, or outage makes one privileged session
   seem faster.
 - Never store SSH keys, pairing tokens, API keys, or secret values in AI Memory, prompts, logs, or

@@ -1,17 +1,14 @@
 import json
 import hashlib
-import hmac
 import unittest
-from datetime import datetime, timezone
 from pathlib import Path
 
 from tests import KERNEL_REFERENCES, schema_matches
 from workflow_kernel.behavioral_contract import (
-    MAX_CONTRACT_BYTES, approval_digest, approval_signing_bytes, canonical_bytes,
+    MAX_CONTRACT_BYTES, canonical_bytes,
     contract_digest, obligations,
     parse_contract_bytes, validate_contract, validate_initial_binding,
-    validate_profile_binding, validate_revision, verification_profile_digest,
-    verify_approval_capability,
+    validate_profile_binding, verification_profile_digest,
 )
 from workflow_kernel.verification import PersonaCase, VerificationProfile
 
@@ -57,22 +54,9 @@ def contract_one():
             "added_obligation_ids": obligation_ids,
             "retained_obligation_ids": [],
             "removed_obligation_ids": [],
-            "human_approval_evidence_ref": None,
         },
     }
 
-
-def approval_for(candidate, previous_digest, run_id="contract-run"):
-    return {
-        "schema_version": 1, "actor": "reviewer-1",
-        "authority": "design-machines-human-approval-v1",
-        "decision": "approved", "issued_at": "2026-07-23T00:00:00Z",
-        "expires_at": "2026-07-23T00:05:00Z", "run_id": run_id,
-        "nonce": "approval-nonce-1",
-        "previous_contract_digest": previous_digest,
-        "candidate_contract_digest": contract_digest(candidate),
-        "signature": "hmac-sha256:" + "a" * 64,
-    }
 
 
 class BehavioralContractTests(unittest.TestCase):
@@ -264,152 +248,12 @@ class BehavioralContractTests(unittest.TestCase):
         self.assertIsNone(canonical["manual_requirements"][0]["evidence_ref"])
         self.assertNotIn("PROOF:CHK-001:REQ-001", obligations(canonical))
 
-    def test_revision_recomputes_deltas_and_requires_approval_for_weakening(self):
-        previous = validate_initial_binding(contract_one())
-        previous_digest = contract_digest(previous)
-        revision = json.loads(json.dumps(previous))
-        revision.update({"revision": 2, "previous_contract_digest": previous_digest})
-        revision["prohibited_regressions"] = []
-        revision["checks"][0]["proves_regression_ids"] = []
-        revision["checks"][0]["baseline_expectation"] = "may_pass"
-        revision["revision_justification"] = {
-            "reason_code": "approved_scope_change", "summary": "Approved narrower baseline.",
-            "added_obligation_ids": [],
-            "retained_obligation_ids": [
-                "BROWSER:browser-primary", "PERSONA:persona-editor", "REQ-001",
-                "PROOF:CHK-001:REQ-001",
-            ],
-            "removed_obligation_ids": ["REG-001", "PROOF:CHK-001:REG-001"],
-            "human_approval_evidence_ref": None,
-        }
+    def test_non_initial_contract_cannot_be_bound(self):
+        contract = contract_one()
+        contract["revision"] = 2
+        contract["previous_contract_digest"] = "sha256:" + "0" * 64
         with self.assertRaises(ValueError):
-            validate_revision(previous, revision, previous_digest)
-        revision["revision_justification"]["human_approval_evidence_ref"] = (
-            "plans/adaptive/plan.html#approval"
-        )
-        self.assertEqual(validate_revision(
-            previous, revision, previous_digest,
-            approval_evidence=approval_for(revision, previous_digest),
-            run_id="contract-run",
-        )["revision"], 2)
-        revision["previous_contract_digest"] = "sha256:" + "0" * 64
-        with self.assertRaises(ValueError):
-            validate_revision(previous, revision, previous_digest)
-
-    def test_behavior_mutation_digest_and_weakening_matrix(self):
-        base = contract_one()
-        base["requirements"].append({
-            "id": "REQ-002", "source_ref": "original-prompt.md#manual",
-            "statement": "Human review confirms the qualitative behavior.",
-        })
-        base["checks"][0]["proves_requirement_ids"].append("REQ-002")
-        base["manual_requirements"] = [
-            {"requirement_id": "REQ-001", "reason_code": "human_judgment_required",
-             "evidence_ref": "plans/adaptive/plan.html#req-1"},
-            {"requirement_id": "REQ-002", "reason_code": "human_judgment_required",
-             "evidence_ref": "plans/adaptive/plan.html#req-2"},
-        ]
-        base["revision_justification"]["added_obligation_ids"].extend([
-            "REQ-002", "PROOF:CHK-001:REQ-002",
-        ])
-        previous = validate_initial_binding(base)
-        previous_digest = contract_digest(previous)
-
-        def change_requirement(value):
-            value["requirements"][0]["statement"] += " More specifically."
-
-        def change_regression(value):
-            value["prohibited_regressions"][0]["statement"] += " On every route."
-
-        def remove_proof_link(value):
-            value["checks"][0]["proves_requirement_ids"].remove("REQ-002")
-
-        def remove_persona(value):
-            value["persona_case_ids"].remove("persona-editor")
-
-        def remove_browser(value):
-            value["browser_case_ids"].remove("browser-primary")
-
-        def baseline_may_pass(value):
-            value["checks"][0]["baseline_expectation"] = "may_pass"
-
-        def baseline_not_runnable(value):
-            value["checks"][0]["baseline_expectation"] = "not_runnable"
-
-        def change_argv(value):
-            value["checks"][0]["argv"][-1] = "tests.test_changed"
-
-        def change_manual(value):
-            value["manual_requirements"][0]["reason_code"] = "accessibility_review"
-
-        def remove_manual(value):
-            value["manual_requirements"].pop(0)
-
-        mutations = {
-            "requirement": change_requirement,
-            "regression": change_regression,
-            "proof_link": remove_proof_link,
-            "persona": remove_persona,
-            "browser": remove_browser,
-            "must_fail_to_may_pass": baseline_may_pass,
-            "must_fail_to_not_runnable": baseline_not_runnable,
-            "argv": change_argv,
-            "manual_mutation": change_manual,
-            "manual_removal": remove_manual,
-        }
-        for name, mutate in mutations.items():
-            behavior = json.loads(json.dumps(previous))
-            mutate(behavior)
-            with self.subTest(name=name, assertion="digest"):
-                self.assertNotEqual(contract_digest(behavior), previous_digest)
-
-            revision = json.loads(json.dumps(previous))
-            mutate(revision)
-            revision.update({"revision": 2, "previous_contract_digest": previous_digest})
-            old_obligations = obligations(previous)
-            new_obligations = obligations(revision)
-            revision["revision_justification"] = {
-                "reason_code": "behavior_revision", "summary": f"Revise {name}.",
-                "added_obligation_ids": sorted(new_obligations - old_obligations),
-                "retained_obligation_ids": sorted(new_obligations & old_obligations),
-                "removed_obligation_ids": sorted(old_obligations - new_obligations),
-                "human_approval_evidence_ref": None,
-            }
-            with self.subTest(name=name, assertion="approval"), self.assertRaises(ValueError):
-                validate_revision(previous, revision, previous_digest)
-            revision["revision_justification"]["human_approval_evidence_ref"] = (
-                "plans/adaptive/plan.html#approval"
-            )
-            with self.subTest(name=name, assertion="approved"):
-                self.assertEqual(
-                    validate_revision(
-                        previous, revision, previous_digest,
-                        approval_evidence=approval_for(revision, previous_digest),
-                        run_id="contract-run",
-                    )["revision"], 2,
-                )
-
-    def test_may_pass_to_not_runnable_requires_authenticated_approval(self):
-        previous = contract_one()
-        previous["checks"][0]["baseline_expectation"] = "may_pass"
-        previous = validate_initial_binding(previous)
-        digest = contract_digest(previous)
-        revision = json.loads(json.dumps(previous))
-        revision.update({"revision": 2, "previous_contract_digest": digest})
-        revision["checks"][0]["baseline_expectation"] = "not_runnable"
-        revision["revision_justification"] = {
-            "reason_code": "approved_baseline_change", "summary": "Cannot run now.",
-            "added_obligation_ids": [],
-            "retained_obligation_ids": sorted(obligations(previous)),
-            "removed_obligation_ids": [],
-            "human_approval_evidence_ref": "approvals/baseline.json",
-        }
-        with self.assertRaises(ValueError):
-            validate_revision(previous, revision, digest)
-        validate_revision(
-            previous, revision, digest,
-            approval_evidence=approval_for(revision, digest), run_id="contract-run",
-        )
+            validate_initial_binding(contract)
 
     def test_contract_cases_are_exactly_bound_to_authoritative_profile(self):
         case = PersonaCase(
@@ -435,79 +279,6 @@ class BehavioralContractTests(unittest.TestCase):
         missing["persona_case_ids"] = []
         with self.assertRaises(ValueError):
             validate_profile_binding(missing, profile)
-
-    def test_profile_identity_transition_is_always_approval_gated(self):
-        previous = validate_initial_binding(contract_one())
-        digest = contract_digest(previous)
-        revision = json.loads(json.dumps(previous))
-        revision.update({"revision": 2, "previous_contract_digest": digest})
-        revision["verification_profile_id"] = "profile-sha256:" + "3" * 64
-        revision["verification_profile_digest"] = "sha256:" + "4" * 64
-        revision["revision_justification"] = {
-            "reason_code": "profile_transition", "summary": "Change profile.",
-            "added_obligation_ids": [],
-            "retained_obligation_ids": sorted(obligations(previous)),
-            "removed_obligation_ids": [],
-            "human_approval_evidence_ref": None,
-        }
-        with self.assertRaises(ValueError):
-            validate_revision(previous, revision, digest)
-
-    def test_profile_schema_nullability_matches_runtime_and_approval_time_normalizes(self):
-        invalid = contract_one()
-        invalid["verification_profile_id"] = None
-        invalid["verification_profile_digest"] = None
-        self.assertFalse(schema_matches(invalid, SCHEMA))
-        with self.assertRaises(ValueError):
-            validate_contract(invalid)
-
-        candidate = contract_one()
-        prior = "sha256:" + "a" * 64
-        candidate_digest = contract_digest(candidate)
-        canonical = approval_for(candidate, prior)
-        fractional = dict(canonical, issued_at="2026-07-23T00:00:00.000Z")
-        self.assertEqual(
-            approval_digest(
-                canonical, previous_digest=prior,
-                candidate_digest=candidate_digest, run_id="contract-run",
-            ),
-            approval_digest(
-                fractional, previous_digest=prior,
-                candidate_digest=candidate_digest, run_id="contract-run",
-            ),
-        )
-
-    def test_approval_capability_verifies_signature_authority_and_expiry(self):
-        candidate = contract_one()
-        prior = "sha256:" + "a" * 64
-        approval = approval_for(candidate, prior)
-        key = b"host-human-approval-key-material"
-        approval["signature"] = "hmac-sha256:" + hmac.new(
-            key, approval_signing_bytes(
-                approval, previous_digest=prior,
-                candidate_digest=contract_digest(candidate), run_id="contract-run",
-            ), hashlib.sha256,
-        ).hexdigest()
-        capability = ("design-machines-human-approval-v1", key)
-        verified = verify_approval_capability(
-            approval, capability, previous_digest=prior,
-            candidate_digest=contract_digest(candidate), run_id="contract-run",
-            now=datetime(2026, 7, 23, 0, 1, tzinfo=timezone.utc),
-        )
-        self.assertEqual(verified["nonce"], "approval-nonce-1")
-        with self.assertRaises(ValueError):
-            verify_approval_capability(
-                approval, capability, previous_digest=prior,
-                candidate_digest=contract_digest(candidate), run_id="contract-run",
-                now=datetime(2026, 7, 23, 0, 5, tzinfo=timezone.utc),
-            )
-        with self.assertRaises(ValueError):
-            verify_approval_capability(
-                approval, (capability[0], b"wrong-key-material-that-is-long-enough"),
-                previous_digest=prior, candidate_digest=contract_digest(candidate),
-                run_id="contract-run",
-                now=datetime(2026, 7, 23, 0, 1, tzinfo=timezone.utc),
-            )
 
     def test_parser_rejects_malformed_invalid_utf8_duplicate_depth_and_size(self):
         valid = canonical_bytes(contract_one())

@@ -61,23 +61,16 @@ planning `HEAD...HEAD`.
 
 Planner execution also requires:
 
-- `ASSEMBLY_VERIFICATION_APPROVAL`: the immutable host-authenticated approval
-  artifact issued before builder dispatch and bound to repository scope,
-  profile path/digest, execution closure, trusted base commit, run ID,
-  authorization event, and approval time;
-- `ASSEMBLY_VERIFICATION_KEY_BROKER`: a host-owned broker outside the
-  repository and worker identity that writes the stable authority key to the
-  kernel's standard input. Never name a key file in process arguments; and
 - `DM_VERIFICATION_SUBSTRATE`: the resolved Docker image digest plus Go/Templ
   toolchain identity used by the lane.
 
-A profile, authority-path, or authority-environment change requires explicit
-host approval and a newly sealed approval artifact.
+The planner hashes the repository-owned profile, command inputs, declared
+execution paths/environment, base commit, candidate commit, and worktree mode.
 
 ## Execution
 
 Resolve one compatible Workflow Kernel launcher using its
-`references/runtime-resolution.md` contract. Require Workflow Kernel `>=0.6.1`
+`references/runtime-resolution.md` contract. Require Workflow Kernel `>=0.14.0`
 and pin that launcher for the command.
 
 Use these run-owned artifacts:
@@ -87,38 +80,26 @@ Use these run-owned artifacts:
 .workflow-kernel/verification/receipts.json
 ```
 
-Before the first builder dispatch, the host invokes
-`approve-verification-profile` with the trusted base commit, exact candidate
-commit, worktree-inclusion choice, run ID, authorization event ID, and
-timezone-aware approval time. The broker supplies
-the authority key through `--receipt-key-stdin`; write the immutable result to
-`$ASSEMBLY_VERIFICATION_APPROVAL`.
-
 Invoke `plan-verification` with:
 
 - repository root: the exact current repository;
 - profile: `.dm/verification.json`;
 - the selected boundary and risk;
-- `--approval "$ASSEMBLY_VERIFICATION_APPROVAL"`;
+- `--base-ref "$ASSEMBLY_VERIFICATION_BASE_REF"`;
+- `--candidate-ref HEAD`;
+- `--include-worktree` for `focused` only;
 - the existing receipt ledger when present; and
-- broker-supplied authority on standard input via `--receipt-key-stdin`; and
 - the plan output path above.
 
 Then invoke `run-verification` with the same repository and profile, the fresh
 plan, the existing receipt ledger when present, and the receipts output path.
-Also pass the approval and broker-supplied key:
 
-```text
---approval "$ASSEMBLY_VERIFICATION_APPROVAL"
---receipt-key-stdin
-```
-
-The runner revalidates the authenticated approval, approved execution closure,
-changed inputs, exact argv, cache key, execution substrate, and receipt history
+The runner revalidates the exact Git range, execution closure, changed inputs,
+argv, cache key, execution substrate, and receipt history
 before executing anything. It uses an empty temporary home, fixed executable
 path, incrementally bounded output/time, and a minimal environment without an
-implicit shell. It terminates descendant process groups and refuses to sign a
-complete result when undeclared mutation changes the final input identity.
+implicit shell. It terminates descendant process groups and refuses a complete
+result when undeclared mutation changes the final input identity.
 
 ## Cadence contract
 
@@ -129,11 +110,9 @@ complete result when undeclared mutation changes the final input identity.
   integrated.
 - Merge-candidate and post-merge boundaries keep race, security, browser, and
   other remote lanes explicit. They are moved, never omitted.
-- A host integration clears a remote lane only with
-  `record-verification-result` and a broker-sealed provider attestation
-  matching its provider, provider run ID, exact candidate commit, evidence
-  digest, observed time, outcome, profile, command, input, cache, and substrate
-  identities.
+- Remote lanes remain explicit `remote_pending` entries. Their native CI or
+  review evidence is reported independently at the exact candidate head; it is
+  not imported into the local receipt ledger.
 - A passing receipt is reusable only when the profile, exact argv, relevant
   source inputs, and declared environment fingerprint are identical.
 - Documentation, receipt, and unrelated metadata edits do not invalidate a
@@ -144,4 +123,5 @@ complete result when undeclared mutation changes the final input identity.
 Report every lane as `passed`, `failed`, `reused`, `remote_pending`, `blocked`,
 or `unavailable`. Use `LOCAL PASS — REMOTE PENDING` when local evidence is
 complete but a required provider receipt is outstanding. Reserve unqualified
-`PASS` for complete authenticated evidence from every required lane.
+`PASS` for complete local and independently reported remote evidence at the
+same exact head.

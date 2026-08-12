@@ -6,11 +6,10 @@
 
   "hosts": {
     "claude-code": {
-      "_comment": "Claude Code remains a compatible cockpit, but coding dispatch uses Codex Pro through codex-companion or OpenRouter. native_judgment remains unselectable until trusted host authority can issue and consume a replay-resistant single-use capability.",
+      "_comment": "Claude Code remains a compatible cockpit, but coding dispatch uses Codex Pro through codex-companion or OpenRouter.",
       "roles": {
         "openrouter_exec":  { "kind": "openrouter_exec", "probe": "openrouter", "models": ["deepseek/deepseek-v4-flash-0731", "x-ai/grok-4.5", "minimax/minimax-m3", "z-ai/glm-5.2"] },
         "premium_sub":     { "kind": "codex_companion", "probe": "codex",      "models": ["gpt-5.6-sol"] },
-        "native_judgment": { "kind": "native",          "probe": "claude",     "models": ["opus", "sonnet", "haiku"] },
         "frontier_api":    { "kind": "wrapper",         "probe": "openrouter", "models": ["moonshotai/kimi-k3", "x-ai/grok-4.5", "meta/muse-spark-1.1", "google/gemini-3.5-flash", "z-ai/glm-5.2"] },
         "cheap_api":       { "kind": "wrapper",         "probe": "openrouter", "models": ["deepseek/deepseek-v4-flash-0731", "minimax/minimax-m3", "qwen/qwen3-coder", "z-ai/glm-5.2"] },
         "bulk_api":        { "kind": "wrapper",         "probe": "openrouter", "models": ["moonshotai/kimi-k3", "deepseek/deepseek-v4-flash-0731", "minimax/minimax-m3", "x-ai/grok-4.5", "z-ai/glm-5.2"] }
@@ -18,11 +17,10 @@
     },
 
     "codex": {
-      "_comment": "Cockpit = Codex on the ChatGPT sub. GPT-5.6 Sol is the native coding head; Terra and GPT-5.5 tie at rank 94, so Terra is second on price and GPT-5.5 follows as the older-CLI fallback. premium_sub serves logic, UI, and integration. native_judgment remains unselectable until trusted host authority can issue and consume a replay-resistant single-use capability.",
+      "_comment": "Cockpit = Codex on the ChatGPT sub. GPT-5.6 Sol is the native coding head; Terra and GPT-5.5 tie at rank 94, so Terra is second on price and GPT-5.5 follows as the older-CLI fallback. premium_sub serves logic, UI, and integration.",
       "roles": {
         "openrouter_exec":  { "kind": "openrouter_exec", "probe": "openrouter", "models": ["deepseek/deepseek-v4-flash-0731", "x-ai/grok-4.5", "minimax/minimax-m3", "z-ai/glm-5.2"] },
         "premium_sub":     { "kind": "native",  "probe": "codex",      "models": ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5", "gpt-5.6-luna"] },
-        "native_judgment": { "kind": "native",  "probe": "codex",      "models": ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.5", "gpt-5.6-luna"] },
         "frontier_api":    { "kind": "wrapper", "probe": "openrouter", "models": ["moonshotai/kimi-k3", "x-ai/grok-4.5", "meta/muse-spark-1.1", "google/gemini-3.5-flash", "z-ai/glm-5.2"] },
         "cheap_api":       { "kind": "wrapper", "probe": "openrouter", "models": ["deepseek/deepseek-v4-flash-0731", "minimax/minimax-m3", "qwen/qwen3-coder", "z-ai/glm-5.2"] },
         "bulk_api":        { "kind": "wrapper", "probe": "openrouter", "models": ["moonshotai/kimi-k3", "deepseek/deepseek-v4-flash-0731", "minimax/minimax-m3", "x-ai/grok-4.5", "z-ai/glm-5.2"] }
@@ -34,7 +32,6 @@
       "roles": {
         "openrouter_exec":  { "kind": "openrouter_exec", "probe": "openrouter", "models": ["deepseek/deepseek-v4-flash-0731", "x-ai/grok-4.5", "minimax/minimax-m3", "z-ai/glm-5.2"] },
         "premium_sub":     { "kind": "none" },
-        "native_judgment": { "kind": "none" },
         "frontier_api":    { "kind": "wrapper", "probe": "openrouter", "models": ["moonshotai/kimi-k3", "x-ai/grok-4.5", "meta/muse-spark-1.1", "google/gemini-3.5-flash", "z-ai/glm-5.2"] },
         "cheap_api":       { "kind": "wrapper", "probe": "openrouter", "models": ["deepseek/deepseek-v4-flash-0731", "minimax/minimax-m3", "qwen/qwen3-coder", "z-ai/glm-5.2"] },
         "bulk_api":        { "kind": "wrapper", "probe": "openrouter", "models": ["moonshotai/kimi-k3", "deepseek/deepseek-v4-flash-0731", "minimax/minimax-m3", "x-ai/grok-4.5", "z-ai/glm-5.2"] }

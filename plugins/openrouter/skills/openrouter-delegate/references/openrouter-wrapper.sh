@@ -512,10 +512,19 @@ TRANSMITTED_REQUEST_ENVELOPE_SHA256="$(printf '%s' "$TRANSMIT_BYTES" | shasum -a
 : > "$stream_file"
 : > "$status_file"
 : > "$curl_error_file"
+authorization_header_file="$RUN_ROOT/authorization.header"
+printf 'Authorization: Bearer %s\n' "$OPENROUTER_API_KEY" > "$authorization_header_file" || {
+  echo "### RUNNER FAILURE: could not prepare the OpenRouter authorization header" >&2
+  exit 1
+}
+chmod 600 "$authorization_header_file"
+# curl reads the credential from the private run root. Keep it out of both the
+# child process argv and environment, where same-host diagnostics can expose it.
+unset OPENROUTER_API_KEY OPENROUTER_API_KEY_FILE
 transport_launching=1
 printf '%s' "$TRANSMIT_BYTES" | curl -N -sS -o "$stream_file" -w '%{http_code}' \
   "$BASE/chat/completions" \
-  -H "Authorization: Bearer $OPENROUTER_API_KEY" \
+  -H "@$authorization_header_file" \
   -H "Content-Type: application/json" \
   -H "HTTP-Referer: https://designmachines.dev" \
   -H "X-Title: world-b-runner" \

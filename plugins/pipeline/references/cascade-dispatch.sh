@@ -18,7 +18,6 @@
 #   0   a wrapper/codex_companion/openrouter_exec rung executed -- output on stdout
 #   64  chosen rung is NATIVE -- directive JSON on stdout; the HOST orchestrator
 #       runs that model in-process (Claude subagent / Codex). The only host-specific action.
-#   75  reserved provider-terminal compatibility status
 #   76  ladder exhausted -- no rung had headroom above the floor
 #   77  disclosure declined -- use the trusted native fallback
 #   2   bad args
@@ -208,19 +207,6 @@ openrouter_allowed() {
   return 0
 }
 
-# native_judgment exists because the 2026-08-08 capped-Codex and fail-closed
-# OpenRouter state produced a zero-chunk execution deadlock. It is gated because
-# silently spending Claude quota on coding work is a policy violation; an honest
-# deadlock report is better than a silent reroute.
-#
-# No environment value can prove a human grant: the caller controls both the
-# alleged receipt and its repository/run comparison values. Until a trusted
-# broker or kernel issues a replay-resistant, single-use capability bound to the
-# ask exchange and dispatch attempt, this rung remains deliberately unavailable.
-native_judgment_allowed() {
-  return 1
-}
-
 probe_json() {
   if [ -n "$PROBE_FILE" ]; then
     # A caller-selected file is a deterministic fixture, never live capacity.
@@ -294,16 +280,10 @@ for role in $LADDER; do
     *) echo "cascade-dispatch: unknown rail kind '$kind'" >&2; exit 2;;
   esac
   prail="$(jq -r --arg h "$HOST" --arg r "$role" '.hosts[$h].roles[$r].probe // "none"' "$PROFILE")"
-  if [ "$role" = "native_judgment" ]; then
-    # The trusted single-use issuer/consumer boundary does not exist yet.
-    # Environment JSON is never treated as authority.
-    native_judgment_allowed || continue
-  else
-    rail_has_headroom "$prail" || continue
-    if [ "$prail" = "openrouter" ] && ! openrouter_allowed; then
-      EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}openrouter"
-      continue
-    fi
+  rail_has_headroom "$prail" || continue
+  if [ "$prail" = "openrouter" ] && ! openrouter_allowed; then
+    EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}openrouter"
+    continue
   fi
   models="$(jq -r --arg h "$HOST" --arg r "$role" '.hosts[$h].roles[$r].models[]?' "$PROFILE")"
   for model in $models; do
@@ -369,7 +349,6 @@ for role in $LADDER; do
       wrapper)
         dispatch_wrapper "$model"; rc=$?
         [ $rc -eq 0 ] && exit 0
-        [ $rc -eq 75 ] && { echo "cascade-dispatch: terminal provider outcome; external dispatch rail stopped" >&2; exit 75; }
         if [ $rc -eq 77 ]; then
           OPENROUTER_GATE_STATE="denied"
           EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}openrouter"
@@ -380,7 +359,6 @@ for role in $LADDER; do
       openrouter_exec)
         out="$(dispatch_openrouter_exec "$model")"; rc=$?
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
-        [ $rc -eq 75 ] && { [ -z "$out" ] || printf '%s\n' "$out"; echo "cascade-dispatch: terminal provider outcome; external dispatch rail stopped" >&2; exit 75; }
         if [ $rc -eq 77 ]; then
           OPENROUTER_GATE_STATE="denied"
           EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}openrouter"

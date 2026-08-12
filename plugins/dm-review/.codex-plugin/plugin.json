@@ -1,6 +1,6 @@
 {
   "name": "dm-review",
-  "version": "1.60.0",
+  "version": "1.60.1",
   "description": "Code review orchestrator with proportional quick review, advisory P3 evidence, full security and browser coverage, stable finding identities, and contribution receipts",
   "author": {
     "name": "Design Machines",
@@ -317,12 +317,12 @@
     "ghostwriter": ">=3.7.0",
     "council": ">=1.5.0",
     "ned": ">=1.4.0",
-    "workflow-kernel": ">=0.13.6"
+    "workflow-kernel": ">=0.14.0"
   },
   "optionalPluginDependencies": {
     "superpowers": ">=1.0.0",
     "airlift": ">=1.0.0",
-    "openrouter": ">=1.14.0"
+    "openrouter": ">=1.14.1"
   },
   "interface": {
     "displayName": "DM Review",

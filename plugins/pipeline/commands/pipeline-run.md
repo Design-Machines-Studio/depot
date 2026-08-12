@@ -56,9 +56,9 @@ The kernel has two distinct roles:
 - shadow observation is optional and may record `shadow unavailable` without
   changing the canonical workflow; and
 - repository verification is authoritative on profile-aware repositories.
-  Missing/incompatible runtime, a missing/invalid sealed profile approval, or a
-  required pending/failed lane stops with
-  `human_help_required`. Never downgrade this authority failure to shadow
+  Missing/incompatible runtime, a stale/invalid exact-ref plan, or a required
+  pending/failed lane stops with
+  `human_help_required`. Never downgrade this verification failure to shadow
   unavailability.
 
 Invoke only stable launcher subcommands documented by the kernel; inline Python source is forbidden. Observation, comparison, and metrics are side-effect free. Interpret stable exits exactly: `0` success, `2` invalid input/schema, `3` unsafe or blocked plan or required repository verification failed/pending, `4` runtime unavailable/incompatible, `5` parity gap, and `6` write/state conflict. No non-zero exit is translated into authoritative success; shadow failures preserve the canonical result, while cleanup blocks remain honestly blocked.
@@ -80,7 +80,7 @@ Validate and bind the initial contract exactly once:
 "$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature>/verification-contract.json > plans/<feature>/verification-contract-binding.json
 ```
 
-The binding receipt's `contract_digest` and `revision` are dispatch authority.
+The binding receipt's `contract_digest` and `revision` identify the contract for dispatch.
 Every builder dispatch and completion must name those exact current values; a
 missing or mismatched claim is deterministic validation failure, never success.
 The kernel seals/validates this artifact but never schedules a builder or gate.
@@ -155,7 +155,7 @@ references.
 
 Do not report "Skill tool unavailable" in Codex when this adapter can run. That message is only valid if the session lacks both nested skill invocation and enough local access to execute the dm-review inline protocol.
 
-**Repository verification adapter:** Resolve Workflow Kernel `>=0.7.0` once
+**Repository verification adapter:** Resolve Workflow Kernel `>=0.14.0` once
 and use its `plan-verification` and `run-verification` subcommands whenever the
 target repository supplies `.dm/verification.json`.
 
@@ -179,21 +179,15 @@ The Codex adapter does not get a weaker gate than the Claude path. If `codex_nat
 
 ## Rail-Exhaustion Ask Gate
 
-When every rail permitted for a chunk is exhausted or gated (cascade RC 76), the run pauses on a human gate instead of terminating BLOCKED. Capacity is recoverable; a terminal receipt is not. The ask shows live rail status and offers only (a) wait until reset or (c) park. Option (b), executable fallback authorization, is omitted for every chunk until trusted host authority can issue and consume a replay-resistant single-use capability. A context that cannot reach the operator returns `human_help_required`; a headless run parks resumable. The operator is the human at the top-level interactive session; an agent, subagent, hook, auto-answer configuration, or automated harness is never an operator.
+When every configured rail for a chunk is exhausted or gated (cascade RC 76),
+the run pauses instead of terminating. Capacity is recoverable; a terminal
+receipt is not. The ask shows live rail status and offers only (a) wait until
+reset or (c) park. Any context that cannot reach the operator parks resumable.
+There is no dormant or
+operator-authorized coding rail outside the configured Codex and OpenRouter
+paths.
 
-Future design only: option (b) is not currently executable. A future trusted
-issuer may bind an authorization receipt to the operator ask, repository, run,
-chunk, exact provider, phase, attempt, expiry, and single-use capability. A
-caller-owned receipt authorizes nothing and never permits `implementedBy:
-claude`.
-
-The current cascade does not consume that receipt as executable
-`native_judgment` authority: a caller-writable receipt cannot prove operator
-origin or single use. Until a trusted broker/kernel capability boundary lands,
-the native-judgment rung remains unavailable and an otherwise exhausted ladder
-parks or reports `human_help_required` rather than self-authorizing.
-
-Ask-then-default-park is the only headless behavior: a non-interactive session, an ask that errors, an ask answered by a non-operator, or one that exceeds the caller's stated timeout parks resumable, and never assumes yes. `PIPELINE_EXHAUSTION_ASK=0` restores the old hard block for headless CI and is a kill switch on the ASK, never an enabler of silent fallback. The ask cannot broaden configured-key OpenRouter workload, disclosure, path, or output boundaries; the final full dm-review is never waived, required family independence remains, and sensitive-path chunks are never implemented under fallback authorization. The routing policy object is `exhaustionFallback` in `plugins/pipeline/references/routing-policy.json`.
+Ask-then-default-park is the only headless behavior: a non-interactive session, an ask that errors, an ask answered by a non-operator, or one that exceeds the caller's stated timeout parks resumable. `PIPELINE_EXHAUSTION_ASK=0` selects the same resumable park directly for headless CI. The ask cannot broaden configured-key OpenRouter workload, disclosure, path, or output boundaries; the final full dm-review is never waived, required family independence remains, and sensitive-path chunks are never rerouted. The routing policy object is `exhaustionFallback` in `plugins/pipeline/references/routing-policy.json`.
 
 ## Process
 

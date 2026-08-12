@@ -138,7 +138,7 @@ done
 authorization_contract="$ROOT/plugins/pipeline/references/openrouter-authorization-contract.md"
 grep -Fq 'OPENROUTER_API_KEY_FILE' "$authorization_contract" &&
 grep -Fq 'delegation-boundary.sh --mode artifact-delegation' "$authorization_contract" &&
-grep -Fq 'has no effect on configured-key dispatch' "$authorization_contract" || {
+grep -Fq 'configured-key path has no broker dependency' "$authorization_contract" || {
   echo "  FAIL  configured-key OpenRouter authorization contract absent"
   failures=1
 }
@@ -189,7 +189,6 @@ do
   grep -Fq 'OPENROUTER_API_KEY_FILE' "$file" &&
   grep -Fq 'delegation-boundary.sh' "$file" &&
   grep -Fq -- '--mode artifact-delegation' "$file" &&
-  ! grep -Fq '/usr/local/bin/workflow-authority' "$file" &&
   ! grep -Fq 'dispatch-provider-request' "$file" &&
   ! grep -Fq 'OPENROUTER_PAYLOAD_AUTHORIZATION' "$file" &&
   ! grep -Fq 'OPENROUTER_PAYLOAD_APPROVAL_SHA256' "$file" || {

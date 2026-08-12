@@ -6,8 +6,8 @@
   "additionalProperties": false,
   "required": [
     "schema_version", "artifact_role", "profile_id", "profile_ref",
-    "profile_digest", "approval_digest", "repository_scope_digest",
-    "run_id", "trusted_base_commit", "request", "status", "lanes"
+    "profile_digest", "execution_closure_digest", "repository_scope_digest",
+    "request", "status", "lanes"
   ],
   "properties": {
     "schema_version": {"const": 1},
@@ -15,21 +15,17 @@
     "profile_id": {"type": "string"},
     "profile_ref": {"type": "string"},
     "profile_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
-    "approval_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "execution_closure_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "repository_scope_digest": {
       "type": "string",
       "pattern": "^sha256:[0-9a-f]{64}$"
-    },
-    "run_id": {"type": "string"},
-    "trusted_base_commit": {
-      "type": "string",
-      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
     },
     "request": {
       "type": "object",
       "additionalProperties": false,
       "required": [
-        "boundary", "risk", "base_commit", "head_commit", "changed_paths"
+        "boundary", "risk", "base_commit", "head_commit", "include_worktree",
+        "changed_paths"
       ],
       "properties": {
         "boundary": {
@@ -44,6 +40,7 @@
           "type": "string",
           "pattern": "^(?:unresolved|[0-9a-f]{40}|[0-9a-f]{64})$"
         },
+        "include_worktree": {"type": "boolean"},
         "changed_paths": {
           "type": "array",
           "maxItems": 100000,

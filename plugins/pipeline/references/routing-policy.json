@@ -230,20 +230,16 @@
     }
   },
   "exhaustionFallback": {
-    "_comment": "Fires when every rail permitted for a chunk is exhausted or gated (cascade RC 76). The current ask can wait or park only. Executable fallback authorization is unavailable until trusted host authority can issue and consume a replay-resistant single-use capability. PIPELINE_EXHAUSTION_ASK=0 restores the hard block for headless CI.",
+    "_comment": "Fires when every configured rail for a chunk is exhausted or gated (cascade RC 76). The operator may wait or park; there is no hidden fallback rail. PIPELINE_EXHAUSTION_ASK=0 restores the hard block for headless CI.",
     "mode": "ask",
     "headlessDefault": "park",
-    "offerableDerivation": "none until trusted host authority exists; live rail status is still shown to inform wait versus park",
     "neverOfferable": [
       "openrouter_automated_lanes",
-      "any provider for sensitive-path chunks",
-      "every executable fallback provider until trusted single-use host authority exists"
+      "any provider for sensitive-path chunks"
     ],
-    "operatorOverride": "optional file OUTSIDE the workspace may narrow the derived list (per-developer subscriptions differ). It is applied LAST in the ask-time derivation and can only REMOVE options: an entry it names that the derivation did not find is ignored rather than added, and nothing in neverOfferable is ever reachable through it. Its annotations are never rendered into the ask. It must not live in the workspace, because a prior chunk's own output could rewrite an in-workspace file to strip every option but the orchestrator itself.",
     "failClosed": "a missing routing-policy.json, a missing or malformed exhaustionFallback, or any mode other than ask restores the old hard block; no configuration read failure yields a path to fallback",
-    "authorization": "future design only; caller-owned receipts authorize nothing until a trusted host issuer binds and consumes a replay-resistant capability for the ask, repository, run, chunk, provider, phase, and attempt",
     "liveStatusRequired": "the ask shows the derived status per rail (capped-until / available / unknown) so the operator decides from live facts; where usage-probe parsers are TODO stubs the ask says unknown rather than guessing",
-    "rationale": "The provider boundary forbids silent or caller-authorized fallback. The current ask supports wait or park; future executable fallback requires trusted host authority."
+    "rationale": "Wait or park preserves resumable state when the configured Codex and OpenRouter rails are unavailable."
   },
   "invariants": {
     "crossProviderVerification": true,

@@ -153,6 +153,7 @@ verification_contract_runtime="$REPO_ROOT/plugins/workflow-kernel/skills/workflo
 verification_execution="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/verification_execution.py"
 repository_verification="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/repository-verification.md"
 assembly_build="$REPO_ROOT/plugins/assembly/commands/assembly-build.md"
+assembly_test_runner="$REPO_ROOT/plugins/assembly/agents/workflow/go-test-runner.md"
 assembly_go_tests="$REPO_ROOT/plugins/assembly/agents/workflow/go-test-runner.md"
 assembly_verification_profile="$REPO_ROOT/plugins/assembly/references/repository-verification-profile.example.json"
 assembly_development="$REPO_ROOT/plugins/assembly/skills/development/SKILL.md"
@@ -239,7 +240,7 @@ require_text "$review_loop" 'rerun_reasons = every lane in lanes_rerun -> ["sele
 require_text "$review_loop" '`.workflow-kernel/`' "dm-review-loop excludes self-authored review artifacts from trigger matching"
 require_text "$review_loop" '`full_fanout_override: true` and' "dm-review-loop keeps full-fanout skip sets empty"
 require_text "$review_loop" 'explicit booleans `selective_rerun`, `promoted_to_full`, and' "dm-review-loop emits all required iteration booleans"
-require_text "$review_skill" 'caller-owned receipts authorize nothing' "dm-review rejects caller-owned exhaustion authority"
+require_text "$review_skill" 'There is no additional authorization or fallback rail.' "dm-review has no hidden exhaustion rail"
 require_absent "$review_skill" 'authorize one operator-selected fallback provider for THIS LANE' "dm-review removes executable exhaustion option b"
 require_absent "$review_loop" '`lanes_skipped` -- `selected_full_set` minus those ATTEMPTED rows.' "dm-review-loop removes the retired attempted-complement skip formula"
 require_absent "$review_loop_skill" '`lanes_skipped` -- `selected_full_set` minus those ATTEMPTED rows.' "generated dm-review-loop removes the retired attempted-complement skip formula"
@@ -362,7 +363,7 @@ require_text "$review_skill" "Kernel prediction is observation-only" "dm-review 
 require_text "$review_skill" "human_help_required" "dm-review preserves required browser recovery escalation"
 require_text "$verification_contract" "## Behavioral contract lifecycle" "shared verification contract defines the behavioral lifecycle"
 require_text "$verification_contract" '`bind-verification-contract`' "shared verification contract binds before dispatch"
-require_text "$verification_contract" '`revise-verification-contract`' "shared verification contract audits revisions"
+require_text "$verification_contract" 'The binding is immutable for that run.' "shared verification contract is immutable within a run"
 require_text "$verification_contract" "quit the primary process or engine session" "shared verification contract requires primary quit"
 require_text "$verification_contract" "fresh primary session" "shared verification contract requires primary restart"
 require_text "$verification_contract" "different configured" "shared verification contract requires an alternate engine"
@@ -373,7 +374,7 @@ require_text "$verification_contract" 'Every prohibited regression has an' "shar
 require_before "$orchestrator" 'bind-verification-contract --state-dir' '### 3d: Dispatch Implementation Subagent' "orchestrator binds contract before dispatch"
 require_before "$pipeline_run" 'bind-verification-contract --state-dir' '**Implementation dispatch:**' "pipeline-run binds contract before dispatch"
 require_text "$orchestrator" 'bind-verification-contract --state-dir .workflow-kernel/runs/<run-id>' "orchestrator binds contracts in the canonical run directory"
-require_text "$orchestrator" 'revise-verification-contract --state-dir .workflow-kernel/runs/<run-id>' "orchestrator revises contracts in the canonical run directory"
+require_absent "$orchestrator" 'revise-verification-contract' "orchestrator has no contract-revision protocol"
 require_text "$pipeline_run" 'bind-verification-contract --state-dir .workflow-kernel/runs/<run-id>' "pipeline-run binds contracts in the canonical run directory"
 require_absent "$orchestrator" 'bind-verification-contract --state-dir plans/' "orchestrator never binds contracts in the observation directory"
 require_absent "$pipeline_run" 'bind-verification-contract --state-dir plans/' "pipeline-run never binds contracts in the observation directory"
@@ -381,7 +382,7 @@ require_text "$orchestrator" "STEP5B_ORDER: docker_reconcile -> artifact_git_cle
 require_text "$orchestrator" "Broad prune, wildcards, negative filters, and name-based ownership are forbidden." "orchestrator forbids broad Docker cleanup"
 require_text "$kernel_skill" "Initialize every run in shadow mode" "kernel documents shadow default"
 require_text "$kernel_cli" "default=RunMode.SHADOW.value" "kernel CLI defaults to shadow"
-require_text "$kernel_promotion" "separate_human_approval_required" "promotion rejects native default without human approval"
+require_text "$kernel_promotion" "native_default_not_supported" "promotion keeps native default unsupported"
 
 # --------------------------------------------------------------------------
 # Group 5: Pipeline performance contract
@@ -401,11 +402,8 @@ require_text "$pipeline_prompts" 'exact closed `decisionProfile`' "pipeline-prom
 require_text "$pipeline_prompts" '`bind-verification-contract`' "pipeline-prompts publishes contract binding"
 require_text "$pipeline_prompts" '`decide-validation-retry`' "pipeline-prompts publishes bounded validation feedback"
 require_text "$pipeline_prompts" "primary process/session quit" "pipeline-prompts publishes primary browser recovery"
-require_text "$orchestrator" 'Authorized native fallback is unavailable until trusted host authority' "orchestrator keeps RC76 native fallback unavailable"
-require_text "$orchestrator" 'Omit option (b) for every chunk.' "orchestrator omits caller-owned fallback authorization"
-require_text "$orchestrator" 'Future receipt design -- non-executable.' "orchestrator quarantines the future authorization receipt shape"
-require_text "$orchestrator" 'Collect display-only rail status at ask time.' "orchestrator keeps current rail status informational"
-require_text "$orchestrator" 'Accept exactly `wait` or `park`.' "orchestrator closes the current ask action vocabulary"
+require_text "$orchestrator" 'The ask is scheduling only.' "orchestrator keeps RC76 as a scheduling decision"
+require_text "$orchestrator" 'offer exactly `wait` or `park`' "orchestrator closes the current ask action vocabulary"
 if grep -Fq -- 'The answer must be an exact identifier from the derived list.' "$orchestrator"; then
   printf "  FAIL  orchestrator still requires a provider identifier for the wait/park ask\n"
   failures=1
@@ -448,8 +446,8 @@ for loop_contract in "$review_loop" "$review_loop_skill"; do
   require_line "$loop_contract" '          promoted_to_full = true' "$loop_contract_relative records ordinary full-review promotion"
 done
 require_text "$review_skill" '`review_lane_allowlist`' "review receiver names the selective lane allowlist"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.13.6"' "dm-review requires the kernel release with bound OpenRouter receipt identity"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.60.0"' "pipeline requires configured-key dm-review release"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.14.0"' "dm-review requires the simplified verification kernel release"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.60.1"' "pipeline requires configured-key dm-review release"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'family-independent second-opinion review' "dm-review manifest describes family-independent perspective resolution"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'Full mode only.' "migration-validator registry limits the lane to full mode"
@@ -477,11 +475,19 @@ require_absent "$orchestrator" 'feed it to `observe-pipeline`' "orchestrator avo
 require_text "$verification_contract_runtime" '"chunk", "revision_batch", "execution_level", "merge_candidate"' "kernel owns the closed verification boundaries"
 require_text "$verification_contract_runtime" '"doctor", "fast", "focused", "full", "race", "harness", "remote"' "kernel owns the closed verification tiers"
 require_text "$verification_execution" "subprocess.Popen(" "kernel executes planned argv through the contained runner"
-require_text "$verification_execution" "stdin=subprocess.DEVNULL" "kernel detaches broker stdin before repository execution"
+require_text "$verification_execution" "stdin=subprocess.DEVNULL" "kernel detaches caller stdin before repository execution"
 require_text "$verification_execution" "start_new_session=True" "kernel isolates repository command process groups"
 require_absent "$verification_execution" "shell=True" "kernel never delegates verification argv through a shell"
-require_text "$repository_verification" "The cache key covers:" "verification receipts document content-addressed reuse"
-require_text "$repository_verification" "Boundary is intentionally not part of the key." "identical candidate evidence can reuse level receipts"
+require_text "$repository_verification" "Its cache key" "verification receipts document content-addressed reuse"
+require_text "$repository_verification" 'Only a structurally valid local `passed` receipt can be reused.' "receipt reuse requires a complete local pass"
+require_text "$assembly_build" 'Workflow Kernel `>=0.14.0`' "assembly resolves the exact-ref verification runtime floor"
+require_text "$pipeline_run" 'Workflow Kernel `>=0.14.0`' "pipeline resolves the exact-ref verification runtime floor"
+require_text "$orchestrator" 'Workflow Kernel `>=0.14.0`' "orchestrator resolves the exact-ref verification runtime floor"
+require_text "$assembly_test_runner" 'Workflow Kernel `>=0.14.0`' "assembly runner resolves the exact-ref verification runtime floor"
+require_text "$orchestrator" 'The kernel does not import remote results.' "pipeline keeps remote evidence outside the local kernel"
+require_text "$assembly_test_runner" 'caller independently collected any required native CI or' "assembly separates remote evidence from local receipts"
+require_absent "$orchestrator" 'validated and authenticated by the host integration' "pipeline removes authenticated provider completion"
+require_absent "$assembly_test_runner" 'reused authenticated' "assembly removes authenticated receipt reuse"
 require_text "$orchestrator" "### 1d: Repository Verification Planner" "orchestrator resolves repository-owned verification before dispatch"
 require_text "$assembly_development" "4-50" "Assembly doctrine names the default member scale"
 require_text "$assembly_development" "two-person development team" "Assembly doctrine names the default team scale"
@@ -522,23 +528,18 @@ require_text "$assembly_go_tests" "Batch all fixes from one review pass" "assemb
 require_text "$assembly_go_tests" "Preserve full race, security, container, browser," "assembly runner keeps expensive remote lanes explicit"
 require_text "$assembly_verification_profile" '"argv": [' "assembly publishes argv-array profile examples"
 require_text "$assembly_verification_profile" '"id": "go-full-race"' "assembly profile retains candidate race coverage"
-require_text "$orchestrator" "Ask-then-default-park is the only headless behavior" "orchestrator parks rather than assuming yes on rail exhaustion"
-require_text "$orchestrator" "The exhaustion ask cannot enable or broaden OpenRouter work." "orchestrator keeps configured-key boundaries non-overridable by the exhaustion ask"
-require_text "$orchestrator" "never implemented under fallback authorization" "orchestrator excludes sensitive-path chunks from fallback"
-require_text "$orchestrator" "The final full dm-review is never waived" "orchestrator never waives the final review for capacity"
-require_text "$orchestrator" "Future receipt design -- non-executable" "orchestrator keeps fallback receipt design non-executable"
-require_text "$orchestrator" "ask_evidence_ref" "orchestrator binds the authorization receipt to a real ask exchange"
-# The bare field name above is satisfied by the JSON literal alone, so the
-# sentence that gives it force gets its own anchor.
-require_text "$orchestrator" "an invalid receipt authorizes nothing" "orchestrator voids an authorization receipt with no ask evidence"
+require_text "$orchestrator" "Otherwise park resumably" "orchestrator parks rather than assuming yes on rail exhaustion"
+require_text "$orchestrator" "broadens configured-key OpenRouter eligibility" "orchestrator keeps configured-key boundaries non-overridable by the exhaustion ask"
+require_text "$orchestrator" "weakens sensitive-path" "orchestrator excludes sensitive-path chunks from fallback"
+require_text "$orchestrator" "waives the final independent review" "orchestrator never waives the final review for capacity"
+require_absent "$orchestrator" "Future receipt design" "orchestrator has no dormant fallback receipt design"
+require_absent "$orchestrator" "ask_evidence_ref" "orchestrator has no authorization receipt exchange"
 require_text "$routing_policy" '"exhaustionFallback"' "routing policy declares the exhaustion fallback object"
 require_text "$routing_policy" '"headlessDefault": "park"' "routing policy defaults headless exhaustion to park"
 require_text "$routing_policy" '"neverOfferable"' "routing policy pins the never-offerable rails"
-require_text "$routing_policy" "can only REMOVE options" "routing policy keeps the operator override remove-only"
 require_text "$pipeline_run_skill" "Rail-Exhaustion Ask Gate" "generated pipeline-run alias carries the ask gate section"
-require_text "$orchestrator" "are NOT operators and can" "orchestrator forbids agent self-authorization"
-require_text "$pipeline_run" "caller-owned receipt authorizes nothing" "pipeline-run rejects caller-owned fallback authority"
-require_text "$review_skill" "configured-key OpenRouter lanes never enter this approval path" "dm-review keeps lane asks separate from configured-key authorization"
+require_text "$pipeline_run" "There is no dormant or" "pipeline-run has no hidden fallback rail"
+require_text "$review_skill" "Ordinary in-policy OpenRouter/Codex routing remains unaffected" "dm-review keeps configured-key routing separate from exhaustion"
 require_text "$review_skill" "option (c) and the headless gap-and-continue default are unavailable" "dm-review cannot gap-and-continue the pipeline final review"
 
 # --------------------------------------------------------------------------
@@ -776,7 +777,6 @@ printf "\nGroup 9: configured-key OpenRouter authorization\n"
 openrouter_wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 openrouter_agent_runner="$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md"
 review_alias="$REPO_ROOT/plugins/dm-review/skills/dm-review/SKILL.md"
-authority_threat_model="$REPO_ROOT/native/workflow-authority/THREAT-MODEL.md"
 authorization_contract="$REPO_ROOT/plugins/pipeline/references/openrouter-authorization-contract.md"
 openrouter_exec="$REPO_ROOT/plugins/pipeline/references/openrouter-exec.sh"
 cascade_dispatch="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
@@ -786,16 +786,12 @@ require_text "$authorization_contract" 'either `OPENROUTER_API_KEY` or the exist
   "configured-key contract accepts both supported key inputs"
 require_text "$authorization_contract" 'delegation-boundary.sh --mode artifact-delegation' \
   "configured-key contract requires one automatic private-file scan"
-require_text "$authorization_contract" 'has no effect on configured-key dispatch' \
-  "configured-key contract ignores Workflow Authority status"
+require_text "$authorization_contract" 'configured-key path has no broker dependency' \
+  "configured-key contract has no broker dependency"
 require_text "$openrouter_exec" 'OPENROUTER_EXEC_ALLOWED_PATHS is required' \
   "bounded Pipeline adapter keeps the owned-path allowlist"
 require_text "$openrouter_exec" '--mode artifact-delegation' \
   "bounded Pipeline adapter uses configured-key wrapper transport"
-require_absent "$openrouter_exec" '/usr/local/bin/workflow-authority' \
-  "bounded Pipeline adapter has no broker probe"
-require_absent "$cascade_dispatch" '/usr/local/bin/workflow-authority' \
-  "Pipeline cascade has no broker probe"
 require_text "$review_skill" 'dispatch immediately' \
   "dm-review resolves eligible configured-key lanes non-interactively"
 require_text "$review_skill" 'OPENROUTER_API_KEY_FILE' \
@@ -826,8 +822,8 @@ require_text "$noninteractive_fixtures" 'test_direct_is_one_pass_and_receipt_is_
   "loopback fixtures cover one-pass direct dispatch and receipt hygiene"
 require_text "$noninteractive_fixtures" 'test_pipeline_rejects_disallowed_path_before_application' \
   "loopback fixtures cover pre-application path rejection"
-require_text "$noninteractive_fixtures" 'test_active_surfaces_ignore_workflow_authority' \
-  "fixtures cover active broker independence"
+require_text "$noninteractive_fixtures" 'test_active_surfaces_have_no_approval_machinery' \
+  "fixtures cover active approval-machinery absence"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md" \
   '`implementer_family`, `reviewer_family`, `resolution_reason`' \
   "dm-review output contract requires family provenance on contribution decisions"
@@ -909,22 +905,14 @@ require_text "$REPO_ROOT/docs/cascade-migration.md" \
   "configured-key" \
   "cascade guidance documents configured-key availability"
 require_text "$REPO_ROOT/docs/cascade-migration.md" \
-  "Workflow Authority status is not consulted" \
-  "cascade guidance makes broker state irrelevant"
+  "configured-key path has no broker dependency" \
+  "cascade guidance has no broker dependency"
 require_text "$REPO_ROOT/docs/cascade-migration.md" \
   "read-only independent review" \
   "cascade guidance preserves Claude's narrow independent review role"
 require_absent "$REPO_ROOT/docs/cascade-migration.md" \
   "never for implementation or code review" \
   "cascade guidance does not forbid the shipped independent Claude review role"
-require_text "$authority_threat_model" "lane-to-digest/model mapping" \
-  "workflow-authority threat model documents schema-v2 lane membership"
-require_text "$authority_threat_model" "candidates, provider routing" \
-  "workflow-authority threat model binds model and provider routing"
-require_absent "$authority_threat_model" 'payload_digests' \
-  "workflow-authority threat model removes retired content-only digest vocabulary"
-require_absent "$authority_threat_model" "only exact ordered content bytes" \
-  "workflow-authority threat model does not revert to content-only binding"
 for f in "$openrouter_agent_runner" "$openrouter_wrapper"; do
   rel="${f#$REPO_ROOT/}"
   require_text "$f" "security review role requires Kimi K3 primary and GPT-5.6 Terra fallback" \

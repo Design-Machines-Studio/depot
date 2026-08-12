@@ -18,8 +18,7 @@
           "required", "status", "reason", "command_digest", "input_digest",
           "cache_key", "exit_code", "duration_seconds",
           "source_receipt_digest", "stdout_digest", "stderr_digest",
-          "stdout_bytes", "stderr_bytes", "profile_digest", "head_commit",
-          "provider_run_id", "observed_at", "evidence_digest", "receipt_auth"
+          "stdout_bytes", "stderr_bytes", "profile_digest", "head_commit"
         ],
         "properties": {
           "schema_version": {"const": 1},
@@ -79,18 +78,8 @@
           "stdout_bytes": {"type": "integer", "minimum": 0},
           "stderr_bytes": {"type": "integer", "minimum": 0},
           "head_commit": {
-            "type": ["string", "null"],
-            "pattern": "^(?:unresolved|[0-9a-f]{40}|[0-9a-f]{64})$"
-          },
-          "provider_run_id": {"type": ["string", "null"]},
-          "observed_at": {"type": ["string", "null"]},
-          "evidence_digest": {
-            "type": ["string", "null"],
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "receipt_auth": {
             "type": "string",
-            "pattern": "^hmac-sha256:[0-9a-f]{64}$"
+            "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
           }
         }
       }

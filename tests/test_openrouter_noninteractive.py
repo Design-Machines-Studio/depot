@@ -126,16 +126,14 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         for forbidden in ("review harmless", "fixture response", "api_key", "secret"):
             self.assertNotIn(forbidden, serialized)
 
-    def configure_fake_authority(self, state: str) -> None:
-        fake = self.root / "workflow-authority"
-        if state == "absent":
-            fake.unlink(missing_ok=True)
-        elif state == "ready":
-            fake.write_text('#!/bin/sh\nprintf \'%s\\n\' \'{"status":"ready"}\'\n')
-            fake.chmod(0o755)
-        else:
-            fake.write_text("#!/bin/sh\nexit 1\n")
-            fake.chmod(0o755)
+    def test_transport_keeps_bearer_value_out_of_curl_argv_and_environment(self) -> None:
+        wrapper = WRAPPER.read_text()
+        self.assertNotIn('-H "Authorization: Bearer $OPENROUTER_API_KEY"', wrapper)
+        self.assertIn('-H "@$authorization_header_file"', wrapper)
+        self.assertIn("unset OPENROUTER_API_KEY OPENROUTER_API_KEY_FILE", wrapper)
+        result = self.direct("Review harmless public configuration.")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(FixtureHandler.contacts, 1)
 
     def test_sensitive_payload_declines_before_contact(self) -> None:
         result = self.direct("OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890")
@@ -296,7 +294,7 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         self.assertEqual(invalid.returncode, 77)
         self.assertNotRegex(invalid.stderr, r"approve|question")
 
-    def test_active_surfaces_ignore_workflow_authority(self) -> None:
+    def test_active_surfaces_have_no_approval_machinery(self) -> None:
         active = [
             REPO / "plugins/openrouter/commands/openrouter.md",
             REPO / "plugins/openrouter/agents/workflow/openrouter-agent-runner.md",
@@ -304,8 +302,6 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
             REPO / "plugins/pipeline/references/openrouter-exec.sh",
             REPO / "plugins/pipeline/references/cascade-dispatch.sh",
         ]
-        shell_active = "\n".join(path.read_text() for path in active[-2:])
-        self.assertNotIn("/usr/local/bin/workflow-authority", shell_active)
         combined = "\n".join(path.read_text() for path in active)
         self.assertNotIn("exit 78", combined)
         self.assertNotIn("status\":\"approval_required", combined)
@@ -321,16 +317,13 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         self.assertIn('[ -n "${OPENROUTER_API_KEY_FILE:-}" ]', orchestrator)
         self.assertIn("export WORKFLOW_KERNEL", orchestrator)
 
-        for state in ("absent", "ready", "broken"):
-            with self.subTest(authority_state=state):
-                self.configure_fake_authority(state)
-                direct = self.direct("Review harmless public configuration.", self.installed)
-                self.assertEqual(direct.returncode, 0, direct.stderr)
-                repo = self.init_repo(f"repo-{state}")
-                diff = ("diff --git a/allowed.txt b/allowed.txt\n--- a/allowed.txt\n"
-                        "+++ b/allowed.txt\n@@ -1 +1 @@\n-before\n+after")
-                pipeline = self.run_pipeline(repo, diff)
-                self.assertEqual(pipeline.returncode, 0, pipeline.stderr)
+        direct = self.direct("Review harmless public configuration.", self.installed)
+        self.assertEqual(direct.returncode, 0, direct.stderr)
+        repo = self.init_repo("repo-no-broker")
+        diff = ("diff --git a/allowed.txt b/allowed.txt\n--- a/allowed.txt\n"
+                "+++ b/allowed.txt\n@@ -1 +1 @@\n-before\n+after")
+        pipeline = self.run_pipeline(repo, diff)
+        self.assertEqual(pipeline.returncode, 0, pipeline.stderr)
 
 
 if __name__ == "__main__":

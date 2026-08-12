@@ -35,7 +35,7 @@ LANE_KEYS = frozenset({
     "id", "tier", "cadences", "owner", "argv", "changed_paths",
     "input_paths", "package_selector", "declared_dependents", "required",
     "cache", "risks", "cache_environment", "required_environment",
-    "authority_paths", "authority_environment", "after",
+    "execution_paths", "execution_environment", "after",
     "mutates_repository", "timeout_seconds",
 })
 ID_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
@@ -143,16 +143,16 @@ def _validate_lane(lane, index):
     input_paths = _string_list(
         lane.get("input_paths", []), f"{label} input_paths", _glob,
     )
-    authority_paths = _string_list(
-        lane.get("authority_paths", []), f"{label} authority_paths", _glob,
+    execution_paths = _string_list(
+        lane.get("execution_paths", []), f"{label} execution_paths", _glob,
     )
     if cache == "content" and owner == "local" and not input_paths:
         raise VerificationPlannerError(
             f"{label} content cache requires input_paths",
         )
-    if owner == "local" and not authority_paths:
+    if owner == "local" and not execution_paths:
         raise VerificationPlannerError(
-            f"{label} local execution requires authority_paths",
+            f"{label} local execution requires execution_paths",
         )
     dependents = lane.get("declared_dependents", {})
     if type(dependents) is not dict or len(dependents) > MAX_ITEMS:
@@ -175,16 +175,16 @@ def _validate_lane(lane, index):
     required_environment = _environment_names(
         lane, "required_environment", label,
     )
-    authority_environment = _environment_names(
-        lane, "authority_environment", label,
+    execution_environment = _environment_names(
+        lane, "execution_environment", label,
     )
     if not set(required_environment) <= set(cache_environment):
         raise VerificationPlannerError(
             f"{label} required environment must also bind the cache key",
         )
-    if not set(authority_environment) <= set(cache_environment):
+    if not set(execution_environment) <= set(cache_environment):
         raise VerificationPlannerError(
-            f"{label} authority environment must also bind the cache key",
+            f"{label} execution environment must also bind the cache key",
         )
     if (
         owner == "local"
@@ -193,7 +193,7 @@ def _validate_lane(lane, index):
         )
         and (
             "DM_VERIFICATION_SUBSTRATE" not in required_environment
-            or "DM_VERIFICATION_SUBSTRATE" not in authority_environment
+            or "DM_VERIFICATION_SUBSTRATE" not in execution_environment
         )
     ):
         raise VerificationPlannerError(
@@ -221,13 +221,13 @@ def _validate_lane(lane, index):
     return {
         "id": lane_id, "tier": tier, "cadences": cadences, "owner": owner,
         "argv": argv, "changed_paths": changed_paths,
-        "input_paths": input_paths, "authority_paths": authority_paths,
+        "input_paths": input_paths, "execution_paths": execution_paths,
         "package_selector": package_selector,
         "declared_dependents": canonical_dependents, "required": required,
         "cache": cache, "risks": risks,
         "cache_environment": cache_environment,
         "required_environment": required_environment,
-        "authority_environment": authority_environment, "after": after,
+        "execution_environment": execution_environment, "after": after,
         "mutates_repository": mutates_repository,
         "timeout_seconds": timeout_seconds,
     }
@@ -662,18 +662,18 @@ def _timestamp(value, label):
     return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
 
 
-def _authority_patterns(profile):
+def _execution_patterns(profile):
     return tuple(sorted({
         pattern
         for lane in profile["lanes"]
-        for pattern in lane["authority_paths"]
+        for pattern in lane["execution_paths"]
     }))
 
 
-def _authority_digest(
+def _execution_digest(
     profile, repository, environment, *, path_digest=None,
 ):
-    patterns = _authority_patterns(profile)
+    patterns = _execution_patterns(profile)
     if path_digest is None:
         path_digest = _input_digests(repository, {patterns}).get(
             patterns, _digest([]),
@@ -681,7 +681,7 @@ def _authority_digest(
     environment_names = sorted({
         name
         for lane in profile["lanes"]
-        for name in lane["authority_environment"]
+        for name in lane["execution_environment"]
     })
     return _digest({
         "paths": path_digest,
@@ -689,16 +689,16 @@ def _authority_digest(
     })
 
 
-def _authority_digest_at_commit(profile, repository, commit, environment):
-    return _authority_digest(
+def _execution_digest_at_commit(profile, repository, commit, environment):
+    return _execution_digest(
         profile, repository, environment,
         path_digest=_tree_input_digest(
-            repository, commit, _authority_patterns(profile),
+            repository, commit, _execution_patterns(profile),
         ),
     )
 
 
-# Public lower-layer interfaces consumed by approval, planning, and execution.
+# Public lower-layer interfaces consumed by planning and execution.
 closed_document = _closed
 bounded_string = _string
 repository_file = _repository_file
@@ -708,9 +708,9 @@ hash_repository_file = _hash_repository_file
 input_digests = _input_digests
 tree_input_digests = _tree_input_digests
 timestamp = _timestamp
-authority_digest = _authority_digest
-authority_digest_at_commit = _authority_digest_at_commit
-authority_patterns = _authority_patterns
+execution_digest = _execution_digest
+execution_digest_at_commit = _execution_digest_at_commit
+execution_patterns = _execution_patterns
 environment_digest = _environment_digest
 expanded_argv = _expanded_argv
 matches = _matches

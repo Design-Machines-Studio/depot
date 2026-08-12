@@ -1,6 +1,5 @@
 import json
 import hashlib
-import hmac
 import os
 import subprocess
 import sys
@@ -17,32 +16,6 @@ from tests import KERNEL_REFERENCES
 FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
 SCOPE_ID = "a" * 64
 
-
-def signed_contract_approval(previous_digest, candidate_digest, *,
-                             run_id="contract-run", nonce="approval-nonce-1",
-                             key=b"k" * 32):
-    from workflow_kernel.behavioral_contract import approval_signing_bytes
-
-    now = datetime.now(timezone.utc)
-    value = {
-        "schema_version": 1, "actor": "reviewer-1",
-        "authority": "design-machines-human-approval-v1",
-        "decision": "approved",
-        "issued_at": (now - timedelta(minutes=1)).isoformat().replace("+00:00", "Z"),
-        "expires_at": (now + timedelta(minutes=4)).isoformat().replace("+00:00", "Z"),
-        "run_id": run_id, "nonce": nonce,
-        "previous_contract_digest": previous_digest,
-        "candidate_contract_digest": candidate_digest,
-        "signature": "hmac-sha256:" + "0" * 64,
-    }
-    signature = hmac.new(
-        key, approval_signing_bytes(
-            value, previous_digest=previous_digest,
-            candidate_digest=candidate_digest, run_id=run_id,
-        ), hashlib.sha256,
-    ).hexdigest()
-    value["signature"] = "hmac-sha256:" + signature
-    return value
 
 
 def shadow_artifact(role, run_spec, events=None):
@@ -99,7 +72,6 @@ def verification_contract(*, marker=None):
                 "REG-001", "REQ-001",
             ],
             "retained_obligation_ids": [], "removed_obligation_ids": [],
-            "human_approval_evidence_ref": None,
         },
     }
 
@@ -370,9 +342,6 @@ class RuntimeCliTests(unittest.TestCase):
                 "contract_ref": reference,
                 "previous_contract_digest": contract["previous_contract_digest"],
                 "reason_code": justification["reason_code"],
-                "human_approval_evidence_ref": justification[
-                    "human_approval_evidence_ref"
-                ],
                 "verification_profile_id": contract["verification_profile_id"],
                 "verification_profile_digest": contract["verification_profile_digest"],
                 "verification_profile_ref": None,
@@ -770,7 +739,7 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertEqual(set(receipt), {
                 "stage", "contract_id", "schema_version", "revision",
                 "contract_digest", "contract_ref", "previous_contract_digest",
-                "reason_code", "human_approval_evidence_ref",
+                "reason_code",
                 "verification_profile_id", "verification_profile_digest",
                 "verification_profile_ref",
             })
@@ -797,217 +766,6 @@ class RuntimeCliTests(unittest.TestCase):
             event = json.loads(events_before.splitlines()[-1])
             self.assertEqual(event["kind"], "evidence.recorded")
             self.assertEqual(event["payload"]["stage"], "verification_contract_bound")
-
-    def test_verification_contract_revision_uses_replay_and_rejects_stale_digest(self):
-        from workflow_kernel.behavioral_contract import contract_digest
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self.init_lifecycle(root, "contract-run")
-            run_dir = root / ".workflow-kernel" / "runs" / "contract-run"
-            initial_value = verification_contract()
-            initial = root / "contract-1.json"
-            initial.write_text(json.dumps(initial_value))
-            bound = self.run_cli(
-                "bind-verification-contract", "--state-dir", run_dir,
-                "--contract", initial,
-            )
-            self.assertEqual(bound.returncode, 0, bound.stderr)
-
-            revision_value = json.loads(json.dumps(initial_value))
-            revision_value["revision"] = 2
-            revision_value["previous_contract_digest"] = contract_digest(initial_value)
-            revision_value["prohibited_regressions"] = []
-            revision_value["checks"][0]["proves_regression_ids"] = []
-            revision_value["revision_justification"] = {
-                "reason_code": "approved_scope_change", "summary": "Approved removal.",
-                "added_obligation_ids": [],
-                "retained_obligation_ids": ["PROOF:CHK-001:REQ-001", "REQ-001"],
-                "removed_obligation_ids": ["REG-001", "PROOF:CHK-001:REG-001"],
-                "human_approval_evidence_ref": "plans/contract/plan.html#approval",
-            }
-            revision = root / "contract-2.json"
-            revision.write_text(json.dumps(revision_value))
-            approval = root / "approval.json"
-            capability_key = b"k" * 32
-            approval.write_text(json.dumps(signed_contract_approval(
-                contract_digest(initial_value), contract_digest(revision_value),
-                key=capability_key,
-            )))
-            capability_descriptor, capability_name = tempfile.mkstemp(
-                prefix="workflow-kernel-host-approval-", suffix=".json",
-            )
-            os.close(capability_descriptor)
-            capability = Path(capability_name)
-            self.addCleanup(capability.unlink, missing_ok=True)
-            capability.write_text(json.dumps({
-                "schema_version": 1,
-                "authority": "design-machines-human-approval-v1",
-                "key_hex": capability_key.hex(),
-            }))
-            capability.chmod(0o600)
-            forged_approval = root / "forged-approval.json"
-            forged_approval.write_text(json.dumps({
-                **json.loads(approval.read_text()),
-                "candidate_contract_digest": "sha256:" + "0" * 64,
-            }))
-            events_before = (run_dir / "events.jsonl").read_bytes()
-            rejected_approval = self.run_cli(
-                "revise-verification-contract", "--state-dir", run_dir,
-                "--contract", revision, "--approval", forged_approval,
-            )
-            self.assertEqual(rejected_approval.returncode, 2)
-            self.assertEqual((run_dir / "events.jsonl").read_bytes(), events_before)
-            self_authored = self.run_cli(
-                "revise-verification-contract", "--state-dir", run_dir,
-                "--contract", revision, "--approval", approval,
-            )
-            self.assertEqual(self_authored.returncode, 2)
-            self.assertEqual((run_dir / "events.jsonl").read_bytes(), events_before)
-            no_host_key = self.run_cli(
-                "authorize-verification-contract-revision",
-                "--state-dir", run_dir, "--approval", approval,
-            )
-            self.assertEqual(no_host_key.returncode, 2)
-            bad_signature = root / "bad-signature.json"
-            bad_signature.write_text(json.dumps({
-                **json.loads(approval.read_text()),
-                "signature": "hmac-sha256:" + "f" * 64,
-            }))
-            rejected_signature = self.run_cli(
-                "authorize-verification-contract-revision",
-                "--state-dir", run_dir, "--approval", bad_signature,
-                "--host-capability", capability,
-            )
-            self.assertEqual(rejected_signature.returncode, 2)
-            repository_capability = root / "workflow-owned-capability.json"
-            repository_capability.write_text(capability.read_text())
-            repository_capability.chmod(0o600)
-            rejected_repository_key = self.run_cli(
-                "authorize-verification-contract-revision",
-                "--state-dir", run_dir, "--approval", approval,
-                "--host-capability", repository_capability,
-            )
-            self.assertEqual(rejected_repository_key.returncode, 2)
-            self.assertEqual((run_dir / "events.jsonl").read_bytes(), events_before)
-            authorized = self.run_cli(
-                "authorize-verification-contract-revision",
-                "--state-dir", run_dir, "--approval", approval,
-                "--host-capability", capability,
-            )
-            self.assertEqual(authorized.returncode, 0, authorized.stderr)
-            authorization_receipt = json.loads(authorized.stdout)
-            self.assertEqual(
-                authorization_receipt["stage"],
-                "verification_contract_revision_authorized",
-            )
-            self.assertNotIn("host_capability", authorization_receipt)
-            self.assertNotIn(capability_key.hex(), (run_dir / "events.jsonl").read_text())
-            revised = self.run_cli(
-                "revise-verification-contract", "--state-dir", run_dir,
-                "--contract", revision,
-            )
-            self.assertEqual(revised.returncode, 0, revised.stderr)
-            receipt = json.loads(revised.stdout)
-            self.assertEqual(receipt["stage"], "verification_contract_revised")
-            self.assertEqual(receipt["revision"], 2)
-            self.assertEqual(
-                receipt["previous_contract_digest"],
-                json.loads(bound.stdout)["contract_digest"],
-            )
-            event = json.loads((run_dir / "events.jsonl").read_text().splitlines()[-1])
-            self.assertNotEqual(
-                event["payload"]["human_approval_evidence_ref"],
-                "plans/contract/plan.html#approval",
-            )
-            self.assertRegex(
-                event["payload"]["human_approval_evidence_ref"],
-                r"^verification-approvals/sha256-[0-9a-f]{64}\.json$",
-            )
-            self.assertTrue(
-                (run_dir / event["payload"]["human_approval_evidence_ref"]).is_file()
-            )
-
-            idempotent = self.run_cli(
-                "revise-verification-contract", "--state-dir", run_dir,
-                "--contract", revision,
-            )
-            self.assertEqual(idempotent.returncode, 0, idempotent.stderr)
-            self.assertEqual(json.loads(idempotent.stdout), receipt)
-
-            approval_artifact = run_dir / receipt["human_approval_evidence_ref"]
-            approval_artifact.unlink()
-            missing = self.run_cli(
-                "revise-verification-contract", "--state-dir", run_dir,
-                "--contract", revision,
-            )
-            self.assertEqual(missing.returncode, 2)
-            restored = self.run_cli(
-                "revise-verification-contract", "--state-dir", run_dir,
-                "--contract", revision, "--approval", approval,
-            )
-            self.assertEqual(restored.returncode, 0, restored.stderr)
-            self.assertTrue(approval_artifact.is_file())
-
-            forged_approval.write_text(json.dumps({
-                **json.loads(approval.read_text()), "actor": "forged-reviewer",
-            }))
-            prefers_stored = self.run_cli(
-                "revise-verification-contract", "--state-dir", run_dir,
-                "--contract", revision, "--approval", forged_approval,
-            )
-            self.assertEqual(prefers_stored.returncode, 0, prefers_stored.stderr)
-            artifact = run_dir / event["payload"]["contract_ref"]
-            revision_record = json.loads(artifact.read_text())["revision_justification"]
-            self.assertEqual(
-                revision_record["removed_obligation_ids"],
-                ["PROOF:CHK-001:REG-001", "REG-001"],
-            )
-            self.assertEqual(revision_record["summary"], "Approved removal.")
-
-            stale = json.loads(json.dumps(revision_value))
-            stale["revision"] = 3
-            stale["previous_contract_digest"] = "sha256:" + "0" * 64
-            stale["revision_justification"] = {
-                "reason_code": "metadata_update", "summary": "Stale update.",
-                "added_obligation_ids": [],
-                "retained_obligation_ids": ["PROOF:CHK-001:REQ-001", "REQ-001"],
-                "removed_obligation_ids": [],
-                "human_approval_evidence_ref": None,
-            }
-            stale_path = root / "contract-stale.json"
-            stale_path.write_text(json.dumps(stale))
-            rejected = self.run_cli(
-                "revise-verification-contract", "--state-dir", run_dir,
-                "--contract", stale_path,
-            )
-            self.assertEqual(rejected.returncode, 2)
-            self.assertNotIn("0000000000", rejected.stderr)
-
-    def test_generic_append_cannot_forge_contract_approval_authority(self):
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self.init_lifecycle(root, "approval-run")
-            run_dir = root / ".workflow-kernel" / "runs" / "approval-run"
-            event = {
-                "schema_version": 1, "sequence": 1, "run_id": "approval-run",
-                "node_id": None, "kind": "evidence.recorded",
-                "occurred_at": "2026-07-23T00:00:01Z",
-                "payload": {
-                    "stage": "verification_contract_revision_authorized",
-                    "run_id": "approval-run", "actor": "forged",
-                    "decision": "approved", "occurred_at": "2026-07-23T00:00:00Z",
-                    "nonce": "forged-nonce",
-                    "previous_contract_digest": "sha256:" + "a" * 64,
-                    "candidate_contract_digest": "sha256:" + "b" * 64,
-                    "approval_ref": "verification-approvals/sha256-" + "c" * 64 + ".json",
-                    "evidence": ["verification-approvals/sha256-" + "c" * 64 + ".json"],
-                },
-            }
-            before = (run_dir / "events.jsonl").read_bytes()
-            result = self.run_cli("append", run_dir, "--event", json.dumps(event))
-            self.assertEqual(result.returncode, 2)
-            self.assertEqual((run_dir / "events.jsonl").read_bytes(), before)
 
     def test_verification_contract_binding_seals_exact_authoritative_profile_cases(self):
         from workflow_kernel.behavioral_contract import obligations, verification_profile_digest
@@ -1046,22 +804,11 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertTrue((run_dir / receipt["verification_profile_ref"]).is_file())
 
             invented = json.loads(json.dumps(value))
-            invented["revision"] = 2
-            invented["previous_contract_digest"] = receipt["contract_digest"]
-            invented["persona_case_ids"] = ["case-sha256:" + "f" * 64]
-            old = obligations(value)
-            new = obligations(invented)
-            invented["revision_justification"] = {
-                "reason_code": "invented_case", "summary": "Invalid case.",
-                "added_obligation_ids": sorted(new - old),
-                "retained_obligation_ids": sorted(new & old),
-                "removed_obligation_ids": sorted(old - new),
-                "human_approval_evidence_ref": None,
-            }
+            invented["contract_id"] = "different-contract"
             invented_path = root / "invented.json"
             invented_path.write_text(json.dumps(invented))
             rejected = self.run_cli(
-                "revise-verification-contract", "--state-dir", run_dir,
+                "bind-verification-contract", "--state-dir", run_dir,
                 "--contract", invented_path, "--verification-profile", profile,
             )
             self.assertEqual(rejected.returncode, 2)
@@ -1081,49 +828,6 @@ class RuntimeCliTests(unittest.TestCase):
             result = self.run_cli(
                 "bind-verification-contract", "--state-dir", run_dir,
                 "--contract", contract,
-            )
-            self.assertEqual(result.returncode, 2)
-            self.assertFalse((run_dir / reference).exists())
-
-    def test_forged_unapproved_revision_cannot_reconcile_missing_artifact(self):
-        from workflow_kernel.behavioral_contract import contract_digest
-
-        with tempfile.TemporaryDirectory() as directory:
-            root = Path(directory)
-            self.init_lifecycle(root, "contract-run")
-            run_dir = root / ".workflow-kernel" / "runs" / "contract-run"
-            initial_value = verification_contract()
-            initial = root / "contract-1.json"
-            initial.write_text(json.dumps(initial_value))
-            bound = self.run_cli(
-                "bind-verification-contract", "--state-dir", run_dir,
-                "--contract", initial,
-            )
-            self.assertEqual(bound.returncode, 0, bound.stderr)
-
-            forged = json.loads(json.dumps(initial_value))
-            forged.update({
-                "revision": 2,
-                "previous_contract_digest": contract_digest(initial_value),
-            })
-            forged["prohibited_regressions"] = []
-            forged["checks"][0]["proves_regression_ids"] = []
-            forged["revision_justification"] = {
-                "reason_code": "unapproved_removal", "summary": "Remove regression.",
-                "added_obligation_ids": [],
-                "retained_obligation_ids": ["PROOF:CHK-001:REQ-001", "REQ-001"],
-                "removed_obligation_ids": ["REG-001", "PROOF:CHK-001:REG-001"],
-                "human_approval_evidence_ref": None,
-            }
-            revision = root / "contract-2.json"
-            revision.write_text(json.dumps(forged))
-            _digest, reference = self.append_contract_binding(
-                run_dir, forged, "verification_contract_revised",
-            )
-
-            result = self.run_cli(
-                "revise-verification-contract", "--state-dir", run_dir,
-                "--contract", revision,
             )
             self.assertEqual(result.returncode, 2)
             self.assertFalse((run_dir / reference).exists())
@@ -1237,8 +941,12 @@ class RuntimeCliTests(unittest.TestCase):
 
     def test_cleanup_command_surface_and_plan_create(self):
         help_result = self.run_cli("--help")
-        for command in ("bind-prediction", "bind-verification-contract", "revise-verification-contract", "authorize-verification-contract-revision", "plan-create", "plan-compose", "record-create", "plan-cleanup", "next-cleanup-step", "execute-cleanup-step", "record-cleanup", "plan-reconcile"):
+        for command in ("bind-prediction", "bind-verification-contract", "plan-create", "plan-compose", "record-create", "plan-cleanup", "next-cleanup-step", "execute-cleanup-step", "record-cleanup", "plan-reconcile"):
             self.assertIn(command, help_result.stdout)
+        self.assertNotIn("revise-verification-contract", help_result.stdout)
+        self.assertNotIn(
+            "authorize-verification-contract-revision", help_result.stdout,
+        )
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory); argv = root / "argv.json"; output = root / "plan.json"
             self.init_lifecycle(root, "run-1")
