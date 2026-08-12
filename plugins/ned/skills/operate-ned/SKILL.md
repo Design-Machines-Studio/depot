@@ -65,57 +65,69 @@ if test "$host" != ned9000 || test "$user" != ned ||
 fi
 ```
 
-Operations preflight:
+Operations preflight and system-Docker wrapper:
 
 ```bash
-host="$(hostname -s)"
-user="$(id -un)"
-workdir="$(pwd -P)"
-if test "$host" != ned9000 || test "$user" != trav ||
-   case "$workdir" in /home/trav|/home/trav/*|/etc|/etc/*|/srv|/srv/*) false ;; *) true ;; esac ||
-   ! sudo -n true; then
-  printf 'host=%s\nuser=%s\nworkdir=%s\n' "$host" "$user" "$workdir" >&2
-  exit 1
-fi
+operations_preflight() {
+  host="$(/usr/bin/hostname -s)"
+  user="$(/usr/bin/id -un)"
+  workdir="$(/bin/pwd -P)"
+  if test "$host" != ned9000 || test "$user" != trav ||
+     case "$workdir" in /home/trav|/home/trav/*|/etc|/etc/*|/srv|/srv/*) false ;; *) true ;; esac ||
+     ! /usr/bin/sudo -n true; then
+    printf 'host=%s\nuser=%s\nworkdir=%s\n' "$host" "$user" "$workdir" >&2
+    return 1
+  fi
+}
+
+system_docker() {
+  operations_preflight || return
+  if test "$#" -eq 0; then
+    printf 'system_docker requires an explicit Docker command\n' >&2
+    return 1
+  fi
+  case "$1" in
+    -*)
+      printf 'system_docker requires a Docker command before its arguments; global option refused: %s\n' "$1" >&2
+      return 1
+      ;;
+  esac
+
+  docker_socket=unix:///var/run/docker.sock
+  if ! docker_probe="$(/usr/bin/sudo -n /usr/bin/env -i \
+    HOME=/root DOCKER_CONFIG=/root/.docker \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    /usr/bin/docker --host "$docker_socket" info \
+    --format '{{printf "%s\t%s" .DockerRootDir (json .SecurityOptions)}}')"; then
+    printf 'docker_socket=%s\nsystem_docker_probe=failed\n' "$docker_socket" >&2
+    return 1
+  fi
+  IFS=$'\t' read -r docker_root docker_security <<< "$docker_probe"
+  if test "$docker_root" != /var/lib/docker ||
+     printf '%s\n' "$docker_security" | grep -Fq 'name=rootless'; then
+    printf 'docker_socket=%s\ndocker_root=%s\ndocker_rootless=%s\n' \
+      "$docker_socket" "$docker_root" \
+      "$(printf '%s\n' "$docker_security" | grep -Fq 'name=rootless' && printf true || printf false)" >&2
+    return 1
+  fi
+
+  /usr/bin/sudo -n /usr/bin/env -i \
+    HOME=/root DOCKER_CONFIG=/root/.docker \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin \
+    /usr/bin/docker --host "$docker_socket" "$@"
+}
+
+operations_preflight || exit 1
 ```
 
-For an operation that uses the system Docker daemon, run the operations preflight above and then
-run this additional system-Docker preflight:
-
-```bash
-docker_socket=unix:///var/run/docker.sock
-if ! docker_root="$(sudo -n env \
-  -u DOCKER_HOST -u DOCKER_CONTEXT \
-  -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
-  /usr/bin/docker --host "$docker_socket" info --format '{{.DockerRootDir}}')"; then
-  printf 'docker_socket=%s\nsystem_docker_probe=failed\n' "$docker_socket" >&2
-  exit 1
-fi
-if ! docker_security="$(sudo -n env \
-  -u DOCKER_HOST -u DOCKER_CONTEXT \
-  -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
-  /usr/bin/docker --host "$docker_socket" info --format '{{json .SecurityOptions}}')"; then
-  printf 'docker_socket=%s\nsystem_docker_probe=failed\n' "$docker_socket" >&2
-  exit 1
-fi
-if printf '%s\n' "$docker_security" | grep -Fq 'name=rootless'; then
-  docker_rootless=true
-else
-  docker_rootless=false
-fi
-if test "$docker_root" != /var/lib/docker || test "$docker_rootless" != false; then
-  printf 'docker_socket=%s\ndocker_root=%s\ndocker_rootless=%s\n' \
-    "$docker_socket" "$docker_root" "$docker_rootless" >&2
-  exit 1
-fi
-```
-
-Stop on any mismatch. Do not require Docker access for operations that do not use Docker. The
-system-Docker preflight pins the root-owned socket and clears caller-controlled endpoint and TLS
-overrides before querying it through passwordless sudo. A failed Docker query is a failure, not
-evidence that the daemon is non-rootless. Report only the bounded facts shown above. Never repair a
-mismatch by weakening authentication, changing sudoers, or adding either account to the `docker`
-group.
+Stop on any mismatch. Non-Docker operations need only `operations_preflight`. For every system
+Docker command, call `system_docker` with the reviewed Docker arguments; never follow the check with
+an ambient `docker` or `sudo docker` command. The wrapper checks the `trav` operations boundary,
+pins the root-owned socket, uses a clean environment and root-owned Docker configuration, rejects
+all caller-supplied Docker global options, verifies the daemon,
+and runs the operation through that same boundary. A failed query is a failure, not evidence that the
+daemon is non-rootless. Report only the bounded facts shown above. Never weaken authentication,
+change sudoers, or add either account to the `docker` group.
 
 ## Split mixed development and operations
 
@@ -140,8 +152,10 @@ to `trav`, present the exact operations command and stop rather than manufacturi
 - Never use `sudo docker` or the `default` Docker context for a development checkout.
 - Never add `ned` or `trav` to the `docker` group. Membership is root-equivalent; keep the group
   empty.
-- Never run Workflow Authority as `ned`; install and operate it only through its separately reviewed
-  privileged-service boundary.
+- Never run `workflow-authorityd`, installation, enrollment, credential provisioning, recovery, or
+  administrative commands as `ned`; those belong to the reviewed root-owned service boundary.
+  `ned` may invoke only the installed unprivileged `workflow-authority` client, and only after a
+  separate review explicitly grants it membership in the restricted socket group.
 - Never collapse the two phases because a demo, deadline, or outage makes one privileged session
   seem faster.
 - Never store SSH keys, pairing tokens, API keys, or secret values in AI Memory, prompts, logs, or
