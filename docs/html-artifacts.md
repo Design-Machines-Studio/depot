@@ -139,10 +139,3 @@ has every `{{...}}` slot, fragments have balanced comments/script tags, sections
 reference their island, and the two helpers are executable + `bash -n` clean.
 (We deliberately avoid `xmllint --html` -- libxml2's HTML4 parser emits false
 errors on HTML5 semantic elements while still exiting 0.)
-
-## Notion sync
-
-Notion renders raw HTML as text, so the canonical artifact stays in-repo. When
-syncing a pipeline run to the depot manual or ops dashboard, upload screenshots
-of the rendered HTML and/or a short markdown summary -- do not paste the HTML
-source.

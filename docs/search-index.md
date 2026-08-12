@@ -54,7 +54,7 @@ Common questions mapped to the right skill:
 | design-practice | identity | identity, logo, branding, marks, visual-identity | -- | "does this logo work", "what makes a good mark", "brand identity system", "favicon design", "color palette for brand", ... |
 | design-practice | layout | layout, grid, editorial, art-direction, hierarchy | -- | "how should I lay this out", "spacing feels wrong", "grid construction", "editorial spread", "visual hierarchy", ... |
 | design-practice | typography | typography, type-scale, fonts, rhythm, swiss-modernism | -- | "what font should I use", "heading sizes", "type scale", "this text feels off", "line-height", ... |
-| dm-review | review | code-review, orchestrator, multi-agent, parallel, issue-tracking | -- | "review this code", "check my PR", "run a code review", "review before merging", "full review", ... |
+| dm-review | review | code-review, orchestrator, multi-agent, parallel, proportional-review, token-efficiency, issue-tracking | -- | "review this code", "check my PR", "run a code review", "review before merging", "full review", ... |
 | dm-review | visual-test | visual-testing, browser, playwright, responsive, screenshots | playwright | "test this visually", "check in the browser", "test responsive layout", "visual QA", "check the page", ... |
 | dm-review | quality-pulse | quality-pulse, repository-audit, scheduled-audit, authoritative-receipts, trend-comparison | -- | "run the scheduled repository quality pulse", "produce this week's code quality digest from our repository profile", "audit repository quality using .dm-review/quality-pulse.json", "compare today's quality pulse with the last compatible baseline", "run a local quality pulse with --profile", ... |
 | ghostwriter | social-media | social-media, linkedin, instagram, bluesky, mastodon, content | -- | "write a LinkedIn post", "Instagram caption", "posting schedule", "hashtag strategy", "cross-platform content", ... |
@@ -70,7 +70,7 @@ Common questions mapped to the right skill:
 | pipeline | promptcraft | prompts, chunking, orchestration, dependency-ordering, manifest | -- | "generate execution prompts", "create prompts from plan", "break plan into chunks", "generate manifest" |
 | pipeline | eval-sweep | evaluation, browser-sweep, accessibility, ledger-first, system-wide, audit | -- | "evaluate the whole app", "system-wide evaluation", "sweep every route", "audit every page", "screenshot every route", ... |
 | project-manager | lt10 | project-management, estimation, scoping, pricing, methodology | -- | "how to estimate", "scope creep", "burn rate", "ROM estimate", "when to use agile", ... |
-| project-manager | planner | sprint-planning, notion, task-management, userback, velocity | notion, ai-memory, userback | "what should I work on", "sprint status", "create a task", "what's in this sprint", "check todos", ... |
+| project-manager | planner | sprint-planning, notion, task-management, userback, velocity | notion, ai-memory, userback | "plan my Notion sprint", "personal sprint planning", "Notion todos", "run sprint-plan", "userback feedback", ... |
 | project-scaffolder | scaffolding | scaffolding, claude-code, hooks, settings, project-setup, claude-md-starter | -- | "set up new project", "configure Claude Code hooks", "create CLAUDE.md", "add CLAUDE.md to existing project", "CLAUDE.md starter template", ... |
 | the-local | element-branding | element-web, branding, css, theming, matrix | -- | "Element Web appearance", "auth page styling", "logo replacement", "welcome page", "custom CSS not applying", ... |
 | the-local | server-ops | server-ops, docker, matrix, digitalocean, infrastructure | -- | "SSH into server", "docker compose restart", "create Matrix account", "check server logs", "backup database", ... |
@@ -118,7 +118,7 @@ Common questions mapped to the right skill:
 | openrouter | openrouter-bulk-analyst | review | diff, review, large-context, kimi-k3, openrouter |
 | openrouter | openrouter-agent-runner | workflow | workflow, review, delegation, openrouter, provider-routing |
 | pipeline | plan-adversary | workflow | review, adversarial, plan-review, convergence |
-| pipeline | execution-orchestrator | workflow | orchestration, worktrees, autonomous, execution, review-loop |
+| pipeline | execution-orchestrator | workflow | orchestration, worktrees, autonomous, execution, proportional-review, token-efficiency, review-loop |
 
 ## Commands Index
 

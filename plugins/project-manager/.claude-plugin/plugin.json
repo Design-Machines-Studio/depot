@@ -1,7 +1,7 @@
 {
   "name": "project-manager",
   "description": "Project management: LT10 methodology, Notion-integrated sprint planning with Userback triage, Calendar.app meeting prep, Mail.app scanning, content ideation, and velocity tracking",
-  "version": "1.8.1",
+  "version": "1.8.2",
   "author": {
     "name": "Design Machines"
   },
@@ -23,9 +23,9 @@
       {
         "id": "planner",
         "name": "Sprint Planner",
-        "description": "Notion-integrated project planning and sprint management with Userback triage",
+        "description": "Explicit Notion-based personal and client sprint planning with Userback triage",
         "mcpDependencies": ["notion", "ai-memory", "userback"],
-        "triggers": ["what should I work on", "sprint status", "create a task", "what's in this sprint", "check todos", "userback feedback", "meeting prep", "velocity"],
+        "triggers": ["plan my Notion sprint", "personal sprint planning", "Notion todos", "run sprint-plan", "userback feedback", "content planning", "meeting prep", "sprint velocity"],
         "tags": ["sprint-planning", "notion", "task-management", "userback", "velocity"]
       }
     ],

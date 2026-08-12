@@ -1,6 +1,6 @@
 ---
 name: scaffolding
-description: Scaffold Claude Code project infrastructure -- hooks, agents, settings.json, and CLAUDE.md -- for any Design Machines project type. Use when setting up a new project, configuring Claude Code hooks, creating a CLAUDE.md routing document, adding commit-push reminders, setting up Docker safety gates, configuring session-start workflows, or standardizing .claude/ directory structure. Covers go-templ-datastar, go-library, css-framework, and craft-cms project types.
+description: Scaffold Claude Code project infrastructure -- hooks, agents, settings.json, and CLAUDE.md -- for any Design Machines project type. Use when setting up a new project, configuring Claude Code hooks, creating a CLAUDE.md routing document, adding commit-push reminders, setting up Docker safety gates, or standardizing .claude/ directory structure. Covers go-templ-datastar, go-library, css-framework, and craft-cms project types.
 disable-model-invocation: true
 argument-hint: "[project-type: go-templ-datastar|go-library|css-framework|craft-cms]"
 ---
@@ -15,7 +15,7 @@ Standardize Claude Code setup across all Design Machines projects. Generate `.cl
 
 | Type | Stack | Docker | Hooks | Agents |
 |------|-------|--------|-------|--------|
-| `go-templ-datastar` | Go + Templ + Datastar + Live Wires | Yes | all 5 + a11y-check | go-builder, css-reviewer, doc-sync, security-auditor, a11y-html-reviewer, a11y-css-reviewer, a11y-dynamic-content-reviewer |
+| `go-templ-datastar` | Go + Templ + Datastar + Live Wires | Yes | all 4 + a11y-check | go-builder, css-reviewer, doc-sync, security-auditor, a11y-html-reviewer, a11y-css-reviewer, a11y-dynamic-content-reviewer |
 | `go-library` | Go module (no frontend) | Optional | commit-push, pre-stop, post-edit | doc-sync |
 | `css-framework` | CSS + npm build | No | commit-push, pre-stop, post-edit, a11y-check | css-reviewer, doc-sync, a11y-css-reviewer |
 | `craft-cms` | Craft CMS + DDEV + Twig | DDEV | commit-push, pre-stop, post-edit, block-bare-craft, a11y-check | doc-sync, security-auditor, a11y-html-reviewer, a11y-css-reviewer |
@@ -25,7 +25,6 @@ Standardize Claude Code setup across all Design Machines projects. Generate `.cl
 | Hook | Event | Matcher | Default | Purpose |
 |------|-------|---------|---------|---------|
 | `block-bare-go.sh` | PreToolUse | Bash | Go projects | Prevent Go/Templ outside Docker |
-| `session-start-gate.sh` | PreToolUse | Edit\|Write | Opt-in | Block changes until planner workflow completes |
 | `commit-push-reminder.sh` | PostToolUse | Edit\|Write | ALL | Nudge commits at 3+ files, push at 2+ commits |
 | `post-edit-context.sh` | PostToolUse | Edit\|Write | ALL | Agent reminders based on file type |
 | `a11y-check.sh` | PostToolUse | Edit\|Write | Frontend projects | A11y agent reminders after template/CSS/JS changes |
@@ -58,8 +57,7 @@ When the user asks to scaffold a project, follow these steps:
 Ask the user:
 1. **Project type** -- one of: `go-templ-datastar`, `go-library`, `css-framework`, `craft-cms`. If the project doesn't fit any of these, use a generic starter from `references/claude-md-templates/` (see "Generic CLAUDE.md Starters" below) and skip to Step 5.
 2. **Project name** -- used for display in CLAUDE.md (e.g., "Assembly", "Dashboard", "Live Wires")
-3. **Enable session-start-gate?** -- opt-in, only for projects using the planner workflow
-4. **Any additional agents?** -- project-specific agents beyond the defaults
+3. **Any additional agents?** -- project-specific agents beyond the defaults
 
 ### Step 2: Derive Configuration
 
@@ -84,7 +82,6 @@ Create the following in the target project:
   settings.json              <- from project-configs.md, based on project type
   hooks/
     block-bare-go.sh         <- Go projects only (from hooks.md)
-    session-start-gate.sh    <- if opted in (from hooks.md)
     commit-push-reminder.sh  <- always (from hooks.md)
     post-edit-context.sh     <- always, customized per type (from hooks.md)
     a11y-check.sh            <- frontend projects (from hooks.md)

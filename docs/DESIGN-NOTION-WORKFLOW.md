@@ -1,6 +1,6 @@
 # Design Spec: Notion Workflow Integration
 
-**Status:** Draft
+**Status:** Historical design; explicit personal/client planning only
 **Plugin:** project-manager
 **Date:** 2026-02-13
 
@@ -8,11 +8,11 @@
 
 ## Problem
 
-Claude Code loses context between sessions. Travis plans work in Notion (Projects, Todos, Sprints, Time Tracking) but Claude has no universal way to read that context, track time, or maintain continuity. The current text-file approach (`tasks/todo.md`) only works for one project and goes stale.
+Travis uses Notion for explicitly requested personal and client planning. Repository development coordination now lives in GitHub Issues, pull requests, and Assembly Coordination Project 1; ordinary coding sessions do not invoke this workflow.
 
 ## Goals
 
-1. **Time tracking** -- Claude automatically logs session time to Notion for every project
+1. **Time tracking** -- Claude logs session time to Notion only when Travis explicitly requests it
 2. **Sprint awareness** -- Claude knows what's in the current sprint across all projects
 3. **Todo visibility** -- Claude can see assigned tasks and update their status when done
 4. **Context continuity** -- Claude maintains robust internal memory across sessions without polluting Notion
@@ -39,7 +39,7 @@ Claude Code loses context between sessions. Travis plans work in Notion (Project
 ├─────────────────────────────────────────────────────┤
 │  Layer 2: Agent (time-tracker)                       │
 │  Lightweight agent for creating/updating time        │
-│  entries. Called at session start/end.                │
+│  entries. Called only when explicitly requested.      │
 ├─────────────────────────────────────────────────────┤
 │  Layer 3: Per-Project Memory                         │
 │  Maps this codebase to a Notion project.             │
@@ -154,7 +154,7 @@ When creating pages via `notion-create-pages`, relations cannot be set inline. C
 
 1. **Teach Claude the database schemas** -- property names, types, valid values
 2. **Define read/write rules** -- what Claude can read, what it can write, and when
-3. **Session workflow** -- what to do at session start and end
+3. **Explicit planning workflow** -- what to do during a requested Notion planning session
 4. **Sprint planning support** -- how to help Travis plan sprints
 5. **Per-project config convention** -- how to find and use the project mapping
 
@@ -163,8 +163,8 @@ When creating pages via `notion-create-pages`, relations cannot be set inline. C
 | Action | Permission | When |
 |--------|-----------|------|
 | Query any database | Always allowed | Anytime Claude needs context |
-| Create time entry | Auto -- do it every session | Session start |
-| Update time entry Days | Auto -- do it every session | Session end |
+| Create time entry | Only when Travis asks | Explicit time-tracking request |
+| Update time entry Days | Only when Travis asks | Explicit time-tracking request |
 | Update todo status to "In progress" | Auto | When Claude starts working on an assigned todo |
 | Update todo status to "Done" | Auto | When Claude finishes an assigned todo |
 | Create new todo | Only when Travis explicitly asks | "Add a todo for X" |
@@ -172,19 +172,19 @@ When creating pages via `notion-create-pages`, relations cannot be set inline. C
 | Modify project properties | Never | Travis-only |
 | Modify sprint properties | Never | Travis-only |
 
-### Session workflow
+### Explicit Notion planning workflow
 
-**Start of session:**
+This workflow is not part of ordinary coding-session startup or shutdown. When Travis explicitly requests Notion planning:
+
+**Start of planning:**
 1. Read `memory/project-notion.md` to get project URL and default role
 2. Query Sprints DB for the sprint with Status = "In progress"
 3. Query Todos DB for todos assigned to this project in the current sprint
-4. Create a time entry (Entry = TBD, Days = TBD, Date = today, Role = default, Project + Sprint linked)
-5. Read `memory/sessions.md` for context from previous sessions
+4. Read `memory/sessions.md` for context from previous planning sessions
 
-**End of session:**
-1. Update time entry with final Entry description and Days worked
-2. Update any todo statuses that changed during the session
-3. Append session summary to `memory/sessions.md`
+**End of planning:**
+1. Update any todo statuses that changed during the requested planning workflow
+2. Append a planning summary to `memory/sessions.md` when useful
 
 ### Sprint planning support
 
@@ -228,7 +228,7 @@ This file is created once per project, manually or with Claude's help.
 
 ### Agent behavior
 
-**Trigger:** Use at session start and end, or when Travis asks to log time.
+**Trigger:** Use only when Travis explicitly asks to log time.
 
 **Model:** haiku (fast, lightweight)
 
@@ -247,9 +247,8 @@ This file is created once per project, manually or with Claude's help.
 ```markdown
 ---
 name: time-tracker
-description: Logs time entries to Notion. Use at session start to create an
-  entry, and at session end to finalize duration. Reads project config from
-  memory/project-notion.md.
+description: Logs time entries to Notion when Travis explicitly asks. Reads
+  project config from memory/project-notion.md.
 ---
 
 You are a time tracking agent. You create and update time entries in Travis's

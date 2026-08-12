@@ -9,7 +9,7 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | **1 -- Ephemeral** | Auto-deleted on run completion (success or failure) | Yes | Orchestrator Step 5b |
 | **2 -- Run-scoped** | Deleted after successful run; preserved on failure for debugging | Yes | Orchestrator Step 5b |
 | **3 -- Feature-scoped** | Persist until user disposes via delivery gate | No | User choice at Phase 7 GATE |
-| **4 -- Durable** | Permanent (ai-memory, committed code, Notion) | N/A | Never |
+| **4 -- Durable** | Permanent (ai-memory, committed code) | N/A | Never |
 
 ## Artifact Inventory
 
@@ -74,7 +74,6 @@ Refs are not artifacts -- they are not deleted by tier, but by the safe-to-delet
 |--------|-------|------------|
 | Pipeline session observation | ai-memory (`DepotPlugin:pipeline`) | Orchestrator Step 5 |
 | Review session observation | ai-memory (project entity) | review-memory-recorder agent |
-| Activity log row | Notion ops dashboard | Pipeline Phase 7 / dm-review Phase 7c |
 
 Protected builder restore blobs are not ordinary artifacts. Store them only in permission-restricted package-owned storage with their own retention/deletion policy. Artifacts, receipts, events, shadow reports, Airlift bundles, and checkpoints may contain only a safe digest projection plus an authoritative receipt reference, never blob bytes or credentials.
 

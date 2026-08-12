@@ -1,18 +1,18 @@
 [
   {
-    "query": "What should I work on today?",
+    "query": "What should I work on in my personal Notion sprint today?",
     "should_trigger": true
   },
   {
-    "query": "Show me what's left in this sprint",
+    "query": "Show me what's left in my personal sprint in Notion",
     "should_trigger": true
   },
   {
-    "query": "Create a task for refactoring the member onboarding flow",
+    "query": "Create a Notion todo for refactoring the member onboarding flow",
     "should_trigger": true
   },
   {
-    "query": "What's my velocity looking like over the last few sprints?",
+    "query": "What's my personal sprint velocity looking like over the last few sprints?",
     "should_trigger": true
   },
   {
@@ -24,11 +24,11 @@
     "should_trigger": true
   },
   {
-    "query": "Mark that navigation todo as done",
+    "query": "Mark that navigation todo as done in Notion",
     "should_trigger": true
   },
   {
-    "query": "What's on my plate for Assembly this sprint?",
+    "query": "What's on my personal Notion sprint for Assembly?",
     "should_trigger": true
   },
   {
@@ -36,7 +36,7 @@
     "should_trigger": true
   },
   {
-    "query": "Move that task to the next sprint, I won't get to it",
+    "query": "Move that Notion task to my next personal sprint",
     "should_trigger": true
   },
   {
@@ -77,6 +77,30 @@
   },
   {
     "query": "Should I use a bar chart or a line chart for this data?",
+    "should_trigger": false
+  },
+  {
+    "query": "Plan the implementation work for this repository",
+    "should_trigger": false
+  },
+  {
+    "query": "Prepare the next coding prompt from the current repository state",
+    "should_trigger": false
+  },
+  {
+    "query": "Update Assembly Coordination Project 1 with this issue",
+    "should_trigger": false
+  },
+  {
+    "query": "Triage the open GitHub Issues for this repo",
+    "should_trigger": false
+  },
+  {
+    "query": "Review the pull request and plan the next commit",
+    "should_trigger": false
+  },
+  {
+    "query": "Start an ordinary coding session on the current branch",
     "should_trigger": false
   }
 ]
