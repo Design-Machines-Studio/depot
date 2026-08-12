@@ -71,24 +71,51 @@ Operations preflight:
 host="$(hostname -s)"
 user="$(id -un)"
 workdir="$(pwd -P)"
-docker_context="$(docker context show)"
-docker_host="${DOCKER_HOST-<unset>}"
-docker_root="$(docker info --format '{{.DockerRootDir}}')"
-docker_rootless="$(docker info --format '{{json .SecurityOptions}}' | grep -Fq 'name=rootless' && printf true || printf false)"
 if test "$host" != ned9000 || test "$user" != trav ||
    case "$workdir" in /home/trav|/home/trav/*|/etc|/etc/*|/srv|/srv/*) false ;; *) true ;; esac ||
-   ! sudo -n true || test "$docker_root" != /var/lib/docker ||
-   test "$docker_rootless" != false; then
-  printf 'host=%s\nuser=%s\nworkdir=%s\ndocker_context=%s\ndocker_host=%s\ndocker_root=%s\ndocker_rootless=%s\n' \
-    "$host" "$user" "$workdir" "$docker_context" "$docker_host" "$docker_root" "$docker_rootless" >&2
+   ! sudo -n true; then
+  printf 'host=%s\nuser=%s\nworkdir=%s\n' "$host" "$user" "$workdir" >&2
   exit 1
 fi
 ```
 
-Stop on any mismatch. Context and `DOCKER_HOST` are diagnostics only; effective daemon root and
-rootless security mode decide Docker authority. Report only the bounded facts shown above.
-Never repair a mismatch by weakening authentication, changing sudoers, or adding `ned` to the
-`docker` group.
+For an operation that uses the system Docker daemon, run the operations preflight above and then
+run this additional system-Docker preflight:
+
+```bash
+docker_socket=unix:///var/run/docker.sock
+if ! docker_root="$(sudo -n env \
+  -u DOCKER_HOST -u DOCKER_CONTEXT \
+  -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
+  /usr/bin/docker --host "$docker_socket" info --format '{{.DockerRootDir}}')"; then
+  printf 'docker_socket=%s\nsystem_docker_probe=failed\n' "$docker_socket" >&2
+  exit 1
+fi
+if ! docker_security="$(sudo -n env \
+  -u DOCKER_HOST -u DOCKER_CONTEXT \
+  -u DOCKER_TLS_VERIFY -u DOCKER_CERT_PATH \
+  /usr/bin/docker --host "$docker_socket" info --format '{{json .SecurityOptions}}')"; then
+  printf 'docker_socket=%s\nsystem_docker_probe=failed\n' "$docker_socket" >&2
+  exit 1
+fi
+if printf '%s\n' "$docker_security" | grep -Fq 'name=rootless'; then
+  docker_rootless=true
+else
+  docker_rootless=false
+fi
+if test "$docker_root" != /var/lib/docker || test "$docker_rootless" != false; then
+  printf 'docker_socket=%s\ndocker_root=%s\ndocker_rootless=%s\n' \
+    "$docker_socket" "$docker_root" "$docker_rootless" >&2
+  exit 1
+fi
+```
+
+Stop on any mismatch. Do not require Docker access for operations that do not use Docker. The
+system-Docker preflight pins the root-owned socket and clears caller-controlled endpoint and TLS
+overrides before querying it through passwordless sudo. A failed Docker query is a failure, not
+evidence that the daemon is non-rootless. Report only the bounded facts shown above. Never repair a
+mismatch by weakening authentication, changing sudoers, or adding either account to the `docker`
+group.
 
 ## Split mixed development and operations
 
@@ -111,7 +138,10 @@ to `trav`, present the exact operations command and stop rather than manufacturi
 - Never run Codex, Claude, a pipeline, or general subagents as `trav`.
 - Never enter through `trav` and launch an agent with `sudo -iu ned`; connect directly as `ned`.
 - Never use `sudo docker` or the `default` Docker context for a development checkout.
-- Never add `ned` to the `docker` group. Membership is root-equivalent.
+- Never add `ned` or `trav` to the `docker` group. Membership is root-equivalent; keep the group
+  empty.
+- Never run Workflow Authority as `ned`; install and operate it only through its separately reviewed
+  privileged-service boundary.
 - Never collapse the two phases because a demo, deadline, or outage makes one privileged session
   seem faster.
 - Never store SSH keys, pairing tokens, API keys, or secret values in AI Memory, prompts, logs, or
