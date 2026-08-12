@@ -64,9 +64,14 @@ git status --short
 git rev-parse HEAD
 cd native/workflow-authority
 GO_BIN="$(command -v go)"
-GOTOOLCHAIN=auto "$GO_BIN" build -tags libfido2 -o workflow-authority ./cmd/workflow-authority
+LIBFIDO2_VERSION="$(pkg-config --modversion libfido2)"
+IFS=. read -r LIBFIDO2_MAJOR LIBFIDO2_MINOR LIBFIDO2_PATCH <<EOF
+$LIBFIDO2_VERSION
+EOF
+LIBFIDO2_CPPFLAGS="-DWORKFLOW_AUTHORITY_LIBFIDO2_MAJOR=$LIBFIDO2_MAJOR -DWORKFLOW_AUTHORITY_LIBFIDO2_MINOR=$LIBFIDO2_MINOR -DWORKFLOW_AUTHORITY_LIBFIDO2_PATCH=$LIBFIDO2_PATCH"
+CGO_CPPFLAGS="$LIBFIDO2_CPPFLAGS" GOTOOLCHAIN=auto "$GO_BIN" build -tags libfido2 -o workflow-authority ./cmd/workflow-authority
 cp workflow-authority workflow-authority-admin
-GOTOOLCHAIN=auto "$GO_BIN" build -tags libfido2 -o workflow-authorityd ./cmd/workflow-authorityd
+CGO_CPPFLAGS="$LIBFIDO2_CPPFLAGS" GOTOOLCHAIN=auto "$GO_BIN" build -tags libfido2 -o workflow-authorityd ./cmd/workflow-authorityd
 ```
 
 The two client filenames intentionally contain the same binary: administrative

@@ -2,6 +2,7 @@
 
 import os
 import re
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -18,6 +19,7 @@ FIDO_SOURCE = (
     / "authority"
     / "fido_libfido2.go"
 )
+GO_MODULE = REPO_ROOT / "native" / "workflow-authority"
 
 
 class WorkflowAuthorityValidatorTest(unittest.TestCase):
@@ -136,7 +138,9 @@ printf '%s\\n' \\
         minimum = re.search(r'LIBFIDO2_MIN_VERSION="(\d+)\.(\d+)\.(\d+)"', shell)
         next_major = re.search(r'LIBFIDO2_NEXT_MAJOR="(\d+)"', shell)
         c_guard = re.search(
-            r"FIDO_VERSION_MAJOR != (\d+) \|\| FIDO_VERSION_MINOR < (\d+)", c_source
+            r"WORKFLOW_AUTHORITY_LIBFIDO2_MAJOR != (\d+) \|\| "
+            r"WORKFLOW_AUTHORITY_LIBFIDO2_MINOR < (\d+)",
+            c_source,
         )
         self.assertIsNotNone(minimum)
         self.assertIsNotNone(next_major)
@@ -147,12 +151,60 @@ printf '%s\\n' \\
         )
         self.assertIn('pkg-config --atleast-version="$LIBFIDO2_MIN_VERSION" libfido2', shell)
         self.assertIn('! pkg-config --atleast-version="$LIBFIDO2_NEXT_MAJOR" libfido2', shell)
+        for component in ("MAJOR", "MINOR", "PATCH"):
+            self.assertIn("WORKFLOW_AUTHORITY_LIBFIDO2_{}".format(component), shell)
+            self.assertIn("WORKFLOW_AUTHORITY_LIBFIDO2_{}".format(component), c_source)
 
     def test_wrong_selected_go_toolchain_fails_clearly(self):
         completed, go_launcher, _ = self.run_validator("1.16.7", go_version="go1.26.4")
         self.assertNotEqual(completed.returncode, 0)
         self.assertIn("requires selected Go toolchain go1.26.5", completed.stderr)
         self.assertIn(str(go_launcher), completed.stderr)
+
+    def test_installed_compatible_libfido2_compiles_production_adapter(self):
+        go_bin = shutil.which("go")
+        pkg_config = shutil.which("pkg-config")
+        if not go_bin or not pkg_config or os.uname().sysname != "Linux":
+            self.skipTest("real Linux Go and pkg-config toolchain unavailable")
+        minimum = subprocess.run(
+            [pkg_config, "--atleast-version=1.16.0", "libfido2"], check=False
+        )
+        next_major = subprocess.run(
+            [pkg_config, "--atleast-version=2", "libfido2"], check=False
+        )
+        if minimum.returncode != 0 or next_major.returncode == 0:
+            self.skipTest("installed libfido2 is outside the supported production range")
+        version = subprocess.run(
+            [pkg_config, "--modversion", "libfido2"],
+            check=True,
+            capture_output=True,
+            text=True,
+        ).stdout.strip()
+        match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)", version)
+        self.assertIsNotNone(match, "pkg-config returned a non-numeric libfido2 version")
+
+        with tempfile.TemporaryDirectory(prefix="wa-real-cgo-cache-") as go_cache:
+            environment = dict(os.environ)
+            environment.update(
+                {
+                    "CGO_CPPFLAGS": (
+                        "-DWORKFLOW_AUTHORITY_LIBFIDO2_MAJOR={} "
+                        "-DWORKFLOW_AUTHORITY_LIBFIDO2_MINOR={} "
+                        "-DWORKFLOW_AUTHORITY_LIBFIDO2_PATCH={}"
+                    ).format(*match.groups()),
+                    "GOCACHE": go_cache,
+                    "GOTOOLCHAIN": "auto",
+                }
+            )
+            completed = subprocess.run(
+                [go_bin, "test", "-tags", "libfido2", "./internal/authority"],
+                cwd=GO_MODULE,
+                env=environment,
+                capture_output=True,
+                text=True,
+                timeout=120,
+            )
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
 
 
 if __name__ == "__main__":

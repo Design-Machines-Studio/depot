@@ -20,21 +20,35 @@ import (
 	"designmachines.dev/workflow-authority/internal/protocol"
 )
 
-func TestStubNeverReportsProductionReady(t *testing.T) {
+func TestUnavailableAdapterNeverReportsProductionReady(t *testing.T) {
 	adapter := NewFIDOAdapter()
 	readiness := adapter.Readiness(context.Background())
-	if readiness.Production || readiness.Adapter != "stub" || readiness.InternalUV {
-		t.Fatalf("unsafe stub readiness: %+v", readiness)
+	if readiness.Production || readiness.InternalUV {
+		t.Fatalf("unavailable adapter reported ready: %+v", readiness)
+	}
+	switch readiness.Adapter {
+	case "stub":
+		if readiness.Version != "unavailable" {
+			t.Fatalf("unexpected stub version: %+v", readiness)
+		}
+	case "libfido2":
+		if readiness.Version != FIDO2Version {
+			t.Fatalf("unexpected libfido2 compatibility label: %+v", readiness)
+		}
+	default:
+		t.Fatalf("unexpected FIDO adapter: %+v", readiness)
 	}
 	if _, err := adapter.Assert(context.Background(), []byte("challenge"), Credential{}); !errors.Is(err, ErrUnavailable) {
-		t.Fatalf("stub assertion: %v", err)
+		t.Fatalf("unavailable assertion: %v", err)
 	}
 }
 
-func TestStubEnrollerFailsClosed(t *testing.T) {
-	credential, err := NewFIDOEnroller().Enroll(context.Background(), enrollment.Request{Generation: 1})
+func TestUnavailableEnrollerFailsClosed(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	credential, err := NewFIDOEnroller().Enroll(ctx, enrollment.Request{Generation: 1})
 	if !errors.Is(err, enrollment.ErrUnavailable) || len(credential.ID) != 0 {
-		t.Fatalf("stub enrollment did not fail closed: %#v %v", credential, err)
+		t.Fatalf("unavailable enrollment did not fail closed: %#v %v", credential, err)
 	}
 }
 
@@ -276,7 +290,7 @@ func TestPinnedNativeSourceAndNoHostPINFallback(t *testing.T) {
 		t.Fatal(err)
 	}
 	source := string(raw)
-	for _, marker := range []string{"FIDO_VERSION_MAJOR != 1", "FIDO_VERSION_MINOR < 16", "workflow-authority requires libfido2 >=1.16.0 and <2.0.0", "dm_ready", "fido_dev_has_uv", "fido_dev_set_timeout(op->dev, 30000)", "fido_assert_authdata_raw_ptr", "dm_operation_cancel", "fido_dev_cancel(op->dev)", "FIDO_OPT_TRUE", "fido_dev_get_assert(op->dev, op->assert, NULL)"} {
+	for _, marker := range []string{"WORKFLOW_AUTHORITY_LIBFIDO2_MAJOR != 1", "WORKFLOW_AUTHORITY_LIBFIDO2_MINOR < 16", "workflow-authority requires libfido2 >=1.16.0 and <2.0.0", "dm_ready", "fido_dev_has_uv", "fido_dev_set_timeout(op->dev, 30000)", "fido_assert_authdata_raw_ptr", "dm_operation_cancel", "fido_dev_cancel(op->dev)", "FIDO_OPT_TRUE", "fido_dev_get_assert(op->dev, op->assert, NULL)"} {
 		if !strings.Contains(source, marker) {
 			t.Fatalf("native invariant missing: %s", marker)
 		}

@@ -189,21 +189,25 @@ grep -E '^  GAP  ' "$harness_log" || true
 
 installed_libfido2=""
 compatible_libfido2=0
+libfido2_cgo_cppflags=""
 if [[ "$(uname -s)" == "Linux" ]] && command -v pkg-config >/dev/null 2>&1; then
   installed_libfido2="$(pkg-config --modversion libfido2 2>/dev/null || true)"
   if pkg-config --atleast-version="$LIBFIDO2_MIN_VERSION" libfido2 && \
      ! pkg-config --atleast-version="$LIBFIDO2_NEXT_MAJOR" libfido2; then
-    compatible_libfido2=1
+    if [[ "$installed_libfido2" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+      compatible_libfido2=1
+      libfido2_cgo_cppflags="-DWORKFLOW_AUTHORITY_LIBFIDO2_MAJOR=${BASH_REMATCH[1]} -DWORKFLOW_AUTHORITY_LIBFIDO2_MINOR=${BASH_REMATCH[2]} -DWORKFLOW_AUTHORITY_LIBFIDO2_PATCH=${BASH_REMATCH[3]}"
+    fi
   fi
 fi
 
 if [[ "$(uname -s)" == "Linux" && "$compatible_libfido2" == "1" ]]; then
   (
     cd "$MODULE"
-    GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" test -tags libfido2 ./...
-    GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" test -race -tags libfido2 ./...
-    GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" vet -tags libfido2 ./...
-    GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" build -tags libfido2 ./cmd/workflow-authority ./cmd/workflow-authorityd
+    CGO_CPPFLAGS="$libfido2_cgo_cppflags" GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" test -tags libfido2 ./...
+    CGO_CPPFLAGS="$libfido2_cgo_cppflags" GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" test -race -tags libfido2 ./...
+    CGO_CPPFLAGS="$libfido2_cgo_cppflags" GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" vet -tags libfido2 ./...
+    CGO_CPPFLAGS="$libfido2_cgo_cppflags" GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" build -tags libfido2 ./cmd/workflow-authority ./cmd/workflow-authorityd
   )
   printf 'OK    workflow authority fixture and production libfido2 validation passed with %s and libfido2 %s (required >=%s,<%s)\n' "$version" "$installed_libfido2" "$LIBFIDO2_MIN_VERSION" "$LIBFIDO2_NEXT_MAJOR"
 else
