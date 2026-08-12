@@ -658,6 +658,11 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  printf "\n${BOLD}NED operations preflight:${RESET}\n"
+  if ! python3 "$REPO_ROOT/tests/test_operate_ned_skill.py"; then
+    any_failed=1
+  fi
+
   printf "\n${BOLD}SKILL.md frontmatter integrity:${RESET}\n"
   if ! check_skill_frontmatter; then
     any_failed=1
