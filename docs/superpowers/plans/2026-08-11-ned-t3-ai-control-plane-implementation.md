@@ -1,5 +1,15 @@
 # NED T3 AI Control Plane Implementation Plan
 
+> **STATUS: SUPERSEDED / DO NOT EXECUTE AS WRITTEN**
+>
+> Live state observed 2026-08-12 already has `t3code.service` enabled and active,
+> with T3 0.0.33 running from `/home/ned/.local/state/t3-code/runtime` and
+> `127.0.0.1:3773` listening. Tailscale Serve maps tailnet port 8443 to that
+> listener and retains a separate 9443-to-8099 route. The proposed
+> `/home/ned/ai/t3-code` tree and `ned-t3.service` do not exist. Preserve the
+> working service and both Serve routes. A future plan must inventory this live
+> state, then explicitly choose adoption, migration, or replacement.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Pair the Mac T3 Code desktop app with an always-on, tailnet-only T3 server whose Claude, Codex, terminals, repositories, worktrees, and Depot workflows execute on NED.

@@ -1,8 +1,8 @@
-# NED Runtime and `ned:operate` Implementation Plan
+# NED Runtime and `ned:operate-ned` Extension Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build a version-controlled NED runtime registry and `nedctl` operator CLI, restore the approved persistent project set, and add the guarded `ned:operate` skill to Depot.
+**Goal:** Build a version-controlled NED runtime registry and `nedctl` operator CLI, restore the approved persistent project set, and extend the guarded `ned:operate-ned` skill in a future NED release.
 
 **Architecture:** `/home/ned/ai/ned-ops` is a private host-local repository containing a standard-library Python CLI, declarative inventory, systemd user units, and NED-only runtime wrappers. Depot contains only the portable operational skill and guardrails; it discovers live machine details through `nedctl` instead of shipping credentials or mutable host state.
 
@@ -48,10 +48,10 @@
 
 ### `/home/ned/ai/depot/.worktrees/ned-operate` (fresh isolated worktree)
 
-- `plugins/ned/skills/operate/SKILL.md` — guarded operator workflow.
-- `plugins/ned/skills/operate/references/ned-runtime.md` — runtime and recovery contract.
-- `description-evals/ned-operate.json` — positive and negative trigger cases.
-- Canonical Claude manifests — skill registration and version `1.8.0`.
+- `plugins/ned/skills/operate-ned/SKILL.md` — extend the shipped account-routing skill only after `nedctl` exists.
+- `plugins/ned/skills/operate-ned/references/ned-runtime.md` — optional future runtime and recovery contract, created only when runtime capability lands.
+- `description-evals/ned-operate-ned.json` — reuse the shipped positive and negative trigger surface.
+- Canonical Claude manifests — read the then-current NED version and bump it normally; do not republish `1.8.0`.
 - Generated Codex manifests and search index — regenerated with repository tools.
 
 ### System state
@@ -1144,21 +1144,21 @@ and stopped; leave the protected approval state for recovery review.
 
 ---
 
-### Task 9: Add `ned:operate` to Depot
+### Task 9: Extend `ned:operate-ned` after `nedctl` exists
 
 **Files:**
 - Create worktree: `/home/ned/ai/depot/.worktrees/ned-operate` from refreshed
   `origin/main`; the shared `/home/ned/ai/depot` checkout remains untouched.
-- Create: `/home/ned/ai/depot/.worktrees/ned-operate/plugins/ned/skills/operate/SKILL.md`
-- Create: `/home/ned/ai/depot/.worktrees/ned-operate/plugins/ned/skills/operate/references/ned-runtime.md`
-- Create: `/home/ned/ai/depot/.worktrees/ned-operate/description-evals/ned-operate.json`
+- Modify: `/home/ned/ai/depot/.worktrees/ned-operate/plugins/ned/skills/operate-ned/SKILL.md`
+- Create only if runtime capability lands: `/home/ned/ai/depot/.worktrees/ned-operate/plugins/ned/skills/operate-ned/references/ned-runtime.md`
+- Reuse: `/home/ned/ai/depot/.worktrees/ned-operate/description-evals/ned-operate-ned.json`
 - Modify: `/home/ned/ai/depot/.worktrees/ned-operate/plugins/ned/.claude-plugin/plugin.json`
 - Modify: `/home/ned/ai/depot/.worktrees/ned-operate/.claude-plugin/marketplace.json`
 - Regenerate: Codex manifests and `docs/search-index.md`
 
 **Interfaces:**
 - Consumes: installed `nedctl` and approved design.
-- Produces: portable skill version `1.8.0`, with no MCP or secret dependency.
+- Produces: an extension of the single portable `operate-ned` skill, with no MCP or secret dependency, in a normal future NED version.
 
 - [ ] **Step 1: Create and bind a fresh isolated Depot worktree**
 
@@ -1194,7 +1194,10 @@ glob, select a newest directory, or copy it to a fixed pointer. Task 10 requires
 that exact path in its fresh shell. A failed or interrupted Task 9 preserves the
 directory for explicit recovery review.
 
-- [ ] **Step 2: Add trigger evals before the skill**
+- [ ] **Step 2: Extend the existing trigger evals before the skill**
+
+Start from `description-evals/ned-operate-ned.json`. Preserve its account-routing
+cases and add the following runtime cases only after `nedctl` exists:
 
 ```json
 [
@@ -1221,11 +1224,11 @@ directory for explicit recovery review.
 ]
 ```
 
-- [ ] **Step 3: Write the skill frontmatter and guarded workflow**
+- [ ] **Step 3: Extend the shipped skill frontmatter and guarded workflow**
 
 ```yaml
 ---
-name: operate
+name: operate-ned
 description: >-
   Operate and diagnose Travis Gertz's NED 9000 Linux development host,
   including nedctl project status, Docker and DDEV runtimes, Caddy domains,
@@ -1243,18 +1246,18 @@ exposure, DNS, credentials, production, sudo, and Tailscale Serve; report
 unproven lanes; and fall back to explicit read-only systemd/Docker/DDEV/Caddy/
 Tailscale checks if `nedctl` is unavailable.
 
-- [ ] **Step 4: Write the runtime reference**
+- [ ] **Step 4: Add the runtime reference only with the runtime capability**
 
 Record account boundaries, `/home/ned/{assembly,sites,ai}`, project
 classifications, plain versus tmux SSH aliases, lifecycle/loopback/Caddy/
 Cloudflare evidence lanes, and exact read-only recovery commands. State that
 ports and enabled state come from `nedctl list --json`, not the plugin.
 
-- [ ] **Step 5: Bump canonical metadata to 1.8.0**
+- [ ] **Step 5: Bump canonical metadata normally**
 
-Add the fourth skill capability `operate` with no `mcpDependencies`; update the
-plugin and marketplace descriptions; synchronize both versions at `1.8.0`;
-change `capabilities_summary.skills` from 3 to 4; add operations tags.
+Read the then-current NED version and make a normal semver bump for the
+`operate-ned` runtime extension. Update plugin and marketplace descriptions
+without adding a second skill capability. Do not republish version `1.8.0`.
 
 - [ ] **Step 6: Regenerate and validate**
 
@@ -1262,7 +1265,7 @@ change `capabilities_summary.skills` from 3 to 4; add operations tags.
 cd /home/ned/ai/depot/.worktrees/ned-operate
 ./tools/generate-codex-manifests.py
 ./tools/validate-composition.sh --generate-index
-./tools/eval-descriptions.sh ned-operate.json
+./tools/eval-descriptions.sh ned-operate-ned.json
 ./tools/validate-dual-compat.sh
 ./tools/validate-composition.sh --all
 git diff --check
@@ -1274,8 +1277,8 @@ Expected: focused eval at least 70%; dual and full composition pass.
 
 ```bash
 cd /home/ned/ai/depot/.worktrees/ned-operate
-git add plugins/ned .claude-plugin/marketplace.json .agents/plugins/marketplace.json description-evals/ned-operate.json docs/search-index.md
-git commit -m "feat(ned): add guarded NED operations skill"
+git add plugins/ned .claude-plugin/marketplace.json .agents/plugins/marketplace.json description-evals/ned-operate-ned.json docs/search-index.md
+git commit -m "feat(ned): extend guarded NED operations skill"
 ```
 
 Do not tag or push in this step.
@@ -1283,12 +1286,12 @@ Do not tag or push in this step.
 - [ ] **Step 8: Request release authority, publish, and verify both providers**
 
 After a fresh exact-head review and `./tools/check-release-preflight.sh` receipt,
-request explicit authority for the push and `ned` 1.8.0 tag. If approved, push
-the reviewed `ai/ned-operate` worktree commit, publish the tag on that exact
-commit, update the Depot
-marketplace in NED Codex and Claude, and prove both report `ned` 1.8.0 with the
-`operate` skill. If authority is not granted or publication fails, acceptance
-must say `ned:operate locally validated; released endpoint unavailable`.
+request explicit authority for the future version's push and tag. If approved,
+push the reviewed `ai/ned-operate` worktree commit, publish that new version on
+the exact commit, update the Depot marketplace in NED Codex and Claude, and
+prove both expose the extended `operate-ned` skill. Never create
+`skills/operate/SKILL.md`, `ned-operate.json`, or `ned:operate`, and never
+republish version `1.8.0`.
 
 ---
 

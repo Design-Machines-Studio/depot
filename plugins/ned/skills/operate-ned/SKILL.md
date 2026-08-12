@@ -48,23 +48,45 @@ Run the appropriate block before changing state.
 Development preflight:
 
 ```bash
-test "$(hostname -s)" = ned9000
-test "$(id -un)" = ned
-case "$(pwd -P)" in /home/ned|/home/ned/*) ;; *) exit 1 ;; esac
-test "$(docker context show)" = rootless
-! sudo -n true >/dev/null 2>&1
+host="$(hostname -s)"
+user="$(id -un)"
+workdir="$(pwd -P)"
+docker_context="$(docker context show)"
+docker_host="${DOCKER_HOST-<unset>}"
+docker_root="$(docker info --format '{{.DockerRootDir}}')"
+docker_rootless="$(docker info --format '{{json .SecurityOptions}}' | grep -Fq 'name=rootless' && printf true || printf false)"
+if test "$host" != ned9000 || test "$user" != ned ||
+   case "$workdir" in /home/ned|/home/ned/*) false ;; *) true ;; esac ||
+   test "$docker_root" != /home/ned/.local/share/docker ||
+   test "$docker_rootless" != true || sudo -n true >/dev/null 2>&1; then
+  printf 'host=%s\nuser=%s\nworkdir=%s\ndocker_context=%s\ndocker_host=%s\ndocker_root=%s\ndocker_rootless=%s\n' \
+    "$host" "$user" "$workdir" "$docker_context" "$docker_host" "$docker_root" "$docker_rootless" >&2
+  exit 1
+fi
 ```
 
 Operations preflight:
 
 ```bash
-test "$(hostname -s)" = ned9000
-test "$(id -un)" = trav
-sudo -n true
-test "$(docker context show)" = default
+host="$(hostname -s)"
+user="$(id -un)"
+workdir="$(pwd -P)"
+docker_context="$(docker context show)"
+docker_host="${DOCKER_HOST-<unset>}"
+docker_root="$(docker info --format '{{.DockerRootDir}}')"
+docker_rootless="$(docker info --format '{{json .SecurityOptions}}' | grep -Fq 'name=rootless' && printf true || printf false)"
+if test "$host" != ned9000 || test "$user" != trav ||
+   case "$workdir" in /home/trav|/home/trav/*|/etc|/etc/*|/srv|/srv/*) false ;; *) true ;; esac ||
+   ! sudo -n true || test "$docker_root" != /var/lib/docker ||
+   test "$docker_rootless" != false; then
+  printf 'host=%s\nuser=%s\nworkdir=%s\ndocker_context=%s\ndocker_host=%s\ndocker_root=%s\ndocker_rootless=%s\n' \
+    "$host" "$user" "$workdir" "$docker_context" "$docker_host" "$docker_root" "$docker_rootless" >&2
+  exit 1
+fi
 ```
 
-Stop on any mismatch. Report the observed hostname, user, working directory, and Docker context.
+Stop on any mismatch. Context and `DOCKER_HOST` are diagnostics only; effective daemon root and
+rootless security mode decide Docker authority. Report only the bounded facts shown above.
 Never repair a mismatch by weakening authentication, changing sudoers, or adding `ned` to the
 `docker` group.
 
@@ -110,4 +132,3 @@ to `trav`, present the exact operations command and stop rather than manufacturi
 When AI Memory is available, open the exact entities `NED 9000` and `NED 9000 Dev Environment`.
 Prefer observations titled `CANONICAL` over older setup history. Treat remembered versions and
 service state as context, then verify cheap, drift-prone facts live before acting.
-

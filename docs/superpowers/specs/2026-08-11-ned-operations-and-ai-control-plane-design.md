@@ -174,6 +174,11 @@ The 2026-08-11 audit found:
 - `designmachines`, `farewell`, and the deferred `assembly-demo` checkout are
   still present.
 
+**Live-state drift note (2026-08-12):** The no-Serve observation above is stale.
+Tailscale Serve now maps tailnet port 8443 to `127.0.0.1:3773` and preserves a
+separate 9443-to-8099 route. Any future implementation must inventory both
+routes and preserve the unrelated 9443 route.
+
 These are rollout inputs, not evidence that the desired runtime already works.
 
 ## 8. `nedctl` operator interface
@@ -226,11 +231,13 @@ policy, and pass both unauthenticated-denial and authenticated-access tests.
 Cloudflare credentials are stored in the standard protected cloudflared
 location, never in `inventory.json`, Depot, shell history, or logs.
 
-## 10. Depot `ned:operate` skill
+## 10. Depot `ned:operate-ned` skill
 
-The operational skill is added to the existing `ned` plugin. The primary
-`SKILL.md` remains concise and loads a detailed project/runtime reference only
-when NED operations are requested.
+NED 1.8.0 adds the single `ned:operate-ned` skill to route account authority.
+That current skill does not perform runtime inventory, health, lifecycle, or
+bounded-log operations. Those capabilities arrive only after `nedctl` exists,
+by extending `operate-ned` and, if then needed, adding its
+`references/ned-runtime.md`.
 
 The skill will:
 
@@ -382,7 +389,7 @@ configuration.
   credentials never enter repositories, command arguments, receipts, or
   unbounded logs.
 - Agent-facing log collection is bounded and redacted.
-- The `ned:operate` skill cannot grant itself sudo or bypass confirmation.
+- The `ned:operate-ned` skill cannot grant itself sudo or bypass confirmation.
 - Cloudflare Access is proven by both denial and permitted-user checks.
 - Production deletion or DigitalOcean retirement occurs only after replacement
   evidence is complete and the user explicitly authorizes it.
@@ -429,7 +436,7 @@ retirement gate fails.
 1. Provision the Burnfund checkout and preserve its tracked nested plugin.
 2. Build the inventory and read-only `nedctl` commands.
 3. Add lifecycle operations and health checks.
-4. Add and validate `ned:operate` in Depot.
+4. After `nedctl` exists, extend and validate `ned:operate-ned` in Depot.
 5. Repair persistent project startup and verify reboot behavior.
 6. Add the Mac `ned-wiz` launcher and update the Stream Deck profile.
 7. Install the administrator-owned, distro-signed system Node runtime and pinned
@@ -452,7 +459,8 @@ The implementation is accepted when:
 - NED reboots into the intended persistent application set.
 - `nedctl` accurately reports and controls every in-scope project without
   affecting adjacent projects.
-- The `ned:operate` skill uses the host contract and honors all guardrails.
+- The current `ned:operate-ned` skill routes account authority; after `nedctl`
+  exists, its runtime extension uses the host contract and honors all guardrails.
 - All Stream Deck scenes execute Wiz Control on NED.
 - The Mac T3 app controls NED-hosted Claude, Codex, terminals, files, and
   worktrees while the Mac remains free of the corresponding heavy processes.
