@@ -66,11 +66,11 @@ graph LR
 | dm-review | openrouter | optional | `>=1.11.4` |
 | ghostwriter | design-machines | optional | `>=1.5.0` |
 | ned | superpowers | optional | `>=1.0.0` |
-| pipeline | dm-review | required | `>=1.58.5` |
+| pipeline | dm-review | required | `>=1.58.6` |
 | pipeline | ned | required | `>=1.4.0` |
 | pipeline | workflow-kernel | required | `>=0.13.6` |
 | pipeline | design-machines | optional | `>=1.3.0` |
-| pipeline | assembly | optional | `>=3.9.1` |
+| pipeline | assembly | optional | `>=3.10.0` |
 | pipeline | live-wires | optional | `>=1.8.0` |
 | pipeline | craft-developer | optional | `>=1.0.0` |
 | pipeline | accessibility-compliance | optional | `>=1.2.0` |

@@ -23,6 +23,19 @@ require_text() {
   fi
 }
 
+require_absent() {
+  local file="$1"
+  local pattern="$2"
+  local label="$3"
+
+  if grep -Fq -- "$pattern" "$file"; then
+    printf "  FAIL  %s\n" "$label"
+    failures=1
+  else
+    printf "  OK    %s\n" "$label"
+  fi
+}
+
 pipeline_run="$REPO_ROOT/plugins/pipeline/commands/pipeline-run.md"
 pipeline_command="$REPO_ROOT/plugins/pipeline/commands/pipeline.md"
 orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
@@ -49,8 +62,14 @@ require_text "$orchestrator" "git commit -F" "orchestrator writes commit message
 require_text "$orchestrator" "git check-ignore -q plans/" "orchestrator detects ignored plans receipts"
 
 require_text "$generated_alias" "## Codex Native Execution Adapter" "generated pipeline-run skill contains adapter section"
-require_text "$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md" "Small UI" "promptcraft scales quality floors by estimatedComplexity"
-require_text "$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md" "module build/tests pass in Docker" "promptcraft avoids bare Go command phrases in commit text"
+promptcraft="$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
+require_text "$promptcraft" "There is no minimum prompt-line or general acceptance-criterion count" "promptcraft rejects count floors"
+require_text "$promptcraft" "Every UI chunk still gets at least two rendered-impression criteria" "promptcraft retains two visual criteria for UI chunks"
+require_text "$promptcraft" "Relative size alone is never under-specification or a blocker" "prompt size parity is advisory only"
+require_absent "$promptcraft" "Classification floors:" "promptcraft removes classification floors"
+require_absent "$promptcraft" "below Logic floor" "promptcraft removes below-floor blockers"
+require_absent "$promptcraft" "floors are non-negotiable" "promptcraft removes non-negotiable floors"
+require_text "$promptcraft" "module build/tests pass in Docker" "promptcraft avoids bare Go command phrases in commit text"
 
 if [ "$failures" -ne 0 ]; then
   printf "FIX  add the Codex-native pipeline execution adapter and regenerate command skill aliases\n"

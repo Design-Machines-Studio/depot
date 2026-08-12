@@ -136,9 +136,17 @@ Flag SSE handlers that don't validate the session before starting a KV Watch or 
 
 ### Object-Level Authorization (P1)
 
-Flag mutation handlers (POST, PUT, PATCH, DELETE) that don't call `Authorize()` before modifying resources. Read-only GET handlers may skip object-level auth if route-level middleware covers the permission.
+Flag protected user/operator mutation handlers (POST, PUT, PATCH, DELETE) that
+do not authorize the concrete action/resource before modifying it. Trusted
+internal maintenance must instead name and enforce an explicit trust boundary;
+do not demand a fake user authorization call. Read-only GET handlers may skip
+object-level auth if route-level middleware covers the permission and the data
+is not privileged.
 
-**Look for:** Handler methods containing `db.Exec`, `db.ExecContext`, `service.Create`, `service.Update`, `service.Delete` without a preceding `auth.Authorize()` or `deps.Auth.Authorize()` call.
+**Look for:** Protected user/operator handler methods containing `db.Exec`,
+`db.ExecContext`, `service.Create`, `service.Update`, or `service.Delete` without
+concrete action/resource authorization before the write; maintenance entry
+points with no explicit trust-boundary proof.
 
 ### Federation Security (P1)
 
@@ -212,7 +220,10 @@ Flag handlers that accept form input, URL parameters, or request body data witho
 
 ### Authorizer Pattern Validation (P1)
 
-Flag mutation handlers/services that write data without calling `deps.Auth.Authorize()` with the correct action string. This check strengthens the existing Object-Level Authorization check above: that check flags *missing* auth calls; this check flags *incorrect* ones (wrong action string, wrong resource, or scope mismatch).
+For protected user/operator writes, flag handlers/services that call
+`deps.Auth.Authorize()` with the wrong action string, resource, or scope. This
+strengthens the missing-authorization check above. For trusted maintenance,
+validate the named trust boundary instead.
 
 **Look for:** `Authorize()` calls where the action string doesn't match the handler's purpose (e.g., `proposal.view` in an update handler), or where the `Resource` struct is missing `AuthorID` or `Status` fields needed for ownership checks.
 
@@ -242,11 +253,28 @@ Flag admin-facing forms that skip length/format validation because "only admins 
 
 ### Auth Boundary Map Gap (P2)
 
-Flag PRs touching `auth/`, `admin/`, `account/`, `install/`, `member/`, or `module`-level permission paths that rely ONLY on `RequireAdmin`/`RequireSuperAdmin` middleware for mutations without explicit `deps.Auth.Authorize()` calls in the service layer. Middleware is necessary but insufficient -- it proves a coarse route precondition, not an authorization decision.
+Flag PRs touching `auth/`, `admin/`, `account/`, `install/`, `member/`, or
+`module`-level permission paths that rely only on
+`RequireAdmin`/`RequireSuperAdmin` middleware for protected mutations without
+explicit concrete action/resource authorization before the write. Middleware is
+necessary but insufficient: it proves a coarse route precondition, not an
+authorization decision. Put the check in the service when the applicability
+matrix selects a service boundary; the narrow permitted direct handler must
+authorize for itself.
 
-**Note:** This check subsumes Object-Level Authorization (above) for auth-surface paths. If both trigger on the same handler, report under Auth Boundary Map Gap only -- but retain P1 severity if there is no `Authorize()` call in either the handler or the service layer (complete authorization bypass). The P2 severity applies only when handler-layer middleware provides coarse auth but the service layer lacks fine-grained `Authorize()` calls.
+**Note:** This check subsumes Object-Level Authorization (above) for auth-surface
+paths. If both trigger on the same protected write, report under Auth Boundary
+Map Gap only. Retain P1 severity when neither the applicable service nor the
+permitted direct handler performs concrete authorization. The P2 severity
+applies when coarse route auth exists but the fine-grained boundary is misplaced
+or incomplete.
 
-**Look for:** Handler or service methods in `auth/`, `admin/`, `account/`, `install/`, `member/`, or `module`-level paths containing `db.Exec`, `db.ExecContext`, `service.Create`, `service.Update`, `service.Delete` without a preceding `deps.Auth.Authorize()` call, even when `RequireAdmin` is present on the route.
+**Look for:** Protected handler or service methods in `auth/`, `admin/`,
+`account/`, `install/`, `member/`, or `module`-level paths containing `db.Exec`,
+`db.ExecContext`, `service.Create`, `service.Update`, or `service.Delete` without
+concrete action/resource authorization before the write, even when
+`RequireAdmin` is present on the route; trusted maintenance paths without a
+named and enforced trust boundary.
 
 **Direct-request / stale-install rejection (Baseplate PR #278):** baseplate-only install endpoints must reject direct, out-of-band, or stale requests not originating from the gated install flow -- default-deny on a POST that arrives without the expected install-flow precondition (install not started, already completed, or wrong step). A stale install-wizard session must fail closed, not resume a privileged flow. Flag install/setup handlers that proceed on any well-formed request without checking install state, and flag install completion that does not invalidate the wizard session.
 

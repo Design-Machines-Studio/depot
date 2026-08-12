@@ -37,7 +37,7 @@ Each generated prompt follows this structure. The goal is a self-contained docum
 - Handler pattern: [describe or show example]
 - Error handling: [describe convention]
 - Naming: [describe convention]
-- Assembly mutation pattern (when targeting Assembly): Authorize before write, publish events after commit (never inside the transaction), validate DTO at handler boundary
+- Assembly mutation pattern (when targeting Assembly): consult `assembly:development`'s Mutation Applicability Matrix; include only controls justified by the present behavior, with required events after commit
 
 ## Companion Skills
 
@@ -104,7 +104,7 @@ If the Task or Acceptance Criteria allow more than one reasonable interpretation
 - Do not reformat, rewrite comments, tighten types, or adjust imports on lines you are not otherwise changing for this chunk.
 - Do not create or modify `*_templ.go` files. Run `docker compose exec app templ generate` to regenerate them after editing `.templ` source files.
 - When adding database migrations, verify the next sequence number: `ls migrations/*.sql | sort | tail -1`. Use the next consecutive number.
-- When this chunk touches `auth/`, `admin/`, `account/`, `install/`, `member/`, or `module`-level permission paths in Assembly code, the final acceptance criterion must include an Auth Boundary Map receipt covering: surfaces mapped, middleware gates, Authorizer action/resource pairs, default-deny UI capabilities, stale-session/operator/install edge cases, test coverage, and residual risk. Omit the receipt only when no auth surface is affected.
+- When this chunk actually changes authentication, middleware, an Authorizer action/resource, a privileged read/write, a role/member/account/install/module permission, or a privileged UI capability in Assembly code, the final acceptance criterion must include an Auth Boundary Map receipt covering: surfaces mapped, middleware gates, Authorizer action/resource pairs, default-deny UI capabilities, stale-session/operator/install edge cases, test coverage, and residual risk. A matching path name is a review hint, not proof of a boundary change.
 - [Any additional constraints specific to this chunk]
 
 ## Research Context

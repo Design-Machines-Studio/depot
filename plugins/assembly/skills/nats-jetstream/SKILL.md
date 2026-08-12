@@ -264,13 +264,17 @@ Common event actions and their subject format. Use this as a reference when addi
 | Vote cast | `assembly.{scope}.vote.cast` | `assembly.gov.vote.cast` |
 | Role assigned | `assembly.member.role_assigned` | (baseplate-owned) |
 
-Every mutation that changes persisted state should publish an event. If a handler writes to SQLite but publishes no event, downstream real-time consumers (SSE, KV cache) will be stale.
+Require an event only when a named current event obligation exists: a current
+consumer, cross-module contract, real-time projection, or existing event
+contract needs the change. A SQLite write alone creates no event obligation.
+When an event is required, publish it only after the write commits so the named
+consumer never observes state that rolled back.
 
 ---
 
 ## Write-Through Pattern
 
-The critical data flow:
+When an event is required, use this data flow:
 
 ```
 Handler mutation
