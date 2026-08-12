@@ -135,10 +135,10 @@ authority boundaries, cleanup safety, promotion gates, and troubleshooting.
 ## validate-workflow-authority.sh
 
 Runs the native Workflow Authority broker's local release-candidate suite. It
-resolves the operator's executable `go` from `PATH`, uses `GOTOOLCHAIN=auto`,
-and requires the module-selected toolchain to report exact Go 1.26.5. The suite
-runs normal tests, the race detector, `go vet`, and untagged fixture binary
-builds. It
+resolves `go` and `pkg-config` from a fixed system-tool path, clears inherited
+Go, cgo, and pkg-config build overrides, uses `GOTOOLCHAIN=auto`, and requires
+the module-selected toolchain to report exact Go 1.26.5. The suite runs normal
+tests, the race detector, `go vet`, and untagged fixture binary builds. It
 includes a real Unix-socket exchange across the durable allocator, IPC server,
 authority manager, disclosure scanner, fixture credential reader, loopback TLS
 provider, fixed client verifier, and signed terminal receipt. It also proves

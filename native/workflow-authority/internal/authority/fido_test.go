@@ -22,7 +22,9 @@ import (
 
 func TestUnavailableAdapterNeverReportsProductionReady(t *testing.T) {
 	adapter := NewFIDOAdapter()
-	readiness := adapter.Readiness(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	readiness := adapter.Readiness(ctx)
 	if readiness.Production || readiness.InternalUV {
 		t.Fatalf("unavailable adapter reported ready: %+v", readiness)
 	}
@@ -38,7 +40,7 @@ func TestUnavailableAdapterNeverReportsProductionReady(t *testing.T) {
 	default:
 		t.Fatalf("unexpected FIDO adapter: %+v", readiness)
 	}
-	if _, err := adapter.Assert(context.Background(), []byte("challenge"), Credential{}); !errors.Is(err, ErrUnavailable) {
+	if _, err := adapter.Assert(ctx, []byte("challenge"), Credential{}); !errors.Is(err, ErrUnavailable) {
 		t.Fatalf("unavailable assertion: %v", err)
 	}
 }

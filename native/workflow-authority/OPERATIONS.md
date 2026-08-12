@@ -32,11 +32,12 @@ sudo apt install golang-go build-essential pkg-config libfido2-dev
 ```
 
 The distro Go launcher may be older than the module toolchain. The validator
-resolves `go` from the operator's executable `PATH`, sets `GOTOOLCHAIN=auto`,
-and requires the module-selected toolchain to report `go1.26.5`. It resolves
-`gofmt` from that selected toolchain's `GOROOT`. The supported native-library
-range is libfido2 1.x at 1.16.0 or newer; 1.15 and older and major version 2 or
-newer fail closed.
+resolves `go` and `pkg-config` only from its fixed system-tool path, clears
+caller-controlled Go, cgo, and pkg-config build overrides, sets
+`GOTOOLCHAIN=auto`, and requires the module-selected toolchain to report
+`go1.26.5`. It resolves `gofmt` from that selected toolchain's `GOROOT`. The
+supported native-library range is libfido2 1.x at 1.16.0 or newer; 1.15 and
+older and major version 2 or newer fail closed.
 
 ## Production-tag build proof from a repository checkout
 
@@ -56,22 +57,15 @@ a provider, or claim broker status `ready`.
 ## Reviewed trusted-main artifacts
 
 Only after review and merge, build installation artifacts from a clean checkout
-of the reviewed trusted-main commit. Record and verify that exact commit before
-building:
+of the reviewed trusted-main commit. The repository-owned gate rejects a dirty
+checkout or commit mismatch, reuses its authenticated toolchain and sanitized
+build environment, and writes commit, tool-version, and checksum evidence:
 
 ```sh
-git status --short
-git rev-parse HEAD
-cd native/workflow-authority
-GO_BIN="$(command -v go)"
-LIBFIDO2_VERSION="$(pkg-config --modversion libfido2)"
-IFS=. read -r LIBFIDO2_MAJOR LIBFIDO2_MINOR LIBFIDO2_PATCH <<EOF
-$LIBFIDO2_VERSION
-EOF
-LIBFIDO2_CPPFLAGS="-DWORKFLOW_AUTHORITY_LIBFIDO2_MAJOR=$LIBFIDO2_MAJOR -DWORKFLOW_AUTHORITY_LIBFIDO2_MINOR=$LIBFIDO2_MINOR -DWORKFLOW_AUTHORITY_LIBFIDO2_PATCH=$LIBFIDO2_PATCH"
-CGO_CPPFLAGS="$LIBFIDO2_CPPFLAGS" GOTOOLCHAIN=auto "$GO_BIN" build -tags libfido2 -o workflow-authority ./cmd/workflow-authority
-cp workflow-authority workflow-authority-admin
-CGO_CPPFLAGS="$LIBFIDO2_CPPFLAGS" GOTOOLCHAIN=auto "$GO_BIN" build -tags libfido2 -o workflow-authorityd ./cmd/workflow-authorityd
+REVIEWED_COMMIT=<approved-full-commit-sha-from-review-record>
+WORKFLOW_AUTHORITY_REVIEWED_COMMIT="$REVIEWED_COMMIT" \
+WORKFLOW_AUTHORITY_ARTIFACT_DIR=/absolute/path/to/empty-package-staging \
+  ./tools/validate-workflow-authority.sh
 ```
 
 The two client filenames intentionally contain the same binary: administrative
