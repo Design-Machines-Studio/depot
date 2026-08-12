@@ -10,10 +10,9 @@ external handoff only; it does not duplicate Baseplate's production roadmap.
 
 The current priority order is:
 
-1. **P1 -- shorten and cheapen development.** Finish PR 33 release closeout,
-   then make dm-review proportional, install the accepted worker/advisor model
-   policy, unlock one bounded audited cheap execution path, and prove it with a
-   measured canary.
+1. **P1 -- shorten and cheapen development.** Make dm-review proportional,
+   install the accepted worker/advisor model policy, unlock one bounded audited
+   cheap execution path, and prove it with a measured canary.
 2. **P2 -- unlock Fixture development.** After the canary, apply the improved
    workflow to the existing Baseplate verifier -> canonical Jig chain. Depot
    does not own that product work.
@@ -23,13 +22,13 @@ The current priority order is:
 
 ### Single next Depot chunk
 
-The PR 33 release-closeout prompt is currently executing in a separate clean
-detached worktree at merge commit
-`48fc3931281282844a13d988a2f21753f8c62b1c`. Its exact tags are
-`assembly-v3.10.0`, `dm-review-v1.58.6`, and `pipeline-v1.45.0`.
+PR 33 release closeout is complete. The remote annotated tags
+`assembly-v3.10.0`, `dm-review-v1.58.6`, and `pipeline-v1.45.0` all peel to its
+merge commit `48fc3931281282844a13d988a2f21753f8c62b1c`; its local/remote branch
+and worktree are absent.
 
-After that receipt is checked, the one immediate successor is **00b-2:
-proportional dm-review severity and convergence**. It makes P3 advisory,
+The one immediate successor is **00b-2: proportional dm-review severity and
+convergence**. It makes P3 advisory,
 removes unconditional duplicate simplification work, and right-sizes review
 fan-out while retaining P1, applicable security, and required browser gates.
 Do not start 00c or a paid OpenRouter implementation lane before 00b-2 lands.
@@ -38,7 +37,7 @@ Do not start 00c or a paid OpenRouter implementation lane before 00b-2 lands.
 
 | Order | Work | State | Promotion evidence |
 |---|---|---|---|
-| 0 | PR 33 release closeout | **IN PROGRESS** | three remote annotated tags peel to `48fc393`; only PR 33's proven-merged refs/worktree removed |
+| 0 | PR 33 release closeout | **DONE** | three remote annotated tags peel to `48fc393`; PR 33's proven-merged refs/worktree removed |
 | 1 | 00b-2 proportional dm-review | **NEXT** | release receipt checked; refreshed bounded prompt approved |
 | 2 | 00c worker/advisor routing | HOLD | 00b-2 merged; executable routing matches the accepted 00a portfolio and effort policy |
 | 3 | 00d bounded audited cheap execution | HOLD / REWRITE | 00c merged; one non-sensitive workload, direct receipt boundary, and one bounded native supervisor check |
@@ -52,8 +51,8 @@ Do not start 00c or a paid OpenRouter implementation lane before 00b-2 lands.
 | 11 | Darwin broker | FUTURE / REPLAN | Linux proves production path; complete FIDO/runtime/IPC scope |
 | 12 | R5 Agent Plugins interop | PARK | a named client or distribution target exists |
 
-Only `IN PROGRESS` and `NEXT` rows authorize immediate coordination. HOLD,
-EXTERNAL, LATER, FUTURE, and PARK are not execution prompts.
+Only `NEXT` authorizes a new Depot execution session. DONE, HOLD, EXTERNAL,
+LATER, FUTURE, and PARK are not execution prompts.
 
 ### Cross-repository handoff
 
