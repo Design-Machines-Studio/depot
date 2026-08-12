@@ -14,6 +14,8 @@
     "architecture",
     "orchestrator",
     "multi-agent",
+    "proportional-review",
+    "token-efficiency",
     "visual-testing",
     "browser-testing",
     "playwright"
@@ -41,6 +43,8 @@
           "orchestrator",
           "multi-agent",
           "parallel",
+          "proportional-review",
+          "token-efficiency",
           "issue-tracking"
         ]
       },
@@ -332,9 +336,9 @@
       "repository-audit",
       "orchestrator",
       "multi-agent",
-      "security",
-      "architecture",
-      "visual-testing"
+      "proportional-review",
+      "token-efficiency",
+      "security"
     ]
   }
 }

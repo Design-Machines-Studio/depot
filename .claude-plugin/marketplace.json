@@ -293,6 +293,8 @@
           "repository-audit",
           "orchestrator",
           "multi-agent",
+          "proportional-review",
+          "token-efficiency",
           "security",
           "architecture",
           "visual-testing",
@@ -371,6 +373,8 @@
           "execution",
           "prompt-generation",
           "review-loop",
+          "proportional-review",
+          "token-efficiency",
           "fix-pass"
         ]
       }

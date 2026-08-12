@@ -1632,7 +1632,7 @@ P3 advisories never trigger the manual repair pass or another review iteration.
 **Evaluation receipt (structural interlock):** After completing the evaluation gate, you MUST output this exact line:
 
 ```text
-EVAL_GATE_PASSED: [chunk-id] | classification: [type] | iterations: [N] | findings_remaining: [N] | deferred: [N]
+EVAL_GATE_PASSED: [chunk-id] | classification: [type] | iterations: [N] | findings_remaining: [N] | p3_advisories: [N]
 ```
 
 Append `requestedProvider: <provider>`, `attemptedProvider: <provider>`,

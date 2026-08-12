@@ -24,8 +24,12 @@ written. See `docs/skill-authoring.md`.
 ### 1. Find Pending Findings
 
 ```bash
-ls todos/*-pending-*.md 2>/dev/null
+ls todos/*-pending-p1-*.md todos/*-pending-p2-*.md 2>/dev/null
 ```
+
+Historical `todos/*-pending-p3-*.md` files from releases before 1.59.0 are
+advisory artifacts. Leave them owner-managed and report them separately; they
+do not enter this fix queue or block completion.
 
 If no pending findings exist, tell the user and stop.
 

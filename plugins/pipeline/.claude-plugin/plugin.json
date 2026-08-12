@@ -29,6 +29,8 @@
     "worktree",
     "execution",
     "review-loop",
+    "proportional-review",
+    "token-efficiency",
     "prompt-generation",
     "multi-agent"
   ],
@@ -138,6 +140,8 @@
           "worktrees",
           "autonomous",
           "execution",
+          "proportional-review",
+          "token-efficiency",
           "review-loop"
         ]
       }
