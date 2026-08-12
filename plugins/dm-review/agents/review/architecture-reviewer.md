@@ -96,13 +96,23 @@ When reviewing Assembly production code (`internal/fixtures/` or `internal/basep
 
 Open Baseplate exercises for this check: **#258** (decompose the federation file) and **#234** (split the membership service + admin handler files). The trust/share/repair services touched by PR #271 (trust hardening/delivery) and PR #275 (data-sharing permissions) are the same decomposition class -- when they grow past the file-size limits, split them under this contract. A good next exercise is executing #258 as a strict reorg-only PR with the Docker test suite as the behavior proof.
 
-**Service Layer Bypass (P2):** Flag handlers that call `ScopedDB` methods directly (`.Query()`, `.Exec()`, `.QueryRow()`) instead of going through a service layer. Handlers should be thin HTTP adapters that delegate to services.
+**Service Boundary Bypass (P2):** Use `assembly:development`'s Mutation
+Applicability Matrix. Flag a handler that calls `ScopedDB` directly when domain
+logic, transaction ownership, or a second real caller requires a service. Do
+not flag a one-use handler merely for one low-consequence `ScopedDB` statement
+when it has no domain logic or transaction ownership. Every other applicable
+control still applies, including concrete action/resource authorization for a
+protected user or operator write.
 
 **Module Boundary Violations (P1):** Flag fixture code that imports from another fixture's package. For example, `internal/fixtures/governance/` must not import from `internal/fixtures/documents/`. Fixtures communicate via the event bus, not direct imports.
 
 **ScopedDB Bypass (P1):** Flag fixture code that imports `database/sql` directly or uses `*sql.DB` instead of `*ScopedDB`. Fixtures must access data exclusively through `ScopedDB` to enforce table-prefix isolation. Exception: baseplate code (`internal/baseplate/`) and test utilities may use raw `*sql.DB`.
 
-**Handler Thickness (P2):** Flag handler functions that contain business logic beyond parse-call-render (validation logic, DB queries, conditional branching on domain rules). Handlers should be thin HTTP adapters that delegate to services. Suggest extracting business logic to the service layer.
+**Handler Thickness (P2):** Flag handler functions that own domain rules,
+transaction scope, or behavior shared by another caller. Do not flag ordinary
+request parsing, input validation, rendering, or the narrow one-statement
+direct `ScopedDB` case allowed by the applicability matrix. Suggest a service
+when a real boundary exists.
 
 **Shared Component Isolation (P1):** Flag `internal/components/` files that import fixture-specific types (e.g., importing from `internal/fixtures/governance/model/`). Shared components must accept primitive props only (strings, ints, bools) so they remain reusable across fixtures.
 
@@ -114,7 +124,11 @@ Open Baseplate exercises for this check: **#258** (decompose the federation file
 
 **Note:** Missing NATS events after mutations are checked by the `nats-reviewer` agent (assembly plugin), not this agent. Do not duplicate that check here. Authorizer call *presence* is checked by the `security-auditor` agent; this agent checks *structural* placement (logic in handler vs service layer).
 
-**Auth Boundary Violation (P2):** Flag handlers that perform mutations (create/update/delete/transition) where the `Authorize()` call lives in the handler layer rather than the service layer. Even if a handler correctly delegates to a service, an `Authorize()` call in the handler means a different caller (CLI command, event handler, internal service call) could bypass auth entirely. The `Authorize()` call belongs inside the service method, not above it.
+**Auth Boundary Violation (P2):** When a protected mutation has a service
+boundary, flag an `Authorize()` call that lives only in the handler. A different
+caller could otherwise bypass authorization. The service method owns the
+concrete action/resource check. A direct handler allowed by the applicability
+matrix must authorize before its protected write.
 
 **Look for:** `Authorize()` calls inside `func (h *Handler)` or `func (h *handler)` methods that precede `h.service.Foo()` calls -- the Authorize should be inside `service.Foo()`, not the handler.
 

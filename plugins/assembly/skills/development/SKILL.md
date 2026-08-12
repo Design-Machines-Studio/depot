@@ -16,7 +16,13 @@ Build cooperative governance applications with Go, Templ, and Datastar. Build pa
 
 ### Operating Doctrine
 
-Assembly defaults to a tiny, internal, self-hosted application serving about 4-50 co-op members. It is maintained by a two-person development team, with only a few possible future contributors. Choose the simplest adequate direct code before adding an abstraction. Apply DRY when concrete behavior repeats or one real boundary needs a single owner, not for speculative reuse. Do not import public-SaaS, huge-team, extreme-scale, or enterprise-compliance machinery unless an explicit requirement introduces it.
+Assembly defaults to a small, internal, self-hosted application serving about
+4-50 co-op members. A two-person development team maintains it, and only a few
+contributors are likely to join. Start with the simplest adequate direct code.
+Add an abstraction when concrete behavior repeats or a real boundary needs one
+owner, not for speculative reuse. Do not import public-SaaS, huge-team,
+extreme-scale, or enterprise-compliance machinery unless an explicit
+requirement introduces it.
 
 Performance, developer ergonomics, elapsed implementation time, and token spend are design constraints when otherwise correct approaches compete. An extra security control must name the exposed surface, plausible actor, consequence, and gap left by existing controls. This proportionality never excuses missing authorization, exposed credentials, corruptible state, or false verification claims.
 
@@ -486,8 +492,8 @@ Apply controls because the present behavior needs them, not merely because code 
 | Validation + invariants | External input or a domain transition is accepted | A typed internal value passes between already validated layers |
 | Transaction | Multiple statements must be atomic, an allocation or sequence is race-sensitive, or an invariant spans reads and writes | Every single SQLite statement; SQLite already makes one statement atomic |
 | Audit | Governance decisions, membership, role or permission changes, money, admin or config, federation trust, destructive or recovery operations, or an existing audit contract | A low-consequence preference or ordinary content edit with no audit consumer or requirement |
-| Event | A current consumer, cross-module contract, realtime projection, or existing event contract needs the change | Every database mutation; when required, publish strictly after commit |
-| SSE | Connected clients currently need realtime notice | An event exists or a handler returns HTML |
+| Event | A current consumer, cross-module contract, real-time projection, or existing event contract needs the change | Every database mutation; when required, publish strictly after commit |
+| SSE | Connected clients currently need real-time notice | An event exists or a handler returns HTML |
 | Service abstraction | Current domain logic, transaction ownership, or a second real caller warrants it | A one-use handler can be direct and clear |
 
 Keep tests proportional: prove each applicable control and its important failure path. Do not demand mocks or assertions for controls the matrix correctly omits.
@@ -503,7 +509,7 @@ Produce this map before review on any PR touching authentication, authorization,
 ### When to Produce
 
 - Any route adds, removes, or changes auth middleware (`RequireAuth`, `RequireAdmin`, `RequireSuperAdmin`, `RequirePermission`, `RequireModule`).
-- Any handler changes a protected or privileged persistent mutation boundary.
+- Any change alters a handler's protected or privileged persistent-mutation boundary.
 - Any service method mutates members, roles, settings, modules, accounts, or install state.
 - Any UI hides, shows, enables, or disables privileged controls.
 - Any change touches operator/super-admin behavior, `LoadMember`, install guard, session rotation, or account existence handling.
@@ -803,7 +809,17 @@ New SDK behavior adds a case to the conformance harness in the same change. A co
 
 ### Service Layer Pattern
 
-Handlers -> Services -> ScopedDB. Services contain business logic. Handlers are thin HTTP adapters (parse request, call service, render response).
+Use Handlers -> Services -> ScopedDB when the Mutation Applicability Matrix says
+a service boundary applies. The service owns domain rules, transaction scope,
+or behavior shared by a second real caller. Keep the handler as a thin HTTP
+adapter that parses, calls the service, and renders.
+
+A one-use handler may call `ScopedDB` directly when it has no domain logic or
+transaction ownership and performs one low-consequence statement. It still
+applies every other selected control, including concrete action/resource
+authorization for a protected user or operator write. Do not create a
+pass-through service solely to satisfy layering shape; extract a service when a
+real boundary appears.
 
 **Size limits:** No handler file over 200 lines. No service file over 500 lines. Split into focused files if needed.
 

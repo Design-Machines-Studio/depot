@@ -260,7 +260,7 @@ type ProxyValidation struct {
 - [ ] Use a transaction only when atomic multi-step work, race-sensitive allocation, or a cross-read/write invariant requires it
 - [ ] Record an audit entry only for a named high-consequence category or existing audit contract
 - [ ] Trigger downstream actions or publish an event only for a current behavior, consumer, projection, or contract; publish required events after commit
-- [ ] Notify through SSE only when connected clients currently need realtime notice
+- [ ] Notify through SSE only when connected clients currently need real-time notice
 - [ ] Return the appropriate response and proportionally test the selected controls and important failure path
 
 ### Example Handler Structure
@@ -268,35 +268,45 @@ type ProxyValidation struct {
 ```go
 func (h *Handlers) SubmitProposal(w http.ResponseWriter, r *http.Request) {
     id := chi.URLParam(r, "id")
+    actor := auth.ContextMember(r.Context())
+    if actor == nil {
+        h.error(w, http.StatusForbidden, "Not authorized")
+        return
+    }
 
-    // 1. Fetch current state
-    proposal, err := h.getProposal(id)
+    if err := h.proposals.Submit(r.Context(), actor.ID, id); err != nil {
+        h.writeProposalError(w, err) // maps denied/invalid/not-found/storage safely
+        return
+    }
+    http.Redirect(w, r, "/governance/proposals/"+id, http.StatusSeeOther)
+}
+
+func (s *ProposalService) Submit(ctx context.Context, actorID, id string) error {
+    proposal, err := s.getProposal(ctx, id)
     if err != nil {
-        h.error(w, http.StatusNotFound, "Proposal not found")
-        return
+        return err
     }
-
-    // 2. Validate transition
+    if err := s.auth.Authorize(ctx, actorID, "proposal.submit", Resource{
+        ID: proposal.ID, AuthorID: proposal.ProposedBy, Status: proposal.Status,
+    }); err != nil {
+        return err
+    }
     if proposal.Status != "draft" {
-        h.error(w, http.StatusBadRequest, "Can only submit draft proposals")
-        return
+        return ErrInvalidProposalTransition
     }
-
-    // 3. Update status
-    _, err = h.db.Exec(`
-        UPDATE proposals
+    _, err = s.db.ExecContext(ctx, `
+        UPDATE $TABLE
         SET status = 'discussion', submitted_at = datetime('now')
         WHERE id = ?
     `, id)
-    if err != nil {
-        h.error(w, http.StatusInternalServerError, "Failed to submit")
-        return
-    }
-
-    // 4. Redirect
-    http.Redirect(w, r, "/governance/proposals/"+id, http.StatusSeeOther)
+    return err
 }
 ```
+
+This protected domain transition uses a service because authorization and a
+status invariant belong to the domain boundary. The single SQL statement is
+already atomic. Add audit, event, or SSE behavior only when the matrix identifies
+a current obligation; publish any required event after the write commits.
 
 ---
 

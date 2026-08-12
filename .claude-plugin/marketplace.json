@@ -277,7 +277,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.58.5",
+      "version": "1.58.6",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

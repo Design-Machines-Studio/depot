@@ -450,18 +450,20 @@ There is no minimum prompt-line or general acceptance-criterion count. Prompt le
 3. Inspect outliers only for a concrete missing requirement, failure mode, or necessary context. Relative size alone is never under-specification or a blocker.
 4. A UI chunk with fewer than two rendered-impression criteria remains incomplete regardless of sibling size.
 
-**Output a parity summary:**
+**Output a completeness summary:**
 
 ```text
-Prompt Quality Parity:
-  Classification floors:
-    UI chunks: chunk-01 (large, 252 lines, 18 ACs, 3 visual) PASS, chunk-03 (small, 120 lines, 8 ACs, 2 visual) PASS
-    Logic chunks: chunk-02 (115 lines, 6 ACs) PASS, chunk-04 (98 lines, 4 ACs) BLOCKER (below Logic floor)
-  Sibling parity:
-    UI group avg 186 lines. chunk-03 at 65% -- under-specified relative to siblings.
+Prompt Completeness:
+  chunk-01: PASS -- task, files, context, mapped requirements, failure modes, validation, and 2 rendered impressions present
+  chunk-02: BLOCKER -- missing the named permission-denial failure mode from REQ-04
+  chunk-03: BLOCKER -- generated-file gate applies, but the prompt does not name the source file or regeneration command
+  Diagnostics: chunk-03 is shorter than its siblings; size did not affect the verdict
 ```
 
-**Fix BLOCKERs** by expanding under-specified prompts or correcting `estimatedComplexity`. The floors are non-negotiable for the chosen size -- if a prompt genuinely cannot be expanded to the small floor, the chunk is misclassified or underspecified. Do not proceed to handoff with BLOCKER-class parity violations.
+Fix a blocker by adding the named missing requirement, realistic failure mode,
+necessary context, applicable gate, or UI rendered-impression criterion. Do not
+add text merely to change a diagnostic count. Do not proceed to handoff while a
+concrete completeness blocker remains.
 
 ### Phase 7: Handoff
 

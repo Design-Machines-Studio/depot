@@ -199,7 +199,7 @@ r.With(httprate.LimitByIP(10, time.Minute)).Get("/sse/*", handleSSE)
 
 ## 8. Post-Commit Event Publishing
 
-Publish an event only when a current consumer, cross-module contract, realtime projection, or existing event contract requires it. A database write alone does not create an event obligation. When an event is required, it must publish AFTER `tx.Commit()`, never inside the transaction. If the transaction rolls back, a pre-commit event is a lie that corrupts downstream state (KV cache, SSE clients, audit trail).
+Publish an event only when a current consumer, cross-module contract, real-time projection, or existing event contract requires it. A database write alone does not create an event obligation. When an event is required, it must publish AFTER `tx.Commit()`, never inside the transaction. If the transaction rolls back, a pre-commit event is a lie that corrupts downstream state (KV cache, SSE clients, audit trail).
 
 ```go
 // CORRECT -- publish after commit

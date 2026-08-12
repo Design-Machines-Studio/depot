@@ -163,7 +163,7 @@
     ]
   },
   "pluginDependencies": {
-    "dm-review": ">=1.58.5",
+    "dm-review": ">=1.58.6",
     "ned": ">=1.4.0",
     "workflow-kernel": ">=0.13.6"
   },

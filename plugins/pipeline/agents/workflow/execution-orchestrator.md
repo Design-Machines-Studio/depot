@@ -1385,9 +1385,17 @@ and null otherwise. The human-help, prior-attempt, and resume-reason fields are
 null only when their condition does not apply.
 `evidence_refs`, `prior_attempt_ref`, `receipt_ref`, and `repo_scope_ref` are the
 only durable references; they must be repository-scoped, bounded, safe, and
-redacted. `reproduction_instruction` is derived from the trusted repository verification profile and reaches the repair attempt before model review. Never include raw output, prompts, session tokens, credentials, environment, URLs,
-arbitrary host paths, or unbounded output. Derive `failure_signature` deterministically from the current
-contract digest/revision, `failing_check_ids` in contract order, and digests of the safe
+redacted.
+
+Derive `reproduction_instruction` from the trusted repository verification
+profile. Deliver it to the repair attempt before model review through the
+bounded receipt transfer defined below.
+
+Never include raw output, prompts, session tokens, credentials, environment,
+URLs, arbitrary host paths, or unbounded output in feedback or repair prompts.
+
+Derive `failure_signature` deterministically from the current contract
+digest/revision, `failing_check_ids` in contract order, and digests of the safe
 evidence receipts. `attempt` and `remaining_retry_budget` are projections of the
 kernel decision below, never locally authored limits.
 
@@ -1415,6 +1423,26 @@ node_id: <chunk-id>
 reason_code: deterministic_validation_failure
 evidence: [<safe feedback receipt ref>, <safe deterministic evidence refs>]
 ```
+
+Resolve and validate the referenced feedback receipt before every repair
+dispatch. The resolver must remain inside the recorded repository scope, accept
+the closed feedback schema only, and match the current node, contract digest,
+contract revision, and failure signature. It extracts only the canonical
+failing check IDs, safe evidence references/digests, and bounded trusted
+`reproduction_instruction` into one repair message. A missing, stale,
+out-of-scope, oversized, or schema-invalid receipt stops repair before any model
+call.
+
+For a resumed builder, the host adapter dereferences the first
+`ValidationFeedback.evidence` reference and includes that bounded repair message
+in the resume input. For a replacement builder, once
+`resume_or_replace` returns `replacement_dispatched`, the orchestrator sends the
+same bounded repair message to the replacement session before it can complete
+or enter model review. A replacement-dispatch receipt by itself is not proof of
+feedback delivery. Persist a bounded delivery receipt containing the feedback
+receipt reference, instruction digest, target attempt reference, and delivery
+mode (`resume` or `replacement`); require it before accepting either repair
+result.
 
 Resume the same builder only when durable evidence proves all of: the original
 dispatch identity, protected session token/handle, same host, same repository
@@ -1524,8 +1552,8 @@ grep -rn 'fmt.Sprintf.*SELECT\|fmt.Sprintf.*INSERT\|fmt.Sprintf.*UPDATE' .worktr
 
 **For Assembly mutation handlers:**
 
-**Authorize() Presence:**
-- Grep every POST/PUT/PATCH/DELETE handler for `Authorize()` call. A mutation handler without authorization is a P1 security violation.
+**Authorization Boundary:**
+- First classify whether each POST/PUT/PATCH/DELETE handler performs a protected user/operator write or trusted internal maintenance. A protected user/operator write without concrete action/resource authorization before the write is a P1 security violation. Trusted maintenance does not need a fake user authorization call, but it must name and enforce its explicit trust boundary; an unproved maintenance claim is a P1.
 - Severity: P1
 
 **Post-Commit Event Sequencing:**
