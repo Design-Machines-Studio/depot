@@ -22,11 +22,13 @@ class ReleasePreflightTests(unittest.TestCase):
         self.bin = self.temp / "bin"
         self.origin = self.temp / "origin.git"
         self.marketplace_root = self.temp / "marketplace"
+        self.home = self.temp / "home"
         self.codex_json = self.temp / "codex.json"
         self.git_log = self.temp / "git.log"
         self.repo.mkdir()
         self.bin.mkdir()
         self.marketplace_root.mkdir()
+        self.home.mkdir()
         (self.repo / "tools").mkdir()
 
         script = SCRIPT_SOURCE.read_text(encoding="utf-8")
@@ -114,8 +116,9 @@ class ReleasePreflightTests(unittest.TestCase):
         )
         wrapper.chmod(0o755)
 
-    def _write_codex(self):
-        codex = self.bin / "codex"
+    def _write_codex(self, path=None):
+        codex = path or self.bin / "codex"
+        codex.parent.mkdir(parents=True, exist_ok=True)
         codex.write_text(
             "#!/bin/sh\n"
             "if [ \"$1\" = plugin ] && [ \"$2\" = marketplace ] && "
@@ -153,8 +156,14 @@ class ReleasePreflightTests(unittest.TestCase):
         if codex == "unavailable":
             codex_path.unlink(missing_ok=True)
         else:
-            self._write_codex()
+            if codex == "user-local":
+                codex_path.unlink(missing_ok=True)
+                self._write_codex(self.home / ".local/bin/codex")
+            else:
+                self._write_codex()
             if codex == "fresh":
+                payload = json.dumps(self._installed_rows())
+            elif codex == "user-local":
                 payload = json.dumps(self._installed_rows())
             elif codex == "stale":
                 payload = json.dumps(self._installed_rows({"alpha": "0.9.0"}))
@@ -168,6 +177,7 @@ class ReleasePreflightTests(unittest.TestCase):
         self.git_log.unlink(missing_ok=True)
         env = os.environ.copy()
         env.update({
+            "HOME": str(self.home),
             "PREFLIGHT_CODEX_JSON": str(self.codex_json),
             "PREFLIGHT_MARKETPLACE_ROOT": str(self.marketplace_root),
             "PREFLIGHT_GIT_LOG": str(self.git_log),
@@ -265,6 +275,12 @@ class ReleasePreflightTests(unittest.TestCase):
         result = self._run_preflight(no_net=True, codex="fresh")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("2 installed Codex plugin(s) checked", result.stdout)
+
+    def test_user_local_codex_cache_passes_without_broadening_fixed_path(self):
+        result = self._run_preflight(no_net=True, codex="user-local")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("2 installed Codex plugin(s) checked", result.stdout)
+        self.assertNotIn("codex CLI not installed", result.stdout)
 
     def test_stale_codex_cache_fails_with_repair(self):
         result = self._run_preflight(no_net=True, codex="stale")

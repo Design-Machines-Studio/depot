@@ -262,10 +262,19 @@ done <<< "$version_report"
 # --------------------------------------------------------------------------
 check_codex_cache_freshness() {
 printf "\nCodex cache freshness:\n"
-if ! command -v codex >/dev/null 2>&1; then
+codex_bin=""
+# Codex's native user install lives outside the fixed toolchain PATH on Linux.
+# Resolve only this executable explicitly; do not expose all user-local tools.
+if [ -n "${HOME:-}" ] && [ -x "$HOME/.local/bin/codex" ]; then
+  codex_bin="$HOME/.local/bin/codex"
+else
+  codex_bin="$(command -v codex 2>/dev/null || :)"
+fi
+
+if [ -z "$codex_bin" ]; then
   skip "codex CLI not installed; Codex cache freshness not checked"
 else
-  codex_marketplaces="$(codex plugin marketplace list)"
+  codex_marketplaces="$("$codex_bin" plugin marketplace list)"
   codex_marketplaces_rc=$?
   codex_marketplace_root="$(printf '%s\n' "$codex_marketplaces" | awk '$1 == "depot" {$1=""; sub(/^[[:space:]]+/, ""); print; exit}')"
 
@@ -274,7 +283,7 @@ else
   elif [ -z "$codex_marketplace_root" ] || [ ! -d "$codex_marketplace_root" ]; then
     skip "codex plugin marketplace list did not resolve a readable depot root; Codex cache freshness not checked"
   else
-    codex_plugins="$(codex plugin list --marketplace depot --json)"
+    codex_plugins="$("$codex_bin" plugin list --marketplace depot --json)"
     codex_plugins_rc=$?
     if [ "$codex_plugins_rc" -ne 0 ]; then
       skip "codex installed-plugin query failed (rc=$codex_plugins_rc); Codex cache freshness not checked"
