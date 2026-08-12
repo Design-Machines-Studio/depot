@@ -123,7 +123,11 @@ func (r FileCredentialReader) Read(ctx context.Context) (*Credential, error) {
 }
 
 func openProductionRoot(owner uint32) (*os.Root, error) {
-	root, err := os.OpenRoot(productionRootPath)
+	return openProductionRootAt(productionRootPath, owner)
+}
+
+func openProductionRootAt(path string, owner uint32) (*os.Root, error) {
+	root, err := os.OpenRoot(path)
 	if err != nil {
 		return nil, ErrStartup
 	}
@@ -134,7 +138,9 @@ func openProductionRoot(owner uint32) (*os.Root, error) {
 	}
 	info, statErr := f.Stat()
 	_ = f.Close()
-	if statErr != nil || !info.IsDir() || info.Mode().Perm() != 0o700 || !ownedBy(info, owner) {
+	// Public trust below this root must remain traversable; secret descendants
+	// retain their separate 0700 directory and 0600 file requirements.
+	if statErr != nil || info.Mode() != os.ModeDir|0o755 || !ownedBy(info, owner) {
 		root.Close()
 		return nil, ErrStartup
 	}
