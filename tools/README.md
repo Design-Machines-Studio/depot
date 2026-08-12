@@ -134,9 +134,11 @@ authority boundaries, cleanup safety, promotion gates, and troubleshooting.
 
 ## validate-workflow-authority.sh
 
-Runs the native Workflow Authority broker's local release-candidate suite with
-exact Go 1.26.5: normal tests, the race detector, `go vet`, and untagged fixture
-binary builds. The suite
+Runs the native Workflow Authority broker's local release-candidate suite. It
+resolves the operator's executable `go` from `PATH`, uses `GOTOOLCHAIN=auto`,
+and requires the module-selected toolchain to report exact Go 1.26.5. The suite
+runs normal tests, the race detector, `go vet`, and untagged fixture binary
+builds. It
 includes a real Unix-socket exchange across the durable allocator, IPC server,
 authority manager, disclosure scanner, fixture credential reader, loopback TLS
 provider, fixed client verifier, and signed terminal receipt. It also proves
@@ -153,9 +155,9 @@ relaxes a check above:
   `workflow-authority-fixture` package and `go list -tags fixture ./...` must, so the
   harness scaffolding can never become a shipped code path. The tagged sources are then
   vetted and built.
-- **Formatting.** `gofmt -l` over the module, using the `gofmt` beside the pinned Go
-  launcher. `go vet` and `go build` both accept unformatted source, so this is the only
-  check that holds the convention.
+- **Formatting.** `gofmt -l` over the module, using `gofmt` from the selected
+  toolchain's `go env GOROOT`. `go vet` and `go build` both accept unformatted source,
+  so this is the only check that holds the convention.
 - **Credential-shaped literal scan.** The module and the acceptance harness must contain
   no AWS key, OpenRouter/Anthropic key, GitHub token, GitLab token, or PEM private-key
   shape. Tripwire vectors in the product's own scanner tests are concatenated at runtime
@@ -179,19 +181,31 @@ sibling inspection, live provider contact, systemd install, and so on. A `GAP` i
 reported non-claim, not a failure; treat the set of `GAP` ids as the boundary of what a
 green run means.
 
-On Linux with exactly libfido2 1.17.0, the validator additionally tests, race
-tests, vets, and builds with `-tags libfido2`. A pinned packaging/CI lane must
-require that evidence rather than accepting a local coverage gap:
+On Ubuntu, install the distro prerequisites (`go`, a cgo compiler,
+`pkg-config`, and `libfido2-dev`) from the configured signed repositories. On
+Linux with libfido2 1.x at 1.16.0 or newer, the validator additionally tests,
+race tests, vets, and builds with `-tags libfido2`; libfido2 1.15 and older and
+major version 2 or newer are rejected. A packaging/CI lane must require that
+evidence rather than accepting a local coverage gap:
 
 ```bash
 WORKFLOW_AUTHORITY_REQUIRE_PRODUCTION_BUILD=1 ./tools/validate-workflow-authority.sh
 ```
 
-Without the pinned Linux dependency, the command reports an explicit
+Without the supported Linux dependency, the command reports an explicit
 `COVERAGE-GAP`; it does not claim production build proof. All local modes still
 perform no root installation, hardware gesture, external provider request, or
 worker-principal/credential-custody acceptance. Those remain separate operator
 evidence.
+
+This command proves a production-tag build from the current repository
+checkout; it does not make that checkout an installation source. Installation
+artifacts must be built later from the exact reviewed, merged trusted-main
+commit. Interactive FIDO enrollment and provider credential custody happen
+only after that trusted-main installation and remain human/operator steps. See
+`native/workflow-authority/OPERATIONS.md` for the fixed paths, ownership and
+permission model, service workflow, UP+UV requirements, and fail-closed status
+contract.
 
 ## validate-quality-pulse.sh
 

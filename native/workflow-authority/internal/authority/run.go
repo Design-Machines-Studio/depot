@@ -26,7 +26,7 @@ import (
 
 const (
 	ProductionSocket = "/run/design-machines/workflow-authority/authority.sock"
-	FIDO2Version     = "1.17.0"
+	FIDO2Version     = "1.x>=1.16.0"
 )
 
 type Diagnostic struct {

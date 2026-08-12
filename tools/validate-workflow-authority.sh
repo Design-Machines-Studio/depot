@@ -2,10 +2,10 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-GO_BIN="/usr/local/go/bin/go"
 GO_CACHE="${TMPDIR:-/tmp}/workflow-authority-go-cache"
 MODULE="$ROOT/native/workflow-authority"
-LIBFIDO2_VERSION="1.17.0"
+LIBFIDO2_MIN_VERSION="1.16.0"
+LIBFIDO2_NEXT_MAJOR="2"
 REQUIRE_PRODUCTION_BUILD="${WORKFLOW_AUTHORITY_REQUIRE_PRODUCTION_BUILD:-0}"
 
 if [[ "$REQUIRE_PRODUCTION_BUILD" != "0" && "$REQUIRE_PRODUCTION_BUILD" != "1" ]]; then
@@ -13,16 +13,33 @@ if [[ "$REQUIRE_PRODUCTION_BUILD" != "0" && "$REQUIRE_PRODUCTION_BUILD" != "1" ]
   exit 1
 fi
 
-if [[ ! -x "$GO_BIN" ]]; then
-  printf 'FAIL  exact Go launcher unavailable: %s\n' "$GO_BIN" >&2
+GO_BIN="$(command -v go 2>/dev/null || true)"
+if [[ -z "$GO_BIN" || ! -x "$GO_BIN" ]]; then
+  printf 'FAIL  executable Go launcher not found on PATH\n' >&2
   exit 1
+fi
+if [[ "$GO_BIN" != /* ]]; then
+  GO_BIN="$(cd "$(dirname "$GO_BIN")" && pwd -P)/$(basename "$GO_BIN")"
 fi
 
-version="$(cd "$MODULE" && GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" env GOVERSION)"
-if [[ "$version" != "go1.26.5" ]]; then
-  printf 'FAIL  workflow authority requires Go 1.26.5, got %s\n' "$version" >&2
+if ! version="$(cd "$MODULE" && GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" env GOVERSION)"; then
+  printf 'FAIL  Go launcher %s could not select the module toolchain with GOTOOLCHAIN=auto\n' "$GO_BIN" >&2
   exit 1
 fi
+if [[ "$version" != "go1.26.5" ]]; then
+  printf 'FAIL  workflow authority requires selected Go toolchain go1.26.5, got %s from %s\n' "$version" "$GO_BIN" >&2
+  exit 1
+fi
+if ! GO_ROOT="$(cd "$MODULE" && GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" env GOROOT)"; then
+  printf 'FAIL  selected Go %s toolchain did not report GOROOT\n' "$version" >&2
+  exit 1
+fi
+GOFMT_BIN="$GO_ROOT/bin/gofmt"
+if [[ ! -x "$GOFMT_BIN" ]]; then
+  printf 'FAIL  gofmt unavailable in selected Go %s toolchain GOROOT: %s\n' "$version" "$GOFMT_BIN" >&2
+  exit 1
+fi
+printf 'OK    workflow authority Go toolchain launcher=%s GOVERSION=%s GOROOT=%s\n' "$GO_BIN" "$version" "$GO_ROOT"
 
 (
   cd "$MODULE"
@@ -62,11 +79,6 @@ fi
 # gate reports success on a file gofmt would rewrite -- which is exactly how the
 # fixture launcher shipped unformatted. gofmt reads files directly, so one pass
 # covers tagged and untagged sources with no build-tag selection.
-GOFMT_BIN="$(dirname "$GO_BIN")/gofmt"
-if [[ ! -x "$GOFMT_BIN" ]]; then
-  printf 'FAIL  exact gofmt unavailable beside the pinned Go launcher: %s\n' "$GOFMT_BIN" >&2
-  exit 1
-fi
 unformatted="$(cd "$MODULE" && "$GOFMT_BIN" -l . || true)"
 if [ -n "$unformatted" ]; then
   printf 'FAIL  unformatted Go source in the authority module:\n%s\n' "$unformatted" >&2
@@ -127,6 +139,7 @@ trap 'rm -f "$harness_log"' EXIT
 # tests/__init__.py imports workflow_kernel at module level, so the harness
 # cannot be collected without the kernel references on PYTHONPATH.
 if ! (cd "$ROOT" && WORKFLOW_AUTHORITY_E2E=1 \
+      WORKFLOW_AUTHORITY_GO_BIN="$GO_BIN" \
       PYTHONPATH="$ROOT/plugins/workflow-kernel/skills/workflow-kernel/references" \
       "$PYTHON" -m unittest -v tests.test_workflow_authority_integration) > "$harness_log" 2>&1; then
   printf 'FAIL  workflow authority acceptance harness failed:\n' >&2
@@ -169,11 +182,16 @@ printf 'OK    workflow authority acceptance harness executed %s cases (%s skippe
 grep -E '^  GAP  ' "$harness_log" || true
 
 installed_libfido2=""
+compatible_libfido2=0
 if [[ "$(uname -s)" == "Linux" ]] && command -v pkg-config >/dev/null 2>&1; then
   installed_libfido2="$(pkg-config --modversion libfido2 2>/dev/null || true)"
+  if pkg-config --atleast-version="$LIBFIDO2_MIN_VERSION" libfido2 && \
+     ! pkg-config --atleast-version="$LIBFIDO2_NEXT_MAJOR" libfido2; then
+    compatible_libfido2=1
+  fi
 fi
 
-if [[ "$(uname -s)" == "Linux" && "$installed_libfido2" == "$LIBFIDO2_VERSION" ]]; then
+if [[ "$(uname -s)" == "Linux" && "$compatible_libfido2" == "1" ]]; then
   (
     cd "$MODULE"
     GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" test -tags libfido2 ./...
@@ -181,11 +199,11 @@ if [[ "$(uname -s)" == "Linux" && "$installed_libfido2" == "$LIBFIDO2_VERSION" ]
     GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" vet -tags libfido2 ./...
     GOTOOLCHAIN=auto GOCACHE="$GO_CACHE" "$GO_BIN" build -tags libfido2 ./cmd/workflow-authority ./cmd/workflow-authorityd
   )
-  printf 'OK    workflow authority fixture and production libfido2 validation passed with %s and libfido2 %s\n' "$version" "$LIBFIDO2_VERSION"
+  printf 'OK    workflow authority fixture and production libfido2 validation passed with %s and libfido2 %s (required >=%s,<%s)\n' "$version" "$installed_libfido2" "$LIBFIDO2_MIN_VERSION" "$LIBFIDO2_NEXT_MAJOR"
 else
   if [[ "$REQUIRE_PRODUCTION_BUILD" == "1" ]]; then
-    printf 'FAIL  pinned production build requires Linux, pkg-config, and exactly libfido2 %s; host=%s libfido2=%s\n' "$LIBFIDO2_VERSION" "$(uname -s)" "${installed_libfido2:-unavailable}" >&2
+    printf 'FAIL  production build requires Linux, pkg-config, and libfido2 >=%s,<%s; host=%s libfido2=%s\n' "$LIBFIDO2_MIN_VERSION" "$LIBFIDO2_NEXT_MAJOR" "$(uname -s)" "${installed_libfido2:-unavailable}" >&2
     exit 1
   fi
-  printf 'COVERAGE-GAP workflow authority production build requires Linux and libfido2 %s; portable fixture validation passed with %s\n' "$LIBFIDO2_VERSION" "$version"
+  printf 'COVERAGE-GAP workflow authority production build requires Linux and libfido2 >=%s,<%s; portable fixture validation passed with %s\n' "$LIBFIDO2_MIN_VERSION" "$LIBFIDO2_NEXT_MAJOR" "$version"
 fi

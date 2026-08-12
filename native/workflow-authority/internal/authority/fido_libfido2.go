@@ -11,8 +11,8 @@ package authority
 #if !defined(FIDO_VERSION_MAJOR) || !defined(FIDO_VERSION_MINOR) || !defined(FIDO_VERSION_PATCH)
 #error "libfido2 version macros required"
 #endif
-#if FIDO_VERSION_MAJOR != 1 || FIDO_VERSION_MINOR != 17 || FIDO_VERSION_PATCH != 0
-#error "workflow-authority requires exactly libfido2 1.17.0"
+#if FIDO_VERSION_MAJOR != 1 || FIDO_VERSION_MINOR < 16
+#error "workflow-authority requires libfido2 >=1.16.0 and <2.0.0"
 #endif
 
 typedef struct {
