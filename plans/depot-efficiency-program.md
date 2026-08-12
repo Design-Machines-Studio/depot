@@ -10,46 +10,61 @@ external handoff only; it does not duplicate Baseplate's production roadmap.
 
 The current priority order is:
 
-1. **P1 -- shorten and cheapen development.** Make dm-review proportional,
-   install the accepted worker/advisor model policy, unlock one bounded audited
-   cheap execution path, and prove it with a measured canary.
-2. **P2 -- unlock Fixture development.** After the canary, apply the improved
-   workflow to the existing Baseplate verifier -> canonical Jig chain. Depot
-   does not own that product work.
-3. **P3 -- wider platform improvement.** Linux/Darwin broker hardening,
-   optional reporting, interop, and broad Baseplate quality work follow unless
-   they become a demonstrated blocker.
+1. **P1 -- finish the active R-series efficiency work.** The proportional-review
+   prerequisite is merged and R2 is closed without speculative code. Make the
+   existing R3 broker path usable in production. R4 follows only when a real run
+   supplies its diagnostic specimen; R5 remains parked without a named consumer.
+2. **P2 -- unlock Fixture development.** Apply the improved workflow to the
+   existing Baseplate verifier -> canonical Jig chain as its external blockers
+   clear. Depot does not own that product work.
+3. **Other tooling is pull-based.** 00c, 00d, harness work, and new platform
+   improvements do not move ahead of an executable R chunk unless an exact
+   current dependency shows that they block it.
 
 ### Single next Depot chunk
 
-PR 33 release closeout is complete. The remote annotated tags
-`assembly-v3.10.0`, `dm-review-v1.58.6`, and `pipeline-v1.45.0` all peel to its
-merge commit `48fc3931281282844a13d988a2f21753f8c62b1c`; its local/remote branch
-and worktree are absent.
+PR 37 merged at `372f2c9a488439b0e380faee0a8e4cafb5a47f32` and closed
+[Issue #35](https://github.com/Design-Machines-Studio/depot/issues/35). Its
+proportional-review policy retains P1, applicable security, and required browser
+gates while making P3 advisory and removing redundant fan-out. The release
+preflight is green for `project-scaffolder-v1.9.1`, `dm-review-v1.59.0`, and
+`pipeline-v1.46.0`; those three annotated tags remain an owner release action.
 
-The one immediate successor is **00b-2: proportional dm-review severity and
-convergence**. It makes P3 advisory,
-removes unconditional duplicate simplification work, and right-sizes review
-fan-out while retaining P1, applicable security, and required browser gates.
-Do not start 00c or a paid OpenRouter implementation lane before 00b-2 lands.
+R2 is closed **DONE / NO CODE**. Current `plan-verification` and
+`run-verification` already put repository proof before model review, keep passing
+raw output out of prompts, and provide bounded failure evidence for repair.
+Exact content-addressed receipt reuse already exists. No measured workload
+justifies adding the authored caller-supplied `mechanical_globs` policy, so the
+old untracked R2 prompts are historical inputs, not executable work.
+
+The one immediate successor is [**Issue #39: R3a portable Workflow Authority
+build on NED Linux**](https://github.com/Design-Machines-Studio/depot/issues/39).
+It replaces host-specific Go and libfido2 assumptions with the smallest
+supported policy and proves the production build on the real host. It does not
+install or enable the service; trusted-main installation, credential enrollment,
+and live E2E remain the bounded R3b successor.
 
 ### Ordered Depot queue
 
 | Order | Work | State | Promotion evidence |
 |---|---|---|---|
 | 0 | PR 33 release closeout | **DONE** | three remote annotated tags peel to `48fc393`; PR 33's proven-merged refs/worktree removed |
-| 1 | 00b-2 proportional dm-review | **NEXT** | release receipt checked; refreshed bounded prompt approved |
-| 2 | 00c worker/advisor routing | HOLD | 00b-2 merged; executable routing matches the accepted 00a portfolio and effort policy |
-| 3 | 00d bounded audited cheap execution | HOLD / REWRITE | 00c merged; one non-sensitive workload, direct receipt boundary, and one bounded native supervisor check |
-| 4 | Cheap-path canary | HOLD | one real task measures elapsed time, token/cost, handholding, and defect escape |
-| 5 | Fixture-development handoff | EXTERNAL | Baseplate verifier consumer proof and publication clear the canonical Jig path |
-| 6 | Linux broker portability + production E2E | HOLD / REWRITE | cheap path proven; portable Go/libfido2 policy and non-skipped host acceptance |
-| 7 | R3 broker transport integration | HOLD / REWRITE | ready probe plus executed acceptance; wire one broker-owned workload |
-| 8 | R3 routing refresh | HOLD / REWRITE | accepted portfolio and direct/broker precedence re-anchored |
-| 9 | Harness lessons: budgets then memory/codify | HOLD / REWRITE | current kernel/caller boundaries rechecked; no default lane claims without concurrent writers |
-| 10 | R4 static run report | LATER / REWRITE | a current failed canary supplies a diagnosis specimen |
-| 11 | Darwin broker | FUTURE / REPLAN | Linux proves production path; complete FIDO/runtime/IPC scope |
-| 12 | R5 Agent Plugins interop | PARK | a named client or distribution target exists |
+| 1 | [#35](https://github.com/Design-Machines-Studio/depot/issues/35) / PR 37 proportional dm-review | **DONE** | merged at `372f2c9`; exact-head policy checks and release preflight passed; three release tags remain to cut |
+| 2 | R2 pre-gates and evidence reuse | **DONE / NO CODE** | merged verification ordering, bounded receipts, and exact reuse cover the residual; no observed mechanical-glob class warrants another policy layer |
+| 3 | [#39](https://github.com/Design-Machines-Studio/depot/issues/39) R3a Linux portability + production build proof | **NEXT** | portable trusted-PATH Go selection, supported libfido2 range, and a non-skipped production build on NED |
+| 4 | R3b trusted-main Linux install + live E2E | HOLD / REWRITE | #39 merged; install from trusted main, enroll one human-controlled credential, enable the service, and execute acceptance without fixture substitution |
+| 5 | R3 broker transport integration | HOLD / REWRITE | broker `status: ready` plus executed acceptance; wire one bounded broker-owned workload rather than another status probe |
+| 6 | R3 Darwin broker follow-up | FUTURE / REPLAN | Linux proves the production path; Macs are confirmed as an active development host; minimum operable launchd/FIDO/IPC scope is refreshed |
+| 7 | R3 routing refresh | HOLD / REWRITE | accepted model portfolio plus direct/broker precedence re-anchored; absorb only the 00c policy needed by this R3 outcome |
+| 8 | R4 static run report | LATER / REWRITE | a current failed R3-backed run supplies a diagnosis specimen |
+| 9 | R5 Agent Plugins interop | PARK | a named client or distribution target exists |
+| 10 | Residual 00c worker/advisor routing | HOLD / REASSESS | R3 routing leaves a demonstrated reusable gap; no duplicate policy layer |
+| 11 | 00d bounded audited direct execution + canary | HOLD / REASSESS | an R-series outcome demonstrates that the broker path cannot provide the required cheap lane |
+| 12 | Harness lessons: budgets then memory/codify | HOLD / REWRITE | active R work is clear and current kernel/caller evidence justifies the change |
+
+The Fixture-development handoff remains an external P2 lane and may advance in
+parallel when its Baseplate/Jig dependency chain clears; it does not displace
+the single `NEXT` Depot chunk.
 
 Only `NEXT` authorizes a new Depot execution session. DONE, HOLD, EXTERNAL,
 LATER, FUTURE, and PARK are not execution prompts.
@@ -62,10 +77,13 @@ LATER, FUTURE, and PARK are not execution prompts.
 | Baseplate Fixture verifier | [PR 662](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/662) draft at `4eb88f5d85ac4727be6b00c5bc779ad5877901a9`; conflicting, all hosted checks skipped; addresses [#659](https://github.com/Design-Machines-Studio/assembly-baseplate/issues/659) | rebase after the owner-selected Baseplate order; candidate verifier accepts the real Jig; trusted publish succeeds | Baseplate acts next. High collision with PR 660 on nine files including `test.yml`, `Makefile`, `sequence.md`, `work-paths.html`, and `tasks/lessons.md`; do not advance both branches independently. |
 | Canonical Jig | [PR 11](https://github.com/Design-Machines-Studio/assembly-fixture-jig/pull/11) draft at `ee27a7658d17af277a76daf1a5206915c8e1e50e`; mergeable; `declarations` passes; [#8](https://github.com/Design-Machines-Studio/assembly-fixture-jig/issues/8) and [#10](https://github.com/Design-Machines-Studio/assembly-fixture-jig/issues/10) remain open | published Baseplate verifier, protected exact-head check, required consumer proof, and retained browser evidence | Jig acts after Baseplate. No Depot file collision; dependency blocks meaningful closeout. |
 
-Project 1 already carries these Baseplate/Jig native items with appropriate
-P1/P2 and Tooling/Fixtures fields. Depot has no native Issue for 00b-2; do not
-create a free-form Project note or repurpose unrelated Depot Issues #25-#28.
-Creating the execution Issue remains an owner decision.
+Project 1 carries these Baseplate/Jig native items with appropriate P1/P2 and
+Tooling/Fixtures fields. Depot Issue #35 is `Done`; Issue #39 is the sole
+`Next`, P1, Tooling item. Draft PR 38 is an already-owned `In progress`, P1,
+Tooling repair for user-local Codex discovery in release preflight. It is safe
+in parallel with #39 because its two release-preflight files do not overlap the
+Workflow Authority files. Do not create free-form Project notes or repurpose
+unrelated Depot Issues #25-#28.
 
 ### Operating doctrine
 
@@ -76,12 +94,13 @@ Creating the execution Issue remains an owner decision.
   seat. DeepSeek V4 Flash refresh and Grok 4.5 remain bounded execution
   candidates. Native Fable 5 or Codex 5.6 provides one proportional supervisor
   checkpoint rather than duplicating the worker's implementation.
-- No automated OpenRouter implementation runs before the audited 00d path.
-  Broker completion is credential-custody hardening, not the cheap-development
-  unlock gate.
-- R2 is not run as authored; R4 waits for a real diagnostic specimen; R5 waits
-  for a real consumer. Old prompts remain historical inputs until explicitly
-  refreshed and marked NEXT.
+- No automated OpenRouter implementation runs before a current audited path is
+  proven. Prefer completing and exercising the existing R3 broker boundary;
+  promote 00d only if evidence shows the broker path cannot unlock the needed
+  cheap lane.
+- R2 is closed rather than run as authored; R4 waits for a real diagnostic
+  specimen; R5 waits for a real consumer. Old prompts remain historical inputs
+  until explicitly refreshed and marked NEXT.
 
 The historical program below is retained as provenance. Its old `Next`,
 `PENDING`, and entry-gate labels do not override the active queue above.
