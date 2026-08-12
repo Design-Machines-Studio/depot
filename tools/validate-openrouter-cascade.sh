@@ -290,7 +290,7 @@ if printf '%s' "$trusted_receipt" | jq -e \
      and .authorizationScope == "policy-accepted-unchanged-ordered-content-bytes"
      and .payloadSha256 == $digest
    ' >/dev/null; then
-  pass "trusted-boundary mode authorizes policy-accepted unchanged bytes without a digest prompt"
+  pass "trusted-boundary mode accepts policy-screened unchanged bytes without user approval"
 else
   fail "trusted-boundary mode must retain policy scanning and exact-byte verification"
   any_failed=1

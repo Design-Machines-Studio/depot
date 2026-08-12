@@ -48,7 +48,7 @@ a chunk early only when a changed path matches this bounded deterministic set:
 - `**/secretbox*`, `**/destructive_confirmation*`,
   `internal/baseplate/email/settings*`, `deploy/**`, or `*.env*`
 - Depot credential-transport controls named `openrouter-wrapper.sh`,
-  `payload-authorization.sh`, `runner-batch-authorization.sh`,
+  `payload-authorization.sh`,
   `delegation-boundary.sh`, or `workflow-authority*`
 
 Do not widen this set to all handlers, shell scripts, dependency manifests, or
@@ -217,7 +217,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
   resolve_openrouter_bundle() {
     if [ -n "$OPENROUTER_ACTIVE_HOST" ]; then
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.12.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
+        --minimum-version 1.13.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -228,7 +228,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     else
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.12.0 \
+        --minimum-version 1.13.0 \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -474,8 +474,8 @@ materializes its exact system/user bytes, snapshots them, and immediately runs
 `verify-trusted-boundary` before invoking the wrapper. A credential/private-key
 match, authenticated DSN, access/session token, or explicitly classified
 private/regulated value declines automatically and returns that lane to Codex.
-There is no approval prompt, digest redispatch, operator batch, broker probe, or
-sunset. The wrapper receipt records `authorization.mode: trusted-boundary` and
+There is no approval prompt, broker probe, or sunset. The wrapper receipt
+records `authorization.mode: trusted-boundary` and
 the request-envelope digest without prompt or response content.
 
 ---

@@ -1,6 +1,6 @@
 {
   "name": "openrouter",
-  "version": "1.12.0",
+  "version": "1.13.0",
   "description": "Configured-key OpenRouter provider plugin with automatic sensitive-payload refusal, Kimi K3-led security and bulk analysis, Terra quality fallback, Luna economical mechanical routing, and an optional official MCP control plane.",
   "author": {
     "name": "Design Machines",

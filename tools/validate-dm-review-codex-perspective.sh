@@ -38,7 +38,7 @@ reject_text() {
 
 security_path_requires_full() {
   case "$1" in
-    internal/auth/*|*/internal/auth/*|internal/federation/*|*/internal/federation/*|*/security/*|*/middleware/auth*|*/middleware/security*|*/secretbox*|*/destructive_confirmation*|internal/baseplate/email/settings*|deploy/*|*/deploy/*|*.env*|*/.env*|*/openrouter-wrapper.sh|*/payload-authorization.sh|*/runner-batch-authorization.sh|*/delegation-boundary.sh|*/workflow-authority*) return 0 ;;
+    internal/auth/*|*/internal/auth/*|internal/federation/*|*/internal/federation/*|*/security/*|*/middleware/auth*|*/middleware/security*|*/secretbox*|*/destructive_confirmation*|internal/baseplate/email/settings*|deploy/*|*/deploy/*|*.env*|*/.env*|*/openrouter-wrapper.sh|*/payload-authorization.sh|*/delegation-boundary.sh|*/workflow-authority*) return 0 ;;
     *) return 1 ;;
   esac
 }

@@ -4,8 +4,8 @@ OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / la
 
 > **Current release mode:** a configured key plus one coherent installed bundle
 > makes OpenRouter available for direct, eligible dm-review, and bounded
-> Pipeline use after automatic payload screening. No per-prompt approval,
-> operator batch, or broker probe is required.
+> Pipeline use after automatic payload screening. No user-approval step or
+> broker probe is required.
 
 The direct API runner is the execution data plane. The optional official
 OpenRouter MCP is a read-only-first control plane for live model/provider

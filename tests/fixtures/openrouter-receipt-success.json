@@ -41,5 +41,5 @@
     }
   },
   "routing": {"workload": "quality", "sort": "exacto"},
-  "authorization": {"mode": "exact-digest"}
+  "authorization": {"mode": "trusted-boundary"}
 }

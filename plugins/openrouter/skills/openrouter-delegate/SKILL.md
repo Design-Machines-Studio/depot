@@ -119,13 +119,13 @@ ACTIVE_HOST=""
 [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.12.0 --active-host "$ACTIVE_HOST" \
+    --minimum-version 1.13.0 --active-host "$ACTIVE_HOST" \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
     --required-executable skills/openrouter-delegate/references/payload-authorization.sh)
 else
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.12.0 \
+    --minimum-version 1.13.0 \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
     --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
     --required-executable skills/openrouter-delegate/references/payload-authorization.sh)

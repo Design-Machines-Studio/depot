@@ -59,14 +59,14 @@ ACTIVE_HOST=""
 resolve_openrouter_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.12.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.13.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
       --required-executable skills/openrouter-delegate/references/payload-authorization.sh
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.12.0 \
+      --minimum-version 1.13.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -104,9 +104,8 @@ RESULT=$(env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
   bash "$WRAPPER_PATH" "$MODEL" - "$TIMEOUT" "${FALLBACK_MODEL:-}" < "$PROMPT_FILE")
 ```
 
-This is a single-pass path. Never emit `approval_required`, request or copy an
-approval digest, create an operator-batch artifact, or probe Workflow Authority.
-Broker presence or health has no bearing on configured-key availability.
+This is a single-pass path with no user-approval state. Workflow Authority
+presence or health has no bearing on configured-key availability.
 
 The wrapper JSON-encodes the prompt into private temporary storage, streams the
 response, and records a content-free receipt. The boundary refuses unmistakable

@@ -20,7 +20,7 @@
     "ghostwriter": ">=3.7.0",
     "superpowers": ">=1.0.0",
     "airlift": ">=1.0.0",
-    "openrouter": ">=1.12.0"
+    "openrouter": ">=1.13.0"
   },
   "keywords": [
     "pipeline",

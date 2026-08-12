@@ -709,7 +709,7 @@ require_text "$measurement_doc" "input_bytes" "measurement CLI reference documen
 require_text "$measurement_doc" "record-attempt" "measurement CLI reference documents record-attempt"
 require_text "$measurement_doc" "attempt_unmeasured" "measurement CLI reference documents the explicit unmeasured claim"
 require_text "$measurement_doc" "--request-envelope-sha256" \
-  "measurement CLI reference documents exact interim request-envelope binding"
+  "measurement CLI reference documents request-envelope evidence binding"
 
 # The emission boundary has to be wired at the DISPATCH site, not only described
 # in the terminal emission paragraph. Six review lanes and four production runs
@@ -724,7 +724,7 @@ for f in "$review_dispatch_skill" "$orchestrator"; do
   require_text "$f" "attempt_unmeasured" "$rel names the explicit unmeasured claim"
   require_text "$f" "--openrouter-receipt" "$rel names the provider-receipt evidence path"
   require_text "$f" "--request-envelope-sha256" \
-    "$rel binds interim provider receipts to the attempted request envelope"
+    "$rel binds provider receipts to the attempted request envelope"
   require_text "$f" "--agent-definition" "$rel names the input-bytes evidence path"
 done
 
@@ -776,7 +776,6 @@ printf "\nGroup 9: configured-key OpenRouter authorization\n"
 payload_authorization="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
 openrouter_wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 openrouter_agent_runner="$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md"
-runner_batch_authorization="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/runner-batch-authorization.sh"
 review_alias="$REPO_ROOT/plugins/dm-review/skills/dm-review/SKILL.md"
 authority_threat_model="$REPO_ROOT/native/workflow-authority/THREAT-MODEL.md"
 authorization_contract="$REPO_ROOT/plugins/pipeline/references/openrouter-authorization-contract.md"
@@ -804,6 +803,18 @@ require_text "$review_skill" 'OPENROUTER_API_KEY_FILE' \
   "dm-review accepts the validated key-file input"
 require_absent "$review_skill" 'OPENROUTER_INTERIM_PROGRAM_SUNSET' \
   "dm-review active path has no artificial sunset"
+require_absent "$openrouter_wrapper" 'exact-digest' \
+  "OpenRouter wrapper removes per-call digest approval"
+require_absent "$openrouter_wrapper" 'interim-operator-batch' \
+  "OpenRouter wrapper removes batch authorization"
+require_absent "$payload_authorization" 'batch-approve' \
+  "payload helper exposes automatic screening only"
+if [ ! -e "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/runner-batch-authorization.sh" ]; then
+  printf "  OK    batch runner helper is deleted\n"
+else
+  printf "  FAIL  batch runner helper is deleted\n"
+  failures=1
+fi
 require_text "$openrouter_agent_runner" 'verify-trusted-boundary' \
   "OpenRouter agent runner screens unchanged exact bytes automatically"
 require_absent "$openrouter_agent_runner" 'RUNNER_BATCH_HELPER' \

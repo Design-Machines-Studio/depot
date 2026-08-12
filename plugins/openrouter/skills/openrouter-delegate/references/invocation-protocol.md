@@ -42,7 +42,7 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.12.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.13.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -50,7 +50,7 @@ resolve_bundle() {
       --required-asset skills/openrouter-delegate/references/mcp-control-plane.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.12.0 \
+      --minimum-version 1.13.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -121,10 +121,8 @@ protocol below before invoking it.
 - `OPENROUTER_IDLE_TIMEOUT` (default `600`): maximum time without stream
   progress. Any streamed bytes reset this watchdog; only a completed, validated
   stream becomes review evidence.
-- `OPENROUTER_AUTHORIZATION_MODE` (`exact-digest|trusted-boundary|unspecified`):
-  low-level receipt vocabulary. Active configured-key callers use
-  `trusted-boundary`; the other values remain for dormant compatibility code
-  and offline tests.
+- `OPENROUTER_AUTHORIZATION_MODE` (`trusted-boundary|unspecified`): low-level
+  receipt vocabulary. Active configured-key callers use `trusted-boundary`.
 - `OPENROUTER_RECEIPT_FILE`: optional path for a content-free JSON success or
   failure receipt. Failure receipts record timeout/error classification without
   prompt, partial completion, inferred provider, or usage content.
@@ -156,9 +154,8 @@ all use one pass:
    native fallback exists. Otherwise invoke the wrapper with
    `OPENROUTER_AUTHORIZATION_MODE=trusted-boundary`.
 
-Never ask for a digest, create an operator-batch artifact, or probe Workflow
-Authority on this configured-key development path. Broker presence or status
-has no effect. Provider-side per-key spending limits are the recommended
+No OpenRouter caller asks for user approval. Workflow Authority presence or
+status has no effect. Provider-side per-key spending limits are the recommended
 runaway-cost control.
 
 ### Codex network allowlist

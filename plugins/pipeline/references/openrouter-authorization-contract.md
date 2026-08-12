@@ -30,9 +30,8 @@ DSNs, access/session tokens, and explicitly classified private or regulated
 material. Placeholder values, variable names, paths, vendors, nationalities,
 and jurisdictions are not disclosure evidence.
 
-No active caller emits `approval_required`, asks for a digest, creates or reads
-an operator-batch artifact, probes Workflow Authority, or treats broker status
-as availability. A fake, ready, broken, or absent
+No OpenRouter caller asks for user approval, probes Workflow Authority, or
+treats broker status as availability. A fake, ready, broken, or absent
 `/usr/local/bin/workflow-authority` has no effect on configured-key dispatch.
 
 ## Bounded Pipeline execution
@@ -62,6 +61,5 @@ fallback slugs beginning with `anthropic/` are rejected before provider
 contact; Anthropic remains native-Claude-only. Existing independent-family and
 consequential-security sign-off rules remain unchanged.
 
-The old exact-digest and interim operator-batch helpers remain dormant
-compatibility code for now. Workflow Authority remains optional dormant code.
-Neither is part of normal configured-key development.
+Workflow Authority remains optional dormant code and is not part of
+configured-key development.

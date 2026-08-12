@@ -17,5 +17,5 @@
   "servingProviderProvenance": "not_reported_by_completion",
   "usage": null,
   "routing": {"workload": "quality", "sort": "exacto"},
-  "authorization": {"mode": "exact-digest"}
+  "authorization": {"mode": "trusted-boundary"}
 }

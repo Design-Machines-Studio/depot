@@ -134,7 +134,7 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.12.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.13.0 --active-host "$ACTIVE_HOST" \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -145,7 +145,7 @@ resolve_bundle() {
       --required-asset skills/openrouter-delegate/references/prompt-templates.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.12.0 \
+      --minimum-version 1.13.0 \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -516,7 +516,7 @@ complete:
 7. **Preserve the provider receipt.** Report the generation ID, canonical response model, and serving-provider provenance. A missing provider field is `not_reported_by_completion`, never evidence of a verified provider. Never include prompt or completion content in receipt metadata.
 8. **Screen unchanged bytes automatically.** Snapshot and verify the exact
    system/user files with `verify-trusted-boundary` immediately before invoking
-   the wrapper. Never ask for a digest, batch, or broker approval.
+   the wrapper. Never ask the user to approve an OpenRouter call.
 
 ## Why This Architecture
 

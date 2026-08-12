@@ -34,7 +34,11 @@ Summarize the resume plan back to the user before changing files:
 
 Then continue from the `Next steps` section in `HANDOFF.md`.
 
-For `resume-via-deepseek`, require env `OPENROUTER_API_KEY`. The target name remains stable for compatibility, but transport is through OpenRouter using `deepseek/deepseek-v4-pro`. Resolve one coherent OpenRouter bundle, then screen both resume artifacts together immediately before wrapper use:
+For `resume-via-deepseek`, require either `OPENROUTER_API_KEY` or the validated
+`OPENROUTER_API_KEY_FILE`. The target name remains stable for compatibility,
+but transport is through OpenRouter using `deepseek/deepseek-v4-pro`. Resolve
+one coherent OpenRouter bundle, then screen both resume artifacts together and
+invoke the wrapper without an approval pause:
 
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
@@ -48,14 +52,14 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.8.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.13.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
       --required-executable skills/openrouter-delegate/references/payload-authorization.sh
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.8.0 \
+      --minimum-version 1.13.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
@@ -69,7 +73,6 @@ BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty')
 case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) echo "airlift-openrouter: bundle-invalid" >&2; exit 1;; esac
 WRAPPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 POLICY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
-BOUNDARY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
 AUTHORIZATION="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
 RESUME_FILE="$BUNDLE_DIR/RESUME_PROMPT.md"
 HANDOFF_FILE="$BUNDLE_DIR/HANDOFF.md"
@@ -87,30 +90,13 @@ AUTHORIZATION_RECEIPT="$SNAPSHOT_DIR/payload-authorization.json"
   --name HANDOFF.md >/dev/null || {
   echo "airlift-openrouter: snapshot-invalid" >&2; exit 2;
 }
-if "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
-    --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT"; then
-  :
-else
-  rc=$?
-  [ "$rc" -eq 3 ] && { echo "airlift-openrouter: disclosure-declined" >&2; exit 3; }
-  echo "airlift-openrouter: boundary-invalid" >&2
-  exit 2
-fi
-PAYLOAD_SHA256=$("$AUTHORIZATION" snapshot \
+"$AUTHORIZATION" snapshot \
   --output "$AUTHORIZATION_RECEIPT" \
-  --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT")
-```
-
-Pause and ask the user to authorize disclosure of the exact ordered resume
-payload identified by `PAYLOAD_SHA256`. Set `approved_payload_sha256` only from
-that response. If the user declines, record
-`airlift-openrouter: host-disclosure-declined` and continue locally.
-Immediately before network contact:
-
-```bash
-"$AUTHORIZATION" verify --manifest "$AUTHORIZATION_RECEIPT" \
-  --approved-sha256 "$approved_payload_sha256" \
+  --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT" >/dev/null
+"$AUTHORIZATION" verify-trusted-boundary --manifest "$AUTHORIZATION_RECEIPT" \
+  --policy "$POLICY" \
   --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT"
 env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$RESUME_SNAPSHOT" \
+  OPENROUTER_AUTHORIZATION_MODE=trusted-boundary \
   bash "$WRAPPER" "deepseek/deepseek-v4-pro" - 180 < "$HANDOFF_SNAPSHOT"
 ```

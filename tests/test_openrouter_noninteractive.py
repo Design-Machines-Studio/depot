@@ -71,7 +71,7 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.home = self.root / "home"
-        installed = self.home / ".codex/plugins/cache/depot/openrouter/1.12.0"
+        installed = self.home / ".codex/plugins/cache/depot/openrouter/1.13.0"
         installed.parent.mkdir(parents=True)
         shutil.copytree(OPENROUTER, installed)
         self.installed = installed
@@ -128,12 +128,6 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_AUTHORIZAT
         else:
             fake.write_text("#!/bin/sh\nexit 1\n")
             fake.chmod(0o755)
-        for name in ("payload-authorization.sh", "openrouter-wrapper.sh"):
-            path = self.installed / "skills/openrouter-delegate/references" / name
-            path.write_text(path.read_text().replace(
-                'BROKER_CLIENT="/usr/local/bin/workflow-authority"',
-                f'BROKER_CLIENT="{fake}"',
-            ))
 
     def test_sensitive_payload_declines_before_contact(self) -> None:
         result = self.direct("OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890")
@@ -246,6 +240,9 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_AUTHORIZAT
         combined = "\n".join(path.read_text() for path in active)
         self.assertNotIn("exit 78", combined)
         self.assertNotIn("status\":\"approval_required", combined)
+        self.assertNotIn("interim-operator-batch", combined)
+        self.assertNotIn("exact-digest", combined)
+        self.assertFalse((OPENROUTER / "skills/openrouter-delegate/references/runner-batch-authorization.sh").exists())
         review = active[2].read_text()
         self.assertIn('OPENROUTER_API_KEY_FILE', review)
         self.assertIn('OPENROUTER_AVAILABLE=true', review)
