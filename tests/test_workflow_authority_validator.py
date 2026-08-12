@@ -36,6 +36,10 @@ class WorkflowAuthorityValidatorTest(unittest.TestCase):
             self.make_executable(
                 fake_bin / "go",
                 """#!/usr/bin/env bash
+if [[ "$(umask)" != "0022" ]]; then
+  printf 'unsafe validator umask: %s\\n' "$(umask)" >&2
+  exit 90
+fi
 if [[ "$*" == "env GOVERSION" ]]; then
   printf '%s\\n' "${FAKE_GO_VERSION}"
 elif [[ "$*" == "env GOROOT" ]]; then

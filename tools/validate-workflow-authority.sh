@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Security-sensitive fixture roots must not inherit a group-writable operator
+# umask. Go's testing package creates the per-test child beneath its private
+# temporary root using 0777, so an interactive 0002 umask makes secure ancestor
+# checks fail on Linux even though the same tests pass under 0022.
+umask 0022
+
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 GO_CACHE="${TMPDIR:-/tmp}/workflow-authority-go-cache"
 MODULE="$ROOT/native/workflow-authority"
