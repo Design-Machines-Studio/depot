@@ -15,7 +15,7 @@ require_text() {
   local pattern="$2"
   local label="$3"
 
-  if grep -Fq "$pattern" "$file"; then
+  if grep -Fq -- "$pattern" "$file"; then
     printf "  OK    %s\n" "$label"
   else
     printf "  FAIL  %s\n" "$label"
@@ -28,7 +28,7 @@ reject_text() {
   local pattern="$2"
   local label="$3"
 
-  if grep -Fq "$pattern" "$file"; then
+  if grep -Fq -- "$pattern" "$file"; then
     printf "  FAIL  %s\n" "$label"
     failures=1
   else
@@ -223,6 +223,10 @@ guardrails="$REPO_ROOT/plugins/dm-review/skills/review/references/guardrails.md"
 output_format="$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md"
 issue_tracking="$REPO_ROOT/plugins/dm-review/skills/review/references/issue-tracking.md"
 graceful_degradation="$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md"
+review_loop="$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md"
+quick_command="$REPO_ROOT/plugins/dm-review/commands/dm-review-quick.md"
+generated_quick="$REPO_ROOT/plugins/dm-review/skills/dm-review-quick/SKILL.md"
+pipeline_orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
 
 require_text "$review_skill" "codex-perspective" "review skill selects codex-perspective reviewer"
 require_text "$review_skill" "codex exec -s read-only -c service_tier=fast --skip-git-repo-check" "review skill documents known-good Codex invocation"
@@ -270,7 +274,43 @@ require_text "$issue_tracking" 'source_agents:' "todo source_agents metadata rem
 require_text "$consolidator" 'Coverage Gaps' "coverage gaps remain explicit"
 require_text "$graceful_degradation" 'REVIEW INCOMPLETE' "core-lane incomplete behavior remains compatible"
 require_text "$graceful_degradation" 'Degraded: all conditional agents unavailable' "degraded-lane behavior remains compatible"
-require_text "$output_format" 'P3-only is NOT clean' "zero-deferral recommendation remains compatible"
+require_text "$output_format" 'if any P3 findings:' "P3-only recommendation retains advisory branch"
+require_text "$output_format" 'recommendation = "CLEAN"' "P3-only maps to CLEAN"
+require_text "$output_format" 'source identity, raw reference, evidence, synthesis disposition, counts, and provenance' "P3 report retains complete advisory evidence"
+require_text "$issue_tracking" 'P3 -- Advisory' "P3 is advisory in issue-tracking policy"
+require_text "$issue_tracking" 'No -- retain in report and receipts only' "P3 does not create todo or issue work"
+require_text "$review_loop" 'never enters the fix queue' "P3 does not enter convergence fix queue"
+reject_text "$review_skill" 'Phase 5.5: Simplification Pass' "active simplification phase is retired"
+reject_text "$review_skill" 'refactor: simplify per dm-review pass' "automatic simplification commit is retired"
+reject_text "$review_skill" 'diff < 100 lines' "quick roster does not scale by diff size"
+require_text "$review_skill" 'Ordinary quick review always selects exactly these two core judgment lanes' "ordinary quick roster has exact core contract"
+require_text "$review_skill" '**pattern-recognition-specialist**' "quick roster includes pattern recognition"
+require_text "$review_skill" '**code-simplicity-reviewer**' "quick roster includes code simplicity"
+require_text "$review_skill" 'Do not add `second-perspective`' "quick roster excludes second perspective"
+require_text "$review_skill" 'quick mode escalates to the existing full mode' "security-sensitive quick review escalates to full"
+require_text "$review_skill" 'mandatory full-diff independent-family security sign-off' "full review retains independent security sign-off"
+require_text "$review_skill" 'add **second-perspective** as a parallel read-only reviewer in full mode only' "full review retains second perspective"
+require_text "$quick_command" 'Ordinary quick review always selects exactly:' "canonical quick command has exact two-core contract"
+require_text "$generated_quick" 'Ordinary quick review always selects exactly:' "generated quick alias has exact two-core contract"
+reject_text "$quick_command" 'architecture-reviewer' "canonical ordinary quick roster excludes architecture"
+reject_text "$generated_quick" 'architecture-reviewer' "generated ordinary quick roster excludes architecture"
+for active_command in \
+  "$REPO_ROOT/plugins/dm-review/commands/dm-review.md" \
+  "$REPO_ROOT/plugins/dm-review/commands/dm-review-fix.md" \
+  "$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md" \
+  "$REPO_ROOT/plugins/dm-review/skills/dm-review/SKILL.md" \
+  "$REPO_ROOT/plugins/dm-review/skills/dm-review-fix/SKILL.md" \
+  "$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md"; do
+  reject_text "$active_command" '--allow-defer-p3' "${active_command#$REPO_ROOT/} retires allow-defer-p3"
+done
+require_text "$pipeline_orchestrator" 'one **focused Codex review**' "Pipeline keeps focused proportional per-chunk review"
+require_text "$pipeline_orchestrator" 'one final full dm-review fan-out' "Pipeline runs one final full fan-out"
+require_text "$pipeline_orchestrator" 'Re-run only the affected lanes' "Pipeline verifies repairs with affected lanes"
+require_text "$pipeline_orchestrator" 'prior full review was incomplete or the' "Pipeline limits repeated full fan-out"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.59.0"' "canonical dm-review version is 1.59.0"
+require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.59.0"' "generated dm-review version is 1.59.0"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.46.0"' "canonical Pipeline version is 1.46.0"
+require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.59.0"' "generated Pipeline dependency floor is current"
 
 printf "Synthesis identity fixtures\n"
 base_id=$(fixture_finding_id \

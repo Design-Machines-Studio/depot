@@ -136,7 +136,7 @@ matrix must authorize before its protected write.
 
 The receipt enumerates: mapped surfaces, middleware gates, Authorizer action/resource pairs, default-deny UI capabilities, stale-session/operator/install edge cases addressed, test files, and residual risk. See the assembly development skill for the template.
 
-Under zero-deferral a P2 must be resolved before the review closes -- which is the point. The receipt is how a reviewer learns which surfaces were *considered*, not merely which ones the diff happened to touch. An auth-surface change whose only artifact is the diff cannot be reviewed for the boundary it failed to draw.
+A P2 must be resolved before merge. The receipt is how a reviewer learns which surfaces were *considered*, not merely which ones the diff happened to touch. An auth-surface change whose only artifact is the diff cannot be reviewed for the boundary it failed to draw.
 
 If Phase 1b located the receipt somewhere other than the PR body (a merge-commit body, `plans/*/receipt.md`), that satisfies this check -- cite where you found it.
 

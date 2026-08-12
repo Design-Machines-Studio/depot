@@ -4,9 +4,9 @@ Complete catalog of all review agents with trigger conditions, file matchers, an
 
 ---
 
-## Always-Run Agents (Full + Quick Mode)
+## Always-Run Agents (Full Mode)
 
-These 5 criteria run on every review. They become 6 logical lanes when
+These 5 criteria run on every full review. They become 6 logical lanes when
 OpenRouter adds the separate security lens.
 
 Every always-run lane receives the FULL diff and is never scoped -- cross-file
@@ -27,9 +27,13 @@ kill switch.
 
 | Role | Default agent definition | Source | Family resolution | Trigger |
 |---|---|---|---|---|
-| second-perspective | `codex-perspective.md` | dm-review | Reviewer family differs from every implementing family; subscription headroom first, then API matrix quality-per-price | Fails open -- enabled unless `DM_REVIEW_SECOND_PERSPECTIVE` or legacy `DM_REVIEW_CODEX_PERSPECTIVE` is exactly `0` |
+| second-perspective | `codex-perspective.md` | dm-review | Reviewer family differs from every implementing family; subscription headroom first, then API matrix quality-per-price | Full mode only; fails open unless `DM_REVIEW_SECOND_PERSPECTIVE` or legacy `DM_REVIEW_CODEX_PERSPECTIVE` is exactly `0` |
 
-`second-perspective` runs in parallel with the selected agents and reports in the same P1/P2/P3 shape. The compatibility-named `codex-perspective.md` file is its default prompt definition, not a provider lock. It is a second-opinion lane, not a replacement for either security lane or architecture-reviewer. Every second-perspective and security sign-off receipt records `implementer_family`, `reviewer_family`, and `resolution_reason`. Legacy `model:` frontmatter is Claude Code compatibility metadata, not a provider-routing instruction.
+`second-perspective` runs in parallel with the selected full-mode agents and reports in the same P1/P2/P3 shape. Quick mode does not add this lane. The compatibility-named `codex-perspective.md` file is its default prompt definition, not a provider lock. It is a second-opinion lane, not a replacement for either security lane or architecture-reviewer. Every second-perspective and security sign-off receipt records `implementer_family`, `reviewer_family`, and `resolution_reason`. Legacy `model:` frontmatter is Claude Code compatibility metadata, not a provider-routing instruction.
+
+## Quick Mode
+
+Ordinary quick review always runs exactly `pattern-recognition-specialist` and `code-simplicity-reviewer`. It adds `ui-standards-reviewer`, `go-build-verifier`, and `craft-reviewer` only when their existing triggers apply. Security-sensitive paths escalate to full mode.
 
 ---
 
@@ -64,7 +68,7 @@ Quick reference for Phase 3 agent selection (FULL mode). Quick mode runs its own
 `migration-validator` is dispatched only in full mode on `.sql` under
 `migrations/` or `seeds/`; quick mode does not add this lane.
 
-| Extension | Always-run | Conditional agents added |
+| Extension | Full-mode always-run | Full-mode conditional agents added |
 |-----------|-----------|------------------------|
 | `.go` | All 5 | go-build-verifier, test-coverage-reviewer |
 | `.templ` | All 5 | a11y-html-reviewer, a11y-dynamic-content-reviewer, go-build-verifier, test-coverage-reviewer, visual-browser-tester, ux-quality-reviewer, ui-standards-reviewer |

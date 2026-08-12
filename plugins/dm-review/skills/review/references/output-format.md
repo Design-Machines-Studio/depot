@@ -56,7 +56,7 @@ The canonical unified report format produced by the review-consolidator after al
 
 ---
 
-### P3 -- Fix Before Merge
+### P3 -- Advisory
 
 #### [Finding Title]
 - **Finding ID:** `finding-v1:sha256(<normalized-key>)`
@@ -223,7 +223,7 @@ The consolidator preserves the original citation format from each agent.
 
 1. **P1 findings get full detail blocks** -- file, issue, fix, reference
 2. **P2 findings get detail blocks** -- same format as P1
-3. **P3 findings get full detail blocks** -- same format as P1/P2. P3 issues must be fixed, not glossed over.
+3. **P3 findings get full detail blocks** -- same format as P1/P2. Preserve source identity, raw reference, evidence, synthesis disposition, counts, and provenance even though P3 is advisory.
 4. **Clean agents are noted** in the summary table but don't get detail sections
 5. **Skipped agents are listed** with the reason (file type not changed, project type mismatch)
 6. **Deduplicated findings** show all source agents: `**Source:** a11y-css-reviewer, css-reviewer`
@@ -236,25 +236,22 @@ The consolidator preserves the original citation format from each agent.
     provenance, evidence, raw ref, agreement, disposition, closed reason code,
     and rationale; raw reviewer reports remain verbatim below
 
-## Merge Recommendation Logic (zero-deferral default)
+## Merge Recommendation Logic
 
 ```text
 if any P1 findings:
   recommendation = "BLOCKS MERGE"
   summary = "X critical issues must be fixed before merging."
-elif any P2 findings or any P3 findings:
-  # Zero-deferral: P3-only is NOT clean. P3s are mandatory fixes before merge.
+elif any P2 findings:
   recommendation = "APPROVE WITH FIXES"
-  if only_p3_findings:
-    summary = "X P3 issue(s) mandatory under zero-deferral. Resolve before merge or pass --allow-defer-p3 with justification."
-  else:
-    summary = "X issue(s) must be addressed before merging."
+  summary = "X issue(s) must be addressed before merging."
 else:
   recommendation = "CLEAN"
-  summary = "No issues found. Ready to merge."
+  if any P3 findings:
+    summary = "No P1/P2 findings. X P3 advisory finding(s) retained below."
+  else:
+    summary = "No issues found. Ready to merge."
 ```
-
-Under `--allow-defer-p3`, P3s may be explicitly deferred with a written justification and a tracking destination. In that mode only, P3-only can return `CLEAN` -- but the report must list every deferred P3 in a dedicated "Deferred Findings" section with tracking IDs.
 
 ## Ops Dashboard Write
 

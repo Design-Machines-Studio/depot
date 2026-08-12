@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
-  "version": "1.58.6",
-  "description": "Code review orchestrator with stable finding identities, disagreement synthesis, raw evidence, contribution receipts, zero-deferral, browser coverage, Codex judgment, and OpenRouter mechanical review",
+  "version": "1.59.0",
+  "description": "Code review orchestrator with proportional quick review, advisory P3 evidence, full security and browser coverage, stable finding identities, and contribution receipts",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -284,7 +284,7 @@
       {
         "id": "dm-review-quick",
         "name": "Quick Review",
-        "description": "Quick code review with 5 core criteria (6 logical lanes when OpenRouter adds its security lens), plus ui-standards-reviewer when UI files changed",
+        "description": "Quick code review with two core judgment lanes plus applicable UI, build, and domain verification",
         "argumentHint": "[optional: PR number, branch name, or file path]"
       },
       {
@@ -296,7 +296,7 @@
       {
         "id": "dm-review-loop",
         "name": "Review-Fix Loop",
-        "description": "Run dm-review then dm-review-fix in a convergence loop until zero findings remain",
+        "description": "Run dm-review then dm-review-fix until no P1/P2 findings remain and required verification is complete",
         "argumentHint": "[optional: --full, --max-iterations N, PR/branch/path]"
       },
       {
@@ -322,8 +322,8 @@
   },
   "interface": {
     "displayName": "DM Review",
-    "shortDescription": "Code review orchestrator with stable finding identities, disagreement synthesis, raw evidence, contribution receipts, ze",
-    "longDescription": "Code review orchestrator with stable finding identities, disagreement synthesis, raw evidence, contribution receipts, zero-deferral, browser coverage, Codex judgment, and OpenRouter mechanical review",
+    "shortDescription": "Code review orchestrator with proportional quick review, advisory P3 evidence, full security and browser coverage, stabl",
+    "longDescription": "Code review orchestrator with proportional quick review, advisory P3 evidence, full security and browser coverage, stable finding identities, and contribution receipts",
     "developerName": "Design Machines",
     "category": "Developer Tools",
     "capabilities": [

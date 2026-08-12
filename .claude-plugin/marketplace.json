@@ -277,12 +277,12 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.58.6",
+      "version": "1.59.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "Code review orchestrator with stable finding identities, disagreement synthesis, raw evidence, contribution receipts, zero-deferral, browser coverage, Codex judgment, and OpenRouter mechanical review",
+      "description": "Code review orchestrator with proportional quick review, advisory P3 evidence, full security and browser coverage, stable finding identities, and contribution receipts",
       "capabilities_summary": {
         "skills": 3,
         "agents": 15,
@@ -353,7 +353,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.45.0",
+      "version": "1.46.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

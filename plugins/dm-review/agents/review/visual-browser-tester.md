@@ -85,7 +85,7 @@ The dispatch skill injects `## Visual Finding Rules` (spec-primary evaluation, t
 
 Your lens is the **rendering level**, complementing the ux-quality-reviewer's design-quality lens: extract the spec's component variants, visual hierarchy, spacing choices, color treatments, and described outcomes; take an element-level `browser_take_screenshot` (CSS selector or coordinates) for each decision that maps to a visible element; state explicitly what you see; flag deviations P1. This catches cases where CSS inheritance, layout context, or scheme color differences produce a different visual result than the code suggests.
 
-Every visual finding -- P1, P2, or P3 -- is a mandatory fix under the zero-deferral policy; see `plugins/dm-review/skills/review/references/severity-mapping.md` for the escalation rules.
+Every visual finding keeps complete evidence and provenance. P1/P2 require fixes; P3 is advisory and does not block `CLEAN`. See `plugins/dm-review/skills/review/references/severity-mapping.md` for the escalation rules.
 
 ### Phase B: Responsive Testing
 

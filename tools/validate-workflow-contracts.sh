@@ -391,7 +391,7 @@ printf "\nPipeline performance contract:\n"
 
 require_text "$pipeline_cmd" "focused Codex review for ordinary chunks" "pipeline command uses focused ordinary-chunk review"
 require_text "$pipeline_run" "For ordinary non-sensitive chunks, run one focused read-only Codex review" "Codex adapter uses one focused ordinary-chunk reviewer"
-require_text "$orchestrator" "Do not dispatch the 5-agent quick dm-review" "orchestrator avoids the old per-chunk review fanout"
+require_text "$orchestrator" "Do not dispatch a multi-agent quick dm-review" "orchestrator avoids per-chunk review fanout"
 require_text "$orchestrator" '`all-chunks-complete` boundary' "orchestrator batches intermediate shadow observation"
 require_text "$orchestrator" "Empty-plan fast path" "orchestrator skips no-op cleanup commands"
 require_text "$promptcraft" "Do not create an orchestrator-owned closeout chunk" "promptcraft excludes closeout-only chunks"
@@ -424,7 +424,7 @@ require_text "$review_cmd" "canonical finding IDs" "dm-review publishes stable f
 require_text "$review_cmd" "disagreement is retained" "dm-review publishes disagreement preservation"
 require_text "$review_cmd" "contribution receipts" "dm-review publishes contribution receipts"
 require_text "$review_cmd" "raw evidence" "dm-review requires raw evidence"
-require_text "$review_cmd" "zero-deferral recommendation" "dm-review preserves zero-deferral"
+require_text "$review_cmd" "finding-policy recommendation" "dm-review preserves proportional severity policy"
 require_text "$review_cmd" "reported coverage gap" "dm-review preserves explicit coverage"
 require_text "$review_cmd" "observation-only economics evidence" "dm-review contributions remain observation-only"
 require_text "$review_consolidator" "stable ID" "review consolidator preserves stable IDs"
@@ -433,25 +433,18 @@ for loop_contract in "$review_loop" "$review_loop_skill"; do
   for receipt_field in selective_rerun lanes_rerun lanes_skipped rerun_reasons selection_fallback_reason; do
     require_text "$loop_contract" "\`$receipt_field\`" "$loop_contract_relative preserves $receipt_field receipt field"
   done
-  require_text "$loop_contract" '**A CLEAN verdict may only ever be issued by a verified full fan-out.** Set `review_is_full_fanout` to true only when selective input was not applied, the authoritative coverage receipt'"'"'s selected lanes exactly equal its completed lanes, and the nested review did not return `REVIEW INCOMPLETE`.' "$loop_contract_relative gates CLEAN on verified full fan-out coverage"
-  require_text "$loop_contract" "Security sign-off is never narrowed and is never made conditional on the touched-file set being non-empty." "$loop_contract_relative never narrows security sign-off"
+  require_text "$loop_contract" '**Convergence requires no open P1/P2 findings and complete required coverage for the verification pass.**' "$loop_contract_relative defines proportional convergence"
+  require_text "$loop_contract" 'P3 advisories never trigger another pass.' "$loop_contract_relative excludes P3 from convergence"
   require_text "$loop_contract" 'the touched-file set is the union of `git diff --name-only <prior-review-head>..HEAD` and the paths reported by `git status --porcelain`' "$loop_contract_relative unions committed and uncommitted changed paths"
   require_text "$loop_contract" "An empty computed lane set is never dispatched." "$loop_contract_relative never dispatches an empty selection"
   require_text "$loop_contract" 'selection fails open to a full fan-out with `fallback_reason: empty selection`' "$loop_contract_relative fails open on an empty selection"
   require_text "$loop_contract" "iteration-receipt.json" "$loop_contract_relative names the iteration receipt artifact"
-  require_text "$loop_contract" '`clean-confirmation-receipt.json`' "$loop_contract_relative names the clean confirmation receipt artifact"
   require_text "$loop_contract" '`max-iterations-verification-receipt.json`' "$loop_contract_relative names the max-iterations receipt artifact"
-  allowlist_reset_count=$(grep -Fc 'review_lane_allowlist = null' "$loop_contract" || true)
-  if [ "$allowlist_reset_count" -lt 5 ]; then
-    printf "  FAIL  %s resets the actual selective input before both required full passes\n" "$loop_contract_relative"
-    failures=1
-  else
-    printf "  OK    %s resets the actual selective input before both required full passes\n" "$loop_contract_relative"
-  fi
+  require_text "$loop_contract" 'Repeat the whole full fan-out only when the prior full review was incomplete or a repair changed a security-sensitive boundary.' "$loop_contract_relative limits repeated full fan-out"
 done
 require_text "$review_skill" '`review_lane_allowlist`' "review receiver names the selective lane allowlist"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.13.6"' "dm-review requires the kernel release with bound OpenRouter receipt identity"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.58.6"' "pipeline requires the review release with conditional service policy"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.59.0"' "pipeline requires proportional dm-review release"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'family-independent second-opinion review' "dm-review manifest describes family-independent perspective resolution"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'Full mode only.' "migration-validator registry limits the lane to full mode"
@@ -467,7 +460,7 @@ done
 require_text "$review_skill" "never relax this equality check to a subset check" "review receiver requires exact selected_full_set equality"
 require_text "$review_skill" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "review receiver fails open without partially honoring invalid input"
 require_text "$review_skill" 'It records the exact set of logical lanes actually `DISPATCHED` on this pass' "review receipt reports actually dispatched lanes"
-require_text "$review_skill" "A review that applied a selective allowlist is not a full fan-out and can never provide the evidence for a CLEAN verdict" "selective review cannot provide CLEAN evidence"
+require_text "$review_skill" 'A selective affected-lane repair verification can support `CLEAN` only after an earlier complete full review' "selective repair verification can complete proportional convergence"
 require_text "$review_skill" 'The independent-family security sign-off, `security-auditor-codex-signoff`, is such a mandatory lane and is never removed by an allowlist.' "review allowlist never removes security sign-off"
 require_text "$postmortem_schema" '`activeComputeSeconds`' "postmortem separates active compute from elapsed time"
 require_text "$postmortem_schema" '`waitSecondsByCategory`' "postmortem records typed waits"
@@ -989,8 +982,8 @@ for f in \
   "$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md" \
   "$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md"; do
   rel="${f#$REPO_ROOT/}"
-  require_text "$f" "and \`second-perspective\`" \
-    "$rel uses the exact provider-neutral perspective lane in selective rosters"
+  require_text "$f" "\`second-perspective\`" \
+    "$rel preserves the exact provider-neutral full-mode perspective lane"
   require_absent "$f" "\`codex-perspective\`" \
     "$rel rejects the retired perspective lane token while allowing its .md filename"
 done
