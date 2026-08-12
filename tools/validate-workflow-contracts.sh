@@ -449,7 +449,7 @@ for loop_contract in "$review_loop" "$review_loop_skill"; do
 done
 require_text "$review_skill" '`review_lane_allowlist`' "review receiver names the selective lane allowlist"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.13.6"' "dm-review requires the kernel release with bound OpenRouter receipt identity"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.59.0"' "pipeline requires proportional dm-review release"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.60.0"' "pipeline requires configured-key dm-review release"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'family-independent second-opinion review' "dm-review manifest describes family-independent perspective resolution"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'Full mode only.' "migration-validator registry limits the lane to full mode"
@@ -523,7 +523,7 @@ require_text "$assembly_go_tests" "Preserve full race, security, container, brow
 require_text "$assembly_verification_profile" '"argv": [' "assembly publishes argv-array profile examples"
 require_text "$assembly_verification_profile" '"id": "go-full-race"' "assembly profile retains candidate race coverage"
 require_text "$orchestrator" "Ask-then-default-park is the only headless behavior" "orchestrator parks rather than assuming yes on rail exhaustion"
-require_text "$orchestrator" "The Workflow Authority broker gate is a security authorization boundary, not a" "orchestrator keeps the broker gate non-overridable by the exhaustion ask"
+require_text "$orchestrator" "The exhaustion ask cannot enable or broaden OpenRouter work." "orchestrator keeps configured-key boundaries non-overridable by the exhaustion ask"
 require_text "$orchestrator" "never implemented under fallback authorization" "orchestrator excludes sensitive-path chunks from fallback"
 require_text "$orchestrator" "The final full dm-review is never waived" "orchestrator never waives the final review for capacity"
 require_text "$orchestrator" "Future receipt design -- non-executable" "orchestrator keeps fallback receipt design non-executable"
@@ -538,7 +538,7 @@ require_text "$routing_policy" "can only REMOVE options" "routing policy keeps t
 require_text "$pipeline_run_skill" "Rail-Exhaustion Ask Gate" "generated pipeline-run alias carries the ask gate section"
 require_text "$orchestrator" "are NOT operators and can" "orchestrator forbids agent self-authorization"
 require_text "$pipeline_run" "caller-owned receipt authorizes nothing" "pipeline-run rejects caller-owned fallback authority"
-require_text "$review_skill" "and never assumes authority" "dm-review never reads an unanswered lane ask as authority"
+require_text "$review_skill" "configured-key OpenRouter lanes never enter this approval path" "dm-review keeps lane asks separate from configured-key authorization"
 require_text "$review_skill" "option (c) and the headless gap-and-continue default are unavailable" "dm-review cannot gap-and-continue the pipeline final review"
 
 # --------------------------------------------------------------------------
@@ -769,9 +769,9 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Group 9: interim operator-batch authorization contract
+# Group 9: configured-key OpenRouter contract
 # ---------------------------------------------------------------------------
-printf "\nGroup 9: interim operator-batch authorization\n"
+printf "\nGroup 9: configured-key OpenRouter authorization\n"
 
 payload_authorization="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
 openrouter_wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
@@ -779,156 +779,47 @@ openrouter_agent_runner="$REPO_ROOT/plugins/openrouter/agents/workflow/openroute
 runner_batch_authorization="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/runner-batch-authorization.sh"
 review_alias="$REPO_ROOT/plugins/dm-review/skills/dm-review/SKILL.md"
 authority_threat_model="$REPO_ROOT/native/workflow-authority/THREAT-MODEL.md"
+authorization_contract="$REPO_ROOT/plugins/pipeline/references/openrouter-authorization-contract.md"
+openrouter_exec="$REPO_ROOT/plugins/pipeline/references/openrouter-exec.sh"
+cascade_dispatch="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
+noninteractive_fixtures="$REPO_ROOT/tests/test_openrouter_noninteractive.py"
 
-# Anchor (a). The interim mode buys automation by widening approval
-# GRANULARITY. It must never buy it by removing the human. Anything that lets
-# an environment variable stand in for the terminal confirmation turns a
-# sunset-bound loosening into a permanent hole, so pin the sentence itself in
-# every file that teaches or implements the mode.
-for f in "$payload_authorization" "$openrouter_wrapper" "$review_skill" "$review_cmd"; do
-  rel="${f#$REPO_ROOT/}"
-  require_text "$f" "No environment variable substitutes for the interactive confirmation." \
-    "$rel forbids an env-only path into interim operator-batch mode"
-done
-
-# Anchor (b). The interim rung sits BETWEEN broker-ready and unavailable, never
-# above broker authority. A ready broker retires the mode on that host with no
-# migration step and no grace period.
-for f in "$payload_authorization" "$openrouter_wrapper" "$review_skill" "$review_cmd"; do
-  rel="${f#$REPO_ROOT/}"
-  require_text "$f" "broker available; interim mode retired on this host" \
-    "$rel retires interim mode when a broker probe reports ready"
-done
-
-# Anchor (c). An installed-but-unhealthy broker is an UNKNOWN state, not a
-# brokerless host. Treating it like one would widen exposure on a machine that
-# is mid-install or degraded, so every layer names the withheld reason.
-for f in "$payload_authorization" "$openrouter_wrapper" "$review_skill" "$review_cmd"; do
-  rel="${f#$REPO_ROOT/}"
-  require_text "$f" "broker_present_not_ready" \
-    "$rel withholds interim mode when the broker is present but not ready"
-done
-
-# Anchor (d). The batch artifact is unsigned. Every file that teaches or
-# implements the mode must say so in those words, because an overclaim here
-# would sell a procedural control as an enforced one.
-for f in "$payload_authorization" "$openrouter_wrapper"; do
-  rel="${f#$REPO_ROOT/}"
-  require_text "$f" "PROCEDURAL and UNAUTHENTICATED" \
-    "$rel states that the batch artifact is unauthenticated"
-done
-for f in "$review_skill" "$review_cmd"; do
-  rel="${f#$REPO_ROOT/}"
-  require_text "$f" "procedural and unauthenticated" \
-    "$rel states that the batch artifact is unauthenticated"
-done
-
-# Anchor (e). Pin executable assignments exactly: a bare date search can be
-# satisfied by explanatory prose after an enforcement constant drifts.
-require_line "$payload_authorization" 'PROGRAM_SUNSET="2026-09-07"' \
-  "payload authorization pins the executable interim sunset"
-require_line "$openrouter_wrapper" 'INTERIM_PROGRAM_SUNSET="2026-09-07"' \
-  "OpenRouter wrapper pins the executable interim sunset"
-require_line "$review_skill" 'OPENROUTER_INTERIM_PROGRAM_SUNSET=2026-09-07' \
-  "dm-review pins the executable interim sunset"
-require_text "$review_cmd" 'program_sunset` (2026-09-07)' \
-  "dm-review command documents the interim sunset"
-require_line_mutation_sensitive "$payload_authorization" \
-  'PROGRAM_SUNSET="2026-09-07"' 'PROGRAM_SUNSET="2099-01-01"' \
-  "payload authorization sunset anchor rejects assignment mutation"
-require_line_mutation_sensitive "$openrouter_wrapper" \
-  'INTERIM_PROGRAM_SUNSET="2026-09-07"' 'INTERIM_PROGRAM_SUNSET="2099-01-01"' \
-  "OpenRouter wrapper sunset anchor rejects assignment mutation"
-require_line_mutation_sensitive "$review_skill" \
-  'OPENROUTER_INTERIM_PROGRAM_SUNSET=2026-09-07' \
-  'OPENROUTER_INTERIM_PROGRAM_SUNSET=2099-01-01' \
-  "dm-review sunset anchor rejects assignment mutation"
-require_text "$openrouter_agent_runner" '--manifest "$request_envelope_manifest"' \
-  "openrouter-agent-runner redispatch preserves the preparation manifest"
-require_text "$review_skill" '--manifest "$request_envelope_manifest"' \
-  "dm-review redispatch preserves the preparation manifest"
-EM_DASH=$(printf '\342\200\224')
-require_absent "$review_skill" "about to POST${EM_DASH}including" \
-  "dm-review request-envelope prose remains ASCII"
-require_absent "$openrouter_wrapper" "about to POST${EM_DASH}including" \
-  "OpenRouter wrapper request-envelope prose remains ASCII"
-
-# Anchor (f). Transmission-point digest binding. The wrapper must not depend on
-# a separate verify-batch step and must bind the complete request envelope.
-require_text "$openrouter_wrapper" "transmitted request envelope is not bound to this approved lane and model set" \
-  "openrouter-wrapper.sh binds transmitted bytes to the approved lane and model set"
-require_text "$payload_authorization" '"lanes": lanes' \
-  "payload-authorization.sh persists the operator-reviewed lane mapping"
-require_text "$payload_authorization" 'summary["inspectionPath"] = inspection_path' \
-  "payload-authorization.sh retains an inspection path through approval"
-require_text "$openrouter_wrapper" '"$AUTHORIZATION_HELPER" validate-batch' \
-  "openrouter-wrapper.sh delegates typed batch validation to the shared helper"
-require_text "$openrouter_wrapper" '.program_sunset == $expected' \
-  "openrouter-wrapper.sh enforces its release sunset pin"
-require_text "$review_skill" '.programSunset == $expected' \
-  "dm-review enforces its release sunset pin"
-require_text "$payload_authorization" 'if [ "$MODE" = "validate-batch" ]; then' \
-  "payload-authorization.sh applies broker retirement to typed batch validation"
-
-# Anchor (f2). Preparation and redispatch treat every renderer/snapshot/verify
-# command as fallible, and only report a prepared envelope after checking the
-# exact digest plus readable, nonempty request and manifest artifacts.
-for phrase in \
-  "request envelope rendering failed" \
-  "request envelope snapshot failed" \
-  "request envelope snapshot is malformed or unavailable" \
-  "redispatch request envelope is not authorized" \
-  "redispatch authorization receipt is empty"; do
-  require_text "$runner_batch_authorization" "$phrase" \
-    "runner-batch-authorization.sh checks $phrase"
-done
-require_text "$runner_batch_authorization" 'cp "$BATCH_FILE" "$BATCH_SNAPSHOT"' \
-  "runner-batch-authorization.sh snapshots the batch before digest and validation"
-require_text "$runner_batch_authorization" 'prepare|verify required' \
-  "runner-batch-authorization.sh limits itself to preparation and read-only verification"
-require_text "$runner_batch_authorization" 'manifest parent must be creator-owned mode 0700' \
-  "runner-batch-authorization.sh requires a private physical preparation parent"
-require_text "$review_skill" 'no cross-process cleanup subcommand' \
-  "dm-review forbids path-based cross-process preparation cleanup"
-require_text "$openrouter_agent_runner" '"$RUNNER_BATCH_HELPER" prepare' \
-  "openrouter-agent-runner delegates preparation to the shipped helper"
-require_text "$openrouter_agent_runner" '"$RUNNER_BATCH_HELPER" verify' \
-  "openrouter-agent-runner delegates redispatch verification to the shipped helper"
-require_text "$openrouter_agent_runner" "could not report prepared request envelope" \
-  "openrouter-agent-runner checks preparation-result reporting"
-require_text "$review_skill" "broker_transport_unavailable" \
-  "dm-review keeps a ready broker unavailable until broker-owned transport exists"
+require_text "$authorization_contract" 'either `OPENROUTER_API_KEY` or the existing' \
+  "configured-key contract accepts both supported key inputs"
+require_text "$authorization_contract" 'verify-trusted-boundary' \
+  "configured-key contract requires automatic unchanged-byte screening"
+require_text "$authorization_contract" 'has no effect on configured-key dispatch' \
+  "configured-key contract ignores Workflow Authority status"
+require_text "$openrouter_exec" 'OPENROUTER_EXEC_ALLOWED_PATHS is required' \
+  "bounded Pipeline adapter keeps the owned-path allowlist"
+require_text "$openrouter_exec" 'OPENROUTER_AUTHORIZATION_MODE=trusted-boundary' \
+  "bounded Pipeline adapter uses configured-key wrapper transport"
+require_absent "$openrouter_exec" '/usr/local/bin/workflow-authority' \
+  "bounded Pipeline adapter has no broker probe"
+require_absent "$cascade_dispatch" '/usr/local/bin/workflow-authority' \
+  "Pipeline cascade has no broker probe"
+require_text "$review_skill" 'OPENROUTER_AUTHORIZATION_MODE=trusted-boundary' \
+  "dm-review resolves eligible configured-key lanes non-interactively"
+require_text "$review_skill" 'OPENROUTER_API_KEY_FILE' \
+  "dm-review accepts the validated key-file input"
+require_absent "$review_skill" 'OPENROUTER_INTERIM_PROGRAM_SUNSET' \
+  "dm-review active path has no artificial sunset"
+require_text "$openrouter_agent_runner" 'verify-trusted-boundary' \
+  "OpenRouter agent runner screens unchanged exact bytes automatically"
+require_absent "$openrouter_agent_runner" 'RUNNER_BATCH_HELPER' \
+  "OpenRouter agent runner does not enter the batch path"
+require_text "$noninteractive_fixtures" 'test_direct_is_one_pass_and_receipt_is_content_free' \
+  "loopback fixtures cover one-pass direct dispatch and receipt hygiene"
+require_text "$noninteractive_fixtures" 'test_pipeline_rejects_disallowed_path_before_application' \
+  "loopback fixtures cover pre-application path rejection"
+require_text "$noninteractive_fixtures" 'test_active_surfaces_ignore_workflow_authority' \
+  "fixtures cover active broker independence"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md" \
   '`implementer_family`, `reviewer_family`, `resolution_reason`' \
   "dm-review output contract requires family provenance on contribution decisions"
 require_text "$review_skill" \
   'Every machine-readable contribution decision and lane companion also records normalized' \
   "dm-review review contract requires family provenance on every contribution surface"
-for f in "$review_cmd" "$review_alias" "$review_skill"; do
-  rel="${f#$REPO_ROOT/}"
-  require_absent "$f" 'available, `authorization_mode: broker`' \
-    "$rel does not advertise the unimplemented broker authorization mode as available"
-  require_absent "$f" 'authorization={broker|' \
-    "$rel does not include broker in the executable routing report"
-  require_text "$f" "broker_transport_unavailable" \
-    "$rel reports a ready broker as unavailable until broker-owned transport exists"
-done
-broker_surfaces=(
-  "$REPO_ROOT/plugins/openrouter/.claude-plugin/plugin.json"
-  "$REPO_ROOT/plugins/openrouter/.codex-plugin/plugin.json"
-  "$REPO_ROOT/plugins/openrouter/README.md"
-  "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/SKILL.md"
-  "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-selection.md"
-  "$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/invocation-protocol.md"
-  "$openrouter_agent_runner"
-)
-for f in "${broker_surfaces[@]}"; do
-  rel="${f#$REPO_ROOT/}"
-  require_absent "$f" "available through a ready Workflow" \
-    "$rel does not advertise ready-broker automation"
-  require_absent "$f" "broker or sunset-bound operator-batch automation" \
-    "$rel does not advertise the unimplemented broker transport"
-done
 family_surfaces=(
   "$REPO_ROOT/plugins/openrouter/commands/openrouter.md"
   "$REPO_ROOT/plugins/openrouter/skills/openrouter/SKILL.md"
@@ -1001,11 +892,11 @@ require_absent "$REPO_ROOT/docs/cascade-migration.md" \
   "future broker-ready host" \
   "cascade guidance does not treat readiness alone as transport authority"
 require_text "$REPO_ROOT/docs/cascade-migration.md" \
-  "dm-review may" \
-  "cascade guidance distinguishes dm-review interim batches from Pipeline implementation authority"
+  "configured-key" \
+  "cascade guidance documents configured-key availability"
 require_text "$REPO_ROOT/docs/cascade-migration.md" \
-  "broker_transport_unavailable" \
-  "cascade guidance names the ready-broker transport gap"
+  "Workflow Authority status is not consulted" \
+  "cascade guidance makes broker state irrelevant"
 require_text "$REPO_ROOT/docs/cascade-migration.md" \
   "read-only independent review" \
   "cascade guidance preserves Claude's narrow independent review role"
@@ -1026,64 +917,10 @@ for f in "$openrouter_agent_runner" "$openrouter_wrapper"; do
     "$rel binds security review routing to the approved model pair"
 done
 
-# Anchor (g). The wrapper binds the batch to the CURRENT run and parses
-# timestamps strictly. A batch issued for another run, issued in the future, or
-# carrying a lifetime past the 24-hour ceiling must be refused at the point of
-# disclosure, independently of any verify-batch step.
-for phrase in \
-  "batch authorization was issued for a different run" \
-  "batch authorization is issued in the future" \
-  "batch authorization lifetime exceeds the 24-hour maximum" \
-  "not well-formed UTC timestamps"; do
-  require_text "$payload_authorization" "$phrase" \
-    "payload-authorization.sh enforces \"$phrase\" for every batch consumer"
-done
-
-# Anchor (h). Anchors (a)-(g) pin PROSE. Prose cannot fail when enforcement is
-# deleted, so the security properties are additionally pinned by behavioral
-# fixtures in tools/test-openrouter-runner-policy.sh. This anchor exists to stop
-# those fixtures from being quietly dropped -- it names the fixture labels, and
-# the fixtures themselves run the wrapper and assert the refusal.
-openrouter_policy_fixtures="$REPO_ROOT/tools/test-openrouter-runner-policy.sh"
-for phrase in \
-  "a ready broker retires interim mode at the wrapper" \
-  "a present-but-not-ready broker withholds interim mode" \
-  "a failing broker probe withholds interim mode" \
-  "a missing jq withholds interim mode above an installed broker" \
-  "interim batch refuses a malformed expiry timestamp" \
-  "interim batch refuses a future-issued authorization" \
-  "interim batch refuses a lifetime over 24 hours" \
-  "interim batch refuses an expired authorization" \
-  "interim batch refuses a batch issued for another run" \
-  "interim batch refuses when the current run id is absent" \
-  "interim batch refuses unapproved transmitted bytes" \
-  "interim batch refuses a self-asserted program sunset" \
-  "interim batch accepts the exact ordered content snapshot approved" \
-  "interim batch refuses a non-existent leap day" \
-  "interim batch refuses a day past the end of a short month" \
-  "interim batch refuses a sixtieth second" \
-  "interim batch parses a genuine leap day" \
-  "shipped sunset constant still admits the interim mode today" \
-  "shipped sunset constant has passed and the interim mode is dead" \
-  "runner preparation detects canonical renderer failure" \
-  "runner preparation detects request-envelope snapshot failure" \
-  "shipped runner helper detects renderer failure" \
-  "shipped runner helper detects snapshot failure" \
-  "shipped runner helper prepares a manifest without provider contact" \
-  "shipped runner helper verifies an immutable private batch snapshot" \
-  "typed batch validation retires interim mode when the broker is ready" \
-  "typed batch validation withholds interim mode when the broker is degraded" \
-  "security runner refuses a matrix-listed model assigned to the wrong role" \
-  "Codex-signoff security runner refuses a matrix-listed model assigned to the wrong role" \
-  "runner redispatch verifies the re-rendered request envelope against the batch"; do
-  require_text "$openrouter_policy_fixtures" "$phrase" \
-    "behavioral fixture retained: $phrase"
-done
-
 printf "\n"
 if [ "$failures" -ne 0 ]; then
   printf "FIX  restore the missing workflow-contract anchors (see docs and plugin sources above)\n"
   exit 1
 fi
 
-printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, routing invariants, interim operator-batch authorization)\n"
+printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, routing invariants, configured-key OpenRouter authorization)\n"

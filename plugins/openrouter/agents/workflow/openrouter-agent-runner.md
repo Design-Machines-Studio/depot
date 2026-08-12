@@ -7,12 +7,9 @@ tools: Bash, Read, Grep
 
 # OpenRouter Agent Runner
 
-> **Authorization is mandatory.** Automated dispatch is currently permitted
-> only through a valid sunset-bound `interim_operator_batch` selected by the
-> root orchestrator. A ready Workflow Authority Broker retires interim mode but
-> remains unavailable here until its broker-owned transport interface lands.
-> An API key alone, a child-selected mode, or an unverified batch artifact is
-> never authority.
+> **Configured-key development path.** A coherent installed bundle plus either
+> supported key input authorizes eligible automated review dispatch. The runner
+> automatically screens the exact outbound bytes; it never asks for approval.
 
 You are a translation layer -- you do not perform review yourself; all judgment work happens inside the selected OpenRouter model. You read files, build prompts, invoke a shell command, validate text output, and format findings.
 
@@ -20,7 +17,7 @@ You are a translation layer -- you do not perform review yourself; all judgment 
 
 dm-review's Provider Routing dispatches you for an OpenRouter-eligible review lane when:
 
-1. `OPENROUTER_API_KEY` is set in the environment
+1. `OPENROUTER_API_KEY` or `OPENROUTER_API_KEY_FILE` is configured
 2. The openrouter plugin is installed
 3. The target agent is selected for OpenRouter by `routing-policy.json` or dm-review's inline fallback policy
 
@@ -34,19 +31,8 @@ The caller passes you these inputs in the prompt body:
 - `target_timeout` -- positive integer seconds, below dm-review's orchestrator timeout
 - `openrouter_bundle_ref` -- ephemeral home-relative selected root from the caller
 - `openrouter_bundle_version`, `cache_class`, and `resolution_reason` -- expected resolver identity
-- `approved_request_envelope_sha256` -- optional exact request-envelope digest
-  copied from the user's approval response; empty on the preparation pass
-- `authorization_mode` -- root-selected `prepare_interim_batch`,
-  `interim_operator_batch`, `exact-digest`, or `trusted-boundary`; `broker` is
-  intentionally not accepted until broker-owned transport is implemented
-- `review_run_id` -- optional for direct exact-digest use and required for
-  automated or `interim_operator_batch` dispatch; copied into the transport
-  receipt so replay identity is explicit
-- `batch_authorization_file` and `batch_authorization_digest` -- required
-  together with `review_run_id` for `interim_operator_batch`
-- `request_envelope_manifest` -- root-owned private preparation-manifest path
-  required for both `prepare_interim_batch` and its later
-  `interim_operator_batch` redispatch; preserved unchanged across approval
+- `authorization_mode` -- `trusted-boundary`; any other active mode is rejected
+- `review_run_id` -- optional run identity copied into the content-free receipt
 - `diff_content` -- the diff to review
 - `changed_files` -- newline-delimited, normalized, unfiltered list of every changed file path
 - `project_context` -- stack info (for example, `Plugin Marketplace (Markdown+JSON)`)
@@ -58,12 +44,12 @@ The caller passes you these inputs in the prompt body:
 Before reading a target file or invoking the wrapper, fail closed on a missing key and validate all caller-controlled values:
 
 ```bash
-if [ -z "${OPENROUTER_API_KEY:-}" ]; then
+if [ -z "${OPENROUTER_API_KEY:-}" ] && [ -z "${OPENROUTER_API_KEY_FILE:-}" ]; then
   cat <<EOF
 ## ${target_agent_name:-unknown} Review (via OpenRouter ${target_model:-unknown})
 
 ### RUNNER FAILURE
-OpenRouter runner (${target_agent_name:-unknown}): OPENROUTER_API_KEY is not set. Review unavailable.
+OpenRouter runner (${target_agent_name:-unknown}): no supported OpenRouter key input is configured. Review unavailable.
 
 ### Critical (P1)
 ### Serious (P2)
@@ -148,26 +134,24 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.11.4 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.12.0 --active-host "$ACTIVE_HOST" \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
       --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
-      --required-executable skills/openrouter-delegate/references/runner-batch-authorization.sh \
       --required-asset skills/openrouter-delegate/references/model-matrix.json \
       --required-asset skills/openrouter-delegate/references/prompt-templates.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.11.4 \
+      --minimum-version 1.12.0 \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
       --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
-      --required-executable skills/openrouter-delegate/references/runner-batch-authorization.sh \
       --required-asset skills/openrouter-delegate/references/model-matrix.json \
       --required-asset skills/openrouter-delegate/references/prompt-templates.md
   fi
@@ -312,8 +296,7 @@ shell. The wrapper prints model text directly on stdout.
 ```bash
 WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 AUTHORIZATION_HELPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
-RUNNER_BATCH_HELPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/runner-batch-authorization.sh"
-if [ ! -x "$WRAPPER_PATH" ] || [ ! -x "$AUTHORIZATION_HELPER" ] || [ ! -x "$RUNNER_BATCH_HELPER" ]; then
+if [ ! -x "$WRAPPER_PATH" ] || [ ! -x "$AUTHORIZATION_HELPER" ]; then
   cat <<EOF
 ## ${target_agent_name} Review (via OpenRouter ${target_model})
 
@@ -368,161 +351,19 @@ case "$target_agent_name" in
   *) OPENROUTER_WORKLOAD_CLASS="quality" ;;
 esac
 
-AUTHORIZATION_MODE="${authorization_mode:-${OPENROUTER_PAYLOAD_AUTHORIZATION:-exact-digest}}"
-if [ "$AUTHORIZATION_MODE" = "exact-digest" ]; then
-  REQUEST_ENVELOPE_FILE=$(mktemp)
-  if ! env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYS_FILE" \
-      OPENROUTER_TARGET_AGENT_NAME="$target_agent_name" \
-      OPENROUTER_WORKLOAD="$OPENROUTER_WORKLOAD_CLASS" \
-      OPENROUTER_REQUEST_ENVELOPE_OUTPUT="$REQUEST_ENVELOPE_FILE" \
-      bash "$WRAPPER_PATH" "$target_model" - "$target_timeout" "${fallback_model:-}" \
-      < "$USER_FILE"; then
-    echo "RUNNER FAILURE: exact request-envelope rendering failed" >&2
-    exit 2
-  fi
-  PAYLOAD_SHA256=$("$AUTHORIZATION_HELPER" snapshot-envelope \
-    --output "$AUTHORIZATION_RECEIPT" --request-file "$REQUEST_ENVELOPE_FILE")
-  # Exact-digest redispatch rebuilds the envelope and compares the human-bound
-  # digest, so it does not need the interim batch's persistent inspection copy.
-  rm -f "$AUTHORIZATION_RECEIPT.request.json"
-elif [ "$AUTHORIZATION_MODE" = "trusted-boundary" ]; then
-  PAYLOAD_SHA256=$("$AUTHORIZATION_HELPER" snapshot \
-    --output "$AUTHORIZATION_RECEIPT" \
-    --content-file "$SYS_FILE" \
-    --content-file "$USER_FILE")
-fi
-if [ "$AUTHORIZATION_MODE" = "exact-digest" ] && [ -z "${approved_request_envelope_sha256:-}" ]; then
-  cat <<EOF
-### PAYLOAD APPROVAL REQUIRED
-lane: \`${target_agent_name}\`
-requestedModel: \`${target_model}\`
-fallbackModel: \`${fallback_model:-none}\`
-requestEnvelopeSha256: \`${PAYLOAD_SHA256}\`
-authorizationScope: \`exact-request-envelope-bytes\`
-EOF
-  exit 0
-fi
-```
-
-The empty-approval branch above returns this structured preparation result
-without invoking the wrapper:
-
-```markdown
-### PAYLOAD APPROVAL REQUIRED
-lane: `{target_agent_name}`
-requestedModel: `{target_model}`
-fallbackModel: `{fallback_model|none}`
-requestEnvelopeSha256: `{PAYLOAD_SHA256}`
-authorizationScope: `exact-request-envelope-bytes`
-```
-
-The root orchestrator collects every such lane result, asks the user to approve
-the exact digests as one batch, and re-dispatches each unchanged runner input
-with that lane's approved digest. A child runner never asks the user or copies
-its own digest into the approval input. General OpenRouter permission, a prior
-payload approval, or orchestrator judgment is not authority for these bytes.
-If the user declines, the orchestrator records `host_disclosure_declined` and
-returns the lane to Codex.
-
-`trusted-boundary` is accepted only when the trusted host or root run
-configuration explicitly selected it before child dispatch. A child runner
-must not set, infer, or promote that mode. It still snapshots, rescans, and
-verifies the same ordered bytes immediately before network contact.
-
-Immediately before the network call, authorize the unchanged payload according
-to the selected mode:
-
-```bash
-case "$AUTHORIZATION_MODE" in
-  prepare_interim_batch)
-    [ -n "${request_envelope_manifest:-}" ] || {
-      echo "RUNNER FAILURE: request_envelope_manifest is required for preparation" >&2
-      exit 2
-    }
-    if ! PREPARATION_JSON=$("$RUNNER_BATCH_HELPER" prepare \
-      --wrapper "$WRAPPER_PATH" --authorization-helper "$AUTHORIZATION_HELPER" \
-      --system-file "$SYS_FILE" --user-file "$USER_FILE" \
-      --model "$target_model" --fallback "${fallback_model:-}" \
-      --timeout "$target_timeout" --workload "$OPENROUTER_WORKLOAD_CLASS" \
-      --target-agent-name "$target_agent_name" \
-      --manifest "$request_envelope_manifest"); then
-      echo "RUNNER FAILURE: interim request-envelope preparation failed" >&2
-      exit 2
-    fi
-    REQUEST_ENVELOPE_SHA256=$(printf '%s' "$PREPARATION_JSON" | jq -er \
-      '.requestEnvelopeSha256 | select(test("^[0-9a-f]{64}$"))') || {
-      echo "RUNNER FAILURE: preparation receipt is malformed" >&2
-      exit 2
-    }
-    REQUEST_ENVELOPE_INSPECTION_PATH=$(printf '%s' "$PREPARATION_JSON" | jq -er \
-      '.inspectionPath | select(type == "string" and length > 0)') || {
-      echo "RUNNER FAILURE: preparation inspection path is malformed" >&2
-      exit 2
-    }
-    if ! cat <<EOF
-### REQUEST ENVELOPE APPROVAL REQUIRED
-lane: \`${target_agent_name}\`
-requestedModel: \`${target_model}\`
-fallbackModel: \`${fallback_model:-none}\`
-requestEnvelopeSha256: \`${REQUEST_ENVELOPE_SHA256}\`
-manifest: \`${request_envelope_manifest}\`
-inspectionPath: \`${REQUEST_ENVELOPE_INSPECTION_PATH}\`
-authorizationScope: \`exact-request-envelope-bytes\`
-EOF
-    then
-      echo "RUNNER FAILURE: could not report prepared request envelope" >&2
-      exit 2
-    fi
+AUTHORIZATION_MODE="${authorization_mode:-trusted-boundary}"
+[ "$AUTHORIZATION_MODE" = "trusted-boundary" ] || {
+  echo "RUNNER FAILURE: active dm-review authorization must be trusted-boundary" >&2
+  exit 2
+}
+"$AUTHORIZATION_HELPER" snapshot --output "$AUTHORIZATION_RECEIPT" \
+  --content-file "$SYS_FILE" --content-file "$USER_FILE" >/dev/null
+"$AUTHORIZATION_HELPER" verify-trusted-boundary \
+  --manifest "$AUTHORIZATION_RECEIPT" --policy "$SECURITY_POLICY_RESOLVED" \
+  --content-file "$SYS_FILE" --content-file "$USER_FILE" >/dev/null || {
+    echo "RUNNER FAILURE: automatic disclosure boundary declined; route to Codex" >&2
     exit 0
-    ;;
-  exact-digest)
-    [ -n "${review_run_id:-}" ] || {
-      echo "RUNNER FAILURE: exact-digest redispatch requires review_run_id" >&2
-      exit 2
-    }
-    "$AUTHORIZATION_HELPER" verify-envelope \
-      --manifest "$AUTHORIZATION_RECEIPT" \
-      --approved-sha256 "$approved_request_envelope_sha256" \
-      --request-file "$REQUEST_ENVELOPE_FILE"
-    ;;
-  trusted-boundary)
-    "$AUTHORIZATION_HELPER" verify-trusted-boundary \
-      --manifest "$AUTHORIZATION_RECEIPT" \
-      --policy "$SECURITY_POLICY_RESOLVED" \
-      --content-file "$SYS_FILE" \
-      --content-file "$USER_FILE"
-    ;;
-  interim_operator_batch)
-    [ -r "${batch_authorization_file:-}" ] &&
-      [[ "${batch_authorization_digest:-}" =~ ^[0-9a-f]{64}$ ]] &&
-      [ -n "${review_run_id:-}" ] &&
-      [ -r "${request_envelope_manifest:-}" ] || {
-      echo "RUNNER FAILURE: interim batch inputs are incomplete" >&2
-      exit 2
-    }
-    if ! BATCH_VERIFICATION_JSON=$("$RUNNER_BATCH_HELPER" verify \
-      --wrapper "$WRAPPER_PATH" --authorization-helper "$AUTHORIZATION_HELPER" \
-      --system-file "$SYS_FILE" --user-file "$USER_FILE" \
-      --model "$target_model" --fallback "${fallback_model:-}" \
-      --timeout "$target_timeout" --workload "$OPENROUTER_WORKLOAD_CLASS" \
-      --target-agent-name "$target_agent_name" \
-      --manifest "$request_envelope_manifest" \
-      --batch-file "$batch_authorization_file" \
-      --batch-digest "$batch_authorization_digest" --run-id "$review_run_id"); then
-      echo "RUNNER FAILURE: redispatch request envelope is not authorized" >&2
-      exit 2
-    fi
-    [ -n "$BATCH_VERIFICATION_JSON" ] || {
-      echo "RUNNER FAILURE: redispatch authorization receipt is empty" >&2
-      exit 2
-    }
-    AUTHORIZATION_MODE=interim-operator-batch
-    ;;
-  *)
-    echo "RUNNER FAILURE: invalid OPENROUTER_PAYLOAD_AUTHORIZATION" >&2
-    exit 2
-    ;;
-esac
+  }
 
 RESULT=$( \
   env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYS_FILE" \
@@ -530,10 +371,6 @@ RESULT=$( \
   OPENROUTER_AUTHORIZATION_MODE="$AUTHORIZATION_MODE" \
   OPENROUTER_AUTHORIZATION_RUN_ID="${review_run_id:-}" \
   OPENROUTER_LANE_ID="$target_agent_name" \
-  OPENROUTER_APPROVED_REQUEST_ENVELOPE_SHA256="${approved_request_envelope_sha256:-}" \
-  OPENROUTER_BATCH_AUTHORIZATION_FILE="${batch_authorization_file:-}" \
-  OPENROUTER_BATCH_AUTHORIZATION_DIGEST="${batch_authorization_digest:-}" \
-  OPENROUTER_BATCH_RUN_ID="${review_run_id:-}" \
   OPENROUTER_WORKLOAD="$OPENROUTER_WORKLOAD_CLASS" \
   OPENROUTER_RECEIPT_FILE="$WRAPPER_RECEIPT" \
   bash "$WRAPPER_PATH" "$target_model" - "$target_timeout" "${fallback_model:-}" \
@@ -677,7 +514,9 @@ complete:
 5. **Keep consequence-appropriate review independent.** High-consequence security completion requires a reviewer family different from the implementer even when non-secret implementation content was eligible for OpenRouter.
 6. **Partial coverage is not full coverage.** When `DECLINED_CHANGED_FILES` is non-empty, emit `### CODEX PARTIAL COVERAGE REQUIRED` with path names only. dm-review completes ordinary lanes locally on Codex; `security-auditor-codex-signoff` must use a non-implementing family for every held path or remain `REVIEW INCOMPLETE`.
 7. **Preserve the provider receipt.** Report the generation ID, canonical response model, and serving-provider provenance. A missing provider field is `not_reported_by_completion`, never evidence of a verified provider. Never include prompt or completion content in receipt metadata.
-8. **Bind disclosure approval to bytes.** Invoke the wrapper only after the user approves the exact `requestEnvelopeSha256` and the authorization helper verifies the unchanged canonical request envelope immediately before transmission.
+8. **Screen unchanged bytes automatically.** Snapshot and verify the exact
+   system/user files with `verify-trusted-boundary` immediately before invoking
+   the wrapper. Never ask for a digest, batch, or broker approval.
 
 ## Why This Architecture
 

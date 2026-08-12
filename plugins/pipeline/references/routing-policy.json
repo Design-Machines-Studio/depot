@@ -291,50 +291,25 @@
     "rationale": "Routing decisions were previously unattributable: the matrix was consumed by nothing at run time, so a receipt could not show which price/context/strength data a rung was chosen against. Naming the snapshot and the deciding axis makes the decision auditable and makes matrix drift visible in the receipt trail."
   },
   "authorization": {
-    "schemaVersion": 1,
-    "_comment": "How an automated OpenRouter lane becomes authorized. Resolved, never assumed. Ordered, fail-closed: broker-ready retires interim but remains unavailable until broker-owned transport lands; then the interim operator batch is considered only when the broker is absent; otherwise unavailable. Broker presence has THREE states: ready (broker_transport_unavailable), present_not_ready (unknown -- unavailable), and absent (the only state where interim is reachable).",
-    "resolutionOrder": ["broker_ready_unavailable", "interim_operator_batch", "unavailable"],
-    "brokerStates": {
-      "ready": "probe parsed with jq -e '.status == \"ready\"' succeeds -- interim retired, automated dispatch unavailable with reason broker_transport_unavailable until broker-owned transport lands",
-      "present_not_ready": "client installed but probe errors, is unparseable, or does not report ready -- unknown state, resolves to unavailable with reason broker_present_not_ready; interim mode is withheld",
-      "absent": "client not installed or not executable -- the only state in which interim_operator_batch is reachable"
-    },
+    "schemaVersion": 2,
+    "_comment": "Configured key plus a coherent installed bundle makes OpenRouter available for eligible payloads. Exact outbound bytes are screened automatically immediately before wrapper invocation. Broker status is not consulted.",
+    "resolutionOrder": ["configured_key_and_bundle", "automatic_payload_screen", "native_fallback"],
     "modes": {
-      "broker": {
-        "status": "future-unimplemented",
-        "probe": "/usr/local/bin/workflow-authority probe --format json reports status ready, parsed with jq -e '.status == \"ready\"' and never a substring match",
-        "authority": "future independent broker-owned run-bound authorization, credential custody, and transport",
-        "currentResolution": "unavailable",
-        "currentReason": "broker_transport_unavailable",
-        "permanentWhenImplemented": true
-      },
-      "interim_operator_batch": {
-        "status": "interim",
-        "_comment": "Deliberate, owner-authorized loosening of approval GRANULARITY -- run-batch instead of per-payload -- not of approval EXISTENCE. Introduced 2026-08-08 because the Linux broker host is unavailable for about two weeks and per-payload interactive approval is too much friction for automated lanes.",
-        "authorizationFile": "plans/<feature>/openrouter-batch-authorization.json",
-        "schemaFields": ["schema_version", "authorization_mode", "run_id", "operator", "created_at", "expires_at", "request_envelope_digests", "lanes", "scope_note", "program_sunset"],
-        "maxLifetimeSeconds": 86400,
-        "programSunset": "2026-09-07",
-        "programSunsetRationale": "About four weeks. The darwin broker milestone is scheduled inside this window. After this date batch files fail validation and extending the program requires a reviewed commit that re-issues the sunset in the schema.",
-        "entryRequirement": "interactive operator confirmation on the controlling terminal showing each lane's model candidates, provider routing, per-role byte totals, exact digest, and private inspection path; retained request bytes are 0600 and removed after the batch is persisted; no environment variable substitutes for the interactive confirmation",
-        "artifactAuthentication": "none",
-        "artifactHonesty": "The batch file is PROCEDURAL and UNAUTHENTICATED -- bare JSON with no signature, MAC, or user-presence binding. Nothing proves batch-approve or its /dev/tty confirmation ever ran, and a same-user process can hand-write an equivalent file carrying its own digests and the known run id. The confirmation is a control against accidental and automated entry by this tooling, NOT a technical barrier against same-user forgery. Closing that gap is what the out-of-process Workflow Authority Broker does, and it is the primary reason this mode carries a sunset. Do not substitute Keychain ACLs or a shared-secret MAC: same-user enforcement inside a user-readable script is theatre.",
-        "transmissionBinding": "openrouter-wrapper.sh hashes the exact request envelope it is about to POST and refuses (exit 2) unless the validated schema-v2 batch file's durable lanes mapping binds that lane id to the same digest and model candidates. The bound bytes include model or fallback models, provider routing and sort, streaming options, roles, and ordered message content. The check is at the point of disclosure and does not depend on the lane having run verify-batch first. The private request copy is opened on a dedicated file descriptor, its path is unlinked, its contents are read once into process memory, and curl receives those same in-memory bytes on stdin (--data-binary @-). No path is reopened between digest and POST.",
-        "sunsetPinning": "All three enforcement layers (payload-authorization.sh PROGRAM_SUNSET, openrouter-wrapper.sh INTERIM_PROGRAM_SUNSET, the dm-review review skill's OPENROUTER_INTERIM_PROGRAM_SUNSET) compare program_sunset against this release constant; a file-asserted future date is not accepted on its own.",
-        "retiredWhen": "broker probe on the host reports ready",
-        "withheldWhen": "broker client is installed but does not probe ready (broker_present_not_ready)",
-        "retirementMessage": "broker available; interim mode retired on this host",
-        "wrapperMode": "interim-operator-batch",
-        "receiptFields": ["authorization_mode", "batchSha256"],
-        "nonMatchingPayload": "per-payload interactive exact-digest path, else fail closed",
-        "permanent": false
+      "trusted_boundary": {
+        "status": "active",
+        "keyInputs": ["OPENROUTER_API_KEY", "OPENROUTER_API_KEY_FILE"],
+        "bundleRequirement": "one coherent installed OpenRouter bundle",
+        "payloadRequirement": "snapshot plus verify-trusted-boundary over exact unchanged system/user files",
+        "wrapperMode": "trusted-boundary",
+        "receiptFields": ["provider", "model", "usage", "requestEnvelopeSha256"],
+        "brokerIndependent": true,
+        "costControl": "provider-side per-key spending limits"
       },
       "unavailable": {
-        "status": "default",
-        "reason": "host_authority_unavailable",
-        "reasons": ["host_authority_unavailable", "broker_present_not_ready"],
+        "status": "fallback",
+        "reason": "configured_key_bundle_provider_or_payload_unavailable",
         "exhaustionFallback": "codex",
-        "_comment": "On hosts with no broker and no valid batch authorization the external rail stays closed and the complete criterion runs on Codex. An available API key, runner, policy, or caller environment variable is not automated dispatch authority."
+        "_comment": "Missing or invalid credentials, an incoherent bundle, provider failure, or an automatically declined payload returns to Codex without prompting."
       }
     }
   },

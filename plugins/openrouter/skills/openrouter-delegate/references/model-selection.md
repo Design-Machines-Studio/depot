@@ -2,11 +2,12 @@
 
 Decision tables for the three distinct routing systems that use these model names. Native Codex execution, dm-review/direct OpenRouter delegation, and the Pipeline cascade have different ordering and provenance; do not combine them into one fallback ladder.
 
-> **Current production mode:** direct interactive `/openrouter` calls require
-> exact-digest approval. dm-review may use the temporary sunset-bound operator
-> batch. A ready broker retires interim mode but remains
-> `broker_transport_unavailable` until broker-owned transport lands. Pipeline
-> retains its separate workflow-authority gate.
+> **Current production mode:** a configured `OPENROUTER_API_KEY` or validated
+> `OPENROUTER_API_KEY_FILE`, a coherent installed bundle, and an automatically
+> accepted disclosure-boundary scan make OpenRouter available. Direct calls,
+> eligible dm-review lanes, and the bounded Pipeline adapter run without an
+> approval redispatch. Provider-side per-key spending limits are the recommended
+> runaway-cost control.
 
 ## Available Models
 

@@ -1,7 +1,7 @@
 {
   "name": "openrouter",
-  "version": "1.11.6",
-  "description": "OpenRouter provider plugin with exact-digest direct interactive use, broker-pending automated routing, Kimi K3-led security and bulk analysis, Terra quality fallback, Luna economical mechanical routing, and an optional official MCP control plane.",
+  "version": "1.12.0",
+  "description": "Configured-key OpenRouter provider plugin with automatic sensitive-payload refusal, Kimi K3-led security and bulk analysis, Terra quality fallback, Luna economical mechanical routing, and an optional official MCP control plane.",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -25,7 +25,7 @@
       {
         "id": "openrouter-delegate",
         "name": "OpenRouter Delegation",
-        "description": "Use exact-digest direct interactive OpenRouter delegation plus sunset-bound operator-batch dm-review automation; ready-broker transport is not implemented.",
+        "description": "Use non-interactive configured-key OpenRouter delegation for automatically screened direct, dm-review, and bounded Pipeline workloads.",
         "triggers": [
           "use openrouter",
           "ask openrouter",
@@ -69,7 +69,7 @@
         "id": "openrouter-agent-runner",
         "name": "OpenRouter Agent Runner",
         "category": "workflow",
-        "description": "Authorized runner for policy-selected review criteria through a validated sunset-bound operator batch; ready-broker transport is not implemented.",
+        "description": "Configured-key runner for automatically screened policy-selected review criteria with native Codex fallback.",
         "tags": [
           "workflow",
           "review",
@@ -92,8 +92,8 @@
   "optionalPluginDependencies": {},
   "interface": {
     "displayName": "Openrouter",
-    "shortDescription": "OpenRouter provider plugin with exact-digest direct interactive use, broker-pending automated routing, Kimi K3-led secur",
-    "longDescription": "OpenRouter provider plugin with exact-digest direct interactive use, broker-pending automated routing, Kimi K3-led security and bulk analysis, Terra quality fallback, Luna economical mechanical routing, and an optional official MCP control plane.",
+    "shortDescription": "Configured-key OpenRouter provider plugin with automatic sensitive-payload refusal, Kimi K3-led security and bulk analys",
+    "longDescription": "Configured-key OpenRouter provider plugin with automatic sensitive-payload refusal, Kimi K3-led security and bulk analysis, Terra quality fallback, Luna economical mechanical routing, and an optional official MCP control plane.",
     "developerName": "Design Machines",
     "category": "Developer Tools",
     "capabilities": [

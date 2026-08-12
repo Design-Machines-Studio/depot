@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# openrouter-exec.sh -- bounded Pipeline adapter for workflow-authority dispatch.
+# openrouter-exec.sh -- bounded configured-key OpenRouter Pipeline adapter.
 
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
@@ -10,8 +10,6 @@ FALLBACK_MODEL="${OPENROUTER_EXEC_FALLBACK_MODEL:-}"
 TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-3600}"
 DEFERRED_VERIFY_CMD="${OPENROUTER_EXEC_VERIFY_CMD:-}"
 COMMIT_MSG="${OPENROUTER_EXEC_COMMIT_MSG:-pipeline: implement openrouter chunk}"
-WORKFLOW_AUTHORITY_CLIENT="/usr/local/bin/workflow-authority"
-ASSESSMENT_LANE="pipeline-assessment-artifact-delegation-v1"
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -52,203 +50,111 @@ fi
   echo "openrouter-exec: OPENROUTER_EXEC_ALLOWED_PATHS is required" >&2
   exit 2
 }
-[ "${DM_PROVIDER_LANE:-}" = "$ASSESSMENT_LANE" ] || {
-  echo "openrouter-exec: host_authority_unavailable" >&2
-  exit 70
-}
-[ -n "${DM_PROVIDER_REPOSITORY:-}" ] && [ -n "${DM_PROVIDER_RUN_ID:-}" ] &&
-  [ -n "${DM_PROVIDER_CANDIDATE:-}" ] && [ -n "${DM_PROVIDER_NONCE:-}" ] || {
-  echo "openrouter-exec: host_authority_unavailable" >&2
-  exit 70
+if [ -z "${OPENROUTER_API_KEY:-}" ] && [ -z "${OPENROUTER_API_KEY_FILE:-}" ]; then
+  echo "openrouter-exec: configured OpenRouter key unavailable; return to Codex" >&2
+  exit 77
+fi
+
+resolve_openrouter_root() {
+  local cache root
+  for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
+    root="$(ls -td "$cache"/openrouter/*/ 2>/dev/null | head -1)"
+    [ -n "$root" ] || continue
+    [ -x "$root/skills/openrouter-delegate/references/openrouter-wrapper.sh" ] &&
+      [ -r "$root/skills/openrouter-delegate/references/delegation-security-policy.json" ] &&
+      [ -x "$root/skills/openrouter-delegate/references/delegation-boundary.sh" ] &&
+      [ -x "$root/skills/openrouter-delegate/references/payload-authorization.sh" ] || continue
+    printf '%s' "${root%/}"
+    return 0
+  done
+  return 1
 }
 
-DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-POLICY="$DIR/../../openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
-BOUNDARY="$DIR/../../openrouter/skills/openrouter-delegate/references/delegation-boundary.sh"
-[ -r "$POLICY" ] && [ -x "$BOUNDARY" ] || {
-  echo "openrouter-exec: output boundary unavailable" >&2
-  exit 2
+OPENROUTER_ROOT="$(resolve_openrouter_root)" || {
+  echo "openrouter-exec: coherent OpenRouter bundle unavailable; return to Codex" >&2
+  exit 77
 }
-
-authority_client() {
-  [ -x "$WORKFLOW_AUTHORITY_CLIENT" ] || return 1
-  printf '%s' "$WORKFLOW_AUTHORITY_CLIENT"
-}
-
-authority_env() {
-  env -i PATH="$PATH" LC_ALL=C "$@"
-}
-
-request_body_digest() {
-  local model="$1" fallback="$2" system_file="$3" prompt_file="$4"
-  /usr/bin/python3 - "$model" "$fallback" 4<"$system_file" 5<"$prompt_file" <<'PY'
-import hashlib, json, os, sys
-models = [sys.argv[1]] + ([sys.argv[2]] if sys.argv[2] else [])
-body = {"messages": [{"content": os.read(4, 8388609).decode("utf-8"), "role": "system"},
-                     {"content": os.read(5, 8388609).decode("utf-8"), "role": "user"}],
-        "models": models, "temperature": None}
-text = json.dumps(body, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
-raw = text.replace("\u2028", "\\u2028").replace("\u2029", "\\u2029").encode()
-print("sha256:" + hashlib.sha256(raw).hexdigest())
-PY
-}
-
-response_metrics() {
-  /usr/bin/python3 -c 'import hashlib,sys; b=sys.stdin.buffer.read(); print(len(b)); print("sha256:"+hashlib.sha256(b).hexdigest())'
-}
-
-validate_terminal_failure() {
-  local receipt="$1" outcome="$2" exit_code="$3" body_digest="$4" models
-  models="$(jq -nc --arg model "$MODEL" --arg fallback "$FALLBACK_MODEL" \
-    'if $fallback == "" then [$model] else [$model,$fallback] end')"
-  jq -e --arg repository "$DM_PROVIDER_REPOSITORY" --arg run_id "$DM_PROVIDER_RUN_ID" \
-    --arg lane "$DM_PROVIDER_LANE" --arg candidate "$DM_PROVIDER_CANDIDATE" \
-    --arg workload "${DM_PROVIDER_WORKLOAD:-pipeline-assessment}" \
-    --arg body_digest "$body_digest" --arg outcome "$outcome" --argjson exit_code "$exit_code" \
-    --argjson models "$models" '
-      .schema_version == 1 and .protocol == "workflow-authority-provider-dispatch-v1" and
-      .operation_family == "external_provider_dispatch" and .substrate_authority == "not_asserted" and
-      .outcome == $outcome and .exit_code == $exit_code and
-      .scope.repository == $repository and .scope.run_id == $run_id and .scope.lane == $lane and
-      .scope.candidate == $candidate and .scope.workload == $workload and
-      .models == $models and .selected_model == null and
-      .provider == "openrouter" and .part_count == 2 and
-      .generation_id == null and .serving_provider == null and
-      .usage_sha256 == null and .fallback == null and
-      .request_body_sha256 == $body_digest and
-      .response_sha256 == "sha256:e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855" and
-      .response_length == 0 and
-      (.challenge_sha256 | test("^sha256:[0-9a-f]{64}$")) and
-      (.authority_assertion_sha256 | test("^sha256:[0-9a-f]{64}$")) and
-      (.result_signer_sha256 | test("^sha256:[0-9a-f]{64}$")) and
-      (.prior_chain_digest | test("^sha256:[0-9a-f]{64}$")) and
-      (.sequence | type == "number" and . >= 1 and . <= 9223372036854775807) and
-      (.issued_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
-      (.completed_at | test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
-      .cleanup == {reservation:"consumed",connection:"closed",content_buffer:"discarded"} and
-      .signature.kind == "es256" and
-      (.signature.signature_der | test("^[A-Za-z0-9_-]{1,4096}$")) and
-      ([keys[] | select(test("prompt|content|credential|api_key|secret"; "i"))] | length) == 0
-    ' "$receipt" >/dev/null 2>&1
-}
-
-CLIENT="$(authority_client)" || {
-  echo "openrouter-exec: host_authority_unavailable" >&2
-  exit 70
-}
-STATUS="$(authority_env "$CLIENT" provider-transport-status 2>/dev/null)" || {
-  echo "openrouter-exec: host_authority_unavailable" >&2
-  exit 70
-}
-printf '%s' "$STATUS" | jq -e '.production_ready == true and .m1_acceptance == true' >/dev/null || {
-  echo "openrouter-exec: host_authority_unavailable" >&2; exit 70;
-}
+WRAPPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+POLICY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
+BOUNDARY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
+AUTHORIZATION="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
 
 TASK_TMP_ROOT="${TMPDIR:-/tmp}"
 SYSTEM="You are an agentic coding runner. Return only a unified diff that applies cleanly to the current git worktree. No prose. No markdown fences."
 PROMPT_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.prompt.XXXXXX")"
 SYSTEM_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.system.XXXXXX")"
+AUTHORIZATION_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.authorization.XXXXXX")"
 ALLOWED_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.allowed.XXXXXX")"
 PATCH_PATHS_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.paths.XXXXXX")"
-RESULT_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.result.XXXXXX")"
+RECEIPT_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.receipt.XXXXXX")"
 PATCH_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.patch.XXXXXX")"
 MSG_FILE=""
-trap 'rm -f "$PROMPT_FILE" "$SYSTEM_FILE" "$ALLOWED_FILE" "$PATCH_PATHS_FILE" "$RESULT_FILE" "$PATCH_FILE" "$MSG_FILE"' EXIT
+trap 'rm -f "$PROMPT_FILE" "$SYSTEM_FILE" "$AUTHORIZATION_FILE" "$ALLOWED_FILE" "$PATCH_PATHS_FILE" "$RECEIPT_FILE" "$PATCH_FILE" "$MSG_FILE"' EXIT
+
 cat > "$PROMPT_FILE"
 printf '%s' "$SYSTEM" > "$SYSTEM_FILE"
 [ -s "$PROMPT_FILE" ] || { echo "openrouter-exec: empty prompt" >&2; exit 2; }
 printf '%s\n' "$OPENROUTER_EXEC_ALLOWED_PATHS" > "$ALLOWED_FILE"
-BODY_DIGEST="$(request_body_digest "$MODEL" "$FALLBACK_MODEL" "$SYSTEM_FILE" "$PROMPT_FILE")" || {
-  echo "openrouter-exec: request body digest failed" >&2; exit 2;
-}
 
-marker="$(printf '\001')"
+# Automatic disclosure boundary plus unchanged-byte proof. This happens before
+# the wrapper can open a provider connection and requires no human interaction.
+"$AUTHORIZATION" snapshot --output "$AUTHORIZATION_FILE" \
+  --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE" >/dev/null
+if ! "$AUTHORIZATION" verify-trusted-boundary --manifest "$AUTHORIZATION_FILE" \
+    --policy "$POLICY" --content-file "$SYSTEM_FILE" \
+    --content-file "$PROMPT_FILE" >/dev/null; then
+  echo "openrouter-exec: host_disclosure_declined; return to Codex" >&2
+  exit 77
+fi
+
 set +e
-RAW_OUT="$(
-  authority_env "$CLIENT" dispatch-provider-request \
-    --repository "$DM_PROVIDER_REPOSITORY" --run-id "$DM_PROVIDER_RUN_ID" \
-    --lane "$DM_PROVIDER_LANE" --candidate "$DM_PROVIDER_CANDIDATE" \
-    --workload "${DM_PROVIDER_WORKLOAD:-pipeline-assessment}" --nonce "$DM_PROVIDER_NONCE" \
-    --model "$MODEL" --fallback-model "$FALLBACK_MODEL" \
-    --system-fd 4 --user-fd 5 --response-fd 3 \
-    4<"$SYSTEM_FILE" 5<"$PROMPT_FILE" 3>&1 >"$RESULT_FILE"
-  rc=$?
-  [ "$rc" -eq 0 ] && printf '\001'
-  exit "$rc"
-)"
+env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
+  OPENROUTER_AUTHORIZATION_MODE=trusted-boundary \
+  OPENROUTER_WORKLOAD=mechanical OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
+  bash "$WRAPPER" "$MODEL" - "$TIMEOUT" "$FALLBACK_MODEL" \
+  < "$PROMPT_FILE" > "$PATCH_FILE"
 rc=$?
 set -e
-if [ "$rc" -ne 0 ]; then
-  case "$rc" in
-    71) echo "openrouter-exec: host authorization declined" >&2; exit 77;;
-    72) echo "openrouter-exec: host_disclosure_declined" >&2; exit 77;;
-    70) echo "openrouter-exec: host_authority_unavailable" >&2; exit 70;;
-    73|74)
-      outcome="provider_failure"
-      [ "$rc" -eq 74 ] && outcome="unknown"
-      if [ -z "$RAW_OUT" ] && validate_terminal_failure "$RESULT_FILE" "$outcome" "$rc" "$BODY_DIGEST"; then
-        echo "openrouter-exec: terminal provider outcome ($outcome); external dispatch rail stopped" >&2
-        cat "$RESULT_FILE"
-      else
-        echo "openrouter-exec: terminal provider result verification failed; external dispatch rail stopped" >&2
-      fi
-      exit 75
-      ;;
-    75) echo "openrouter-exec: provider outcome unverifiable; external dispatch rail stopped" >&2; exit 75;;
-    *) echo "openrouter-exec: broker result verification failed" >&2; exit 2;;
-  esac
-fi
-RAW_OUT="${RAW_OUT%"$marker"}"
-METRICS="$(printf '%s' "$RAW_OUT" | response_metrics)" || {
-  echo "openrouter-exec: response digest failed" >&2; exit 2;
-}
-RESPONSE_LENGTH="$(printf '%s\n' "$METRICS" | sed -n '1p')"
-RESPONSE_DIGEST="$(printf '%s\n' "$METRICS" | sed -n '2p')"
-MODELS_JSON="$(jq -nc --arg model "$MODEL" --arg fallback "$FALLBACK_MODEL" \
-  'if $fallback == "" then [$model] else [$model,$fallback] end')"
-jq -e --arg repository "$DM_PROVIDER_REPOSITORY" --arg run_id "$DM_PROVIDER_RUN_ID" \
-  --arg lane "$DM_PROVIDER_LANE" --arg candidate "$DM_PROVIDER_CANDIDATE" \
-  --arg workload "${DM_PROVIDER_WORKLOAD:-pipeline-assessment}" --arg nonce "$DM_PROVIDER_NONCE" \
-  --arg body_digest "$BODY_DIGEST" --arg response_digest "$RESPONSE_DIGEST" \
-  --argjson models "$MODELS_JSON" --argjson response_length "$RESPONSE_LENGTH" '
-    .schema_version == 1 and .protocol == "workflow-authority-provider-dispatch-v1" and
-    .operation_family == "external_provider_dispatch" and .substrate_authority == "not_asserted" and
-    .outcome == "verified" and .exit_code == 0 and
-    .scope.repository == $repository and .scope.run_id == $run_id and .scope.lane == $lane and
-    .scope.candidate == $candidate and .scope.workload == $workload and
-    .models == $models and (.selected_model as $selected | (.models | index($selected)) != null) and
-    .provider == "openrouter" and .part_count == 2 and
-    (.generation_id | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
-    (.serving_provider | test("^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$")) and
-    (.usage_sha256 | test("^sha256:[0-9a-f]{64}$")) and
-    (.fallback == (.selected_model != .models[0])) and
-    .request_body_sha256 == $body_digest and
-    .response_sha256 == $response_digest and .response_length == $response_length and
-    (.challenge_sha256 | test("^sha256:[0-9a-f]{64}$")) and
-    (.authority_assertion_sha256 | test("^sha256:[0-9a-f]{64}$")) and
-    (.result_signer_sha256 | test("^sha256:[0-9a-f]{64}$")) and
-    (.prior_chain_digest | test("^sha256:[0-9a-f]{64}$")) and
-    (.sequence | type == "number" and . >= 1) and
-    .cleanup == {reservation:"consumed",connection:"closed",content_buffer:"discarded"} and
-    .signature.kind == "es256" and
-    (.signature.signature_der | test("^[A-Za-z0-9_-]{1,4096}$")) and
-    ([keys[] | select(test("prompt|content|credential|api_key|secret"; "i"))] | length) == 0
-  ' "$RESULT_FILE" >/dev/null || {
-  echo "openrouter-exec: broker result scope mismatch" >&2
+case "$rc" in
+  0) ;;
+  28|1)
+    echo "openrouter-exec: provider unavailable or credentials invalid; return to Codex" >&2
+    exit 77
+    ;;
+  2)
+    echo "openrouter-exec: wrapper invocation rejected" >&2
+    exit 2
+    ;;
+  *)
+    echo "openrouter-exec: wrapper failed with status $rc" >&2
+    exit 77
+    ;;
+esac
+
+jq -e '
+  .schemaVersion == 2 and .outcome == "success" and
+  .requestedModel != null and .responseModel != null and
+  (.authorization.mode == "trusted-boundary") and
+  (.authorization.requestEnvelopeSha256 | test("^[0-9a-f]{64}$")) and
+  (.generationId | type == "string" and length > 0) and
+  (.usage == null or (.usage | type == "object")) and
+  ([(.. | objects) | keys[] |
+    select(test("^(prompt|response|content|api_?key|secret)$"; "i"))] | length) == 0
+' "$RECEIPT_FILE" >/dev/null || {
+  echo "openrouter-exec: wrapper receipt invalid" >&2
   exit 2
 }
 
-# The response is held in memory until its signed terminal is accepted. It is
-# materialized only for the existing local diff parser/apply boundary and is
-# removed by the EXIT trap; there is no broker retrieval or caller output path.
-printf '%s' "$RAW_OUT" > "$PATCH_FILE"
 [ -s "$PATCH_FILE" ] || { echo "openrouter-exec: model returned no unified diff" >&2; exit 1; }
 if "$BOUNDARY" --policy "$POLICY" --changed-files "$ALLOWED_FILE" \
     --diff-file "$PATCH_FILE" --output-paths "$PATCH_PATHS_FILE"; then
   :
 else
   rc=$?
-  [ "$rc" -eq 3 ] && { echo "openrouter-exec: model patch exceeded chunk/security boundary; return to Codex" >&2; exit 77; }
+  if [ "$rc" -eq 2 ] || [ "$rc" -eq 3 ]; then
+    echo "openrouter-exec: model patch exceeded chunk/security boundary; return to Codex" >&2
+    exit 77
+  fi
   echo "openrouter-exec: model patch could not be validated" >&2
   exit 2
 fi
@@ -275,15 +181,18 @@ git commit -F "$MSG_FILE" >/dev/null
 FILES_CHANGED="$(git diff --name-only HEAD~1..HEAD | tr '\n' ',' | sed 's/,$//')"
 jq -n --arg commit "$(git rev-parse --short HEAD)" --arg files "$FILES_CHANGED" \
   --arg verification "$VERIFY_RESULT" --arg requested_model "$MODEL" \
-  --arg actual_model "$(jq -r '.selected_model' "$RESULT_FILE")" \
-  --arg provider "$(jq -r '.serving_provider' "$RESULT_FILE")" \
-  --arg generation_id "$(jq -r '.generation_id' "$RESULT_FILE")" \
-  --arg usage_sha256 "$(jq -r '.usage_sha256' "$RESULT_FILE")" \
-  --argjson fallback "$(jq '.fallback' "$RESULT_FILE")" '
+  --arg actual_model "$(jq -r '.responseModel' "$RECEIPT_FILE")" \
+  --arg provider "$(jq -r '.servingProvider // ""' "$RECEIPT_FILE")" \
+  --arg provider_provenance "$(jq -r '.servingProviderProvenance' "$RECEIPT_FILE")" \
+  --arg generation_id "$(jq -r '.generationId' "$RECEIPT_FILE")" \
+  --arg request_digest "$(jq -r '.authorization.requestEnvelopeSha256' "$RECEIPT_FILE")" \
+  --argjson usage "$(jq '.usage' "$RECEIPT_FILE")" \
+  --argjson fallback "$(jq '.fallbackUsed' "$RECEIPT_FILE")" '
   {requestedProvider:"openrouter",attemptedProvider:"openrouter",actualImplementer:"openrouter",
    implementedBy:"openrouter",status:"committed",commit:$commit,filesChanged:$files,
    verification:$verification,requestedModel:$requested_model,actualModel:$actual_model,
-   servingProvider:$provider,generationId:$generation_id,usageSha256:$usage_sha256,responseModelProvenance:"broker-verified",
-   servingProviderProvenance:"broker-verified",fallback:$fallback,
-   fallbackReason:(if $fallback then "broker-routed-fallback" else "none" end),
-   nativeVendorOriginInvariant:"passed",usage:null}'
+   servingProvider:(if $provider == "" then null else $provider end),generationId:$generation_id,
+   requestEnvelopeSha256:$request_digest,responseModelProvenance:"response",
+   servingProviderProvenance:$provider_provenance,fallback:$fallback,
+   fallbackReason:(if $fallback then "openrouter-native-fallback" else "none" end),
+   nativeVendorOriginInvariant:"passed",usage:$usage}'

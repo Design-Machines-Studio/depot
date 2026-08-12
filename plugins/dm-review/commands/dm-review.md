@@ -54,54 +54,19 @@ emits a durable coverage receipt even when the raw inventory is empty.
 
 ## OpenRouter Availability Resolution
 
-Automated external lanes are never assumed available. The review skill RESOLVES
-availability into exactly three outcomes, evaluated in this order and
-fail-closed at every step:
+OpenRouter is available when one coherent installed OpenRouter bundle resolves
+and either `OPENROUTER_API_KEY` or the validated `OPENROUTER_API_KEY_FILE` input
+is configured. Eligible mechanical, bulk, and supplementary Kimi security lanes
+then dispatch non-interactively with the existing automatic disclosure scan and
+unchanged-byte check. No digest question, batch artifact, broker probe, FIDO
+interaction, or redispatch is part of the active path.
 
-1. **Broker probe reports `ready`** -- unavailable for automated dispatch,
-   reason `broker_transport_unavailable`. A ready broker retires interim mode,
-   but the dm-review runner must remain unavailable until its broker-owned
-   transport interface is implemented. Never pass `authorization_mode: broker`
-   to the API-key wrapper.
-2. **Valid unexpired batch authorization for THIS run** -- available,
-   `OPENROUTER_AUTHORIZATION_MODE=interim_operator_batch`, reason
-   `interim_operator_batch`. This INTERIM mode is reachable only when the
-   broker client is ABSENT from the host. Its intended entry is
-   `payload-authorization.sh batch-approve`, which shows the operator the lane
-   list, byte totals, and digest count on the controlling terminal at run start
-   and waits for a typed confirmation.
-   **No environment variable substitutes for the interactive confirmation.**
-   **The batch artifact is procedural and unauthenticated** -- bare JSON with
-   no signature and no user-presence binding, so nothing proves the
-   confirmation ever happened and a same-user process can hand-write an
-   equivalent file. The confirmation guards against accidental and automated
-   entry by this tooling, not against same-user forgery; the out-of-process
-   Workflow Authority Broker is what closes that gap, and it is the primary
-   reason for the sunset. Only digests recorded in the batch file are accepted;
-   the wrapper re-checks that membership over the bytes it actually transmits,
-   and any other payload falls back to the per-payload interactive path or
-   fails closed.
-3. **Otherwise** -- unavailable. Coding agents run on Codex. An available API
-   key, runner, policy, or caller environment variable is not automated
-   dispatch authority. The reason is `broker_present_not_ready` when the broker
-   client is installed but does not probe ready -- an unknown state fails
-   closed instead of widening exposure -- and `host_authority_unavailable`
-   otherwise.
-
-Interim mode is FORBIDDEN when a broker probe on the host reports `ready`; the
-batch path refuses with `broker available; interim mode retired on this host`.
-It is likewise WITHHELD when the broker client is installed but does not probe
-ready. Probes are parsed with `jq -e '.status == "ready"'`, never a substring
-match.
-It also carries a hard calendar backstop, `program_sunset` (2026-09-07), after
-which batch files fail validation and extending the program requires a reviewed
-commit that re-issues the sunset in the schema. The darwin broker milestone is
-scheduled inside that window.
-
-Every lane receipt produced in interim mode carries
-`authorization_mode: interim_operator_batch` plus the batch file digest, and
-the review report's coverage section states that interim operator-batch
-authorization was active for the run.
+A missing or invalid key, unavailable bundle/provider, or automatically
+declined payload falls back to Codex without prompting. Workflow Authority
+presence, absence, readiness, or degradation does not change configured-key
+availability. Receipts remain content-free and record provider, model, usage,
+and request-envelope digest metadata. Recommend provider-side per-key spending
+limits as the runaway-cost control.
 
 ## Shadow Workflow Kernel Lifecycle
 
