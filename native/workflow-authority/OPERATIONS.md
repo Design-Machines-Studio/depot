@@ -22,19 +22,50 @@ macOS will use the same provider-dispatch protocol and receipt verification, but
 this Linux systemd/libfido2 installation workflow does not claim macOS runtime
 support.
 
-## Packaging build gate
+## Ubuntu distro prerequisites
 
-Build release artifacts only on a trusted Linux packaging host with Go 1.26.5,
-cgo, `pkg-config`, and exactly libfido2 1.17.0. The production adapter is behind
-the `libfido2` build tag; an untagged build deliberately contains the
-fail-closed fixture adapter and must not be installed as production authority.
+Use Ubuntu's signed packages from the configured distro repositories for the Go
+launcher, cgo compiler, `pkg-config`, and libfido2 development files:
+
+```sh
+sudo apt install golang-go build-essential pkg-config libfido2-dev
+```
+
+The distro Go launcher may be older than the module toolchain. The validator
+resolves `go` and `pkg-config` only from its fixed system-tool path, clears
+caller-controlled Go, cgo, and pkg-config build overrides, sets
+`GOTOOLCHAIN=auto`, and requires the module-selected toolchain to report
+`go1.26.5`. It resolves `gofmt` from that selected toolchain's `GOROOT`. The
+supported native-library range is libfido2 1.x at 1.16.0 or newer; 1.15 and
+older and major version 2 or newer fail closed.
+
+## Production-tag build proof from a repository checkout
+
+From a candidate repository checkout, run the complete validation gate:
 
 ```sh
 WORKFLOW_AUTHORITY_REQUIRE_PRODUCTION_BUILD=1 ./tools/validate-workflow-authority.sh
-cd native/workflow-authority
-GOTOOLCHAIN=auto /usr/local/go/bin/go build -tags libfido2 -o workflow-authority ./cmd/workflow-authority
-cp workflow-authority workflow-authority-admin
-GOTOOLCHAIN=auto /usr/local/go/bin/go build -tags libfido2 -o workflow-authorityd ./cmd/workflow-authorityd
+```
+
+The production adapter is behind the `libfido2` build tag; an untagged build
+deliberately contains the fail-closed fixture adapter and must not be installed
+as production authority. A green candidate-branch gate proves that the tagged
+source builds on the host. It does not authorize installing binaries from that
+checkout, access a FIDO authenticator, provision a provider credential, contact
+a provider, or claim broker status `ready`.
+
+## Reviewed trusted-main artifacts
+
+Only after review and merge, build installation artifacts from a clean checkout
+of the reviewed trusted-main commit. The repository-owned gate rejects a dirty
+checkout or commit mismatch, reuses its authenticated toolchain and sanitized
+build environment, and writes commit, tool-version, and checksum evidence:
+
+```sh
+REVIEWED_COMMIT=<approved-full-commit-sha-from-review-record>
+WORKFLOW_AUTHORITY_REVIEWED_COMMIT="$REVIEWED_COMMIT" \
+WORKFLOW_AUTHORITY_ARTIFACT_DIR=/absolute/path/to/empty-package-staging \
+  ./tools/validate-workflow-authority.sh
 ```
 
 The two client filenames intentionally contain the same binary: administrative
@@ -44,8 +75,9 @@ explicit production-build coverage gap rather than Linux/libfido2 proof.
 
 ## Package installation
 
-Run these steps from a trusted, verified package staging directory as root. Do
-not build or copy binaries from a repository-worker checkout.
+Run these steps from a trusted, verified package staging directory as root,
+using only artifacts built from the reviewed, merged trusted-main commit. Do
+not build or copy binaries from a feature or repository-worker checkout.
 
 ```sh
 install -o root -g root -m 0755 workflow-authority /usr/local/bin/workflow-authority
@@ -64,11 +96,12 @@ Install the fixed root-owned provider policy at
 Create the `workflow-authority` group and add only independently authenticated
 local client accounts. Do not enable or start the socket yet.
 
-## Enrollment and credential custody
+## Later interactive enrollment and credential custody
 
 Run administrative commands interactively from the controlling terminal. The
 program rejects redirected stdin and a terminal that changes during the
-operation.
+operation. This human ceremony happens only after trusted-main installation; it
+is not part of repository production-build proof.
 
 ```sh
 sudo /usr/local/sbin/workflow-authority-admin enroll-fido

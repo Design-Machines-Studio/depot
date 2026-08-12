@@ -50,7 +50,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 GO_MODULE = REPO_ROOT / "native" / "workflow-authority"
-GO_BIN = Path("/usr/local/go/bin/go")
+GO_BIN_VALUE = os.environ.get("WORKFLOW_AUTHORITY_GO_BIN")
+GO_BIN = Path(GO_BIN_VALUE) if GO_BIN_VALUE else None
 FIXTURE_TAG = "fixture"
 FIXTURE_PACKAGE = "./cmd/workflow-authority-fixture"
 
@@ -170,8 +171,10 @@ class HarnessBase(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
-        if not GO_BIN.is_file():
-            raise unittest.SkipTest("exact Go launcher unavailable: {}".format(GO_BIN))
+        if GO_BIN is None or not GO_BIN.is_absolute() or not GO_BIN.is_file():
+            raise unittest.SkipTest(
+                "explicit absolute Go launcher unavailable: {}".format(GO_BIN_VALUE)
+            )
         cls._binary_dir = tempfile.TemporaryDirectory(prefix="wa-fixture-bin-")
         cls.binary = Path(cls._binary_dir.name) / "workflow-authority-fixture"
         completed = cls.go(
@@ -987,7 +990,7 @@ class UnrunLaneLedgerTest(unittest.TestCase):
             "that path would be invisible",
         )
         for requirement, reason in (
-            ("libfido2", "real authenticator and libfido2 1.17.0 require Linux hardware"),
+            ("libfido2", "real authenticator and libfido2 hardware are not exercised"),
             ("systemd", "root systemd install, socket activation, and tmpfiles require Linux root"),
             ("credential-provisioning", "production credential provisioning is separately gated"),
             ("provider-live", "system TLS and live OpenRouter contact are separately gated"),

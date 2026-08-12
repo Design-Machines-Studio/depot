@@ -8,11 +8,11 @@ package authority
 #include <string.h>
 #include <fido.h>
 
-#if !defined(FIDO_VERSION_MAJOR) || !defined(FIDO_VERSION_MINOR) || !defined(FIDO_VERSION_PATCH)
-#error "libfido2 version macros required"
+#if !defined(WORKFLOW_AUTHORITY_LIBFIDO2_MAJOR) || !defined(WORKFLOW_AUTHORITY_LIBFIDO2_MINOR) || !defined(WORKFLOW_AUTHORITY_LIBFIDO2_PATCH)
+#error "workflow-authority libfido2 version macros required from pkg-config"
 #endif
-#if FIDO_VERSION_MAJOR != 1 || FIDO_VERSION_MINOR != 17 || FIDO_VERSION_PATCH != 0
-#error "workflow-authority requires exactly libfido2 1.17.0"
+#if WORKFLOW_AUTHORITY_LIBFIDO2_MAJOR != 1 || WORKFLOW_AUTHORITY_LIBFIDO2_MINOR < 16
+#error "workflow-authority requires libfido2 >=1.16.0 and <2.0.0"
 #endif
 
 typedef struct {
