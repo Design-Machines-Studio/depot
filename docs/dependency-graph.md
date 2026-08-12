@@ -70,7 +70,7 @@ graph LR
 | pipeline | ned | required | `>=1.4.0` |
 | pipeline | workflow-kernel | required | `>=0.13.6` |
 | pipeline | design-machines | optional | `>=1.3.0` |
-| pipeline | assembly | optional | `>=3.9.1` |
+| pipeline | assembly | optional | `>=3.10.0` |
 | pipeline | live-wires | optional | `>=1.8.0` |
 | pipeline | craft-developer | optional | `>=1.0.0` |
 | pipeline | accessibility-compliance | optional | `>=1.2.0` |

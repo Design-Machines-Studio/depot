@@ -254,12 +254,14 @@ type ProxyValidation struct {
 
 ### For Each Workflow Handler
 
-- [ ] Validate current status allows transition
-- [ ] Update status field
-- [ ] Record timestamp
-- [ ] Create audit log entry
-- [ ] Trigger downstream actions (resolution creation, etc.)
-- [ ] Return appropriate response
+- [ ] Consult the development skill's Mutation Applicability Matrix and name why each selected control applies
+- [ ] Authorize the concrete action/resource before a protected user or operator write
+- [ ] Validate external input and current status for a domain transition
+- [ ] Use a transaction only when atomic multi-step work, race-sensitive allocation, or a cross-read/write invariant requires it
+- [ ] Record an audit entry only for a named high-consequence category or existing audit contract
+- [ ] Trigger downstream actions or publish an event only for a current behavior, consumer, projection, or contract; publish required events after commit
+- [ ] Notify through SSE only when connected clients currently need realtime notice
+- [ ] Return the appropriate response and proportionally test the selected controls and important failure path
 
 ### Example Handler Structure
 

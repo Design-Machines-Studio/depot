@@ -49,7 +49,10 @@ require_text "$orchestrator" "git commit -F" "orchestrator writes commit message
 require_text "$orchestrator" "git check-ignore -q plans/" "orchestrator detects ignored plans receipts"
 
 require_text "$generated_alias" "## Codex Native Execution Adapter" "generated pipeline-run skill contains adapter section"
-require_text "$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md" "Small UI" "promptcraft scales quality floors by estimatedComplexity"
+promptcraft="$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
+require_text "$promptcraft" "There is no minimum prompt-line or general acceptance-criterion count" "promptcraft rejects count floors"
+require_text "$promptcraft" "Every UI chunk still gets at least two rendered-impression criteria" "promptcraft retains two visual criteria for UI chunks"
+require_text "$promptcraft" "Relative size alone is never under-specification or a blocker" "prompt size parity is advisory only"
 require_text "$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md" "module build/tests pass in Docker" "promptcraft avoids bare Go command phrases in commit text"
 
 if [ "$failures" -ne 0 ]; then

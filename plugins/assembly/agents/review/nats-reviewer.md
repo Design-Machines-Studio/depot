@@ -54,12 +54,12 @@ Flag event publishing that occurs inside a database transaction or before `tx.Co
 
 ### 6. Missing Events After Mutations (P2)
 
-Flag service methods that perform create/update/delete operations on the database without publishing a corresponding NATS event.
+Flag a missing event only when the changed behavior has a named current event obligation: an existing entity event family, named consumer, current SSE/KV projection, or explicit design requirement.
 
-**Look for:** Service methods containing `INSERT`, `UPDATE`, `DELETE` SQL or `db.Exec`/`db.ExecContext` calls.
-**Pass:** Each mutation has a corresponding `Publish()` call after the database operation.
-**Fail:** Database mutation with no event publish.
-**Exception:** Read-only queries, migrations, and seed data operations.
+**Look for:** The current contract or consumer first, then the mutation that must notify it.
+**Pass:** Each required event has a corresponding `Publish()` call after commit, or no current event obligation exists.
+**Fail:** A named current event obligation exists but the mutation does not publish it after commit.
+**Do not infer obligation from:** `INSERT`, `UPDATE`, `DELETE`, `db.Exec`, or `db.ExecContext` alone.
 
 ## Output Format
 

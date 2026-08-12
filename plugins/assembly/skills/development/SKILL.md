@@ -14,6 +14,12 @@ Build cooperative governance applications with Go, Templ, and Datastar. Build pa
 
 **Prototype toward production.** Every page you build is real code. Use mockup data in SQLite, but structure your handlers and DTOs for real queries. The prototype becomes the product.
 
+### Operating Doctrine
+
+Assembly defaults to a tiny, internal, self-hosted application serving about 4-50 co-op members. It is maintained by a two-person development team, with only a few possible future contributors. Choose the simplest adequate direct code before adding an abstraction. Apply DRY when concrete behavior repeats or one real boundary needs a single owner, not for speculative reuse. Do not import public-SaaS, huge-team, extreme-scale, or enterprise-compliance machinery unless an explicit requirement introduces it.
+
+Performance, developer ergonomics, elapsed implementation time, and token spend are design constraints when otherwise correct approaches compete. An extra security control must name the exposed surface, plausible actor, consequence, and gap left by existing controls. This proportionality never excuses missing authorization, exposed credentials, corruptible state, or false verification claims.
+
 **Optional companion plugins:**
 - **council** -- Governance domain knowledge and decolonial language for UI labels
 - **design-machines** -- Business strategy and product positioning context
@@ -470,17 +476,21 @@ components.ProposalCard(governance.Proposal{...})
 
 ---
 
-## Mutation Invariant Checklist
+## Mutation Applicability Matrix
 
-Every state-changing operation (create, update, delete, status transition) must follow this sequence. Skipping a step is a review finding.
+Apply controls because the present behavior needs them, not merely because code writes to SQLite.
 
-1. **Authorize** -- call `deps.Auth.Authorize(ctx, "entity.action", resource)` before any write. Route middleware (RBAC) is not sufficient; object-level auth is required for every mutation.
-2. **Validate** -- validate all input fields (length, format, enum membership) in the service layer. Never trust handler-level parsing alone.
-3. **Transaction** -- wrap multi-step mutations in `db.WithTx()`. Number generation (sequence IDs, resolution numbers) happens inside the transaction.
-4. **Preserve invariants** -- enforce domain rules within the transaction (e.g., quorum thresholds, status transition validity, uniqueness constraints).
-5. **Audit** -- write an audit log entry via `deps.Audit` inside the transaction. Include actor, action, entity, and changed fields.
-6. **Publish event after commit** -- call `deps.Events.Publish()` only AFTER `tx.Commit()` returns nil. Never publish inside the transaction scope.
-7. **Tests** -- service-layer tests verify the full sequence: mock deps, assert authorize was called, assert audit was written, assert event was published, assert state change in DB.
+| Concern | Required when | Do not require merely because |
+|---|---|---|
+| Authorization | A user or operator mutates a protected domain resource or collection; authorize the concrete action and resource before the write | The code contains SQL; trusted internal maintenance still needs an explicit trust boundary, not a fake user authorization call |
+| Validation + invariants | External input or a domain transition is accepted | A typed internal value passes between already validated layers |
+| Transaction | Multiple statements must be atomic, an allocation or sequence is race-sensitive, or an invariant spans reads and writes | Every single SQLite statement; SQLite already makes one statement atomic |
+| Audit | Governance decisions, membership, role or permission changes, money, admin or config, federation trust, destructive or recovery operations, or an existing audit contract | A low-consequence preference or ordinary content edit with no audit consumer or requirement |
+| Event | A current consumer, cross-module contract, realtime projection, or existing event contract needs the change | Every database mutation; when required, publish strictly after commit |
+| SSE | Connected clients currently need realtime notice | An event exists or a handler returns HTML |
+| Service abstraction | Current domain logic, transaction ownership, or a second real caller warrants it | A one-use handler can be direct and clear |
+
+Keep tests proportional: prove each applicable control and its important failure path. Do not demand mocks or assertions for controls the matrix correctly omits.
 
 ---
 
@@ -488,12 +498,12 @@ Every state-changing operation (create, update, delete, status transition) must 
 
 Produce this map before review on any PR touching authentication, authorization, admin surfaces, member mutations, install flow, account/profile state, fixture enablement, or UI capability flags.
 
-**Middleware is a route precondition, not an authorization decision.** Every mutation and every privileged read (member PII, financial data, audit logs) requires an explicit `deps.Auth.Authorize(ctx, action, resource)` call in the service layer. The boundary map makes this visible.
+**Middleware is a route precondition, not an authorization decision.** Every protected user/operator mutation and every privileged read (member PII, financial data, audit logs) requires explicit authorization for the concrete action and resource before access. The boundary map makes this visible.
 
 ### When to Produce
 
 - Any route adds, removes, or changes auth middleware (`RequireAuth`, `RequireAdmin`, `RequireSuperAdmin`, `RequirePermission`, `RequireModule`).
-- Any handler performs a persistent mutation.
+- Any handler changes a protected or privileged persistent mutation boundary.
 - Any service method mutates members, roles, settings, modules, accounts, or install state.
 - Any UI hides, shows, enables, or disables privileged controls.
 - Any change touches operator/super-admin behavior, `LoadMember`, install guard, session rotation, or account existence handling.
@@ -513,8 +523,8 @@ Fill one row per route, handler action, service mutation, or privileged UI capab
 3. **Install guard rechecks** -- install wizard GET and POST paths re-check current admin eligibility per request, including the case where a CLI-created admin appears mid-flow. Aborted or privilege-changing auth flows rotate or destroy session state.
 4. **UI capability default-deny** -- template conditionals gating admin/mutation UI must use the same `Authorize(ctx, action, resource)` pairs as the handler. Default deny on nil authz, missing member, unexpected account type, or authorization error.
 5. **PII-safe logs** -- error responses and logs avoid account-existence disclosure and raw or reversible PII when a stable non-PII identifier is available. Service validation errors map to 400-class; auth failures to 403-class; storage failures to 500-class.
-6. **Post-commit events** -- events published only after `tx.Commit()` (per Mutation Invariant #6). The map should note which events each surface publishes and confirm none are inside the transaction.
-7. **Audit expectations** -- each mapped surface declares its audit log entry (actor, action, entity, changed fields) per the module's existing audit pattern.
+6. **Post-commit events** -- when the applicability matrix identifies a current event obligation, events publish only after `tx.Commit()`. The map names the obligation and confirms no event is inside the transaction.
+7. **Audit expectations** -- each mapped high-consequence or contract-bound surface declares its audit log entry (actor, action, entity, changed fields) per the module's existing audit pattern.
 8. **Direct-request rejection (PR #278)** -- baseplate-only install endpoints reject direct, out-of-band, or stale requests not originating from the gated install flow. Default-deny a POST that arrives without the expected install-flow precondition (install not started, already completed, wrong step). A stale install-wizard session fails closed rather than resuming a privileged flow, and install completion invalidates the wizard session.
 9. **Async form defaults (#274)** -- forms that rely on async-populated defaults (a value fetched and filled client-side after load) must render a safe default server-side and validate the submitted value server-side. Never trust that the client applied the default; a form submitted before the async fill must not write an empty or attacker-chosen value.
 
@@ -529,7 +539,7 @@ For each mapped row, include at least one focused test for the failure mode:
 - Direct/out-of-band request to a baseplate-only install endpoint is rejected (PR #278)
 - A form relying on an async-populated default validates the value server-side and rejects an empty/premature submit (#274)
 - UI capability flags hide or disable privileged controls when Authorizer denies
-- Post-commit event/audit behavior covered for persistent mutations
+- Applicable post-commit event and audit behavior is covered where the matrix requires it
 
 ### Browser Proof (install / auth-boundary surfaces)
 

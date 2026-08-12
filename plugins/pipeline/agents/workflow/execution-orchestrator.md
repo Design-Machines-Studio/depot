@@ -1337,6 +1337,8 @@ You MUST verify these before proceeding:
    check and record that no executable planner/cache authority was available.
 4. **Provider receipt check:** The chunk receipt includes `implementedBy: codex` or `implementedBy: openrouter`. Any coding receipt with `implementedBy: claude` is a misroute.
 
+Represent a passing or reused repository-verification result once with a bounded summary containing selected check IDs, status, plan/receipt digest, and a safe receipt reference. Raw passing stdout/stderr and repeated copies of the receipt must not enter a builder repair prompt or any later reviewer prompt.
+
 For an eligible deterministic check failure, do not send prose back to a new
 builder and do not duplicate retry policy. Persist a bounded closed feedback
 receipt containing exactly these fields (nullable fields remain present so the
@@ -1350,6 +1352,7 @@ shape stays closed):
   "failing_check_ids": ["CHK-..."],
   "evidence_refs": ["receipts/<safe-ref>"],
   "failure_signature": "sha256:<stable-safe-digest>",
+  "reproduction_instruction": "<trusted profile-derived bounded instruction>",
   "retry_reason": "deterministic_validation_failure",
   "attempt": 1,
   "remaining_retry_budget": 1,
@@ -1382,8 +1385,8 @@ and null otherwise. The human-help, prior-attempt, and resume-reason fields are
 null only when their condition does not apply.
 `evidence_refs`, `prior_attempt_ref`, `receipt_ref`, and `repo_scope_ref` are the
 only durable references; they must be repository-scoped, bounded, safe, and
-redacted. Never include raw output, prompts, session tokens, credentials, URLs,
-or host paths. Derive `failure_signature` deterministically from the current
+redacted. `reproduction_instruction` is derived from the trusted repository verification profile and reaches the repair attempt before model review. Never include raw output, prompts, session tokens, credentials, environment, URLs,
+arbitrary host paths, or unbounded output. Derive `failure_signature` deterministically from the current
 contract digest/revision, `failing_check_ids` in contract order, and digests of the safe
 evidence receipts. `attempt` and `remaining_retry_budget` are projections of the
 kernel decision below, never locally authored limits.

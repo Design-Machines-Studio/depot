@@ -234,13 +234,11 @@ Generated `*_templ.go` files must never appear in `filesToModify` or acceptance 
 
 **Rule:** Add this constraint to every chunk that modifies `.templ` files: "Do not create or modify `*_templ.go` files. Run `docker compose exec app templ generate` to regenerate them after editing `.templ` source files."
 
-### Phase 3h: Authorization/Event Coverage Gate
+### Phase 3h: Assembly Mutation Applicability Gate
 
-Every mutation chunk (creates, updates, deletes, or transitions state) must include acceptance criteria for Authorize, event publish, and audit write.
+For each Assembly mutation chunk, consult `assembly:development`'s Mutation Applicability Matrix. Record only applicable authorization, validation/invariant, transaction, audit, event, SSE, service-abstraction, and test criteria, each with a one-line reason tied to a present behavior, current consumer/contract, or realistic consequence. Omit inapplicable controls without `N/A` ceremony. A mutation verb or SQL statement alone never proves that every control applies; any required event still publishes strictly after commit.
 
-**Rule:** If a chunk's task description contains mutation verbs (create, update, delete, archive, approve, reject, transition) AND targets Assembly code, its acceptance criteria must include: (1) `Authorize()` called with correct action string, (2) event published after commit, (3) audit log entry written.
-
-**Auth Boundary Map gate:** When a chunk touches paths matching `auth/`, `admin/`, `account/`, `install/`, `member/`, or `module`-level permission code in Assembly projects, the prompt MUST include an Auth Boundary Map receipt as a final acceptance criterion. The receipt enumerates: mapped surfaces, middleware gates, Authorizer action/resource pairs, default-deny UI capabilities, stale-session/operator/install edge cases addressed, test files, and residual risk. Without this receipt the chunk is incomplete -- the execution-orchestrator must not mark it done.
+**Auth Boundary Map gate:** The map is mandatory when a change actually alters authentication, middleware, an Authorizer action/resource, a privileged read/write, a role/member/account/install/module permission, or a privileged UI capability. Path names such as `auth/`, `admin/`, `account/`, `install/`, `member/`, and module-permission paths are review hints, not proof that the boundary changed. The receipt enumerates mapped surfaces, middleware gates, Authorizer action/resource pairs, default-deny UI capabilities, stale-session/operator/install edge cases addressed, test files, and residual risk. Without this receipt an actual boundary-changing chunk is incomplete.
 
 **Data-integrity receipt (membership and settings chunks):** When a chunk adds, edits, clones, or reorders rows in a membership, settings, or permissions surface, its acceptance criteria must include:
 
@@ -315,6 +313,8 @@ orchestrator generates the canonical JSON from these approved inputs only after
 `run.started`, then validates and binds it before the first builder dispatch.
 Every dispatch and builder completion must echo the current contract digest and
 revision exactly.
+
+Repository verification evidence stays bounded across model prompts. A passing or reused result appears once as selected check IDs, status, plan/receipt digest, and safe receipt reference; raw passing stdout/stderr and repeated receipt copies never enter builder repair or reviewer prompts. Before model review, a failure reaches the repair attempt as bounded canonical failing check IDs, safe receipt references/digests, a stable failure signature, and a trusted profile-derived reproduction instruction. Never include raw logs, secrets, environment, arbitrary host paths, or unbounded output.
 
 ### Phase 3m: Fixture SDK Conformance Gate
 
@@ -435,39 +435,20 @@ Requirements Coverage:
 
 If any requirement is uncovered, either add it to an existing chunk's acceptance criteria or create a new chunk. Do not proceed with gaps.
 
-### Phase 6b: Prompt Quality Parity Check
+### Phase 6b: Evidence-Based Prompt Completeness Check
 
-Compare prompt detail levels against classification- and complexity-specific floors (primary) and against same-classification siblings (secondary) to catch both context fatigue and category-level under-specification without punishing legitimately surgical chunks.
+Every prompt needs a concrete task, exact modified files, relevant pattern/context, observable acceptance criteria for changed behavior, and exact validation commands. Applicable security, data-integrity, browser/persona, migration, and generated-file gates remain mandatory. Every UI chunk still gets at least two rendered-impression criteria.
 
-**Classification + `estimatedComplexity` floors (BLOCKERS -- must be met before handoff):**
-
-| Classification | `estimatedComplexity` | Min acceptance criteria | Min prompt lines | Min visual ACs |
-|----------------|-----------------------|-------------------------|------------------|----------------|
-| Trivial        | small                 | 2                       | 25               | n/a            |
-| Trivial        | medium                | 3                       | 40               | n/a            |
-| Trivial        | large                 | 5                       | 70               | n/a            |
-| Logic          | small                 | 3                       | 60               | n/a            |
-| Logic          | medium                | 5                       | 100              | n/a            |
-| Logic          | large                 | 8                       | 160              | n/a            |
-| Integration    | small                 | 5                       | 100              | 1 (if UI surface) |
-| Integration    | medium                | 10                      | 200              | 1 (if UI surface) |
-| Integration    | large                 | 14                      | 280              | 2 (if UI surface) |
-| Small UI       | small                 | 5                       | 80               | 2              |
-| UI             | medium                | 10                      | 160              | 2              |
-| UI             | large                 | 15                      | 250              | 2              |
-
-A prompt below any floor for its classification and `estimatedComplexity` is a BLOCKER, not a warning. Expand it before handoff -- missing context, missing acceptance criteria, missing visual specifications. If the prompt is genuinely a two-line surgical templ fix, keep it `kind: ui`, set `estimatedComplexity: small`, and meet the Small UI floor; do not inflate the task or reclassify it as config just to satisfy the old UI floor. The visual acceptance criteria requirement remains: every UI chunk gets at least 2 visual ACs regardless of size.
+There is no minimum prompt-line or general acceptance-criterion count. Prompt length and criterion count are diagnostics only: a short surgical prompt can pass, and no prompt is expanded solely to meet a count or a sibling average. Remove repetition, derivable context, duplicated validation, and criteria that do not map to a requirement or realistic failure mode.
 
 **Commit text guidance for chunk prompts:** When instructing subagents to summarize verification in commit messages, use phrases such as "module build/tests pass in Docker" or "Docker-backed verification passed". Avoid literal bare command phrases like `go build ./...`, `go test ./...`, or `vet` in commit prose because some projects use hooks that block bare-Go claims outside Docker.
 
-**Sibling parity (secondary signal -- flags context fatigue within a classification):**
+**Sibling comparison (advisory evidence check):**
 
 1. Group prompts by classification.
 2. For each group, compute the average line count and AC count.
-3. Flag outliers:
-   - Any prompt at less than 50% of the group's average line count (context fatigue signal).
-   - The LAST prompt in a group being the shortest (strong context fatigue signal -- flag even if still above the classification floor).
-   - A UI chunk with 0 visual ACs when siblings have 2+ (visual requirements dropped during decomposition).
+3. Inspect outliers only for a concrete missing requirement, failure mode, or necessary context. Relative size alone is never under-specification or a blocker.
+4. A UI chunk with fewer than two rendered-impression criteria remains incomplete regardless of sibling size.
 
 **Output a parity summary:**
 
