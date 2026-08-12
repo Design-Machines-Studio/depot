@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/bash -p
 #
 # check-release-preflight.sh -- Verify a depot release is actually safe to tag
 # and push, and print a release receipt.
@@ -32,6 +32,31 @@
 # Deliberately no `set -e`: we want every check to run and report, not abort on
 # the first failure. `set -u` and pipefail are safe and wanted.
 set -uo pipefail
+
+# Privileged Bash startup (`-p` in the absolute shebang) prevents BASH_ENV and
+# exported functions from being imported before this first line. If either is
+# still present in the process environment, cross an empty-environment boundary
+# so child scripts cannot import it. Preserve only the narrow fixture/auth inputs.
+if /usr/bin/env | /usr/bin/grep -Eq '^(BASH_ENV|BASH_FUNC_[^=]*)='; then
+  exec /usr/bin/env -i \
+    HOME="${HOME-}" SSH_AUTH_SOCK="${SSH_AUTH_SOCK-}" \
+    PREFLIGHT_CODEX_JSON="${PREFLIGHT_CODEX_JSON-}" \
+    PREFLIGHT_MARKETPLACE_ROOT="${PREFLIGHT_MARKETPLACE_ROOT-}" \
+    PREFLIGHT_GIT_LOG="${PREFLIGHT_GIT_LOG-}" \
+    PREFLIGHT_GIT_FAIL="${PREFLIGHT_GIT_FAIL-}" \
+    PREFLIGHT_GIT_MUTATE="${PREFLIGHT_GIT_MUTATE-}" \
+    PATH=/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin \
+    /bin/bash "$0" "$@"
+fi
+
+# A non-interactive Bash imports BASH_FUNC_* definitions before this script
+# starts. Remove every function at the boundary so a caller cannot shadow
+# python3, type, git, or another fixed-PATH tool. Disable alias expansion too;
+# use `builtin` so the cleanup itself cannot be shadowed by a function.
+while builtin read -r _ _ imported_function; do
+  builtin unset -f "$imported_function"
+done < <(builtin declare -F)
+builtin shopt -u expand_aliases
 
 # Fixed PATH -- prevent a caller-controlled PATH from hijacking git/python3.
 PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin"
@@ -264,11 +289,72 @@ check_codex_cache_freshness() {
 printf "\nCodex cache freshness:\n"
 codex_bin=""
 # Codex's native user install lives outside the fixed toolchain PATH on Linux.
-# Resolve only this executable explicitly; do not expose all user-local tools.
-if [ -n "${HOME:-}" ] && [ -x "$HOME/.local/bin/codex" ]; then
-  codex_bin="$HOME/.local/bin/codex"
+# Resolve the account home through the OS account database, not caller-controlled
+# HOME. The native installer uses a user-owned symlink into ~/.codex, so bind
+# both the link and resolved target beneath that canonical home and reject any
+# component writable by another account.
+canonical_home="$(python3 -I -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)' 2>/dev/null || :)"
+candidate_codex="${canonical_home:+$canonical_home/.local/bin/codex}"
+validated_codex=""
+if [ -n "$candidate_codex" ]; then
+  validated_codex="$(python3 -I -c '
+import grp, os, pwd, stat, sys
+
+home, candidate = map(os.path.abspath, sys.argv[1:])
+uid = os.getuid()
+username = pwd.getpwuid(uid).pw_name
+
+def contained(path):
+    relative = os.path.relpath(path, home)
+    return relative != os.pardir and not relative.startswith(os.pardir + os.sep)
+
+def private_group(gid):
+    members = set(grp.getgrgid(gid).gr_mem)
+    primary_users = {entry.pw_name for entry in pwd.getpwall() if entry.pw_gid == gid}
+    return members | primary_users <= {username}
+
+def validate_components(path, allow_final_symlink=False):
+    relative = os.path.relpath(path, home)
+    current = home
+    components = (".", *relative.split(os.sep))
+    for index, component in enumerate(components):
+        if component != ".":
+            current = os.path.join(current, component)
+        metadata = os.lstat(current)
+        is_final = index == len(components) - 1
+        if metadata.st_uid != uid:
+            raise ValueError("component not owned by account uid")
+        if stat.S_ISLNK(metadata.st_mode):
+            if not (allow_final_symlink and is_final):
+                raise ValueError("unexpected symlink component")
+            continue
+        if metadata.st_mode & stat.S_IWOTH:
+            raise ValueError("world-writable component")
+        if metadata.st_mode & stat.S_IWGRP and not private_group(metadata.st_gid):
+            raise ValueError("component writable by a shared group")
+
+try:
+    if not contained(candidate):
+        raise ValueError("candidate outside account home")
+    validate_components(candidate, allow_final_symlink=True)
+    resolved = os.path.realpath(candidate)
+    if not contained(resolved):
+        raise ValueError("resolved executable outside account home")
+    validate_components(resolved)
+    if not stat.S_ISREG(os.stat(resolved).st_mode) or not os.access(resolved, os.X_OK):
+        raise ValueError("resolved candidate is not a regular executable")
+    print(resolved)
+except (KeyError, OSError, ValueError):
+    raise SystemExit(1)
+' "$canonical_home" "$candidate_codex" 2>/dev/null || :)"
+fi
+if [ -n "$validated_codex" ]; then
+  # Execute the exact physical file whose full path was validated above. Do not
+  # reopen the original symlink after the trust check.
+  codex_bin="$validated_codex"
 else
-  codex_bin="$(command -v codex 2>/dev/null || :)"
+  # External files only: command -v can select an imported shell function.
+  codex_bin="$(type -P codex 2>/dev/null || :)"
 fi
 
 if [ -z "$codex_bin" ]; then
