@@ -22,11 +22,14 @@ class ReleasePreflightTests(unittest.TestCase):
         self.bin = self.temp / "bin"
         self.origin = self.temp / "origin.git"
         self.marketplace_root = self.temp / "marketplace"
+        self.home = self.temp / "home"
         self.codex_json = self.temp / "codex.json"
         self.git_log = self.temp / "git.log"
         self.repo.mkdir()
         self.bin.mkdir()
         self.marketplace_root.mkdir()
+        self.home.mkdir()
+        self.home.chmod(0o700)
         (self.repo / "tools").mkdir()
 
         script = SCRIPT_SOURCE.read_text(encoding="utf-8")
@@ -34,6 +37,10 @@ class ReleasePreflightTests(unittest.TestCase):
         script = script.replace(
             'PATH="/usr/bin:/bin:/usr/sbin:/sbin:/usr/local/bin:/opt/homebrew/bin"',
             fixed_path,
+        )
+        script = script.replace(
+            "canonical_home=\"$(python3 -I -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)' 2>/dev/null || :)\"",
+            'canonical_home="{}"'.format(self.home),
         )
         self.script = self.repo / "tools/check-release-preflight.sh"
         self.script.write_text(script, encoding="utf-8")
@@ -114,8 +121,14 @@ class ReleasePreflightTests(unittest.TestCase):
         )
         wrapper.chmod(0o755)
 
-    def _write_codex(self):
-        codex = self.bin / "codex"
+    def _write_codex(self, path=None):
+        codex = path or self.bin / "codex"
+        codex.parent.mkdir(parents=True, exist_ok=True)
+        if codex.is_relative_to(self.home):
+            current = self.home
+            for component in codex.relative_to(self.home).parts[:-1]:
+                current /= component
+                current.chmod(0o755)
         codex.write_text(
             "#!/bin/sh\n"
             "if [ \"$1\" = plugin ] && [ \"$2\" = marketplace ] && "
@@ -148,13 +161,20 @@ class ReleasePreflightTests(unittest.TestCase):
 
     def _run_preflight(
         self, *, no_net=False, codex="fresh", git_fail=None, git_mutate=None,
+        home_override=None, env_overrides=None,
     ):
         codex_path = self.bin / "codex"
         if codex == "unavailable":
             codex_path.unlink(missing_ok=True)
         else:
-            self._write_codex()
+            if codex == "user-local":
+                codex_path.unlink(missing_ok=True)
+                self._write_codex(self.home / ".local/bin/codex")
+            else:
+                self._write_codex()
             if codex == "fresh":
+                payload = json.dumps(self._installed_rows())
+            elif codex == "user-local":
                 payload = json.dumps(self._installed_rows())
             elif codex == "stale":
                 payload = json.dumps(self._installed_rows({"alpha": "0.9.0"}))
@@ -168,6 +188,7 @@ class ReleasePreflightTests(unittest.TestCase):
         self.git_log.unlink(missing_ok=True)
         env = os.environ.copy()
         env.update({
+            "HOME": str(home_override or self.home),
             "PREFLIGHT_CODEX_JSON": str(self.codex_json),
             "PREFLIGHT_MARKETPLACE_ROOT": str(self.marketplace_root),
             "PREFLIGHT_GIT_LOG": str(self.git_log),
@@ -176,6 +197,8 @@ class ReleasePreflightTests(unittest.TestCase):
             env["PREFLIGHT_GIT_FAIL"] = git_fail
         if git_mutate:
             env["PREFLIGHT_GIT_MUTATE"] = git_mutate
+        if env_overrides:
+            env.update(env_overrides)
         argv = [str(self.script)]
         if no_net:
             argv.append("--no-net")
@@ -265,6 +288,127 @@ class ReleasePreflightTests(unittest.TestCase):
         result = self._run_preflight(no_net=True, codex="fresh")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("2 installed Codex plugin(s) checked", result.stdout)
+
+    def test_user_local_codex_cache_passes_without_broadening_fixed_path(self):
+        result = self._run_preflight(no_net=True, codex="user-local")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("2 installed Codex plugin(s) checked", result.stdout)
+        self.assertNotIn("codex CLI not installed", result.stdout)
+
+    def test_caller_home_cannot_select_an_untrusted_codex(self):
+        hostile_home = self.temp / "hostile-home"
+        self._write_codex(hostile_home / ".local/bin/codex")
+        result = self._run_preflight(
+            no_net=True, codex="unavailable", home_override=hostile_home,
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("codex CLI not installed", result.stdout)
+
+    def test_user_local_codex_symlink_is_rejected(self):
+        target = self.temp / "codex-target"
+        self._write_codex(target)
+        candidate = self.home / ".local/bin/codex"
+        candidate.parent.mkdir(parents=True)
+        candidate.symlink_to(target)
+        result = self._run_preflight(no_net=True, codex="unavailable")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("codex CLI not installed", result.stdout)
+
+    def test_user_local_codex_symlink_within_account_home_is_accepted(self):
+        target = self.home / ".codex/releases/current/bin/codex"
+        self._write_codex(target)
+        candidate = self.home / ".local/bin/codex"
+        candidate.parent.mkdir(parents=True)
+        candidate.symlink_to(target)
+        self.codex_json.write_text(
+            json.dumps(self._installed_rows()), encoding="utf-8"
+        )
+        result = self._run_preflight(no_net=True, codex="user-local")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("2 installed Codex plugin(s) checked", result.stdout)
+
+    def test_user_local_codex_symlink_through_world_writable_directory_is_rejected(self):
+        shared = self.home / "shared"
+        target = shared / "current/codex"
+        self._write_codex(target)
+        shared.chmod(0o777)
+        candidate = self.home / ".local/bin/codex"
+        candidate.parent.mkdir(parents=True)
+        candidate.symlink_to(target)
+        result = self._run_preflight(no_net=True, codex="unavailable")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("codex CLI not installed", result.stdout)
+
+    def test_imported_codex_shell_function_is_ignored(self):
+        result = self._run_preflight(
+            no_net=True,
+            codex="unavailable",
+            env_overrides={"BASH_FUNC_codex%%": "() { printf forged; }"},
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("codex CLI not installed", result.stdout)
+
+    def test_imported_type_function_cannot_forge_external_codex(self):
+        forged = self.temp / "forged-codex"
+        self._write_codex(forged)
+        result = self._run_preflight(
+            no_net=True,
+            codex="unavailable",
+            env_overrides={"BASH_FUNC_type%%": "() { printf '%s\\n' '" + str(forged) + "'; }"},
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("codex CLI not installed", result.stdout)
+
+    def test_imported_builtin_cannot_preserve_a_forged_type_function(self):
+        forged = self.temp / "forged-codex"
+        self._write_codex(forged)
+        result = self._run_preflight(
+            no_net=True,
+            codex="unavailable",
+            env_overrides={
+                "BASH_FUNC_builtin%%": "() { if [[ $1 == unset ]]; then return 0; fi; command builtin \"$@\"; }",
+                "BASH_FUNC_type%%": "() { printf '%s\\n' '" + str(forged) + "'; }",
+            },
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("codex CLI not installed", result.stdout)
+
+    def test_imported_exec_cannot_suppress_the_clean_environment_boundary(self):
+        forged = self.temp / "forged-codex"
+        self._write_codex(forged)
+        result = self._run_preflight(
+            no_net=True,
+            codex="unavailable",
+            env_overrides={
+                "BASH_FUNC_exec%%": "() { return 0; }",
+                "BASH_FUNC_type%%": "() { printf '%s\\n' '" + str(forged) + "'; }",
+            },
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("codex CLI not installed", result.stdout)
+
+    def test_imported_python_function_cannot_intercept_validation(self):
+        result = self._run_preflight(
+            no_net=True,
+            codex="fresh",
+            env_overrides={"BASH_FUNC_python3%%": "() { printf '[]\\n'; }"},
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("2 installed Codex plugin(s) checked", result.stdout)
+
+    def test_python_startup_customization_cannot_override_home_lookup(self):
+        poison = self.temp / "poison"
+        poison.mkdir()
+        (poison / "sitecustomize.py").write_text(
+            "raise RuntimeError('PYTHONPATH was imported')\n", encoding="utf-8"
+        )
+        result = self._run_preflight(
+            no_net=True,
+            codex="unavailable",
+            env_overrides={"PYTHONPATH": str(poison)},
+        )
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("READY", result.stdout)
 
     def test_stale_codex_cache_fails_with_repair(self):
         result = self._run_preflight(no_net=True, codex="stale")
