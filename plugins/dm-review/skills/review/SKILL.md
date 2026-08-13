@@ -978,7 +978,7 @@ Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
 5. **Determine merge recommendation** using `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic. In summary:
    - Any P1 -> "BLOCKS MERGE"
    - Any P2 -> "APPROVE WITH FIXES"
-   - P3 only -> "CLEAN" with every P3 retained as a visible advisory
+   - P3 only -> "CLEAN" with every P3 retained in complete evidence and an exact count plus pointer in the compact handoff
    - Zero findings -> "CLEAN"
 6. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`, including the compact required `Synthesis Decisions` section and full raw agent reports.
 
@@ -1012,7 +1012,10 @@ lane, including lanes with zero findings. Never hand-author
 coverage receipts. A zero-finding synthesis still runs the command with count
 zero and all required lane receipts so missing producer coverage is observable.
 
-Output the full report to the user.
+Keep the consolidated report body provisional through the remaining phases.
+Do not write `.claude/ux-review/report.md` or deliver the compact human handoff
+yet: mandatory repository cleanup in Phase 8 supplies the report's final
+cleanup truth. The finalization and delivery boundary follows Phase 8.
 
 #### Coverage receipt and shadow observation
 
@@ -1053,7 +1056,7 @@ The `[ -n "$ENGINE" ]` guard covers "airlift not installed"; the `[ -x "$ENGINE"
 
 **Skip this phase in Quick mode.**
 
-After outputting the report, determine tracking method automatically:
+After consolidation, determine tracking method automatically:
 
 **1. If `todos/` directory exists** in the project root -- use text file tracking automatically. Do NOT ask the user. Create todo files for P1 and P2 findings only. P3 advisories remain in the report and receipts.
 
@@ -1233,6 +1236,22 @@ Never execute proposed cleanup argv separately or cross-use the two plan authori
 The cleanup report includes Docker before/after inventories and `removed|missing|retained|blocked|unmanaged` dispositions alongside Git. Cleanup runs on every terminal path. A cleanup failure never becomes a clean disposition or changes the authoritative code-review finding result.
 
 Never delete the feature branch under review. There is no condition under which a code review deletes the branch it was asked to review.
+
+---
+
+### Finalize Report and Deliver Handoff
+
+Only after Phase 8 has completed, add its authoritative repository and Docker
+cleanup results to the provisional unified report. Then write the complete report to `.claude/ux-review/report.md`.
+This is the existing dm-review artifact flow, not a new report subsystem.
+
+Deliver the compact human handoff after that write, following
+`references/output-format.md`. Preserve the complete unified report and all
+machine-readable companions in the established evidence flow. The compact
+handoff links `.claude/ux-review/report.md` and names any blocked cleanup that
+requires operator action. Do not dump the expanded report, provider tables,
+agent transcripts, synthesis ledger, cleanup inventory, or raw reports directly
+into visible chat by default.
 
 ---
 

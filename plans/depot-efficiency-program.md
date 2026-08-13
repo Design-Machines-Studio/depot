@@ -10,13 +10,13 @@ external handoff only; it does not duplicate Baseplate's production roadmap.
 
 The current priority order is:
 
-1. **P1 -- proportional scope and review convergence.** Correct Pipeline intake,
-   minimum-adequate planning, adversarial review, and dm-review severity so
-   requested mechanisms do not become architecture by default and supported
-   P1/P2 repairs converge in one batch plus one affected-lane recheck.
-2. **P1 -- clear operator output.** Immediately after the policy correction,
-   ship the smallest usable Publish Preview workflow that gives an operator a
-   clear publication result without reviving its two six-chunk campaigns.
+1. **P1 -- clear human output.** Separate compact operator handoffs from durable
+   voice-check, dm-review, and Pipeline evidence without weakening gates or
+   discarding receipts.
+2. **Successor -- one real cheap-path canary.** Use the next non-sensitive
+   plugin capability/index maintenance change to compare the configured cheap
+   route against native execution with a measured time, cost, and quality
+   receipt before changing routing policy.
 3. **Evidence-gated follow-ons.** Workflow Kernel changes, R4, R5, new routing,
    and speculative harness/platform tooling stay parked until a current failure
    or measured workload proves the need.
@@ -25,9 +25,13 @@ The current priority order is:
 
 ### Single next Depot chunk
 
-Current trusted main for this correction is
-`345b1d44aa34d1209e33977295f7c60c9846d8ea`. Publish Preview is checkpointed in
-draft PR #51 so this branch can proceed without touching that session.
+Current trusted main for this chunk is
+`ed59991aa37c1df315b9df6be1ea1eea4dbf9a46`. PR #51's exact head
+`6da69ba96c9fff470ba0bc786d1c82b15c61e958` landed in main through merge
+`3c2a27627ebf96124bf60671a9d4f26256fb88ec`. PR #52 merged as
+`ed59991aa37c1df315b9df6be1ea1eea4dbf9a46` (exact head
+`f843d89ae4b148f3f5ae673ebbb2caf2f1597dbf`). The proportional-scope and
+Publish Preview chunks are done.
 
 R2 is closed **DONE / NO CODE**. Current `plan-verification` and
 `run-verification` already put repository proof before model review, keep passing
@@ -37,15 +41,11 @@ results. No measured workload justifies adding the authored caller-supplied
 `mechanical_globs` policy, so the old untracked R2 prompts are historical inputs,
 not executable work.
 
-The immediate P1 is this proportional-scope correction. Its acceptance
-specimens are **Publish Preview** (a 2,231-word mechanism-heavy request expanded
-into two six-chunk campaigns and 12,586 words of prompts before testing a
-smaller publication workflow) and **Assembly Baseplate FIX-01** (PRs #657 and
-#662 / Issue #659, where trusted first-party Fixture code was modeled as a
-hostile marketplace and thousands of unnecessary lines followed). Passing means
-both preserve the real desired outcome and trust boundary while selecting the
-smallest adequate implementation; no specimen source tree or receipt is copied
-into Depot.
+The immediate P1 is clear human output for voice-check, dm-review, and Pipeline.
+Passing means the operator sees outcome, required attention, and one next action
+first, while complete findings, coverage gaps, browser evidence, cleanup truth,
+provenance, receipts, and raw reports remain available in existing durable
+artifacts.
 
 ### Ordered Depot queue
 
@@ -56,22 +56,23 @@ into Depot.
 | 2 | R2 pre-gates and evidence reuse | **DONE / NO CODE** | merged verification ordering, bounded receipts, and exact reuse cover the residual; no observed mechanical-glob class warrants another policy layer |
 | 3 | [#39](https://github.com/Design-Machines-Studio/depot/issues/39) / PR 40 R3a Linux portability proof | **DONE** | production-tag build passed on NED; no service was installed |
 | 4 | PR 44 production-root contract repair | **REVIEW / OPTIONAL** | exact-head review and owner merge decision; it does not block the new path and authorizes no broker continuation |
-| 5 | Proportional scope, threat model, and review convergence | **NEXT / P1** | Publish Preview and FIX-01 policy specimens select the smallest adequate outcome while real boundaries remain blocking |
-| 6 | Clear Publish Preview operator output | **NEXT AFTER P1** | smallest usable publication path returns an unambiguous operator result without campaign expansion |
-| 7 | One real cheap-path canary | HOLD | measured time/cost/quality receipt from a non-sensitive workload proves a current routing need |
-| 8 | Minimal worker/advisor routing adjustment | HOLD / REASSESS | canary shows a concrete routing miss; otherwise current matrix stands |
-| 9 | Baseplate verifier -> canonical Jig Fixture handoff | EXTERNAL / P2 | producer checks and consumer proof clear in their owning repositories |
-| 10 | R4 static run report | LATER / EVIDENCE-GATED | a current failed run supplies a diagnosis specimen |
-| 11 | R5 Agent Plugins interop | PARK / EVIDENCE-GATED | a named client or distribution target exists |
-| 12 | Workflow Kernel or speculative harness/platform changes | HOLD / EVIDENCE-GATED | a current reachable failure proves the smallest required change |
-| 13 | Workflow Authority install, integration, and Darwin port | **REMOVED** | reintroduction requires a new owner decision backed by a demonstrated threat or operational need |
+| 5 | Proportional scope, threat model, and review convergence | **DONE** | PR #52 exact head `f843d89` merged as `ed59991`; supported repairs converge proportionally |
+| 6 | Clear Publish Preview operator output | **DONE** | PR #51 exact head `6da69ba` landed through `3c2a276`; the playbook returns explicit publication status |
+| 7 | Clear human output for voice-check, dm-review, and Pipeline | **NEXT / P1** | compact handoffs lead with outcome and action while existing durable evidence remains complete |
+| 8 | One real cheap-path canary on the next non-sensitive capability/index maintenance change | **NEXT AFTER P1** | measured time/cost/quality receipt tests the cheap route before any routing adjustment |
+| 9 | Minimal worker/advisor routing adjustment | HOLD / REASSESS | canary shows a concrete routing miss; otherwise current matrix stands |
+| 10 | Baseplate verifier -> canonical Jig Fixture handoff | EXTERNAL / P2 | producer checks and consumer proof clear in their owning repositories; roadmap remains external |
+| 11 | R4 static run report | LATER / EVIDENCE-GATED | a current failed run supplies a diagnosis specimen |
+| 12 | R5 Agent Plugins interop | PARK / EVIDENCE-GATED | a named client or distribution target exists |
+| 13 | Workflow Kernel or speculative harness/platform changes | HOLD / EVIDENCE-GATED | a current reachable failure proves the smallest required change |
+| 14 | Workflow Authority install, integration, and Darwin port | **REMOVED** | reintroduction requires a new owner decision backed by a demonstrated threat or operational need |
 
 The Fixture-development handoff remains an external P2 lane and may advance in
 parallel when its Baseplate/Jig dependency chain clears; it does not displace
 the single `NEXT` Depot chunk.
 
 Only the immediate P1 authorizes this Depot execution session. `NEXT AFTER P1`
-requires the correction to merge first. DONE, HOLD, EXTERNAL, LATER, FUTURE,
+requires the clear-output chunk to merge first. DONE, HOLD, EXTERNAL, LATER, FUTURE,
 and PARK are not execution prompts.
 
 ### Cross-repository handoff

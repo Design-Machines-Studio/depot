@@ -25,7 +25,7 @@ Automates the cycle of reviewing code, fixing required findings, and re-reviewin
 
 ## Finding Policy
 
-P1 blocks merge and P2 must be fixed before merge. P3 remains fully visible advisory evidence but never enters the fix queue, triggers another iteration, or blocks convergence. The loop is clean when no P1/P2 findings remain and all required verification and coverage gates are complete.
+P1 blocks merge and P2 must be fixed before merge. P3 remains fully retained advisory evidence but never enters the fix queue, triggers another iteration, or blocks convergence; the compact handoff shows its exact count and evidence pointer. The loop is clean when no P1/P2 findings remain and all required verification and coverage gates are complete.
 
 The default convergence path is one repair batch followed by one affected-lane recheck. Repeat broad review only when the original required review was incomplete or the repair changed a real sensitive boundary.
 

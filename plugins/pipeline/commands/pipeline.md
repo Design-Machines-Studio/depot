@@ -35,6 +35,34 @@ In lean mode:
 
 **How to decide:** If the plan from Phase 3 has more than one logical step that could be parallelized or that touches separate file groups, use full mode. If it's a single coherent change that still benefits from quality checks, use lean mode. When in doubt, use full mode.
 
+## Human-Facing Output
+
+Keep phase gates, blocked-run messages, and delivery summaries compact. The
+durable artifacts carry process detail; visible chat helps the operator decide
+what to do.
+
+- At a phase gate, state what phase is ready, the decision or correction needed,
+  one recommended next action, and the artifact path. Do not paste the full
+  assessment, research, plan, requirements map, prompt inventory, or receipts.
+- A terminal summary starts with exactly `Done`, `Needs fixes`, or `Blocked`,
+  then states what changed or stopped, verification, branch or PR, one
+  recommended next action, and links or paths to the receipt, requirements
+  crosscheck, postmortem, and detailed review when present.
+- A blocked message names the exact blocker, the smallest operator action that
+  can clear it, and where resumable work is preserved. Required P1/P2 findings,
+  coverage gaps, blocked browser evidence, cleanup truth, and provenance remain
+  in the linked durable evidence.
+- Put `Recommended next action` before any additional option. Show other options
+  only when they are genuinely live decisions; do not print a default
+  multiple-choice menu.
+
+The visible summary should normally fit within roughly 250 words. Exceed that
+only to expose actionable P1/P2 findings or a real blocker. Never hide required
+action to meet the budget. Do not print `Steps Completed`, provider accounting,
+cleanup inventories, every evaluation receipt, or raw review output in chat by
+default; keep them in `receipt.md`, `run-postmortem.md`, the requirements
+crosscheck, and the established detailed review artifact.
+
 ## Provider-Adaptive Complexity
 
 Choose lean versus full mode from dependency shape, risk, and verification needs--not from a Claude model. Coding execution and review use Codex or OpenRouter. Claude effort settings may deepen explicitly non-coding planning, strategy, research synthesis, voice/editorial work, or optional plan critique, but they never change coding routes or justify broader implementation chunks.
@@ -283,7 +311,8 @@ Load the assess skill from `plugins/pipeline/skills/assess/SKILL.md`.
 3. In the existing assessment prose, classify the request as: desired outcomes; hard constraints and explicit approved decisions; implementation mechanisms proposed by the user or upstream prompt; and future or conditional ideas. Never silently discard an explicit request.
 4. Identify the smallest adequate solution. If it would omit or replace a requested mechanism, present both the smaller alternative and the mechanism-preserving option at this gate. Do not choose for the user.
 5. Save the Assessment Brief to `plans/<feature-slug>/assessment.html` (per **Artifact Format** above). Before the gate, any proposed Key Requirements are provisional. After the user's response, update the `keyRequirements` island so it contains only the resulting approved outcomes, constraints, and decisions; proposed mechanisms enter it only when the user approves them as scope.
-6. Present key findings to the user
+6. Present only the phase outcome, any correction needed, one recommended next
+   action, and the `assessment.html` path
 
 Mark ledger item 2 as complete.
 
@@ -300,7 +329,8 @@ You MUST run this phase even if you think you already have enough context. Resea
 1. Pass the feature description and Assessment Brief to the research orchestrator
 2. Dispatch parallel research agents across all available sources (ai-memory, RAG, domain plugins, web, codebase)
 3. Save the Research Brief to `plans/<feature-slug>/research.html` (per **Artifact Format** above; `findings`/`references` island)
-4. Present the Research Brief summary to the user
+4. Present only the phase outcome, any scope decision needed, one recommended
+   next action, and the `research.html` path
 
 **Verification:** The Research Brief file MUST exist on disk before proceeding. Run `ls plans/<feature-slug>/research.html` to confirm.
 
@@ -431,7 +461,7 @@ legacy/default receipt above is authoritative until a new manifest is generated.
 
 Mark ledger item 8 as complete.
 
-**Requirements coverage check (ledger item 9):** Read the cached Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html`. For each requirement, verify at least one chunk's acceptance criteria covers it. Present the coverage map:
+**Requirements coverage check (ledger item 9):** Read the cached Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html`. For each requirement, verify at least one chunk's acceptance criteria covers it. Keep the complete coverage map in the existing plan/manifest artifacts:
 
 ```
 Requirements Coverage:
@@ -442,7 +472,9 @@ Requirements Coverage:
 
 If any requirement is uncovered, fix it before proceeding. Mark item 9 when coverage is 100%.
 
-Present the manifest summary: chunk count, parallel groups, overlap risk, requirements coverage.
+At the gate, present only the chunk count, whether coverage is complete, any
+operator decision, one recommended next action, and the manifest path. Keep
+parallel groups, overlap detail, and the full coverage map in the manifest.
 
 ## Phase 5: Adversarial Scope Review
 
@@ -597,24 +629,21 @@ Entries marked "Addressed" without an evidence type are treated as NOT ADDRESSED
 
 Mark item 13 as complete.
 
-**GATE (ledger item 14):** Use AskUserQuestion to present options:
-
-"Feature branch `<branch>` is ready. Review it with `git log main..<branch>`. What next?"
-
-Options:
-1. **Create PR** -- work continues on the branch; feature-scoped artifacts retained
-2. **Give feedback** -- another iteration; feature-scoped artifacts retained
-3. **Done -- clean up** -- retain only `receipt.md`
+**GATE (ledger item 14):** Use AskUserQuestion with the compact terminal summary
+contract above. Lead with the outcome and one recommendation, for example:
+"Done. Feature branch `<branch>` passed verification. Recommended next action:
+create the PR. Reply with feedback instead if another iteration is needed."
+Include the evidence paths. Do not print a standing multiple-choice menu.
 
 **The repository cleanup phase runs on all three answers.** Only *artifact* disposition varies by answer. Orphan worktrees and temp chunk branches are never left behind because the caller chose "Create PR" or "Give feedback" -- they collide with the next run's `git worktree add`. See `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`.
 
 Before presenting this gate, confirm the orchestrator's Step 5b ran its repository cleanup and that `plans/<feature-slug>/receipt.md` carries a `## Branch & Worktree Inventory` block. If it does not, run the cleanup phase now and write the inventory before proceeding.
 
-**If option 1 (PR):** Proceed to create PR. The feature branch is kept (no merge proof yet -- that is expected, and the inventory says so). Artifact Tier 3 cleanup deferred until the user returns.
+**If the user chooses PR:** Proceed to create PR. The feature branch is kept (no merge proof yet -- that is expected, and the inventory says so). Artifact Tier 3 cleanup deferred until the user returns.
 
-**If option 2 (feedback):** Append the new feedback to `original-prompt.md` as a new section (`## Iteration N Feedback`), extract new requirements, and re-enter at Phase 3 or Phase 4. This ensures feedback accumulates rather than replacing context.
+**If the user gives feedback:** Append the new feedback to `original-prompt.md` as a new section (`## Iteration N Feedback`), extract new requirements, and re-enter at Phase 3 or Phase 4. This ensures feedback accumulates rather than replacing context.
 
-**If option 3 (done):** Run full cleanup per the artifact lifecycle policy:
+**If the user says done:** Run full cleanup per the artifact lifecycle policy:
 1. Ensure `plans/<feature-slug>/receipt.md` exists (written by orchestrator Step 5b). If missing, write it now.
 2. Delete Tier 1 + 2 artifacts (if not already cleaned by orchestrator).
 3. Delete Tier 3 artifacts:
@@ -628,7 +657,7 @@ Before presenting this gate, confirm the orchestrator's Step 5b ran its reposito
    Every filename carries the `plans/<slug>/` prefix. Without it the `rm` silently matches nothing and the artifacts accumulate.
 4. Only `receipt.md` remains in `plans/<feature-slug>/`.
 5. Re-verify the repository readiness checks (clean tree, no stale worktree registrations).
-6. Report: `Plan directory cleaned. Receipt retained at plans/<slug>/receipt.md.` Then reproduce the inventory's "Remaining after cleanup" table so the user sees exactly which branches still exist and why.
+6. Report: `Plan directory cleaned. Receipt retained at plans/<slug>/receipt.md.` Name only blocked refs that require operator action and point to the receipt for the complete inventory.
 
 ## Self-Audit
 
