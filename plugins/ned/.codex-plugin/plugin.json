@@ -1,7 +1,7 @@
 {
   "name": "ned",
-  "version": "1.8.2",
-  "description": "Personal knowledge graph, NED operations, and session capture for Travis Gertz",
+  "version": "1.9.0",
+  "description": "Personal knowledge graph, NED operations, preview publication, and session capture for Travis Gertz",
   "author": {
     "name": "Design Machines"
   },
@@ -106,6 +106,28 @@
           "rootless-docker",
           "tailscale"
         ]
+      },
+      {
+        "id": "publish-preview",
+        "name": "Publish Preview",
+        "description": "Inventory-driven playbook for publishing Access-protected NED development and client previews",
+        "triggers": [
+          "publish this project as dmNNN.asmbly.app",
+          "publish this site as <slug>.designmachines.xyz",
+          "make this NED preview public",
+          "dm023.asmbly.app",
+          "designmachines.xyz preview",
+          "unpublish this NED preview",
+          "check the NED preview status"
+        ],
+        "tags": [
+          "ned-operations",
+          "preview",
+          "cloudflare-access",
+          "caddy",
+          "uptime-kuma",
+          "rootless-docker"
+        ]
       }
     ],
     "agents": [],
@@ -135,8 +157,8 @@
   },
   "interface": {
     "displayName": "Ned",
-    "shortDescription": "Personal knowledge graph, NED operations, and session capture for Travis Gertz",
-    "longDescription": "Personal knowledge graph, NED operations, and session capture for Travis Gertz",
+    "shortDescription": "Personal knowledge graph, NED operations, preview publication, and session capture for Travis Gertz",
+    "longDescription": "Personal knowledge graph, NED operations, preview publication, and session capture for Travis Gertz",
     "developerName": "Design Machines",
     "category": "Knowledge",
     "capabilities": [

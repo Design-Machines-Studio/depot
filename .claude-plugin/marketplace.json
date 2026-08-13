@@ -12,13 +12,13 @@
     {
       "name": "ned",
       "source": "./plugins/ned",
-      "version": "1.8.2",
+      "version": "1.9.0",
       "author": {
         "name": "Design Machines"
       },
-      "description": "Personal knowledge graph, NED operations, and session capture",
+      "description": "Personal knowledge graph, NED operations, preview publication, and session capture",
       "capabilities_summary": {
-        "skills": 4,
+        "skills": 5,
         "agents": 0,
         "commands": 3,
         "tags": [
@@ -34,7 +34,11 @@
           "compounding",
           "ned-operations",
           "remote-development",
-          "ssh"
+          "ssh",
+          "preview",
+          "cloudflare-access",
+          "caddy",
+          "uptime-kuma"
         ]
       }
     },

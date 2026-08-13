@@ -365,7 +365,20 @@ print(sum(len(c.get('skills',[])) for c in pjs), sum(len(c.get('agents',[])) for
 run_all() {
   local any_failed=0
 
-  printf "\n${BOLD}1/4: Description Evals${RESET}\n"
+  printf "\n${BOLD}1/6: Publish Preview Playbook${RESET}\n"
+  printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+  if python3 "$REPO_ROOT/tests/test_publish_preview_skill.py"; then
+    :
+  else
+    any_failed=1
+  fi
+  if EVAL_THRESHOLD=100 "$SCRIPT_DIR/eval-descriptions.sh" ned-publish-preview.json; then
+    :
+  else
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}2/6: Description Evals${RESET}\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
   if "$SCRIPT_DIR/eval-descriptions.sh"; then
     :
@@ -373,7 +386,7 @@ run_all() {
     any_failed=1
   fi
 
-  printf "\n${BOLD}2/4: Dependency Validation${RESET}\n"
+  printf "\n${BOLD}3/6: Dependency Validation${RESET}\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
   if "$SCRIPT_DIR/check-dependencies.sh"; then
     :
@@ -381,7 +394,7 @@ run_all() {
     any_failed=1
   fi
 
-  printf "\n${BOLD}3/4: Workflow Kernel Behavioral Validation${RESET}\n"
+  printf "\n${BOLD}4/6: Workflow Kernel Behavioral Validation${RESET}\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
   if validate_workflow_kernel; then
     :
@@ -389,7 +402,7 @@ run_all() {
     any_failed=1
   fi
 
-  printf "\n${BOLD}4/5: Quality-Pulse Conformance${RESET}\n"
+  printf "\n${BOLD}5/6: Quality-Pulse Conformance${RESET}\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
   if validate_quality_pulse; then
     :
@@ -397,7 +410,7 @@ run_all() {
     any_failed=1
   fi
 
-  printf "\n${BOLD}5/5: Composition Validation${RESET}\n"
+  printf "\n${BOLD}6/6: Composition Validation${RESET}\n"
   printf "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
   if run_composition_checks --no-header; then
     :

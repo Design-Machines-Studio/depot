@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "projects": [
+    {
+      "id": "fictional-assembly-preview",
+      "type": "assembly",
+      "factoryCode": "DM-999",
+      "checkoutPath": "/home/ned/assembly/fictional-dm-999",
+      "projectName": "fictional-dm-999",
+      "serviceName": "app",
+      "internalPort": 8999,
+      "hostname": "dm999.asmbly.app",
+      "environment": "client-preview",
+      "purpose": "Fictional example used only to document the inventory shape.",
+      "health": {"path": "/healthz", "statuses": [200], "keyword": "fictional-ready"},
+      "restartExpectation": "unless-stopped",
+      "publication": {"tunnelPublished": false, "backendBinding": "127.0.0.1"},
+      "access": {
+        "mode": "protected",
+        "identityFile": "/home/ned/.config/design-machines/publish-preview/identities/fictional-reviewers.txt"
+      },
+      "kuma": {"monitorName": "DM-999 fictional client-preview", "monitorId": null},
+      "ownership": {"marker": "ned-publish-preview/v1:fictional-assembly-preview", "receiptId": null}
+    },
+    {
+      "id": "fictional-design-site",
+      "type": "ddev",
+      "siteSlug": "fictional-studio-preview",
+      "checkoutPath": "/home/ned/sites/fictional-studio-preview",
+      "projectName": "fictional-studio-preview",
+      "serviceName": "web",
+      "internalPort": 8080,
+      "hostname": "fictional-studio-preview.designmachines.xyz",
+      "environment": "development",
+      "purpose": "Fictional DDEV preview example.",
+      "health": {"path": "/", "statuses": [200], "keyword": "Fictional Studio"},
+      "restartExpectation": "unless-stopped",
+      "publication": {"tunnelPublished": false, "backendBinding": "127.0.0.1"},
+      "access": {
+        "mode": "protected",
+        "identityFile": "/home/ned/.config/design-machines/publish-preview/identities/fictional-studio.txt"
+      },
+      "kuma": {"monitorName": "fictional-studio-preview development", "monitorId": null},
+      "ownership": {"marker": "ned-publish-preview/v1:fictional-design-site", "receiptId": null}
+    }
+  ]
+}
