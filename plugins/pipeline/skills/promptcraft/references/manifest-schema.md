@@ -35,6 +35,8 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
       "companionSkills": ["assembly:development"],
       "estimatedComplexity": "small",
       "kind": "logic",
+      "renderedSurface": "not_applicable",
+      "renderedSurfaceRationale": "A database migration changes persistence only and exposes no route, template, page, or rendered output.",
       "executor": "openrouter"
     },
     {
@@ -51,6 +53,8 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
       "companionSkills": ["assembly:development"],
       "estimatedComplexity": "medium",
       "kind": "logic",
+      "renderedSurface": "required",
+      "renderedSurfaceRationale": "The handler and route change the rendered proposal response even though this chunk contains no template file.",
       "executor": "codex"
     },
     {
@@ -67,6 +71,8 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
       "companionSkills": ["assembly:development", "live-wires:livewires"],
       "estimatedComplexity": "medium",
       "kind": "ui",
+      "renderedSurface": "required",
+      "renderedSurfaceRationale": "The Templ files render the proposal page and change its visible vote display.",
       "executor": "codex"
     },
     {
@@ -83,6 +89,8 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
       "companionSkills": ["assembly:development"],
       "estimatedComplexity": "medium",
       "kind": "integration",
+      "renderedSurface": "required",
+      "renderedSurfaceRationale": "The wiring changes a served proposal route and its rendered template.",
       "executor": "codex"
     }
   ],
@@ -128,6 +136,16 @@ rationale: non-empty string}`. It never derives or changes `workflowClass`,
 `routingOverride`. Do not copy workflow stages or safety-anchor constants into
 this schema; the workflow-kernel's separately versioned trusted policy remains
 authoritative.
+
+`kind` and `renderedSurface` are also separate policy inputs. `kind` classifies
+the code and selects review/provider depth. `renderedSurface` answers the
+narrower evidence question: whether the chunk changes a route, page, template,
+browser interaction, or other product output that can be rendered and
+inspected. A filename heuristic may classify an unserved planning `.html` file
+as `ui`, or a non-HTTP CLI `main.go` as `integration`; neither fact alone
+creates a browser-verifiable product surface. New manifests therefore declare
+both fields explicitly and fail closed when the rendered-surface decision is
+uncertain.
 
 ## Performance Contract
 
@@ -209,6 +227,8 @@ or run-wide discontinuity, and includes it in shadow parity and metrics.
 | `companionSkills` | string[] | Skills to load in format "plugin:skill" |
 | `estimatedComplexity` | enum | "small" (1-2 files), "medium" (3-5 files), "large" (6+ files) |
 | `kind` | enum | Chunk type classification: `"ui"`, `"logic"`, `"integration"`, or `"config"`. Inferred from `filesToModify` during prompt generation. Used by the execution-orchestrator for evaluation depth and by the `executor` field for tool routing. See Classification Rules below. |
+| `renderedSurface` | enum | Required on new manifests. Closed values: `"required"` or `"not_applicable"`. Controls visual references, rendered-impression criteria, browser/persona cases, Datastar gates, browser preflight, browser smoke, and final visual verification. It never changes `kind`, executor routing, or code-review depth. |
+| `renderedSurfaceRationale` | string | Required with `renderedSurface`; non-empty and specific. For `not_applicable`, name every UI/integration syntactic trigger and prove why it is unserved or non-rendering. Mixed or uncertain scope must use `required`. |
 | `executor` | enum | Coding execution tool: `"codex"` or `"openrouter"`; legacy `"claude"` remains parseable but normalizes to Codex. Derived from `kind`, `estimatedComplexity`, and the shared `plugins/pipeline/references/routing-policy.json`. See Executor Mapping below. |
 | `routingOverride` | object, conditional | Required only when `executor` differs from the routing-policy default. Contains `reasonCode`, concrete `reason`, `splitAttempted`, and `splitBlockedBy`. A config/docs chunk routed to Codex without this object is invalid. |
 
@@ -239,6 +259,30 @@ The `kind` field is inferred from `filesToModify` during prompt generation (Phas
 
 When a chunk's files span multiple categories, classify up: `ui` > `integration` > `logic` > `config`.
 
+## Rendered-Surface Applicability
+
+After classifying `kind`, derive `renderedSurface` independently:
+
+| Value | Condition |
+|-------|-----------|
+| `required` | The chunk changes any served route, rendered page/template/component, browser-visible output, client interaction, or acceptance criterion about visual/runtime browser behavior. Mixed rendered and non-rendered work is also `required`. |
+| `not_applicable` | Every apparent UI/integration trigger is demonstrably unserved or non-rendering. Examples include a planning/report `.html` artifact that is never mounted by the product, a non-HTTP CLI `main.go`, backend wiring with no served route or rendered output, or deletion of copied assets without a surviving product surface. |
+
+`not_applicable` is not a browser skip flag. The rationale must identify the
+triggering files or verbs, state why no product route/output exists, and remain
+consistent with the prompt's acceptance criteria. A route, template, browser
+interaction, visual claim, mixed scope, incomplete rationale, or unresolved
+ambiguity forces `required`. Do not invent personas, browser cases, routes, or
+visual criteria for a truthful `not_applicable` chunk.
+
+For consumption-only legacy manifests missing both fields, the orchestrator
+defaults `ui` and `integration` chunks to `required`, defaults `logic` and
+`config` chunks to `not_applicable`, and records
+`rendered_surface_defaulted=true` plus the derived legacy rationale in every
+receipt. A manifest that supplies only one of the two fields, uses an unknown
+value, or supplies an empty rationale is invalid. Promptcraft never emits the
+legacy form.
+
 ## Executor Mapping
 
 The `executor` field is derived from `kind`, `estimatedComplexity`, and `routing-policy.json`:
@@ -248,7 +292,7 @@ The `executor` field is derived from `kind`, `estimatedComplexity`, and `routing
 | `config` / docs | `openrouter` | Documentation and configuration edits are text-heavy and fit cheap large-context models |
 | mechanical `logic` | `openrouter` or `codex` | Rename follow-through, test tables, seed data, and migration edits can run on OpenRouter when bounded; Codex is secondary |
 | complex `logic` | `codex` | New service methods and refactors need agentic code execution before falling back |
-| `ui` | `codex` | UI implementation uses Codex; browser and Live Wires evidence remain mandatory |
+| `ui` | `codex` | UI-classified implementation uses Codex; browser and Live Wires evidence are mandatory when `renderedSurface` is `required` |
 | `integration` | `codex` | Cross-chunk wiring and route verification are code-heavy orchestration |
 
 Before overriding a policy-selected OpenRouter chunk because it needs a connector or other host-only tool, split the live-tool operation from offline analysis/config/docs whenever ownership permits. A valid override has this shape:

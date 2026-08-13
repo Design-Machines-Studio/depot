@@ -262,7 +262,7 @@ elif kernel.get("pluginDependencies", {}) or kernel.get("optionalPluginDependenc
     errors.append("workflow-kernel must remain a leaf with no dependencies")
 
 consumer_floors = {
-    "pipeline": ">=0.14.0",
+    "pipeline": ">=0.15.0",
     "dm-review": ">=0.14.0",
 }
 

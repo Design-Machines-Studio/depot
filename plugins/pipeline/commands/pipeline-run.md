@@ -38,6 +38,16 @@ Before executing, verify:
    complexity, kind/executor, and routing overrides. For a legacy manifest with
    no profile, retain the current standard path and record
    `decision_profile_defaulted=true`; absence is not low/low evidence.
+9. **Rendered-surface applicability is valid** -- New manifests require both
+   `renderedSurface: required|not_applicable` and a non-empty
+   `renderedSurfaceRationale` on every chunk. Reject one-sided, unknown, empty,
+   or contradictory declarations. `not_applicable` must account for every
+   UI/integration syntactic trigger and must not coexist with a served route,
+   rendered output, browser interaction, visual claim, or mixed surface scope.
+   Legacy manifests missing both fields default UI/Integration to `required`
+   and Logic/Trivial to `not_applicable`, recording
+   `rendered_surface_defaulted=true` in every receipt. This field never changes
+   `kind`, provider routing, or review depth.
 
 If any check fails, report the issue and stop.
 
@@ -73,8 +83,14 @@ The canonical shadow inputs are `plans/<feature>/manifest.json` plus the cumulat
 After the canonical `run.started` transition and before the first builder
 dispatch, generate `plans/<feature>/verification-contract.json` only from the
 approved requirements and final acceptance criteria. Resolve persona/browser
-case IDs against authoritative project declarations and block unresolved IDs.
-Validate and bind the initial contract exactly once:
+case IDs against authoritative project declarations for chunks whose
+`renderedSurface` is `required` and block unresolved IDs. When at least one
+chunk is required, materialize and bind the authoritative verification profile
+for that union. When every chunk is `not_applicable`, use null profile
+ID/digest, empty arrays, no profile artifact/flag, and preserve the validated
+rationales in manifest and receipts. Never fabricate cases. Validate and bind
+the initial contract exactly once, adding `--verification-profile
+plans/<feature>/verification-profile.json` only for the required-surface form:
 
 ```text
 "$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature>/verification-contract.json > plans/<feature>/verification-contract-binding.json
@@ -155,7 +171,7 @@ references.
 
 Do not report "Skill tool unavailable" in Codex when this adapter can run. That message is only valid if the session lacks both nested skill invocation and enough local access to execute the dm-review inline protocol.
 
-**Repository verification adapter:** Resolve Workflow Kernel `>=0.14.0` once
+**Repository verification adapter:** Resolve Workflow Kernel `>=0.15.0` once
 and use its `plan-verification` and `run-verification` subcommands whenever the
 target repository supplies `.dm/verification.json`.
 

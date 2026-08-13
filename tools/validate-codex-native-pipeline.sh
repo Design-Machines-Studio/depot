@@ -64,7 +64,7 @@ require_text "$orchestrator" "git check-ignore -q plans/" "orchestrator detects 
 require_text "$generated_alias" "## Codex Native Execution Adapter" "generated pipeline-run skill contains adapter section"
 promptcraft="$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
 require_text "$promptcraft" "There is no minimum prompt-line or general acceptance-criterion count" "promptcraft rejects count floors"
-require_text "$promptcraft" "Every UI chunk still gets at least two rendered-impression criteria" "promptcraft retains two visual criteria for UI chunks"
+require_text "$promptcraft" 'Every `renderedSurface: required` chunk gets at least two rendered-impression criteria' "promptcraft retains two visual criteria for rendered-surface chunks"
 require_text "$promptcraft" "Relative size alone is never under-specification or a blocker" "prompt size parity is advisory only"
 require_absent "$promptcraft" "Classification floors:" "promptcraft removes classification floors"
 require_absent "$promptcraft" "below Logic floor" "promptcraft removes below-floor blockers"

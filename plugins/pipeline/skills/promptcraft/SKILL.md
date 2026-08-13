@@ -54,10 +54,22 @@ Read the plan and identify discrete chunks of work. A chunk is:
    - `config` / docs / pure prose -> `openrouter`
    - mechanical `logic` (rename follow-through, test tables, seed/migration edits) -> `openrouter` or `codex` per policy
    - complex `logic` (new service methods, refactors, multi-file behavior) -> `codex`
-   - `ui` -> `codex` (browser evidence remains mandatory)
+   - `ui` -> `codex`
    - `integration` -> `codex`
 
    When a chunk's files span multiple categories, classify up: `ui` > `integration` > `logic` > `config`.
+
+   Then classify rendered-output applicability independently. Every new chunk
+   MUST carry `renderedSurface: required|not_applicable` and a non-empty
+   `renderedSurfaceRationale`. Use `required` when the chunk changes a served
+   route, rendered page/template/component, browser interaction, visible
+   output, or visual/browser acceptance criterion. Use `not_applicable` only
+   when every UI/integration syntactic trigger is demonstrably unserved or
+   non-rendering, such as a planning `.html` artifact or non-HTTP CLI
+   `main.go`. Name the triggering files and absence of a product route/output
+   in the rationale. Mixed or uncertain chunks are `required`. This field
+   controls browser/persona/visual/Datastar evidence only; it never changes
+   `kind`, executor routing, or review depth.
 
    Before assigning Codex because a task needs a live connector, browser, GitHub/Notion operation, or another host-only tool, split the live-tool action from offline analysis/config/docs whenever file ownership and dependency order permit. The offline chunk keeps its policy-selected OpenRouter executor. If a chunk's `executor` differs from the routing-policy default, add a `routingOverride` object with `reasonCode`, a concrete `reason`, `splitAttempted`, and `splitBlockedBy`. A `config`/docs chunk with `executor: codex` and no complete `routingOverride` is invalid; tool mentions alone are never a silent override.
 
@@ -81,7 +93,8 @@ malformed values, multiple profiles, or conflict with approved upstream data
 blocks prompt generation and returns to the Phase 3 user gate.
 
 Keep `decisionProfile` distinct from `workflowClass`, `risk`, `overlapRisk`,
-`estimatedComplexity`, `kind`, `executor`, and `routingOverride`. Apply the
+`estimatedComplexity`, `kind`, `renderedSurface`, `executor`, and
+`routingOverride`. Apply the
 `decisionLeverage` section from `routing-policy.json` to workflow depth only:
 low/low uses the optimized current path; high uncertainty adds one independent
 planning opinion plus one bounded synthesis; high consequence strengthens the
@@ -112,7 +125,7 @@ Read `references/prompt-template.md` for the exact prompt structure.
 
 ### Phase 2.5: Visual Reference Extraction
 
-For UI chunks (those touching `.templ`, `.twig`, `.html`, or `.css` files), check for brainstorm outputs that define the approved visual design:
+For chunks with `renderedSurface: required`, check for brainstorm outputs that define the approved visual design:
 
 1. Check `plans/<feature-slug>/brainstorm.html` for visual design decisions -- read the `visualDecisions` island with `references/templates/extract-json-island.sh`
 2. Check `.superpowers/brainstorm/` for HTML mockups (these contain styling decisions as inline styles)
@@ -123,7 +136,7 @@ For UI chunks (those touching `.templ`, `.twig`, `.html`, or `.css` files), chec
 4. Do NOT embed full HTML mockups in prompts -- extract the decisions, not the markup. Full mockups waste token budget and obscure the intent.
 5. Include the file PATH to the mockup so the subagent can reference it if needed
 
-This summary feeds into each UI chunk's prompt as a `## Visual References` section and shapes the visual acceptance criteria in `### Visual Acceptance Criteria`.
+This summary feeds into each rendered-surface chunk's prompt as a `## Visual References` section and shapes the visual acceptance criteria in `### Visual Acceptance Criteria`.
 
 ### Phase 3: Overlap Analysis
 
@@ -249,9 +262,9 @@ For each Assembly mutation chunk, consult `assembly:development`'s Mutation Appl
 
 ### Phase 3i: Visual Acceptance Criteria Gate
 
-Every UI chunk must include at least 2 visual acceptance criteria describing rendered impressions, not just structural class names.
+Every chunk with `renderedSurface: required` must include at least 2 visual acceptance criteria describing rendered impressions, not just structural class names.
 
-**Rule:** UI-classified chunks (`kind: ui`) must have a `### Visual Acceptance Criteria` subsection with >= 2 criteria. "Uses `.button--accent` class" is structural. "Primary action button is visually dominant over secondary actions" is visual. Both types are required.
+**Rule:** Rendered-surface chunks must have a `### Visual Acceptance Criteria` subsection with >= 2 criteria. "Uses `.button--accent` class" is structural. "Primary action button is visually dominant over secondary actions" is visual. Both types are required. A chunk marked `not_applicable` must not fabricate rendered impressions.
 
 **Shared-component parity:** When one Templ component is rendered on two or more routes -- a shared editor, a shared form, a shared dialog -- the chunk must carry a **Visual Parity Criterion** even when the prompt never says "visually identical". Sharing a component is itself the parity claim, and a route-specific wrapper or a stale override quietly breaks it.
 
@@ -264,13 +277,13 @@ Both criteria are **P1**. A shared component that renders differently per route 
 
 ### Phase 3j: UX Task Selection Gate
 
-When the target repo contains `tests/ux/`, reference persona tasks in UI chunk prompts.
+When the target repo contains `tests/ux/`, reference persona tasks in prompts whose `renderedSurface` is `required`.
 
-**Rule:** If `tests/ux/` exists, each UI chunk's Research Context must reference which persona tasks cover the affected routes. If no task file exists for a new route, add an acceptance criterion: "Create task file at `tests/ux/tasks/{area}/{task-name}.md`."
+**Rule:** If `tests/ux/` exists, each rendered-surface chunk's Research Context must reference which persona tasks cover the affected routes. If no task file exists for a new route, add an acceptance criterion: "Create task file at `tests/ux/tasks/{area}/{task-name}.md`."
 
 Use `plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md`.
 Carry the complete selected persona/scenario/route/browser/viewport case set into
-UI and integration acceptance criteria. Task frontmatter is authoritative; do
+acceptance criteria for chunks with `renderedSurface: required`. Task frontmatter is authoritative; do
 not turn the generated coverage matrix or a fixed persona sample into coverage.
 Required browser criteria must preserve the evidence -> primary process quit ->
 fresh primary relaunch/retry -> different engine -> `human_help_required` ladder.
@@ -286,7 +299,7 @@ Sibling parallel prompts must not cross-reference each other. A prompt in a para
 
 Validate the generated manifest against the required schema before handoff.
 
-**Rule:** Every chunk object in `executionPlan.levels[].groups[].chunks[]` must include: `id`, `title`, `prompt`, `kind`, `executor`, `filesToModify`, `dependsOn`, `companionSkills`, `estimatedComplexity`. Missing fields cause orchestrator dispatch failures. When the selected executor differs from the routing-policy default, `routingOverride` is also required and must include `splitAttempted`; omit the object when no override occurred.
+**Rule:** Every chunk object in the authoritative `chunks[]` array must include: `id`, `title`, `prompt`, `kind`, `renderedSurface`, `renderedSurfaceRationale`, `executor`, `filesToModify`, `dependsOn`, `companionSkills`, `estimatedComplexity`. Missing fields cause orchestrator dispatch failures. `renderedSurface` accepts only `required|not_applicable`; its rationale must be non-empty, and `not_applicable` must account for every UI/integration syntactic trigger. When the selected executor differs from the routing-policy default, `routingOverride` is also required and must include `splitAttempted`; omit the object when no override occurred.
 
 Every new manifest also carries the explicit top-level `workflowClass` copied unchanged from the approved plan island. Accepted values are `chore|bug|feature|hotfix|security|investigation|migration`. If the plan does not contain exactly one approved value, stop and return to the pipeline Phase 3 user gate; promptcraft never chooses or infers it from filenames, chunk kinds, prompt prose, risk, or keyword heuristics. The legacy absent-field default belongs only to manifest consumption and records `feature` plus `workflow_class_defaulted=true`.
 
@@ -302,11 +315,19 @@ the final acceptance criteria. Assign stable `REQ-*` and `CHK-*` IDs, preserve
 explicit prohibited regressions, and classify every requirement as executable
 or manual per
 `plugins/workflow-kernel/skills/workflow-kernel/references/behavioral-verification-contract-schema.json`.
-For UI/integration work, resolve selected persona and browser case IDs from the
+For work with `renderedSurface: required`, resolve selected persona and browser case IDs from the
 authoritative declarations described by `verification-contract.md`; generated
 coverage matrices and invented sample personas are not authority. Any unresolved
 persona, scenario, route binding, browser, viewport, auth fixture, or case ID
 blocks handoff.
+
+For validated `renderedSurface: not_applicable` chunks, contribute no persona or
+browser case IDs to the run-wide contract and preserve the rationale in the
+manifest and receipts. If the run has zero `required` chunks, use the contract's
+explicit no-profile/null pair and empty case arrays; otherwise the bound profile
+and arrays contain only the union selected for `required` chunks. Do not create
+placeholder cases, fake routes, or `not_declared` browser evidence to satisfy a
+kind-based heuristic.
 
 Promptcraft does not bind or pre-authorize the contract. The execution
 orchestrator generates the canonical JSON from these approved inputs only after
@@ -355,7 +376,7 @@ Fail-closed is the theme. Any invariant that defaults to permissive on absent in
 
 ### Phase 3o: Datastar-First Gate
 
-**Trigger:** the project is Go + Templ + Datastar and the chunk is `kind: ui` or `kind: integration`.
+**Trigger:** the project is Go + Templ + Datastar and the chunk has `renderedSurface: required`.
 
 Agents reach for hand-rolled JS by default. Most client behavior an Assembly page needs already exists as a declarative Datastar attribute, and a Datastar Pro attribute whose plugin is missing from the bundle is **inert** -- a silent no-op that looks correct in review.
 
@@ -374,7 +395,7 @@ For each chunk, generate a self-contained execution prompt using the template fr
 2. **Specific** -- Exact file paths, exact patterns to follow, exact acceptance criteria
 3. **Scoped** -- Only touches the files listed, nothing else
 4. **Testable** -- Clear acceptance criteria the subagent can verify
-5. **Visually specified** (UI chunks) -- Include the Visual Reference Summary from Phase 2.5 and generate both structural AND visual acceptance criteria (see prompt template)
+5. **Visually specified** (`renderedSurface: required`) -- Include the Visual Reference Summary from Phase 2.5 and generate both structural AND visual acceptance criteria (see prompt template)
 
 Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`, where `<chunk-id>` is the `NN-<slug>` from the plan island's `chunks` (zero-padded, ordered; e.g. `00-preflight`, `01-reader-service`, ... `10-doc-sync`). Prompts stay **markdown** -- they are Tier 2 (run-scoped) agent-only artifacts, auto-deleted by the orchestrator's cleanup phase after successful execution.
 
@@ -384,7 +405,7 @@ Generate `plans/<feature-slug>/manifest.json` following the schema in `reference
 
 Read top-level `workflowClass` and the exact closed `decisionProfile` from the approved plan data island, copy both explicitly into every generated manifest, and preserve those exact values through handoff. Missing, ambiguous, malformed, multiple, or conflicting plan data blocks generation and returns to the user gate. Security classification does not weaken or replace existing sensitive-path provider and approval rules.
 
-Each chunk object in the manifest MUST include `kind` and `executor` fields (classified in Phase 1, step 6 from `routing-policy.json`). Example:
+Each chunk object in the manifest MUST include `kind`, `renderedSurface`, `renderedSurfaceRationale`, and `executor` fields (classified independently in Phase 1, step 7). Example:
 
 ```json
 {
@@ -398,6 +419,8 @@ Each chunk object in the manifest MUST include `kind` and `executor` fields (cla
   "companionSkills": ["assembly:development"],
   "estimatedComplexity": "small",
   "kind": "logic",
+  "renderedSurface": "not_applicable",
+  "renderedSurfaceRationale": "The migration changes storage only and exposes no product route or rendered output.",
   "executor": "openrouter"
 }
 ```
@@ -421,6 +444,7 @@ The manifest encodes:
 - Execution metadata
 - Workflow class for trusted kernel policy translation
 - Approved decision profile for depth-only planning and verification leverage
+- Explicit rendered-surface applicability for visual/browser evidence
 
 ### Phase 6: Requirements Coverage Check
 
@@ -437,7 +461,7 @@ If any requirement is uncovered, either add it to an existing chunk's acceptance
 
 ### Phase 6b: Evidence-Based Prompt Completeness Check
 
-Every prompt needs a concrete task, exact modified files, relevant pattern/context, observable acceptance criteria for changed behavior, and exact validation commands. Applicable security, data-integrity, browser/persona, migration, and generated-file gates remain mandatory. Every UI chunk still gets at least two rendered-impression criteria.
+Every prompt needs a concrete task, exact modified files, relevant pattern/context, observable acceptance criteria for changed behavior, and exact validation commands. Applicable security, data-integrity, browser/persona, migration, and generated-file gates remain mandatory. Every `renderedSurface: required` chunk gets at least two rendered-impression criteria.
 
 There is no minimum prompt-line or general acceptance-criterion count. Prompt length and criterion count are diagnostics only: a short surgical prompt can pass, and no prompt is expanded solely to meet a count or a sibling average. Remove repetition, derivable context, duplicated validation, and criteria that do not map to a requirement or realistic failure mode.
 
@@ -448,7 +472,7 @@ There is no minimum prompt-line or general acceptance-criterion count. Prompt le
 1. Group prompts by classification.
 2. For each group, compute the average line count and AC count.
 3. Inspect outliers only for a concrete missing requirement, failure mode, or necessary context. Relative size alone is never under-specification or a blocker.
-4. A UI chunk with fewer than two rendered-impression criteria remains incomplete regardless of sibling size.
+4. A `renderedSurface: required` chunk with fewer than two rendered-impression criteria remains incomplete regardless of sibling size.
 
 **Output a completeness summary:**
 

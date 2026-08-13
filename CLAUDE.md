@@ -221,7 +221,7 @@ If the pipeline skill is unavailable (not installed), tell the user and stop. Do
 
 ## Known Pipeline Failure Modes
 
-Eighteen failure patterns have been observed in production pipeline runs, each with a
+Nineteen failure patterns have been observed in production pipeline runs, each with a
 root cause, a hardening measure in the pipeline plugin, and a post-implementation
 verification checklist. They live in the `pipeline-failure-modes` skill
 (`.claude/skills/pipeline-failure-modes/SKILL.md`) -- load it before starting a pipeline

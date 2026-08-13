@@ -45,7 +45,7 @@ Can each prompt actually be executed by a subagent working in isolation?
 - [ ] Are companion skills correctly named? (plugin:skill format, skills that exist)
 - [ ] **API existence:** Does the prompt propose using framework functions that actually exist? Grep the dependency source to verify. Hallucinated APIs are the #1 pipeline failure cause.
 - [ ] **Framework syntax:** Does the prompt use the exact syntax from the CODEBASE, not from generic docs? (e.g., Datastar `__window` not `.window`, Templ `@` not `{@}`)
-- [ ] **Route tracing:** For UI chunks, has the nav-link -> route -> handler -> template chain been traced? Does the template import path match the actual file?
+- [ ] **Route tracing:** For chunks with `renderedSurface: required`, has the nav-link -> route -> handler -> template chain been traced? Does the template import path match the actual file?
 
 ### Perspective 2: Completeness (against original prompt)
 
@@ -80,7 +80,7 @@ Do the prompts follow Design Machines conventions and integrate with depot guard
 **Stack conventions:**
 
 - [ ] Go+Templ+Datastar: Does the prompt reference assembly patterns? Handler conventions? DTO patterns?
-- [ ] **Datastar-first:** "Does any UI chunk hand-roll behavior the substitution table already covers -- `localStorage`, `matchMedia`, `ResizeObserver`, `scrollIntoView()`, `navigator.clipboard`, `Intl.*`, `requestAnimationFrame`, `history.pushState`? Each has a Datastar or Datastar Pro attribute. A new `<script>` block with no stated reason is a finding. Does every prescribed Pro attribute carry a recorded bundle-presence check (a grep of the vendored bundle for the plugin's registered name)? A Pro attribute prescribed against a bundle that lacks the plugin is a **BLOCKER** -- it fails silently at runtime, no console error, and the template reads as correct."
+- [ ] **Datastar-first:** "Does any `renderedSurface: required` chunk hand-roll behavior the substitution table already covers -- `localStorage`, `matchMedia`, `ResizeObserver`, `scrollIntoView()`, `navigator.clipboard`, `Intl.*`, `requestAnimationFrame`, `history.pushState`? Each has a Datastar or Datastar Pro attribute. A new `<script>` block with no stated reason is a finding. Does every prescribed Pro attribute carry a recorded bundle-presence check (a grep of the vendored bundle for the plugin's registered name)? A Pro attribute prescribed against a bundle that lacks the plugin is a **BLOCKER** -- it fails silently at runtime, no console error, and the template reads as correct."
 - [ ] CSS: Does the prompt reference Live Wires primitives and tokens? No invented class names?
 - [ ] Craft CMS: Does the prompt follow Craft query patterns and template conventions?
 - [ ] Accessibility: Are a11y requirements included where relevant?
@@ -125,9 +125,16 @@ When the plan targets Assembly (`assembly-baseplate` or `internal/fixtures/`), v
 
 ### Perspective 4: Visual Verification Readiness
 
-For each chunk classified as UI or Integration, verify the prompts are set up for visual quality enforcement:
+First audit the independent rendered-surface declaration for every chunk:
 
-- [ ] Does the chunk have a `## Visual References` section citing a design spec, the `brainstorm.html` `visualDecisions` island, or the original prompt's visual requirements? If no visual baseline exists, flag as **IMPORTANT**: "UI chunk [chunk-id] has no visual baseline to verify against -- visual quality will be evaluated by heuristics only, which has a documented history of missing implementation gaps."
+- [ ] Does the manifest carry both `renderedSurface` and a non-empty `renderedSurfaceRationale`?
+- [ ] For `not_applicable`, does the rationale name every `.templ`, `.twig`, `.html`, `.css`, route, `main.go`, navigation, or wiring trigger and prove why it is unserved or non-rendering?
+- [ ] Does the prompt avoid visual/browser claims, served routes, or client interactions that contradict `not_applicable`?
+- [ ] Are mixed or uncertain chunks classified `required`? A syntactic trigger with an incomplete rationale is a **BLOCKER**, not permission to skip browser evidence.
+
+For each chunk with `renderedSurface: required`, verify the prompts are set up for visual quality enforcement:
+
+- [ ] Does the chunk have a `## Visual References` section citing a design spec, the `brainstorm.html` `visualDecisions` island, or the original prompt's visual requirements? If no visual baseline exists, flag as **IMPORTANT**: "Rendered-surface chunk [chunk-id] has no visual baseline to verify against -- visual quality will be evaluated by heuristics only, which has a documented history of missing implementation gaps."
 - [ ] Does the chunk have `### Visual Acceptance Criteria` with at least 2 criteria describing visual IMPRESSIONS (not just structural class names)? "Button uses `button--outline-danger` class" is structural. "Block and Abstain buttons are visually smaller and lighter than the main position buttons" is an impression. Both are needed; impressions catch the gap between "correct class" and "correct visual effect."
 - [ ] Does each visual acceptance criterion include a browser-verifiable test? A criterion is browser-verifiable if it can be confirmed by screenshot comparison or getComputedStyle extraction. "Code is clean" is not verifiable. "Button has font-size < 1rem per getComputedStyle" is verifiable.
 - [ ] For chunks modifying the same visual area (e.g., sidebar, form, card), do the visual criteria align across chunks? One chunk shouldn't say "prominent headings" while another says "subdued headings."

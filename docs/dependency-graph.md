@@ -68,7 +68,7 @@ graph LR
 | ned | superpowers | optional | `>=1.0.0` |
 | pipeline | dm-review | required | `>=1.60.1` |
 | pipeline | ned | required | `>=1.4.0` |
-| pipeline | workflow-kernel | required | `>=0.14.0` |
+| pipeline | workflow-kernel | required | `>=0.15.0` |
 | pipeline | design-machines | optional | `>=1.3.0` |
 | pipeline | assembly | optional | `>=3.10.1` |
 | pipeline | live-wires | optional | `>=1.8.0` |

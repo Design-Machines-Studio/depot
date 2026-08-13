@@ -31,8 +31,12 @@ bound to its digest and initial revision.
 
 Pipeline materializes the authoritative profile before the contract. Discovery
 status `not_declared` is still an authoritative non-null profile and binds empty
-persona/browser case arrays. A null profile ID/digest pair means legacy/no-profile
-input only; both arrays must then be empty and no profile artifact flag is passed.
+persona/browser case arrays when rendered-surface verification is required. A
+null profile ID/digest pair means legacy/no-profile input or a caller-validated
+run with zero `rendered_surface=required` nodes; both arrays must then be empty
+and no profile artifact flag is passed. Every not-applicable rationale remains
+in the authoritative caller manifest and receipts rather than being copied into
+this closed contract.
 
 Required browser evidence follows one primary recovery ladder: preserve the
 failed attempt, quit the primary process or engine session, launch and prove a
@@ -98,8 +102,8 @@ whose cases are all optional records `selection_status=optional_cases_only`.
 The discovery/source/selection/cases matrix is exact: `not_declared` requires an
 absent tree and empty cases/engines; declared profiles use project-declaration
 provenance and exactly one of runnable, optional-only, or proven no-runnable
-selection. UI work with empty coverage blocks unless declared provenance proves
-that no runnable cases exist.
+selection. Work with `rendered_surface=required` and empty coverage blocks
+unless declared provenance proves that no runnable cases exist.
 
 Routes containing `{parameter}` are declarations, not runnable targets. Optional
 `verification.json` `route_bindings` are exact task-scoped, non-secret path
@@ -125,9 +129,15 @@ origins, credentials, query secrets, and fragments are never persisted.
 Required coverage is exact set subtraction: required case IDs minus valid passing
 evidence case IDs. Evidence must bind one persona, scenario, route, engine,
 viewport, attempt, authentication state, and evaluation. Curl or reachability
-diagnostics are never browser evidence. UI/integration work blocks on missing,
-failed, unauthenticated, or non-evaluative required evidence. No UX directory is
-`not_declared`; no personas are fabricated, and non-UI work remains unblocked.
+diagnostics are never browser evidence. Work with
+`rendered_surface=required` blocks on missing, failed, unauthenticated, or
+non-evaluative required evidence regardless of its code `work_kind`. Work with
+`rendered_surface=not_applicable` is unblocked only after the caller has
+validated its explicit rationale; the kernel never derives that assertion from
+the kind. No UX directory is `not_declared`, and no personas are fabricated.
+For compatibility, a caller that omits `rendered_surface` retains the historical
+conservative default: UI/integration is required and logic/documentation is not
+applicable.
 Persona, scenario, role, and auth field identifiers are at most 128 characters.
 Routes are at most 2048 characters, are absolute and origin-relative, contain no
 credentials, query, fragment, control characters, credential-shaped values, or
