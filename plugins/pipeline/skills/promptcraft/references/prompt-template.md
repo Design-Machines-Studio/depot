@@ -74,12 +74,14 @@ The rendered result must match these visual treatments. If you cannot determine 
 
 Visual criteria describe the IMPRESSION, not the implementation. "Uses button--outline-danger" is structural. "Block button is visually subordinate to the Accept button" is visual. Include both types.
 
-## Tool-Call Budget & Partial-Return Contract
+## Tool-Call Exploration Checkpoint & Delivery Contract
 
-You run under a hard budget. Treat every tool call as spend you track.
+Treat approximately 40 tool calls as an exploration checkpoint, not a termination point. Keep a rough running count.
 
-- **Hard cap: 40 tool calls** (50 if this chunk drives a browser). Keep a running count.
-- **At 80% of budget (32 calls) stop exploring and finish the edit + write-up.** A subagent that dies mid-flight (spend limit, context overflow, crash) returns NOTHING and its whole chunk is lost. Partial progress committed beats a perfect diff never returned.
+- **At the exploration checkpoint, stop new research, broad exploration, speculative refactoring, scope expansion, and unrelated improvements.** Move directly to delivering or preserving the work already performed.
+- **The checkpoint never prohibits closeout calls:** inspect the current diff and status; run proportionate focused verification; perform targeted repairs and rerun the failing check; commit coherent work; push the branch; create or update the PR; and provide the final report.
+- **Bound repair churn.** After at most two targeted repair-and-recheck cycles, stop trying to perfect the implementation. Report any remaining failure honestly and push a coherent recoverable branch or draft PR rather than silently abandoning local work.
+- **Reaching the exploration checkpoint is never, by itself, a valid reason to leave implemented work unverified, uncommitted, unpushed, or unreported.**
 - **End your response with two sections, even if you had to stop early:**
   - `NOT-COVERED:` -- acceptance criteria, files, or checks the budget did not reach.
   - `COMMANDS-RUN:` -- the build/test/search commands you actually ran.
@@ -130,4 +132,4 @@ If the Task or Acceptance Criteria allow more than one reasonable interpretation
 
 8. **Reference the approved design.** When a brainstorm produced mockups, the prompt must reference them. The subagent can read HTML source even if it can't view rendered images. Include the path and the key visual decisions extracted from it.
 
-9. **The Tool-Call Budget block, the Ambiguity Protocol, and the last two Constraints bullets are invariant.** Copy them verbatim into every prompt. The budget block ensures a subagent that hits a spend/context wall returns partial work with a `NOT-COVERED:` list instead of dying silently; the Ambiguity Protocol closes the seam between plan-adversary (structural ambiguity) and brainstorming (pre-plan ambiguity) by addressing implementation-time micro-decisions and drive-by refactors. Do not rewrite or shorten them per chunk.
+9. **The Tool-Call Exploration Checkpoint block, the Ambiguity Protocol, and the last two Constraints bullets are invariant.** Copy them verbatim into every prompt. The checkpoint block stops exploration before it runs away while preserving the calls needed to verify and deliver coherent work with transparent `NOT-COVERED:` and `COMMANDS-RUN:` sections; the Ambiguity Protocol closes the seam between plan-adversary (structural ambiguity) and brainstorming (pre-plan ambiguity) by addressing implementation-time micro-decisions and drive-by refactors. Do not rewrite or shorten them per chunk.
