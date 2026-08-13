@@ -1,7 +1,7 @@
 {
   "name": "pipeline",
   "version": "1.47.1",
-  "description": "Autonomous feature development pipeline with executable tiered verification, exact receipt reuse, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
+  "description": "Autonomous feature development pipeline with fresh executable tiered verification, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -184,8 +184,8 @@
   },
   "interface": {
     "displayName": "Pipeline",
-    "shortDescription": "Autonomous feature development pipeline with executable tiered verification, exact receipt reuse, approved decision-dept",
-    "longDescription": "Autonomous feature development pipeline with executable tiered verification, exact receipt reuse, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
+    "shortDescription": "Autonomous feature development pipeline with fresh executable tiered verification, approved decision-depth profiles, bou",
+    "longDescription": "Autonomous feature development pipeline with fresh executable tiered verification, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
     "developerName": "Design Machines",
     "category": "Developer Tools",
     "capabilities": [

@@ -57,9 +57,9 @@
         "type": "object",
         "additionalProperties": false,
         "required": [
-          "id", "tier", "owner", "required", "cache", "disposition",
+          "id", "tier", "owner", "required", "disposition",
           "reason", "argv", "packages", "input_digest", "command_digest",
-          "cache_key", "after"
+          "after"
         ],
         "properties": {
           "id": {"type": "string"},
@@ -72,7 +72,6 @@
             "enum": ["local", "github", "blueprint", "other", "unresolved"]
           },
           "required": {"type": "boolean"},
-          "cache": {"enum": ["content", "never"]},
           "after": {
             "type": "array",
             "uniqueItems": true,
@@ -80,7 +79,7 @@
           },
           "disposition": {
             "enum": [
-              "not_scheduled", "not_triggered", "run", "reuse", "remote",
+              "not_scheduled", "not_triggered", "run", "remote",
               "blocked", "unavailable"
             ]
           },
@@ -92,10 +91,6 @@
             "pattern": "^sha256:[0-9a-f]{64}$"
           },
           "command_digest": {
-            "type": ["string", "null"],
-            "pattern": "^sha256:[0-9a-f]{64}$"
-          },
-          "cache_key": {
             "type": ["string", "null"],
             "pattern": "^sha256:[0-9a-f]{64}$"
           }

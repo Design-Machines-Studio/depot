@@ -1,4 +1,4 @@
-"""Lane selection, cache policy, and immutable plan identity."""
+"""Lane selection and immutable repository-verification plan identity."""
 
 from __future__ import annotations
 
@@ -6,16 +6,15 @@ import os
 import subprocess
 from pathlib import Path
 
-from .verification_contract import BOUNDARIES
+from .verification_contract import BOUNDARIES, digest
 from .verification_errors import VerificationPlannerError
 from .verification_repository import (
     PLAN_SCHEMA_VERSION, RISKS, execution_digest, execution_patterns,
-    environment_digest, expanded_argv, git_changed_paths, input_digests,
+    expanded_argv, git_changed_paths, input_digests,
     matches, normalize_changed_paths, repository_file,
     repository_scope_digest, resolve_commit,
     tree_input_digests, validate_profile,
 )
-from .verification_receipts import digest, receipt_index
 
 
 def checkout_changed_paths(
@@ -67,42 +66,10 @@ def _select_lane(lane, changed_paths, boundary, risk):
     return "selected", "lane_selected", argv, packages
 
 
-def _receipt_reusable(
-    receipt, lane, profile_digest, command_digest, input_digest, head_commit,
-):
-    return (
-        receipt["profile_digest"] == profile_digest
-        and receipt["lane_id"] == lane["id"]
-        and receipt["tier"] == lane["tier"]
-        and receipt["owner"] == lane["owner"]
-        and receipt["command_digest"] == command_digest
-        and receipt["input_digest"] == input_digest
-        and receipt["exit_code"] == 0
-        and (
-            lane["owner"] == "local"
-            or receipt["head_commit"] == head_commit
-        )
-    )
-
-
 def _plan_selected_lane(
-    lane, argv, packages, input_digest, profile_digest, environment, prior,
-    head_commit,
+    lane, argv, packages, input_digest, environment,
 ):
     command_digest = digest(argv)
-    environment_digest_value = environment_digest(
-        lane["cache_environment"], environment,
-    )
-    cache_identity = {
-        "profile_digest": profile_digest,
-        "lane_id": lane["id"],
-        "argv": argv,
-        "input_digest": input_digest,
-        "environment_digest": environment_digest_value,
-    }
-    if lane["owner"] != "local":
-        cache_identity["head_commit"] = head_commit
-    cache_key = digest(cache_identity)
     missing = [
         name for name in lane["required_environment"]
         if not environment.get(name)
@@ -111,17 +78,7 @@ def _plan_selected_lane(
         disposition = "blocked" if lane["required"] else "unavailable"
         reason = "required_environment_missing"
     else:
-        source = prior.get(cache_key)
-        if (
-            lane["cache"] == "content" and source is not None
-            and _receipt_reusable(
-                source, lane, profile_digest, command_digest, input_digest,
-                head_commit,
-            )
-        ):
-            disposition = "reuse"
-            reason = "matching_passing_receipt"
-        elif lane["owner"] == "local":
+        if lane["owner"] == "local":
             disposition = "run"
             reason = "scheduled_local_lane"
         elif lane["owner"] == "unresolved":
@@ -135,7 +92,6 @@ def _plan_selected_lane(
         "tier": lane["tier"],
         "owner": lane["owner"],
         "required": lane["required"],
-        "cache": lane["cache"],
         "after": lane["after"],
         "disposition": disposition,
         "reason": reason,
@@ -143,12 +99,11 @@ def _plan_selected_lane(
         "packages": packages,
         "input_digest": input_digest,
         "command_digest": command_digest,
-        "cache_key": cache_key,
     }
 
 
 def build_plan(profile_document, repository_root, profile_ref, changed_paths,
-               boundary, risk, *, receipt_ledger=None, base_commit=None,
+               boundary, risk, *, base_commit=None,
                head_commit="unresolved",
                include_worktree=False, environment=None,
                _allow_declared_mutation=False):
@@ -172,7 +127,9 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
     base_commit = resolve_commit(repository, base_commit, "base_commit")
     if boundary not in BOUNDARIES or risk not in RISKS:
         raise VerificationPlannerError("invalid verification boundary or risk")
-    changed_paths = normalize_changed_paths(changed_paths)
+    changed_paths = (
+        None if changed_paths is None else normalize_changed_paths(changed_paths)
+    )
     if type(include_worktree) is not bool:
         raise VerificationPlannerError("include_worktree must be boolean")
     if boundary in {"merge_candidate", "post_merge"} and include_worktree:
@@ -188,7 +145,7 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
             repository, base_commit, head_commit, include_worktree,
         )
     )
-    if _allow_declared_mutation:
+    if _allow_declared_mutation or changed_paths is None:
         changed_paths = authoritative_changed_paths
     elif changed_paths != authoritative_changed_paths:
         raise VerificationPlannerError(
@@ -221,7 +178,6 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
         profile, repository, environment,
         path_digest=input_digest_map[execution_path_patterns],
     )
-    prior = receipt_index(receipt_ledger)
     lanes = []
     blocked = False
     for lane, disposition, reason, argv, packages in selections:
@@ -231,8 +187,7 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
                 input_digest_map[input_key] if input_key else digest([])
             )
             planned = _plan_selected_lane(
-                lane, argv, packages, input_digest, profile_digest,
-                environment, prior, head_commit,
+                lane, argv, packages, input_digest, environment,
             )
             blocked = blocked or (
                 planned["disposition"] == "blocked" and lane["required"]
@@ -243,7 +198,6 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
                 "tier": lane["tier"],
                 "owner": lane["owner"],
                 "required": lane["required"],
-                "cache": lane["cache"],
                 "after": lane["after"],
                 "disposition": disposition,
                 "reason": reason,
@@ -251,7 +205,6 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
                 "packages": packages,
                 "input_digest": None,
                 "command_digest": None,
-                "cache_key": None,
             }
         lanes.append(planned)
     return {
@@ -278,25 +231,5 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
 def validate_plan_identity(plan, expected):
     if type(plan) is not dict:
         raise VerificationPlannerError("verification plan must be an object")
-    for field in (
-        "schema_version", "artifact_role", "profile_id", "profile_ref",
-        "profile_digest", "execution_closure_digest",
-        "repository_scope_digest", "request",
-    ):
-        if plan.get(field) != expected.get(field):
-            raise VerificationPlannerError("verification plan identity is stale")
-    actual_lanes = plan.get("lanes")
-    if type(actual_lanes) is not list or len(actual_lanes) != len(expected["lanes"]):
-        raise VerificationPlannerError("verification plan lane set is stale")
-    immutable = {
-        "id", "tier", "owner", "required", "cache", "argv", "packages",
-        "input_digest", "command_digest", "cache_key", "after",
-    }
-    for actual, current in zip(actual_lanes, expected["lanes"]):
-        if type(actual) is not dict or any(
-            actual.get(field) != current.get(field) for field in immutable
-        ):
-            raise VerificationPlannerError("verification plan lane identity is stale")
-        dispositions = {actual.get("disposition"), current.get("disposition")}
-        if len(dispositions) > 1 and dispositions != {"run", "reuse"}:
-            raise VerificationPlannerError("verification plan disposition is stale")
+    if plan != expected:
+        raise VerificationPlannerError("verification plan identity is stale")

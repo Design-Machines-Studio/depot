@@ -360,7 +360,7 @@
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "Autonomous feature development pipeline with executable tiered verification, exact receipt reuse, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
+      "description": "Autonomous feature development pipeline with fresh executable tiered verification, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
       "capabilities_summary": {
         "skills": 4,
         "agents": 2,
@@ -429,7 +429,7 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.14.1",
+      "version": "1.14.2",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

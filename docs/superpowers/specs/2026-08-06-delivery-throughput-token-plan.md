@@ -215,7 +215,7 @@ these numbers to prove itself.
   cheapest leverage in the strategy.
 - Quality-pulse tooling prompt: proceed as written after Phases 0-1 land; its
   available/unavailable/fallback/skipped evidence semantics are the same ones
-  Phase 1's receipt reuse must honor.
+  Phase 1's fresh verification results must preserve.
 
 ## 5. What success looks like in 4-6 weeks
 

@@ -672,30 +672,21 @@ hardcoded `./cmd/api`, `docker compose exec app`, or full-race-on-every-Go-chang
 commands. Non-Assembly repositories without a profile retain their existing
 repository-native verification command for compatibility, record
 `verificationPlanner: unavailable`, and add a measured postmortem proposal to
-adopt the profile. Do not claim batching or receipt reuse on that legacy path.
+adopt the profile. Do not claim profile-driven batching on that legacy path.
 
 Before dispatching a builder, run `plan-verification` with the exact base ref,
 candidate ref, and worktree-inclusion choice. The kernel derives changed paths
 from Git and hashes the repository scope, profile, execution closure, relevant
 inputs, and declared environment.
 
-Keep one absolute orchestrator-owned append-only ledger at:
-
-```text
-plans/<feature-slug>/repository-verification-receipts.json
-```
-
 Every planner invocation writes a fresh boundary-specific plan beneath
-`plans/<feature-slug>/verification-plans/`. Pass the shared prior receipt
-ledger, then invoke `run-verification` with that fresh plan. Publication uses
-the kernel's ledger lock and deterministic merge: each worker may execute
-concurrently, but it atomically appends only its new receipts to the latest
-shared history. A divergent baseline exits with write conflict; never replace
-the ledger manually. The runner revalidates the profile, exact argv, relevant
-source/mode digests, declared environment and execution-substrate fingerprint,
-and local receipt identity before executing any command. Required remote lanes
+`plans/<feature-slug>/verification-plans/`, then invoke `run-verification` with
+that fresh plan. The runner revalidates the profile, exact argv, relevant
+source/mode digests, declared environment, and execution-substrate fingerprint
+before executing any command. It returns only the bounded result of the current
+invocation. Required remote lanes
 remain `remote_pending`; report their native CI or review evidence independently
-at the exact candidate head rather than importing it into the local ledger.
+at the exact candidate head rather than importing it into the local result.
 
 The authoritative cadence is:
 
@@ -704,7 +695,7 @@ The authoritative cadence is:
 | `chunk` | Worker completed one chunk | Doctor, fast, focused |
 | `revision_batch` | All fixes from one review pass are applied | Affected doctor, fast, focused |
 | `execution_level` | Every chunk in one dependency level is merged | Integrated full non-race once |
-| `merge_candidate` | All levels are merged and before final review | Exact candidate; reuse identical level evidence; remote lanes explicit |
+| `merge_candidate` | All levels are merged and before final review | Fresh exact-candidate run; remote lanes explicit |
 | `post_merge` | Main-branch proof | Repository-declared authoritative lanes |
 
 Full race, security, container, browser, accessibility, and other expensive
@@ -963,7 +954,7 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 |---|---|---|
 | `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model` and `role`. **Re-dispatch IN-PROCESS through the current host's native path**, then apply **Native Model Descent** below. Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
 | `0` | `openrouter_exec`, wrapper, or codex-companion rung executed; stdout is produced text or a receipt. | If stdout includes `implementedBy: openrouter` or a JSON receipt with `"implementedBy": "openrouter"`, treat it as an agentic OpenRouter implementation receipt. Otherwise apply the **one-shot validity rule** below. |
-| `76` | Ladder exhausted -- no configured rung above the quality floor had headroom. | Run **Step 3d.5 -- Rail-exhaustion ask gate** BEFORE any terminal receipt. The current exits are: **(a) wait** -> parked resumable, `wait_category: human_gate` receipt carries the named reset time and resume instruction; **(c) park, `PIPELINE_EXHAUSTION_ASK=0`, a fail-closed policy read, or any context that cannot reach the operator** -> flag the chunk failed and preserve resumable state. Do NOT silently ship partial output. |
+| `76` | Ladder exhausted -- no configured rung above the quality floor had headroom. | Run **Step 3d.5 -- Rail-exhaustion ask gate** BEFORE any terminal receipt. The current exits are: **wait** -> parked resumable, `wait_category: human_gate` receipt carries the named reset time and resume instruction; **park, `PIPELINE_EXHAUSTION_ASK=0`, a fail-closed policy read, or any context that cannot reach the operator** -> flag the chunk failed and preserve resumable state. Do NOT silently ship partial output. |
 | `77` | Missing/invalid key, unavailable provider/bundle, or automatic disclosure/output boundary decline. | Record the exact reason, then use the Codex fallback without prompting. |
 | other | Bad args / engine error. | Fall back to Codex once. If Codex is unavailable, fail the chunk; do not route coding work to Claude. |
 
@@ -1110,7 +1101,7 @@ You MUST verify these before proceeding:
    check and record that no executable planner/cache authority was available.
 4. **Provider receipt check:** The chunk receipt includes `implementedBy: codex` or `implementedBy: openrouter`. Any coding receipt with `implementedBy: claude` is a misroute.
 
-Represent a passing or reused repository-verification result once with a bounded summary containing selected check IDs, status, plan/receipt digest, and a safe receipt reference. Raw passing stdout/stderr and repeated copies of the receipt must not enter a builder repair prompt or any later reviewer prompt.
+Represent a passing repository-verification result once with a bounded summary containing selected check IDs, status, and plan digest. Raw passing stdout/stderr and repeated result copies must not enter a builder repair prompt or any later reviewer prompt.
 
 For an eligible deterministic check failure, do not send prose back to a new
 builder and do not duplicate retry policy. Persist a bounded closed feedback
@@ -1690,16 +1681,14 @@ repository planner exactly once with boundary `execution_level`. Supply the
 cumulative changed paths for that level, not one invocation per chunk.
 
 The full non-race lane runs against the first tree where all sibling chunks
-actually coexist. If an identical passing receipt already exists, the runner
-may reuse it. A documentation, receipt, or unrelated metadata-only change does
+actually coexist. A documentation or unrelated metadata-only change does
 not invalidate a code lane unless `.dm/verification.json` explicitly includes
 that path. A failed required level lane blocks dependent levels.
 
-Append the resulting verification receipts to the canonical receipt ledger and
-record:
+Record the current invocation result:
 
 ```text
-LEVEL_VERIFICATION: <level> | passed: <N> | reused: <N> | failed: <N>
+LEVEL_VERIFICATION: <level> | passed: <N> | failed: <N>
 ```
 
 ## Step 4: Final Full Review
@@ -1707,9 +1696,8 @@ LEVEL_VERIFICATION: <level> | passed: <N> | reused: <N> | failed: <N>
 **THIS STEP IS MANDATORY.** After ALL chunks are merged, you MUST run a full dm-review.
 
 Before dispatching the review, invoke the repository planner with boundary
-`merge_candidate` on the exact feature-branch tree. This is not an automatic
-second full-suite run: an unchanged candidate reuses the content-identical
-passing `execution_level` receipt. It does materialize every required remote
+`merge_candidate` on the exact feature-branch tree and run the selected lanes.
+It materializes every required remote
 race/security/container/harness lane as `remote_pending`, `blocked`, or
 `unavailable`. The kernel does not import remote results. The caller separately
 collects required native CI or independent review evidence bound to the exact
@@ -1800,8 +1788,8 @@ if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "revi
   not import that evidence into Workflow Kernel or require provider attestation.
 
 **Repository verification interlock:** Before emitting any merge
-recommendation, require passing or exact-reused local `merge_candidate`
-receipts from `.dm/verification.json`. Required remote lanes retain their
+recommendation, require passing local `merge_candidate` results from the
+current invocation against `.dm/verification.json`. Required remote lanes retain their
 actual pending/failed/unavailable status; the lane's `required` field is the
 merge-gating authority. Never substitute hardcoded Docker, Go package, service,
 or build-tag commands.

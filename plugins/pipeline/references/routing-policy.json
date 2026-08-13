@@ -230,14 +230,14 @@
     }
   },
   "exhaustionFallback": {
-    "_comment": "Fires when every configured rail for a chunk is exhausted or gated (cascade RC 76). The operator may wait or park; there is no hidden fallback rail. PIPELINE_EXHAUSTION_ASK=0 restores the hard block for headless CI.",
+    "_comment": "Fires when every configured rail for a chunk is exhausted or gated (cascade RC 76). The operator may wait or park; there is no hidden fallback rail. PIPELINE_EXHAUSTION_ASK=0 selects resumable parking directly for headless CI.",
     "mode": "ask",
     "headlessDefault": "park",
     "neverOfferable": [
       "openrouter_automated_lanes",
       "any provider for sensitive-path chunks"
     ],
-    "failClosed": "a missing routing-policy.json, a missing or malformed exhaustionFallback, or any mode other than ask restores the old hard block; no configuration read failure yields a path to fallback",
+    "failClosed": "a missing routing-policy.json, a missing or malformed exhaustionFallback, or any mode other than ask blocks execution rather than selecting an undeclared rail; an explicit valid headless configuration parks resumably",
     "liveStatusRequired": "the ask shows the derived status per rail (capped-until / available / unknown) so the operator decides from live facts; where usage-probe parsers are TODO stubs the ask says unknown rather than guessing",
     "rationale": "Wait or park preserves resumable state when the configured Codex and OpenRouter rails are unavailable."
   },

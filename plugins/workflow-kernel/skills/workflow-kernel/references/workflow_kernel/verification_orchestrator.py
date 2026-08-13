@@ -1,28 +1,29 @@
-"""Dependency-aware execution orchestration for repository verification plans."""
+"""Dependency-aware execution for one fresh repository verification plan."""
 
 from __future__ import annotations
 
 import os
 from pathlib import Path
 
-from .verification_planning import build_plan, validate_plan_identity
 from .verification_errors import VerificationPlannerError
 from .verification_execution import execution_environment, run_local_command
-from .verification_repository import input_digests, validate_profile
-from .verification_receipts import (
-    RECEIPT_SCHEMA_VERSION, digest, receipt_index,
+from .verification_contract import digest
+from .verification_planning import build_plan, validate_plan_identity
+from .verification_repository import (
+    execution_digest, input_digests, validate_profile,
 )
 
 
-def _static_receipt(base, *, status, reason, exit_code=None,
-                    source_receipt_digest=None):
+RESULT_SCHEMA_VERSION = 1
+
+
+def _static_result(base, *, status, reason, exit_code=None):
     return {
         **base,
         "status": status,
         "reason": reason,
         "exit_code": exit_code,
         "duration_seconds": 0.0,
-        "source_receipt_digest": source_receipt_digest,
         "stdout_digest": None,
         "stderr_digest": None,
         "stdout_bytes": 0,
@@ -39,9 +40,15 @@ def _dependency_failed(current, current_by_id, outcomes):
     return any(outcomes.get(dependency) != "passed" for dependency in active)
 
 
-def execute_plan(profile_document, repository_root, plan, *,
-                 receipt_ledger=None, environment=None):
-    """Execute exact local lanes and return a deterministic receipt ledger."""
+def _execution_closure_matches(profile, repository, environment, expected):
+    try:
+        return execution_digest(profile, repository, environment) == expected
+    except VerificationPlannerError:
+        return False
+
+
+def execute_plan(profile_document, repository_root, plan, *, environment=None):
+    """Revalidate and execute one plan without persistent result reuse."""
     profile = validate_profile(profile_document)
     if type(plan) is not dict:
         raise VerificationPlannerError("verification plan must be an object")
@@ -49,20 +56,15 @@ def execute_plan(profile_document, repository_root, plan, *,
     environment = dict(os.environ if environment is None else environment)
     request = plan.get("request", {})
     expected = build_plan(
-        profile_document, repository_root, plan.get("profile_ref", ""),
-        request.get("changed_paths", []), request.get("boundary"),
-        request.get("risk"), receipt_ledger=receipt_ledger,
+        profile_document, repository_root, plan.get("profile_ref", ""), None,
+        request.get("boundary"), request.get("risk"),
         base_commit=request.get("base_commit"),
         head_commit=request.get("head_commit", "unresolved"),
         include_worktree=request.get("include_worktree", False),
         environment=environment,
     )
     validate_plan_identity(plan, expected)
-    prior_receipts = [] if receipt_ledger is None else list(
-        receipt_ledger["receipts"],
-    )
-    prior = receipt_index(receipt_ledger)
-    receipts = []
+    results = []
     failed = False
     pending = False
     repository = Path(repository_root).resolve(strict=True)
@@ -70,6 +72,7 @@ def execute_plan(profile_document, repository_root, plan, *,
     profile_by_id = {lane["id"]: lane for lane in profile["lanes"]}
     current_by_id = {lane["id"]: lane for lane in expected["lanes"]}
     outcomes = {}
+    expected_closure = expected["execution_closure_digest"]
     for planned in plan["lanes"]:
         current = current_by_id[planned["id"]]
         profile_lane = profile_by_id[planned["id"]]
@@ -78,41 +81,27 @@ def execute_plan(profile_document, repository_root, plan, *,
             outcomes[current["id"]] = "skipped"
             continue
         base = {
-            "schema_version": RECEIPT_SCHEMA_VERSION,
-            "profile_digest": profile_digest,
             "lane_id": current["id"],
             "tier": current["tier"],
-            "boundary": request["boundary"],
             "owner": current["owner"],
             "required": current["required"],
             "command_digest": current["command_digest"],
             "input_digest": current["input_digest"],
-            "cache_key": current["cache_key"],
-            "head_commit": request["head_commit"],
         }
         if _dependency_failed(current, current_by_id, outcomes):
-            receipts.append(_static_receipt(
+            results.append(_static_result(
                 base, status="blocked", reason="dependency_not_passed",
             ))
             outcomes[current["id"]] = "blocked"
             failed = failed or current["required"]
             continue
         if expected["status"] == "blocked" and disposition == "run":
-            receipts.append(_static_receipt(
+            results.append(_static_result(
                 base, status="blocked",
                 reason="plan_blocked_by_required_lane",
             ))
             outcomes[current["id"]] = "blocked"
             failed = True
-            continue
-        if disposition == "reuse":
-            source = prior[current["cache_key"]]
-            receipts.append(_static_receipt(
-                base, status="reused",
-                reason="matching_passing_receipt", exit_code=0,
-                source_receipt_digest=digest(source),
-            ))
-            outcomes[current["id"]] = "passed"
             continue
         if disposition in {"remote", "blocked", "unavailable"}:
             status = {
@@ -120,7 +109,7 @@ def execute_plan(profile_document, repository_root, plan, *,
                 "blocked": "blocked",
                 "unavailable": "unavailable",
             }[disposition]
-            receipts.append(_static_receipt(
+            results.append(_static_result(
                 base, status=status, reason=current["reason"],
             ))
             failed = failed or (
@@ -131,24 +120,37 @@ def execute_plan(profile_document, repository_root, plan, *,
             )
             outcomes[current["id"]] = status
             continue
+        if not _execution_closure_matches(
+            profile, repository, environment, expected_closure,
+        ):
+            results.append(_static_result(
+                base, status="failed", reason="execution_closure_changed",
+            ))
+            outcomes[current["id"]] = "failed"
+            failed = True
+            break
         result = run_local_command(repository, {
             **profile_lane, "argv": current["argv"],
         }, command_environment)
-        receipts.append({**base, **result})
+        if not _execution_closure_matches(
+            profile, repository, environment, expected_closure,
+        ):
+            result = {
+                **result, "status": "failed",
+                "reason": "execution_closure_changed",
+            }
+        results.append({**base, **result})
         outcomes[current["id"]] = result["status"]
         failed = failed or (
             result["status"] == "failed" and current["required"]
         )
+        if result["reason"] == "execution_closure_changed":
+            failed = True
+            break
         if result["status"] == "passed" and profile_lane["mutates_repository"]:
-            interim = {
-                "schema_version": RECEIPT_SCHEMA_VERSION,
-                "artifact_role": "repository_verification_receipts",
-                "receipts": [*prior_receipts, *receipts],
-            }
             refreshed = build_plan(
-                profile_document, repository, plan["profile_ref"],
-                request["changed_paths"], request["boundary"], request["risk"],
-                receipt_ledger=interim,
+                profile_document, repository, plan["profile_ref"], None,
+                request["boundary"], request["risk"],
                 base_commit=request["base_commit"],
                 head_commit=request["head_commit"],
                 include_worktree=request.get("include_worktree", False),
@@ -157,7 +159,6 @@ def execute_plan(profile_document, repository_root, plan, *,
             current_by_id = {
                 lane["id"]: lane for lane in refreshed["lanes"]
             }
-            prior = receipt_index(interim)
     final_patterns = {
         tuple(profile_by_id[lane_id]["input_paths"])
         for lane_id, current in current_by_id.items()
@@ -175,32 +176,24 @@ def execute_plan(profile_document, repository_root, plan, *,
     if stale_final_inputs:
         failed = True
         stale_id = stale_final_inputs[0]
-        receipts.append({
-            "schema_version": RECEIPT_SCHEMA_VERSION,
-            "profile_digest": profile_digest,
+        results.append(_static_result({
             "lane_id": stale_id,
             "tier": profile_by_id[stale_id]["tier"],
-            "boundary": request["boundary"],
             "owner": profile_by_id[stale_id]["owner"],
             "required": True,
-            "status": "failed",
-            "reason": "undeclared_repository_mutation",
             "command_digest": current_by_id[stale_id]["command_digest"],
             "input_digest": current_by_id[stale_id]["input_digest"],
-            "cache_key": current_by_id[stale_id]["cache_key"],
-            "head_commit": request["head_commit"],
-            "exit_code": None,
-            "duration_seconds": 0.0,
-            "source_receipt_digest": None,
-            "stdout_digest": None,
-            "stderr_digest": None,
-            "stdout_bytes": 0,
-            "stderr_bytes": 0,
-        })
-    ledger = {
-        "schema_version": RECEIPT_SCHEMA_VERSION,
-        "artifact_role": "repository_verification_receipts",
-        "receipts": [*prior_receipts, *receipts],
-    }
+        }, status="failed", reason="undeclared_repository_mutation"))
     outcome = "failed" if failed else "pending" if pending else "complete"
-    return ledger, outcome
+    return {
+        "schema_version": RESULT_SCHEMA_VERSION,
+        "artifact_role": "repository_verification_result",
+        "plan_digest": digest(expected),
+        "profile_digest": profile_digest,
+        "execution_closure_digest": expected["execution_closure_digest"],
+        "repository_scope_digest": expected["repository_scope_digest"],
+        "request": expected["request"],
+        "head_commit": request["head_commit"],
+        "status": outcome,
+        "lanes": results,
+    }

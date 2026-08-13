@@ -1,6 +1,6 @@
 ---
 name: workflow-kernel
-description: Use for workflow-state validation and replay, or when asked to batch repository tests, select focused/full verification lanes, reuse deterministic local test receipts, or use Workflow Kernel pipeline/review mechanics.
+description: Use for workflow-state validation and replay, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
 version: 0.14.0
 ---
 
@@ -66,8 +66,8 @@ evidence attachment and one cleanup reconciliation.
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
 0.14.0 surface includes state/replay and inspection commands, exact-ref
-repository verification planning/execution with deterministic local receipt
-reuse, initial contract binding and retry
+repository verification planning/execution with deterministic fresh results,
+initial contract binding and retry
 decisions, prediction/observation/comparison, canonical review-contribution
 export, metrics, and guarded resource planning/execution/reconciliation.
 Consume successful operational output and errors as stable JSON. Treat
@@ -430,14 +430,14 @@ workflow-kernel-launcher.sh plan-verification \
   --repository-root <root> --profile <repository-profile> \
   --boundary <chunk|revision_batch|execution_level|merge_candidate|post_merge> \
   --risk <low|medium|high> --base-ref <ref> [--candidate-ref <ref>] \
-  [--include-worktree] [--receipts <ledger>] \
+  [--include-worktree] \
   --output <plan>
 workflow-kernel-launcher.sh run-verification \
   --repository-root <root> --profile <repository-profile> \
-  --plan <plan> [--receipts <ledger>] --output <ledger>
+  --plan <plan>
 ```
 
-Repository verification profiles, deterministic exact-input receipt reuse, and
+Repository verification profiles, fresh bounded results, and
 the chunk/revision/level/candidate cadence are documented in
 `references/repository-verification.md`.
 

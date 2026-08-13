@@ -25,13 +25,21 @@ WRAPPER = OPENROUTER / "skills/openrouter-delegate/references/openrouter-wrapper
 class FixtureHandler(http.server.BaseHTTPRequestHandler):
     contacts = 0
     requests: list[dict] = []
+    authorizations: list[str | None] = []
     response_text = "fixture response"
+    block_response = False
+    request_seen = threading.Event()
+    release_response = threading.Event()
 
     def do_POST(self) -> None:  # noqa: N802
         length = int(self.headers.get("Content-Length", "0"))
         payload = json.loads(self.rfile.read(length))
         type(self).contacts += 1
         type(self).requests.append(payload)
+        type(self).authorizations.append(self.headers.get("Authorization"))
+        type(self).request_seen.set()
+        if type(self).block_response:
+            type(self).release_response.wait(timeout=5)
         model = payload.get("model") or payload.get("models", ["z-ai/glm-5.2"])[0]
         events = [
             {"id": "gen-fixture", "model": model, "provider": "fixture/provider",
@@ -67,7 +75,12 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
     def setUp(self) -> None:
         FixtureHandler.contacts = 0
         FixtureHandler.requests = []
+        FixtureHandler.authorizations = []
         FixtureHandler.response_text = "fixture response"
+        FixtureHandler.block_response = False
+        FixtureHandler.request_seen.clear()
+        FixtureHandler.release_response.clear()
+        self.api_key = "test"
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.home = self.root / "home"
@@ -91,7 +104,7 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
 
     def env(self) -> dict[str, str]:
         env = os.environ.copy()
-        env.update({"HOME": str(self.home), "OPENROUTER_API_KEY": "test",
+        env.update({"HOME": str(self.home), "OPENROUTER_API_KEY": self.api_key,
                     "OPENROUTER_BASE": self.base, "WORKFLOW_KERNEL": str(self.kernel)})
         env.pop("OPENROUTER_API_KEY_FILE", None)
         return env
@@ -118,6 +131,7 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         result = self.direct("Review harmless public configuration.")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(FixtureHandler.contacts, 1)
+        self.assertEqual(FixtureHandler.authorizations, ["Bearer test"])
         self.assertNotRegex(result.stdout + result.stderr, r"approval_required|APPROVAL REQUIRED|exit 78|batch|broker")
         receipt = json.loads(result.receipt_path.read_text())  # type: ignore[attr-defined]
         self.assertRegex(receipt["authorization"]["requestEnvelopeSha256"], r"^[0-9a-f]{64}$")
@@ -134,6 +148,43 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         result = self.direct("Review harmless public configuration.")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(FixtureHandler.contacts, 1)
+        self.assertEqual(FixtureHandler.authorizations, ["Bearer test"])
+
+    @unittest.skipUnless(Path("/proc").is_dir(), "requires Linux /proc")
+    def test_live_curl_process_does_not_expose_bearer_value(self) -> None:
+        exposed_forms = (b"Authorization: Bearer test", b"OPENROUTER_API_KEY=test")
+        FixtureHandler.block_response = True
+        results: list[subprocess.CompletedProcess[str]] = []
+        worker = threading.Thread(
+            target=lambda: results.append(self.direct("Review harmless configuration.")),
+        )
+        worker.start()
+        try:
+            self.assertTrue(FixtureHandler.request_seen.wait(timeout=5))
+            observed = []
+            for process in Path("/proc").iterdir():
+                if not process.name.isdigit():
+                    continue
+                try:
+                    cmdline = (process / "cmdline").read_bytes()
+                    environment = (process / "environ").read_bytes()
+                except (FileNotFoundError, PermissionError, ProcessLookupError):
+                    continue
+                if b"curl\0" not in cmdline or self.base.encode() not in cmdline:
+                    continue
+                observed.append(process.name)
+                for exposed in exposed_forms:
+                    self.assertNotIn(exposed, cmdline)
+                    self.assertNotIn(exposed, environment)
+            self.assertTrue(observed, "live OpenRouter curl process was not observable")
+            self.assertEqual(
+                FixtureHandler.authorizations, ["Bearer test"],
+            )
+        finally:
+            FixtureHandler.release_response.set()
+            worker.join(timeout=10)
+        self.assertFalse(worker.is_alive())
+        self.assertEqual(results[0].returncode, 0, results[0].stderr)
 
     def test_sensitive_payload_declines_before_contact(self) -> None:
         result = self.direct("OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890")

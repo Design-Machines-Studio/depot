@@ -77,7 +77,6 @@ Use these run-owned artifacts:
 
 ```text
 .workflow-kernel/verification/plan.json
-.workflow-kernel/verification/receipts.json
 ```
 
 Invoke `plan-verification` with:
@@ -87,15 +86,14 @@ Invoke `plan-verification` with:
 - the selected boundary and risk;
 - `--base-ref "$ASSEMBLY_VERIFICATION_BASE_REF"`;
 - `--candidate-ref HEAD`;
-- `--include-worktree` for `focused` only;
-- the existing receipt ledger when present; and
+- `--include-worktree` for `focused` only; and
 - the plan output path above.
 
 Then invoke `run-verification` with the same repository and profile, the fresh
-plan, the existing receipt ledger when present, and the receipts output path.
+plan. It prints the bounded result for that invocation.
 
 The runner revalidates the exact Git range, execution closure, changed inputs,
-argv, cache key, execution substrate, and receipt history
+argv, and execution substrate
 before executing anything. It uses an empty temporary home, fixed executable
 path, incrementally bounded output/time, and a minimal environment without an
 implicit shell. It terminates descendant process groups and refuses a complete
@@ -112,16 +110,14 @@ result when undeclared mutation changes the final input identity.
   other remote lanes explicit. They are moved, never omitted.
 - Remote lanes remain explicit `remote_pending` entries. Their native CI or
   review evidence is reported independently at the exact candidate head; it is
-  not imported into the local receipt ledger.
-- A passing receipt is reusable only when the profile, exact argv, relevant
-  source inputs, and declared environment fingerprint are identical.
-- Documentation, receipt, and unrelated metadata edits do not invalidate a
+  not imported into the local result.
+- Documentation and unrelated metadata edits do not select a
   code lane unless the repository profile explicitly includes them.
 
 ## Result
 
-Report every lane as `passed`, `failed`, `reused`, `remote_pending`, `blocked`,
+Report every lane as `passed`, `failed`, `remote_pending`, `blocked`,
 or `unavailable`. Use `LOCAL PASS — REMOTE PENDING` when local evidence is
-complete but a required provider receipt is outstanding. Reserve unqualified
+complete but required provider evidence is outstanding. Reserve unqualified
 `PASS` for complete local and independently reported remote evidence at the
 same exact head.

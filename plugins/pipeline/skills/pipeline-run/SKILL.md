@@ -179,12 +179,11 @@ target repository supplies `.dm/verification.json`.
   perform one affected recheck.
 - `execution_level`: after all sibling chunks merge, run one integrated full
   non-race pass.
-- `merge_candidate`: reuse identical level evidence or run once for the changed
-  tree; preserve remote race/security/container/harness lanes explicitly.
+- `merge_candidate`: run once for the exact candidate tree; preserve remote
+  race/security/container/harness lanes explicitly.
 
 Do not execute a full or race suite after each chunk or each individual finding
-fix. Do not synthesize cache hits: reuse requires a matching passing receipt
-for the exact profile, argv, relevant inputs, and declared environment. For an
+fix. For an
 Assembly target without `.dm/verification.json`, stop for project
 configuration rather than restoring hardcoded Go/Docker commands.
 
@@ -195,9 +194,9 @@ The Codex adapter does not get a weaker gate than the Claude path. If `codex_nat
 ## Rail-Exhaustion Ask Gate
 
 When every configured rail for a chunk is exhausted or gated (cascade RC 76),
-the run pauses instead of terminating. Capacity is recoverable; a terminal
-receipt is not. The ask shows live rail status and offers only (a) wait until
-reset or (c) park. Any context that cannot reach the operator parks resumable.
+the run pauses instead of terminating. Capacity is recoverable. The ask shows
+live rail status and offers “wait until reset” or “park this run.” Any context
+that cannot reach the operator parks resumable.
 There is no dormant or
 operator-authorized coding rail outside the configured Codex and OpenRouter
 paths.

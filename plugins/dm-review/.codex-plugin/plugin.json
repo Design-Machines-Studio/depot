@@ -322,7 +322,7 @@
   "optionalPluginDependencies": {
     "superpowers": ">=1.0.0",
     "airlift": ">=1.0.0",
-    "openrouter": ">=1.14.1"
+    "openrouter": ">=1.14.2"
   },
   "interface": {
     "displayName": "DM Review",

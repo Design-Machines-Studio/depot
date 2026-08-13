@@ -77,8 +77,7 @@ private outbound files. No user approval, broker probe, FIDO interaction, or
 redispatch is part of the path.
 
 A missing or invalid key, unavailable bundle/provider, or automatically
-declined payload falls back to Codex without prompting. Configured-key input
-and one coherent installed bundle determine availability. Receipts remain
+declined payload falls back to Codex without prompting. Receipts remain
 content-free and record provider, model, usage, and request-envelope digest
 metadata. Recommend provider-side per-key spending
 limits as the runaway-cost control.
@@ -93,13 +92,8 @@ Materialize the validated review request at `.claude/ux-review/workflow-kernel/r
 "$WORKFLOW_KERNEL" bind-prediction --type review --request .claude/ux-review/workflow-kernel/request.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel
 ```
 
-After the authoritative consolidated review and coverage receipt exist, run exactly:
-
-```text
-"$WORKFLOW_KERNEL" observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
-```
-
-After terminal cleanup receipts are appended, run exactly:
+After the authoritative consolidated review, coverage receipt, and terminal
+cleanup receipts exist, run exactly:
 
 ```text
 "$WORKFLOW_KERNEL" observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel

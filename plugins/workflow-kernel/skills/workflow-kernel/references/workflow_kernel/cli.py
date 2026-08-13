@@ -166,14 +166,6 @@ def command_append(args):
             ErrorDetailKey.REASON_CODE.value: "recursion_limit",
         }) from None
     event = WorkflowEvent.from_dict(data)
-    if (
-        event.kind == "evidence.recorded"
-        and event.payload.get("stage")
-        == "verification_contract_revision_authorized"
-    ):
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            ErrorDetailKey.REASON_CODE.value: "reserved_coordinator_event",
-        })
     engine = TransitionEngine()
     with _coordinated_run(states) as lease:
         existing, _, state, materialized = _observe_consistent_run(
@@ -818,8 +810,8 @@ def _load_bound_contract(run_root, binding):
     return contract
 
 
-def _contract_bindings(replayed):
-    bindings = []
+def _contract_binding(replayed):
+    binding = None
     for event in replayed:
         if event.kind != "evidence.recorded":
             continue
@@ -831,7 +823,7 @@ def _contract_bindings(replayed):
         revision = payload["revision"]
         profile_ref = payload["verification_profile_ref"]
         if (
-            bindings
+            binding is not None
             or type(revision) is not int or revision != 1
             or type(payload["schema_version"]) is not int
             or payload["schema_version"] != 1
@@ -857,8 +849,8 @@ def _contract_bindings(replayed):
             )
         ):
             raise ValueError("verification contract binding chain mismatch")
-        bindings.append(payload)
-    return tuple(bindings)
+        binding = payload
+    return binding
 
 
 def _contract_receipt(binding):
@@ -890,14 +882,11 @@ def _contract_binding_payload(contract, digest, stage, *, profile_ref=None):
     }
 
 
-def _validated_contract_binding_chain(run_root, bindings):
+def _validated_contract_binding(run_root, binding):
     from .behavioral_contract import contract_digest, validate_initial_binding
 
-    if len(bindings) > 1:
-        raise ValueError("verification contracts are immutable within a run")
-    if not bindings:
-        return ()
-    binding = bindings[0]
+    if binding is None:
+        return None
     contract = validate_initial_binding(_load_bound_contract(run_root, binding))
     expected = _contract_binding_payload(
         contract, contract_digest(contract), binding["stage"],
@@ -914,7 +903,7 @@ def _validated_contract_binding_chain(run_root, bindings):
         contract = validate_profile_binding(contract, profile)
     elif contract["verification_profile_id"] is not None:
         raise ValueError("verification profile artifact is missing")
-    return (contract,)
+    return contract
 
 
 def command_bind_verification_contract(args):
@@ -938,8 +927,7 @@ def command_bind_verification_contract(args):
         if reconstructed.run_id != run_id:
             raise ValueError("run directory identity mismatch")
         materialized = _load_optional_state(states)
-        bindings = _contract_bindings(replayed)
-        latest = bindings[-1] if bindings else None
+        binding = _contract_binding(replayed)
         requested_stage = "verification_contract_bound"
         profile = None
         profile_ref = None
@@ -958,11 +946,11 @@ def command_bind_verification_contract(args):
             candidate, digest, requested_stage, profile_ref=profile_ref,
         )
         idempotent = (
-            latest is not None
-            and _contract_receipt(latest) == _contract_receipt(payload)
-            and latest["stage"] == requested_stage
+            binding is not None
+            and _contract_receipt(binding) == _contract_receipt(payload)
+            and binding["stage"] == requested_stage
         )
-        _validated_contract_binding_chain(run_root, bindings)
+        _validated_contract_binding(run_root, binding)
 
         if idempotent:
             _store_contract_once(run_root, candidate, digest)
@@ -972,10 +960,10 @@ def command_bind_verification_contract(args):
                     _prepare_replay_state(states, reconstructed, expected_revision),
                     expected_revision, lease=lease,
                 )
-            receipt = _contract_receipt(latest)
+            receipt = _contract_receipt(binding)
         else:
             _require_materialized_matches_ledger(materialized, reconstructed)
-            if latest is not None:
+            if binding is not None:
                 raise ValueError("verification contract already bound")
             candidate = validate_initial_binding(candidate)
             digest = contract_digest(candidate)
@@ -1300,9 +1288,7 @@ def command_observe_review(args):
     if any(receipt.get("stage") == "browser_recovery" for receipt in receipts):
         contract_events = [
             event for event in events
-            if event.payload.get("stage") in {
-                "verification_contract_bound", "verification_contract_revised",
-            }
+            if event.payload.get("stage") == "verification_contract_bound"
         ]
         if not contract_events:
             raise ValueError("browser recovery lacks contract binding")
@@ -1312,18 +1298,16 @@ def command_observe_review(args):
         scope = _repository_scope(args.state_dir)
         run_root = _prediction_lifecycle(scope, spec)
         replayed, _state = _load_prediction_lifecycle(scope, spec)
-        bindings = _contract_bindings(replayed)
-        if not bindings:
+        binding = _contract_binding(replayed)
+        if binding is None:
             raise ValueError("browser recovery lacks lifecycle contract binding")
-        latest = bindings[-1]
         binding_fields = _CONTRACT_BINDING_FIELDS - frozenset({"evidence"})
-        if any(claimed.get(field) != latest[field] for field in binding_fields):
+        if any(claimed.get(field) != binding[field] for field in binding_fields):
             raise ValueError("browser recovery contract receipt is not current")
-        contracts = _validated_contract_binding_chain(run_root, bindings)
-        contract = contracts[-1]
+        contract = _validated_contract_binding(run_root, binding)
         profile_document = _load_bound_profile(
-            run_root, latest["verification_profile_ref"],
-            latest["verification_profile_digest"],
+            run_root, binding["verification_profile_ref"],
+            binding["verification_profile_digest"],
         )
         from .verification import VerificationProfile
         profile = VerificationProfile.from_dict(profile_document)
@@ -3595,46 +3579,19 @@ def _exact_commit(repository, value):
     return commit
 
 
-def _publish_receipt_ledger(path, produced, baseline_count):
-    from .verification_errors import VerificationPlannerError
-    from .verification_receipts import merge_receipt_ledgers
-
-    destination = Path(path)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = destination.with_name(destination.name + ".lock")
-    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-        current = _load_json(destination) if destination.exists() else None
-        merged = merge_receipt_ledgers(current, produced, baseline_count)
-        _write_json(destination, merged)
-        return merged
-    except VerificationPlannerError as exc:
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            ErrorDetailKey.REASON_CODE.value: "verification_receipt_conflict",
-        }) from exc
-    finally:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
-        os.close(descriptor)
-
-
 def command_plan_verification(args):
     from .verification_errors import VerificationPlannerError
-    from .verification_planning import build_plan, checkout_changed_paths
+    from .verification_planning import build_plan
 
     repository, profile_ref = _repository_profile_ref(
         args.repository_root, args.profile,
     )
     base_commit = _exact_commit(repository, args.base_ref)
     head_commit = _exact_commit(repository, args.candidate_ref)
-    receipts = None if args.receipts is None else _load_json(args.receipts)
     try:
-        changed_paths = checkout_changed_paths(
-            repository, base_commit, head_commit, args.include_worktree,
-        )
         plan = build_plan(
-            _load_json(args.profile), repository, profile_ref, changed_paths,
-            args.boundary, args.risk, receipt_ledger=receipts,
+            _load_json(args.profile), repository, profile_ref, None,
+            args.boundary, args.risk,
             base_commit=base_commit, head_commit=head_commit,
             include_worktree=args.include_worktree,
         )
@@ -3651,27 +3608,24 @@ def command_run_verification(args):
     from .verification_errors import VerificationPlannerError
     from .verification_orchestrator import execute_plan
 
-    repository, _profile_ref = _repository_profile_ref(
+    repository, profile_ref = _repository_profile_ref(
         args.repository_root, args.profile,
     )
-    receipts = None if args.receipts is None else _load_json(args.receipts)
-    baseline_count = 0 if receipts is None else len(receipts.get("receipts", []))
     try:
-        result, outcome = execute_plan(
-            _load_json(args.profile), repository, _load_json(args.plan),
-            receipt_ledger=receipts,
+        plan = _load_json(args.plan)
+        if type(plan) is not dict or plan.get("profile_ref") != profile_ref:
+            raise VerificationPlannerError(
+                "verification plan profile does not match --profile",
+            )
+        result = execute_plan(
+            _load_json(args.profile), repository, plan,
         )
     except VerificationPlannerError as exc:
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
             ErrorDetailKey.REASON_CODE.value: "invalid_repository_verification",
         }) from exc
-    result = _publish_receipt_ledger(args.output, result, baseline_count)
-    _emit({
-        "status": outcome,
-        "receipt_count": len(result["receipts"]),
-        "output": str(args.output),
-    })
-    return 0 if outcome == "complete" else EXIT_UNSAFE_PLAN
+    _emit(result)
+    return 0 if result["status"] == "complete" else EXIT_UNSAFE_PLAN
 
 
 def parser():
@@ -3927,8 +3881,7 @@ def parser():
         help="select tiered repository verification lanes for one boundary",
         description=(
             "Validate a repository-owned command-array profile, resolve changed "
-            "paths, select only the lanes scheduled for this boundary, and reuse "
-            "content-identical passing receipts."
+            "paths, and select only the lanes scheduled for this boundary."
         ),
     )
     plan_verification.add_argument("--repository-root", required=True)
@@ -3951,7 +3904,6 @@ def parser():
         "--include-worktree", action="store_true",
         help="include staged, unstaged, and untracked changes",
     )
-    plan_verification.add_argument("--receipts")
     plan_verification.add_argument("--output", required=True)
     plan_verification.set_defaults(handler=command_plan_verification)
 
@@ -3959,16 +3911,14 @@ def parser():
         "run-verification",
         help="execute exact local lanes from a fresh repository verification plan",
         description=(
-            "Revalidate the profile, source inputs, commands, and cache identity "
+            "Revalidate the profile, source inputs, commands, and plan identity "
             "before executing local argv arrays without a shell. Remote lanes "
-            "remain explicit pending receipts."
+            "remain explicit in the invocation result."
         ),
     )
     run_verification.add_argument("--repository-root", required=True)
     run_verification.add_argument("--profile", required=True)
     run_verification.add_argument("--plan", required=True)
-    run_verification.add_argument("--receipts")
-    run_verification.add_argument("--output", required=True)
     run_verification.set_defaults(handler=command_run_verification)
 
     def creation_command(name, handler):

@@ -36,9 +36,10 @@ coordination. Current trusted main is `981bf6c86cb1b4e70df9767786e9e5661eda0079`
 R2 is closed **DONE / NO CODE**. Current `plan-verification` and
 `run-verification` already put repository proof before model review, keep passing
 raw output out of prompts, and provide bounded failure evidence for repair.
-Exact content-addressed receipt reuse already exists. No measured workload
-justifies adding the authored caller-supplied `mechanical_globs` policy, so the
-old untracked R2 prompts are historical inputs, not executable work.
+Each selected boundary now runs fresh and returns only bounded current-invocation
+results. No measured workload justifies adding the authored caller-supplied
+`mechanical_globs` policy, so the old untracked R2 prompts are historical inputs,
+not executable work.
 
 The one immediate successor is **R3-simplify: non-interactive OpenRouter on a
 trusted developer workstation**. `OPENROUTER_API_KEY` or the existing validated

@@ -48,7 +48,7 @@ class ReleaseValidatorTests(unittest.TestCase):
             "cleanup-receipt-schema.json",
             "repository-verification-plan-schema.json",
             "repository-verification-profile-schema.json",
-            "repository-verification-receipts-schema.json",
+            "repository-verification-result-schema.json",
             "resource-registry-schema.json",
             "run-cost-summary-schema.json",
             "verification-profile-schema.json",

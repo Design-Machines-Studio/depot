@@ -220,6 +220,19 @@ class PipelineAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             translate_pipeline_receipts(({"run_id": "r", "sequence": 0, "stage": "run_summary", "status": "succeeded", "occurred_at": "2026-07-14T00:00:00Z"},))
 
+    def test_retired_contract_revision_stages_are_rejected(self):
+        original = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        for stage in (
+            "verification_contract_revised",
+            "verification_contract_revision_authorized",
+        ):
+            receipt = copy.deepcopy(original[0])
+            receipt["stage"] = stage
+            with self.subTest(stage=stage), self.assertRaisesRegex(
+                ValueError, "unknown receipt stage",
+            ):
+                translate_pipeline_receipts([receipt])
+
     def test_receipts_require_one_run_contiguous_order_and_context_continuity(self):
         original = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         mutations = []
@@ -600,7 +613,11 @@ class PipelineAdapterTests(unittest.TestCase):
         ))
 
         second_binding = copy.deepcopy(bound)
-        second_binding.update({"sequence": 1, "contract_digest": "sha256:" + "b" * 64})
+        second_binding.update({
+            "sequence": 1,
+            "contract_digest": "sha256:" + "b" * 64,
+            "contract_ref": "verification-contracts/sha256-" + "b" * 64 + ".json",
+        })
         with self.assertRaises(ValueError):
             translate_pipeline_receipts([bound, second_binding])
 
@@ -608,6 +625,51 @@ class PipelineAdapterTests(unittest.TestCase):
         stale["contract_digest"] = "sha256:" + "b" * 64
         with self.assertRaises(ValueError):
             translate_pipeline_receipts([bound, stale])
+
+    def test_only_declared_pre_contract_stages_are_allowed_before_binding(self):
+        digest = "sha256:" + "a" * 64
+        binding = {
+            "run_id": "run-1", "sequence": 1,
+            "stage": "verification_contract_bound",
+            "occurred_at": "2026-07-14T00:00:01Z",
+            "authoritative_receipt": "receipts/binding.json",
+            "workflow_class": "feature", "execution_mode": "generic",
+            "contract_id": "contract-1", "schema_version": 1,
+            "revision": 1, "contract_digest": digest,
+            "contract_ref": "verification-contracts/sha256-" + "a" * 64 + ".json",
+            "previous_contract_digest": None,
+            "reason_code": "initial_binding",
+            "verification_profile_id": None,
+            "verification_profile_digest": None,
+            "verification_profile_ref": None,
+        }
+
+        def receipt(stage):
+            return {
+                "run_id": "run-1", "sequence": 0, "stage": stage,
+                "status": "ready", "node_id": None,
+                "occurred_at": "2026-07-14T00:00:00Z",
+                "authoritative_receipt": f"receipts/{stage}.json",
+                "workflow_class": "feature", "execution_mode": "generic",
+            }
+
+        for stage in ("progress", "manifest_validation", "dependency_ready"):
+            with self.subTest(stage=stage):
+                events = translate_pipeline_receipts([receipt(stage), binding])
+                self.assertEqual(events[0].payload["stage"], stage)
+                self.assertEqual(
+                    events[0].payload["verification_contract_provenance"],
+                    "pre_binding",
+                )
+
+        prohibited = (
+            "dispatch", "deterministic_validation", "evaluation_gate",
+            "browser_verification", "merge_disposition", "chunk_cleanup",
+            "final_dm_review", "terminal_reconciliation", "run_summary",
+        )
+        for stage in prohibited:
+            with self.subTest(stage=stage), self.assertRaises(ValueError):
+                translate_pipeline_receipts([receipt(stage), binding])
 
     def test_final_review_is_a_literal_pipeline_stage(self):
         receipt = {

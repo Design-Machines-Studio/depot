@@ -7,21 +7,17 @@ import os
 import re
 import stat
 import subprocess
-from datetime import datetime, timezone
 from functools import lru_cache
 from pathlib import Path
 
 from .verification_errors import VerificationPlannerError
 from .verification_contract import (
-    BOUNDARIES, BOUNDARY_CHOICES, CACHE_POLICIES, COMMIT_PATTERN, OWNERS,
+    BOUNDARIES, BOUNDARY_CHOICES, COMMIT_PATTERN, OWNERS, digest as _digest,
     TIERS,
 )
 from .verification_execution import (
     BASE_EXECUTION_ENVIRONMENT, FIXED_SUBPROCESS_PATH, MAX_COMMAND_SECONDS,
     run_bounded_capture,
-)
-from .verification_receipts import (
-    digest as _digest,
 )
 
 
@@ -34,7 +30,7 @@ PROFILE_KEYS = frozenset({"schema_version", "profile_id", "lanes"})
 LANE_KEYS = frozenset({
     "id", "tier", "cadences", "owner", "argv", "changed_paths",
     "input_paths", "package_selector", "declared_dependents", "required",
-    "cache", "risks", "cache_environment", "required_environment",
+    "risks", "required_environment",
     "execution_paths", "execution_environment", "after",
     "mutates_repository", "timeout_seconds",
 })
@@ -116,12 +112,11 @@ def _validate_lane(lane, index):
     lane_id = _string(lane.get("id"), f"{label} id", pattern=ID_PATTERN)
     tier = lane.get("tier")
     owner = lane.get("owner")
-    cache = lane.get("cache", "content")
     package_selector = lane.get("package_selector", "none")
     if tier not in TIERS or owner not in OWNERS:
         raise VerificationPlannerError(f"{label} has an invalid tier or owner")
-    if cache not in CACHE_POLICIES or package_selector not in PACKAGE_SELECTORS:
-        raise VerificationPlannerError(f"{label} has an invalid cache or selector")
+    if package_selector not in PACKAGE_SELECTORS:
+        raise VerificationPlannerError(f"{label} has an invalid selector")
     cadences = _string_list(lane.get("cadences"), f"{label} cadences")
     if not cadences or any(value not in BOUNDARIES for value in cadences):
         raise VerificationPlannerError(f"{label} has invalid cadences")
@@ -146,10 +141,6 @@ def _validate_lane(lane, index):
     execution_paths = _string_list(
         lane.get("execution_paths", []), f"{label} execution_paths", _glob,
     )
-    if cache == "content" and owner == "local" and not input_paths:
-        raise VerificationPlannerError(
-            f"{label} content cache requires input_paths",
-        )
     if owner == "local" and not execution_paths:
         raise VerificationPlannerError(
             f"{label} local execution requires execution_paths",
@@ -169,23 +160,12 @@ def _validate_lane(lane, index):
     risks = _string_list(lane.get("risks", list(RISK_CHOICES)), f"{label} risks")
     if not risks or any(value not in RISKS for value in risks):
         raise VerificationPlannerError(f"{label} has invalid risks")
-    cache_environment = _environment_names(
-        lane, "cache_environment", label,
-    )
     required_environment = _environment_names(
         lane, "required_environment", label,
     )
     execution_environment = _environment_names(
         lane, "execution_environment", label,
     )
-    if not set(required_environment) <= set(cache_environment):
-        raise VerificationPlannerError(
-            f"{label} required environment must also bind the cache key",
-        )
-    if not set(execution_environment) <= set(cache_environment):
-        raise VerificationPlannerError(
-            f"{label} execution environment must also bind the cache key",
-        )
     if (
         owner == "local"
         and not (
@@ -224,8 +204,7 @@ def _validate_lane(lane, index):
         "input_paths": input_paths, "execution_paths": execution_paths,
         "package_selector": package_selector,
         "declared_dependents": canonical_dependents, "required": required,
-        "cache": cache, "risks": risks,
-        "cache_environment": cache_environment,
+        "risks": risks,
         "required_environment": required_environment,
         "execution_environment": execution_environment, "after": after,
         "mutates_repository": mutates_repository,
@@ -464,12 +443,6 @@ def _hash_repository_contents(repository_fd, relative, object_format):
             os.close(descriptor)
 
 
-def _hash_repository_file(repository_fd, relative):
-    return _hash_repository_contents(
-        repository_fd, relative, "raw-sha256",
-    )
-
-
 def _hash_repository_blob(repository_fd, relative, object_format):
     return _hash_repository_contents(
         repository_fd, relative, object_format,
@@ -531,18 +504,6 @@ def _input_digests(repository, pattern_sets):
         patterns: _digest(sorted(items, key=lambda item: item[0]))
         for patterns, items in records.items()
     }
-
-
-def _git_file(repository, commit, relative, label):
-    result = subprocess.run(
-        ["git", "-C", str(repository), "show", f"{commit}:{relative}"],
-        capture_output=True, check=False,
-    )
-    if result.returncode != 0:
-        raise VerificationPlannerError(
-            f"{label} is unavailable from the trusted base commit",
-        )
-    return result.stdout
 
 
 @lru_cache(maxsize=32)
@@ -616,13 +577,12 @@ def _tree_input_digests(repository, commit, pattern_sets):
     }
 
 
-def _tree_input_digest(repository, commit, patterns):
-    return _tree_input_digests(repository, commit, {patterns})[patterns]
-
-
 def _environment_digest(names, environment):
     return _digest([
-        [name, hashlib.sha256(environment.get(name, "").encode("utf-8")).hexdigest()]
+        [
+            name, name in environment,
+            hashlib.sha256(environment.get(name, "").encode("utf-8")).hexdigest(),
+        ]
         for name in names
     ])
 
@@ -651,17 +611,6 @@ def _repository_file(repository, relative, label):
     return relative
 
 
-def _timestamp(value, label):
-    value = _string(value, label)
-    try:
-        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
-    except ValueError:
-        raise VerificationPlannerError(f"{label} must be ISO-8601") from None
-    if parsed.tzinfo is None:
-        raise VerificationPlannerError(f"{label} must include a timezone")
-    return parsed.astimezone(timezone.utc).isoformat().replace("+00:00", "Z")
-
-
 def _execution_patterns(profile):
     return tuple(sorted({
         pattern
@@ -678,24 +627,11 @@ def _execution_digest(
         path_digest = _input_digests(repository, {patterns}).get(
             patterns, _digest([]),
         )
-    environment_names = sorted({
-        name
-        for lane in profile["lanes"]
-        for name in lane["execution_environment"]
-    })
+    environment_names = sorted(BASE_EXECUTION_ENVIRONMENT)
     return _digest({
         "paths": path_digest,
         "environment": _environment_digest(environment_names, environment),
     })
-
-
-def _execution_digest_at_commit(profile, repository, commit, environment):
-    return _execution_digest(
-        profile, repository, environment,
-        path_digest=_tree_input_digest(
-            repository, commit, _execution_patterns(profile),
-        ),
-    )
 
 
 # Public lower-layer interfaces consumed by planning and execution.
@@ -703,15 +639,10 @@ closed_document = _closed
 bounded_string = _string
 repository_file = _repository_file
 resolve_commit = _resolve_commit
-git_file = _git_file
-hash_repository_file = _hash_repository_file
 input_digests = _input_digests
 tree_input_digests = _tree_input_digests
-timestamp = _timestamp
 execution_digest = _execution_digest
-execution_digest_at_commit = _execution_digest_at_commit
 execution_patterns = _execution_patterns
-environment_digest = _environment_digest
 expanded_argv = _expanded_argv
 matches = _matches
 repository_scope_digest = _repository_scope_digest

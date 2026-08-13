@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.studio/schemas/repository-verification-result-v1.json",
+  "title": "Repository Verification Result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version", "artifact_role", "plan_digest", "profile_digest",
+    "execution_closure_digest", "repository_scope_digest", "request",
+    "head_commit", "status", "lanes"
+  ],
+  "properties": {
+    "schema_version": {"const": 1},
+    "artifact_role": {"const": "repository_verification_result"},
+    "plan_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "profile_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "execution_closure_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "repository_scope_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "request": {"$ref": "#/$defs/request"},
+    "head_commit": {
+      "type": "string",
+      "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+    },
+    "status": {"enum": ["complete", "pending", "failed"]},
+    "lanes": {
+      "type": "array",
+      "maxItems": 65,
+      "items": {"$ref": "#/$defs/laneResult"}
+    }
+  },
+  "$defs": {
+    "request": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "boundary", "risk", "base_commit", "head_commit",
+        "include_worktree", "changed_paths"
+      ],
+      "properties": {
+        "boundary": {
+          "enum": ["chunk", "revision_batch", "execution_level", "merge_candidate", "post_merge"]
+        },
+        "risk": {"enum": ["low", "medium", "high"]},
+        "base_commit": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "head_commit": {
+          "type": "string",
+          "pattern": "^(?:[0-9a-f]{40}|[0-9a-f]{64})$"
+        },
+        "include_worktree": {"type": "boolean"},
+        "changed_paths": {
+          "type": "array",
+          "maxItems": 100000,
+          "uniqueItems": true,
+          "items": {"type": "string"}
+        }
+      }
+    },
+    "laneResult": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "lane_id", "tier", "owner", "required", "command_digest",
+        "input_digest", "status", "reason", "exit_code", "duration_seconds",
+        "stdout_digest", "stderr_digest", "stdout_bytes", "stderr_bytes"
+      ],
+      "properties": {
+        "lane_id": {"type": "string"},
+        "tier": {
+          "enum": ["doctor", "fast", "focused", "full", "race", "harness", "remote"]
+        },
+        "owner": {"enum": ["local", "github", "blueprint", "other", "unresolved"]},
+        "required": {"type": "boolean"},
+        "command_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "input_digest": {
+          "type": "string",
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "status": {"enum": ["passed", "failed", "remote_pending", "blocked", "unavailable"]},
+        "reason": {"type": "string"},
+        "exit_code": {"type": ["integer", "null"]},
+        "duration_seconds": {"type": "number", "minimum": 0},
+        "stdout_digest": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "stderr_digest": {
+          "type": ["string", "null"],
+          "pattern": "^sha256:[0-9a-f]{64}$"
+        },
+        "stdout_bytes": {"type": "integer", "minimum": 0},
+        "stderr_bytes": {"type": "integer", "minimum": 0}
+      }
+    }
+  }
+}

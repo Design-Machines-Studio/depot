@@ -21,15 +21,15 @@ repository verification planner; do not author or guess build/test commands.
    - main after merge: `post_merge`.
 4. Invoke `plan-verification` using the exact changed range plus worktree
    changes. Candidate, level, and post-merge boundaries require an explicit
-   base; never accept `HEAD...HEAD`. Pass the existing verification receipt
-   ledger, exact base and candidate refs, and worktree-inclusion choice.
+   base; never accept `HEAD...HEAD`. Pass the exact base and candidate refs and
+   worktree-inclusion choice.
 5. Inspect the plan. Stop on a required unresolved lane. Do not promote a
    remote lane to local merely to obtain a green result.
-6. Invoke `run-verification` with the fresh plan and existing receipt ledger.
+6. Invoke `run-verification` with the fresh plan.
    The runner executes repository-owned argv arrays with an empty temporary home, fixed
    path, minimal environment, bounded time/output, descendant cleanup, and a
    final undeclared-mutation check.
-7. Report the structured receipts without weakening their statuses.
+7. Report the current invocation's bounded results without weakening statuses.
 
 ## Test cadence
 
@@ -39,12 +39,11 @@ repository verification planner; do not author or guess build/test commands.
   focused scope.
 - Batch all fixes from one review pass before one `revision_batch` recheck.
 - At `execution_level`, run the integrated full non-race suite once.
-- At `merge_candidate`, reuse an identical passing level receipt; otherwise run
-  one new full non-race suite. Preserve full race, security, container, browser,
+- At `merge_candidate`, run one full non-race suite. Preserve full race,
+  security, container, browser,
   accessibility, and project-required lanes under their declared owners.
 - Never use Go's test cache for a focused command when the profile declares
-  `-count=1`. Receipt reuse is separate: it is exact evidence reuse keyed by
-  profile, argv, relevant file content, and declared environment.
+  `-count=1`.
 
 ## Profile rules
 
@@ -59,17 +58,17 @@ repository verification planner; do not author or guess build/test commands.
 - Main package paths, generated-code commands, migrations, CSS/JS builds,
   specialized harnesses, and remote owners are repository declarations.
 - Mutating generation lanes declare `mutates_repository: true`; the runner
-  refreshes later input/cache identities after a passing mutation.
-- Docker-backed cacheable lanes require `DM_VERIFICATION_SUBSTRATE`, containing
+  refreshes later input identities after a passing mutation.
+- Docker-backed lanes require `DM_VERIFICATION_SUBSTRATE`, containing
   the resolved image digest and toolchain identity.
-- Coverage comparisons require an actual compatible baseline receipt.
+- Coverage comparisons require an actual compatible measured baseline.
 
 ## Verdict
 
-- **PASS**: every required local lane passed or reused deterministic exact-match
-  evidence, and the caller independently collected any required native CI or
+- **PASS**: every required local lane passed in this invocation, and the caller
+  independently collected any required native CI or
   review evidence against the exact candidate head.
-- **LOCAL PASS — REMOTE PENDING**: every required local lane passed or reused,
+- **LOCAL PASS — REMOTE PENDING**: every required local lane passed,
   but at least one required remote lane remains pending. This is not merge
   proof.
 - **FAIL**: a required lane failed.

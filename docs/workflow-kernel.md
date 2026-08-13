@@ -18,6 +18,31 @@ calling Markdown workflow explicitly delegates the mechanic; the kernel does
 not choose repository policy, providers, findings, merge disposition, or
 cleanup policy.
 
+### Decommissioning the retired Workflow Authority broker
+
+Version 0.14.0 removes the native Workflow Authority broker and its credential
+custody. Removing this repository code does not stop an installation that was
+previously copied onto a Linux host. On every host where it may have been
+installed, first rotate at the provider any OpenRouter key that the broker ever
+held. Then stop, disable, and mask all three units before deleting files:
+
+```sh
+sudo systemctl disable --now workflow-authority.socket workflow-authority.service workflow-authority-runtime.service
+sudo systemctl mask workflow-authority.socket workflow-authority.service workflow-authority-runtime.service
+sudo rm -f /usr/local/bin/workflow-authority /usr/local/sbin/workflow-authority-admin
+sudo rm -f /usr/local/libexec/design-machines/workflow-authorityd
+sudo rm -f /etc/systemd/system/workflow-authority.socket /etc/systemd/system/workflow-authority.service /etc/systemd/system/workflow-authority-runtime.service
+sudo rm -f /usr/lib/systemd/system/workflow-authority.socket /usr/lib/systemd/system/workflow-authority.service /usr/lib/systemd/system/workflow-authority-runtime.service
+sudo rm -f /usr/lib/tmpfiles.d/workflow-authority.conf
+sudo systemctl daemon-reload
+sudo rm -rf /etc/design-machines/workflow-authority /var/lib/design-machines/workflow-authority /run/design-machines/workflow-authority
+sudo groupdel workflow-authority
+```
+
+Inspect the exact paths before removal and retain any audit material required by
+local policy. The three final directories contain retired credential, trust,
+state, and runtime data; removing them is intentionally destructive.
+
 ## Runtime and state layout
 
 Invoke the kernel through `workflow-kernel-launcher.sh` (in the plugin's
@@ -120,7 +145,7 @@ routing recommendations; they never mutate routing policy.
 Projects may declare `.dm/verification.json` using the closed
 `repository-verification-profile-schema.json`. Workflow Kernel then owns
 mechanical lane selection, changed-Go-package expansion, exact command-array
-execution, timing receipts, and content-addressed evidence reuse:
+execution, and bounded current-invocation results:
 
 ```sh
 "$WORKFLOW_KERNEL" plan-verification \
@@ -128,27 +153,23 @@ execution, timing receipts, and content-addressed evidence reuse:
   --boundary chunk --risk medium \
   --base-ref "$TRUSTED_BASE_SHA" --candidate-ref "$EXACT_HEAD_SHA" \
   --include-worktree \
-  --receipts plans/feature/repository-verification-receipts.json \
   --output plans/feature/verification-plans/chunk-01.json
 "$WORKFLOW_KERNEL" run-verification \
   --repository-root "$PWD" --profile "$PWD/.dm/verification.json" \
-  --plan plans/feature/verification-plans/chunk-01.json \
-  --receipts plans/feature/repository-verification-receipts.json \
-  --output plans/feature/repository-verification-receipts.json
+  --plan plans/feature/verification-plans/chunk-01.json
 ```
 
 The plan binds the current checkout, exact base/head refs, repository-owned
 profile, command inputs, and execution environment. Execution rebuilds that
-identity before running. Deterministic receipt ledgers use lock-protected
-concurrent publication. Remote lanes remain pending for independent CI or
+identity before running and prints only that invocation's bounded result.
+Remote lanes remain pending for independent CI or
 provider evidence; the kernel does not exchange provider results. The cadence
 is chunk/revision focused verification, one integrated
-full non-race pass per execution level, merge-candidate reuse when exact source,
-mode, environment, and substrate inputs are unchanged, and explicit remote
+full non-race pass per execution level, a fresh exact merge-candidate run, and explicit remote
 race/security/container/harness lanes. Required remote pending exits non-zero.
 Expensive gates move later; they do not disappear. See
 `plugins/workflow-kernel/skills/workflow-kernel/references/repository-verification.md`
-for the complete profile, cache-key, receipt, and evidence contract.
+for the complete profile, planning, execution, and result contract.
 
 ### Behavioral contracts and validation retry
 

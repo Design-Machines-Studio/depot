@@ -314,7 +314,7 @@ orchestrator generates the canonical JSON from these approved inputs only after
 Every dispatch and builder completion must echo the current contract digest and
 revision exactly.
 
-Repository verification evidence stays bounded across model prompts. A passing or reused result appears once as selected check IDs, status, plan/receipt digest, and safe receipt reference; raw passing stdout/stderr and repeated receipt copies never enter builder repair or reviewer prompts. Before model review, a failure reaches the repair attempt as bounded canonical failing check IDs, safe receipt references/digests, a stable failure signature, and a trusted profile-derived reproduction instruction. Never include raw logs, secrets, environment, arbitrary host paths, or unbounded output.
+Repository verification evidence stays bounded across model prompts. A passing current-invocation result appears once as selected check IDs, status, and plan digest; raw passing stdout/stderr and repeated result copies never enter builder repair or reviewer prompts. Before model review, a failure reaches the repair attempt as bounded canonical failing check IDs, a stable failure signature, and a trusted profile-derived reproduction instruction. Never include raw logs, secrets, environment, arbitrary host paths, or unbounded output.
 
 ### Phase 3m: Fixture SDK Conformance Gate
 

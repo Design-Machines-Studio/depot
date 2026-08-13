@@ -60,7 +60,7 @@ SCHEMA_DOCUMENTS = frozenset({
     "cleanup-receipt-schema.json",
     "repository-verification-plan-schema.json",
     "repository-verification-profile-schema.json",
-    "repository-verification-receipts-schema.json",
+    "repository-verification-result-schema.json",
     "resource-registry-schema.json",
     "run-cost-summary-schema.json",
     "verification-profile-schema.json",
@@ -136,7 +136,6 @@ BEHAVIORAL_CLI_CASES = {
     "run-verification": (
         "--repository-root", "<state>", "--profile", "<missing>",
         "--plan", "<missing>",
-        "--output", "<output>",
     ),
     "plan-create": ("--state-dir", "<state>", "--run-id", "validator-cli", "--node-id", "node", "--lifecycle", "chunk", "--cleanup-policy", "stop-remove", "--argv-json", "<missing>", "--output", "<output>"),
     "plan-compose": ("--state-dir", "<state>", "--run-id", "validator-cli", "--node-id", "node", "--lifecycle", "chunk", "--cleanup-policy", "stop-remove", "--argv-json", "<missing>", "--output", "<output>"),

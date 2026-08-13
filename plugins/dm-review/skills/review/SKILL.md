@@ -216,7 +216,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
   resolve_openrouter_bundle() {
     if [ -n "$OPENROUTER_ACTIVE_HOST" ]; then
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.14.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
+        --minimum-version 1.14.2 --active-host "$OPENROUTER_ACTIVE_HOST" \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -227,7 +227,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     else
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.14.0 \
+        --minimum-version 1.14.2 \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -841,11 +841,11 @@ When a CODING lane finds its provider AND its declared fallback both unavailable
 
 The operator is the human at the top-level interactive session. An agent, subagent, hook, auto-answer configuration, or automated harness is not an operator and can never authorize a fallback lane; an ask answered by any of them is an unanswered ask. When the reviewing context cannot reach the operator, do not fabricate the exchange -- record the gap and continue, or escalate `human_help_required` through the caller that can reach the human.
 
-Collect live rail status at ask time and display it only to inform timing. Offer exactly: (a) wait until the named reset, or (c) record the Coverage Gap and continue -- the review equivalent of park. A context that cannot reach the operator returns `human_help_required` through a reaching caller or records the gap under the headless rule. No provider identifier is an executable answer.
+Collect live rail status at ask time and display it only to inform timing. Offer exactly: wait until the named reset, or record the Coverage Gap and continue -- the review equivalent of park. A context that cannot reach the operator returns `human_help_required` through a reaching caller or records the gap under the headless rule. No provider identifier is an executable answer.
 
 Ask-then-default-gap is the only headless behavior for an ordinary standalone review: a non-interactive session or unanswered ask records the Coverage Gap and continues. Independent-family sign-off and sensitive-path rules remain non-overridable; configured-key OpenRouter lanes never enter this approval path.
 
-**When this review is the pipeline's final full dm-review, option (c) and the headless gap-and-continue default are unavailable for coding-lane exhaustion.** The only outcome is REVIEW INCOMPLETE and the branch waits. Ordinary in-policy OpenRouter/Codex routing remains unaffected; it is not exhaustion authorization.
+**When this review is the pipeline's final full dm-review, “record the gap and continue” and the headless gap-and-continue default are unavailable for coding-lane exhaustion.** The only outcome is REVIEW INCOMPLETE and the branch waits. Ordinary in-policy OpenRouter/Codex routing remains unaffected; it is not exhaustion authorization.
 
 A skipped lane is a coverage gap, and a coverage gap is reported. "All agents completed" while a required independent-family lane never ran is a false clean.
 
