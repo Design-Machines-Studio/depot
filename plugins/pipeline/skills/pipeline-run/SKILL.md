@@ -21,10 +21,10 @@ argument-hint: "[path to manifest.json or prompts directory]"
 
 # Pipeline Run
 
-Execute a set of generated prompts autonomously in worktrees with focused
-ordinary-chunk review, sensitive-path escalation, and a final full review. This
-is the execution engine -- it creates branches, runs subagents, reviews, fixes,
-merges, and delivers a clean feature branch.
+Execute a set of generated prompts autonomously in worktrees with focused Codex
+review for ordinary chunks, sensitive-path escalation, and the approved final
+review mode. This is the execution engine -- it creates or reuses branches, runs
+subagents, reviews, fixes, merges, and delivers a clean feature branch.
 
 ## Input
 
@@ -42,7 +42,13 @@ Before executing, verify:
 2. **All prompt files referenced in manifest exist and resolve within `plans/`** -- reject any path that escapes the project's `plans/<feature>/prompts/` directory after canonical resolution
 3. **Branch names are safe** -- `featureBranch` and all chunk IDs match `^[a-z0-9][a-z0-9\-\/]*$`
 4. **Git working tree has no blocking user-file changes** -- classify dirty paths as pipeline-owned artifacts (`plans/<feature>/`, generated prompts/manifests/receipts) versus unrelated user files. Commit/gitignore/force-add pipeline-owned artifacts as directed by the orchestrator; block only on unrelated user files.
-5. **On the manifest base branch** with latest changes -- use `manifest.baseBranch` when present, defaulting to `main`. The base may be any existing ref, including an unmerged PR branch, stacked branch, or hotfix branch.
+5. **Branch setup is valid** -- New manifests require `branchMode:
+   create|reuse`. `create` uses `manifest.baseBranch` (default `main`) and
+   requires `expectedFeatureHead` to be null/absent. `reuse` requires an exact
+   lowercase 40- or 64-hex `expectedFeatureHead`; fetch
+   `origin/<featureBranch>`, require its tip to match, select only that existing
+   branch, and perform no initial push. Legacy manifests default to `create`
+   with `branch_mode_defaulted=true`.
 6. **Bypass permissions active** -- If not, warn: "Autonomous execution requires bypass permissions mode. Enable it and re-run."
 7. **Workflow class is valid** -- Accept only `chore|bug|feature|hotfix|security|investigation|migration`. For a legacy manifest with no `workflowClass`, use `feature` and record `workflow_class_defaulted=true`. Never infer the class. Pass the validated value unchanged to the orchestrator, shadow translator, receipts, and metrics.
 8. **Decision profile is valid** -- New manifests require exactly one closed
@@ -63,6 +69,14 @@ Before executing, verify:
    and Logic/Trivial to `not_applicable`, recording
    `rendered_surface_defaulted=true` in every receipt. This field never changes
    `kind`, provider routing, or review depth.
+10. **Final review mode is valid** -- New manifests require
+    `finalReviewMode: full|quick` and a non-empty `finalReviewRationale` copied
+    from the approved plan. `quick` is invalid for
+    `decisionProfile.consequence: high`; a security-sensitive final diff
+    escalates it to full and records the escalation. Legacy manifests default
+    to `full` with `final_review_mode_defaulted=true`. This field never weakens
+    per-chunk sensitive review, repository/browser evidence, P1/P2 resolution,
+    or cleanup.
 
 If any check fails, report the issue and stop.
 
@@ -117,7 +131,7 @@ missing or mismatched claim is deterministic validation failure, never success.
 The kernel seals/validates this artifact but never schedules a builder or gate.
 
 Append every later authoritative receipt to the cumulative ledger. Observe only
-at the `all-chunks-complete` checkpoint before final full review and at the
+at the `all-chunks-complete` checkpoint before the approved final review and at the
 terminal checkpoint. Each observation uses:
 
 ```text
@@ -147,7 +161,7 @@ nonnegative `duration_seconds` and exactly one `wait_category` from
 the non-overlapping orchestrator-level interval, not one per parallel worker.
 Never estimate an interval or classify active implementation/review as waiting.
 
-**Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: worktree isolation or the documented `sequential-on-branch` isolation strategy (recorded as `isolationStrategy`, never as `executionMode`) for container-mounted test harnesses, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, final full review, memory capture, cleanup, and summary.
+**Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: branch create/reuse semantics, worktree isolation or the documented `sequential-on-branch` isolation strategy (recorded as `isolationStrategy`, never as `executionMode`) for container-mounted test harnesses, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, the approved final review mode, memory capture, cleanup, and summary.
 
 **Implementation dispatch:** For each chunk, create the worktree first, inline the full prompt content, then call `multi_agent_v1.spawn_agent` with `agent_type: "worker"`. The worker prompt MUST include:
 
@@ -179,8 +193,12 @@ references.
 
 - For ordinary non-sensitive chunks, run one focused read-only Codex review against the chunk diff and allow at most one P1/P2 repair/recheck pass. Preserve pending/done todo receipts.
 - For sensitive-path chunks, run the full inline `plugins/dm-review/skills/review/SKILL.md` protocol against the chunk worktree, with at most two passes.
-- For the final gate, run one full fan-out using the review skill's full-mode protocol against the feature branch.
-- Use `multi_agent_v1.spawn_agent` for the focused Codex reviewer or for review agents selected by the full dm-review protocol when available.
+- For the final gate, read `finalReviewMode`. `full` runs the review skill's
+  full-mode protocol. `quick` loads and executes the installed
+  `dm-review-quick` protocol against the feature branch; if that protocol finds
+  a bounded security-sensitive path, escalate to full and receipt the effective
+  mode.
+- Use `multi_agent_v1.spawn_agent` for the focused Codex reviewer or for review agents selected by the chosen dm-review protocol when available.
 - Fix P1/P2 findings and retain complete P3 advisory evidence. Verify repairs with affected lanes; repeat the full fan-out only if its coverage was incomplete or a repair changed a security-sensitive boundary.
 - Write/read the same `todos/*-pending-*.md` and `todos/*-done-*.md` receipts that dm-review uses.
 
@@ -217,7 +235,7 @@ There is no dormant or
 operator-authorized coding rail outside the configured Codex and OpenRouter
 paths.
 
-Ask-then-default-park is the only headless behavior: a non-interactive session, an ask that errors, an ask answered by a non-operator, or one that exceeds the caller's stated timeout parks resumable. `PIPELINE_EXHAUSTION_ASK=0` selects the same resumable park directly for headless CI. The ask cannot broaden configured-key OpenRouter workload, disclosure, path, or output boundaries; the final full dm-review is never waived, required family independence remains, and sensitive-path chunks are never rerouted. The routing policy object is `exhaustionFallback` in `plugins/pipeline/references/routing-policy.json`.
+Ask-then-default-park is the only headless behavior: a non-interactive session, an ask that errors, an ask answered by a non-operator, or one that exceeds the caller's stated timeout parks resumable. `PIPELINE_EXHAUSTION_ASK=0` selects the same resumable park directly for headless CI. The ask cannot broaden configured-key OpenRouter workload, disclosure, path, or output boundaries; the approved final dm-review gate is never waived, required family independence remains, and sensitive-path chunks are never rerouted. The routing policy object is `exhaustionFallback` in `plugins/pipeline/references/routing-policy.json`.
 
 ## Process
 
@@ -226,12 +244,12 @@ Ask-then-default-park is the only headless behavior: a non-interactive session, 
 3. Otherwise, launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/execution-orchestrator.md`
 4. Pass the manifest path, prompts directory, and feature branch name
 5. The orchestrator handles everything autonomously:
-   - Branch creation
+   - Branch creation or exact-head existing-branch reuse
    - Worktree creation per chunk
    - Subagent dispatch with inlined prompt content
    - focused Codex review after ordinary chunks; full review for sensitive paths
    - Merge back to feature branch
-   - Final full dm-review
+   - Approved final dm-review mode, with security escalation
    - ai-memory session recording
    - cumulative shadow observation after all chunks and at terminal, when the trusted runtime is available
 6. Present the execution summary

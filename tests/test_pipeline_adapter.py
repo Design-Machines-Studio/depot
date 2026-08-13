@@ -160,6 +160,110 @@ class PipelineAdapterTests(unittest.TestCase):
             with self.subTest(manifest=manifest), self.assertRaises(ValueError):
                 translate_manifest(manifest, self.profile())
 
+    def test_branch_reuse_and_final_review_controls_are_closed_and_preserved(self):
+        legacy = translate_manifest(self.manifest(), self.profile())
+        self.assertEqual(legacy.branch_mode, "create")
+        self.assertTrue(legacy.branch_mode_defaulted)
+        self.assertIsNone(legacy.expected_feature_head)
+        self.assertEqual(legacy.final_review_mode, "full")
+        self.assertTrue(legacy.final_review_mode_defaulted)
+        self.assertIsNone(legacy.final_review_rationale)
+
+        manifest = self.manifest()
+        manifest.update({
+            "decisionProfile": {
+                "uncertainty": "medium", "consequence": "medium",
+                "rationale": "Bounded existing-branch repair.",
+            },
+            "branchMode": "reuse",
+            "expectedFeatureHead": "a" * 40,
+            "finalReviewMode": "quick",
+            "finalReviewRationale": "One bounded quick pass is approved.",
+        })
+        spec = translate_manifest(manifest, self.profile())
+        self.assertEqual(spec.branch_mode, "reuse")
+        self.assertFalse(spec.branch_mode_defaulted)
+        self.assertEqual(spec.expected_feature_head, "a" * 40)
+        self.assertEqual(spec.final_review_mode, "quick")
+        self.assertFalse(spec.final_review_mode_defaulted)
+        self.assertEqual(
+            spec.final_review_rationale, "One bounded quick pass is approved.",
+        )
+        self.assertEqual(spec, type(spec).from_dict(spec.to_dict()))
+
+        invalid = []
+        for branch_mode, expected in (
+            ("reuse", None), ("reuse", "not-a-commit"),
+            ("create", "a" * 40), ("unknown", None),
+        ):
+            candidate = self.manifest()
+            candidate["branchMode"] = branch_mode
+            if expected is not None:
+                candidate["expectedFeatureHead"] = expected
+            invalid.append(candidate)
+        missing_rationale = self.manifest()
+        missing_rationale["finalReviewMode"] = "quick"
+        invalid.append(missing_rationale)
+        missing_profile = self.manifest()
+        missing_profile.update({
+            "branchMode": "reuse",
+            "expectedFeatureHead": "a" * 40,
+            "finalReviewMode": "quick",
+            "finalReviewRationale": "Unclassified quick review.",
+        })
+        invalid.append(missing_profile)
+        incomplete_controls = self.manifest()
+        incomplete_controls["branchMode"] = "create"
+        invalid.append(incomplete_controls)
+        high_quick = self.manifest()
+        high_quick.update({
+            "decisionProfile": {
+                "uncertainty": "low", "consequence": "high",
+                "rationale": "High consequence requires full review.",
+            },
+            "finalReviewMode": "quick",
+            "finalReviewRationale": "Too narrow.",
+        })
+        invalid.append(high_quick)
+        for candidate in invalid:
+            with self.subTest(candidate=candidate), self.assertRaises(ValueError):
+                translate_manifest(candidate, self.profile())
+
+    def test_branch_and_final_review_receipt_context_is_continuous(self):
+        receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        for receipt in receipts:
+            receipt.update({
+                "decisionProfile": {
+                    "uncertainty": "medium", "consequence": "medium",
+                    "rationale": "Bounded existing-branch repair.",
+                },
+                "decisionProfileDefaulted": False,
+                "branchMode": "reuse",
+                "branchModeDefaulted": False,
+                "expectedFeatureHead": "b" * 40,
+                "finalReviewMode": "quick",
+                "finalReviewModeDefaulted": False,
+                "finalReviewRationale": "Approved bounded quick review.",
+            })
+        receipts[-1].update({
+            "finalReviewEffectiveMode": "quick",
+            "finalReviewEscalation": "none",
+        })
+        events = translate_pipeline_receipts(receipts)
+        self.assertTrue(all(
+            event.payload["branch_mode"] == "reuse" for event in events
+        ))
+        self.assertEqual(events[-1].payload["final_review_effective_mode"], "quick")
+
+        changed = copy.deepcopy(receipts)
+        changed[-1]["expectedFeatureHead"] = "c" * 40
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(changed)
+        invalid_effective = copy.deepcopy(receipts)
+        invalid_effective[-1]["finalReviewEffectiveMode"] = "full"
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts(invalid_effective)
+
     def test_decision_profile_receipt_context_is_preserved_and_continuous(self):
         receipts = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         profile = {

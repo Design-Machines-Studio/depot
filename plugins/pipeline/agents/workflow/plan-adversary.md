@@ -117,6 +117,12 @@ When the plan targets Assembly (`assembly-baseplate` or `internal/fixtures/`), v
 
 **Execution guardrails:**
 
+- [ ] Does `branchMode` match the approved plan? For `reuse`, does the
+  manifest carry an exact fetched remote `expectedFeatureHead`, forbid the
+  initial setup push, and block instead of resetting a divergent local branch?
+- [ ] Does `finalReviewMode` match explicit approved intent and carry a
+  non-empty rationale? Is `quick` rejected for high consequence and guaranteed
+  to escalate to full on a security-sensitive final diff?
 - [ ] Are prompt files small enough for the token budget (~80K per subagent)?
 - [ ] Do any prompts reference `.env`, credentials, or secrets that should be stripped?
 - [ ] Are severity levels consistent with P1/P2/P3 definitions (per `plugins/dm-review/skills/review/references/severity-mapping.md`)?

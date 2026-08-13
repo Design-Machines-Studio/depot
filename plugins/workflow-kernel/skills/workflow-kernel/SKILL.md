@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.15.0
+version: 0.16.0
 ---
 
 # Workflow Kernel
@@ -25,7 +25,8 @@ version cannot shadow a newer one), verifies Python 3.12+, sets the module
 path, and execs `python3 -m workflow_kernel`. Compatibility is same-major at
 or above the declared capability floor. Repository-verification consumers use
 `>=0.14.0`. Pipeline consumers using independent rendered-surface
-applicability require `>=0.15.0`. The complete consumer-facing
+applicability require `>=0.15.0`; exact-head branch reuse and approved
+final-review mode context require `>=0.16.0`. The complete consumer-facing
 resolution and fail-closed contract, including the launcher discovery
 snippet, is `references/runtime-resolution.md`; consuming plugins link there
 instead of restating it.
@@ -36,7 +37,7 @@ checkout or invoke the module with
 
 ## Operating Contract
 
-Initialize every run in shadow mode by default. Version 0.15.0 permits a
+Initialize every run in shadow mode by default. Version 0.16.0 permits a
 canonical caller to explicitly select an approved `enforce` or `native` mode
 and delegate the
 bounded authoritative mechanics for immutable initial behavioral-contract binding,
@@ -66,7 +67,7 @@ evidence attachment and one cleanup reconciliation.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
-0.15.0 surface includes state/replay and inspection commands, exact-ref
+0.16.0 surface includes state/replay and inspection commands, exact-ref
 repository verification planning/execution with deterministic fresh results,
 initial contract binding and retry
 decisions, prediction/observation/comparison, canonical review-contribution
@@ -76,6 +77,14 @@ Consume successful operational output and errors as stable JSON. Treat
 
 ## Public API and Contracts
 
+- Pipeline translation preserves the validated orchestration provenance on the
+  run specification and every normalized receipt: `branch_mode`,
+  `branch_mode_defaulted`, `expected_feature_head`, `final_review_mode`,
+  `final_review_mode_defaulted`, `final_review_rationale`,
+  `final_review_effective_mode`, and `final_review_escalation`. Reuse requires
+  one exact expected feature head. Quick review may remain quick or escalate to
+  full, but it may never produce another effective mode or contradict its
+  requested mode without a recorded escalation.
 - Evaluate persona/browser coverage with
   `VerificationGate.evaluate(..., work_kind=..., rendered_surface=...)`.
   `rendered_surface` is the independent closed applicability value

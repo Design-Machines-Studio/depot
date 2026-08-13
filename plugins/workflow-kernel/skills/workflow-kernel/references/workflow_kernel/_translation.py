@@ -54,6 +54,10 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "resource_name", "topology", "topology_node", "topology_edge",
     "workflow_class_defaulted",
     "decision_profile", "decision_profile_defaulted",
+    "branch_mode", "branch_mode_defaulted", "expected_feature_head",
+    "final_review_mode", "final_review_mode_defaulted",
+    "final_review_rationale", "final_review_effective_mode",
+    "final_review_escalation",
     "contract_id", "schema_version", "revision", "contract_digest",
     "contract_ref", "previous_contract_digest", "reason_code",
     "verification_contract_bound", "verification_profile_id",
@@ -93,6 +97,14 @@ RECEIPT_FIELD_ALIASES = {
     "workflowClassDefaulted": "workflow_class_defaulted",
     "decisionProfile": "decision_profile",
     "decisionProfileDefaulted": "decision_profile_defaulted",
+    "branchMode": "branch_mode",
+    "branchModeDefaulted": "branch_mode_defaulted",
+    "expectedFeatureHead": "expected_feature_head",
+    "finalReviewMode": "final_review_mode",
+    "finalReviewModeDefaulted": "final_review_mode_defaulted",
+    "finalReviewRationale": "final_review_rationale",
+    "finalReviewEffectiveMode": "final_review_effective_mode",
+    "finalReviewEscalation": "final_review_escalation",
     "requestedProvider": "requested_provider",
     "attemptedProvider": "attempted_provider",
     "implementedBy": "implemented_by",
@@ -328,8 +340,13 @@ _LEGACY_RUN_SPEC_FIELDS = frozenset({
     "execution_levels", "execution_plan_disagreement",
     "required_lanes", "review_mode", "observation_only",
 })
-_RUN_SPEC_FIELDS = _LEGACY_RUN_SPEC_FIELDS | frozenset({
+_PROFILE_RUN_SPEC_FIELDS = _LEGACY_RUN_SPEC_FIELDS | frozenset({
     "decision_profile", "decision_profile_defaulted",
+})
+_RUN_SPEC_FIELDS = _PROFILE_RUN_SPEC_FIELDS | frozenset({
+    "branch_mode", "branch_mode_defaulted", "expected_feature_head",
+    "final_review_mode", "final_review_mode_defaulted",
+    "final_review_rationale",
 })
 _NODE_FIELDS = frozenset({
     "id", "depends_on", "gate_kind", "required_evidence",
@@ -341,6 +358,9 @@ _GATE_FIELDS = frozenset({
     "allowed", "reason_code", "missing_evidence", "human_required",
 })
 _DECISION_LEVELS = frozenset({"low", "medium", "high"})
+_BRANCH_MODES = frozenset({"create", "reuse"})
+_FINAL_REVIEW_MODES = frozenset({"full", "quick"})
+_EXACT_COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 
 
 def normalize_decision_profile(value: object) -> dict:
@@ -387,6 +407,12 @@ class RunSpec:
     review_mode: Optional[str] = None
     decision_profile: Optional[Mapping[str, str]] = None
     decision_profile_defaulted: bool = True
+    branch_mode: str = "create"
+    branch_mode_defaulted: bool = True
+    expected_feature_head: Optional[str] = None
+    final_review_mode: str = "full"
+    final_review_mode_defaulted: bool = True
+    final_review_rationale: Optional[str] = None
 
     def __post_init__(self) -> None:
         """Single validation layer: the constructor owns every field rule."""
@@ -445,6 +471,47 @@ class RunSpec:
             object.__setattr__(
                 self, "decision_profile", MappingProxyType(profile),
             )
+        if self.branch_mode not in _BRANCH_MODES:
+            raise ValueError("invalid RunSpec branch mode")
+        if type(self.branch_mode_defaulted) is not bool:
+            raise ValueError("invalid RunSpec branch mode provenance")
+        if self.branch_mode_defaulted and self.branch_mode != "create":
+            raise ValueError("invalid RunSpec branch mode provenance")
+        if self.branch_mode == "reuse":
+            if (
+                type(self.expected_feature_head) is not str
+                or _EXACT_COMMIT.fullmatch(self.expected_feature_head) is None
+            ):
+                raise ValueError("invalid RunSpec expected feature head")
+        elif self.expected_feature_head is not None:
+            raise ValueError("invalid RunSpec expected feature head")
+        if self.final_review_mode not in _FINAL_REVIEW_MODES:
+            raise ValueError("invalid RunSpec final review mode")
+        if type(self.final_review_mode_defaulted) is not bool:
+            raise ValueError("invalid RunSpec final review mode provenance")
+        if self.branch_mode_defaulted != self.final_review_mode_defaulted:
+            raise ValueError("incomplete RunSpec orchestration provenance")
+        if self.final_review_mode_defaulted:
+            if self.final_review_mode != "full" or self.final_review_rationale is not None:
+                raise ValueError("invalid RunSpec final review mode provenance")
+        else:
+            rationale = required_text(
+                self.final_review_rationale, "final review rationale",
+            )
+            if contains_high_confidence_secret(rationale):
+                raise ValueError("invalid RunSpec final review rationale")
+            rationale = sanitize_durable_payload(rationale)
+            if type(rationale) is not str:
+                raise ValueError("invalid RunSpec final review rationale")
+            object.__setattr__(self, "final_review_rationale", rationale)
+        if (
+            self.final_review_mode == "quick"
+            and (
+                self.decision_profile is None
+                or self.decision_profile["consequence"] == "high"
+            )
+        ):
+            raise ValueError("quick final review requires non-high consequence")
 
     @classmethod
     def from_dict(cls, value: object) -> "RunSpec":
@@ -457,7 +524,10 @@ class RunSpec:
         """
         if (
             type(value) is not dict
-            or set(value) not in {_LEGACY_RUN_SPEC_FIELDS, _RUN_SPEC_FIELDS}
+            or set(value) not in {
+                _LEGACY_RUN_SPEC_FIELDS, _PROFILE_RUN_SPEC_FIELDS,
+                _RUN_SPEC_FIELDS,
+            }
             or value["observation_only"] is not True
         ):
             raise ValueError("invalid RunSpec")
@@ -501,6 +571,7 @@ class RunSpec:
             if type(value["required_lanes"]) is not list:
                 raise ValueError("invalid RunSpec lanes")
             legacy_profile = "decision_profile" not in value
+            legacy_orchestration = "branch_mode" not in value
             return cls(
                 value["run_id"],
                 WorkflowClass(value["workflow_class"]),
@@ -513,6 +584,12 @@ class RunSpec:
                 tuple(value["required_lanes"]), value["review_mode"],
                 None if legacy_profile else value["decision_profile"],
                 True if legacy_profile else value["decision_profile_defaulted"],
+                "create" if legacy_orchestration else value["branch_mode"],
+                True if legacy_orchestration else value["branch_mode_defaulted"],
+                None if legacy_orchestration else value["expected_feature_head"],
+                "full" if legacy_orchestration else value["final_review_mode"],
+                True if legacy_orchestration else value["final_review_mode_defaulted"],
+                None if legacy_orchestration else value["final_review_rationale"],
             )
         except (KernelError, KeyError, TypeError, ValueError) as error:
             message = str(error) if type(error) is ValueError else "invalid RunSpec"
@@ -561,6 +638,12 @@ class RunSpec:
                 else dict(self.decision_profile)
             ),
             "decision_profile_defaulted": self.decision_profile_defaulted,
+            "branch_mode": self.branch_mode,
+            "branch_mode_defaulted": self.branch_mode_defaulted,
+            "expected_feature_head": self.expected_feature_head,
+            "final_review_mode": self.final_review_mode,
+            "final_review_mode_defaulted": self.final_review_mode_defaulted,
+            "final_review_rationale": self.final_review_rationale,
             "observation_only": True,
         }
 
@@ -693,6 +776,46 @@ def _validate_observation_receipt(receipt: dict) -> dict:
         receipt["decision_profile_defaulted"]
     ) is not bool:
         raise ValueError("invalid decision profile provenance")
+    if "branch_mode" in receipt and receipt["branch_mode"] not in _BRANCH_MODES:
+        raise ValueError("invalid branch mode")
+    if "branch_mode_defaulted" in receipt and type(
+        receipt["branch_mode_defaulted"]
+    ) is not bool:
+        raise ValueError("invalid branch mode provenance")
+    if "expected_feature_head" in receipt and receipt["expected_feature_head"] is not None and (
+        type(receipt["expected_feature_head"]) is not str
+        or _EXACT_COMMIT.fullmatch(receipt["expected_feature_head"]) is None
+    ):
+        raise ValueError("invalid expected feature head")
+    for field in ("final_review_mode", "final_review_effective_mode"):
+        if field in receipt and receipt[field] not in _FINAL_REVIEW_MODES:
+            raise ValueError("invalid " + field.replace("_", " "))
+    if "final_review_mode_defaulted" in receipt and type(
+        receipt["final_review_mode_defaulted"]
+    ) is not bool:
+        raise ValueError("invalid final review mode provenance")
+    if "final_review_rationale" in receipt:
+        rationale = required_text(
+            receipt["final_review_rationale"], "final review rationale",
+        )
+        if contains_high_confidence_secret(rationale):
+            raise ValueError("invalid final review rationale")
+        receipt["final_review_rationale"] = sanitize_durable_payload(rationale)
+    if "final_review_escalation" in receipt and receipt[
+        "final_review_escalation"
+    ] not in {"none", "security-sensitive-path"}:
+        raise ValueError("invalid final review escalation")
+    if "final_review_effective_mode" in receipt:
+        requested = receipt.get("final_review_mode")
+        escalation = receipt.get("final_review_escalation", "none")
+        effective = receipt["final_review_effective_mode"]
+        if requested not in _FINAL_REVIEW_MODES or (
+            escalation == "none" and effective != requested
+        ) or (
+            escalation == "security-sensitive-path"
+            and not (requested == "quick" and effective == "full")
+        ):
+            raise ValueError("invalid final review effective mode")
     for field in _MEASUREMENT_FIELDS:
         if field in receipt:
             _nonnegative_number(receipt[field], field, integer=True)
@@ -1153,6 +1276,12 @@ def translate_receipts(
     workflow_class_defaulted = None
     decision_profile = None
     decision_profile_defaulted = None
+    branch_mode = None
+    branch_mode_defaulted = None
+    expected_feature_head = None
+    final_review_mode = None
+    final_review_mode_defaulted = None
+    final_review_rationale = None
     isolation_strategy = None
     current_contract = None
     contribution_sources = set()
@@ -1206,6 +1335,65 @@ def translate_receipts(
         )
         if current_mode not in EXECUTION_MODES:
             raise ValueError("invalid execution mode")
+        branch_was_present = "branch_mode" in receipt
+        current_branch_mode = receipt.get(
+            "branch_mode", branch_mode or "create",
+        )
+        if current_branch_mode not in _BRANCH_MODES:
+            raise ValueError("invalid branch mode")
+        if "branch_mode_defaulted" in receipt:
+            current_branch_defaulted = receipt["branch_mode_defaulted"]
+        else:
+            current_branch_defaulted = (
+                not branch_was_present if position == 0
+                else branch_mode_defaulted if not branch_was_present else False
+            )
+        current_expected_head = receipt.get(
+            "expected_feature_head", expected_feature_head,
+        )
+        if current_branch_mode == "reuse":
+            if (
+                type(current_expected_head) is not str
+                or _EXACT_COMMIT.fullmatch(current_expected_head) is None
+            ):
+                raise ValueError("invalid expected feature head")
+        elif current_expected_head is not None:
+            raise ValueError("invalid expected feature head")
+        final_review_was_present = "final_review_mode" in receipt
+        current_final_review_mode = receipt.get(
+            "final_review_mode", final_review_mode or "full",
+        )
+        if current_final_review_mode not in _FINAL_REVIEW_MODES:
+            raise ValueError("invalid final review mode")
+        if "final_review_mode_defaulted" in receipt:
+            current_final_review_defaulted = receipt["final_review_mode_defaulted"]
+        else:
+            current_final_review_defaulted = (
+                not final_review_was_present if position == 0
+                else final_review_mode_defaulted
+                if not final_review_was_present else False
+            )
+        if current_branch_defaulted != current_final_review_defaulted:
+            raise ValueError("incomplete orchestration provenance")
+        current_final_review_rationale = receipt.get(
+            "final_review_rationale", final_review_rationale,
+        )
+        if current_final_review_defaulted:
+            if (
+                current_final_review_mode != "full"
+                or current_final_review_rationale is not None
+            ):
+                raise ValueError("invalid final review mode provenance")
+        elif current_final_review_rationale is None:
+            raise ValueError("invalid final review rationale")
+        if (
+            current_final_review_mode == "quick"
+            and (
+                current_profile is None
+                or current_profile["consequence"] == "high"
+            )
+        ):
+            raise ValueError("quick final review requires non-high consequence")
         current_isolation = receipt.get("isolation_strategy", _MISSING)
         isolation_was_present = current_isolation is not _MISSING
         if current_isolation is _MISSING:
@@ -1224,13 +1412,25 @@ def translate_receipts(
             workflow_class_defaulted = current_defaulted
             decision_profile = current_profile
             decision_profile_defaulted = current_profile_defaulted
+            branch_mode = current_branch_mode
+            branch_mode_defaulted = current_branch_defaulted
+            expected_feature_head = current_expected_head
+            final_review_mode = current_final_review_mode
+            final_review_mode_defaulted = current_final_review_defaulted
+            final_review_rationale = current_final_review_rationale
             isolation_strategy = current_isolation
         elif (
             run_id, current_class, current_mode, current_defaulted,
             current_profile, current_profile_defaulted, current_isolation,
+            current_branch_mode, current_branch_defaulted, current_expected_head,
+            current_final_review_mode, current_final_review_defaulted,
+            current_final_review_rationale,
         ) != (
             run_identity, workflow_class, execution_mode, workflow_class_defaulted,
             decision_profile, decision_profile_defaulted, isolation_strategy,
+            branch_mode, branch_mode_defaulted, expected_feature_head,
+            final_review_mode, final_review_mode_defaulted,
+            final_review_rationale,
         ):
             raise ValueError("receipt context discontinuity")
         stage = required_text(receipt.get("stage"), "stage")
@@ -1277,6 +1477,22 @@ def translate_receipts(
             current_profile_defaulted
         )
         normalized_receipt["execution_mode"] = current_mode
+        normalized_receipt["branch_mode"] = current_branch_mode
+        normalized_receipt["branch_mode_defaulted"] = current_branch_defaulted
+        if current_expected_head is None:
+            normalized_receipt.pop("expected_feature_head", None)
+        else:
+            normalized_receipt["expected_feature_head"] = current_expected_head
+        normalized_receipt["final_review_mode"] = current_final_review_mode
+        normalized_receipt["final_review_mode_defaulted"] = (
+            current_final_review_defaulted
+        )
+        if current_final_review_rationale is None:
+            normalized_receipt.pop("final_review_rationale", None)
+        else:
+            normalized_receipt["final_review_rationale"] = (
+                current_final_review_rationale
+            )
         if current_isolation is None:
             normalized_receipt.pop("isolation_strategy", None)
         else:
