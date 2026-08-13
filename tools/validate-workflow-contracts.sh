@@ -1124,6 +1124,20 @@ require_text "$lifecycle" '| `.claude/ux-review/report.md` | 3 |' \
   "dm-review complete report uses the existing artifact lifecycle"
 require_text "$review_consolidator" 'Coverage Gaps' \
   "dm-review consolidator retains coverage gaps"
+require_text "$review_consolidator" 'provisional report body preserving' \
+  "dm-review consolidator produces only a provisional report body"
+require_text "$review_consolidator" 'Do not write `.claude/ux-review/report.md` and do not deliver or project the' \
+  "dm-review consolidator forbids delegated publication"
+require_before "$review_consolidator" '### Step 5.5: Coverage Gaps' 'Return the provisional report body only after this Coverage Gaps section is' \
+  "dm-review consolidator completes coverage gaps before returning its provisional body"
+require_absent "$review_consolidator" 'Write that report to `.claude/ux-review/report.md`' \
+  "dm-review consolidator does not write the final report early"
+require_absent "$review_consolidator" 'then project its compact' \
+  "dm-review consolidator does not project the handoff early"
+require_text "$review_skill" 'After consolidation, determine tracking method automatically:' \
+  "dm-review issue tracking follows consolidation rather than publication"
+require_absent "$review_skill" 'After outputting the report' \
+  "dm-review removes the stale early-publication Phase 6 phrase"
 require_absent "$review_skill" 'Output the full report to the user.' \
   "dm-review rejects the old visible full-report dump"
 for f in "$review_command" "$review_alias"; do

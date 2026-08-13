@@ -187,15 +187,16 @@ Apply the merge recommendation logic from `${CLAUDE_SKILL_DIR}/references/output
 
 ### Step 5: Generate Report
 
-Follow the exact templates in `references/output-format.md`. Generate the
-complete report first, preserving the header, merge recommendation, P1/P2/P3
-findings, `Synthesis Decisions`, agent summary, cleanup truth, and raw reports.
-Write that report to `.claude/ux-review/report.md`, then project its compact
-human handoff: exact verdict, one plain sentence, actionable P1/P2 findings,
-human-action coverage gaps, one recommended next action, and a pointer to the
-complete evidence. Every
-retained canonical finding keeps its stable ID and all contributing source IDs,
-agents, providers, models, evidence, and raw refs in the complete report.
+Follow the complete-report template in `references/output-format.md`. Produce a
+provisional report body preserving the header, merge recommendation, P1/P2/P3
+findings, `Synthesis Decisions`, agent summary, and raw reports. Leave the
+repository-cleanup section pending for the top-level skill to fill from Phase 8
+authority. Every retained canonical finding keeps its stable ID and all
+contributing source IDs, agents, providers, models, evidence, and raw refs.
+
+Do not write `.claude/ux-review/report.md` and do not deliver or project the
+compact human handoff. The top-level review skill owns both actions after
+mandatory cleanup.
 
 ### Step 5.5: Coverage Gaps
 
@@ -205,6 +206,9 @@ Add a **Coverage Gaps** section (immediately below the agent summary table) that
 - Every dead/absent agent (see Dead / Missing Agent Handling), with what it was responsible for.
 
 If there are no gaps, state `Coverage Gaps: none -- all lanes completed within budget.` An empty or omitted section must never be used to imply full coverage; absence of the section is treated as an authoring error, not as "clean".
+
+Return the provisional report body only after this Coverage Gaps section is
+complete.
 
 ## Rules
 

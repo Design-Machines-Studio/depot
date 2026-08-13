@@ -1056,7 +1056,7 @@ The `[ -n "$ENGINE" ]` guard covers "airlift not installed"; the `[ -x "$ENGINE"
 
 **Skip this phase in Quick mode.**
 
-After outputting the report, determine tracking method automatically:
+After consolidation, determine tracking method automatically:
 
 **1. If `todos/` directory exists** in the project root -- use text file tracking automatically. Do NOT ask the user. Create todo files for P1 and P2 findings only. P3 advisories remain in the report and receipts.
 
