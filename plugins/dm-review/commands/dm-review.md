@@ -15,7 +15,7 @@ P1 blocks merge and P2 must be fixed before merge. P3 is advisory: retain its co
 The merge recommendation reflects this policy:
 
 - **Zero findings:** `CLEAN` -- safe to merge.
-- **P3 only (no P1/P2):** `CLEAN` -- retain every P3 as a visible advisory.
+- **P3 only (no P1/P2):** `CLEAN` -- retain every P3 in complete evidence; show only the exact count and evidence pointer in the compact handoff.
 - **P2 present:** `APPROVE WITH FIXES`. Must fix.
 - **P1 present:** `BLOCKS MERGE`. Must fix.
 

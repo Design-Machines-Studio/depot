@@ -978,7 +978,7 @@ Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
 5. **Determine merge recommendation** using `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic. In summary:
    - Any P1 -> "BLOCKS MERGE"
    - Any P2 -> "APPROVE WITH FIXES"
-   - P3 only -> "CLEAN" with every P3 retained as a visible advisory
+   - P3 only -> "CLEAN" with every P3 retained in complete evidence and an exact count plus pointer in the compact handoff
    - Zero findings -> "CLEAN"
 6. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`, including the compact required `Synthesis Decisions` section and full raw agent reports.
 
@@ -1012,7 +1012,14 @@ lane, including lanes with zero findings. Never hand-author
 coverage receipts. A zero-finding synthesis still runs the command with count
 zero and all required lane receipts so missing producer coverage is observable.
 
-Output the full report to the user.
+Deliver the compact human handoff first, following
+`references/output-format.md`. Preserve the complete unified report and all
+machine-readable companions in the established evidence flow. Before delivery,
+write the complete report to `.claude/ux-review/report.md`; this is the existing
+dm-review artifact flow, not a new report subsystem. The compact handoff links
+that path. Do not dump the expanded report, provider tables, agent transcripts,
+synthesis ledger, cleanup inventory, or raw reports directly into visible chat
+by default.
 
 #### Coverage receipt and shadow observation
 

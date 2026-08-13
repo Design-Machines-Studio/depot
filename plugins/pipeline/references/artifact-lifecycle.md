@@ -57,6 +57,7 @@ Refs are not artifacts -- they are not deleted by tier, but by the safe-to-delet
 |------|------|-------|
 | `.claude/ux-review/screenshots/<date>/*.png` | 1 | Rotated: only today's date kept |
 | `.claude/ux-review/manifest.json` | 2 | Overwritten each run |
+| `.claude/ux-review/report.md` | 3 | Complete unified review, including findings, coverage, cleanup, provenance, and collapsed raw reports |
 | `.claude/ux-review/workflow-kernel/request.json` | 2 | Validated review request with unchanged/defaulted workflow class |
 | `.claude/ux-review/workflow-kernel/authoritative-receipts.json` | 2 | Cumulative ordered redacted review receipt array |
 | `.claude/ux-review/workflow-kernel/review-shadow-observation.json` | 2 | Explicit authoritative review observation snapshot |

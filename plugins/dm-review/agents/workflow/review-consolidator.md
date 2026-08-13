@@ -187,7 +187,15 @@ Apply the merge recommendation logic from `${CLAUDE_SKILL_DIR}/references/output
 
 ### Step 5: Generate Report
 
-Follow the exact template in `references/output-format.md`. Include all required sections: header, merge recommendation, P1/P2/P3 findings, the compact `Synthesis Decisions` ledger, agent summary table, and detailed raw agent reports in collapsible sections. Every retained canonical finding includes its stable ID and all contributing source IDs, agents, providers, models, evidence, and raw refs.
+Follow the exact templates in `references/output-format.md`. Generate the
+complete report first, preserving the header, merge recommendation, P1/P2/P3
+findings, `Synthesis Decisions`, agent summary, cleanup truth, and raw reports.
+Write that report to `.claude/ux-review/report.md`, then project its compact
+human handoff: exact verdict, one plain sentence, actionable P1/P2 findings,
+human-action coverage gaps, one recommended next action, and a pointer to the
+complete evidence. Every
+retained canonical finding keeps its stable ID and all contributing source IDs,
+agents, providers, models, evidence, and raw refs in the complete report.
 
 ### Step 5.5: Coverage Gaps
 
@@ -218,3 +226,8 @@ If there are no gaps, state `Coverage Gaps: none -- all lanes completed within b
 13. **Provenance is literal** -- if a requested provider falls back, retain the
     requested, attempted, and implemented-by values. Never silently relabel a
     Codex fallback as OpenRouter work.
+14. **The handoff is bounded** -- list every P1/P2 once when there are at most
+    eight; otherwise show the highest-impact eight, the exact remaining count,
+    and the complete-report pointer. Show P3 only as a count plus evidence
+    pointer there. Never expand provider tables, transcripts, synthesis ledgers,
+    cleanup tables, or raw reports in the visible handoff.

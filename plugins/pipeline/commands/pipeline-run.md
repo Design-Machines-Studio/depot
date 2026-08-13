@@ -11,6 +11,22 @@ review for ordinary chunks, sensitive-path escalation, and the approved final
 review mode. This is the execution engine -- it creates or reuses branches, runs
 subagents, reviews, fixes, merges, and delivers a clean feature branch.
 
+## Human-Facing Completion
+
+Present the orchestrator's compact summary, not its durable ledgers. Start with
+exactly `Done`, `Needs fixes`, or `Blocked`; state what changed or stopped, the
+verification result, branch or PR, and one recommended next action. Link the
+existing `receipt.md`, `final-requirements-crosscheck.md`,
+`run-postmortem.md`, and detailed review when present. For blocked work, name
+the exact blocker, the smallest operator action, and the preserved resumable
+location. Normally stay within roughly 250 words, except for required P1/P2
+findings or a real blocker.
+
+Do not repeat `Steps Completed`, provider accounting, cleanup inventory, every
+evaluation receipt, raw review output, or a default action menu in visible chat.
+Those facts remain in the established artifacts. Put one recommended action
+before any genuinely live alternatives.
+
 ## Input
 
 <manifest_path> #$ARGUMENTS </manifest_path>
@@ -256,13 +272,9 @@ The `emit-cost-summary` command is one transaction: it owns the artifact path, c
 
 `bind-prediction` runs before corresponding authoritative actions, atomically seals the source, translated events, event digest, and RunSpec context, and appends exact binding authority to the canonical lifecycle ledger before `run.started`. `observe-pipeline` runs only after authoritative receipts exist and requires that ordered authority plus bound `pipeline-shadow-prediction.json`; direct comparison rechecks the same authority, and byte-identical predicted and authoritative receipts are valid only with the pre-start binding. It writes a separate `authoritative_observation` and never creates or changes the prediction. Without matching independent prediction evidence, observation and comparison fail closed. Keep the source and bound artifact until comparison completes. Write the shadow report and reliability metrics without changing the merge recommendation, cleanup disposition, or provider result. Never auto-delete the repository-lifetime `.workflow-kernel/repository-scope.json`; retain the terminal run directory or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches, regardless of parity `match`.
 
-Present the summary report from the orchestrator, then ask:
-
-"Feature branch `<branch>` is ready. Options:
-1. Review the branch (`git log main..<branch>`)
-2. Create a PR (`gh pr create`)
-3. Give feedback for another iteration
-4. Run another full review (`/dm-review <branch>`)
-5. Done"
+Present the compact summary from the orchestrator. If an operator decision is
+still needed, ask for it after `Recommended next action`; mention additional
+choices only when they are genuinely live. Do not emit a standing five-option
+menu.
 
 If feedback given, suggest re-running `/pipeline-prompts` with the feedback to generate revision prompts, then `/pipeline-run` again on the same feature branch.

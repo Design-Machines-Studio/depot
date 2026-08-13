@@ -30,10 +30,20 @@ delve, tapestry, landscape (metaphorical), navigate (metaphorical), leverage (ve
 
 **AI Writing Patterns:**
 - Em-dash clusters (more than 2 per paragraph)
-- Tricolon crutches (three parallel items as a default rhythm)
-- Mechanical transitions ("Furthermore," "Moreover," "Additionally,")
+- Puffery, promotional filler, vague attribution, and generic conclusions
+- Canned transitions and chatbot phrases
+- Forced rules of three (do not force a natural list into three items)
+- Synonym cycling that avoids repeating the clearest noun
+- False ranges whose endpoints do not share a meaningful scale
+- Excessive hedging or cutoff disclaimers that avoid a supported claim
+- Abstract jargon where a concrete word names the mechanism, fact, or actor
+- Unnecessary passive voice when the actor is known and matters
+- Weak verb plus adverb constructions where a stronger verb or measurement exists
+- Repetitive punctuation or formatting habits, including em-dash, colon, boldface, or inline-header clusters
+- Sentences that express a feeling but provide no fact, instruction, example, or decision
+- Dense sentences that require rereading; split or remove clauses
 - Emotional flatness (every paragraph at the same register)
-- Vocabulary uniformity (same word choices a human wouldn't repeat)
+- Sterile rewrites that remove the writer's actual voice, opinion, rhythm, or register
 
 **Rhythm Issues:**
 - No sentence variety (all medium-length)
@@ -46,25 +56,28 @@ delve, tapestry, landscape (metaphorical), navigate (metaphorical), leverage (ve
 
 ### 4. Report
 
+Return a compact edit, not an inventory of every scan result:
+
+```markdown
+## Verdict
+[Ready | Light edit | Rewrite needed] -- [one plain sentence explaining why]
+
+## Fix now
+[Highest-value concrete edits, ordered by impact. Use the natural number needed; do not force three.]
+
+## Suggested rewrite
+[Direct replacement text for the affected passage. If the text is ready, say "No rewrite needed."]
+
+## What remains
+[Only unresolved ambiguity or an intentional voice/register choice. If none, say "Nothing."]
 ```
-Voice Check -- [source]
 
-Kill words found: X
-AI patterns found: Y
-Rhythm issues: Z
+Do not report kill-word, pattern, or rhythm counts unless the user asks for an
+audit ledger. Prefer the smallest set of edits that materially improves the
+text. Preserve exact names, quotations, technical terms, paths, and commands
+when precision requires them.
 
-KILLS:
-- Line N: "leverage" -> try "use" or "exploit"
-- Line N: "robust" -> try "solid" or "tough"
-
-AI PATTERNS:
-- Para 2: Three consecutive "Additionally/Furthermore/Moreover" transitions
-- Para 4: Em-dash cluster (4 in one paragraph)
-
-RHYTHM:
-- All sentences 15-25 words -- needs variety (fragments + longer builds)
-- No gear shifts between registers
-
-REWRITES:
-[Provide 2-3 rewritten passages that fix the identified issues]
-```
+The voice skill is authoritative. A mechanical plain-language preference must
+not flatten a deliberate Travis metaphor, fragment, repetition, political
+position, joke, or platform register. The goal is clearer human writing in the
+writer's voice, not sterile uniformity.

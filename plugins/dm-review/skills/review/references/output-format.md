@@ -1,10 +1,83 @@
 # Review Output Format
 
-The canonical unified report format produced by the review-consolidator after all agents complete.
+The canonical unified report and compact human handoff produced by the
+review-consolidator after all agents complete. The handoff is a projection of
+the complete report, never a replacement for it.
 
 ---
 
-## Report Template
+## Compact Human Handoff
+
+Every visible result begins with this compact handoff. Use the exact mechanical
+verdict from the complete report. Keep the explanation to one plain sentence.
+
+```markdown
+## <CLEAN | APPROVE WITH FIXES | BLOCKS MERGE | REVIEW INCOMPLETE>
+
+<One plain sentence explaining the verdict.>
+
+### Actionable findings
+<For each retained P1/P2, once only: `path:anchor -- problem -- smallest adequate fix`>
+<If none: `None.`>
+
+### Coverage gap requiring action
+<Only gaps that require human action. If none: `None.`>
+
+### Recommended next action
+<One action.>
+
+### Complete evidence
+`Full report: .claude/ux-review/report.md`.
+<If P3 exists: `P3 advisories: N -- <evidence pointer>.`>
+```
+
+When there are at most eight P1/P2 findings, list each exactly once. When there
+are more than eight, list the highest-impact eight, state `N additional P1/P2
+findings` with the exact remaining count, and point to the complete report.
+Never imply that omitted findings do not exist. P3 advisories appear only as an
+exact count and evidence pointer in this handoff; they remain fully detailed in
+the report and never enter the fix queue.
+
+Do not repeat provider tables, agent transcripts, synthesis ledgers, cleanup
+tables, or raw reports in the handoff. Write them to the established durable
+artifact `.claude/ux-review/report.md` before delivery. Coverage gaps, blocked
+browser evidence, cleanup truth, finding IDs, and
+literal provider/model provenance remain in that complete evidence flow.
+
+### Representative handoffs
+
+Clean review:
+
+```markdown
+## CLEAN
+No P1/P2 findings were found, and all required lanes completed.
+### Actionable findings
+None.
+### Coverage gap requiring action
+None.
+### Recommended next action
+Merge the reviewed head.
+### Complete evidence
+Full report: `.claude/ux-review/report.md` (P3 advisories: 0).
+```
+
+Review with actionable findings:
+
+```markdown
+## APPROVE WITH FIXES
+Two P2 findings must be fixed before merge.
+### Actionable findings
+- `internal/members/handler.go:Create` -- validation accepts an empty name -- reject an empty trimmed value.
+- `web/templates/member.templ:member-form` -- error text is not associated with the field -- add the existing error ID to `aria-describedby`.
+### Coverage gap requiring action
+Safari browser evidence is blocked -- run the retained case on a Safari-capable host.
+### Recommended next action
+Fix the two P2 findings, then rerun their affected lanes and the blocked browser case.
+### Complete evidence
+Full report: `.claude/ux-review/report.md` (P3 advisories: 2).
+```
+
+## Complete Report Template
 
 ```markdown
 ## Code Review Report
@@ -227,7 +300,7 @@ The consolidator preserves the original citation format from each agent.
 4. **Clean agents are noted** in the summary table but don't get detail sections
 5. **Skipped agents are listed** with the reason (file type not changed, project type mismatch)
 6. **Deduplicated findings** show all source agents: `**Source:** a11y-css-reviewer, css-reviewer`
-7. **Full agent reports** are always included in collapsible sections for reference
+7. **Full agent reports** are always included in collapsible sections in the complete evidence, not expanded in the compact handoff
 8. **No sugar-coating** -- if the code has problems, say so directly
 9. **Stable identity is mandatory** -- every retained canonical finding uses
    `finding-v1:sha256(<normalized-key>)`, derived without reviewer, provider,
@@ -235,6 +308,9 @@ The consolidator preserves the original citation format from each agent.
 10. **Synthesis decisions are complete** -- every source finding appears with
     provenance, evidence, raw ref, agreement, disposition, closed reason code,
     and rationale; raw reviewer reports remain verbatim below
+11. **Human delivery is compact** -- the exact verdict, one-sentence explanation,
+    actionable P1/P2 findings, human-action coverage gaps, one recommended next
+    action, and complete-evidence pointer appear before the report
 
 ## Merge Recommendation Logic
 

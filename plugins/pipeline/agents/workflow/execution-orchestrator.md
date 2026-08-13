@@ -2019,13 +2019,16 @@ rule prevents it, what automated check catches it earlier, what becomes the defa
   Failure Modes" (grep to confirm), draft both:
   1. a `docs/post-mortems/YYYY-MM-DD-<slug>.md` stub (symptom, root cause, hardening proposal), and
   2. a candidate "Known Pipeline Failure Modes" entry,
-  and surface both in the Step 6 Summary Report under **Codify Proposals** for human approval. Do NOT
-  edit CLAUDE.md or commit the postmortem yourself -- propose; the caller approves.
+  and write both under `## Codify Proposals` in the mandatory
+  `plans/<feature-slug>/run-postmortem.md` for human approval. The compact Step
+  6 summary links that postmortem. Do NOT edit CLAUDE.md or commit the proposed
+  postmortem stub yourself -- propose; the caller approves.
 
 This converts the previously reactive "someone remembers to write a postmortem" ritual into an
 automatic proposal emitted every time a novel failure occurs.
 
-If ai-memory is unavailable, still produce the Codify Proposals in the report; skip only the auto-write.
+If ai-memory is unavailable, still write the Codify Proposals to the run
+postmortem; skip only the memory write.
 
 Mark `FINAL 4. Record session to ai-memory` complete.
 
@@ -2332,102 +2335,56 @@ Mark `FINAL 5c. Campaign state write` complete.
 
 Before presenting the summary, use the terminal comparison and metrics result captured in Step 5b before any semantic-match cleanup. Report the semantic parity category and reasons without changing the authoritative merge, review, provider, browser, or cleanup result. If unavailable, report the attempted resolver source and safe reason. The stable comparison vocabulary is `match`, `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, and `unsafe_to_promote`; diagnostics such as `semantic_receipts_required` and `run_spec_receipt_context_mismatch` belong only in `differences`.
 
-Present this report:
+Present this compact report. Populate every evidence path that exists; omit a
+nonexistent optional artifact rather than inventing one:
 
 ```markdown
-# Pipeline Execution Complete
+## <Done | Needs fixes | Blocked>
 
-## Feature: <feature-name>
-**Branch:** <featureBranch>
-**Base:** <baseBranch>
-**Branch mode:** create / reuse
-**Expected feature head:** <commit-or-null>
-For create mode, Base is the pullable branch from `manifest.baseBranch` and
-`main` is only the absent-field default. For reuse mode, Base is contextual
-only; execution starts from the exact fetched existing feature head and makes
-no setup push.
+<What changed, or the exact blocker and what stopped.>
 
-## Chunks Executed
-| Chunk | Status | Evaluation Gate Result | Notes |
-|-------|--------|----------------------|-------|
-| chunk-id | clean/needs-attention | N iterations, M findings | |
+**Verification:** <passed checks and final review result, or exact failed/pending evidence>
+**Branch or PR:** <branch and PR URL when present>
+**Recommended next action:** <one action; for blocked work, the smallest operator action>
+**Resumable work:** <preserved branch/worktree/artifact path; required when blocked>
 
-## Final Review
-- **Requested mode:** full / quick
-- **Effective mode:** full / quick
-- **Escalation:** none / security-sensitive-path
-- **Result:** Clean / N findings remaining
-- **Merge Recommendation:** CLEAN / APPROVE WITH FIXES / BLOCKS MERGE / BLOCKED PENDING CALLER VERIFICATION / BLOCKED PENDING REMOTE VERIFICATION
-- **executionMode:** full_cli / codex_native / manual_walkthrough
-- **isolationStrategy:** per-chunk-worktree / sequential-on-branch
-- **providerSplit:** `{claude: N, codex: N, openrouter: N}` measured from run receipts/postmortem; DeepSeek-model calls count under OpenRouter
-- **eligibleProviderSplit:** `{codex: N, openrouter: N, targetProfile: <name>, routingVariance: <measured>}` measured before disclosure/routing fallback
-- **workflowClass:** `<class>` (`workflow_class_defaulted=true|false`)
-- **shadow:** match / parity-gap / unavailable (reason)
-- **noMergeOnCompletion:** true/false
-
-## Steps Completed
-- [x] Chunk classification: [UI: N, Logic: N, Trivial: N, Integration: N]
-- [x] Worktree per chunk: yes/no
-- [x] Anti-pattern scan per chunk: yes/no (findings per chunk)
-- [x] Evaluation gate per chunk: yes/no (type and iterations per chunk)
-- [x] Playwright browser checks: N of M `renderedSurface: required` chunks checked; K `not_applicable` chunks recorded with rationale
-- [x] Approved final dm-review mode: yes/no
-- [x] final-requirements-crosscheck.md written: yes/no
-- [x] Merge policy honored (noMergeOnCompletion): yes/no
-- [x] ai-memory capture: yes/no
-- [x] Codify run (if run had friction): yes/no/n-a
-- [x] Run Post-Mortem written and measured providerSplit reported: yes/no
-- [x] Artifact cleanup: yes/no
-- [x] Repository cleanup: worktrees N->M, branches deleted K, blocked J
-- [x] Docker cleanup/reconciliation: created N, removed M, missing K, retained/blocked J
-- [x] Shadow comparison/metrics: match/parity-gap/unavailable
-- [x] Zero-deferral enforced: yes/no
-
-## Artifact Cleanup
-- Receipt: plans/<feature-slug>/receipt.md
-- Ephemeral removed: N files
-- Run-scoped removed: N files (or "preserved -- run failed")
-- Feature-scoped retained: N files
-
-## Repository Cleanup
-[Reproduce the `## Branch & Worktree Inventory` block from receipt.md verbatim -- both tables,
-the worktree before/after counts, and the `git status --porcelain` result. Every kept or blocked
-ref carries the exact follow-up command. Never report a blocked ref as deleted.]
-
-## Evaluation Receipts
-[List every EVAL_GATE_PASSED line, proving each chunk was evaluated]
-
-## Advisory Findings
-[List retained P3 advisories with their evidence references. If none, state "None."]
-
-## Codify Proposals
-[From Step 5.2. List each lesson and where it should be encoded. For any NOVEL pipeline failure pattern,
-include the drafted postmortem stub path and the candidate "Known Pipeline Failure Modes" entry text,
-flagged AWAITING APPROVAL -- the caller approves before anything is committed to CLAUDE.md or
-docs/post-mortems/. If the run was clean, state "None -- clean run, nothing to codify."]
-
-## Run Economics
-- Post-mortem: plans/<feature-slug>/run-postmortem.md
-- providerSplit: <measured split>
-- Claude share target: <from routing-policy.json>
-- Misroutes: <N>
-- Top recommendation: <title or none -- optimal>
-- Recommendation status: AWAITING APPROVAL
-
-## Warnings
-[List any recovered browser attempts, unresolved `human_help_required` browser blockers, degraded non-browser reviews, or anti-pattern findings that were fixed. Required browser verification is never skipped.]
-
-## Flagged Items
-[Any chunks or findings needing manual attention]
-
-## Next Steps
-1. Review: `git log main..<featureBranch>`
-2. Test end-to-end
-3. Create PR: `gh pr create`
+**Evidence:**
+- Receipt: `plans/<feature-slug>/receipt.md`
+- Requirements: `plans/<feature-slug>/final-requirements-crosscheck.md`
+- Postmortem: `plans/<feature-slug>/run-postmortem.md`
+- Detailed review: `.claude/ux-review/report.md`
 ```
 
-The "Steps Completed" section is your honest self-report. If any step was skipped, say so here.
+The visible summary normally stays within roughly 250 words. Exceed that only
+for actionable P1/P2 findings or a real blocker. Do not omit required action.
+Keep chunk tables, `Steps Completed`, provider accounting, cleanup inventory,
+evaluation receipts, P3 detail, browser receipts, synthesis/provenance ledgers,
+and raw reports in the evidence artifacts. The compact summary must still name
+any coverage gap or blocked browser evidence that requires human action and
+must never report blocked cleanup as complete.
+
+Successful-run specimen:
+
+```markdown
+## Done
+The membership validation change is committed and ready for review.
+**Verification:** Unit tests and the approved final review passed; no P1/P2 findings remain.
+**Branch or PR:** `enhance/member-validation` -- PR #123
+**Recommended next action:** Review and merge PR #123.
+**Evidence:** receipt, requirements crosscheck, postmortem, and detailed review under `plans/member-validation/`.
+```
+
+Blocked-run specimen:
+
+```markdown
+## Blocked
+Required Safari evidence for `member-form-mobile` could not run because no Safari-capable host is available.
+**Verification:** Code tests passed; the final review remains blocked on that browser case.
+**Branch or PR:** `enhance/member-form`
+**Recommended next action:** Run `member-form-mobile` on a Safari-capable host and attach the result.
+**Resumable work:** `enhance/member-form`; receipts and the pending case are preserved under `plans/member-form/`.
+**Evidence:** `plans/member-form/receipt.md` and `plans/member-form/final-requirements-crosscheck.md`.
+```
 
 Mark `FINAL 6. Present summary report` complete.
 

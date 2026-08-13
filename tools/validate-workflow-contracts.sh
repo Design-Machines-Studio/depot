@@ -501,7 +501,7 @@ for loop_contract in "$review_loop" "$review_loop_skill"; do
 done
 require_text "$review_skill" '`review_lane_allowlist`' "review receiver names the selective lane allowlist"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.14.0"' "dm-review requires the simplified verification kernel release"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.61.0"' "pipeline requires proportional-scope dm-review release"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.62.0"' "pipeline requires compact-handoff dm-review release"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'family-independent second-opinion review' "dm-review manifest describes family-independent perspective resolution"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'Full mode only.' "migration-validator registry limits the lane to full mode"
@@ -1062,6 +1062,119 @@ for f in "$openrouter_agent_runner" "$openrouter_wrapper"; do
   require_text "$f" "security review role requires Kimi K3 primary and GPT-5.6 Terra fallback" \
     "$rel binds security review routing to the approved model pair"
 done
+
+# ---------------------------------------------------------------------------
+# Group 10: compact human output with durable evidence
+# ---------------------------------------------------------------------------
+printf "\nGroup 10: compact human output with durable evidence\n"
+
+voice_check="$REPO_ROOT/plugins/ghostwriter/commands/voice-check.md"
+voice_check_alias="$REPO_ROOT/plugins/ghostwriter/skills/voice-check/SKILL.md"
+review_output="$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md"
+review_consolidator="$REPO_ROOT/plugins/dm-review/agents/workflow/review-consolidator.md"
+review_command="$REPO_ROOT/plugins/dm-review/commands/dm-review.md"
+review_alias="$REPO_ROOT/plugins/dm-review/skills/dm-review/SKILL.md"
+pipeline_alias="$REPO_ROOT/plugins/pipeline/skills/pipeline/SKILL.md"
+
+for f in "$voice_check" "$voice_check_alias"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" 'Puffery, promotional filler, vague attribution, and generic conclusions' \
+    "$rel audits promotional and vague language"
+  require_text "$f" 'Sentences that express a feeling but provide no fact, instruction, example, or decision' \
+    "$rel requires concrete information"
+  require_text "$f" 'Dense sentences that require rereading' \
+    "$rel catches dense sentences"
+  require_text "$f" 'Sterile rewrites that remove the writer' \
+    "$rel preserves deliberate voice"
+  require_text "$f" '## Verdict' "$rel starts the compact result shape with Verdict"
+  require_text "$f" '## Fix now' "$rel includes impact-ordered fixes"
+  require_text "$f" '## Suggested rewrite' "$rel includes direct replacement text"
+  require_text "$f" '## What remains' "$rel limits residual commentary"
+done
+require_absent "$voice_check" 'Provide 2-3 rewritten passages' \
+  "voice-check no longer forces a fixed rewrite count"
+
+require_before "$review_output" '## Compact Human Handoff' '## Complete Report Template' \
+  "dm-review leads with compact handoff before complete evidence"
+require_text "$review_output" 'path:anchor -- problem -- smallest adequate fix' \
+  "dm-review handoff has the compact P1/P2 row shape"
+require_text "$review_output" 'findings` with the exact remaining count' \
+  "dm-review discloses the exact overflow count"
+require_text "$review_output" 'exact count and evidence pointer in this handoff' \
+  "dm-review keeps P3 advisory detail out of the handoff"
+require_text "$review_output" '### Synthesis Decisions' \
+  "dm-review retains the complete synthesis ledger"
+require_text "$review_output" '### Repository Cleanup' \
+  "dm-review retains cleanup truth"
+require_text "$review_output" '### Detailed Agent Reports' \
+  "dm-review retains raw reviewer evidence"
+require_text "$review_skill" 'Preserve the complete unified report and all' \
+  "dm-review preserves complete report evidence"
+require_text "$review_skill" 'write the complete report to `.claude/ux-review/report.md`' \
+  "dm-review always writes the complete report before compact delivery"
+require_text "$lifecycle" '| `.claude/ux-review/report.md` | 3 |' \
+  "dm-review complete report uses the existing artifact lifecycle"
+require_text "$review_consolidator" 'Coverage Gaps' \
+  "dm-review consolidator retains coverage gaps"
+require_absent "$review_skill" 'Output the full report to the user.' \
+  "dm-review rejects the old visible full-report dump"
+for f in "$review_command" "$review_alias"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" 'show only the exact count and evidence pointer in the compact handoff' \
+    "$rel keeps P3 detail in complete evidence"
+  require_absent "$f" 'retain every P3 as a visible advisory' \
+    "$rel rejects expanded P3 delivery"
+done
+require_text "$review_output" 'Clean review:' \
+  "dm-review carries a clean-review specimen"
+require_text "$review_output" 'Review with actionable findings:' \
+  "dm-review carries an actionable-review specimen"
+
+for f in "$pipeline_cmd" "$pipeline_alias" "$pipeline_run" "$pipeline_run_skill"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" 'Done' "$rel includes the successful outcome token"
+  require_text "$f" 'Needs fixes' "$rel includes the repair outcome token"
+  require_text "$f" 'Blocked' "$rel includes the blocked outcome token"
+  require_text "$f" 'Recommended next action' "$rel requires one recommended next action"
+done
+require_text "$orchestrator" '## <Done | Needs fixes | Blocked>' \
+  "Pipeline final summary leads with the outcome"
+require_text "$orchestrator" '**Recommended next action:** <one action; for blocked work, the smallest operator action>' \
+  "Pipeline final summary has one recommended action"
+require_text "$orchestrator" 'Successful-run specimen:' \
+  "Pipeline carries a successful-run specimen"
+require_text "$orchestrator" 'Blocked-run specimen:' \
+  "Pipeline carries a blocked-run specimen"
+require_text "$orchestrator" 'Required Safari evidence for `member-form-mobile` could not run' \
+  "blocked specimen exposes exact browser evidence"
+require_text "$orchestrator" 'plans/<feature-slug>/receipt.md' \
+  "Pipeline keeps the durable receipt path"
+require_text "$orchestrator" 'plans/<feature-slug>/final-requirements-crosscheck.md' \
+  "Pipeline keeps the durable requirements crosscheck"
+require_text "$orchestrator" 'plans/<feature-slug>/run-postmortem.md' \
+  "Pipeline keeps the durable postmortem"
+require_text "$orchestrator" 'write both under `## Codify Proposals` in the mandatory' \
+  "Pipeline preserves approval-ready codify proposals in the postmortem"
+require_text "$orchestrator" 'Detailed review: `.claude/ux-review/report.md`' \
+  "Pipeline links the mandatory detailed review artifact"
+require_text "$orchestrator" 'providerSplit: {claude: N, codex: N, openrouter: N}' \
+  "Pipeline receipt retains provider provenance"
+require_text "$orchestrator" 'retained/blocked <J>' \
+  "Pipeline receipt retains cleanup truth"
+require_text "$orchestrator" 'P1/P2' \
+  "Pipeline still preserves actionable findings"
+require_text "$orchestrator" 'human_help_required' \
+  "Pipeline still preserves blocked browser evidence"
+require_absent "$orchestrator" '# Pipeline Execution Complete' \
+  "Pipeline rejects the old giant visible completion template"
+require_absent "$pipeline_run" 'Feature branch `<branch>` is ready. Options:' \
+  "pipeline-run rejects the old standing action menu"
+require_text "$pipeline_cmd" 'Keep the complete coverage map in the existing plan/manifest artifacts' \
+  "Pipeline phase gate keeps detailed coverage durable"
+require_text "$pipeline_cmd" 'At the gate, present only the chunk count' \
+  "Pipeline phase gate stays compact"
+require_absent "$pipeline_cmd" 'Then reproduce the inventory' \
+  "Pipeline cleanup delivery does not dump the complete inventory"
 
 printf "\n"
 if [ "$failures" -ne 0 ]; then
