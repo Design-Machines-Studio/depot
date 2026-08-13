@@ -1,7 +1,7 @@
 {
   "name": "ned",
-  "description": "Personal knowledge graph, NED operations, and session capture for Travis Gertz",
-  "version": "1.8.2",
+  "description": "Personal knowledge graph, NED operations, preview publication, and session capture for Travis Gertz",
+  "version": "1.9.0",
   "author": {
     "name": "Design Machines"
   },
@@ -40,6 +40,13 @@
         "description": "Select and verify the safe NED account for development and bounded system operations",
         "triggers": ["use NED", "run this on NED", "SSH to NED", "use the trav account", "use the ned account", "which NED user", "NED account matrix", "rootless Docker on NED", "system Docker on NED", "T3 NED environment"],
         "tags": ["ned-operations", "remote-development", "ssh", "account-selection", "least-privilege", "rootless-docker", "tailscale"]
+      },
+      {
+        "id": "publish-preview",
+        "name": "Publish Preview",
+        "description": "Inventory-driven playbook for publishing Access-protected NED development and client previews",
+        "triggers": ["publish this project as dmNNN.asmbly.app", "publish this site as <slug>.designmachines.xyz", "make this NED preview public", "dm023.asmbly.app", "designmachines.xyz preview", "unpublish this NED preview", "check the NED preview status"],
+        "tags": ["ned-operations", "preview", "cloudflare-access", "caddy", "uptime-kuma", "rootless-docker"]
       }
     ],
     "agents": [],
