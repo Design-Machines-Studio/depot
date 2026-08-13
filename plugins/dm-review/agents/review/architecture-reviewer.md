@@ -215,7 +215,7 @@ Violations:
 
 1. Understand the project's architecture before flagging violations -- read the directory structure and imports
 2. Don't enforce textbook architecture on small projects -- pragmatism over purity
-3. Layer violations are P1 when they create circular dependencies, P2 otherwise
+3. A layer violation is P1 or P2 only when it causes a concrete current failure, reachable harm, or approved-scope regression. Otherwise it is P3 advice or not a finding.
 4. Every finding must name the specific principle or rule being violated
 5. Suggest where the code should live instead, not just "this is in the wrong place"
 6. If the project doesn't have clear layers yet, note it as P3 and suggest the target architecture

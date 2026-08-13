@@ -1180,6 +1180,8 @@ Approved Key Requirements from the assessment `keyRequirements` island:
 
 Your implementation MUST satisfy the requirements relevant to this chunk.
 
+[FULL PROMPT CONTENT INLINED HERE]
+
 When done:
 1. Verify all acceptance criteria are met
 2. State which approved Key Requirements this chunk addresses
