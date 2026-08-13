@@ -98,10 +98,10 @@ unrelated Depot Issues #25-#28.
 - Assembly means small self-hosted Go applications for 4-50-person co-ops,
   maintained by a two-person team. YAGNI, pragmatic DRY, ergonomics, runtime
   performance, elapsed time, and token cost are design constraints.
-- Kimi K3 is review-only, especially focused security. GLM-5.2 has no default
-  seat. DeepSeek V4 Flash refresh and Grok 4.5 remain bounded execution
-  candidates. Native Fable 5 or Codex 5.6 provides one proportional supervisor
-  checkpoint rather than duplicating the worker's implementation.
+- Kimi K3 is review-only, especially focused security. DeepSeek V4 Flash 0731
+  leads bounded execution, Grok 4.5 handles harder escalation, and GLM-5.2 is
+  the experimental last fallback. Native Fable 5 or Codex 5.6 provides one
+  proportional supervisor checkpoint rather than duplicating the worker's implementation.
 - A deliberately configured OpenRouter key is authorization on a trusted
   developer workstation. Do not add a second human-approval ceremony. Keep
   obvious-secret refusal automatic and use provider-side key limits for spend.

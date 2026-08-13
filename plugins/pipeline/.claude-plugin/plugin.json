@@ -1,13 +1,13 @@
 {
   "name": "pipeline",
   "description": "Autonomous feature development pipeline with executable tiered verification, exact receipt reuse, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
-  "version": "1.46.1",
+  "version": "1.47.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
   },
   "pluginDependencies": {
-    "dm-review": ">=1.59.0",
+    "dm-review": ">=1.60.0",
     "ned": ">=1.4.0",
     "workflow-kernel": ">=0.13.6"
   },
@@ -20,7 +20,7 @@
     "ghostwriter": ">=3.7.0",
     "superpowers": ">=1.0.0",
     "airlift": ">=1.0.0",
-    "openrouter": ">=1.8.0"
+    "openrouter": ">=1.14.0"
   },
   "keywords": [
     "pipeline",

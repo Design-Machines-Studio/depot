@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
   "description": "Code review orchestrator with proportional quick review, advisory P3 evidence, full security and browser coverage, stable finding identities, and contribution receipts",
-  "version": "1.59.1",
+  "version": "1.60.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -17,7 +17,7 @@
   "optionalPluginDependencies": {
     "superpowers": ">=1.0.0",
     "airlift": ">=1.0.0",
-    "openrouter": ">=1.11.4"
+    "openrouter": ">=1.14.0"
   },
   "keywords": [
     "review",

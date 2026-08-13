@@ -5,11 +5,10 @@ description: Use when the user explicitly asks to use, ask, send, delegate, or o
 
 # OpenRouter Delegation
 
-Use OpenRouter directly for explicitly requested, human-approved interactive
-analysis. dm-review automation may use a valid temporary sunset-bound operator
-batch only while the broker is absent. A ready Workflow Authority Broker
-retires interim mode but remains `broker_transport_unavailable` until its
-transport lands; variables and API-key presence never grant authority.
+Use OpenRouter directly for explicitly requested analysis on a trusted
+developer workstation. A configured `OPENROUTER_API_KEY` or validated
+`OPENROUTER_API_KEY_FILE`, a coherent installed bundle, and an automatically
+screened eligible payload are sufficient; no second approval is required.
 
 OpenRouter exposes many models behind one OpenAI-compatible endpoint. This plugin uses **GPT-5.6 Terra** (`openai/gpt-5.6-terra`) for general quality work, **GPT-5.6 Luna** (`openai/gpt-5.6-luna`) for economical mechanical work, and **Kimi K3** (`moonshotai/kimi-k3`) as the security-analysis head. All three carry roughly 1M-token context.
 
@@ -17,15 +16,14 @@ OpenRouter exposes many models behind one OpenAI-compatible endpoint. This plugi
 
 The wrapper (`references/openrouter-wrapper.sh`) is a **single-turn completion call**. It returns text; it does not read/write files or run a tool loop.
 
-The bounded Pipeline executor remains as a broker-integration seam and an
-offline-tested implementation. In the current production mode,
-`plugins/pipeline/references/openrouter-exec.sh` exits unavailable before
-provider contact. Dry-run routing still exposes the intended future topology;
-native Codex performs config/docs/mechanical-logic chunks today.
+The bounded Pipeline executor uses the same configured-key wrapper path for its
+already-authorized non-sensitive config/docs/mechanical workload. It still
+requires an exact owned-path allowlist, accepts only a validated unified diff,
+and defers correctness verification to native Codex.
 
 - **Valid current uses:** explicitly requested direct interactive big-diff
   analysis, code review, second-opinion analysis, and config/doc text generation
-  after exact-digest approval.
+  after the automatic disclosure boundary accepts the exact outbound bytes.
 - **Invalid use:** complex autonomous chunk implementation that needs exploratory tool use, visual review, or cross-chunk judgment. For that work, the pipeline cascade returns to Codex or an eligible agentic OpenRouter rung. Never pipe raw wrapper text in as a chunk implementation.
 
 ## When to Delegate
@@ -35,7 +33,7 @@ native Codex performs config/docs/mechanical-logic chunks today.
 | **Quality-first analysis** | Security, big-diff review, pattern analysis, second opinions | Kimi K3 leads eligible OpenRouter analysis while an independent non-implementing family remains the consequential sign-off. |
 | **1M-token context** | Bulk read, docs, config, and full-diff synthesis at any diff size | No truncation needed. Kimi K3, Terra, Luna, and GLM-5.2 all hold roughly 1M context. |
 | **Provider routing** | Privacy / throughput control | Per-request provider preferences (`OPENROUTER_ZDR=1` for no-train/no-retain providers). |
-| **Capacity relief** | Authorized dm-review operator-batch runs | The temporary batch may preserve Codex subscription headroom; Pipeline automation remains unavailable. |
+| **Capacity relief** | Eligible dm-review and bounded Pipeline lanes | Configured-key dispatch may preserve Codex subscription headroom without interrupting the run. |
 
 ## When NOT to Delegate
 
@@ -60,8 +58,8 @@ native Codex performs config/docs/mechanical-logic chunks today.
 
 Load the full protocol from `${CLAUDE_SKILL_DIR}/references/invocation-protocol.md`. It covers the wrapper's positional argument shape, workload-aware provider preferences (`OPENROUTER_WORKLOAD`, `OPENROUTER_ZDR`, `OPENROUTER_REQUIRE_PARAMS`, `OPENROUTER_PROVIDER_SORT`), streamed response handling, native fallback to a second model slug, layered timeouts, and content-free success/failure receipts.
 
-Key rules: always set an overall timeout, use the wrapper only through the
-direct exact-digest workflow in production, and pipe large prompts via stdin
+Key rules: always set an overall timeout, use the configured-key
+`trusted-boundary` workflow in production, and pipe large prompts via stdin
 (`-` as the prompt arg). The wrapper
 privately JSON-encodes the prompt, assembles the streamed deltas, and prints the
 model's text directly. All failures are graceful skips with content-free
@@ -83,11 +81,10 @@ refresh model identity, endpoints, provider slugs, benchmarks, credits, and
 documentation before changing the durable Matrix.
 
 The MCP is discovery/observability only for automated workflows. Do not replace
-the direct interactive API runner with `send-message`: `/openrouter` retains
-its exact-digest human gate, timeouts, provider controls, fallback chain, and
-content-free receipts. Pipeline dispatch remains unavailable. dm-review may use
-only a valid `interim_operator_batch` while the broker is absent; a ready broker
-retires interim but is unavailable until broker-owned transport lands.
+the direct API runner with `send-message`: `/openrouter` retains its automatic
+disclosure boundary, timeouts, provider controls, fallback chain, and
+content-free receipts. dm-review and bounded Pipeline use that same
+configured-key transport under their existing applicability rules.
 
 ## Prompt Engineering
 
@@ -108,8 +105,8 @@ Load templates from `${CLAUDE_SKILL_DIR}/references/prompt-templates.md`. Key pr
 
 ## Prerequisites
 
-An OpenRouter API key is required for direct interactive use only. Setting it
-does not activate automated Pipeline or dm-review dispatch:
+An OpenRouter API key or validated key file enables eligible direct, dm-review,
+and bounded Pipeline dispatch after automatic payload screening:
 
 ```bash
 export OPENROUTER_API_KEY="sk-or-..."
@@ -122,24 +119,25 @@ ACTIVE_HOST=""
 [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.8.0 --active-host "$ACTIVE_HOST" \
-    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+    --minimum-version 1.14.0 --active-host "$ACTIVE_HOST" \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
     --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
-    --required-executable skills/openrouter-delegate/references/payload-authorization.sh)
+    --required-executable skills/openrouter-delegate/references/delegation-boundary.sh)
 else
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.8.0 \
-    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+    --minimum-version 1.14.0 \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
     --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
-    --required-executable skills/openrouter-delegate/references/payload-authorization.sh)
+    --required-executable skills/openrouter-delegate/references/delegation-boundary.sh)
 fi
 BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty')
 case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) exit 1;; esac
 WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 [ -x "$WRAPPER_PATH" ] || exit 1
 
-# Verify the installed low-level assets without transmitting data. Use the
-# canonical /openrouter workflow for an authorized live authentication probe.
+# Verify the installed low-level assets without transmitting data.
 test -x "$WRAPPER_PATH"
 ```
 

@@ -48,7 +48,6 @@ a chunk early only when a changed path matches this bounded deterministic set:
 - `**/secretbox*`, `**/destructive_confirmation*`,
   `internal/baseplate/email/settings*`, `deploy/**`, or `*.env*`
 - Depot credential-transport controls named `openrouter-wrapper.sh`,
-  `payload-authorization.sh`, `runner-batch-authorization.sh`,
   `delegation-boundary.sh`, or `workflow-authority*`
 
 Do not widen this set to all handlers, shell scripts, dependency manifests, or
@@ -204,13 +203,12 @@ Every `second-perspective` and independent-family security sign-off receipt reco
 OPENROUTER_RUNNER_PATH=""
 OPENROUTER_SECURITY_POLICY_PATH=""
 OPENROUTER_BOUNDARY_PATH=""
-OPENROUTER_AUTHORIZATION_PATH=""
 OPENROUTER_BUNDLE_ROOT=""
 OPENROUTER_BUNDLE_REF=""
 OPENROUTER_BUNDLE_VERSION=""
 OPENROUTER_CACHE_CLASS=""
 OPENROUTER_RESOLUTION_REASON=""
-if [ -n "${OPENROUTER_API_KEY:-}" ]; then
+if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; then
   : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh once per review first}"
   OPENROUTER_ACTIVE_HOST=""
   [ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && OPENROUTER_ACTIVE_HOST="claude"
@@ -218,26 +216,24 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
   resolve_openrouter_bundle() {
     if [ -n "$OPENROUTER_ACTIVE_HOST" ]; then
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.11.4 --active-host "$OPENROUTER_ACTIVE_HOST" \
+        --minimum-version 1.14.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+        --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
         --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
         --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-        --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
-        --required-executable skills/openrouter-delegate/references/runner-batch-authorization.sh \
         --required-asset skills/openrouter-delegate/references/model-matrix.json \
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     else
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.11.4 \
+        --minimum-version 1.14.0 \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+        --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
         --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
         --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-        --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
-        --required-executable skills/openrouter-delegate/references/runner-batch-authorization.sh \
         --required-asset skills/openrouter-delegate/references/model-matrix.json \
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     fi
@@ -250,140 +246,29 @@ if [ -n "${OPENROUTER_API_KEY:-}" ]; then
   OPENROUTER_RUNNER_PATH="$OPENROUTER_BUNDLE_ROOT/agents/workflow/openrouter-agent-runner.md"
   OPENROUTER_SECURITY_POLICY_PATH="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
   OPENROUTER_BOUNDARY_PATH="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
-  OPENROUTER_AUTHORIZATION_PATH="$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
   OPENROUTER_BUNDLE_VERSION=$(printf '%s' "$BUNDLE_JSON" | jq -r '.version // empty' 2>/dev/null)
   OPENROUTER_CACHE_CLASS=$(printf '%s' "$BUNDLE_JSON" | jq -r '.cache_class // empty' 2>/dev/null)
   OPENROUTER_RESOLUTION_REASON=$(printf '%s' "$BUNDLE_JSON" | jq -r '.reason // empty' 2>/dev/null)
 fi
-# Availability is RESOLVED, never assumed. Three outcomes, evaluated in this
-# order, fail-closed: broker-ready retires interim and remains unavailable until
-# broker-owned transport lands; an absent broker may permit the interim batch;
-# every other state is unavailable.
+# Availability is configured-key plus one coherent installed bundle. Payload
+# eligibility is decided automatically at dispatch time by the disclosure
+# boundary. Workflow Authority presence or status is irrelevant to this path.
 OPENROUTER_AVAILABLE=false
-OPENROUTER_AUTHORIZATION_MODE=""
-OPENROUTER_BATCH_AUTHORIZATION_FILE=""
-OPENROUTER_BATCH_AUTHORIZATION_DIGEST=""
-OPENROUTER_UNAVAILABLE_REASON=host_authority_unavailable
-OPENROUTER_BROKER_CLIENT=/usr/local/bin/workflow-authority
-# The interim program sunset, pinned here as well as in payload-authorization.sh
-# (PROGRAM_SUNSET) and openrouter-wrapper.sh (INTERIM_PROGRAM_SUNSET). All three
-# enforcement layers compare against this constant so no batch file can assert
-# its own later backstop.
-OPENROUTER_INTERIM_PROGRAM_SUNSET=2026-09-07
-# Three broker states, not two. `absent` is the ONLY state that leaves interim
-# mode available. A client that is installed but whose probe errors or does not
-# report ready is an UNKNOWN state -- treating it like a brokerless host would
-# widen exposure on a machine that is mid-install or degraded -- so it fails
-# closed with reason broker_present_not_ready.
-OPENROUTER_BROKER_STATUS=absent
-if [ -x "$OPENROUTER_BROKER_CLIENT" ]; then
-  if "$OPENROUTER_BROKER_CLIENT" probe --format json 2>/dev/null |
-       jq -e '.status == "ready"' >/dev/null 2>&1; then
-    OPENROUTER_BROKER_STATUS=ready
-  else
-    OPENROUTER_BROKER_STATUS=present_not_ready
-  fi
-fi
-
-# Outcome 1 -- broker probe reports ready, but the runner has no broker-owned
-# run-bound transport interface yet. Do not pass authorization_mode=broker to
-# the API-key wrapper; remain unavailable until that interface exists.
-if [ "$OPENROUTER_BROKER_STATUS" = ready ]; then
-  OPENROUTER_AVAILABLE=false
-  OPENROUTER_AUTHORIZATION_MODE=""
-  OPENROUTER_UNAVAILABLE_REASON=broker_transport_unavailable
-# Outcome 2 -- INTERIM operator batch. Requires a valid, unexpired,
-# sunset-pinned batch authorization bound to THIS run. It is intended to be
-# created at run start by an interactive approval the operator typed on the
-# controlling terminal -- but the artifact is procedural and unauthenticated
-# and this check cannot prove that happened. Only reachable when the broker
-# client is ABSENT; present_not_ready falls through to Outcome 3.
-elif [ "$OPENROUTER_BROKER_STATUS" = absent ] &&
-     [ -n "${OPENROUTER_API_KEY:-}" ] && [ -n "$OPENROUTER_BUNDLE_ROOT" ] &&
-     [ -x "$OPENROUTER_AUTHORIZATION_PATH" ] &&
-     [ -f "plans/$FEATURE_SLUG/openrouter-batch-authorization.json" ]; then
-  OPENROUTER_BATCH_AUTHORIZATION_FILE="plans/$FEATURE_SLUG/openrouter-batch-authorization.json"
-  if OPENROUTER_BATCH_VALIDATION_JSON=$("$OPENROUTER_AUTHORIZATION_PATH" validate-batch \
-       --batch-file "$OPENROUTER_BATCH_AUTHORIZATION_FILE" \
-       --run-id "$REVIEW_RUN_ID") && \
-     printf '%s' "$OPENROUTER_BATCH_VALIDATION_JSON" | jq -e \
-       --arg expected "$OPENROUTER_INTERIM_PROGRAM_SUNSET" \
-       '.programSunset == $expected' >/dev/null 2>&1; then
-    OPENROUTER_AVAILABLE=true
-    OPENROUTER_AUTHORIZATION_MODE=interim_operator_batch
-    OPENROUTER_BATCH_AUTHORIZATION_DIGEST=$(shasum -a 256 \
-      "$OPENROUTER_BATCH_AUTHORIZATION_FILE" | awk '{print $1}')
-    OPENROUTER_UNAVAILABLE_REASON=""
-  else
-    OPENROUTER_AVAILABLE=false
-    OPENROUTER_AUTHORIZATION_MODE=""
-    OPENROUTER_UNAVAILABLE_REASON=host_authority_unavailable
-  fi
-# Outcome 3 -- unavailable. Unchanged from today on hosts with no broker and
-# no batch authorization, and the fail-closed landing spot for an installed
-# broker client that does not probe ready.
-else
-  OPENROUTER_AVAILABLE=false
-  OPENROUTER_AUTHORIZATION_MODE=""
-  if [ "$OPENROUTER_BROKER_STATUS" = present_not_ready ]; then
-    OPENROUTER_UNAVAILABLE_REASON=broker_present_not_ready
-  else
-    OPENROUTER_UNAVAILABLE_REASON=host_authority_unavailable
-  fi
+OPENROUTER_UNAVAILABLE_REASON=configured_key_or_bundle_unavailable
+if { [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; } &&
+   [ -n "$OPENROUTER_BUNDLE_ROOT" ] && [ -f "$OPENROUTER_RUNNER_PATH" ] &&
+   [ -r "$OPENROUTER_SECURITY_POLICY_PATH" ] && [ -x "$OPENROUTER_BOUNDARY_PATH" ]; then
+  OPENROUTER_AVAILABLE=true
+  OPENROUTER_UNAVAILABLE_REASON=""
 fi
 ```
 
-**Outcome 1 -- broker present, transport unavailable
-(`OPENROUTER_AVAILABLE=false`):** a ready probe retires interim mode, but this
-release has no broker-owned run-bound transport interface. Record
-`broker_transport_unavailable` and keep the lane native. Never pass
-`authorization_mode=broker` into the API-key wrapper.
-
-**Outcome 2 -- `interim_operator_batch` (`OPENROUTER_AVAILABLE=true`,
-reason `interim_operator_batch`):** an explicitly temporary, sunset-bound mode
-for hosts where no broker client is installed at all. It changes approval
-granularity from per-payload to per-run; for payloads that travel this path it
-does not change approval existence. The intended entry is
-`payload-authorization.sh batch-approve` showing the operator the lane list,
-model candidates, provider routing, per-role byte totals, inspection paths, and
-digest count on the controlling terminal, with the operator
-typing the confirmation phrase.
-**No environment variable substitutes for the interactive confirmation.**
-**The batch artifact is procedural and unauthenticated.** It is bare JSON with
-no signature and no user-presence binding, so nothing verifies that
-`batch-approve` ever ran: a same-user process can hand-write the file with its
-own digests and this run's id and enter the mode without any interactive
-approval. The confirmation is a control against accidental and automated entry
-by this tooling, not a technical barrier against same-user forgery. Closing
-that gap is what the out-of-process Workflow Authority Broker does, and it is
-the primary reason this mode is sunset-bound.
-Lanes dispatch with
-`OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch` plus the batch file and
-its digest, and each lane verifies its complete request-envelope digest against the
-batch through `payload-authorization.sh verify-batch` before transmission. The
-wrapper does not rely on that step having run: it hashes the exact request
-envelope it is about to POST--including model or fallback models, provider
-routing and sort, streaming options, roles, and ordered message content--and
-refuses unless that digest and model set are bound to the caller's lane in the
-batch file's durable `lanes` mapping. A request whose lane, digest, or model set
-does not match falls back to the per-payload interactive path or
-fails closed. Interim mode is FORBIDDEN when a broker probe
-on this host reports `ready`: both the batch path and the wrapper refuse with
-`broker available; interim mode retired on this host`. It is also WITHHELD when
-the broker client is installed but does not probe ready -- an unknown state
-resolves to unavailable with reason `broker_present_not_ready`, never to
-interim. The batch file also
-carries a hard calendar backstop, `program_sunset` (2026-09-07, about four
-weeks); after that date batch files fail validation and extending the program
-requires a reviewed commit that changes the sunset in the schema. The rationale
-for that window is that the darwin broker milestone is scheduled inside it.
-
-**Outcome 3 -- unavailable (`OPENROUTER_AVAILABLE=false`):** coding agents run
-on Codex. Record `host_authority_unavailable`; do not reinterpret an available
-API key, runner, policy, or caller environment variable as automated dispatch
-authority. Non-coding agents may still use Claude. Direct interactive
-`/openrouter` is a separate exact-digest workflow and does not enable these
-child lanes.
+When available, eligible mechanical, bulk, and supplementary security lanes
+dispatch immediately. The runner materializes private outbound files, scans
+them once, and passes those same files to the wrapper. A
+missing/invalid key, unavailable bundle/provider, or automatic disclosure
+decline records the reason and retries the lane on Codex without asking the
+user. Broker presence, absence, readiness, or degradation is not consulted.
 
 #### Quick Mode
 
@@ -560,11 +445,11 @@ Routing decisions come from `plugins/pipeline/references/routing-policy.json`, w
 
 | Agent ID | Primary model slug | Fallback model slug | Timeout |
 |---|---|---|---|
-| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 3600s |
-| `pattern-recognition-specialist` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
-| `code-simplicity-reviewer` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
-| `doc-sync-reviewer` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
-| `test-coverage-reviewer` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
+| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `openai/gpt-5.6-terra` | 3600s |
+| `pattern-recognition-specialist` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
+| `code-simplicity-reviewer` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
+| `doc-sync-reviewer` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
+| `test-coverage-reviewer` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
 | `openrouter-bulk-analyst` | `moonshotai/kimi-k3` | `openai/gpt-5.6-terra` | 3600s; 7200s at or above 10K diff lines |
 
 When `routing-policy.json` supplies `model` and `fallbackModel`, those full OpenRouter slugs override the inline table. The table is the standalone dm-review fallback. Both models are invoked through the OpenRouter wrapper and billed to the OpenRouter rail.
@@ -572,7 +457,7 @@ When `routing-policy.json` supplies `model` and `fallbackModel`, those full Open
 **Routing report** -- print before Phase 4:
 
 ```
-Provider routing (OPENROUTER_AVAILABLE={true|false}, authorization={interim_operator_batch|none}):
+Provider routing (OPENROUTER_AVAILABLE={true|false}, authorization={trusted-boundary|none}):
 - N analyses -> OpenRouter (Kimi security, pattern-recognition, code-simplicity, doc-sync, test-coverage, openrouter-bulk-analyst when selected)
 - N native coding agents -> Codex (architecture, visual/UI, unavailable-provider and sensitive-section coverage)
 - 1 required security sign-off -> resolved independent family (full diff)
@@ -580,108 +465,15 @@ Provider routing (OPENROUTER_AVAILABLE={true|false}, authorization={interim_oper
 - N non-coding agents -> Claude when explicitly selected (for example voice/editorial)
 ```
 
-#### Byte-bound authorization
+#### Automatic disclosure boundary
 
-Authorization follows the resolved outcome from Phase 3, never an API key, an
-exact digest, or a caller-selected `trusted-boundary`.
-
-**Broker outcome.** The independently installed broker owns authorization,
-credential custody, and transport and binds the exact payload, destination,
-repository, run, candidate, lane, and substrate.
-
-**Interim operator-batch outcome.** Before dispatching any lane, snapshot each
-lane's exact outbound bytes, then take ONE interactive approval covering the
-whole set:
-
-```bash
-# First dispatch each lane's openrouter-agent-runner with
-# authorization_mode=prepare_interim_batch and a private, persistent
-# request_envelope_manifest path beneath a physical, creator-owned mode-0700
-# run directory. The runner uses the wrapper's canonical render-only mode and
-# returns without network contact.
-"$OPENROUTER_AUTHORIZATION_PATH" batch-approve \
-  --batch-file "plans/$FEATURE_SLUG/openrouter-batch-authorization.json" \
-  --run-id "$REVIEW_RUN_ID" --operator "$OPERATOR" \
-  --scope-note "dm-review lanes for $FEATURE_SLUG" \
-  --lane "<lane-id>=.claude/ux-review/openrouter/<lane-id>.manifest.json"
-```
-
-`batch-approve` prints each lane's model candidates, provider routing, per-role
-byte totals, exact digest, and private inspection path on the controlling
-terminal and waits for the operator to
-type the confirmation phrase. It reads that answer from `/dev/tty` and nothing
-else, and an unavailable terminal fails closed:
-**No environment variable substitutes for the interactive confirmation.**
-It refuses outright with
-`broker available; interim mode retired on this host`
-when a broker probe reports ready, refuses with `broker_present_not_ready` when
-the broker client is installed but does not probe ready, and refuses after the
-`program_sunset` calendar backstop. It reads the probe with
-`jq -e '.status == "ready"'`, never a substring match.
-
-That terminal prompt constrains this tooling, not the filesystem: the batch
-file it writes is unauthenticated, so a same-user process can produce an
-equivalent file without ever showing the prompt. Treat interim mode as an
-operator-procedural control with a technical digest binding, not as proof of
-consent.
-
-The root keeps the exact manifest list and the private run directory it
-allocated as lifecycle state. The `verify` helper is strictly read-only toward
-persisted preparation artifacts, and no cross-process cleanup subcommand
-accepts a caller-selected manifest path. On refusal, interruption, failure, or
-completed redispatch, only the original trusted parent performs terminal
-deletion using its retained creator-side directory identity. If that parent
-cannot retain and revalidate the identity, preserve the artifacts and report a
-cleanup coverage gap; never infer deletion authority from a path, same-UID
-ownership, mode bits, a digest, or caller-adjacent metadata.
-
-Immediately before transmission, the redispatched runner invokes the shipped
-`runner-batch-authorization.sh verify` helper. The helper re-renders the
-request into its own private temporary file with the wrapper's canonical
-render-only mode, requires the unchanged preparation manifest, checks the
-declared batch digest, and verifies the re-rendered bytes against both that
-manifest and the approved batch:
-
-```bash
-"$RUNNER_BATCH_HELPER" verify \
-  --wrapper "$WRAPPER_PATH" \
-  --authorization-helper "$OPENROUTER_AUTHORIZATION_PATH" \
-  --system-file "$SYS_FILE" --user-file "$USER_FILE" \
-  --model "$target_model" --fallback "${fallback_model:-}" \
-  --timeout "$target_timeout" --workload "$OPENROUTER_WORKLOAD_CLASS" \
-  --target-agent-name "$target_agent_name" \
-  --batch-file "$OPENROUTER_BATCH_AUTHORIZATION_FILE" \
-  --batch-digest "$OPENROUTER_BATCH_AUTHORIZATION_DIGEST" \
-  --run-id "$REVIEW_RUN_ID" \
-  --manifest "$request_envelope_manifest"
-```
-
-The helper's canonical request file is copied to a 0600 inspection path beside
-the preparation manifest. `batch-approve` treats both files as read-only input;
-the original trusted parent owns their terminal lifecycle as described above.
-Redispatch MUST
-pass the same preparation-manifest path that the preparation result reported;
-a content-mode payload receipt is not an envelope manifest.
-
-A non-zero exit means the payload is not covered: fall back to the per-payload
-interactive exact-digest path, or fail the lane closed to Codex. Never widen
-the batch to make a lane fit. Every lane receipt in interim mode carries
-`authorization_mode: interim_operator_batch` and the batch file digest
-(`$OPENROUTER_BATCH_AUTHORIZATION_DIGEST`); the wrapper is invoked with
-`OPENROUTER_AUTHORIZATION_MODE=interim-operator-batch`,
-`OPENROUTER_BATCH_AUTHORIZATION_FILE`,
-`OPENROUTER_BATCH_AUTHORIZATION_DIGEST`, and
-`OPENROUTER_BATCH_RUN_ID="$REVIEW_RUN_ID"` so its own schemaVersion-2 receipt
-records the same mode and digest. `OPENROUTER_BATCH_RUN_ID` is not optional:
-the wrapper re-checks the run binding itself and refuses a batch issued for a
-different run, because it must hold even when no `verify-batch` step ran. The review report's coverage section MUST
-state that interim operator-batch authorization was active for the run, name
-the batch digest, and name its `expires_at` and `program_sunset`.
-
-**Unavailable outcome.** Selection records `host_authority_unavailable` and
-launches the complete criterion on Codex without preparing external payload
-bytes. Direct interactive `/openrouter` retains its separate exact-digest human
-workflow.
+The configured key authorizes eligible development dispatch. Each runner
+materializes its exact system/user bytes, scans those private files once, and
+immediately invokes the wrapper. A credential/private-key
+match, authenticated DSN, access/session token, or explicitly classified
+private/regulated value declines automatically and returns that lane to Codex.
+There is no approval prompt, broker probe, or sunset. The wrapper receipt
+records a request-envelope digest without prompt or response content.
 
 ---
 
@@ -713,8 +505,6 @@ authorization, invocation, fallback, and provenance implementation.
      to bind runner execution to the definition that was loaded; never publish it
    - `openrouter_bundle_version`, `cache_class`, and `resolution_reason` --
      durable resolver evidence (never the selected root)
-   - `approved_payload_sha256` -- empty during default `exact-digest`
-     preparation and set only to the exact user-approved lane digest
    - The unfiltered list of changed files (the runner filters it before disclosure)
    - The full diff content (the runner invokes `delegation-boundary.sh --mode mechanical-review` and sends only the emitted safe remainder)
    - Project context
@@ -772,13 +562,11 @@ Both A and B agents launch in parallel in the same message. The runner reads the
 3. Dispatch `security-auditor.md` with the complete unfiltered diff. The sign-off remains mandatory and full-diff regardless of which family performs it.
 4. Record `implementer_family`, `reviewer_family`, and `resolution_reason`, including every family swap and why it occurred. If no independent family can complete, the lane is incomplete and the review cannot be clean.
 
-**Authorization and failure handling:** Automated OpenRouter selection may run
-only through a validated `interim_operator_batch` outcome from Phase 3. A ready
-broker retires interim mode but remains `broker_transport_unavailable` until
-the runner has a broker-owned transport interface; never pass
-`authorization_mode: broker` to the API-key wrapper. When no executable
-authorization path exists, fail before payload preparation and apply Phase 4.5
-lane-aware resolution. Ordinary lanes may retry on Codex. The
+**Authorization and failure handling:** Automated OpenRouter selection uses the
+configured-key `trusted-boundary` path from Phase 3. Missing or invalid
+credentials, unavailable provider/bundle, or an automatic disclosure decline
+applies Phase 4.5 lane-aware resolution without a prompt. Ordinary lanes may
+retry on Codex. The
 `security-auditor-codex-signoff` compatibility lane is the exception: every
 retry and partial/full-decline completion must use a non-implementing family,
 and exhaustion is `REVIEW INCOMPLETE`. Do not mark the run clean until required
@@ -1059,7 +847,7 @@ Collect live rail status at ask time and display it only to inform timing. Offer
 
 Option (b) and its former authorization receipt are future design only and non-executable. A caller-owned receipt, including one carrying `ask_evidence_ref`, never authorizes a fallback lane or `fallbackReason: rail_exhausted_user_authorized` today.
 
-Ask-then-default-gap is the only headless behavior for an ordinary standalone review: a non-interactive session or unanswered ask records the Coverage Gap and continues, and never assumes authority. The Workflow Authority broker gate, independent-family sign-off, and sensitive-path rules remain non-overridable.
+Ask-then-default-gap is the only headless behavior for an ordinary standalone review: a non-interactive session or unanswered ask records the Coverage Gap and continues. Independent-family sign-off and sensitive-path rules remain non-overridable; configured-key OpenRouter lanes never enter this approval path.
 
 **When this review is the pipeline's final full dm-review, option (c) and the headless gap-and-continue default are unavailable for coding-lane exhaustion.** The only outcome is REVIEW INCOMPLETE and the branch waits. Ordinary in-policy OpenRouter/Codex routing remains unaffected; it is not exhaustion authorization.
 
@@ -1125,7 +913,7 @@ Report the fallback in the Agent Summary table:
 
 | Agent | Provider | Status |
 |-------|----------|--------|
-| pattern-recognition-specialist | OpenRouter `z-ai/glm-5.2` | RUNNER FAILURE |
+| pattern-recognition-specialist | OpenRouter `openai/gpt-5.6-terra` | RUNNER FAILURE |
 | pattern-recognition-specialist | Codex (fallback) | Completed |
 | security-auditor-openrouter | OpenRouter `moonshotai/kimi-k3` | Completed (eligible sections) |
 | security-auditor-codex-signoff | Resolved independent family | Completed (full diff) |

@@ -277,7 +277,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.59.1",
+      "version": "1.60.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -355,7 +355,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.46.1",
+      "version": "1.47.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -405,7 +405,7 @@
     {
       "name": "airlift",
       "source": "./plugins/airlift",
-      "version": "1.3.3",
+      "version": "1.4.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -429,12 +429,12 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.11.6",
+      "version": "1.14.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "OpenRouter provider plugin with exact-digest direct interactive use, broker-pending automated routing, Kimi K3-led security and bulk analysis, Terra quality fallback, Luna economical mechanical routing, and an optional official MCP control plane.",
+      "description": "Configured-key OpenRouter provider plugin with automatic sensitive-payload refusal, Kimi K3-led security and bulk analysis, Terra quality fallback, Luna economical mechanical routing, and an optional official MCP control plane.",
       "capabilities_summary": {
         "skills": 1,
         "agents": 2,

@@ -38,7 +38,7 @@ reject_text() {
 
 security_path_requires_full() {
   case "$1" in
-    internal/auth/*|*/internal/auth/*|internal/federation/*|*/internal/federation/*|*/security/*|*/middleware/auth*|*/middleware/security*|*/secretbox*|*/destructive_confirmation*|internal/baseplate/email/settings*|deploy/*|*/deploy/*|*.env*|*/.env*|*/openrouter-wrapper.sh|*/payload-authorization.sh|*/runner-batch-authorization.sh|*/delegation-boundary.sh|*/workflow-authority*) return 0 ;;
+    internal/auth/*|*/internal/auth/*|internal/federation/*|*/internal/federation/*|*/security/*|*/middleware/auth*|*/middleware/security*|*/secretbox*|*/destructive_confirmation*|internal/baseplate/email/settings*|deploy/*|*/deploy/*|*.env*|*/.env*|*/openrouter-wrapper.sh|*/delegation-boundary.sh|*/workflow-authority*) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -326,10 +326,10 @@ require_text "$review_skill" '**code-simplicity-reviewer**' "quick roster includ
 require_text "$review_skill" 'Do not add `second-perspective`' "quick roster excludes second perspective"
 require_text "$review_skill" 'quick mode escalates to the existing full mode' "security-sensitive quick review escalates to full"
 require_text "$review_skill" '`**/middleware/auth*`' "quick escalation covers auth middleware"
-require_text "$review_skill" '`payload-authorization.sh`' "quick escalation covers Depot credential transport"
+require_text "$review_skill" '`delegation-boundary.sh`' "quick escalation covers Depot credential transport"
 require_text "$review_skill" 'Do not widen this set to all handlers, shell scripts, dependency manifests, or' "quick escalation stays proportionally bounded"
 assert_fixture true "auth path escalates quick review" security_path_requires_full "internal/auth/session.go"
-assert_fixture true "Depot credential transport escalates quick review" security_path_requires_full "plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh"
+assert_fixture true "Depot credential transport escalates quick review" security_path_requires_full "plugins/openrouter/skills/openrouter-delegate/references/delegation-boundary.sh"
 assert_fixture false "ordinary handler stays on quick review" security_path_requires_full "internal/members/handler.go"
 assert_fixture false "dependency manifest stays on quick review" security_path_requires_full "go.mod"
 assert_fixture true "proven ordinary repair may omit repeated security sign-off" full_allowlist_can_omit_security affected_lane_repair true false
@@ -359,10 +359,10 @@ reject_text "$pipeline_orchestrator" 'findings_remaining: [N] | deferred: [N]' "
 require_text "$REPO_ROOT/README.md" 'Quick review with two core judgment lanes' "README describes proportional quick roster"
 require_text "$REPO_ROOT/README.md" 'P3 stays advisory' "README describes proportional convergence"
 reject_text "$REPO_ROOT/plugins/project-scaffolder/skills/scaffolding/references/claude-md-templates/dm-standard.md" '--allow-defer-p3' "scaffold template retires P3 deferral flag"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.59.1"' "canonical dm-review version is 1.59.1"
-require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.59.1"' "generated dm-review version is 1.59.1"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.46.1"' "canonical Pipeline version is 1.46.1"
-require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.59.0"' "generated Pipeline dependency floor is current"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.60.0"' "canonical dm-review version is 1.60.0"
+require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.60.0"' "generated dm-review version is 1.60.0"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.47.0"' "canonical Pipeline version is 1.47.0"
+require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.60.0"' "generated Pipeline dependency floor is current"
 
 printf "Synthesis identity fixtures\n"
 base_id=$(fixture_finding_id \

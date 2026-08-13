@@ -181,7 +181,42 @@ codex_json() {
 }
 
 openrouter_json() {
-  local response="" rc=0 balance=""
+  local response="" rc=0 balance="" credential_loader="" active_host="" bundle_json="" bundle_ref=""
+  if [ -n "${OPENROUTER_API_KEY_FILE:-}" ] && [ -z "${OPENROUTER_API_KEY:-}" ]; then
+    case "${OPENROUTER_BUNDLE_RESOLVED:-0}:${OPENROUTER_BUNDLE_REF:-}" in
+      "1:~/"*) credential_loader="$HOME/${OPENROUTER_BUNDLE_REF#\~/}/skills/openrouter-delegate/references/openrouter-credential.sh" ;;
+    esac
+    # Standalone probes may resolve once for themselves. Cascade callers always
+    # supply the complete process-local binding above, preventing mixed roots.
+    if [ -z "$credential_loader" ] && [ -n "${WORKFLOW_KERNEL:-}" ] && [ -x "$WORKFLOW_KERNEL" ]; then
+      [ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && active_host="claude"
+      [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && active_host="codex"
+      if [ -n "$active_host" ]; then
+        bundle_json=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+          --minimum-version 1.14.0 --active-host "$active_host" \
+          --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+          --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
+          --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+          --required-executable skills/openrouter-delegate/references/delegation-boundary.sh) || bundle_json=""
+      else
+        bundle_json=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+          --minimum-version 1.14.0 \
+          --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+          --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
+          --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+          --required-executable skills/openrouter-delegate/references/delegation-boundary.sh) || bundle_json=""
+      fi
+      bundle_ref=$(printf '%s' "$bundle_json" | jq -r '.selected_root // empty')
+      case "$bundle_ref" in
+        "~/"*) credential_loader="$HOME/${bundle_ref#\~/}/skills/openrouter-delegate/references/openrouter-credential.sh" ;;
+      esac
+    fi
+    if [ -r "$credential_loader" ]; then
+      # shellcheck source=/dev/null
+      . "$credential_loader"
+      load_openrouter_api_key || OPENROUTER_API_KEY=""
+    fi
+  fi
   if [ -n "${OPENROUTER_API_KEY:-}" ] && command -v curl >/dev/null 2>&1; then
     response="$(curl -sS --max-time 10 https://openrouter.ai/api/v1/credits \
       -H "Authorization: Bearer $OPENROUTER_API_KEY" 2>/dev/null)" || rc=$?

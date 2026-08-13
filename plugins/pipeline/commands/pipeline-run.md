@@ -56,8 +56,8 @@ The kernel has two distinct roles:
 - shadow observation is optional and may record `shadow unavailable` without
   changing the canonical workflow; and
 - repository verification is authoritative on profile-aware repositories.
-  Missing/incompatible runtime, a missing/invalid sealed profile approval,
-  unavailable host authority broker, or a required pending/failed lane stops with
+  Missing/incompatible runtime, a missing/invalid sealed profile approval, or a
+  required pending/failed lane stops with
   `human_help_required`. Never downgrade this authority failure to shadow
   unavailability.
 
@@ -193,7 +193,7 @@ origin or single use. Until a trusted broker/kernel capability boundary lands,
 the native-judgment rung remains unavailable and an otherwise exhausted ladder
 parks or reports `human_help_required` rather than self-authorizing.
 
-Ask-then-default-park is the only headless behavior: a non-interactive session, an ask that errors, an ask answered by a non-operator, or one that exceeds the caller's stated timeout parks resumable, and never assumes yes. `PIPELINE_EXHAUSTION_ASK=0` restores the old hard block for headless CI and is a kill switch on the ASK, never an enabler of silent fallback. Four exclusions survive every operator answer: the Workflow Authority broker gate is a security authorization boundary, not a capacity setting, so automated OpenRouter lanes stay fail-closed regardless of the answer (the interactive exact-digest `/openrouter` path may still be offered because it carries its own per-payload approval); the final full dm-review is never waived, the branch waits absolutely for capped review rails (no exhaustion authorization can execute the final review), and a review carrying a coverage gap on a required lane never satisfies that gate; no fallback-authorized review lane may share a provider family with the implementer of the code it reviews; and sensitive-path chunks are never implemented under fallback authorization. The routing policy object is `exhaustionFallback` in `plugins/pipeline/references/routing-policy.json`.
+Ask-then-default-park is the only headless behavior: a non-interactive session, an ask that errors, an ask answered by a non-operator, or one that exceeds the caller's stated timeout parks resumable, and never assumes yes. `PIPELINE_EXHAUSTION_ASK=0` restores the old hard block for headless CI and is a kill switch on the ASK, never an enabler of silent fallback. The ask cannot broaden configured-key OpenRouter workload, disclosure, path, or output boundaries; the final full dm-review is never waived, required family independence remains, and sensitive-path chunks are never implemented under fallback authorization. The routing policy object is `exhaustionFallback` in `plugins/pipeline/references/routing-policy.json`.
 
 ## Process
 

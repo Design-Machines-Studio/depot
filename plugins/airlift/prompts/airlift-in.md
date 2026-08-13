@@ -34,7 +34,12 @@ Summarize the resume plan back to the user before changing files:
 
 Then continue from the `Next steps` section in `HANDOFF.md`.
 
-For `resume-via-deepseek`, require env `OPENROUTER_API_KEY`. The target name remains stable for compatibility, but transport is through OpenRouter using `deepseek/deepseek-v4-pro`. Resolve one coherent OpenRouter bundle, then screen both resume artifacts together immediately before wrapper use:
+For `resume-via-deepseek`, require either `OPENROUTER_API_KEY` or the validated
+`OPENROUTER_API_KEY_FILE`. The target name remains stable for compatibility,
+but transport is through OpenRouter using `deepseek/deepseek-v4-flash-0731`
+with `x-ai/grok-4.5` fallback. Resolve
+one coherent OpenRouter bundle, then privately copy and screen both resume
+artifacts together before invoking the wrapper immediately:
 
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
@@ -48,18 +53,18 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.8.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.14.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.8.0 \
+      --minimum-version 1.14.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
   fi
 }
 BUNDLE_JSON=$(resolve_bundle) || {
@@ -70,47 +75,51 @@ case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) echo
 WRAPPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 POLICY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
 BOUNDARY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
-AUTHORIZATION="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
 RESUME_FILE="$BUNDLE_DIR/RESUME_PROMPT.md"
 HANDOFF_FILE="$BUNDLE_DIR/HANDOFF.md"
-SNAPSHOT_DIR=$(mktemp -d "${TMPDIR:-/tmp}/airlift-openrouter.XXXXXX") || {
-  echo "airlift-openrouter: snapshot-unavailable" >&2; exit 2;
+PRIVATE_DIR=$(mktemp -d "${TMPDIR:-/tmp}/airlift-openrouter.XXXXXX") || {
+  echo "airlift-openrouter: private-copy-unavailable" >&2; exit 2;
 }
-trap 'rm -rf "$SNAPSHOT_DIR"' EXIT
-RESUME_SNAPSHOT="$SNAPSHOT_DIR/RESUME_PROMPT.md"
-HANDOFF_SNAPSHOT="$SNAPSHOT_DIR/HANDOFF.md"
-AUTHORIZATION_RECEIPT="$SNAPSHOT_DIR/payload-authorization.json"
+trap 'rm -rf "$PRIVATE_DIR"' EXIT
+RESUME_COPY="$PRIVATE_DIR/RESUME_PROMPT.md"
+HANDOFF_COPY="$PRIVATE_DIR/HANDOFF.md"
 "$WORKFLOW_KERNEL" snapshot-files \
   --source-root "$BUNDLE_DIR" \
-  --destination-root "$SNAPSHOT_DIR" \
+  --destination-root "$PRIVATE_DIR" \
   --name RESUME_PROMPT.md \
   --name HANDOFF.md >/dev/null || {
-  echo "airlift-openrouter: snapshot-invalid" >&2; exit 2;
+  echo "airlift-openrouter: private-copy-invalid" >&2; exit 2;
 }
 if "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
-    --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT"; then
+    --content-file "$RESUME_COPY" --content-file "$HANDOFF_COPY"; then
   :
 else
-  rc=$?
-  [ "$rc" -eq 3 ] && { echo "airlift-openrouter: disclosure-declined" >&2; exit 3; }
-  echo "airlift-openrouter: boundary-invalid" >&2
-  exit 2
+  BOUNDARY_RC=$?
+  [ "$BOUNDARY_RC" -eq 3 ] && {
+    echo "airlift-openrouter: disclosure-declined" >&2; exit 3;
+  }
+  echo "airlift-openrouter: boundary-invalid" >&2; exit 2
 fi
-PAYLOAD_SHA256=$("$AUTHORIZATION" snapshot \
-  --output "$AUTHORIZATION_RECEIPT" \
-  --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT")
-```
-
-Pause and ask the user to authorize disclosure of the exact ordered resume
-payload identified by `PAYLOAD_SHA256`. Set `approved_payload_sha256` only from
-that response. If the user declines, record
-`airlift-openrouter: host-disclosure-declined` and continue locally.
-Immediately before network contact:
-
-```bash
-"$AUTHORIZATION" verify --manifest "$AUTHORIZATION_RECEIPT" \
-  --approved-sha256 "$approved_payload_sha256" \
-  --content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT"
-env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$RESUME_SNAPSHOT" \
-  bash "$WRAPPER" "deepseek/deepseek-v4-pro" - 180 < "$HANDOFF_SNAPSHOT"
+RECEIPT_FILE="$BUNDLE_DIR/OPENROUTER_RECEIPT.json"
+if env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$RESUME_COPY" \
+    OPENROUTER_RUN_ID="airlift-resume" OPENROUTER_LANE_ID="resume-via-deepseek" \
+    OPENROUTER_WORKLOAD="quality" OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
+    bash "$WRAPPER" "deepseek/deepseek-v4-flash-0731" - 180 "x-ai/grok-4.5" \
+    < "$HANDOFF_COPY"; then
+  :
+else
+  WRAPPER_RC=$?
+  echo "airlift-openrouter: wrapper-failed" >&2
+  exit "$WRAPPER_RC"
+fi
+jq -e '
+  .schemaVersion == 2 and .outcome == "success" and
+  .authorization.runId == "airlift-resume" and
+  .authorization.laneId == "resume-via-deepseek" and
+  (.authorization.requestEnvelopeSha256 | test("^[0-9a-f]{64}$")) and
+  ([(.. | objects) | keys[] |
+    select(test("^(prompt|response|content|api_?key|secret)$"; "i"))] | length) == 0
+' "$RECEIPT_FILE" >/dev/null || {
+  echo "airlift-openrouter: receipt-invalid" >&2; exit 2;
+}
 ```

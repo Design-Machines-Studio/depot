@@ -408,25 +408,20 @@ Present the manifest summary: chunk count, parallel groups, overlap risk, requir
 
 ## Phase 5: Adversarial Review + Sprint Contract Negotiation
 
-Codex is the required adversarial reviewer. Run its lens over the plan, prompts, manifest, and
-`original-prompt.md`. Automated OpenRouter review is temporarily unavailable;
-record `openrouter-perspective: host_authority_unavailable` and do not prepare
-or transmit a payload. An API key or caller authorization variable does not
-change this state.
+Codex is the required adversarial reviewer. Run its lens over the plan, prompts,
+manifest, and `original-prompt.md`. This planning phase stays native by policy;
+configured-key OpenRouter availability does not broaden the bounded execution
+workload.
 
 Resolve the coherent installed Pipeline bundle through workflow-kernel with
 `--plugin pipeline --minimum-version 1.36.1 --required-asset
 references/openrouter-authorization-contract.md --active-host <claude|codex>`
-and read that contract from the selected root. It defines the current disabled
-mode and future broker re-enablement boundary. Never read a target-repository
-copy. Current automated execution does not emit `PAYLOAD APPROVAL REQUIRED`;
-`exact-digest` is direct-interactive only, and caller-selected
-`trusted-boundary` remains non-authoritative.
+and read that contract from the selected root. Never read a target-repository
+copy.
 
 Claude `plan-adversary` remains an optional independent second lens when
 `PIPELINE_CLAUDE_ADVERSARY=1` or when the user explicitly requests it. If Codex
-is unavailable, block or explicitly enable that Claude lens; do not route
-around the missing broker through an automated OpenRouter call.
+is unavailable, block or explicitly enable that Claude lens.
 
 1. Pass the plan, prompts, manifest, AND `original-prompt.md`
 2. Every available adversary reviews for feasibility, completeness, and DM standards
@@ -434,7 +429,7 @@ around the missing broker through an automated OpenRouter call.
 4. Merge findings from all available outputs; deduplicate by chunk/file/acceptance criterion; a finding from any perspective is in-scope unless code or prompt evidence disproves it
 5. Merge the adversaries' proposed criteria into the chunk prompts
 6. If any verdict is REVISE: apply revisions and re-submit to every available perspective (max 3 rounds)
-7. When all available required perspectives are APPROVED: proceed, retaining the unavailable OpenRouter coverage receipt
+7. When all available required perspectives are APPROVED: proceed, retaining the native-only planning coverage receipt
 
 Mark ledger item 10 as complete.
 

@@ -772,7 +772,7 @@ def check_cli(context):
              "openrouter-receipt-success.json").read_text(encoding="utf-8")
         )
         record_attempt_document["authorization"] = {
-            "mode": "exact-digest",
+            "mode": "trusted-boundary",
             "runId": "validator-cli",
             "laneId": "validator",
             "requestEnvelopeSha256": "b" * 64,

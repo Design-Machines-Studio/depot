@@ -44,22 +44,15 @@ Detect the project type to determine which domain plugins to load as companions.
 Launch all available research agents simultaneously. Each agent gets the feature description and assessment brief (if available).
 
 **Executor routing:** Default read-heavy research fan-out to Codex, with Claude
-as the local fallback when Codex is unavailable. Automated OpenRouter research
-is disabled until broker integration. Ignore an `openrouter` override, record
-`host_authority_unavailable`, and use Codex.
-
-**External-provider boundary:** Do not prepare or transmit automated research
-payloads. Record `host_authority_unavailable` and continue through the complete
-local research path. API-key presence and caller authorization variables are
-non-authoritative.
+as the local fallback when Codex is unavailable. This phase remains native by
+workload policy; configured-key availability does not broaden the bounded
+OpenRouter execution workload.
 
 Resolve the coherent installed Pipeline bundle with `--plugin pipeline
 --minimum-version 1.36.1 --required-asset
 references/openrouter-authorization-contract.md --active-host <claude|codex>`
 and read the current-mode contract from that selected root. Never use a
-target-repository copy. Automated research does not emit `PAYLOAD APPROVAL
-REQUIRED`; exact-digest remains direct-interactive only and caller-selected
-`trusted-boundary` is unavailable.
+target-repository copy.
 
 **Agent 1: ai-memory Researcher**
 

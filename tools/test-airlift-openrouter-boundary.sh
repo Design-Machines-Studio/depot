@@ -11,14 +11,13 @@ FIXTURE="$(mktemp -d "${TMPDIR:-/tmp}/airlift-openrouter.XXXXXX")"
 trap 'rm -rf "$FIXTURE"' EXIT
 
 HOME_FIXTURE="$FIXTURE/home"
-PLUGIN_ROOT="$HOME_FIXTURE/.codex/plugins/cache/depot/openrouter/1.7.0"
+PLUGIN_ROOT="$HOME_FIXTURE/.codex/plugins/cache/depot/openrouter/1.14.0"
 REFS="$PLUGIN_ROOT/skills/openrouter-delegate/references"
 mkdir -p "$REFS" "$FIXTURE/bundle"
 cp "$ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json" "$REFS/"
+cp "$ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-credential.sh" "$REFS/"
 cp "$ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-boundary.sh" \
   "$REFS/delegation-boundary.real.sh"
-cp "$ROOT/plugins/openrouter/skills/openrouter-delegate/references/payload-authorization.sh" \
-  "$REFS/payload-authorization.sh"
 cat > "$REFS/delegation-boundary.sh" <<'EOF'
 #!/usr/bin/env bash
 set -euo pipefail
@@ -33,15 +32,20 @@ if [ "${MUTATE_AFTER_SCAN:-0}" = "1" ]; then
     '-----END PRIVATE KEY-----' > "$BUNDLE_DIR/HANDOFF.md"
 fi
 EOF
-chmod +x "$REFS/delegation-boundary.sh" "$REFS/delegation-boundary.real.sh" \
-  "$REFS/payload-authorization.sh"
+chmod +x "$REFS/delegation-boundary.sh" "$REFS/delegation-boundary.real.sh"
 
 cat > "$REFS/openrouter-wrapper.sh" <<'EOF'
 #!/usr/bin/env bash
 touch "$AIRLIFT_WRAPPER_SENTINEL"
 [ -n "${OPENROUTER_SYSTEM_FILE:-}" ] && [ -z "${OPENROUTER_SYSTEM:-}" ]
+[ "$1" = "deepseek/deepseek-v4-flash-0731" ]
+[ "$4" = "x-ai/grok-4.5" ]
 cp "$OPENROUTER_SYSTEM_FILE" "$AIRLIFT_WRAPPER_CAPTURE.resume"
 cat > "$AIRLIFT_WRAPPER_CAPTURE.handoff"
+jq -n --arg run "$OPENROUTER_RUN_ID" --arg lane "$OPENROUTER_LANE_ID" '
+  {schemaVersion:2,outcome:"success",authorization:{runId:$run,laneId:$lane,
+   requestEnvelopeSha256:"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}}
+' > "$OPENROUTER_RECEIPT_FILE"
 printf 'controlled safe delegation\n'
 EOF
 chmod +x "$REFS/openrouter-wrapper.sh"
@@ -54,7 +58,7 @@ case "${1:-}" in
     exec "$REAL_WORKFLOW_KERNEL" "$@"
     ;;
   resolve-plugin-bundle)
-    printf '{"selected_root":"~/.codex/plugins/cache/depot/openrouter/1.7.0","cache_class":"codex","version":"1.7.0","reason":"highest_compatible_semver"}\n'
+    printf '{"selected_root":"~/.codex/plugins/cache/depot/openrouter/1.14.0","cache_class":"codex","version":"1.14.0","reason":"highest_compatible_semver"}\n'
     ;;
   snapshot-files)
     exec "$REAL_WORKFLOW_KERNEL" "$@"
@@ -67,18 +71,9 @@ EOF
 chmod +x "$FIXTURE/kernel"
 
 {
-  printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail'
+  # The documented block must fail closed without ambient errexit behavior.
+  printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail'
   sed -n '/^: "${WORKFLOW_KERNEL/,/^```/p' "$SOURCE" | sed '$d'
-  printf '%s\n' \
-    'if [ "${AUTO_APPROVE:-1}" != "1" ]; then' \
-    '  printf '\''{"status":"approval_required","payloadSha256":"%s"}\n'\'' "$PAYLOAD_SHA256"' \
-    '  exit 78' \
-    'fi' \
-    'approved_payload_sha256="$PAYLOAD_SHA256"' \
-    'if [ "${MUTATE_APPROVED_PAYLOAD:-0}" = "1" ]; then' \
-    '  printf '\''changed\n'\'' >> "$HANDOFF_SNAPSHOT"' \
-    'fi'
-  sed -n '/^"\$AUTHORIZATION" verify/,/^```/p' "$SOURCE" | sed '$d'
 } > "$FIXTURE/resume"
 chmod +x "$FIXTURE/resume"
 
@@ -92,7 +87,7 @@ run_expect() {
   output="$(HOME="$HOME_FIXTURE" WORKFLOW_KERNEL="$FIXTURE/kernel" \
     REAL_WORKFLOW_KERNEL="$ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh" \
     BUNDLE_DIR="$FIXTURE/bundle" AIRLIFT_WRAPPER_SENTINEL="$FIXTURE/sentinel" \
-    AIRLIFT_WRAPPER_CAPTURE="$FIXTURE/captured" AUTO_APPROVE="${AUTO_APPROVE:-1}" \
+    AIRLIFT_WRAPPER_CAPTURE="$FIXTURE/captured" \
     "$@" "$FIXTURE/resume" 2>&1)"
   rc=$?
   set -e
@@ -104,28 +99,22 @@ run_expect() {
 }
 
 rm -f "$FIXTURE/sentinel"
-AUTO_APPROVE=0 run_expect 78 "safe payload pauses for exact user approval" env
-[ ! -e "$FIXTURE/sentinel" ]
-
-rm -f "$FIXTURE/sentinel"
-run_expect 0 "safe two-file delegation reaches controlled wrapper" env
+run_expect 0 "safe two-file delegation reaches wrapper without approval" env
 [ -e "$FIXTURE/sentinel" ]
-
-rm -f "$FIXTURE/sentinel"
-run_expect 2 "approved payload mutation is rejected before wrapper" \
-  env MUTATE_APPROVED_PAYLOAD=1
-[ ! -e "$FIXTURE/sentinel" ]
+jq -e '.authorization.runId == "airlift-resume" and
+  .authorization.laneId == "resume-via-deepseek"' \
+  "$FIXTURE/bundle/OPENROUTER_RECEIPT.json" >/dev/null
 
 printf 'Continue the listed work safely.\n' > "$FIXTURE/bundle/RESUME_PROMPT.md"
 printf 'Objective: validate the handoff.\n' > "$FIXTURE/bundle/HANDOFF.md"
 rm -f "$FIXTURE/sentinel" "$FIXTURE"/captured.*
-run_expect 0 "post-scan source mutation cannot change delegated snapshots" \
+run_expect 0 "post-scan source mutation cannot change delegated private copies" \
   env MUTATE_AFTER_SCAN=1
 [ -e "$FIXTURE/sentinel" ]
 grep -Fxq 'Continue the listed work safely.' "$FIXTURE/captured.resume"
 grep -Fxq 'Objective: validate the handoff.' "$FIXTURE/captured.handoff"
 if grep -Eq 'sk-or-v1|PRIVATE KEY' "$FIXTURE"/captured.*; then
-  echo "  FAIL  mutable originals reached wrapper after snapshot validation" >&2
+  echo "  FAIL  mutable originals reached wrapper after private-copy screening" >&2
   exit 1
 fi
 

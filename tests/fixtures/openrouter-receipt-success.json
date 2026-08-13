@@ -41,5 +41,5 @@
     }
   },
   "routing": {"workload": "quality", "sort": "exacto"},
-  "authorization": {"mode": "exact-digest"}
+  "authorization": {"runId": "record-attempt-1", "laneId": "security", "requestEnvelopeSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
 }

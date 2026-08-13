@@ -19,5 +19,5 @@
   "servingProviderProvenance": "response",
   "usage": null,
   "routing": {"workload": "mechanical", "sort": null},
-  "authorization": {"mode": "exact-digest"}
+  "authorization": {"runId": null, "laneId": null, "requestEnvelopeSha256": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"}
 }

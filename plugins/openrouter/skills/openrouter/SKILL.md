@@ -21,7 +21,8 @@ argument-hint: "<prompt> [--model <slug>]"
 
 # /openrouter
 
-Delegate a prompt directly to an OpenRouter model (single-turn completion).
+Delegate a prompt directly to an OpenRouter model in one pass on a trusted
+developer workstation.
 
 ## Usage
 
@@ -42,169 +43,98 @@ than the implementation family.
 
 Extract the prompt and optional `--model` flag from the user's input.
 
-- If `--model` is specified, use that slug.
-- If `--model` is not specified, use `openai/gpt-5.6-terra` with
-  `moonshotai/kimi-k3` as the quality fallback.
-- If `--model` is specified, honor it exactly; do not silently replace an explicit user choice.
+- If `--model` is specified, use that slug exactly.
+- Otherwise use `openai/gpt-5.6-terra` with `moonshotai/kimi-k3` as fallback.
+- Reject any primary or fallback slug beginning with `anthropic/`; Anthropic
+  remains native-Claude-only.
 
 ### Step 2: Check Prerequisites
 
-Verify either `OPENROUTER_API_KEY` or `OPENROUTER_API_KEY_FILE` is set. The
-file form is preferred for non-interactive harnesses and is validated by the
-wrapper as a non-symlink regular file owned by the current UID with mode 0600:
-
-```bash
-if [ -z "${OPENROUTER_API_KEY:-}" ] && [ -z "${OPENROUTER_API_KEY_FILE:-}" ]; then
-  echo "OPENROUTER_API_KEY or OPENROUTER_API_KEY_FILE required."
-  exit 1
-fi
-```
+Either `OPENROUTER_API_KEY` or `OPENROUTER_API_KEY_FILE` authorizes this
+configured-key development path. The wrapper validates the file form as a
+non-symlink regular file owned by the current UID with mode 0600. If neither is
+configured, report OpenRouter unavailable; do not ask for approval.
 
 ### Step 3: Select Timeout
 
-Default 3600s. Increase to 7200s for very large inputs (big diffs at or above
-10K lines). The wrapper separately enforces a 30s connection timeout plus 600s
-first-byte and stream-idle watchdogs, so this value is the total completion
-budget rather than the only liveness check.
+Default to 3600s. Increase to 7200s for inputs at or above 10K lines. The
+wrapper separately enforces connection, first-byte, and stream-idle timeouts.
 
-### Step 4: Invoke OpenRouter
+### Step 4: Resolve, Screen, and Invoke Once
 
-Resolve `WORKFLOW_KERNEL` once using the workflow-kernel runtime-resolution contract. Then select one coherent installed OpenRouter bundle and derive the wrapper from it. Pipe prompts containing code or special characters through stdin:
+Resolve `WORKFLOW_KERNEL` once using the workflow-kernel runtime-resolution
+contract. Select one coherent installed OpenRouter bundle and derive every
+asset from that root:
 
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
 ACTIVE_HOST=""
 [ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && ACTIVE_HOST="claude"
 [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
-if [ -n "$ACTIVE_HOST" ]; then
-  BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.8.0 \
-    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
-    --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-    --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-    --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
-    --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
-    --active-host "$ACTIVE_HOST")
-else
-  BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.8.0 \
-    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
-    --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-    --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-    --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
-    --required-asset skills/openrouter-delegate/references/mcp-control-plane.md)
-fi
+resolve_openrouter_bundle() {
+  if [ -n "$ACTIVE_HOST" ]; then
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.14.0 --active-host "$ACTIVE_HOST" \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+  else
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.14.0 \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+  fi
+}
+BUNDLE_JSON=$(resolve_openrouter_bundle) || exit 1
 BUNDLE_REF=$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty')
 case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) exit 1;; esac
 WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
-SECURITY_POLICY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
+POLICY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
 BOUNDARY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
-AUTHORIZATION_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
-[ -x "$WRAPPER_PATH" ] && [ -r "$SECURITY_POLICY_PATH" ] &&
-  [ -x "$BOUNDARY_PATH" ] && [ -x "$AUTHORIZATION_PATH" ] || exit 1
 
 PROMPT_FILE=$(mktemp)
 SYSTEM_FILE=$(mktemp)
 RECEIPT_FILE=$(mktemp)
-AUTHORIZATION_FILE=$(mktemp)
-REQUEST_ENVELOPE_FILE=$(mktemp)
-trap 'rm -f "$PROMPT_FILE" "$SYSTEM_FILE" "$RECEIPT_FILE" "$AUTHORIZATION_FILE" "$REQUEST_ENVELOPE_FILE"' EXIT
+trap 'rm -f "$PROMPT_FILE" "$SYSTEM_FILE" "$RECEIPT_FILE"' EXIT
 printf '%s' "$USER_PROMPT" > "$PROMPT_FILE"
 printf '%s' "${OPENROUTER_SYSTEM:-You are a terse, precise coding assistant. Output only what was asked.}" > "$SYSTEM_FILE"
-if ! "$BOUNDARY_PATH" --mode artifact-delegation \
-    --policy "$SECURITY_POLICY_PATH" \
-    --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE"; then
+
+if ! "$BOUNDARY_PATH" --mode artifact-delegation --policy "$POLICY_PATH" \
+    --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE" >/dev/null; then
   echo "OpenRouter disclosure declined; no prompt bytes were sent."
   exit 1
 fi
 
-env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
-  OPENROUTER_AUTHORIZATION_MODE=exact-digest \
-  OPENROUTER_WORKLOAD=direct \
-  OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
-  OPENROUTER_REQUEST_ENVELOPE_OUTPUT="$REQUEST_ENVELOPE_FILE" \
-  bash "$WRAPPER_PATH" "${MODEL}" - "${TIMEOUT}" "${FALLBACK_MODEL:-}" < "$PROMPT_FILE"
-REQUEST_ENVELOPE_SHA256=$("$AUTHORIZATION_PATH" snapshot-envelope \
-  --output "$AUTHORIZATION_FILE" --request-file "$REQUEST_ENVELOPE_FILE")
-```
-
-Direct interactive `/openrouter` supports only `exact-digest` until the
-external Workflow Authority Broker is installed and integrated. Immediately
-before provider contact, authorize the exact rendered request envelope through
-the payload-specific human gate. The envelope binds the system/user bytes,
-model candidates, provider routing, and streaming parameters. Caller-selected `trusted-boundary` is unavailable
-and must not be treated as authority.
-
-In `exact-digest` mode this is a two-pass workflow:
-
-1. **Preparation pass:** Materialize, disclosure-screen, render, and snapshot
-   the exact request-envelope bytes. If no recorded human decision exists, emit
-   `approval_required` with status/exit `78`, stop before the wrapper, and ask
-   the human with `AskUserQuestion` (or a normal chat question when unavailable)
-   to approve or decline that `requestEnvelopeSha256`. End the current turn;
-   approval pending is neither success nor provider failure.
-2. **Resume/re-dispatch pass:** Continue only after a recorded human response.
-   A decline records `host_disclosure_declined`, returns status/exit `77`, and
-   sends nothing. On approval, copy only the digest from that human response
-   into `approved_request_envelope_sha256`, then rerun Step 4. Rebuild, rescan,
-   rerender, and verify the envelope immediately before contact.
-
-Never self-populate `approved_request_envelope_sha256` from the rendered digest, infer
-approval from general OpenRouter permission, or continue to the wrapper during
-the preparation pass. The recorded human response, not the command or child
-runner, is the authority.
-
-```bash
-AUTHORIZATION_MODE=exact-digest
-case "$AUTHORIZATION_MODE" in
-  exact-digest)
-    [ -n "${approved_request_envelope_sha256:-}" ] || {
-      printf '{"status":"approval_required","requestEnvelopeSha256":"%s","authority":"user"}\n' \
-        "$REQUEST_ENVELOPE_SHA256"
-      exit 78
-    }
-    "$AUTHORIZATION_PATH" verify-envelope --manifest "$AUTHORIZATION_FILE" \
-      --approved-sha256 "$approved_request_envelope_sha256" \
-      --request-file "$REQUEST_ENVELOPE_FILE"
-    ;;
-  *) echo "OpenRouter host authority unavailable" >&2; exit 77 ;;
-esac
-
 RESULT=$(env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
-  OPENROUTER_AUTHORIZATION_MODE="$AUTHORIZATION_MODE" \
-  OPENROUTER_APPROVED_REQUEST_ENVELOPE_SHA256="$approved_request_envelope_sha256" \
-  OPENROUTER_WORKLOAD=direct \
-  OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
-  bash "$WRAPPER_PATH" "${MODEL}" - "${TIMEOUT}" "${FALLBACK_MODEL:-}" < "$PROMPT_FILE")
+  OPENROUTER_WORKLOAD=direct OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
+  bash "$WRAPPER_PATH" "$MODEL" - "$TIMEOUT" "${FALLBACK_MODEL:-}" < "$PROMPT_FILE")
 ```
 
-The wrapper JSON-encodes the prompt into a private request file and streams the
-response with native OpenRouter model fallback; never embed raw user input
-directly in a curl `-d` body.
-Models beginning with `anthropic/` are invalid on this command. OpenAI and
-third-party slugs are allowed through OpenRouter; Anthropic remains native
-Claude-only. Boundary authorization is mandatory; see
-`references/invocation-protocol.md`.
+This is a single-pass path with no user-approval state. Workflow Authority
+presence or health has no bearing on configured-key availability.
+
+The wrapper JSON-encodes the prompt into private temporary storage, streams the
+response, and records a content-free receipt. The boundary refuses unmistakable
+credentials, private keys, authenticated DSNs, access/session tokens, and
+explicitly classified private or regulated material before provider contact.
 
 ### Step 5: Handle Errors
 
-Command statuses: `0` success, `77` human disclosure decline (no send), `78`
-human approval required or approved bytes changed (pause; no send), `28`
-timeout, `1` exhausted/error, and `2` bad args. An approval-required result is
-a preparation state: ask the human and stop the current turn rather than
-presenting it as success or silently falling back. On provider error, report
-the type and the content-free failure receipt to the user.
+Wrapper statuses are `0` success, `28` timeout, `1` exhausted/provider/key
+error, and `2` invalid arguments or a forbidden model origin. A boundary
+decline or wrapper failure sends nothing further and does not trigger an
+approval prompt. Report the content-free failure receipt when available.
 
 ### Step 6: Present Response and Receipt
 
-The wrapper prints the model's text content directly -- `$RESULT` is the
-answer. Present it to the user, followed by the content-free generation ID,
-canonical response model, serving provider and its provenance, and usage from
-`$RECEIPT_FILE`. A null provider with
-`not_reported_by_completion` means OpenRouter did not include that optional
-field; it is not a verified provider identity. Never print the prompt from the
-temporary file.
+Present the model text, followed by the content-free generation ID, response
+model, serving provider and provenance, usage, and request-envelope digest from
+the receipt. A null provider with `not_reported_by_completion` is not verified
+provider identity. Never print temporary prompt/system files or receipt fields
+containing prompt, response, API-key, or secret content.
 
-For live model/endpoint discovery, use the optional official MCP described in
-`references/mcp-control-plane.md`. The direct runner and its team API key remain
-authoritative for this call.
+Recommend provider-side per-key spending limits for runaway-cost control; do
+not add a second local approval or billing service.

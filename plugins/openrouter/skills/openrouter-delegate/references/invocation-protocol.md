@@ -42,19 +42,19 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.8.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.14.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
       --required-asset skills/openrouter-delegate/references/mcp-control-plane.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.8.0 \
+      --minimum-version 1.14.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
-      --required-executable skills/openrouter-delegate/references/payload-authorization.sh \
       --required-asset skills/openrouter-delegate/references/mcp-control-plane.md
   fi
 }
@@ -64,17 +64,16 @@ case "$BUNDLE_REF" in "~/"*) OPENROUTER_ROOT="$HOME/${BUNDLE_REF#\~/}";; *) exit
 WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 SECURITY_POLICY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
 BOUNDARY_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
-AUTHORIZATION_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/payload-authorization.sh"
 [ -x "$WRAPPER_PATH" ] && [ -r "$SECURITY_POLICY_PATH" ] &&
-  [ -x "$BOUNDARY_PATH" ] && [ -x "$AUTHORIZATION_PATH" ] || exit 1
+  [ -x "$BOUNDARY_PATH" ] || exit 1
 ```
 
 Persist only `version`, `cache_class`, and `reason` from the resolver receipt. `selected_root` is for immediate local use and must not enter public durable receipts.
 
 ## How to Invoke
 
-Use the canonical `/openrouter` workflow, which applies the content boundary,
-exact-payload user approval, unchanged-byte verification, and receipt handling
+Use the canonical `/openrouter` workflow, which applies the automatic content
+boundary and receipt handling
 before it reaches this low-level wrapper:
 
 ```text
@@ -83,8 +82,8 @@ before it reaches this low-level wrapper:
 ```
 
 The positional wrapper syntax above is an implementation interface, not an
-authorization boundary. New callers must implement the full protocol in
-Payload-Specific Host Authorization before invoking it.
+authorization boundary. New callers must implement the full configured-key
+protocol below before invoking it.
 
 ## Environment Variables
 
@@ -121,10 +120,6 @@ Payload-Specific Host Authorization before invoking it.
 - `OPENROUTER_IDLE_TIMEOUT` (default `600`): maximum time without stream
   progress. Any streamed bytes reset this watchdog; only a completed, validated
   stream becomes review evidence.
-- `OPENROUTER_AUTHORIZATION_MODE` (`exact-digest|trusted-boundary|unspecified`):
-  low-level receipt vocabulary. Current production automation never accepts
-  caller-selected `trusted-boundary`; direct interactive use records
-  `exact-digest`. The other values remain for compatibility and offline tests.
 - `OPENROUTER_RECEIPT_FILE`: optional path for a content-free JSON success or
   failure receipt. Failure receipts record timeout/error classification without
   prompt, partial completion, inferred provider, or usage content.
@@ -141,31 +136,24 @@ For live catalog, provider, endpoint, benchmark, and credit inspection, use
 remains authoritative for the call because the MCP OAuth identity may not share
 the direct API key's workspace.
 
-## Host Authorization
+## Configured-Key Authorization
 
-Direct interactive `/openrouter` requires user disclosure approval for the
-exact outbound request envelope. Treat it as byte-bound authority, separate from network
-permission:
+On a trusted developer workstation, either supported key input authorizes an
+eligible payload. Direct `/openrouter`, dm-review, and the bounded Pipeline lane
+all use one pass:
 
-1. Run `delegation-boundary.sh` first and materialize the exact eligible system
-   and user prompt bytes in private temporary files.
-2. Run the wrapper with `OPENROUTER_REQUEST_ENVELOPE_OUTPUT` to render without
-   provider contact, then run `payload-authorization.sh snapshot-envelope` and
-   request approval for its content-free `requestEnvelopeSha256`.
-3. On resume, repeat the boundary check and rendering, then run
-   `payload-authorization.sh verify-envelope` with the user-approved digest.
-   Pass that digest as `OPENROUTER_APPROVED_REQUEST_ENVELOPE_SHA256`; the wrapper
-   compares it with the exact bytes supplied to curl immediately before contact.
-   Any prompt, model, fallback, routing, or stream-option change requires fresh authorization.
-4. Never retry around a denial or broaden a file-specific authorization. Record
-   `host_disclosure_declined` and fall back to Codex.
+1. Resolve one coherent installed bundle and materialize the exact system/user
+   files.
+2. Run `delegation-boundary.sh --mode artifact-delegation` with the installed
+   disclosure policy over those private files immediately before wrapper
+   invocation.
+3. On an automatic decline, contact no provider and fall back to Codex where a
+   native fallback exists. Otherwise invoke the wrapper with those same private
+   files.
 
-Automated dm-review lanes currently require the sunset-bound
-`interim_operator_batch` protocol. It binds the exact request envelope and run
-but remains procedural and unauthenticated. A ready external broker retires
-interim mode and resolves to `broker_transport_unavailable` until broker-owned
-transport lands. Neither an API key nor caller-selected authorization variables
-enable automation.
+No OpenRouter caller asks for user approval. Workflow Authority presence or
+status has no effect. Provider-side per-key spending limits are the recommended
+runaway-cost control.
 
 ### Codex network allowlist
 
@@ -183,7 +171,7 @@ domains = { "openrouter.ai" = "allow" }
 ```
 
 This controls whether sandboxed commands can reach OpenRouter. It does not
-override byte-bound disclosure authorization, workspace policy, or a declined
+override the automatic disclosure boundary, workspace policy, or a declined
 boundary check.
 
 ## API Endpoint
@@ -198,7 +186,7 @@ POST https://openrouter.ai/api/v1/chat/completions
 
 ```json
 {
-  "models": ["moonshotai/kimi-k3", "z-ai/glm-5.2"],
+  "models": ["moonshotai/kimi-k3", "openai/gpt-5.6-terra"],
   "provider": {
     "require_parameters": true,
     "allow_fallbacks": true,

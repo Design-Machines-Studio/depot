@@ -25,7 +25,7 @@ consumers=(
   plugins/pipeline/agents/workflow/execution-orchestrator.md
 )
 
-is_broker_consumer() {
+is_configured_key_script() {
   case "$1" in
     plugins/pipeline/references/cascade-dispatch.sh|plugins/pipeline/references/openrouter-exec.sh) return 0 ;;
     *) return 1 ;;
@@ -43,11 +43,11 @@ for relative in "${consumers[@]}"; do
     failures=1
     continue
   fi
-  if ! is_broker_consumer "$relative" && ! grep -Fq 'resolve-plugin-bundle' "$file"; then
+  if ! is_configured_key_script "$relative" && ! grep -Fq 'resolve-plugin-bundle' "$file"; then
     echo "  FAIL  resolver contract absent: $relative"
     failures=1
   fi
-  if grep -Eq 'ls -t[d]? .*openrouter|ls -t[d]? .*pipeline|OPENROUTER_EXEC_WRAPPER_PATH|OPENROUTER_EXEC_CMD|WRAPPER_CMD|security_policy_path' "$file"; then
+  if ! is_configured_key_script "$relative" && grep -Eq 'ls -t[d]? .*openrouter|ls -t[d]? .*pipeline|OPENROUTER_EXEC_WRAPPER_PATH|OPENROUTER_EXEC_CMD|WRAPPER_CMD|security_policy_path' "$file"; then
     echo "  FAIL  independent or caller-selected OpenRouter/Pipeline asset lookup: $relative"
     failures=1
   fi
@@ -60,8 +60,11 @@ for relative in "${consumers[@]}"; do
   openrouter_calls="$(grep -Fc 'resolve-plugin-bundle --plugin openrouter' "$file" || true)"
   if [ "$openrouter_calls" -gt 0 ]; then
     case "$relative" in
-      plugins/openrouter/agents/workflow/openrouter-agent-runner.md|plugins/dm-review/skills/review/SKILL.md) openrouter_floor="1.11.4" ;;
-      plugins/airlift/*|plugins/openrouter/*|plugins/pipeline/*) openrouter_floor="1.8.0" ;;
+      plugins/openrouter/agents/workflow/openrouter-agent-runner.md|plugins/dm-review/skills/review/SKILL.md) openrouter_floor="1.14.0" ;;
+      plugins/openrouter/commands/openrouter.md|plugins/openrouter/skills/openrouter/SKILL.md|plugins/openrouter/skills/openrouter-delegate/SKILL.md|plugins/openrouter/skills/openrouter-delegate/references/invocation-protocol.md) openrouter_floor="1.14.0" ;;
+      plugins/airlift/*) openrouter_floor="1.14.0" ;;
+      plugins/pipeline/*) openrouter_floor="1.14.0" ;;
+      plugins/openrouter/*) openrouter_floor="1.8.0" ;;
       *) openrouter_floor="1.7.0" ;;
     esac
     floor_calls="$(grep -Fc -- "--minimum-version $openrouter_floor" "$file" || true)"
@@ -78,24 +81,23 @@ for relative in "${consumers[@]}"; do
       failures=1
     fi
   fi
-  if grep -Fq 'skills/openrouter-delegate/references/openrouter-wrapper.sh' "$file"; then
+  if ! is_configured_key_script "$relative" && grep -Fq 'skills/openrouter-delegate/references/openrouter-wrapper.sh' "$file"; then
     grep -Fq -- '--required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh' "$file" &&
     ! grep -Fq -- '--required-asset skills/openrouter-delegate/references/openrouter-wrapper.sh' "$file" || {
       echo "  FAIL  OpenRouter wrapper is not declared executable-only: $relative"
       failures=1
     }
   fi
-  if ! is_broker_consumer "$relative" && grep -Fq 'skills/openrouter-delegate/references/delegation-boundary.sh' "$file"; then
-    grep -Fq -- '--required-executable skills/openrouter-delegate/references/delegation-boundary.sh' "$file" &&
-    ! grep -Fq -- '--required-asset skills/openrouter-delegate/references/delegation-boundary.sh' "$file" || {
-      echo "  FAIL  OpenRouter boundary is not declared executable-only: $relative"
+  if grep -Fq 'skills/openrouter-delegate/references/openrouter-wrapper.sh' "$file"; then
+    grep -Fq -- '--required-asset skills/openrouter-delegate/references/openrouter-credential.sh' "$file" || {
+      echo "  FAIL  OpenRouter credential loader is not bound into the coherent bundle: $relative"
       failures=1
     }
   fi
-  if grep -Fq 'skills/openrouter-delegate/references/payload-authorization.sh' "$file"; then
-    grep -Fq -- '--required-executable skills/openrouter-delegate/references/payload-authorization.sh' "$file" &&
-    ! grep -Fq -- '--required-asset skills/openrouter-delegate/references/payload-authorization.sh' "$file" || {
-      echo "  FAIL  OpenRouter payload authorization is not declared executable-only: $relative"
+  if ! is_configured_key_script "$relative" && grep -Fq 'skills/openrouter-delegate/references/delegation-boundary.sh' "$file"; then
+    grep -Fq -- '--required-executable skills/openrouter-delegate/references/delegation-boundary.sh' "$file" &&
+    ! grep -Fq -- '--required-asset skills/openrouter-delegate/references/delegation-boundary.sh' "$file" || {
+      echo "  FAIL  OpenRouter boundary is not declared executable-only: $relative"
       failures=1
     }
   fi
@@ -114,11 +116,30 @@ for relative in "${consumers[@]}"; do
   fi
 done
 
+if ! "$ROOT/tools/test-openrouter-agent-runner-boundary.sh"; then
+  echo "  FAIL  OpenRouter agent runner behavioral one-pass boundary regression"
+  failures=1
+fi
+
+for relative in \
+  plugins/pipeline/references/cascade-dispatch.sh \
+  plugins/pipeline/references/openrouter-exec.sh
+do
+  file="$ROOT/$relative"
+  grep -Fq 'resolve-plugin-bundle --plugin openrouter' "$file" &&
+  grep -Fq -- '--minimum-version 1.14.0' "$file" &&
+  grep -Fq 'WORKFLOW_KERNEL' "$file" &&
+  ! grep -Eq 'ls -t[d]? .*openrouter' "$file" || {
+    echo "  FAIL  configured-key consumer bypasses coherent semver OpenRouter resolution: $relative"
+    failures=1
+  }
+done
+
 authorization_contract="$ROOT/plugins/pipeline/references/openrouter-authorization-contract.md"
-grep -Fq '`/usr/local/bin/workflow-authority` client' "$authorization_contract" &&
-grep -Fq 'provider credential' "$authorization_contract" &&
-grep -Fq 'fixed client or production-ready status is unavailable' "$authorization_contract" || {
-  echo "  FAIL  fixed broker-mediated OpenRouter authorization contract absent"
+grep -Fq 'OPENROUTER_API_KEY_FILE' "$authorization_contract" &&
+grep -Fq 'delegation-boundary.sh --mode artifact-delegation' "$authorization_contract" &&
+grep -Fq 'has no effect on configured-key dispatch' "$authorization_contract" || {
+  echo "  FAIL  configured-key OpenRouter authorization contract absent"
   failures=1
 }
 
@@ -133,8 +154,6 @@ do
   grep -Fq -- '--required-asset' "$file" &&
   grep -Fq 'references/openrouter-authorization-contract.md' "$file" &&
   grep -Fq -- '--active-host' "$file" &&
-  grep -Fq 'exact-digest' "$file" &&
-  grep -Fq 'trusted-boundary' "$file" &&
   ! grep -Fq 'plugins/pipeline/references/openrouter-authorization-contract.md' "$file" &&
   ! grep -Fq 'compute each file'\''s SHA-256' "$file" || {
     echo "  FAIL  automated Pipeline OpenRouter caller lacks the shared authorization contract: $relative"
@@ -152,14 +171,12 @@ grep -Fq 'generic `openrouter-agent-runner` is the only execution path' "$bulk_c
 
 for relative in \
   plugins/openrouter/commands/openrouter.md \
-  plugins/openrouter/agents/workflow/openrouter-agent-runner.md \
-  plugins/airlift/commands/airlift-in.md \
-  plugins/airlift/prompts/airlift-in.md
+  plugins/openrouter/agents/workflow/openrouter-agent-runner.md
 do
   file="$ROOT/$relative"
-  grep -Fq 'payload-authorization.sh' "$file" &&
-  grep -Fq ' verify ' "$file" || {
-    echo "  FAIL  wrapper consumer lacks byte-bound authorization: $relative"
+  grep -Fq 'delegation-boundary.sh' "$file" &&
+  grep -Fq -- '--mode artifact-delegation' "$file" || {
+    echo "  FAIL  wrapper consumer lacks automatic private-file screening: $relative"
     failures=1
   }
 done
@@ -169,14 +186,14 @@ for relative in \
   plugins/pipeline/references/openrouter-exec.sh
 do
   file="$ROOT/$relative"
-  grep -Fq 'WORKFLOW_AUTHORITY_CLIENT="/usr/local/bin/workflow-authority"' "$file" &&
-  grep -Fq 'provider-transport-status' "$file" &&
-  grep -Fq 'dispatch-provider-request' "$file" &&
-  grep -Fq 'env -i PATH="$PATH" LC_ALL=C' "$file" &&
-  ! grep -Fq 'payload-authorization.sh' "$file" &&
+  grep -Fq 'OPENROUTER_API_KEY_FILE' "$file" &&
+  grep -Fq 'delegation-boundary.sh' "$file" &&
+  grep -Fq -- '--mode artifact-delegation' "$file" &&
+  ! grep -Fq '/usr/local/bin/workflow-authority' "$file" &&
+  ! grep -Fq 'dispatch-provider-request' "$file" &&
   ! grep -Fq 'OPENROUTER_PAYLOAD_AUTHORIZATION' "$file" &&
   ! grep -Fq 'OPENROUTER_PAYLOAD_APPROVAL_SHA256' "$file" || {
-    echo "  FAIL  broker consumer does not use the fixed empty-environment authority client: $relative"
+    echo "  FAIL  configured-key consumer does not use the coherent screened wrapper path: $relative"
     failures=1
   }
 done
@@ -240,10 +257,10 @@ for file in \
   "$ROOT/plugins/airlift/commands/airlift-in.md" \
   "$ROOT/plugins/airlift/prompts/airlift-in.md"
 do
-  grep -Fq -- '--content-file "$RESUME_SNAPSHOT" --content-file "$HANDOFF_SNAPSHOT"' "$file" &&
-  grep -Fq 'env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$RESUME_SNAPSHOT"' "$file" &&
-  grep -Fq '< "$HANDOFF_SNAPSHOT"' "$file" || {
-    echo "  FAIL  Airlift does not screen and delegate the same artifact snapshots: ${file#"$ROOT/"}"
+  grep -Fq -- '--content-file "$RESUME_COPY" --content-file "$HANDOFF_COPY"' "$file" &&
+  grep -Fq 'env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$RESUME_COPY"' "$file" &&
+  grep -Fq '< "$HANDOFF_COPY"' "$file" || {
+    echo "  FAIL  Airlift does not screen and delegate the same private copies: ${file#"$ROOT/"}"
     failures=1
   }
 done

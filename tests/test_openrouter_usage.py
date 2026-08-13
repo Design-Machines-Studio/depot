@@ -967,11 +967,8 @@ class RecordAttemptTests(unittest.TestCase):
         directory = tempfile.mkdtemp()
         receipts = os.path.join(directory, "authoritative-receipts.json")
         try:
+            # Consume the checked-in producer-faithful bound receipt unchanged.
             wrapper_receipt = _receipt(SUCCESS_FIXTURE)
-            wrapper_receipt["authorization"] = {
-                "mode": "exact-digest", "runId": "record-attempt-1",
-                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
-            }
             wrapper_receipt_path = Path(directory) / "openrouter-receipt.json"
             wrapper_receipt_path.write_text(
                 json.dumps(wrapper_receipt), encoding="utf-8",
@@ -1061,7 +1058,7 @@ class RecordAttemptTests(unittest.TestCase):
                 self.assertNotEqual(code, 0)
                 self.assertFalse(os.path.exists(receipts))
 
-    def test_rejects_crossed_interim_openrouter_receipt_identity(self):
+    def test_rejects_crossed_openrouter_receipt_identity(self):
         import os
         import tempfile
 
@@ -1076,8 +1073,6 @@ class RecordAttemptTests(unittest.TestCase):
             with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
                 receipt = _receipt(SUCCESS_FIXTURE)
                 receipt["authorization"] = {
-                    "mode": "interim-operator-batch",
-                    "batchSha256": "a" * 64,
                     "runId": "record-attempt-1",
                     "laneId": "security",
                     "requestEnvelopeSha256": "b" * 64,
@@ -1093,15 +1088,13 @@ class RecordAttemptTests(unittest.TestCase):
                 self.assertNotEqual(code, 0)
                 self.assertFalse(os.path.exists(receipts))
 
-    def test_accepts_exact_interim_openrouter_receipt_identity(self):
+    def test_accepts_exact_openrouter_receipt_identity(self):
         import os
         import tempfile
 
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "interim-operator-batch",
-                "batchSha256": "a" * 64,
                 "runId": "record-attempt-1",
                 "laneId": "security",
                 "requestEnvelopeSha256": "b" * 64,
@@ -1115,7 +1108,7 @@ class RecordAttemptTests(unittest.TestCase):
             ))
             self.assertEqual(code, 0, error)
 
-    def test_rejects_exact_digest_receipt_without_attempt_coordinates(self):
+    def test_rejects_receipt_without_attempt_coordinates(self):
         import os
         import tempfile
 
@@ -1123,23 +1116,23 @@ class RecordAttemptTests(unittest.TestCase):
             receipts = os.path.join(directory, "authoritative-receipts.json")
             code, _, _ = _invoke(self._argv(
                 receipts, "security", 1,
-                openrouter_receipt=SUCCESS_FIXTURE,
+                openrouter_receipt=SUCCESS_NO_USAGE_FIXTURE,
                 request_envelope_sha256="b" * 64,
             ))
             self.assertNotEqual(code, 0)
             self.assertFalse(os.path.exists(receipts))
 
-    def test_exact_digest_receipt_is_consumed_once_across_streams(self):
+    def test_openrouter_receipt_is_consumed_once_across_streams(self):
         import os
         import tempfile
 
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "exact-digest", "runId": "run-a",
+                "runId": "run-a",
                 "laneId": "security", "requestEnvelopeSha256": "b" * 64,
             }
-            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path = Path(directory) / "openrouter-receipt.json"
             receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
             first_directory = Path(directory) / "run-a"
             second_directory = Path(directory) / "run-b"
@@ -1183,10 +1176,10 @@ class RecordAttemptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "exact-digest", "runId": "record-attempt-1",
+                "runId": "record-attempt-1",
                 "laneId": "security", "requestEnvelopeSha256": "b" * 64,
             }
-            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path = Path(directory) / "openrouter-receipt.json"
             receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
             receipts = Path(directory) / "authoritative-receipts.json"
             receipts.write_text("{}", encoding="utf-8")
@@ -1210,10 +1203,10 @@ class RecordAttemptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "exact-digest", "runId": "record-attempt-1",
+                "runId": "record-attempt-1",
                 "laneId": "security", "requestEnvelopeSha256": "b" * 64,
             }
-            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path = Path(directory) / "openrouter-receipt.json"
             receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
             receipts = Path(directory) / "authoritative-receipts.json"
             argv = self._argv(
@@ -1242,10 +1235,10 @@ class RecordAttemptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "exact-digest", "runId": "record-attempt-1",
+                "runId": "record-attempt-1",
                 "laneId": "security", "requestEnvelopeSha256": "b" * 64,
             }
-            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path = Path(directory) / "openrouter-receipt.json"
             receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
             receipts = Path(directory) / "authoritative-receipts.json"
             argv = self._argv(
@@ -1278,10 +1271,10 @@ class RecordAttemptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "exact-digest", "runId": "record-attempt-1",
+                "runId": "record-attempt-1",
                 "laneId": "security", "requestEnvelopeSha256": "b" * 64,
             }
-            receipt_path = Path(directory) / "exact-digest-receipt.json"
+            receipt_path = Path(directory) / "openrouter-receipt.json"
             receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
             descriptor = os.open(
                 Path(directory) / "consumption.lock", os.O_WRONLY | os.O_CREAT,
@@ -1306,15 +1299,13 @@ class RecordAttemptTests(unittest.TestCase):
                 self.assertNotEqual(code, 0)
                 close.assert_any_call(descriptor)
 
-    def test_rejects_reusing_one_interim_openrouter_receipt_for_another_attempt(self):
+    def test_rejects_reusing_one_openrouter_receipt_for_another_attempt(self):
         import os
         import tempfile
 
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "interim-operator-batch",
-                "batchSha256": "a" * 64,
                 "runId": "record-attempt-1",
                 "laneId": "security",
                 "requestEnvelopeSha256": "b" * 64,
@@ -1345,8 +1336,6 @@ class RecordAttemptTests(unittest.TestCase):
                 receipt = _receipt(FAILED_FIXTURE)
                 receipt["invocationId"] = invocation_id
                 receipt["authorization"] = {
-                    "mode": "interim-operator-batch",
-                    "batchSha256": "a" * 64,
                     "runId": "record-attempt-1",
                     "laneId": "security",
                     "requestEnvelopeSha256": "b" * 64,
@@ -1371,8 +1360,6 @@ class RecordAttemptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "interim-operator-batch",
-                "batchSha256": "a" * 64,
                 "runId": "record-attempt-1",
                 "laneId": "security",
                 "requestEnvelopeSha256": "b" * 64,
