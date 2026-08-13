@@ -361,7 +361,7 @@ require_text "$REPO_ROOT/README.md" 'P3 stays advisory' "README describes propor
 reject_text "$REPO_ROOT/plugins/project-scaffolder/skills/scaffolding/references/claude-md-templates/dm-standard.md" '--allow-defer-p3' "scaffold template retires P3 deferral flag"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.60.1"' "canonical dm-review version is 1.60.1"
 require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.60.1"' "generated dm-review version is 1.60.1"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.47.1"' "canonical Pipeline version is 1.47.1"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.48.0"' "canonical Pipeline version is 1.48.0"
 require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.60.1"' "generated Pipeline dependency floor is current"
 
 printf "Synthesis identity fixtures\n"

@@ -197,8 +197,8 @@ Not all chunks need the same evaluation depth. Classify each chunk before execut
 **UI chunks** (touch `.templ`, `.twig`, `.html`, `.css`, or template files):
 
 - Run focused Codex review with at most one repair/recheck pass
-- ALSO run Playwright browser evaluation: navigate to the affected route, screenshot, check the page loads and renders correctly, verify interactive elements respond
-- If the project has `tests/ux/` personas, evaluate through at least 2 persona lenses
+- When `renderedSurface: required`, ALSO run Playwright browser evaluation against the authoritative declared cases
+- When `renderedSurface: not_applicable`, retain UI review depth but do not invent a route, persona, screenshot, or browser interaction
 
 **Logic chunks** (touch `.go`, `.py`, `.ts`, `.php` handler/service files, migrations):
 
@@ -214,17 +214,22 @@ Not all chunks need the same evaluation depth. Classify each chunk before execut
 **Integration chunks** (wire multiple prior chunks together, touch routes/main):
 
 - Run focused Codex review with at most one repair/recheck pass, then verify the cross-chunk wiring explicitly
-- Run Playwright browser evaluation on all affected routes
+- Run Playwright browser evaluation on all affected routes only when `renderedSurface: required`
 - This is the highest-risk chunk type -- treat it with full rigor
 
-The manifest's `estimatedComplexity` field and the chunk's `filesToModify` list determine the classification. When in doubt, classify up (treat ambiguous chunks as Logic, not Trivial).
+The manifest's `kind` controls this review classification. The separate closed
+`renderedSurface` field controls browser, persona, visual, and Datastar
+obligations. New manifests require `required|not_applicable` plus a non-empty
+rationale. Mixed or uncertain surface scope is `required`; `not_applicable`
+must account for every syntactic UI/integration trigger without weakening
+review depth.
 
 The sensitive-path exception overrides every classification above and requires
 full dm-review with at most two passes.
 
 ## Progress Ledger
 
-Create this ledger with TodoWrite immediately. Update it as you work. Each chunk gets its own set of sub-steps. Every chunk carries an `executionMode` label captured from the host/tooling pre-flight: `full_cli` (Claude orchestration tools available), `codex_native` (Codex adapter using `multi_agent_v1.spawn_agent` and dm-review inline protocol), or `manual_walkthrough` (user is driving some steps). Browser availability is a separate required-evidence status and never an execution mode. Each chunk also carries a separate `isolationStrategy` label from Step 1c (`per-chunk-worktree` or `sequential-on-branch`) -- isolation is never folded into `executionMode`. Include both labels in every chunk receipt and in the final Summary Report.
+Create this ledger with TodoWrite immediately. Update it as you work. Each chunk gets its own set of sub-steps. Every chunk carries an `executionMode` label captured from the host/tooling pre-flight: `full_cli` (Claude orchestration tools available), `codex_native` (Codex adapter using `multi_agent_v1.spawn_agent` and dm-review inline protocol), or `manual_walkthrough` (user is driving some steps). Browser availability is a separate required-evidence status and never an execution mode. Each chunk also carries a separate `isolationStrategy` label from Step 1c (`per-chunk-worktree` or `sequential-on-branch`) -- isolation is never folded into `executionMode`. Include both labels in every chunk receipt and in the final Summary Report. Every chunk receipt also records `renderedSurface`, `renderedSurfaceRationale`, and `rendered_surface_defaulted`.
 
 Before any chunk runs:
 
@@ -243,7 +248,7 @@ For each chunk, you MUST complete ALL applicable steps in order:
 [chunk-id] 5. Validate subagent output (completion + commit + build)
 [chunk-id] 6. Run anti-pattern scan (framework-specific grep)
 [chunk-id] 7. Run evaluation gate (per classification)
-[chunk-id] 8. Run Playwright browser check (UI and Integration chunks only)
+[chunk-id] 8. Run Playwright browser check (`renderedSurface: required` only; otherwise record not applicable with rationale)
 [chunk-id] 9. Merge back to feature branch
 [chunk-id] 10. Clean up worktree
 [chunk-id] executionMode: full_cli | codex_native | manual_walkthrough
@@ -343,16 +348,24 @@ skipped. The terminal `emit-cost-summary` reports the count on the receipt line
 as `(usage measured m/n)`; `0/n` is the signature of an unwired boundary.
 
 The next canonical transition is `run.started`. After that transition and before
-the first builder dispatch, Pipeline generates
+the first builder dispatch, inspect the validated rendered-surface set. When at
+least one chunk is `required`, Pipeline generates
 `plans/<feature-slug>/verification-profile.json` by running the complete
-project-declaration discovery and selection contract in `verification-contract.md`.
-Materialize that canonical profile before generating the behavioral contract;
-the contract copies its exact `profile_id`, full-document digest, and required
-case IDs. An absent declaration tree still produces and materializes the
-authoritative `not_declared` profile with empty case arrays. Null profile fields
-are legacy/no-profile input only and Pipeline MUST NOT emit them for a fresh run.
-Do not invoke `bind-verification-contract` until the profile artifact exists and
-has been reloaded successfully. Pipeline then generates
+project-declaration discovery and selection contract in
+`verification-contract.md` for the union of required chunks only. Materialize
+that canonical profile before generating the behavioral contract; the contract
+copies its exact `profile_id`, full-document digest, and required case IDs. An
+absent declaration tree still produces and materializes the authoritative
+`not_declared` profile with empty case arrays and therefore blocks required
+rendered work. Do not invoke `bind-verification-contract` until this required
+profile artifact exists and has been reloaded successfully.
+
+When every chunk is `not_applicable`, do not discover or materialize a browser
+profile. Generate the closed contract with null profile ID/digest and empty
+persona/browser arrays, preserve every validated N/A rationale in manifest and
+receipts, and invoke binding without `--verification-profile`. This is an
+explicit no-rendered-surface contract, not fabricated `not_declared` evidence.
+Pipeline then generates
 `plans/<feature-slug>/verification-contract.json` from only the approved Key
 Requirements and final chunk acceptance criteria. Use the strict
 `behavioral-verification-contract-schema.json` shape with stable `REQ-*`,
@@ -362,10 +375,15 @@ persona, scenario, route binding, browser, viewport, authentication fixture, or
 case ID blocks dispatch. Generated matrices and invented sample personas are not
 authority.
 
-Validate and bind the initial contract exactly once:
+Validate and bind the initial contract exactly once. Pass
+`--verification-profile` only when at least one chunk is `required`:
 
 ```text
+# One or more rendered-surface chunks:
 "$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature-slug>/verification-contract.json --verification-profile plans/<feature-slug>/verification-profile.json > plans/<feature-slug>/verification-contract-binding.json
+
+# Zero rendered-surface chunks:
+"$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature-slug>/verification-contract.json > plans/<feature-slug>/verification-contract-binding.json
 ```
 
 Reject a non-zero exit, malformed receipt, or a receipt not carrying the exact
@@ -415,6 +433,18 @@ Before any git operations, validate the manifest:
    manifest with no field follows the current standard path and records
    `decision_profile_defaulted=true`; absence is unknown provenance, not
    low/low evidence.
+6. **Rendered-surface applicability:** New manifests require both
+   `renderedSurface` and `renderedSurfaceRationale` on every chunk. Accept only
+   `required|not_applicable` and a non-empty rationale. For `not_applicable`,
+   verify the rationale accounts for every UI/integration syntactic trigger and
+   that no served route, rendered output, browser interaction, visual claim, or
+   mixed surface scope contradicts it; uncertainty fails closed to `required`.
+   A manifest supplying only one field is invalid. For a legacy manifest with
+   neither field, default UI/Integration chunks to `required`, Logic/Trivial
+   chunks to `not_applicable`, and record
+   `rendered_surface_defaulted=true` plus the derived rationale in every
+   receipt. Never use this field to change `kind`, provider routing, or review
+   depth.
 
 Read `decisionLeverage` from `routing-policy.json` and apply it only to workflow
 depth. Low/low uses the optimized standard path. High uncertainty consumes
@@ -439,11 +469,11 @@ Defer shadow observation until `all-chunks-complete`.
 
 ## Step 0b: MCP Pre-Flight Check
 
-Before any chunk execution, verify that browser testing tools are available for UI and Integration chunks.
+Before any chunk execution, verify that browser testing tools are available for chunks with `renderedSurface: required`.
 
-### 1. Count UI/Integration chunks
+### 1. Count rendered-surface chunks
 
-Scan the manifest's `chunks` array. Count chunks where the classification (from prompt content or manifest metadata) is UI or Integration. If all chunks are Logic or Trivial, log `MCP Pre-Flight: not required (no UI/Integration chunks)` and skip to Step 1.
+Scan the manifest's `chunks` array. Count chunks whose validated `renderedSurface` is `required`. If none exist, log `MCP Pre-Flight: not required (no rendered-surface chunks)` and skip to Step 1.
 
 ### 2. Check Playwright MCP availability
 
@@ -458,12 +488,12 @@ Also check for Chrome DevTools MCP:
 
 ### 3. Decision gate
 
-**If UI/Integration chunks > 0 AND no browser MCP tools are initially found:**
+**If rendered-surface chunks > 0 AND no browser MCP tools are initially found:**
 
 Treat discovery failure as the first failed required-browser attempt. Preserve the safe discovery evidence, attempt to quit the primary browser process/engine session, attempt a demonstrably fresh primary launch and retry discovery, then attempt a genuinely different configured browser engine. Record an unavailable attempt when the host cannot perform a recovery action. If the ladder is exhausted, output:
 
 ```text
-BLOCKED: This manifest contains [N] UI/Integration chunks that require browser verification, but no Playwright or Chrome DevTools MCP tools are available. Visual verification cannot be performed.
+BLOCKED: This manifest contains [N] rendered-surface chunks that require browser verification, but no Playwright or Chrome DevTools MCP tools are available. Visual verification cannot be performed.
 
 Fix: Ensure a Playwright or Chrome DevTools MCP server is running before pipeline execution.
 ```
@@ -472,11 +502,11 @@ Record the required cases as blocked `human_help_required` with the initial disc
 
 **If browser tools are available:**
 
-Log: `MCP Pre-Flight: Playwright=[available/unavailable], Chrome DevTools=[available/unavailable], UI chunks=[N], decision=proceed, degradedMode=none`
+Log: `MCP Pre-Flight: Playwright=[available/unavailable], Chrome DevTools=[available/unavailable], rendered-surface chunks=[N], decision=proceed, degradedMode=none`
 
 ### 4. Dev server check
 
-If browser tools are available and UI chunks exist, verify the dev server is reachable. Try these URLs in order:
+If browser tools are available and rendered-surface chunks exist, verify the dev server is reachable. Try these URLs in order:
 
 1. `manifest.devServerURL` when present.
 2. Host URLs derived from `docker compose ps` port mappings (for example, `0.0.0.0:8091->8090/tcp` becomes `http://localhost:8091`).
@@ -658,7 +688,7 @@ Tradeoff: no parallel isolation. This is acceptable for sequential manifests and
 
 ### 1d: Repository Verification Planner
 
-Use Workflow Kernel `>=0.14.0` as the only executable source of repository
+Use Workflow Kernel `>=0.15.0` as the only executable source of repository
 test selection. Pin the launcher already resolved for this run.
 
 This authority is separate from optional kernel shadow observation. Shadow
@@ -735,7 +765,11 @@ Read the chunk's `kind` field from the manifest and map to the orchestrator's cl
 - **Trivial:** Only `.md`, `.json`, `.yaml`, `.toml`, config, or documentation files
 - **Integration:** The chunk title or prompt contains "wire," "integrate," "connect," or it modifies route files, `main.go`, or navigation templates
 
-Log: "Chunk [chunk-id] classified as: [type] (source: manifest kind | file-extension heuristic)"
+Read the independently validated `renderedSurface` and rationale from the
+manifest, or the conservative legacy default from Step 0. Do not derive it
+again from `kind`.
+
+Log: "Chunk [chunk-id] classified as: [type] (source: manifest kind | file-extension heuristic); renderedSurface: [required|not_applicable] (defaulted: [true|false]); rationale: [text]"
 
 Mark `[chunk-id] 1. Classify chunk` complete.
 
@@ -1339,7 +1373,7 @@ If anti-patterns are found, fix them BEFORE running the review loop. Don't rely 
 
 Mark `[chunk-id] 6. Run anti-pattern scan` complete.
 
-For UI chunks, run the cheap Datastar/markup static checks and one browser smoke
+For chunks with `renderedSurface: required`, run the cheap Datastar/markup static checks and one browser smoke
 immediately after this scan. Confirm the changed route renders, the console has
 no new errors, and the primary interaction responds. Fix failures before broad
 tests or review; do not postpone the first UI signal until the final browser
@@ -1422,15 +1456,17 @@ if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "exec
 
 Mark `[chunk-id] 7. Run evaluation gate` complete.
 
-### 3h: Visual Verification Protocol (UI and Integration chunks only)
+### 3h: Visual Verification Protocol (`renderedSurface: required` only)
 
-**Skip this step for Logic and Trivial chunks.**
+**For `renderedSurface: not_applicable`, record the validated rationale and mark
+the step not applicable. Do not emit `BROWSER_VERIFIED`, fabricate empty
+coverage, or run a recovery ladder for a surface that does not exist.**
 
-For UI and Integration chunks, verify the rendered output in a browser against the design spec and visual acceptance criteria. A screenshot without evaluation is theatre -- every screenshot must be compared against something.
+For `renderedSurface: required` chunks, verify the rendered output in a browser against the design spec and visual acceptance criteria. A screenshot without evaluation is theatre -- every screenshot must be compared against something.
 
 Discover the complete verification profile from project configuration and `tests/ux/` task frontmatter. Required coverage is the exact declared set of persona, scenario, concrete route, configured engine, viewport, authentication state, and expected evaluation cases. `not_declared` is valid only when declarations are absent. A present but incomplete declaration, unresolved route binding, missing auth fixture, or missing case evidence is blocking; never replace the project case set with a fixed two-persona sample.
 
-**If browser tools, the dev server, authentication fixture, route binding, or verification profile is unavailable,** treat that as the initial failed required attempt. Preserve safe evidence, run the mandatory recovery ladder (primary process/session quit -> demonstrably fresh primary retry -> different configured browser), then emit blocked `human_help_required` with the exact missing case IDs and ask the user to restore the prerequisite. There is no proceed-without-browser, skipped, deferred, degraded, or curl-proof path for UI/Integration work.
+**If browser tools, the dev server, authentication fixture, route binding, or verification profile is unavailable,** treat that as the initial failed required attempt. Preserve safe evidence, run the mandatory recovery ladder (primary process/session quit -> demonstrably fresh primary retry -> different configured browser), then emit blocked `human_help_required` with the exact missing case IDs and ask the user to restore the prerequisite. There is no proceed-without-browser, skipped, deferred, degraded, or curl-proof path for required rendered-surface work.
 
 #### Step 1: Design Spec Discovery
 
@@ -2224,7 +2260,7 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 - [x] Worktree per chunk: yes/no
 - [x] Anti-pattern scan per chunk: yes/no (findings per chunk)
 - [x] Evaluation gate per chunk: yes/no (type and iterations per chunk)
-- [x] Playwright browser checks: N of M UI/Integration chunks checked
+- [x] Playwright browser checks: N of M `renderedSurface: required` chunks checked; K `not_applicable` chunks recorded with rationale
 - [x] Final full dm-review: yes/no
 - [x] final-requirements-crosscheck.md written: yes/no
 - [x] Merge policy honored (noMergeOnCompletion): yes/no

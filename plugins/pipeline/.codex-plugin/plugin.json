@@ -1,6 +1,6 @@
 {
   "name": "pipeline",
-  "version": "1.47.1",
+  "version": "1.48.0",
   "description": "Autonomous feature development pipeline with fresh executable tiered verification, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
   "author": {
     "name": "Design Machines",
@@ -169,7 +169,7 @@
   "pluginDependencies": {
     "dm-review": ">=1.60.1",
     "ned": ">=1.4.0",
-    "workflow-kernel": ">=0.14.0"
+    "workflow-kernel": ">=0.15.0"
   },
   "optionalPluginDependencies": {
     "design-machines": ">=1.3.0",
