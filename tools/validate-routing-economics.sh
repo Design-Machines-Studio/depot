@@ -138,6 +138,7 @@ promptcraft="$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
 orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
 cascade="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
 usage_probe="$REPO_ROOT/plugins/pipeline/references/usage-probe.sh"
+usage_probe_fixture="$REPO_ROOT/tools/run-usage-probe-fixture.sh"
 model_cascade="$REPO_ROOT/plugins/pipeline/references/model-cascade.json"
 harness="$REPO_ROOT/plugins/pipeline/references/harness-profile.json"
 runner="$REPO_ROOT/plugins/pipeline/references/openrouter-exec.sh"
@@ -165,13 +166,21 @@ require_text "$usage_probe" 'select($data.total_usage | type == "number")' "Open
 require_absent "$usage_probe" 'ccusage blocks --json' "Claude probe removes the incomplete ccusage fallback"
 require_absent "$usage_probe" 'suppresses the ccusage fallback' "Claude probe removes stale ccusage control-flow prose"
 require_text "$usage_probe" '.windowDurationMins == 10080' "Codex probe recognizes only the expected weekly duration"
-require_text "$usage_probe" 'TEST FIXTURE MODE active; headroom is not live capacity evidence' \
-  "usage probe visibly marks fixture-sourced capacity"
+require_absent "$usage_probe" 'USAGE_PROBE_TEST_MODE' "production usage probe has no fixture-mode switch"
+require_absent "$usage_probe" 'USAGE_PROBE_CODEX_APP_SERVER_JSON' "production usage probe has no Codex fixture input"
+require_absent "$usage_probe" 'USAGE_PROBE_CLAUDE_STATUSLINE_JSON' "production usage probe has no inline Claude fixture input"
+require_absent "$usage_probe" 'USAGE_PROBE_CLAUDE_STATUSLINE_FILE' "production usage probe has no file-based Claude fixture input"
+require_absent "$usage_probe" 'USAGE_PROBE_CLAUDE_STATUSLINE_STDIN' "production usage probe has no stdin Claude fixture input"
+require_absent "$usage_probe" 'DM_OPERATOR_PROFILE_FILE' "production usage probe has no environment-selected profile path"
+require_absent "$usage_probe" 'TEST FIXTURE MODE' "production usage probe has no fixture branch"
+require_text "$usage_probe_fixture" 'FIXTURE-ONLY EVIDENCE; NOT LIVE CAPACITY' \
+  "test wrapper conspicuously marks fixture-only execution"
+require_text "$usage_probe_fixture" 'bash "$USAGE_PROBE"' \
+  "test wrapper invokes the production usage probe"
 
 codex_expected_windows='{"id":7,"result":{"rateLimits":{"primary":{"usedPercent":10,"windowDurationMins":300},"secondary":{"usedPercent":20,"windowDurationMins":10080}}}}'
-codex_expected_result="$(USAGE_PROBE_TEST_MODE=1 \
-  USAGE_PROBE_CODEX_APP_SERVER_JSON="$codex_expected_windows" \
-  OPENROUTER_API_KEY='' bash "$usage_probe")"
+codex_expected_result="$(printf '%s\n' "$codex_expected_windows" \
+  | bash "$usage_probe_fixture")"
 if printf '%s' "$codex_expected_result" | jq -e '
   .probe_source == "fixture"
     and .codex.state == "ok"
@@ -209,6 +218,63 @@ else
   failures=1
 fi
 
+mkdir -p "$profile_fixture_root/tracked/.dm"
+cat > "$profile_fixture_root/tracked/.dm/operator-profile.local.json" <<'JSON'
+{"operator":"fixture","updated":"2026-08-10","familyPreferenceOrder":[],"neverUse":[],"subscriptions":[{"rail":"tracked","probe":["/usr/bin/printf","{\"state\":\"ok\",\"remaining_pct\":99,\"window\":\"weekly\"}"],"windows":["weekly"]}]}
+JSON
+(
+  cd "$profile_fixture_root/tracked"
+  git init -q
+  git add .dm/operator-profile.local.json
+)
+profile_tracked_result="$(cd "$profile_fixture_root/tracked" && \
+  OPENROUTER_API_KEY='' bash "$usage_probe")"
+if printf '%s' "$profile_tracked_result" | jq -e 'has("tracked") | not' >/dev/null; then
+  printf "  OK    tracked operator profiles are refused\n"
+else
+  printf "  FAIL  tracked operator profiles are refused\n"
+  failures=1
+fi
+
+mkdir -p "$profile_fixture_root/final-symlink/.dm" "$profile_fixture_root/final-symlink-target"
+cat > "$profile_fixture_root/final-symlink-target/operator-profile.local.json" <<'JSON'
+{"operator":"fixture","updated":"2026-08-10","familyPreferenceOrder":[],"neverUse":[],"subscriptions":[{"rail":"final_symlink","probe":["/usr/bin/printf","{\"state\":\"ok\",\"remaining_pct\":99,\"window\":\"weekly\"}"],"windows":["weekly"]}]}
+JSON
+ln -s "$profile_fixture_root/final-symlink-target/operator-profile.local.json" \
+  "$profile_fixture_root/final-symlink/.dm/operator-profile.local.json"
+git -C "$profile_fixture_root/final-symlink" init -q
+profile_final_symlink_result="$(cd "$profile_fixture_root/final-symlink" && \
+  OPENROUTER_API_KEY='' bash "$usage_probe")"
+if printf '%s' "$profile_final_symlink_result" | jq -e 'has("final_symlink") | not' >/dev/null; then
+  printf "  OK    symlinked operator profile files are refused\n"
+else
+  printf "  FAIL  symlinked operator profile files are refused\n"
+  failures=1
+fi
+
+cat > "$profile_fixture_root/retired-probe.sh" <<SH
+#!/bin/sh
+touch "$profile_fixture_root/retired-profile-executed"
+printf '%s\\n' '{"state":"ok","remaining_pct":99,"window":"weekly"}'
+SH
+chmod 755 "$profile_fixture_root/retired-probe.sh"
+cat > "$profile_fixture_root/retired-profile.json" <<'JSON'
+{"operator":"fixture","updated":"2026-08-10","familyPreferenceOrder":[],"neverUse":[],"subscriptions":[{"rail":"retired_env_escape","probe":["RETIRED_PROBE_PATH"],"windows":["weekly"]}]}
+JSON
+sed "s|RETIRED_PROBE_PATH|$profile_fixture_root/retired-probe.sh|" \
+  "$profile_fixture_root/retired-profile.json" > "$profile_fixture_root/retired-profile.ready.json"
+retired_env_result="$(USAGE_PROBE_TEST_MODE=1 \
+  DM_OPERATOR_PROFILE_FILE="$profile_fixture_root/retired-profile.ready.json" \
+  OPENROUTER_API_KEY='' bash "$usage_probe")"
+if printf '%s' "$retired_env_result" | jq -e '
+  .probe_source == "live" and (has("retired_env_escape") | not)
+' >/dev/null && [ ! -e "$profile_fixture_root/retired-profile-executed" ]; then
+  printf "  OK    retired environment pair cannot select or expose an arbitrary profile\n"
+else
+  printf "  FAIL  retired environment pair cannot select or expose an arbitrary profile\n"
+  failures=1
+fi
+
 # A linked worktree is pipeline output, not the owner of executable operator
 # configuration. The common checkout's untracked profile must win, and an
 # equally valid worktree-local profile must remain invisible.
@@ -233,11 +299,10 @@ cat > "$profile_fixture_root/chunk/.dm/operator-profile.local.json" <<JSON
 {"operator":"fixture","updated":"2026-08-10","familyPreferenceOrder":[],"neverUse":[],"subscriptions":[{"rail":"planted","probe":["$profile_fixture_root/probe.sh"],"windows":["weekly"]}]}
 JSON
 profile_worktree_result="$(cd "$profile_fixture_root/chunk" && \
-  USAGE_PROBE_TEST_MODE=1 \
-  USAGE_PROBE_CODEX_APP_SERVER_JSON="$codex_expected_windows" \
   OPENROUTER_API_KEY='' bash "$usage_probe")"
 if printf '%s' "$profile_worktree_result" | jq -e '
-  .common.state == "ok" and (has("planted") | not)
+  .probe_source == "live"
+    and .common.state == "ok" and (has("planted") | not)
 ' >/dev/null; then
   printf "  OK    operator profiles resolve from the common checkout, not chunk worktrees\n"
 else
@@ -246,9 +311,8 @@ else
 fi
 
 codex_unrecognized_window='{"id":7,"result":{"rateLimits":{"primary":{"usedPercent":10,"windowDurationMins":300},"secondary":{"usedPercent":20,"windowDurationMins":1440}}}}'
-codex_unrecognized_result="$(USAGE_PROBE_TEST_MODE=1 \
-  USAGE_PROBE_CODEX_APP_SERVER_JSON="$codex_unrecognized_window" \
-  OPENROUTER_API_KEY='' bash "$usage_probe")"
+codex_unrecognized_result="$(printf '%s\n' "$codex_unrecognized_window" \
+  | bash "$usage_probe_fixture")"
 if printf '%s' "$codex_unrecognized_result" | jq -e '
   .codex.state == "unknown"
     and .codex.window == "weekly"
@@ -258,6 +322,14 @@ if printf '%s' "$codex_unrecognized_result" | jq -e '
   printf "  OK    Codex probe leaves unrecognized durations conservatively unknown\n"
 else
   printf "  FAIL  Codex probe leaves unrecognized durations conservatively unknown\n"
+  failures=1
+fi
+
+production_live_result="$(OPENROUTER_API_KEY='' bash "$usage_probe")"
+if printf '%s' "$production_live_result" | jq -e '.probe_source == "live"' >/dev/null; then
+  printf "  OK    ordinary production usage output remains live evidence\n"
+else
+  printf "  FAIL  ordinary production usage output remains live evidence\n"
   failures=1
 fi
 

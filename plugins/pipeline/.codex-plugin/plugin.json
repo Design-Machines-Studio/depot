@@ -1,6 +1,6 @@
 {
   "name": "pipeline",
-  "version": "1.48.1",
+  "version": "1.48.2",
   "description": "Autonomous feature development pipeline with fresh executable tiered verification, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
   "author": {
     "name": "Design Machines",
