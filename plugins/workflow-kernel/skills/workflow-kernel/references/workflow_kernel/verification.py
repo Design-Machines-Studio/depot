@@ -445,17 +445,33 @@ class CoverageDecision:
 
 
 class VerificationGate:
-    def evaluate(self, profile, evidence: Iterable[EvidenceRef], *, work_kind="ui"):
+    def evaluate(
+        self, profile, evidence: Iterable[EvidenceRef], *, work_kind="ui",
+        rendered_surface=None,
+    ):
         if work_kind not in {"ui", "integration", "logic", "documentation"}:
+            _invalid("invalid_verification_gate")
+        if rendered_surface is None:
+            # Consumption-only compatibility for callers that predate the
+            # independent applicability field. Keep the historical
+            # conservative behavior without making work_kind authoritative for
+            # new calls.
+            rendered_surface = (
+                "required" if work_kind in {"ui", "integration"}
+                else "not_applicable"
+            )
+        elif (type(rendered_surface) is not str
+              or rendered_surface not in {"required", "not_applicable"}):
             _invalid("invalid_verification_gate")
         profile = _snapshot_verification_profile(profile)
         try:
             supplied = tuple(_snapshot_evidence_ref(item) for item in evidence)
         except Exception:
             _invalid("invalid_verification_evidence")
+        if rendered_surface == "not_applicable":
+            return CoverageDecision(True, "rendered_surface_not_applicable")
         if profile.discovery_status == "not_declared":
-            return CoverageDecision(work_kind not in {"ui", "integration"},
-                                    "persona_declarations_not_declared" if work_kind in {"ui", "integration"} else "persona_declarations_not_applicable")
+            return CoverageDecision(False, "persona_declarations_not_declared")
         if profile.selection_status == "no_runnable_tasks":
             return CoverageDecision(True, "no_runnable_persona_cases_declared")
         if profile.selection_status == "blocked_route_bindings":

@@ -294,6 +294,57 @@ class PersonaGateTests(unittest.TestCase):
         self.assertFalse(VerificationGate().evaluate(profile, (), work_kind="ui").allowed)
         self.assertTrue(VerificationGate().evaluate(profile, (), work_kind="logic").allowed)
 
+    def test_rendered_surface_applicability_is_independent_from_work_kind(self):
+        with tempfile.TemporaryDirectory() as directory:
+            absent = ProjectPersonaAdapter(
+                policy_path=ROOT / "workflow-policy.json",
+            ).discover(Path(directory))
+        gate = VerificationGate()
+
+        ui_artifact = gate.evaluate(
+            absent, (), work_kind="ui", rendered_surface="not_applicable",
+        )
+        cli_entrypoint = gate.evaluate(
+            absent, (), work_kind="integration",
+            rendered_surface="not_applicable",
+        )
+        rendered_logic = gate.evaluate(
+            absent, (), work_kind="logic", rendered_surface="required",
+        )
+        declared_case = PersonaCase(
+            "member", "dashboard", "member", "/dashboard", "chromium",
+            "1440x900", True,
+        )
+        declared = VerificationProfile(
+            1, "project_declaration", (declared_case,), (),
+            configured_engines=("chromium",),
+        ).bind_target_origin(TARGET_ORIGIN)
+        unserved_html_in_ui_repo = gate.evaluate(
+            declared, (), work_kind="ui", rendered_surface="not_applicable",
+        )
+
+        self.assertTrue(ui_artifact.allowed)
+        self.assertEqual(
+            ui_artifact.reason_code, "rendered_surface_not_applicable",
+        )
+        self.assertTrue(cli_entrypoint.allowed)
+        self.assertTrue(unserved_html_in_ui_repo.allowed)
+        self.assertFalse(rendered_logic.allowed)
+        self.assertEqual(
+            rendered_logic.reason_code, "persona_declarations_not_declared",
+        )
+
+    def test_invalid_rendered_surface_value_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            profile = ProjectPersonaAdapter(
+                policy_path=ROOT / "workflow-policy.json",
+            ).discover(Path(directory))
+        for value in ("skip", [], True):
+            with self.subTest(value=value), self.assertRaises(InvalidSchemaError):
+                VerificationGate().evaluate(
+                    profile, (), work_kind="ui", rendered_surface=value,
+                )
+
     def test_governance_task_without_explicit_role_fails_closed(self):
         import shutil
 
