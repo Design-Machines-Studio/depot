@@ -153,7 +153,7 @@ Written by Step 5b after cleanup. Under 2 KB. This is the durable record that re
 | 2 | <text> | screenshot (cleaned) |
 | 3 | <text> | authorize-present:`grep -n "Authorize" internal/handler/foo.go` |
 | 4 | <text> | event-published:`grep -n "Publish" internal/service/foo.go` |
-| 5 | <text> | repository-verification:`go-full-non-race` exact receipt |
+| 5 | <text> | repository-verification:`go-full-non-race` current result, plan digest `<sha256:...>` |
 
 ## Cleanup
 - Ephemeral removed: N files

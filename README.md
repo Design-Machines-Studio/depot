@@ -209,7 +209,7 @@ Autonomous feature development pipeline. 4 skills, 2 agents, 5 commands.
 - **promptcraft** -- Generates self-contained execution prompts with overlap-aware dependency ordering
 - **eval-sweep** -- Ledger-first system-wide route, breakpoint, and accessibility evaluation
 - **plan-adversary** (agent) -- Adversarial review of plans and prompts, iterating to convergence
-- **execution-orchestrator** (agent) -- Autonomous worktree execution with batched P1/P2 review fixes, advisory P3 evidence, tiered tests, and authenticated receipt reuse
+- **execution-orchestrator** (agent) -- Autonomous worktree execution with batched P1/P2 review fixes, advisory P3 evidence, and tiered repository verification
 - `/pipeline` -- Full autonomous pipeline: assess, research, plan, prompt, review, execute, deliver
 - `/pipeline-assess` -- Pre-plan assessment of current state
 - `/pipeline-prompts` -- Generate execution prompts from an existing plan
@@ -221,7 +221,7 @@ Autonomous feature development pipeline. 4 skills, 2 agents, 5 commands.
 Neutral deterministic workflow and inspection mechanics. 1 internal skill.
 
 - **workflow-kernel** -- Run-state replay/recovery, behavioral contracts,
-  authenticated tiered repository verification, receipts, trusted inspection
+  deterministic tiered repository verification, trusted inspection
   profiles, contained lanes, redaction, canonical output, and compatible trends
 
 ### openrouter

@@ -10,7 +10,6 @@ from pathlib import Path
 from unittest.mock import patch
 
 from tests import KERNEL_REFERENCES, schema_matches
-from workflow_kernel.verification_authority import issue_profile_approval
 from workflow_kernel.verification_errors import VerificationPlannerError
 from workflow_kernel.verification_execution import run_bounded_capture
 from workflow_kernel.verification_orchestrator import execute_plan
@@ -18,28 +17,15 @@ from workflow_kernel.verification_repository import (
     git_changed_paths, tree_input_digests, validate_profile,
 )
 from workflow_kernel.verification_planning import build_plan as kernel_build_plan
-from workflow_kernel.verification_provider import record_provider_result
-from workflow_kernel.verification_receipts import (
-    merge_receipt_ledgers, seal_provider_attestation, validate_receipt,
-)
 
 
 PROFILE_SCHEMA = KERNEL_REFERENCES / "repository-verification-profile-schema.json"
-APPROVAL_SCHEMA = (
-    KERNEL_REFERENCES / "repository-verification-approval-schema.json"
-)
 PLAN_SCHEMA = KERNEL_REFERENCES / "repository-verification-plan-schema.json"
-PROVIDER_ATTESTATION_SCHEMA = (
-    KERNEL_REFERENCES
-    / "repository-verification-provider-attestation-schema.json"
-)
-RECEIPT_SCHEMA = KERNEL_REFERENCES / "repository-verification-receipts-schema.json"
+RESULT_SCHEMA = KERNEL_REFERENCES / "repository-verification-result-schema.json"
 ASSEMBLY_EXAMPLE = (
     KERNEL_REFERENCES.parents[3]
     / "assembly/references/repository-verification-profile.example.json"
 )
-RECEIPT_KEY = b"repository-verification-test-key-32-bytes"
-APPROVED_AT = "2026-07-30T00:00:00Z"
 BASE_REF = "refs/verification/base"
 TEST_ENVIRONMENT = {
     "DM_VERIFICATION_SUBSTRATE": "test-host-containment",
@@ -123,29 +109,13 @@ def prepare_candidate(repository, changed_paths):
     return git_commit(repository, BASE_REF), git_commit(repository)
 
 
-def approval(profile, repository, *, environment=None):
-    base_commit = git_commit(repository, BASE_REF)
-    candidate_commit = git_commit(repository)
-    return issue_profile_approval(
-        profile, repository, ".dm/verification.json",
-        trusted_base_commit=base_commit, candidate_commit=candidate_commit,
-        run_id="verification-test-run",
-        authorization_event_id="operator-approved-verification",
-        approved_at=APPROVED_AT, receipt_key=RECEIPT_KEY,
-        environment=test_environment(environment),
-    )
-
-
 def build_plan(
     profile, repository, profile_ref, changed_paths, boundary, risk, **kwargs,
 ):
-    _base_commit, head_commit = prepare_candidate(repository, changed_paths)
+    base_commit, head_commit = prepare_candidate(repository, changed_paths)
     environment = test_environment(kwargs.get("environment"))
     kwargs["environment"] = environment
-    kwargs.setdefault("receipt_key", RECEIPT_KEY)
-    kwargs.setdefault(
-        "approval", approval(profile, repository, environment=environment),
-    )
+    kwargs.setdefault("base_commit", base_commit)
     kwargs.setdefault("head_commit", head_commit)
     return kernel_build_plan(
         profile, repository, profile_ref, changed_paths, boundary, risk,
@@ -153,15 +123,13 @@ def build_plan(
     )
 
 
-def execute(profile, repository, plan, *, receipt_ledger=None, environment=None):
+def execute(profile, repository, plan, *, environment=None):
     environment = test_environment(environment)
-    return execute_plan(
+    result = execute_plan(
         profile, repository, plan,
-        receipt_ledger=receipt_ledger,
-        receipt_key=RECEIPT_KEY,
-        approval=approval(profile, repository, environment=environment),
         environment=environment,
     )
+    return result, result["status"]
 
 
 def profile_document(command=None):
@@ -182,11 +150,9 @@ def profile_document(command=None):
                 "owner": "local",
                 "argv": [sys.executable, "-c", "raise SystemExit(0)"],
                 "input_paths": [".dm/verification.json"],
-                "authority_paths": [".dm/verification.json"],
-                "cache": "never",
-                "cache_environment": ["DM_VERIFICATION_SUBSTRATE"],
+                "execution_paths": [".dm/verification.json"],
                 "required_environment": ["DM_VERIFICATION_SUBSTRATE"],
-                "authority_environment": ["DM_VERIFICATION_SUBSTRATE"],
+                "execution_environment": ["DM_VERIFICATION_SUBSTRATE"],
             },
             {
                 "id": "go-focused",
@@ -198,17 +164,13 @@ def profile_document(command=None):
                 "input_paths": [
                     "**/*.go", "go.mod", "go.sum", ".dm/verification.json",
                 ],
-                "authority_paths": [".dm/verification.json"],
+                "execution_paths": [".dm/verification.json"],
                 "package_selector": "go_changed",
                 "declared_dependents": {
                     "./internal/source": ["./internal/dependent"],
                 },
-                "cache": "content",
-                "cache_environment": [
-                    "GOFLAGS", "DM_VERIFICATION_SUBSTRATE",
-                ],
                 "required_environment": ["DM_VERIFICATION_SUBSTRATE"],
-                "authority_environment": ["DM_VERIFICATION_SUBSTRATE"],
+                "execution_environment": ["DM_VERIFICATION_SUBSTRATE"],
             },
             {
                 "id": "go-full",
@@ -222,11 +184,9 @@ def profile_document(command=None):
                 "input_paths": [
                     "**/*.go", "go.mod", "go.sum", ".dm/verification.json",
                 ],
-                "authority_paths": [".dm/verification.json"],
-                "cache": "content",
-                "cache_environment": ["DM_VERIFICATION_SUBSTRATE"],
+                "execution_paths": [".dm/verification.json"],
                 "required_environment": ["DM_VERIFICATION_SUBSTRATE"],
-                "authority_environment": ["DM_VERIFICATION_SUBSTRATE"],
+                "execution_environment": ["DM_VERIFICATION_SUBSTRATE"],
             },
             {
                 "id": "go-race",
@@ -238,7 +198,6 @@ def profile_document(command=None):
                 "input_paths": [
                     "**/*.go", "go.mod", "go.sum", ".dm/verification.json",
                 ],
-                "cache": "content",
             },
         ],
     }
@@ -284,16 +243,13 @@ class RepositoryVerificationTests(unittest.TestCase):
         )
         return repository, document
 
-    def authority_repository(self, directory):
+    def execution_repository(self, directory):
         repository, profile = self.repository(directory)
         script = repository / "tools/verify.py"
         script.parent.mkdir()
         script.write_text("print('trusted')\n", encoding="utf-8")
-        profile["lanes"][0]["authority_paths"].append("tools/verify.py")
-        profile["lanes"][0]["cache_environment"] = [
-            "GOFLAGS", "DM_VERIFICATION_SUBSTRATE",
-        ]
-        profile["lanes"][0]["authority_environment"] = [
+        profile["lanes"][0]["execution_paths"].append("tools/verify.py")
+        profile["lanes"][0]["execution_environment"] = [
             "GOFLAGS", "DM_VERIFICATION_SUBSTRATE",
         ]
         (repository / ".dm/verification.json").write_text(
@@ -303,7 +259,7 @@ class RepositoryVerificationTests(unittest.TestCase):
             ["git", "-C", str(repository), "add", "."], check=True,
         )
         subprocess.run(
-            ["git", "-C", str(repository), "commit", "-m", "authority"],
+            ["git", "-C", str(repository), "commit", "-m", "execution"],
             check=True, capture_output=True,
         )
         subprocess.run(
@@ -320,71 +276,29 @@ class RepositoryVerificationTests(unittest.TestCase):
                 ["internal/source/source.go"], "chunk", "low",
                 environment={"GOFLAGS": "-tags=dev"},
             )
-            receipts, outcome = execute(
+            result, outcome = execute(
                 profile, repository, plan, environment={"GOFLAGS": "-tags=dev"},
             )
-            approval_document = approval(
-                profile, repository, environment={"GOFLAGS": "-tags=dev"},
-            )
-            provider_attestation = seal_provider_attestation({
-                "schema_version": 1,
-                "artifact_role": "repository_verification_provider_attestation",
-                "provider": "github",
-                "provider_run_id": "schema-fixture",
-                "head_commit": git_commit(repository),
-                "evidence_digest": "sha256:" + "d" * 64,
-                "observed_at": "2026-07-30T00:30:00Z",
-                "outcome": "passed",
-                "exit_code": 0,
-            }, RECEIPT_KEY)
         self.assertEqual(outcome, "complete")
         self.assertTrue(schema_matches(
             validate_profile(profile),
             json.loads(PROFILE_SCHEMA.read_text(encoding="utf-8")),
         ))
         self.assertTrue(schema_matches(
-            approval_document,
-            json.loads(APPROVAL_SCHEMA.read_text(encoding="utf-8")),
-        ))
-        self.assertTrue(schema_matches(
-            provider_attestation,
-            json.loads(PROVIDER_ATTESTATION_SCHEMA.read_text(encoding="utf-8")),
-        ))
-        self.assertTrue(schema_matches(
             plan, json.loads(PLAN_SCHEMA.read_text(encoding="utf-8")),
         ))
+        self.assertEqual(result["artifact_role"], "repository_verification_result")
+        self.assertEqual(result["status"], "complete")
+        self.assertTrue(result["lanes"])
         self.assertTrue(schema_matches(
-            receipts, json.loads(RECEIPT_SCHEMA.read_text(encoding="utf-8")),
+            result, json.loads(RESULT_SCHEMA.read_text(encoding="utf-8")),
         ))
-        invalid_receipt = {
-            **receipts["receipts"][0], "tier": "bogus",
-        }
-        self.assertFalse(schema_matches(
-            {
-                "schema_version": 1,
-                "artifact_role": "repository_verification_receipts",
-                "receipts": [invalid_receipt],
-            },
-            json.loads(RECEIPT_SCHEMA.read_text(encoding="utf-8")),
-        ))
-        with self.assertRaises(VerificationPlannerError):
-            validate_receipt(invalid_receipt, RECEIPT_KEY)
         invalid_plan = {
             **plan,
             "lanes": [{**plan["lanes"][0], "owner": "bogus"}, *plan["lanes"][1:]],
         }
         self.assertFalse(schema_matches(
             invalid_plan, json.loads(PLAN_SCHEMA.read_text(encoding="utf-8")),
-        ))
-        invalid_cache_plan = {
-            **plan,
-            "lanes": [
-                {**plan["lanes"][0], "cache": "bogus"}, *plan["lanes"][1:]
-            ],
-        }
-        self.assertFalse(schema_matches(
-            invalid_cache_plan,
-            json.loads(PLAN_SCHEMA.read_text(encoding="utf-8")),
         ))
 
     def test_assembly_example_is_a_valid_closed_profile(self):
@@ -398,9 +312,8 @@ class RepositoryVerificationTests(unittest.TestCase):
     def test_candidate_execution_without_external_containment_is_rejected(self):
         profile = profile_document()
         lane = profile["lanes"][1]
-        lane["cache_environment"] = ["GOFLAGS"]
         lane.pop("required_environment")
-        lane.pop("authority_environment")
+        lane.pop("execution_environment")
         with self.assertRaises(VerificationPlannerError):
             validate_profile(profile)
         for tier, argv in (
@@ -412,9 +325,8 @@ class RepositoryVerificationTests(unittest.TestCase):
                 lane = profile["lanes"][0]
                 lane["tier"] = tier
                 lane["argv"] = argv
-                lane.pop("cache_environment")
                 lane.pop("required_environment")
-                lane.pop("authority_environment")
+                lane.pop("execution_environment")
                 with self.assertRaises(VerificationPlannerError):
                     validate_profile(profile)
 
@@ -451,14 +363,13 @@ class RepositoryVerificationTests(unittest.TestCase):
             _base, head = prepare_candidate(
                 repository, ["internal/source/source.go"],
             )
-            approved = approval(profile, repository)
             with patch(
                 "workflow_kernel.verification_repository.os.walk", wraps=os.walk,
             ) as walk:
                 kernel_build_plan(
                     profile, repository, ".dm/verification.json",
                     ["internal/source/source.go"], "chunk", "low",
-                    receipt_key=RECEIPT_KEY, approval=approved,
+                    base_commit=git_commit(repository, BASE_REF),
                     head_commit=head,
                     environment=TEST_ENVIRONMENT,
                 )
@@ -470,15 +381,6 @@ class RepositoryVerificationTests(unittest.TestCase):
             base_commit, candidate_commit = prepare_candidate(
                 repository, ["internal/source/source.go"],
             )
-            approved = issue_profile_approval(
-                profile, repository, ".dm/verification.json",
-                trusted_base_commit=base_commit,
-                candidate_commit=candidate_commit,
-                run_id="batched-terminal-tree",
-                authorization_event_id="approved-exact-head",
-                approved_at=APPROVED_AT, receipt_key=RECEIPT_KEY,
-                environment=TEST_ENVIRONMENT,
-            )
             with patch(
                 "workflow_kernel.verification_repository.subprocess.run",
                 wraps=subprocess.run,
@@ -489,7 +391,7 @@ class RepositoryVerificationTests(unittest.TestCase):
                 plan = kernel_build_plan(
                     profile, repository, ".dm/verification.json",
                     ["internal/source/source.go"], "merge_candidate", "high",
-                    receipt_key=RECEIPT_KEY, approval=approved,
+                    base_commit=base_commit,
                     head_commit=candidate_commit,
                     environment=TEST_ENVIRONMENT,
                 )
@@ -503,9 +405,9 @@ class RepositoryVerificationTests(unittest.TestCase):
         self.assertFalse(any(
             "cat-file" in call.args[0] for call in run.call_args_list
         ))
-        self.assertEqual(sum(
+        self.assertFalse(any(
             "show" in call.args[0] for call in run.call_args_list
-        ), 1)
+        ))
 
     def test_tree_enumeration_bounds_unmatched_entries_and_process_failures(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -561,110 +463,44 @@ class RepositoryVerificationTests(unittest.TestCase):
             "untracked.go",
         ])
 
-    def test_full_lane_runs_once_and_reuses_at_unchanged_merge_candidate(self):
+    def test_each_boundary_builds_a_fresh_execution_plan(self):
         with tempfile.TemporaryDirectory() as directory:
             repository, profile = self.repository(directory)
             level = build_plan(
                 profile, repository, ".dm/verification.json",
                 ["internal/source/source.go"], "execution_level", "medium",
             )
-            receipts, outcome = execute(profile, repository, level)
+            _result, outcome = execute(profile, repository, level)
             self.assertEqual(outcome, "complete")
             candidate = build_plan(
                 profile, repository, ".dm/verification.json",
                 ["internal/source/source.go"], "merge_candidate", "medium",
-                receipt_ledger=receipts, receipt_key=RECEIPT_KEY,
             )
         lanes = {lane["id"]: lane for lane in candidate["lanes"]}
-        self.assertEqual(lanes["go-full"]["disposition"], "reuse")
+        self.assertEqual(lanes["go-full"]["disposition"], "run")
         self.assertEqual(lanes["go-race"]["disposition"], "remote")
 
-    def test_relevant_source_change_invalidates_receipt_but_docs_do_not(self):
+    def test_file_mode_change_changes_the_fresh_plan_identity(self):
         with tempfile.TemporaryDirectory() as directory:
             repository, profile = self.repository(directory)
             first = build_plan(
                 profile, repository, ".dm/verification.json",
                 ["internal/source/source.go"], "chunk", "low",
             )
-            receipts, outcome = execute(profile, repository, first)
-            self.assertEqual(outcome, "complete")
-            unchanged = build_plan(
-                profile, repository, ".dm/verification.json",
-                ["internal/source/source.go"], "chunk", "low",
-                receipt_ledger=receipts, receipt_key=RECEIPT_KEY,
-            )
-            unchanged_lane = {
-                lane["id"]: lane for lane in unchanged["lanes"]
+            first_lane = {
+                item["id"]: item for item in first["lanes"]
             }["go-focused"]
-            self.assertEqual(unchanged_lane["disposition"], "reuse")
-            (repository / "docs/readme.md").write_text("changed docs\n")
-            docs_only = build_plan(
-                profile, repository, ".dm/verification.json",
-                ["docs/readme.md", "internal/source/source.go"], "chunk", "low",
-                receipt_ledger=receipts, receipt_key=RECEIPT_KEY,
-            )
-            docs_lane = {
-                lane["id"]: lane for lane in docs_only["lanes"]
-            }["go-focused"]
-            self.assertEqual(docs_lane["disposition"], "reuse")
-            (repository / "internal/source/source.go").write_text(
-                "package source\nconst Changed = true\n",
-            )
-            changed = build_plan(
-                profile, repository, ".dm/verification.json",
-                ["docs/readme.md", "internal/source/source.go"], "chunk", "low",
-                receipt_ledger=receipts, receipt_key=RECEIPT_KEY,
-            )
-        changed_lane = {
-            lane["id"]: lane for lane in changed["lanes"]
-        }["go-focused"]
-        self.assertEqual(changed_lane["disposition"], "run")
-
-    def test_file_mode_change_invalidates_receipt(self):
-        with tempfile.TemporaryDirectory() as directory:
-            repository, profile = self.repository(directory)
-            first = build_plan(
-                profile, repository, ".dm/verification.json",
-                ["internal/source/source.go"], "chunk", "low",
-            )
-            receipts, outcome = execute(profile, repository, first)
+            _result, outcome = execute(profile, repository, first)
             self.assertEqual(outcome, "complete")
             source = repository / "internal/source/source.go"
             source.chmod(0o744)
             changed = build_plan(
                 profile, repository, ".dm/verification.json",
                 ["internal/source/source.go"], "chunk", "low",
-                receipt_ledger=receipts, receipt_key=RECEIPT_KEY,
             )
         lane = {item["id"]: item for item in changed["lanes"]}["go-focused"]
         self.assertEqual(lane["disposition"], "run")
-
-    def test_concurrent_receipt_suffixes_merge_without_lost_updates(self):
-        with tempfile.TemporaryDirectory() as directory:
-            repository, profile = self.repository(directory)
-            first_plan = build_plan(
-                profile, repository, ".dm/verification.json",
-                ["internal/source/source.go"], "chunk", "low",
-            )
-            first, first_outcome = execute(profile, repository, first_plan)
-            self.assertEqual(first_outcome, "complete")
-            (repository / "internal/source/source.go").write_text(
-                "package source\nconst Concurrent = true\n",
-            )
-            second_plan = build_plan(
-                profile, repository, ".dm/verification.json",
-                ["internal/source/source.go"], "chunk", "low",
-            )
-            second, second_outcome = execute(profile, repository, second_plan)
-            self.assertEqual(second_outcome, "complete")
-            merged = merge_receipt_ledgers(
-                first, second, 0, RECEIPT_KEY,
-            )
-        focused_keys = {
-            receipt["cache_key"] for receipt in merged["receipts"]
-            if receipt["lane_id"] == "go-focused"
-        }
-        self.assertEqual(len(focused_keys), 2)
+        self.assertNotEqual(lane["input_digest"], first_lane["input_digest"])
 
     def test_stale_plan_is_rejected_before_command_execution(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -691,44 +527,102 @@ class RepositoryVerificationTests(unittest.TestCase):
                 execute(profile, repository, plan)
             self.assertFalse(counter.exists())
 
-    def test_execution_requires_host_authenticated_profile_approval(self):
+    def test_execution_closure_change_changes_plan_identity(self):
         with tempfile.TemporaryDirectory() as directory:
-            repository, profile = self.repository(directory)
+            repository, profile, script = self.execution_repository(directory)
+            profile["lanes"][1]["changed_paths"].append("tools/verify.py")
+            profile["lanes"][1]["execution_paths"].append("tools/verify.py")
+            (repository / ".dm/verification.json").write_text(
+                json.dumps(profile), encoding="utf-8",
+            )
+            first = build_plan(
+                profile, repository, ".dm/verification.json",
+                ["internal/source/source.go"], "chunk", "low",
+            )
+            _result, outcome = execute(profile, repository, first)
+            self.assertEqual(outcome, "complete")
+            script.write_text("print('changed')\n", encoding="utf-8")
+            base_commit = git_commit(repository, BASE_REF)
+            head_commit = git_commit(repository)
+            changed = kernel_build_plan(
+                profile, repository, ".dm/verification.json",
+                ["internal/source/source.go", "tools/verify.py"],
+                "chunk", "low",
+                base_commit=base_commit, head_commit=head_commit,
+                include_worktree=True, environment=TEST_ENVIRONMENT,
+            )
+        self.assertNotEqual(
+            changed["execution_closure_digest"], first["execution_closure_digest"],
+        )
+
+    def test_required_environment_change_rejects_plan_before_execution(self):
+        with tempfile.TemporaryDirectory() as directory:
+            counter = Path(directory) / "counter"
+            command = [
+                sys.executable, "-c",
+                (
+                    "from pathlib import Path; "
+                    f"Path({str(counter)!r}).write_text('ran')"
+                ),
+                "{packages}",
+            ]
+            document = profile_document(command)
+            document["lanes"][0]["required_environment"] = [
+                "DM_VERIFICATION_SUBSTRATE", "GOFLAGS",
+            ]
+            document["lanes"][0]["execution_environment"] = [
+                "DM_VERIFICATION_SUBSTRATE",
+            ]
+            repository, profile = self.repository(
+                Path(directory) / "repository", document,
+            )
             plan = build_plan(
                 profile, repository, ".dm/verification.json",
                 ["internal/source/source.go"], "chunk", "low",
+                environment={**TEST_ENVIRONMENT, "GOFLAGS": "planned"},
             )
             with self.assertRaises(VerificationPlannerError):
                 execute_plan(
-                    profile, repository, plan, receipt_key=RECEIPT_KEY,
-                    approval={
-                        **approval(profile, repository),
-                        "approval_auth": "hmac-sha256:" + "0" * 64,
-                    },
+                    profile, repository, plan,
+                    environment={**TEST_ENVIRONMENT, "GOFLAGS": "changed"},
                 )
+            self.assertFalse(counter.exists())
 
-    def test_fabricated_receipt_cannot_suppress_execution(self):
+    def test_include_worktree_plans_and_runs_mixed_dirty_state(self):
         with tempfile.TemporaryDirectory() as directory:
             repository, profile = self.repository(directory)
-            plan = build_plan(
-                profile, repository, ".dm/verification.json",
-                ["internal/source/source.go"], "chunk", "low",
+            base_commit = git_commit(repository, BASE_REF)
+            head_commit = git_commit(repository)
+            (repository / "docs/readme.md").write_text("staged\n")
+            subprocess.run(
+                ["git", "-C", str(repository), "add", "docs/readme.md"],
+                check=True,
             )
-            focused = {lane["id"]: lane for lane in plan["lanes"]}["go-focused"]
-            forged = {
-                "schema_version": 1,
-                "artifact_role": "repository_verification_receipts",
-                "receipts": [{
-                    "status": "passed",
-                    "cache_key": focused["cache_key"],
-                }],
-            }
-            with self.assertRaises(VerificationPlannerError):
-                build_plan(
-                    profile, repository, ".dm/verification.json",
-                    ["internal/source/source.go"], "chunk", "low",
-                    receipt_ledger=forged, receipt_key=RECEIPT_KEY,
-                )
+            (repository / "internal/source/source.go").write_text(
+                "package source\nconst Dirty = true\n",
+            )
+            (repository / "untracked.go").write_text("package untracked\n")
+            changed_paths = git_changed_paths(
+                repository, base_commit, head_ref=head_commit,
+                include_worktree=True,
+            )
+            plan = kernel_build_plan(
+                profile, repository, ".dm/verification.json", changed_paths,
+                "chunk", "low", base_commit=base_commit,
+                head_commit=head_commit, include_worktree=True,
+                environment=TEST_ENVIRONMENT,
+            )
+            result = execute_plan(
+                profile, repository, plan, environment=TEST_ENVIRONMENT,
+            )
+            outcome = result["status"]
+        self.assertEqual(outcome, "complete")
+        self.assertEqual(plan["request"]["changed_paths"], [
+            "docs/readme.md", "internal/source/source.go", "untracked.go",
+        ])
+        self.assertTrue(any(
+            lane["status"] == "passed" for lane in result["lanes"]
+        ))
 
     def test_shell_strings_unknown_fields_and_symlink_inputs_are_rejected(self):
         document = profile_document()
@@ -778,340 +672,96 @@ class RepositoryVerificationTests(unittest.TestCase):
                 profile, repository, ".dm/verification.json",
                 ["internal/source/source.go"], "merge_candidate", "high",
             )
-            receipts, outcome = execute(profile, repository, plan)
+            result, outcome = execute(profile, repository, plan)
             self.assertFalse(counter.exists())
         self.assertEqual(plan["status"], "blocked")
         self.assertEqual(outcome, "failed")
         self.assertIn("blocked", {
-            receipt["status"] for receipt in receipts["receipts"]
+            lane["status"] for lane in result["lanes"]
         })
 
-    def test_required_remote_lane_is_pending_until_signed_pass_exists(self):
+    def test_required_remote_lane_remains_pending_for_independent_evidence(self):
         with tempfile.TemporaryDirectory() as directory:
             repository, profile = self.repository(directory)
             candidate = build_plan(
                 profile, repository, ".dm/verification.json",
                 [], "merge_candidate", "high",
             )
-            receipts, outcome = execute(profile, repository, candidate)
+            result, outcome = execute(profile, repository, candidate)
         self.assertEqual(outcome, "pending")
         self.assertIn("remote_pending", {
-            receipt["status"] for receipt in receipts["receipts"]
+            lane["status"] for lane in result["lanes"]
         })
 
-    def test_authenticated_provider_result_completes_exact_candidate(self):
+    def test_exact_head_and_clean_terminal_checkout_are_required(self):
         with tempfile.TemporaryDirectory() as directory:
             repository, profile = self.repository(directory)
-            approved = approval(profile, repository)
-            candidate = build_plan(
-                profile, repository, ".dm/verification.json",
-                [], "merge_candidate", "high",
-            )
-            pending_receipts, outcome = execute(
-                profile, repository, candidate,
-            )
-            self.assertEqual(outcome, "pending")
-            attestation = seal_provider_attestation({
-                "schema_version": 1,
-                "artifact_role": "repository_verification_provider_attestation",
-                "provider": "github",
-                "provider_run_id": "github-run-123",
-                "head_commit": git_commit(repository),
-                "evidence_digest": "sha256:" + "c" * 64,
-                "observed_at": "2026-07-30T01:00:00Z",
-                "outcome": "passed",
-                "exit_code": 0,
-            }, RECEIPT_KEY)
-            authenticated = record_provider_result(
-                profile, repository, candidate, approval=approved,
-                receipt_ledger=pending_receipts, receipt_key=RECEIPT_KEY,
-                lane_id="go-race", provider_attestation=attestation,
-                environment=TEST_ENVIRONMENT,
-            )
-            completed_plan = kernel_build_plan(
-                profile, repository, ".dm/verification.json",
-                [], "merge_candidate", "high",
-                receipt_ledger=authenticated, receipt_key=RECEIPT_KEY,
-                approval=approved, head_commit=git_commit(repository),
-                environment=TEST_ENVIRONMENT,
-            )
-            race = {
-                lane["id"]: lane for lane in completed_plan["lanes"]
-            }["go-race"]
-            self.assertEqual(race["disposition"], "reuse")
-            _receipts, outcome = execute(
-                profile, repository, completed_plan,
-                receipt_ledger=authenticated,
-            )
-        self.assertEqual(outcome, "complete")
-
-    def test_provider_result_rejects_unsealed_caller_assertions(self):
-        with tempfile.TemporaryDirectory() as directory:
-            repository, profile = self.repository(directory)
-            candidate = build_plan(
-                profile, repository, ".dm/verification.json",
-                [], "merge_candidate", "high",
-            )
-            pending_receipts, _outcome = execute(
-                profile, repository, candidate,
-            )
-            forged = {
-                "schema_version": 1,
-                "artifact_role": "repository_verification_provider_attestation",
-                "provider": "github",
-                "provider_run_id": "made-up-run",
-                "head_commit": git_commit(repository),
-                "evidence_digest": "sha256:" + "e" * 64,
-                "observed_at": "2026-07-30T01:00:00Z",
-                "outcome": "passed",
-                "exit_code": 0,
-                "attestation_auth": "hmac-sha256:" + "0" * 64,
-            }
+            base = git_commit(repository, BASE_REF)
+            head = git_commit(repository)
+            (repository / "untracked.go").write_text("package untracked\n")
             with self.assertRaises(VerificationPlannerError):
-                record_provider_result(
-                    profile, repository, candidate,
-                    approval=approval(profile, repository),
-                    receipt_ledger=pending_receipts,
-                    receipt_key=RECEIPT_KEY, lane_id="go-race",
-                    provider_attestation=forged,
-                    environment=TEST_ENVIRONMENT,
+                kernel_build_plan(
+                    profile, repository, ".dm/verification.json", [],
+                    "merge_candidate", "high", base_commit=base,
+                    head_commit=head, environment=TEST_ENVIRONMENT,
+                )
+            with self.assertRaises(VerificationPlannerError):
+                kernel_build_plan(
+                    profile, repository, ".dm/verification.json",
+                    ["untracked.go"], "merge_candidate", "high",
+                    base_commit=base, head_commit=head,
+                    include_worktree=True, environment=TEST_ENVIRONMENT,
                 )
 
-    def test_remote_receipt_is_not_reused_for_another_exact_commit(self):
+    def test_execution_closure_changes_invalidate_a_saved_plan(self):
         with tempfile.TemporaryDirectory() as directory:
-            repository, profile = self.repository(directory)
-            first = build_plan(
-                profile, repository, ".dm/verification.json",
-                [], "merge_candidate", "high",
+            repository, profile, script = self.execution_repository(directory)
+            plan = build_plan(
+                profile, repository, ".dm/verification.json", [],
+                "chunk", "low", environment={"GOFLAGS": "-tags=trusted"},
             )
-            pending, _outcome = execute(profile, repository, first)
-            first_approval = approval(profile, repository)
-            attestation = seal_provider_attestation({
-                "schema_version": 1,
-                "artifact_role": "repository_verification_provider_attestation",
-                "provider": "github",
-                "provider_run_id": "first-run",
-                "head_commit": git_commit(repository),
-                "evidence_digest": "sha256:" + "f" * 64,
-                "observed_at": "2026-07-30T01:00:00Z",
-                "outcome": "passed",
-                "exit_code": 0,
-            }, RECEIPT_KEY)
-            authenticated = record_provider_result(
-                profile, repository, first, approval=first_approval,
-                receipt_ledger=pending, receipt_key=RECEIPT_KEY,
-                lane_id="go-race", provider_attestation=attestation,
-                environment=TEST_ENVIRONMENT,
+            script.write_text("print(\"changed\")\n", encoding="utf-8")
+            with self.assertRaises(VerificationPlannerError):
+                execute(
+                    profile, repository, plan,
+                    environment={"GOFLAGS": "-tags=trusted"},
+                )
+
+    def test_lane_cannot_replace_a_later_verification_executable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, profile, script = self.execution_repository(directory)
+            marker = repository / "later-lane-ran"
+            script.write_text("raise SystemExit(1)\n", encoding="utf-8")
+            replacement = (
+                "from pathlib import Path; "
+                f"Path({str(marker)!r}).touch()\n"
             )
-            source = repository / "internal/source/source.go"
-            source.write_text(
-                source.read_text(encoding="utf-8") + "\n// second candidate\n",
-                encoding="utf-8",
-            )
-            subprocess.run(
-                ["git", "-C", str(repository), "add", str(source)], check=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(repository), "commit", "-m", "second candidate"],
-                check=True, capture_output=True,
-            )
-            second_approval = approval(profile, repository)
-            second = kernel_build_plan(
-                profile, repository, ".dm/verification.json",
-                git_changed_paths(
-                    repository, git_commit(repository, BASE_REF),
-                    head_ref=git_commit(repository),
+            profile["lanes"][0]["argv"] = [
+                sys.executable, "-c",
+                (
+                    "from pathlib import Path; "
+                    f"Path({str(script)!r}).write_text({replacement!r})"
                 ),
-                "merge_candidate", "high", receipt_ledger=authenticated,
-                receipt_key=RECEIPT_KEY, approval=second_approval,
-                head_commit=git_commit(repository),
-                environment=TEST_ENVIRONMENT,
-            )
-        race = {lane["id"]: lane for lane in second["lanes"]}["go-race"]
-        self.assertEqual(race["disposition"], "remote")
-
-    def test_profile_approval_rejects_changed_execution_closure(self):
-        with tempfile.TemporaryDirectory() as directory:
-            repository, profile = self.repository(directory)
-            approved = approval(profile, repository)
+            ]
+            profile["lanes"][1]["argv"] = [sys.executable, str(script), "{packages}"]
+            profile["lanes"][1]["changed_paths"].append("tools/verify.py")
+            profile["lanes"][1]["execution_paths"].append("tools/verify.py")
+            profile["lanes"][1]["after"] = ["doctor"]
             (repository / ".dm/verification.json").write_text(
-                json.dumps({**profile, "profile_id": "changed-on-disk"}),
+                json.dumps(profile), encoding="utf-8",
             )
-            with self.assertRaises(VerificationPlannerError):
-                kernel_build_plan(
-                    profile, repository, ".dm/verification.json",
-                    ["internal/source/source.go"], "chunk", "low",
-                    receipt_key=RECEIPT_KEY, approval=approved,
-                    head_commit=git_commit(repository),
-                )
-
-    def test_profile_approval_rejects_nonexistent_full_commit(self):
-        with tempfile.TemporaryDirectory() as directory:
-            repository, profile = self.repository(directory)
-            with self.assertRaises(VerificationPlannerError):
-                issue_profile_approval(
-                    profile, repository, ".dm/verification.json",
-                    trusted_base_commit="a" * 40,
-                    candidate_commit=git_commit(repository),
-                    run_id="invalid-base", authorization_event_id="invalid",
-                    approved_at=APPROVED_AT, receipt_key=RECEIPT_KEY,
-                )
-
-    def test_approval_binds_authority_file_mode_environment_and_candidate(self):
-        with tempfile.TemporaryDirectory() as directory:
-            repository, profile, script = self.authority_repository(directory)
-            approved = approval(
-                profile, repository, environment={"GOFLAGS": "-tags=trusted"},
+            plan = build_plan(
+                profile, repository, ".dm/verification.json",
+                ["tools/verify.py"], "chunk", "low",
             )
-            script.write_text("print('candidate')\n", encoding="utf-8")
-            with self.assertRaises(VerificationPlannerError):
-                kernel_build_plan(
-                    profile, repository, ".dm/verification.json", [],
-                    "chunk", "low", receipt_key=RECEIPT_KEY,
-                    approval=approved, head_commit=git_commit(repository),
-                    environment={"GOFLAGS": "-tags=trusted"},
-                )
-
-    def test_approval_rejects_post_seal_checkout_and_head_drift(self):
-        for include_worktree in (False, True):
-            for state in ("untracked", "staged"):
-                with self.subTest(
-                    state=state, include_worktree=include_worktree,
-                ):
-                    with tempfile.TemporaryDirectory() as directory:
-                        repository, profile = self.repository(directory)
-                        approved = issue_profile_approval(
-                            profile, repository, ".dm/verification.json",
-                            trusted_base_commit=git_commit(repository, BASE_REF),
-                            candidate_commit=git_commit(repository),
-                            include_worktree=include_worktree,
-                            run_id="checkout-drift",
-                            authorization_event_id="approved-clean-checkout",
-                            approved_at=APPROVED_AT, receipt_key=RECEIPT_KEY,
-                        )
-                        added = repository / "internal/source/late.go"
-                        added.write_text("package source\n", encoding="utf-8")
-                        if state == "staged":
-                            subprocess.run(
-                                ["git", "-C", str(repository), "add", str(added)],
-                                check=True,
-                            )
-                        with self.assertRaises(VerificationPlannerError):
-                            kernel_build_plan(
-                                profile, repository, ".dm/verification.json", [],
-                                "chunk", "low", receipt_key=RECEIPT_KEY,
-                                approval=approved,
-                                head_commit=git_commit(repository),
-                            )
-
-        with tempfile.TemporaryDirectory() as directory:
-            repository, profile = self.repository(directory)
-            approved = approval(profile, repository)
-            (repository / "docs/readme.md").write_text(
-                "moved head\n", encoding="utf-8",
-            )
-            subprocess.run(
-                ["git", "-C", str(repository), "add", "docs/readme.md"],
-                check=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(repository), "commit", "-m", "move head"],
-                check=True, capture_output=True,
-            )
-            with self.assertRaises(VerificationPlannerError):
-                kernel_build_plan(
-                    profile, repository, ".dm/verification.json",
-                    ["docs/readme.md"], "chunk", "low",
-                    receipt_key=RECEIPT_KEY, approval=approved,
-                    head_commit=git_commit(repository),
-                )
-
-        with tempfile.TemporaryDirectory() as directory:
-            repository, profile, script = self.authority_repository(directory)
-            approved = approval(
-                profile, repository, environment={"GOFLAGS": "-tags=trusted"},
-            )
-            script.chmod(0o755)
-            with self.assertRaises(VerificationPlannerError):
-                kernel_build_plan(
-                    profile, repository, ".dm/verification.json", [],
-                    "chunk", "low", receipt_key=RECEIPT_KEY,
-                    approval=approved, head_commit=git_commit(repository),
-                    environment={"GOFLAGS": "-tags=trusted"},
-                )
-
-        with tempfile.TemporaryDirectory() as directory:
-            repository, profile, _script = self.authority_repository(directory)
-            approved = approval(
-                profile, repository, environment={"GOFLAGS": "-tags=trusted"},
-            )
-            with self.assertRaises(VerificationPlannerError):
-                kernel_build_plan(
-                    profile, repository, ".dm/verification.json", [],
-                    "chunk", "low", receipt_key=RECEIPT_KEY,
-                    approval=approved, head_commit=git_commit(repository),
-                    environment={"GOFLAGS": "-tags=changed"},
-                )
-
-        with tempfile.TemporaryDirectory() as directory:
-            repository, profile, _script = self.authority_repository(directory)
-            approved = approval(
-                profile, repository, environment={"GOFLAGS": "-tags=trusted"},
-            )
-            (repository / "docs/readme.md").write_text(
-                "second candidate\n", encoding="utf-8",
-            )
-            subprocess.run(
-                ["git", "-C", str(repository), "add", "docs/readme.md"],
-                check=True,
-            )
-            subprocess.run(
-                ["git", "-C", str(repository), "commit", "-m", "candidate b"],
-                check=True, capture_output=True,
-            )
-            with self.assertRaises(VerificationPlannerError):
-                kernel_build_plan(
-                    profile, repository, ".dm/verification.json",
-                    ["docs/readme.md"], "chunk", "low",
-                    receipt_key=RECEIPT_KEY, approval=approved,
-                    head_commit=git_commit(repository),
-                    environment={"GOFLAGS": "-tags=trusted"},
-                )
-
-    def test_approval_rejects_same_path_content_drift(self):
-        for include_worktree in (False, True):
-            with self.subTest(include_worktree=include_worktree):
-                with tempfile.TemporaryDirectory() as directory:
-                    repository, profile = self.repository(directory)
-                    base_commit, candidate_commit = prepare_candidate(
-                        repository, ["internal/source/source.go"],
-                    )
-                    source = repository / "internal/source/source.go"
-                    if include_worktree:
-                        source.write_text(
-                            "package source\n// approved dirty state\n",
-                            encoding="utf-8",
-                        )
-                    approved = issue_profile_approval(
-                        profile, repository, ".dm/verification.json",
-                        trusted_base_commit=base_commit,
-                        candidate_commit=candidate_commit,
-                        include_worktree=include_worktree,
-                        run_id="same-path-drift",
-                        authorization_event_id="approved-candidate-snapshot",
-                        approved_at=APPROVED_AT, receipt_key=RECEIPT_KEY,
-                    )
-                    source.write_text(
-                        "package source\n// later unapproved state\n",
-                        encoding="utf-8",
-                    )
-                    with self.assertRaises(VerificationPlannerError):
-                        kernel_build_plan(
-                            profile, repository, ".dm/verification.json",
-                            ["internal/source/source.go"], "chunk", "low",
-                            receipt_key=RECEIPT_KEY, approval=approved,
-                            head_commit=candidate_commit,
-                        )
+            result, outcome = execute(profile, repository, plan)
+            marker_exists = marker.exists()
+        self.assertEqual(outcome, "failed")
+        self.assertFalse(marker_exists)
+        self.assertEqual(result["lanes"][0]["reason"], "execution_closure_changed")
+        self.assertNotIn("go-focused", {
+            lane["lane_id"] for lane in result["lanes"]
+        })
 
     def test_terminal_plan_rejects_ignored_input_absent_from_commit(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -1125,19 +775,11 @@ class RepositoryVerificationTests(unittest.TestCase):
             (repository / "internal/source/generated.go").write_text(
                 "package source\n", encoding="utf-8",
             )
-            approved = issue_profile_approval(
-                profile, repository, ".dm/verification.json",
-                trusted_base_commit=base_commit,
-                candidate_commit=candidate_commit,
-                run_id="ignored-input",
-                authorization_event_id="approved-exact-head",
-                approved_at=APPROVED_AT, receipt_key=RECEIPT_KEY,
-            )
             with self.assertRaises(VerificationPlannerError):
                 kernel_build_plan(
                     profile, repository, ".dm/verification.json",
                     [".gitignore"], "merge_candidate", "high",
-                    receipt_key=RECEIPT_KEY, approval=approved,
+                    base_commit=base_commit,
                     head_commit=candidate_commit,
                 )
 
@@ -1177,12 +819,10 @@ class RepositoryVerificationTests(unittest.TestCase):
                 ],
                 "changed_paths": ["**/*.templ"],
                 "input_paths": ["**/*.templ", ".dm/verification.json"],
-                "authority_paths": [".dm/verification.json"],
-                "cache": "never",
+                "execution_paths": [".dm/verification.json"],
                 "mutates_repository": True,
-                "cache_environment": ["DM_VERIFICATION_SUBSTRATE"],
                 "required_environment": ["DM_VERIFICATION_SUBSTRATE"],
-                "authority_environment": ["DM_VERIFICATION_SUBSTRATE"],
+                "execution_environment": ["DM_VERIFICATION_SUBSTRATE"],
             })
             profile["lanes"][2]["changed_paths"].append("**/*.templ")
             profile["lanes"][2]["input_paths"].append("**/*.templ")
@@ -1196,13 +836,13 @@ class RepositoryVerificationTests(unittest.TestCase):
             before = {
                 lane["id"]: lane for lane in plan["lanes"]
             }["go-focused"]["input_digest"]
-            receipts, outcome = execute(profile, repository, plan)
+            result, outcome = execute(profile, repository, plan)
         self.assertEqual(outcome, "complete")
-        focused_receipt = [
-            receipt for receipt in receipts["receipts"]
-            if receipt["lane_id"] == "go-focused"
+        focused_result = [
+            lane for lane in result["lanes"]
+            if lane["lane_id"] == "go-focused"
         ][0]
-        self.assertNotEqual(focused_receipt["input_digest"], before)
+        self.assertNotEqual(focused_result["input_digest"], before)
 
     def test_dependency_order_moves_generator_before_consumer(self):
         document = profile_document()
@@ -1214,12 +854,10 @@ class RepositoryVerificationTests(unittest.TestCase):
             "argv": [sys.executable, "-c", "raise SystemExit(0)"],
             "changed_paths": ["**/*.go"],
             "input_paths": [".dm/verification.json"],
-            "authority_paths": [".dm/verification.json"],
-            "cache": "never",
+            "execution_paths": [".dm/verification.json"],
             "mutates_repository": True,
-            "cache_environment": ["DM_VERIFICATION_SUBSTRATE"],
             "required_environment": ["DM_VERIFICATION_SUBSTRATE"],
-            "authority_environment": ["DM_VERIFICATION_SUBSTRATE"],
+            "execution_environment": ["DM_VERIFICATION_SUBSTRATE"],
         }
         document["lanes"][1]["after"] = ["generate"]
         document["lanes"].append(generator)
@@ -1262,11 +900,9 @@ class RepositoryVerificationTests(unittest.TestCase):
                 "argv": [sys.executable, "-c", "raise SystemExit(9)"],
                 "changed_paths": ["**/*.go"],
                 "input_paths": [".dm/verification.json"],
-                "authority_paths": [".dm/verification.json"],
-                "cache": "never",
-                "cache_environment": ["DM_VERIFICATION_SUBSTRATE"],
+                "execution_paths": [".dm/verification.json"],
                 "required_environment": ["DM_VERIFICATION_SUBSTRATE"],
-                "authority_environment": ["DM_VERIFICATION_SUBSTRATE"],
+                "execution_environment": ["DM_VERIFICATION_SUBSTRATE"],
             })
             document["lanes"][1]["after"] = ["generate"]
             repository, profile = self.repository(
@@ -1276,11 +912,11 @@ class RepositoryVerificationTests(unittest.TestCase):
                 profile, repository, ".dm/verification.json",
                 ["internal/source/source.go"], "chunk", "low",
             )
-            receipts, outcome = execute(profile, repository, plan)
+            result, outcome = execute(profile, repository, plan)
         self.assertEqual(outcome, "failed")
         self.assertFalse(counter.exists())
         self.assertIn("dependency_not_passed", {
-            receipt["reason"] for receipt in receipts["receipts"]
+            lane["reason"] for lane in result["lanes"]
         })
 
     def test_repository_command_receives_isolated_stdin_home_and_environment(self):
@@ -1308,7 +944,7 @@ class RepositoryVerificationTests(unittest.TestCase):
                     "SECRET_SENTINEL": "must-not-cross",
                 },
             )
-            _receipts, outcome = execute(
+            _result, outcome = execute(
                 profile, repository, plan,
                 environment={
                     "GOFLAGS": "-tags=allowed",
@@ -1373,7 +1009,7 @@ class RepositoryVerificationTests(unittest.TestCase):
                         )
                     )
                     with output_limit:
-                        _receipts, outcome = execute(
+                        _result, outcome = execute(
                             profile, repository, plan,
                         )
                     elapsed = time.monotonic() - started
@@ -1413,7 +1049,7 @@ class RepositoryVerificationTests(unittest.TestCase):
                 profile, repository, ".dm/verification.json",
                 ["internal/source/source.go"], "chunk", "low",
             )
-            receipts, outcome = execute(profile, repository, plan)
+            result, outcome = execute(profile, repository, plan)
             descendant_pid = int(pid_path.read_text())
             gone = False
             for _attempt in range(40):
@@ -1426,8 +1062,8 @@ class RepositoryVerificationTests(unittest.TestCase):
             if not gone:
                 os.kill(descendant_pid, 9)
         focused = [
-            receipt for receipt in receipts["receipts"]
-            if receipt["lane_id"] == "go-focused"
+            lane for lane in result["lanes"]
+            if lane["lane_id"] == "go-focused"
         ][0]
         self.assertEqual(outcome, "failed")
         self.assertEqual(
@@ -1453,10 +1089,10 @@ class RepositoryVerificationTests(unittest.TestCase):
                 profile, repository, ".dm/verification.json",
                 ["internal/source/source.go"], "chunk", "low",
             )
-            receipts, outcome = execute(profile, repository, plan)
+            result, outcome = execute(profile, repository, plan)
         self.assertEqual(outcome, "failed")
         self.assertIn("undeclared_repository_mutation", {
-            receipt["reason"] for receipt in receipts["receipts"]
+            lane["reason"] for lane in result["lanes"]
         })
 
     def test_output_limit_terminates_process_without_unbounded_capture(self):
@@ -1472,11 +1108,11 @@ class RepositoryVerificationTests(unittest.TestCase):
             with patch(
                 "workflow_kernel.verification_execution.MAX_OUTPUT_BYTES", 32,
             ):
-                receipts, outcome = execute(profile, repository, plan)
+                result, outcome = execute(profile, repository, plan)
         self.assertEqual(outcome, "failed")
         focused = [
-            receipt for receipt in receipts["receipts"]
-            if receipt["lane_id"] == "go-focused"
+            lane for lane in result["lanes"]
+            if lane["lane_id"] == "go-focused"
         ][0]
         self.assertEqual(
             focused["reason"], "command_output_limit_exceeded",
@@ -1532,7 +1168,7 @@ class RepositoryVerificationTests(unittest.TestCase):
                 "workflow_kernel.verification_execution.os.killpg",
                 side_effect=deny_group_signals,
             ):
-                receipts, outcome = execute(profile, repository, plan)
+                result, outcome = execute(profile, repository, plan)
             leader_pid = int(pid_path.read_text())
             leader_gone = False
             for _attempt in range(40):
@@ -1546,8 +1182,8 @@ class RepositoryVerificationTests(unittest.TestCase):
                 os.kill(leader_pid, signal.SIGKILL)
         self.assertEqual(outcome, "failed")
         focused = [
-            receipt for receipt in receipts["receipts"]
-            if receipt["lane_id"] == "go-focused"
+            lane for lane in result["lanes"]
+            if lane["lane_id"] == "go-focused"
         ][0]
         self.assertEqual(
             focused["reason"], "command_output_limit_exceeded",
@@ -1557,7 +1193,7 @@ class RepositoryVerificationTests(unittest.TestCase):
 
     def test_symlinked_input_directory_and_unbounded_arrays_are_rejected(self):
         document = profile_document()
-        document["lanes"][0]["cache_environment"] = [
+        document["lanes"][0]["execution_environment"] = [
             f"SAFE_VALUE_{index}" for index in range(257)
         ]
         with self.assertRaises(VerificationPlannerError):
@@ -1575,44 +1211,30 @@ class RepositoryVerificationTests(unittest.TestCase):
                     ["internal/source/source.go"], "chunk", "low",
                 )
 
-    def test_cli_plans_runs_and_reuses_exact_receipt(self):
+    def test_cli_plans_and_returns_current_invocation_result(self):
         with tempfile.TemporaryDirectory() as directory:
             repository, _profile = self.repository(Path(directory) / "repository")
             plan_path = Path(directory) / "plan.json"
-            receipts_path = Path(directory) / "receipts.json"
-            approval_path = Path(directory) / "approval.json"
             env = dict(
-                os.environ,
-                PYTHONPATH=str(KERNEL_REFERENCES),
+                os.environ, PYTHONPATH=str(KERNEL_REFERENCES),
                 DM_VERIFICATION_SUBSTRATE="test-host-containment",
             )
+
             def run_cli(arguments):
                 return subprocess.run(
                     [sys.executable, "-m", "workflow_kernel", *arguments],
-                    env=env, input=RECEIPT_KEY, capture_output=True, check=False,
+                    env=env, capture_output=True, check=False,
                 )
+
             base_commit, candidate_commit = prepare_candidate(
                 repository, ["internal/source/source.go"],
             )
-            approved = run_cli([
-                "approve-verification-profile",
-                "--repository-root", str(repository),
-                "--profile", str(repository / ".dm/verification.json"),
-                "--trusted-base-commit", base_commit,
-                "--candidate-commit", candidate_commit,
-                "--run-id", "cli-verification-run",
-                "--authorization-event-id", "operator-approved-cli-run",
-                "--approved-at", APPROVED_AT,
-                "--receipt-key-stdin", "--output", str(approval_path),
-            ])
-            self.assertEqual(approved.returncode, 0, approved.stderr.decode())
             command = [
                 "plan-verification",
                 "--repository-root", str(repository),
                 "--profile", str(repository / ".dm/verification.json"),
                 "--boundary", "chunk", "--risk", "low",
-                "--approval", str(approval_path),
-                "--receipt-key-stdin",
+                "--base-ref", base_commit, "--candidate-ref", candidate_commit,
                 "--output", str(plan_path),
             ]
             planned = run_cli(command)
@@ -1621,157 +1243,185 @@ class RepositoryVerificationTests(unittest.TestCase):
                 "run-verification",
                 "--repository-root", str(repository),
                 "--profile", str(repository / ".dm/verification.json"),
-                "--plan", str(plan_path), "--output", str(receipts_path),
-                "--approval", str(approval_path), "--receipt-key-stdin",
+                "--plan", str(plan_path),
             ])
             self.assertEqual(run.returncode, 0, run.stderr.decode())
-            planned_again = run_cli([
-                *command[:-2],
-                "--receipts", str(receipts_path),
-                "--output", str(plan_path),
-            ])
-            self.assertEqual(
-                planned_again.returncode, 0, planned_again.stderr.decode(),
-            )
-            focused = {
-                lane["id"]: lane
-                for lane in json.loads(plan_path.read_text())["lanes"]
-            }["go-focused"]
-            self.assertEqual(focused["disposition"], "reuse")
+            result = json.loads(run.stdout)
+            self.assertEqual(result["artifact_role"], "repository_verification_result")
+            self.assertEqual(result["status"], "complete")
+            self.assertIn("go-focused", {
+                lane["lane_id"] for lane in result["lanes"]
+            })
 
-    def test_cli_required_remote_pending_exits_unsafe_not_success(self):
+            mismatched = json.loads(plan_path.read_text())
+            mismatched["profile_ref"] = "README.md"
+            plan_path.write_text(json.dumps(mismatched), encoding="utf-8")
+            rejected = run_cli([
+                "run-verification",
+                "--repository-root", str(repository),
+                "--profile", str(repository / ".dm/verification.json"),
+                "--plan", str(plan_path),
+            ])
+            self.assertNotEqual(rejected.returncode, 0)
+            self.assertEqual(rejected.stdout, b"")
+
+    def test_cli_stdout_is_one_json_result_when_a_lane_prints_output(self):
+        document = profile_document([
+            sys.executable, "-c", "print('lane-output')", "{packages}",
+        ])
+        with tempfile.TemporaryDirectory() as directory:
+            repository, _profile = self.repository(
+                Path(directory) / "repository", document,
+            )
+            plan_path = Path(directory) / "plan.json"
+            environment = dict(
+                os.environ, PYTHONPATH=str(KERNEL_REFERENCES),
+                DM_VERIFICATION_SUBSTRATE="test-host-containment",
+            )
+            base_commit, candidate_commit = prepare_candidate(
+                repository, ["internal/source/source.go"],
+            )
+            planned = subprocess.run([
+                sys.executable, "-m", "workflow_kernel", "plan-verification",
+                "--repository-root", str(repository),
+                "--profile", str(repository / ".dm/verification.json"),
+                "--boundary", "chunk", "--risk", "low",
+                "--base-ref", base_commit, "--candidate-ref", candidate_commit,
+                "--output", str(plan_path),
+            ], env=environment, capture_output=True, check=False, text=True)
+            self.assertEqual(planned.returncode, 0, planned.stderr)
+            run = subprocess.run([
+                sys.executable, "-m", "workflow_kernel", "run-verification",
+                "--repository-root", str(repository),
+                "--profile", str(repository / ".dm/verification.json"),
+                "--plan", str(plan_path),
+            ], env=environment, capture_output=True, check=False, text=True)
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(json.loads(run.stdout)["status"], "complete")
+        self.assertNotIn("lane-output", run.stdout)
+        self.assertIn("lane-output", run.stderr)
+
+    def test_cli_include_worktree_plans_and_runs_mixed_dirty_state(self):
         with tempfile.TemporaryDirectory() as directory:
             repository, _profile = self.repository(Path(directory) / "repository")
-            plan_path = Path(directory) / "candidate-plan.json"
-            receipts_path = Path(directory) / "candidate-receipts.json"
-            approval_path = Path(directory) / "candidate-approval.json"
+            plan_path = Path(directory) / "dirty-plan.json"
             env = dict(
                 os.environ, PYTHONPATH=str(KERNEL_REFERENCES),
                 DM_VERIFICATION_SUBSTRATE="test-host-containment",
             )
-            def run_cli(arguments):
-                return subprocess.run(
-                    [sys.executable, "-m", "workflow_kernel", *arguments],
-                    env=env, input=RECEIPT_KEY, capture_output=True, check=False,
-                )
+            base_commit = git_commit(repository, BASE_REF)
+            head_commit = git_commit(repository)
+            (repository / "docs/readme.md").write_text("staged\n")
+            subprocess.run(
+                ["git", "-C", str(repository), "add", "docs/readme.md"],
+                check=True,
+            )
+            (repository / "internal/source/source.go").write_text(
+                "package source\nconst Dirty = true\n",
+            )
+            (repository / "untracked.go").write_text("package untracked\n")
+            planned = subprocess.run([
+                sys.executable, "-m", "workflow_kernel",
+                "plan-verification", "--repository-root", str(repository),
+                "--profile", str(repository / ".dm/verification.json"),
+                "--boundary", "chunk", "--risk", "low",
+                "--base-ref", base_commit, "--candidate-ref", head_commit,
+                "--include-worktree", "--output", str(plan_path),
+            ], env=env, capture_output=True, check=False, text=True)
+            self.assertEqual(planned.returncode, 0, planned.stderr)
+            plan = json.loads(plan_path.read_text())
+            self.assertEqual(plan["request"]["changed_paths"], [
+                "docs/readme.md", "internal/source/source.go", "untracked.go",
+            ])
+            run = subprocess.run([
+                sys.executable, "-m", "workflow_kernel",
+                "run-verification", "--repository-root", str(repository),
+                "--profile", str(repository / ".dm/verification.json"),
+                "--plan", str(plan_path),
+            ], env=env, capture_output=True, check=False, text=True)
+            self.assertEqual(run.returncode, 0, run.stderr)
+            self.assertEqual(json.loads(run.stdout)["status"], "complete")
+
+            subprocess.run(
+                ["git", "-C", str(repository), "add", "--all"], check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "commit", "-m", "advance head"],
+                check=True, capture_output=True,
+            )
+            stale = subprocess.run([
+                sys.executable, "-m", "workflow_kernel",
+                "plan-verification", "--repository-root", str(repository),
+                "--profile", str(repository / ".dm/verification.json"),
+                "--boundary", "chunk", "--risk", "low",
+                "--base-ref", base_commit, "--candidate-ref", head_commit,
+                "--include-worktree", "--output", str(plan_path),
+            ], env=env, capture_output=True, check=False, text=True)
+            self.assertNotEqual(stale.returncode, 0)
+
+    def test_cli_required_remote_lane_exits_three_and_reports_pending(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, _profile = self.repository(Path(directory) / "repository")
+            plan_path = Path(directory) / "remote-plan.json"
+            env = dict(
+                os.environ, PYTHONPATH=str(KERNEL_REFERENCES),
+                DM_VERIFICATION_SUBSTRATE="test-host-containment",
+            )
             base_commit, candidate_commit = prepare_candidate(
                 repository, ["internal/source/source.go"],
             )
-            approved = run_cli([
-                "approve-verification-profile",
-                "--repository-root", str(repository),
-                "--profile", str(repository / ".dm/verification.json"),
-                "--trusted-base-commit", base_commit,
-                "--candidate-commit", candidate_commit,
-                "--run-id", "cli-candidate-run",
-                "--authorization-event-id", "operator-approved-candidate",
-                "--approved-at", APPROVED_AT,
-                "--receipt-key-stdin", "--output", str(approval_path),
-            ])
-            self.assertEqual(approved.returncode, 0, approved.stderr.decode())
-            planned = run_cli([
-                "plan-verification",
-                "--repository-root", str(repository),
+            planned = subprocess.run([
+                sys.executable, "-m", "workflow_kernel",
+                "plan-verification", "--repository-root", str(repository),
                 "--profile", str(repository / ".dm/verification.json"),
                 "--boundary", "merge_candidate", "--risk", "high",
-                "--approval", str(approval_path),
-                "--receipt-key-stdin",
+                "--base-ref", base_commit, "--candidate-ref", candidate_commit,
                 "--output", str(plan_path),
-            ])
-            self.assertEqual(planned.returncode, 0, planned.stderr.decode())
-            run = run_cli([
-                "run-verification",
-                "--repository-root", str(repository),
+            ], env=env, capture_output=True, check=False, text=True)
+            self.assertEqual(planned.returncode, 0, planned.stderr)
+            run = subprocess.run([
+                sys.executable, "-m", "workflow_kernel",
+                "run-verification", "--repository-root", str(repository),
                 "--profile", str(repository / ".dm/verification.json"),
                 "--plan", str(plan_path),
-                "--approval", str(approval_path),
-                "--receipt-key-stdin",
-                "--output", str(receipts_path),
-            ])
-            self.assertEqual(run.returncode, 3, run.stderr.decode())
-            self.assertEqual(
-                json.loads(run.stdout.decode())["status"], "pending",
-            )
-            attestation_path = Path(directory) / "provider-attestation.json"
-            failed_attestation = seal_provider_attestation({
-                "schema_version": 1,
-                "artifact_role": "repository_verification_provider_attestation",
-                "provider": "github",
-                "provider_run_id": "failed-provider-run",
-                "head_commit": candidate_commit,
-                "evidence_digest": "sha256:" + "1" * 64,
-                "observed_at": "2026-07-30T02:00:00Z",
-                "outcome": "failed",
-                "exit_code": 1,
-            }, RECEIPT_KEY)
-            attestation_path.write_text(json.dumps(failed_attestation))
-            record_command = [
-                "record-verification-result",
-                "--repository-root", str(repository),
-                "--profile", str(repository / ".dm/verification.json"),
-                "--plan", str(plan_path),
-                "--approval", str(approval_path),
-                "--receipts", str(receipts_path),
-                "--lane-id", "go-race",
-                "--provider-attestation", str(attestation_path),
-                "--receipt-key-stdin",
-                "--output", str(receipts_path),
+            ], env=env, capture_output=True, check=False, text=True)
+            self.assertEqual(run.returncode, 3, run.stderr)
+            self.assertEqual(json.loads(run.stdout)["status"], "pending")
+            remote = [
+                lane for lane in json.loads(run.stdout)["lanes"]
+                if lane["status"] == "remote_pending"
             ]
-            recorded_failure = run_cli(record_command)
-            self.assertEqual(
-                recorded_failure.returncode, 3,
-                recorded_failure.stderr.decode(),
+        self.assertEqual(len(remote), 1)
+        self.assertEqual(json.loads(run.stdout)["head_commit"], candidate_commit)
+
+    def test_cli_has_no_broker_commands_or_inputs(self):
+        env = dict(os.environ, PYTHONPATH=str(KERNEL_REFERENCES))
+        help_result = subprocess.run(
+            [sys.executable, "-m", "workflow_kernel", "--help"],
+            env=env, capture_output=True, check=False, text=True,
+        )
+        self.assertEqual(help_result.returncode, 0, help_result.stderr)
+        combined = help_result.stdout + help_result.stderr
+        for removed in (
+            "approve-verification-profile", "record-verification-result",
+            "authorize-verification-contract-revision",
+            "revise-verification-contract", "receipt-key-stdin",
+            "provider-attestation", "repository-verification-receipts",
+            "--receipts",
+        ):
+            self.assertNotIn(removed, combined)
+        for command in ("plan-verification", "run-verification"):
+            help_result = subprocess.run(
+                [sys.executable, "-m", "workflow_kernel", command, "--help"],
+                env=env, capture_output=True, check=False, text=True,
             )
-            self.assertEqual(
-                json.loads(receipts_path.read_text())["receipts"][-1]["status"],
-                "failed",
-            )
-            replan_command = [
-                "plan-verification",
-                "--repository-root", str(repository),
-                "--profile", str(repository / ".dm/verification.json"),
-                "--boundary", "merge_candidate", "--risk", "high",
-                "--approval", str(approval_path),
-                "--receipts", str(receipts_path),
-                "--receipt-key-stdin", "--output", str(plan_path),
-            ]
-            self.assertEqual(
-                run_cli(replan_command).returncode, 0,
-            )
-            race = {
-                lane["id"]: lane
-                for lane in json.loads(plan_path.read_text())["lanes"]
-            }["go-race"]
-            self.assertEqual(race["disposition"], "remote")
-            passed_attestation = seal_provider_attestation({
-                **failed_attestation,
-                "provider_run_id": "passed-provider-run",
-                "evidence_digest": "sha256:" + "2" * 64,
-                "observed_at": "2026-07-30T02:05:00Z",
-                "outcome": "passed",
-                "exit_code": 0,
-            }, RECEIPT_KEY)
-            attestation_path.write_text(json.dumps(passed_attestation))
-            recorded_pass = run_cli(record_command)
-            self.assertEqual(
-                recorded_pass.returncode, 0, recorded_pass.stderr.decode(),
-            )
-            self.assertEqual(run_cli(replan_command).returncode, 0)
-            race = {
-                lane["id"]: lane
-                for lane in json.loads(plan_path.read_text())["lanes"]
-            }["go-race"]
-            self.assertEqual(race["disposition"], "reuse")
-            completed = run_cli([
-                "run-verification",
-                "--repository-root", str(repository),
-                "--profile", str(repository / ".dm/verification.json"),
-                "--plan", str(plan_path),
-                "--approval", str(approval_path),
-                "--receipts", str(receipts_path),
-                "--receipt-key-stdin", "--output", str(receipts_path),
-            ])
-            self.assertEqual(completed.returncode, 0, completed.stderr.decode())
+            self.assertEqual(help_result.returncode, 0, help_result.stderr)
+            self.assertNotIn("--receipts", help_result.stdout)
+        run_help = subprocess.run(
+            [sys.executable, "-m", "workflow_kernel", "run-verification", "--help"],
+            env=env, capture_output=True, check=False, text=True,
+        )
+        self.assertNotIn("--output", run_help.stdout)
 
 
 if __name__ == "__main__":

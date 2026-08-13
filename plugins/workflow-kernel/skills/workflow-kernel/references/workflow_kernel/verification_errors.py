@@ -2,4 +2,4 @@
 
 
 class VerificationPlannerError(ValueError):
-    """Raised when repository verification authority is invalid or stale."""
+    """Raised when a repository verification plan is invalid or stale."""

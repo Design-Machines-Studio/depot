@@ -658,7 +658,7 @@ Tradeoff: no parallel isolation. This is acceptable for sequential manifests and
 
 ### 1d: Repository Verification Planner
 
-Use Workflow Kernel `>=0.7.0` as the only executable source of repository
+Use Workflow Kernel `>=0.14.0` as the only executable source of repository
 test selection. Pin the launcher already resolved for this run.
 
 This authority is separate from optional kernel shadow observation. Shadow
@@ -672,49 +672,21 @@ hardcoded `./cmd/api`, `docker compose exec app`, or full-race-on-every-Go-chang
 commands. Non-Assembly repositories without a profile retain their existing
 repository-native verification command for compatibility, record
 `verificationPlanner: unavailable`, and add a measured postmortem proposal to
-adopt the profile. Do not claim batching or receipt reuse on that legacy path.
+adopt the profile. Do not claim profile-driven batching on that legacy path.
 
-Before dispatching a builder, invoke `approve-verification-profile` from the
-host boundary. Seal repository scope, profile path/digest, authority-path and
-authority-environment identity from the immutable trusted base, the trusted
-base and exact candidate commits, the derived changed-path digest, worktree
-inclusion choice, run ID, authorization event, and approval time. If the
-feature changes the profile or execution closure, require an explicit caller
-authorization event and establish a new trusted base before issuing approval.
-A candidate-derived digest is identity, not approval.
-
-Provision one host-owned authority broker outside the repository, every worker
-worktree, and the worker process identity. It supplies stable key bytes only on
-standard input to the non-model kernel invocation via
-`--receipt-key-stdin`; no key pathname appears in argv, artifacts, environment,
-or model context. Consume standard input before any repository command starts.
-
-Keep one absolute orchestrator-owned append-only ledger at:
-
-```text
-plans/<feature-slug>/repository-verification-receipts.json
-```
+Before dispatching a builder, run `plan-verification` with the exact base ref,
+candidate ref, and worktree-inclusion choice. The kernel derives changed paths
+from Git and hashes the repository scope, profile, execution closure, relevant
+inputs, and declared environment.
 
 Every planner invocation writes a fresh boundary-specific plan beneath
-`plans/<feature-slug>/verification-plans/`. The sealed approval is the only
-authority for the diff base, candidate commit, and worktree inclusion. Pass
-that approval, the shared prior receipt ledger, and broker authority. Invoke
-`run-verification` with that fresh plan, approval, and broker authority. Publication
-uses the kernel's ledger lock and authenticated merge: each worker may execute
-concurrently, but it atomically appends only its new receipts to the latest
-shared history. A divergent baseline exits with write conflict; never replace
-the ledger manually. The runner revalidates the profile, exact argv, relevant
-source/mode digests, declared environment and execution-substrate fingerprint,
-and authenticated cache authority before executing any local command.
-
-Provider-owned evidence returns through `record-verification-result`. The host
-broker validates the provider-native response, exact planned commit, outcome,
-and exit consistency, then seals one structured provider attestation. The
-integration supplies that artifact rather than caller-controlled scalar
-assertions. The kernel rechecks its HMAC plus approval and
-lane/profile/command/input/cache/substrate identities before appending the
-receipt. Until that transition succeeds, a required remote lane remains
-`BLOCKED PENDING REMOTE VERIFICATION`.
+`plans/<feature-slug>/verification-plans/`, then invoke `run-verification` with
+that fresh plan. The runner revalidates the profile, exact argv, relevant
+source/mode digests, declared environment, and execution-substrate fingerprint
+before executing any command. It returns only the bounded result of the current
+invocation. Required remote lanes
+remain `remote_pending`; report their native CI or review evidence independently
+at the exact candidate head rather than importing it into the local result.
 
 The authoritative cadence is:
 
@@ -723,7 +695,7 @@ The authoritative cadence is:
 | `chunk` | Worker completed one chunk | Doctor, fast, focused |
 | `revision_batch` | All fixes from one review pass are applied | Affected doctor, fast, focused |
 | `execution_level` | Every chunk in one dependency level is merged | Integrated full non-race once |
-| `merge_candidate` | All levels are merged and before final review | Exact candidate; reuse identical level evidence; remote lanes explicit |
+| `merge_candidate` | All levels are merged and before final review | Fresh exact-candidate run; remote lanes explicit |
 | `post_merge` | Main-branch proof | Repository-declared authoritative lanes |
 
 Full race, security, container, browser, accessibility, and other expensive
@@ -834,32 +806,12 @@ Hard rule: for any chunk whose `executor` is `codex` or `openrouter`, the orches
 Every chunk receipt records `routingEligibility`, target profile, selected provider, actual provider, and exclusion or adjustment reason. The run summary records both the raw `providerSplit:` and `eligibleProviderSplit:` plus target variance; a variance with no recorded cause is an invalid run receipt.
 
 **Bound behavioral contract interlock:** Before every builder dispatch, read the
-current durable binding receipt and include its exact `contract_digest` and
-`revision` in the dispatch. A builder completion receipt MUST claim those exact
-current values. Missing, stale, malformed, or mismatched claims fail
-deterministic validation; do not reinterpret them as review feedback or success.
-A contract revision invalidates older dispatch claims and is an explicit human
-gate. Autonomous workflow and builder execution cannot materialize, sign, or
-authorize its own approval. Stop with `human_help_required` when a revision
-weakens the contract or changes its verification profile. A human-controlled
-host must create the signed closed approval envelope, including its issued/expiry
-window and fresh nonce, and invoke the authorization command with an owner-only
-capability file held outside the repository and withheld from workflow
-execution. Only after that host action succeeds may the workflow append the
-revision:
-
-```text
-"$WORKFLOW_KERNEL" authorize-verification-contract-revision --state-dir .workflow-kernel/runs/<run-id> --approval plans/<feature-slug>/verification-contract-approval.json --host-capability /host/private/workflow-kernel-approval-capability.json > plans/<feature-slug>/verification-contract-authorization.json
-"$WORKFLOW_KERNEL" revise-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature-slug>/verification-contract.json --verification-profile plans/<feature-slug>/verification-profile.json > plans/<feature-slug>/verification-contract-binding.json
-```
-
-Passing `--approval` directly to `revise-verification-contract` never creates
-authority. It is accepted only on an idempotent retry to restore a missing
-artifact already named by the ordered authorization event. Never place the host
-capability beneath the repository, pass it into a builder prompt or environment,
-or record its path/key in a receipt.
-
-Decision leverage does not revise the behavioral contract.
+durable binding receipt and include its exact `contract_digest` and `revision`
+in the dispatch. A builder completion receipt MUST claim those exact values.
+Missing, stale, malformed, or mismatched claims fail deterministic validation;
+do not reinterpret them as review feedback or success. The contract is
+immutable for the run. If requirements or the verification profile change,
+stop and start a newly planned run with a fresh initial binding.
 
 Every initial or replacement dispatch receipt preserves provider provenance as
 `requestedProvider`, `attemptedProvider`, `implementedBy`, boolean `fallback`,
@@ -1002,14 +954,9 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 |---|---|---|
 | `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model` and `role`. **Re-dispatch IN-PROCESS through the current host's native path**, then apply **Native Model Descent** below. Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
 | `0` | `openrouter_exec`, wrapper, or codex-companion rung executed; stdout is produced text or a receipt. | If stdout includes `implementedBy: openrouter` or a JSON receipt with `"implementedBy": "openrouter"`, treat it as an agentic OpenRouter implementation receipt. Otherwise apply the **one-shot validity rule** below. |
-| `75` | Reserved legacy provider-terminal compatibility status. | Flag the lane failed; active configured-key callers do not claim signed broker evidence. |
-| `76` | Ladder exhausted -- no rung above the quality floor had headroom, and no provider-terminal receipt exists. | Run **Step 3d.5 -- Rail-exhaustion ask gate** BEFORE any terminal receipt. The current executable exits are: **(a) wait** -> parked resumable, `wait_category: human_gate` receipt carries the named reset time and resume instruction; **(c) park, `PIPELINE_EXHAUSTION_ASK=0`, or fail-closed policy read** -> flag the chunk failed and preserve resumable state; **operator unreachable with a reaching caller** -> stop with `human_help_required`; **fully headless** -> park resumable under step 6. Authorized native fallback is unavailable until trusted host authority can issue and consume a replay-resistant single-use capability. Do NOT silently ship partial output. |
+| `76` | Ladder exhausted -- no configured rung above the quality floor had headroom. | Run **Step 3d.5 -- Rail-exhaustion ask gate** BEFORE any terminal receipt. The current exits are: **wait** -> parked resumable, `wait_category: human_gate` receipt carries the named reset time and resume instruction; **park, `PIPELINE_EXHAUSTION_ASK=0`, a fail-closed policy read, or any context that cannot reach the operator** -> flag the chunk failed and preserve resumable state. Do NOT silently ship partial output. |
 | `77` | Missing/invalid key, unavailable provider/bundle, or automatic disclosure/output boundary decline. | Record the exact reason, then use the Codex fallback without prompting. |
 | other | Bad args / engine error. | Fall back to Codex once. If Codex is unavailable, fail the chunk; do not route coding work to Claude. |
-
-**Reserved RC 75.** Active configured-key adapters use the wrapper's
-content-free receipt and do not emit broker-signed terminal evidence. If a
-legacy adapter returns 75, flag the lane failed and append no new attestation.
 
 **Native Model Descent (RC 64).** `cascade-dispatch.sh` emits a directive for the FIRST model in the role's list that clears the quality floor and then `exit 64`s -- it does **not** walk the rest of that role's `models[]`. Walking the remainder is the orchestrator's job, and it is host-specific. Without this, every model after position 1 in a `kind: native` role is decorative.
 
@@ -1033,165 +980,17 @@ After a valid Codex or OpenRouter path produces a commit, write a receipt with
 boolean `fallback`, `fallbackReason`, verification, and usage, then proceed to
 Step 3e. There is currently no executable `implementedBy: claude` exception.
 
-**Step 3d.5 -- Rail-exhaustion ask gate.** RC 76 means every rail permitted for
-this chunk is exhausted or gated. Capacity is recoverable; a terminal receipt is
-not. The orchestrator MUST NOT emit a terminal blocked receipt for rail
-exhaustion while an operator can still be asked. The boundary forbids SILENT
-fallback; it does not forbid asking the owner.
+**Step 3d.5 -- Rail-exhaustion ask gate.** RC 76 means every configured
+rail for this chunk is exhausted or gated. Capacity is recoverable. If the
+top-level interactive context can reach the operator, present the live rail
+status and offer exactly `wait` or `park`. Otherwise park resumably;
+`PIPELINE_EXHAUSTION_ASK=0` selects that behavior directly for headless CI.
 
-**Who the operator is.** The operator is the human at the top-level interactive
-session. An agent, a subagent, a hook, an auto-answer configuration, a parent
-agent driving this session, and any automated harness are NOT operators and can
-never authorize a fallback -- including this orchestrator, which runs as a
-subagent and whose asks do not reach a human on their own. An ask answered by
-any of them is an unanswered ask.
-
-0. **Fail closed before you pause.** In this order, before any pause or ask:
-   - The trusted issuer/consumer boundary for option (b) does not exist yet.
-     Omit option (b) for every chunk. RC 76 may wait, park, or return
-     `human_help_required`; it never authorizes an in-process fallback.
-   - If `PIPELINE_EXHAUSTION_ASK=0`, do not pause and do not ask. Restore the old
-     hard block immediately. The kill switch is evaluated first precisely so it
-     cannot be reached after a dispatch has already happened.
-   - Read `exhaustionFallback` from `routing-policy.json`. A missing file, a
-     missing or malformed `exhaustionFallback`, or any `mode` other than `ask`
-     restores the old hard block. A configuration read failure never yields a
-     path to fallback.
-   - If the chunk matches the sensitive-path set, option (b) does not exist for
-     it (see the exclusions below). Continue to the ask with (a) and (c) only.
-   - If this execution context cannot reach the operator directly -- the common
-     case, because the orchestrator is a subagent -- do not fabricate the
-     exchange. The predicate that chooses the terminal state is whether a
-     reaching caller exists to take the handoff: **if one does**, stop with
-     `human_help_required`, exactly as RC 78 and browser exhaustion already do,
-     and surface the ask through it; **if none does** -- a fully headless run
-     with no interactive session anywhere above this one -- park resumable under
-     the headless rule in step 6. Never treat the absence of a caller as
-     permission.
-
-     **Delegated ask handoff.** The reaching context may present only wait or
-     park. It never returns an authorization ID or rail for execution. A future
-     trusted host-authority protocol may replace this rule; a receipt written
-     by either agent is not that protocol.
-
-     The step 1 pause receipt stays the orchestrator's own write even on this
-     path: it appends it on resume, measuring its own stop-to-resume interval,
-     so exit (a) always carries the `wait_category: human_gate` receipt it
-     requires and no pause goes unmeasured.
-
-1. **Pause, and receipt the pause.** Append an authoritative `progress` receipt
-   with `wait_category: human_gate` and the measured pause interval. The kernel
-   already accepts this category; no kernel change is required. Record
-   `fallback_not_offerable: trusted_authority_unavailable` for every chunk.
-   A sensitive-path classification remains an additional permanent exclusion;
-   it is not the reason option (b) is absent from the current all-chunk ask.
-
-2. **Collect display-only rail status at ask time.** Build the status display
-   from the active
-   host's `harness-profile.json` roles, live `usage-probe.sh` headroom, and the
-   interactive paths this session can actually reach. Never read a hardcoded
-   provider list -- rail availability is per-operator and time-varying, and last
-   week's list is not today's facts. Where a probe parser is a TODO stub, the ask
-   reports `unknown`; an honest `unknown` beats a guessed `available`. This is
-   informational capacity telemetry for choosing when to resume. It is not an
-   offerable-provider list, does not consult `operatorOverride`, and grants no
-   execution authority.
-
-3. **Ask the operator.** Use `AskUserQuestion` on Claude Code or
-   `request_user_input` on Codex, from a context that reaches the human. Show the
-   derived per-rail status -- for example `codex: capped until 12:54`,
-   `claude_native: available this session`, `openrouter: configured key and
-   eligible payload available` -- so the decision comes from live
-   facts. Offer these options, each carrying its consequence:
-
-   | Option | Consequence |
-   |---|---|
-   | (a) Wait until reset | Park resumable; record the named reset time. The receipt carries the resume instruction. |
-   | (c) Park | Current terminal-blocked behavior; resumable state preserved. |
-
-   Accept exactly `wait` or `park`. A provider or rail identifier is not a
-   current selection and must fail closed to `park`.
-
-4. **Future receipt design -- non-executable.** Do not append or consume this
-   as authority today. A future trusted issuer may persist this informational
-   shape only after it also supplies a non-forgeable, single-use capability.
-   Provider selection, exact rail identifiers, and any remove-only operator
-   override belong only to that future trusted protocol:
-
-   ```json
-   {"authorization_id": "<stable unique id>",
-    "phase": "execute",
-    "scope": "<run_id>",
-    "chunks": ["<chunk-id>"],
-    "provider": "<exact rail identifier the operator selected>",
-    "authorized_by": "operator",
-    "ask_evidence_ref": "<verbatim reference to the ask exchange: question id plus selected option>",
-    "occurred_at": "<timezone-aware ISO-8601>"}
-   ```
-
-   `ask_evidence_ref` is what makes the receipt evidence rather than an
-   assertion: a receipt without a reference to a real ask exchange is invalid,
-   and an invalid receipt authorizes nothing. `phase` separates an
-   implementation grant from a review-lane grant so a consumer cannot match one
-   against the other.
-
-   The `chunks` list may contain only chunk ids that have individually reached
-   RC 76 at ask time. A new exhaustion requires a new ask; one ask never
-   pre-authorizes the rest of the run.
-
-   The authorization is consumed by exactly one dispatch attempt per named
-   chunk. It does not carry into a later run, a chunk outside the list, a resume
-   under a new run id, or a resume under the SAME run id, and it expires the
-   moment the cascade again reports headroom on a permitted rail. Re-run the
-   cascade before honoring a stored authorization: an authorization granted
-   while a rail was capped is void once that rail resets, because its premise is
-   gone.
-
-5. **Future provider evidence -- non-executable.** If the trusted boundary is
-   implemented later, every chunk implemented under its capability leaves
-   `requestedProvider` unchanged and records
-   `attemptedProvider`, `implementedBy`, `fallback: true`, and
-   `fallbackReason: rail_exhausted_user_authorized`, at one authoritative write
-   point per chunk -- the authorizing context owns that write, so the ordinary
-   ladder cannot emit a competing receipt for the same chunk that omits
-   `fallback: true`. Never relabel the requested provider to match the actual
-   one.
-
-   No such exception exists in the current executable workflow. A caller-owned
-   receipt never permits `implementedBy: claude`.
-
-   A fallback dispatch without a prior valid authorization receipt MUST be
-   halted, its output discarded and never merged, and the chunk flagged failed.
-   It is also a run-postmortem misroute, but the halt is the obligation and the
-   postmortem entry is the record of it.
-
-6. **Headless rule.** Ask-then-default-park is the only headless behavior: no
-   operator response available -- a non-interactive session, an ask that errors
-   or whose tool is unavailable, an ask answered by anything other than the
-   operator defined above, or no response within the caller's stated ask timeout
-   -- means park, never assume yes. `PIPELINE_EXHAUSTION_ASK=0` restores the old
-   hard block for headless CI; it is a kill switch on the ASK, never an enabler
-   of silent fallback.
-
-**Non-overridable exclusions.** No operator answer weakens any of these. The
-current workflow has no executable fallback-authorization option; the
-provider-family rules below also constrain any future trusted implementation:
-
-- The exhaustion ask cannot enable or broaden OpenRouter work. Configured-key
-  lanes remain limited by their automatic disclosure boundary, workload policy,
-  path allowlist, and output validation regardless of the operator's answer.
-- The final full dm-review is never waived, and is never executed by a
-  fallback-authorized provider outside its own policy. If the review rails are
-  capped, the branch WAITS for them. A review carrying a coverage gap on a
-  required lane never satisfies the final-review gate, and the coding-lane
-  exhaustion ask cannot convert one into a pass.
-- No fallback-authorized review lane may share a provider family with the
-  chunk's implementer. Cross-provider verification is the reason the deferred
-  review is worth waiting for; an authorization that lets one family mark its
-  own homework destroys it.
-- Security-sensitive chunks -- the sensitive-path set in the per-chunk review
-  tier -- are never implemented under fallback authorization. Like every
-  current chunk, they may wait, park, or return `human_help_required`.
+The ask is scheduling only. It never selects a provider, authorizes another
+rail, broadens configured-key OpenRouter eligibility, weakens sensitive-path
+rules, or waives the final independent review. Record the measured pause with
+`wait_category: human_gate`; a wait receipt carries the named reset time and
+resume instruction.
 
 #### 3d-LEGACY: Binary executor path (preserved verbatim)
 
@@ -1302,7 +1101,7 @@ You MUST verify these before proceeding:
    check and record that no executable planner/cache authority was available.
 4. **Provider receipt check:** The chunk receipt includes `implementedBy: codex` or `implementedBy: openrouter`. Any coding receipt with `implementedBy: claude` is a misroute.
 
-Represent a passing or reused repository-verification result once with a bounded summary containing selected check IDs, status, plan/receipt digest, and a safe receipt reference. Raw passing stdout/stderr and repeated copies of the receipt must not enter a builder repair prompt or any later reviewer prompt.
+Represent a passing repository-verification result once with a bounded summary containing selected check IDs, status, and plan digest. Raw passing stdout/stderr and repeated result copies must not enter a builder repair prompt or any later reviewer prompt.
 
 For an eligible deterministic check failure, do not send prose back to a new
 builder and do not duplicate retry policy. Persist a bounded closed feedback
@@ -1882,16 +1681,14 @@ repository planner exactly once with boundary `execution_level`. Supply the
 cumulative changed paths for that level, not one invocation per chunk.
 
 The full non-race lane runs against the first tree where all sibling chunks
-actually coexist. If an identical passing receipt already exists, the runner
-may reuse it. A documentation, receipt, or unrelated metadata-only change does
+actually coexist. A documentation or unrelated metadata-only change does
 not invalidate a code lane unless `.dm/verification.json` explicitly includes
 that path. A failed required level lane blocks dependent levels.
 
-Append the resulting verification receipts to the canonical receipt ledger and
-record:
+Record the current invocation result:
 
 ```text
-LEVEL_VERIFICATION: <level> | passed: <N> | reused: <N> | failed: <N>
+LEVEL_VERIFICATION: <level> | passed: <N> | failed: <N>
 ```
 
 ## Step 4: Final Full Review
@@ -1899,11 +1696,12 @@ LEVEL_VERIFICATION: <level> | passed: <N> | reused: <N> | failed: <N>
 **THIS STEP IS MANDATORY.** After ALL chunks are merged, you MUST run a full dm-review.
 
 Before dispatching the review, invoke the repository planner with boundary
-`merge_candidate` on the exact feature-branch tree. This is not an automatic
-second full-suite run: an unchanged candidate reuses the content-identical
-passing `execution_level` receipt. It does materialize every required remote
+`merge_candidate` on the exact feature-branch tree and run the selected lanes.
+It materializes every required remote
 race/security/container/harness lane as `remote_pending`, `blocked`, or
-`unavailable` until its declared provider returns authoritative evidence.
+`unavailable`. The kernel does not import remote results. The caller separately
+collects required native CI or independent review evidence bound to the exact
+candidate head.
 
 First materialize the cumulative authoritative receipt array through the
 `all-chunks-complete` boundary and run the first `observe-pipeline` checkpoint.
@@ -1985,12 +1783,13 @@ if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "revi
 - `BLOCKED PENDING CALLER VERIFICATION` -- any required browser case has a `human_help_required` receipt or lacks complete passing browser evidence. Emit this regardless of review findings. The caller must resolve the blocked case and complete browser verification before merge is considered safe. Do NOT use the phrase "merge is safe", "ready to merge", or equivalent in any output while this flag is set.
 - `BLOCKED PENDING REMOTE VERIFICATION` -- any non-browser lane with
   `required: true` is `remote_pending`, `failed`, `blocked`, or `unavailable`.
-  Only a provider receipt validated and authenticated by the host integration
-  clears this recommendation.
+  Clear this recommendation only after the caller independently verifies the
+  required native CI or review evidence against the exact candidate head. Do
+  not import that evidence into Workflow Kernel or require provider attestation.
 
 **Repository verification interlock:** Before emitting any merge
-recommendation, require passing or exact-reused local `merge_candidate`
-receipts from `.dm/verification.json`. Required remote lanes retain their
+recommendation, require passing local `merge_candidate` results from the
+current invocation against `.dm/verification.json`. Required remote lanes retain their
 actual pending/failed/unavailable status; the lane's `required` field is the
 merge-gating authority. Never substitute hardcoded Docker, Go package, service,
 or build-tag commands.

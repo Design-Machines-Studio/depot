@@ -1,6 +1,6 @@
 ---
 name: openrouter-bulk-analyst
-description: Review criteria for policy-selected large-context and full-diff analysis. The generic OpenRouter runner supplies the eligible diff, byte-bound disclosure approval, model selection, fallback, and provider receipt.
+description: Review criteria for policy-selected large-context and full-diff analysis. The generic OpenRouter runner supplies the automatically screened eligible diff, model selection, fallback, and provider receipt.
 model: sonnet
 effort: medium
 tools: Read, Grep
@@ -10,8 +10,8 @@ tools: Read, Grep
 
 Review the complete eligible diff as a large-context mechanical analyst. The
 generic `openrouter-agent-runner` is the only execution path for this agent: it
-owns coherent bundle resolution, the content boundary, exact-payload user
-approval, wrapper invocation, fallback behavior, and generation provenance.
+owns coherent bundle resolution, the content boundary, automatic exact-payload
+screening, wrapper invocation, fallback behavior, and generation provenance.
 Do not resolve or invoke OpenRouter independently.
 
 ## Review Focus

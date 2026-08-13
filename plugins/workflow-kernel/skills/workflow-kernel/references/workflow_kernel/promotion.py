@@ -118,7 +118,7 @@ def evaluate_promotion(
     *,
     supported_hosts: Iterable[str] = SUPPORTED_PROMOTION_HOSTS,
 ) -> PromotionDecision:
-    """Evaluate one adjacent promotion without enabling workflow authority."""
+    """Evaluate one adjacent promotion without granting execution authority."""
     current = _state(current_state)
     target = _state(target_state)
     values = _evidence(evidence)
@@ -126,8 +126,8 @@ def evaluate_promotion(
     if target is PromotionState.NATIVE_DEFAULT:
         return PromotionDecision(
             current, target, False,
-            ("separate_human_approval_required",),
-            ("separate_human_approval",),
+            ("native_default_not_supported",),
+            (),
         )
 
     allowed_transition = {

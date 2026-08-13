@@ -60,7 +60,8 @@ for relative in "${consumers[@]}"; do
   openrouter_calls="$(grep -Fc 'resolve-plugin-bundle --plugin openrouter' "$file" || true)"
   if [ "$openrouter_calls" -gt 0 ]; then
     case "$relative" in
-      plugins/openrouter/agents/workflow/openrouter-agent-runner.md|plugins/dm-review/skills/review/SKILL.md) openrouter_floor="1.14.0" ;;
+      plugins/openrouter/agents/workflow/openrouter-agent-runner.md) openrouter_floor="1.14.0" ;;
+      plugins/dm-review/skills/review/SKILL.md) openrouter_floor="1.14.2" ;;
       plugins/openrouter/commands/openrouter.md|plugins/openrouter/skills/openrouter/SKILL.md|plugins/openrouter/skills/openrouter-delegate/SKILL.md|plugins/openrouter/skills/openrouter-delegate/references/invocation-protocol.md) openrouter_floor="1.14.0" ;;
       plugins/airlift/*) openrouter_floor="1.14.0" ;;
       plugins/pipeline/*) openrouter_floor="1.14.0" ;;
@@ -138,7 +139,7 @@ done
 authorization_contract="$ROOT/plugins/pipeline/references/openrouter-authorization-contract.md"
 grep -Fq 'OPENROUTER_API_KEY_FILE' "$authorization_contract" &&
 grep -Fq 'delegation-boundary.sh --mode artifact-delegation' "$authorization_contract" &&
-grep -Fq 'has no effect on configured-key dispatch' "$authorization_contract" || {
+grep -Fq 'configured-key path has no broker dependency' "$authorization_contract" || {
   echo "  FAIL  configured-key OpenRouter authorization contract absent"
   failures=1
 }
@@ -189,7 +190,6 @@ do
   grep -Fq 'OPENROUTER_API_KEY_FILE' "$file" &&
   grep -Fq 'delegation-boundary.sh' "$file" &&
   grep -Fq -- '--mode artifact-delegation' "$file" &&
-  ! grep -Fq '/usr/local/bin/workflow-authority' "$file" &&
   ! grep -Fq 'dispatch-provider-request' "$file" &&
   ! grep -Fq 'OPENROUTER_PAYLOAD_AUTHORIZATION' "$file" &&
   ! grep -Fq 'OPENROUTER_PAYLOAD_APPROVAL_SHA256' "$file" || {
@@ -251,6 +251,11 @@ grep -Fq '[ "$RESOLVED_VERSION" = "$openrouter_bundle_version" ]' \
 grep -Fq '[ "$RESOLVED_CLASS" = "$cache_class" ]' \
   "$ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md" || {
     echo "  FAIL  dm-review runner selection is not identity-bound across re-resolution"
+    failures=1
+  }
+grep -Fq 'if type == "boolean" then tostring else error("invalid fallbackUsed") end' \
+  "$ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md" || {
+    echo "  FAIL  OpenRouter runner rejects a valid fallbackUsed:false receipt"
     failures=1
   }
 for file in \

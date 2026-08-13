@@ -262,8 +262,8 @@ elif kernel.get("pluginDependencies", {}) or kernel.get("optionalPluginDependenc
     errors.append("workflow-kernel must remain a leaf with no dependencies")
 
 consumer_floors = {
-    "pipeline": ">=0.13.6",
-    "dm-review": ">=0.13.6",
+    "pipeline": ">=0.14.0",
+    "dm-review": ">=0.14.0",
 }
 
 for consumer, expected in consumer_floors.items():
@@ -274,8 +274,8 @@ for consumer, expected in consumer_floors.items():
 
 pipeline = manifests.get("pipeline")
 dm_review_floor = None if pipeline is None else pipeline.get("pluginDependencies", {}).get("dm-review")
-if dm_review_floor != ">=1.60.0":
-    errors.append("pipeline must require dm-review >=1.60.0")
+if dm_review_floor != ">=1.60.1":
+    errors.append("pipeline must require dm-review >=1.60.1")
 
 if errors:
     for error in errors:

@@ -42,11 +42,9 @@
     "native_to_default": {
       "allowed": false,
       "current_state": "native_available",
-      "missing_evidence": [
-        "separate_human_approval"
-      ],
+      "missing_evidence": [],
       "reason_codes": [
-        "separate_human_approval_required"
+        "native_default_not_supported"
       ],
       "target_state": "native_default"
     },

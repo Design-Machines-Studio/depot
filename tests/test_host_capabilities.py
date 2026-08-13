@@ -325,8 +325,6 @@ class HostCapabilityTests(unittest.TestCase):
     def test_harness_routes_preserve_provider_capability_and_dispatch_coherence(self):
         claude = capabilities_from_harness_profile("claude-code", canonical_harness_profile())
         expected = {
-            HostRoute("anthropic", HostCapability.CLAUDE_EXECUTION, "native"),
-            HostRoute("anthropic", HostCapability.ANTHROPIC_NATIVE_EXECUTION, "native"),
             HostRoute("openai", HostCapability.CODEX_EXECUTION, "codex_companion"),
             HostRoute("openrouter", HostCapability.OPENROUTER_EXECUTION,
                       "openrouter_exec"),
@@ -549,14 +547,11 @@ class HostCapabilityTests(unittest.TestCase):
     def test_harness_fixtures_declare_only_observed_dispatch_rails(self):
         expected = {
             "claude-code": {
-                HostCapability.NATIVE_DISPATCH,
                 HostCapability.COMPANION_DISPATCH,
                 HostCapability.WRAPPER_DISPATCH,
                 HostCapability.OPENROUTER_EXEC,
-                HostCapability.CLAUDE_EXECUTION,
                 HostCapability.CODEX_EXECUTION,
                 HostCapability.OPENROUTER_EXECUTION,
-                HostCapability.ANTHROPIC_NATIVE_EXECUTION,
             },
             "codex": {
                 HostCapability.NATIVE_DISPATCH,

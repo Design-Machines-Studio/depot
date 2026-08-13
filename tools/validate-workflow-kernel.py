@@ -55,20 +55,12 @@ PROMOTION_CHECK_SOURCES = {
 }
 SCHEMA_DOCUMENTS = frozenset({
     "behavioral-verification-contract-schema.json",
-    "verification-contract-approval-schema.json",
     "browser-recovery-schema.json",
     "cleanup-plan-schema.json",
     "cleanup-receipt-schema.json",
-    "provider-dispatch-allocation-schema.json",
-    "provider-dispatch-exchange-schema.json",
-    "provider-dispatch-request-schema.json",
-    "provider-dispatch-result-schema.json",
-    "provider-dispatch-status-schema.json",
     "repository-verification-plan-schema.json",
-    "repository-verification-approval-schema.json",
-    "repository-verification-provider-attestation-schema.json",
     "repository-verification-profile-schema.json",
-    "repository-verification-receipts-schema.json",
+    "repository-verification-result-schema.json",
     "resource-registry-schema.json",
     "run-cost-summary-schema.json",
     "verification-profile-schema.json",
@@ -82,13 +74,8 @@ BEHAVIORAL_CLI_CASES = {
     "replay": ("<run>",),
     "status": ("<run>",),
     "decide-validation-retry": ("--state-dir", "<state>", "--reason", "deterministic_validation_failure"),
-    "authorize-verification-contract-revision": (
-        "--state-dir", "<state>", "--approval", "<missing>",
-        "--host-capability", "<missing>",
-    ),
     "bind-prediction": ("--type", "pipeline", "--manifest", "<missing>", "--prediction-receipts", "<missing>", "--state-dir", "<state>"),
     "bind-verification-contract": ("--state-dir", "<state>", "--contract", "<missing>"),
-    "revise-verification-contract": ("--state-dir", "<state>", "--contract", "<missing>"),
     "observe-pipeline": ("--manifest", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
     "observe-review": ("--request", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
     "export-review-contributions": ("--request", "<missing>", "--decisions", "<missing>", "--raw-findings", "<missing>", "--lane-receipts", "<missing>", "--raw-lane-outputs", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>", "--output", "<output>"),
@@ -141,32 +128,14 @@ BEHAVIORAL_CLI_CASES = {
         "--implemented-by", "validator",
         "--provider", "validator", "--model", "validator",
     ),
-    "approve-verification-profile": (
-        "--repository-root", "<state>", "--profile", "<missing>",
-        "--trusted-base-commit", "0" * 40,
-        "--candidate-commit", "0" * 40, "--run-id", "validator-cli",
-        "--authorization-event-id", "validator-approval",
-        "--approved-at", "2026-07-30T00:00:00Z",
-        "--receipt-key-stdin", "--output", "<output>",
-    ),
     "plan-verification": (
         "--repository-root", "<state>", "--profile", "<missing>",
         "--boundary", "chunk", "--risk", "low",
-        "--approval", "<missing>",
-        "--receipt-key-stdin", "--output", "<output>",
+        "--base-ref", "HEAD", "--output", "<output>",
     ),
     "run-verification": (
         "--repository-root", "<state>", "--profile", "<missing>",
-        "--plan", "<missing>", "--approval", "<missing>",
-        "--receipt-key-stdin",
-        "--output", "<output>",
-    ),
-    "record-verification-result": (
-        "--repository-root", "<state>", "--profile", "<missing>",
-        "--plan", "<missing>", "--approval", "<missing>",
-        "--lane-id", "remote", "--provider-attestation", "<missing>",
-        "--receipt-key-stdin",
-        "--output", "<output>",
+        "--plan", "<missing>",
     ),
     "plan-create": ("--state-dir", "<state>", "--run-id", "validator-cli", "--node-id", "node", "--lifecycle", "chunk", "--cleanup-policy", "stop-remove", "--argv-json", "<missing>", "--output", "<output>"),
     "plan-compose": ("--state-dir", "<state>", "--run-id", "validator-cli", "--node-id", "node", "--lifecycle", "chunk", "--cleanup-policy", "stop-remove", "--argv-json", "<missing>", "--output", "<output>"),
@@ -475,7 +444,7 @@ def check_promotion(context):
     native = evaluate_promotion("enforce_available", "native_available", native_fixture)
     require(not native.allowed and all(name.startswith("real_shadow_run:") for name in native.missing_evidence), "fixture masqueraded as real-run evidence")
     default = evaluate_promotion("native_available", "native_default", ())
-    require(default.reason_codes == ("separate_human_approval_required",), "native default was not blocked")
+    require(default.reason_codes == ("native_default_not_supported",), "native default was not blocked")
     context["promotion"] = {
         "shadow_to_enforce_fixture": enforce.to_dict(),
         "enforce_to_native_fixture": native.to_dict(),
@@ -496,14 +465,12 @@ def check_cli(context):
     expected = {
         "init", "validate", "append", "replay", "status",
         "decide-validation-retry", "bind-prediction",
-        "authorize-verification-contract-revision",
-        "bind-verification-contract", "revise-verification-contract",
+        "bind-verification-contract",
         "observe-pipeline", "observe-review", "export-review-contributions",
         "compare", "metrics", "run-cost-summary", "emit-cost-summary",
         "openrouter-usage",
-        "lane-input-bytes", "record-attempt", "approve-verification-profile",
+        "lane-input-bytes", "record-attempt",
         "plan-verification", "run-verification",
-        "record-verification-result",
         "plan-create", "plan-compose", "record-create", "plan-cleanup",
         "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
         "plan-reconcile",
@@ -837,8 +804,6 @@ def check_cli(context):
         )
 
         from tests.test_runtime_cli import verification_contract
-        from workflow_kernel.behavioral_contract import contract_digest
-
         contract_run = initialize("contract-1")
         contract_value = verification_contract()
         contract_path = root / "verification-contract-1.json"
@@ -846,28 +811,6 @@ def check_cli(context):
         successful(
             "bind-verification-contract", "--state-dir", contract_run,
             "--contract", contract_path,
-        )
-        revision_value = json.loads(json.dumps(contract_value))
-        revision_value.update({
-            "revision": 2,
-            "previous_contract_digest": contract_digest(contract_value),
-        })
-        revision_value["revision_justification"] = {
-            "reason_code": "metadata_update",
-            "summary": "Retain the approved behavioral obligations.",
-            "added_obligation_ids": [],
-            "retained_obligation_ids": [
-                "PROOF:CHK-001:REG-001", "PROOF:CHK-001:REQ-001",
-                "REG-001", "REQ-001",
-            ],
-            "removed_obligation_ids": [],
-            "human_approval_evidence_ref": None,
-        }
-        revision_path = root / "verification-contract-2.json"
-        revision_path.write_text(json.dumps(revision_value), encoding="utf-8")
-        successful(
-            "revise-verification-contract", "--state-dir", contract_run,
-            "--contract", revision_path,
         )
         successful(
             "decide-validation-retry", "--state-dir", contract_run,
@@ -958,13 +901,8 @@ def check_cli(context):
             ),
             (
                 BehavioralContractTests,
-                "test_revision_recomputes_deltas_and_requires_approval_for_weakening",
-                "unauthorized weakening",
-            ),
-            (
-                RuntimeCliTests,
-                "test_verification_contract_revision_uses_replay_and_rejects_stale_digest",
-                "stale digest",
+                "test_non_initial_contract_cannot_be_bound",
+                "non-initial binding",
             ),
             (
                 RuntimeCliTests,

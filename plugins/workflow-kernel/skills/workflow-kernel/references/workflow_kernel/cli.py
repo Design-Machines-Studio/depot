@@ -166,14 +166,6 @@ def command_append(args):
             ErrorDetailKey.REASON_CODE.value: "recursion_limit",
         }) from None
     event = WorkflowEvent.from_dict(data)
-    if (
-        event.kind == "evidence.recorded"
-        and event.payload.get("stage")
-        == "verification_contract_revision_authorized"
-    ):
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            ErrorDetailKey.REASON_CODE.value: "reserved_coordinator_event",
-        })
     engine = TransitionEngine()
     with _coordinated_run(states) as lease:
         existing, _, state, materialized = _observe_consistent_run(
@@ -601,18 +593,10 @@ def _document_digest(value):
 _CONTRACT_BINDING_FIELDS = frozenset({
     "stage", "contract_id", "schema_version", "revision", "contract_digest",
     "contract_ref", "previous_contract_digest", "reason_code",
-    "human_approval_evidence_ref", "verification_profile_id",
-    "verification_profile_digest", "verification_profile_ref", "evidence",
+    "verification_profile_id", "verification_profile_digest",
+    "verification_profile_ref", "evidence",
 })
-_CONTRACT_STAGES = frozenset({
-    "verification_contract_bound", "verification_contract_revised",
-})
-_CONTRACT_APPROVAL_FIELDS = frozenset({
-    "stage", "run_id", "actor", "authority", "decision", "issued_at",
-    "expires_at", "nonce",
-    "previous_contract_digest", "candidate_contract_digest",
-    "approval_ref", "evidence",
-})
+_CONTRACT_STAGES = frozenset({"verification_contract_bound"})
 
 
 def _contract_run_context(state_dir):
@@ -659,10 +643,6 @@ def _contract_artifact_name(digest):
 
 def _contract_artifact_ref(digest):
     return "verification-contracts/" + _contract_artifact_name(digest)
-
-
-def _approval_artifact_ref(digest):
-    return "verification-approvals/" + _contract_artifact_name(digest)
 
 
 def _profile_artifact_ref(digest):
@@ -739,96 +719,6 @@ def _load_bound_profile(run_root, reference, digest):
     if verification_profile_digest(profile) != digest:
         raise ValueError("verification profile artifact digest mismatch")
     return profile
-
-
-def _store_approval_once(run_root, approval, digest, *, previous_digest,
-                         candidate_digest, run_id):
-    from .behavioral_contract import approval_bytes, parse_approval_bytes
-
-    name = _contract_artifact_name(digest)
-    encoded = approval_bytes(
-        approval, previous_digest=previous_digest,
-        candidate_digest=candidate_digest, run_id=run_id,
-    ) + b"\n"
-    with _contract_artifact_directory(run_root, "verification-approvals") as directory:
-        if directory.regular_exists(name):
-            descriptor = directory.open_regular(name, os.O_RDONLY)
-            try:
-                existing = os.read(descriptor, len(encoded) + 1)
-                if os.read(descriptor, 1) or existing != encoded:
-                    raise ValueError("bound approval artifact mismatch")
-                parse_approval_bytes(
-                    existing, previous_digest=previous_digest,
-                    candidate_digest=candidate_digest, run_id=run_id,
-                )
-                directory.require_identity(descriptor, name)
-            finally:
-                os.close(descriptor)
-            return False
-        descriptor, temporary = directory.create_temporary(name + ".tmp-", ".json")
-        try:
-            pending = encoded
-            while pending:
-                count = os.write(descriptor, pending)
-                if count <= 0:
-                    raise OSError("approval write made no progress")
-                pending = pending[count:]
-            os.fsync(descriptor)
-            directory.require_identity(descriptor, temporary)
-            os.link(
-                temporary, name, src_dir_fd=directory.descriptor,
-                dst_dir_fd=directory.descriptor, follow_symlinks=False,
-            )
-            directory.unlink(temporary)
-            temporary = None
-            directory.require_identity(descriptor, name)
-            directory.fsync()
-        finally:
-            if temporary is not None:
-                try:
-                    directory.unlink(temporary)
-                except OSError:
-                    pass
-            os.close(descriptor)
-    return True
-
-
-def _load_bound_approval(run_root, reference, *, previous_digest,
-                         candidate_digest, run_id):
-    from .behavioral_contract import approval_digest, parse_approval_bytes
-
-    match = re.fullmatch(
-        r"verification-approvals/sha256-([0-9a-f]{64})\.json", reference or "",
-    )
-    if match is None:
-        raise ValueError("invalid approval artifact reference")
-    digest = "sha256:" + match.group(1)
-    with _contract_artifact_directory(run_root, "verification-approvals") as directory:
-        descriptor = directory.open_regular(Path(reference).name, os.O_RDONLY)
-        try:
-            chunks = []
-            total = 0
-            while True:
-                chunk = os.read(descriptor, min(8192, 65_537 - total))
-                if not chunk:
-                    break
-                chunks.append(chunk)
-                total += len(chunk)
-                if total > 65_536:
-                    raise ValueError("approval artifact too large")
-            directory.require_identity(descriptor, Path(reference).name)
-        finally:
-            os.close(descriptor)
-    approval = parse_approval_bytes(
-        b"".join(chunks), previous_digest=previous_digest,
-        candidate_digest=candidate_digest, run_id=run_id,
-    )
-    if approval_digest(
-        approval, previous_digest=previous_digest,
-        candidate_digest=candidate_digest, run_id=run_id,
-    ) != digest:
-        raise ValueError("approval artifact digest mismatch")
-    return approval
 
 
 def _store_contract_once(run_root, contract, digest):
@@ -920,8 +810,8 @@ def _load_bound_contract(run_root, binding):
     return contract
 
 
-def _contract_bindings(replayed):
-    bindings = []
+def _contract_binding(replayed):
+    binding = None
     for event in replayed:
         if event.kind != "evidence.recorded":
             continue
@@ -931,16 +821,10 @@ def _contract_bindings(replayed):
         if type(payload) is not dict or set(payload) != _CONTRACT_BINDING_FIELDS:
             raise ValueError("invalid verification contract binding event")
         revision = payload["revision"]
-        expected_revision = len(bindings) + 1
-        expected_previous = None if not bindings else bindings[-1]["contract_digest"]
-        expected_stage = (
-            "verification_contract_bound" if revision == 1
-            else "verification_contract_revised"
-        )
-        approval = payload["human_approval_evidence_ref"]
         profile_ref = payload["verification_profile_ref"]
         if (
-            type(revision) is not int or revision != expected_revision
+            binding is not None
+            or type(revision) is not int or revision != 1
             or type(payload["schema_version"]) is not int
             or payload["schema_version"] != 1
             or type(payload["contract_id"]) is not str
@@ -953,118 +837,20 @@ def _contract_bindings(replayed):
                 r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}",
                 payload["reason_code"],
             ) is None
-            or (approval is not None and type(approval) is not str)
             or payload["verification_profile_id"] is not None and type(payload["verification_profile_id"]) is not str
             or payload["verification_profile_digest"] is not None and type(payload["verification_profile_digest"]) is not str
             or (profile_ref is not None and type(profile_ref) is not str)
-            or payload["previous_contract_digest"] != expected_previous
-            or payload["stage"] != expected_stage
+            or payload["previous_contract_digest"] is not None
+            or payload["stage"] != "verification_contract_bound"
             or payload["contract_ref"] != _contract_artifact_ref(payload["contract_digest"])
             or payload["evidence"] != (
                 [payload["contract_ref"]]
                 + ([] if profile_ref is None else [profile_ref])
-                + ([] if approval is None else [approval])
             )
-            or (bindings and payload["contract_id"] != bindings[-1]["contract_id"])
         ):
             raise ValueError("verification contract binding chain mismatch")
-        bindings.append(payload)
-    return tuple(bindings)
-
-
-def _contract_authorizations(replayed, run_root, run_id, *, load_artifacts=True):
-    authorizations = []
-    last_binding_sequence = -1
-    used_nonces = set()
-    for event in replayed:
-        if event.kind != "evidence.recorded":
-            continue
-        payload = event.to_dict()["payload"]
-        if payload.get("stage") in _CONTRACT_STAGES:
-            last_binding_sequence = event.sequence
-            continue
-        if payload.get("stage") != "verification_contract_revision_authorized":
-            continue
-        if type(payload) is not dict or set(payload) != _CONTRACT_APPROVAL_FIELDS:
-            raise ValueError("invalid contract approval authorization event")
-        if (
-            payload["run_id"] != run_id
-            or payload["decision"] != "approved"
-            or payload["evidence"] != [payload["approval_ref"]]
-            or event.sequence <= last_binding_sequence
-            or payload["nonce"] in used_nonces
-        ):
-            raise ValueError("invalid contract approval authorization order")
-        approval = None
-        if load_artifacts:
-            approval = _load_bound_approval(
-                run_root, payload["approval_ref"],
-                previous_digest=payload["previous_contract_digest"],
-                candidate_digest=payload["candidate_contract_digest"], run_id=run_id,
-            )
-            if any(approval[name] != payload[name] for name in (
-                "actor", "authority", "decision", "issued_at", "expires_at",
-                "nonce", "run_id",
-                "previous_contract_digest", "candidate_contract_digest",
-            )):
-                raise ValueError("contract approval authorization mismatch")
-        used_nonces.add(payload["nonce"])
-        authorizations.append((event.sequence, last_binding_sequence, payload, approval))
-    return tuple(authorizations)
-
-
-def _authorized_contract_revision(replayed, run_root, run_id, *,
-                                  previous_digest, candidate_digest,
-                                  idempotent=False):
-    bindings = [
-        event for event in replayed
-        if event.kind == "evidence.recorded"
-        and event.payload.get("stage") in _CONTRACT_STAGES
-    ]
-    if idempotent:
-        if not bindings:
-            raise ValueError("authoritative contract approval is missing")
-        prior_sequence = bindings[-2].sequence if len(bindings) > 1 else -1
-        ceiling = bindings[-1].sequence
-    else:
-        prior_sequence = bindings[-1].sequence if bindings else -1
-        ceiling = None
-    matches = [
-        item for item in _contract_authorizations(
-            replayed, run_root, run_id, load_artifacts=False,
-        )
-        if item[0] > prior_sequence
-        and (ceiling is None or item[0] < ceiling)
-        and item[2]["previous_contract_digest"] == previous_digest
-        and item[2]["candidate_contract_digest"] == candidate_digest
-    ]
-    if len(matches) != 1:
-        raise ValueError("authoritative contract approval is missing or ambiguous")
-    return matches[0][2]
-
-
-def _validate_contract_authorization_chain(replayed, run_root, run_id):
-    binding_events = [
-        event for event in replayed
-        if event.kind == "evidence.recorded"
-        and event.payload.get("stage") in _CONTRACT_STAGES
-    ]
-    authorizations = _contract_authorizations(replayed, run_root, run_id)
-    for index, binding in enumerate(binding_events[1:], start=1):
-        payload = binding.to_dict()["payload"]
-        approval_ref = payload["human_approval_evidence_ref"]
-        candidates = [
-            item for item in authorizations
-            if binding_events[index - 1].sequence < item[0] < binding.sequence
-            and item[2]["previous_contract_digest"]
-            == payload["previous_contract_digest"]
-            and item[2]["candidate_contract_digest"] == payload["contract_digest"]
-            and item[2]["approval_ref"] == approval_ref
-        ]
-        if approval_ref is not None and len(candidates) != 1:
-            raise ValueError("contract revision lacks lifecycle approval authority")
-        if approval_ref is None and candidates:
-            raise ValueError("contract revision dropped lifecycle approval authority")
+        binding = payload
+    return binding
 
 
 def _contract_receipt(binding):
@@ -1072,15 +858,13 @@ def _contract_receipt(binding):
         name: binding[name] for name in (
             "stage", "contract_id", "schema_version", "revision",
             "contract_digest", "contract_ref", "previous_contract_digest",
-            "reason_code", "human_approval_evidence_ref",
-            "verification_profile_id", "verification_profile_digest",
-            "verification_profile_ref",
+            "reason_code", "verification_profile_id",
+            "verification_profile_digest", "verification_profile_ref",
         )
     }
 
 
-def _contract_binding_payload(contract, digest, stage, *, approval_ref=None,
-                              profile_ref=None):
+def _contract_binding_payload(contract, digest, stage, *, profile_ref=None):
     justification = contract["revision_justification"]
     reference = _contract_artifact_ref(digest)
     return {
@@ -1090,175 +874,42 @@ def _contract_binding_payload(contract, digest, stage, *, approval_ref=None,
         "contract_ref": reference,
         "previous_contract_digest": contract["previous_contract_digest"],
         "reason_code": justification["reason_code"],
-        "human_approval_evidence_ref": approval_ref,
         "verification_profile_id": contract["verification_profile_id"],
         "verification_profile_digest": contract["verification_profile_digest"],
         "verification_profile_ref": profile_ref,
         "evidence": [reference]
-        + ([] if profile_ref is None else [profile_ref])
-        + ([] if approval_ref is None else [approval_ref]),
+        + ([] if profile_ref is None else [profile_ref]),
     }
 
 
-def _validated_contract_binding_chain(run_root, bindings, *, run_id,
-                                      missing_latest=None, missing_approval=None):
+def _validated_contract_binding(run_root, binding):
+    from .behavioral_contract import contract_digest, validate_initial_binding
+
+    if binding is None:
+        return None
+    contract = validate_initial_binding(_load_bound_contract(run_root, binding))
+    expected = _contract_binding_payload(
+        contract, contract_digest(contract), binding["stage"],
+        profile_ref=binding["verification_profile_ref"],
+    )
+    if binding != expected:
+        raise ValueError("verification contract binding does not match artifact")
+    if binding["verification_profile_ref"] is not None:
+        from .behavioral_contract import validate_profile_binding
+        profile = _load_bound_profile(
+            run_root, binding["verification_profile_ref"],
+            binding["verification_profile_digest"],
+        )
+        contract = validate_profile_binding(contract, profile)
+    elif contract["verification_profile_id"] is not None:
+        raise ValueError("verification profile artifact is missing")
+    return contract
+
+
+def command_bind_verification_contract(args):
     from .behavioral_contract import (
-        contract_digest, validate_initial_binding, validate_revision,
-    )
-
-    contracts = []
-    previous_digest = None
-    for index, binding in enumerate(bindings):
-        try:
-            contract = _load_bound_contract(run_root, binding)
-        except FileNotFoundError:
-            if (
-                index != len(bindings) - 1
-                or binding["revision"] == 1
-                or missing_latest is None
-            ):
-                raise ValueError("verification contract artifact is missing") from None
-            contract = missing_latest
-        digest = contract_digest(contract)
-        expected = _contract_binding_payload(
-            contract, digest, binding["stage"],
-            approval_ref=binding["human_approval_evidence_ref"],
-            profile_ref=binding["verification_profile_ref"],
-        )
-        if binding != expected:
-            raise ValueError("verification contract binding does not match artifact")
-        if not contracts:
-            contract = validate_initial_binding(contract)
-        else:
-            approval = None
-            if binding["human_approval_evidence_ref"] is not None:
-                if missing_approval is not None and index == len(bindings) - 1:
-                    approval = missing_approval
-                else:
-                    approval = _load_bound_approval(
-                        run_root, binding["human_approval_evidence_ref"],
-                        previous_digest=previous_digest,
-                        candidate_digest=digest, run_id=run_id,
-                    )
-            contract = validate_revision(
-                contracts[-1], contract, previous_digest,
-                approval_evidence=approval, run_id=run_id,
-            )
-        if binding["verification_profile_ref"] is not None:
-            from .behavioral_contract import validate_profile_binding
-            profile = _load_bound_profile(
-                run_root, binding["verification_profile_ref"],
-                binding["verification_profile_digest"],
-            )
-            contract = validate_profile_binding(contract, profile)
-        elif contract["verification_profile_id"] is not None:
-            raise ValueError("verification profile artifact is missing")
-        contracts.append(contract)
-        previous_digest = digest
-    return tuple(contracts)
-
-
-def command_authorize_verification_contract_revision(args):
-    """Verify one externally held host capability before authorization."""
-    from .behavioral_contract import (
-        approval_digest, load_approval, load_host_approval_capability,
-        verify_approval_capability,
-    )
-
-    scope, run_id, run_root, events, states = _contract_run_context(args.state_dir)
-    approval_scope = _repository_scope(args.approval)
-    if approval_scope.scope_id != scope.scope_id:
-        raise ValueError("approval input belongs to a foreign repository scope")
-    raw = _load_json(args.approval)
-    if type(raw) is not dict:
-        raise ValueError("invalid approval document")
-    try:
-        previous_digest = raw["previous_contract_digest"]
-        candidate_digest = raw["candidate_contract_digest"]
-    except KeyError:
-        raise ValueError("invalid approval document") from None
-    approval = load_approval(
-        args.approval, previous_digest=previous_digest,
-        candidate_digest=candidate_digest, run_id=run_id,
-    )
-    capability_path = bind_durable_path(Path(args.host_capability)).path
-    try:
-        capability_path.relative_to(scope.repo_root.resolve(strict=True))
-    except ValueError:
-        pass
-    else:
-        raise ValueError("host approval capability must be outside repository scope")
-    capability = load_host_approval_capability(capability_path)
-    approval = verify_approval_capability(
-        approval, capability, previous_digest=previous_digest,
-        candidate_digest=candidate_digest, run_id=run_id,
-    )
-    digest = approval_digest(
-        approval, previous_digest=previous_digest,
-        candidate_digest=candidate_digest, run_id=run_id,
-    )
-    approval_ref = _approval_artifact_ref(digest)
-    engine = TransitionEngine()
-    with _coordinated_run(states) as lease:
-        replayed, _notes, reconstructed, materialized = _observe_consistent_run(
-            events, states, engine, recovery=False,
-            empty_error=InvalidSchemaError(ErrorMessage.RUN_DIRECTORY_UNINITIALIZED),
-        )
-        bindings = _contract_bindings(replayed)
-        if not bindings or bindings[-1]["contract_digest"] != previous_digest:
-            raise ValueError("approval does not extend current contract binding")
-        authorizations = _contract_authorizations(
-            replayed, run_root, run_id, load_artifacts=False,
-        )
-        latest_binding_sequence = max(
-            event.sequence for event in replayed
-            if event.kind == "evidence.recorded"
-            and event.payload.get("stage") in _CONTRACT_STAGES
-        )
-        if any(
-            item[0] > latest_binding_sequence
-            or item[2]["nonce"] == approval["nonce"]
-            for item in authorizations
-        ):
-            raise ValueError("contract revision approval already pending or reused")
-        _store_approval_once(
-            run_root, approval, digest, previous_digest=previous_digest,
-            candidate_digest=candidate_digest, run_id=run_id,
-        )
-        payload = {
-            "stage": "verification_contract_revision_authorized",
-            "run_id": run_id, "actor": approval["actor"],
-            "authority": approval["authority"],
-            "decision": approval["decision"],
-            "issued_at": approval["issued_at"],
-            "expires_at": approval["expires_at"], "nonce": approval["nonce"],
-            "previous_contract_digest": previous_digest,
-            "candidate_contract_digest": candidate_digest,
-            "approval_ref": approval_ref, "evidence": [approval_ref],
-        }
-        current = datetime.now(timezone.utc)
-        prior = datetime.fromisoformat(reconstructed.updated_at.replace("Z", "+00:00"))
-        event_time = max(current, prior + timedelta(microseconds=1)).isoformat().replace(
-            "+00:00", "Z",
-        )
-        event = WorkflowEvent(
-            1, len(replayed), run_id, None, "evidence.recorded", event_time, payload,
-        )
-        next_state = engine.apply(reconstructed, event)
-        expected_revision = materialized.revision if materialized is not None else -1
-        _append_and_publish(
-            events, states, event, next_state, expected_sequence=len(replayed),
-            expected_revision=expected_revision, lease=lease,
-            authoritative_initialization=materialized is None,
-        )
-    _emit({name: value for name, value in payload.items() if name != "evidence"})
-    return 0
-
-
-def _command_verification_contract(args, *, revise):
-    from .behavioral_contract import (
-        approval_digest, contract_digest, load_approval, load_contract, load_profile,
-        validate_initial_binding, validate_profile_binding, validate_revision,
+        contract_digest, load_contract, load_profile, validate_initial_binding,
+        validate_profile_binding,
     )
 
     scope, run_id, run_root, events, states = _contract_run_context(args.state_dir)
@@ -1276,15 +927,8 @@ def _command_verification_contract(args, *, revise):
         if reconstructed.run_id != run_id:
             raise ValueError("run directory identity mismatch")
         materialized = _load_optional_state(states)
-        bindings = _contract_bindings(replayed)
-        latest = bindings[-1] if bindings else None
-        requested_stage = (
-            "verification_contract_revised" if revise
-            else "verification_contract_bound"
-        )
-        source_approval_ref = candidate["revision_justification"][
-            "human_approval_evidence_ref"
-        ]
+        binding = _contract_binding(replayed)
+        requested_stage = "verification_contract_bound"
         profile = None
         profile_ref = None
         if candidate["verification_profile_id"] is not None:
@@ -1298,73 +942,15 @@ def _command_verification_contract(args, *, revise):
             profile_ref = _profile_artifact_ref(candidate["verification_profile_digest"])
         elif getattr(args, "verification_profile", None) is not None:
             raise ValueError("unexpected verification profile artifact")
-        approval = None
-        approval_ref = None
-        candidate_matches_latest = (
-            revise and latest is not None
-            and latest["stage"] == "verification_contract_revised"
-            and latest["contract_digest"] == digest
-        )
-        if source_approval_ref is not None:
-            if not revise:
-                raise ValueError("initial binding cannot carry approval evidence")
-            authorization = _authorized_contract_revision(
-                replayed, run_root, run_id,
-                previous_digest=candidate["previous_contract_digest"],
-                candidate_digest=digest, idempotent=candidate_matches_latest,
-            )
-            approval_ref = authorization["approval_ref"]
-            try:
-                approval = _load_bound_approval(
-                    run_root, approval_ref,
-                    previous_digest=candidate["previous_contract_digest"],
-                    candidate_digest=digest, run_id=run_id,
-                )
-            except FileNotFoundError:
-                if getattr(args, "approval", None) is None:
-                    raise ValueError("authorized approval artifact is missing") from None
-                approval_scope = _repository_scope(args.approval)
-                if approval_scope.scope_id != scope.scope_id:
-                    raise ValueError("approval input belongs to a foreign repository scope")
-                approval = load_approval(
-                    args.approval,
-                    previous_digest=candidate["previous_contract_digest"],
-                    candidate_digest=digest, run_id=run_id,
-                )
-                restored_digest = approval_digest(
-                    approval, previous_digest=candidate["previous_contract_digest"],
-                    candidate_digest=digest, run_id=run_id,
-                )
-                if _approval_artifact_ref(restored_digest) != approval_ref:
-                    raise ValueError("approval recovery artifact mismatch")
-                _store_approval_once(
-                    run_root, approval, restored_digest,
-                    previous_digest=candidate["previous_contract_digest"],
-                    candidate_digest=digest, run_id=run_id,
-                )
-            if any(approval[name] != authorization[name] for name in (
-                "actor", "authority", "decision", "issued_at", "expires_at",
-                "nonce", "run_id",
-                "previous_contract_digest", "candidate_contract_digest",
-            )):
-                raise ValueError("approval artifact does not match authorization")
-        elif getattr(args, "approval", None) is not None:
-            raise ValueError("unexpected approval artifact")
         payload = _contract_binding_payload(
-            candidate, digest, requested_stage, approval_ref=approval_ref,
-            profile_ref=profile_ref,
+            candidate, digest, requested_stage, profile_ref=profile_ref,
         )
         idempotent = (
-            latest is not None
-            and _contract_receipt(latest) == _contract_receipt(payload)
-            and latest["stage"] == requested_stage
+            binding is not None
+            and _contract_receipt(binding) == _contract_receipt(payload)
+            and binding["stage"] == requested_stage
         )
-        _validate_contract_authorization_chain(replayed, run_root, run_id)
-        _validated_contract_binding_chain(
-            run_root, bindings, run_id=run_id,
-            missing_latest=candidate if idempotent and revise else None,
-            missing_approval=None,
-        )
+        _validated_contract_binding(run_root, binding)
 
         if idempotent:
             _store_contract_once(run_root, candidate, digest)
@@ -1374,25 +960,15 @@ def _command_verification_contract(args, *, revise):
                     _prepare_replay_state(states, reconstructed, expected_revision),
                     expected_revision, lease=lease,
                 )
-            receipt = _contract_receipt(latest)
+            receipt = _contract_receipt(binding)
         else:
             _require_materialized_matches_ledger(materialized, reconstructed)
-            if revise:
-                if latest is None:
-                    raise ValueError("verification contract has no prior binding")
-                previous = _load_bound_contract(run_root, latest)
-                candidate = validate_revision(
-                    previous, candidate, latest["contract_digest"],
-                    approval_evidence=approval, run_id=run_id,
-                )
-            else:
-                if latest is not None:
-                    raise ValueError("verification contract already bound")
-                candidate = validate_initial_binding(candidate)
+            if binding is not None:
+                raise ValueError("verification contract already bound")
+            candidate = validate_initial_binding(candidate)
             digest = contract_digest(candidate)
             payload = _contract_binding_payload(
-                candidate, digest, requested_stage, approval_ref=approval_ref,
-                profile_ref=profile_ref,
+                candidate, digest, requested_stage, profile_ref=profile_ref,
             )
             _store_contract_once(run_root, candidate, digest)
             if profile is not None:
@@ -1420,16 +996,6 @@ def _command_verification_contract(args, *, revise):
             receipt = _contract_receipt(payload)
     _emit(receipt)
     return 0
-
-
-def command_bind_verification_contract(args):
-    return _command_verification_contract(args, revise=False)
-
-
-def command_revise_verification_contract(args):
-    return _command_verification_contract(args, revise=True)
-
-
 def _prediction_binding_payload(scope, observation_type, spec, event_digest, source_digest):
     return {
         "stage": "independent_prediction_bound",
@@ -1722,9 +1288,7 @@ def command_observe_review(args):
     if any(receipt.get("stage") == "browser_recovery" for receipt in receipts):
         contract_events = [
             event for event in events
-            if event.payload.get("stage") in {
-                "verification_contract_bound", "verification_contract_revised",
-            }
+            if event.payload.get("stage") == "verification_contract_bound"
         ]
         if not contract_events:
             raise ValueError("browser recovery lacks contract binding")
@@ -1734,20 +1298,16 @@ def command_observe_review(args):
         scope = _repository_scope(args.state_dir)
         run_root = _prediction_lifecycle(scope, spec)
         replayed, _state = _load_prediction_lifecycle(scope, spec)
-        bindings = _contract_bindings(replayed)
-        if not bindings:
-            raise ValueError("browser recovery lacks lifecycle contract authority")
-        latest = bindings[-1]
+        binding = _contract_binding(replayed)
+        if binding is None:
+            raise ValueError("browser recovery lacks lifecycle contract binding")
         binding_fields = _CONTRACT_BINDING_FIELDS - frozenset({"evidence"})
-        if any(claimed.get(field) != latest[field] for field in binding_fields):
+        if any(claimed.get(field) != binding[field] for field in binding_fields):
             raise ValueError("browser recovery contract receipt is not current")
-        contracts = _validated_contract_binding_chain(
-            run_root, bindings, run_id=spec.run_id,
-        )
-        contract = contracts[-1]
+        contract = _validated_contract_binding(run_root, binding)
         profile_document = _load_bound_profile(
-            run_root, latest["verification_profile_ref"],
-            latest["verification_profile_digest"],
+            run_root, binding["verification_profile_ref"],
+            binding["verification_profile_digest"],
         )
         from .verification import VerificationProfile
         profile = VerificationProfile.from_dict(profile_document)
@@ -4003,24 +3563,6 @@ def _repository_profile_ref(repository_root, profile_path):
         }) from None
 
 
-def _load_receipt_key_from_stdin(enabled):
-    if not enabled or sys.stdin.isatty():
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            ErrorDetailKey.REASON_CODE.value: "receipt_key_required",
-        })
-    stream = sys.stdin.buffer
-    value = stream.read(4097)
-    try:
-        stream.close()
-    except OSError:
-        pass
-    if len(value) < 32 or len(value) > 4096:
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            ErrorDetailKey.REASON_CODE.value: "receipt_key_size",
-        })
-    return value
-
-
 def _exact_commit(repository, value):
     result = subprocess.run(
         ["git", "-C", str(repository), "rev-parse", "--verify", f"{value}^{{commit}}"],
@@ -4037,63 +3579,6 @@ def _exact_commit(repository, value):
     return commit
 
 
-def command_approve_verification_profile(args):
-    from .verification_authority import issue_profile_approval
-    from .verification_errors import VerificationPlannerError
-
-    repository, profile_ref = _repository_profile_ref(
-        args.repository_root, args.profile,
-    )
-    receipt_key = _load_receipt_key_from_stdin(args.receipt_key_stdin)
-    try:
-        approval = issue_profile_approval(
-            _load_json(args.profile), repository, profile_ref,
-            trusted_base_commit=_exact_commit(
-                repository, args.trusted_base_commit,
-            ),
-            candidate_commit=_exact_commit(
-                repository, args.candidate_commit,
-            ),
-            include_worktree=args.include_worktree,
-            run_id=args.run_id,
-            authorization_event_id=args.authorization_event_id,
-            approved_at=args.approved_at,
-            receipt_key=receipt_key,
-        )
-    except VerificationPlannerError as exc:
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            ErrorDetailKey.REASON_CODE.value: "invalid_repository_verification",
-        }) from exc
-    _write_json_once(args.output, approval)
-    _emit(approval)
-    return 0
-
-
-def _publish_receipt_ledger(path, produced, baseline_count, receipt_key):
-    from .verification_errors import VerificationPlannerError
-    from .verification_receipts import merge_receipt_ledgers
-
-    destination = Path(path)
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    lock_path = destination.with_name(destination.name + ".lock")
-    descriptor = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o600)
-    try:
-        fcntl.flock(descriptor, fcntl.LOCK_EX)
-        current = _load_json(destination) if destination.exists() else None
-        merged = merge_receipt_ledgers(
-            current, produced, baseline_count, receipt_key,
-        )
-        _write_json(destination, merged)
-        return merged
-    except VerificationPlannerError as exc:
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            ErrorDetailKey.REASON_CODE.value: "verification_receipt_conflict",
-        }) from exc
-    finally:
-        fcntl.flock(descriptor, fcntl.LOCK_UN)
-        os.close(descriptor)
-
-
 def command_plan_verification(args):
     from .verification_errors import VerificationPlannerError
     from .verification_planning import build_plan
@@ -4101,18 +3586,14 @@ def command_plan_verification(args):
     repository, profile_ref = _repository_profile_ref(
         args.repository_root, args.profile,
     )
-    approval = _load_json(args.approval)
-    changed_paths = approval.get("changed_paths", [])
-    receipts = None if args.receipts is None else _load_json(args.receipts)
-    receipt_key = _load_receipt_key_from_stdin(args.receipt_key_stdin)
+    base_commit = _exact_commit(repository, args.base_ref)
+    head_commit = _exact_commit(repository, args.candidate_ref)
     try:
         plan = build_plan(
-            _load_json(args.profile), repository, profile_ref, changed_paths,
-            args.boundary, args.risk, receipt_ledger=receipts,
-            receipt_key=receipt_key, approval=approval,
-            head_commit=_exact_commit(
-                repository, approval.get("candidate_commit", ""),
-            ),
+            _load_json(args.profile), repository, profile_ref, None,
+            args.boundary, args.risk,
+            base_commit=base_commit, head_commit=head_commit,
+            include_worktree=args.include_worktree,
         )
     except VerificationPlannerError as exc:
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
@@ -4127,64 +3608,24 @@ def command_run_verification(args):
     from .verification_errors import VerificationPlannerError
     from .verification_orchestrator import execute_plan
 
-    repository, _profile_ref = _repository_profile_ref(
+    repository, profile_ref = _repository_profile_ref(
         args.repository_root, args.profile,
     )
-    receipts = None if args.receipts is None else _load_json(args.receipts)
-    baseline_count = 0 if receipts is None else len(receipts.get("receipts", []))
-    receipt_key = _load_receipt_key_from_stdin(args.receipt_key_stdin)
     try:
-        result, outcome = execute_plan(
-            _load_json(args.profile), repository, _load_json(args.plan),
-            receipt_ledger=receipts, receipt_key=receipt_key,
-            approval=_load_json(args.approval),
+        plan = _load_json(args.plan)
+        if type(plan) is not dict or plan.get("profile_ref") != profile_ref:
+            raise VerificationPlannerError(
+                "verification plan profile does not match --profile",
+            )
+        result = execute_plan(
+            _load_json(args.profile), repository, plan,
         )
     except VerificationPlannerError as exc:
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
             ErrorDetailKey.REASON_CODE.value: "invalid_repository_verification",
         }) from exc
-    result = _publish_receipt_ledger(
-        args.output, result, baseline_count, receipt_key,
-    )
-    _emit({
-        "status": outcome,
-        "receipt_count": len(result["receipts"]),
-        "output": str(args.output),
-    })
-    return 0 if outcome == "complete" else EXIT_UNSAFE_PLAN
-
-
-def command_record_verification_result(args):
-    from .verification_errors import VerificationPlannerError
-    from .verification_provider import record_provider_result
-
-    repository, _profile_ref = _repository_profile_ref(
-        args.repository_root, args.profile,
-    )
-    receipt_key = _load_receipt_key_from_stdin(args.receipt_key_stdin)
-    receipts = None if args.receipts is None else _load_json(args.receipts)
-    baseline_count = 0 if receipts is None else len(receipts.get("receipts", []))
-    try:
-        result = record_provider_result(
-            _load_json(args.profile), repository, _load_json(args.plan),
-            approval=_load_json(args.approval), receipt_ledger=receipts,
-            receipt_key=receipt_key, lane_id=args.lane_id,
-            provider_attestation=_load_json(args.provider_attestation),
-        )
-    except VerificationPlannerError as exc:
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
-            ErrorDetailKey.REASON_CODE.value: "invalid_repository_verification",
-        }) from exc
-    result = _publish_receipt_ledger(
-        args.output, result, baseline_count, receipt_key,
-    )
-    outcome = result["receipts"][-1]["status"]
-    _emit({
-        "status": outcome,
-        "receipt_count": len(result["receipts"]),
-        "output": str(args.output),
-    })
-    return 0 if outcome == "passed" else EXIT_UNSAFE_PLAN
+    _emit(result)
+    return 0 if result["status"] == "complete" else EXIT_UNSAFE_PLAN
 
 
 def parser():
@@ -4251,27 +3692,6 @@ def parser():
     bind_contract.add_argument("--contract", required=True)
     bind_contract.add_argument("--verification-profile")
     bind_contract.set_defaults(handler=command_bind_verification_contract)
-
-    revise_contract = commands.add_parser(
-        "revise-verification-contract",
-        help="validate and append one behavioral verification contract revision",
-    )
-    revise_contract.add_argument("--state-dir", required=True)
-    revise_contract.add_argument("--contract", required=True)
-    revise_contract.add_argument("--verification-profile")
-    revise_contract.add_argument("--approval")
-    revise_contract.set_defaults(handler=command_revise_verification_contract)
-
-    authorize_contract = commands.add_parser(
-        "authorize-verification-contract-revision",
-        help="record one coordinator-authorized verification contract revision",
-    )
-    authorize_contract.add_argument("--state-dir", required=True)
-    authorize_contract.add_argument("--approval", required=True)
-    authorize_contract.add_argument("--host-capability", required=True)
-    authorize_contract.set_defaults(
-        handler=command_authorize_verification_contract_revision,
-    )
 
     observe_pipeline = commands.add_parser("observe-pipeline", help="observe authoritative pipeline receipts")
     observe_pipeline.add_argument("--manifest", required=True)
@@ -4456,64 +3876,12 @@ def parser():
     record_attempt.set_defaults(handler=command_record_attempt)
     lane_input_bytes.set_defaults(handler=command_lane_input_bytes)
 
-    approve_verification = commands.add_parser(
-        "approve-verification-profile",
-        help="seal host authority for one repository verification profile",
-    )
-    approve_verification.add_argument(
-        "--repository-root", required=True,
-        help="repository whose durable scope and profile are being authorized",
-    )
-    approve_verification.add_argument(
-        "--profile", required=True,
-        help="repository-owned verification profile to validate and seal",
-    )
-    approve_verification.add_argument(
-        "--trusted-base-commit", required=True,
-        help="host-validated base commit bound into the approval",
-    )
-    approve_verification.add_argument(
-        "--candidate-commit", required=True,
-        help="exact candidate commit whose changes and provider gates are approved",
-    )
-    approve_verification.add_argument(
-        "--include-worktree", action="store_true",
-        help="bind tracked and untracked worktree changes into this approval",
-    )
-    approve_verification.add_argument(
-        "--run-id", required=True,
-        help="workflow run identifier bound into the approval",
-    )
-    approve_verification.add_argument(
-        "--authorization-event-id", required=True,
-        help="unique host authorization event recorded in the approval",
-    )
-    approve_verification.add_argument(
-        "--approved-at", required=True,
-        help="timezone-aware timestamp for the host authorization decision",
-    )
-    approve_verification.add_argument(
-        "--receipt-key-stdin", action="store_true", required=True,
-        help=(
-            "read 32-4096 broker-supplied authority bytes from standard input; "
-            "the key is never named in argv or passed to verification children"
-        ),
-    )
-    approve_verification.add_argument(
-        "--output", required=True,
-        help="destination for the sealed approval JSON",
-    )
-    approve_verification.set_defaults(
-        handler=command_approve_verification_profile,
-    )
-
     plan_verification = commands.add_parser(
         "plan-verification",
         help="select tiered repository verification lanes for one boundary",
         description=(
             "Validate a repository-owned command-array profile, resolve changed "
-            "paths, select only the lanes scheduled for this boundary, and reuse "
-            "content-identical passing receipts."
+            "paths, and select only the lanes scheduled for this boundary."
         ),
     )
     plan_verification.add_argument("--repository-root", required=True)
@@ -4525,16 +3893,16 @@ def parser():
         "--risk", choices=RISK_CHOICES, required=True,
     )
     plan_verification.add_argument(
-        "--approval", required=True,
-        help="host-authenticated profile approval issued before dispatch",
+        "--base-ref", required=True,
+        help="Git commit or ref used as the exact changed-path base",
     )
-    plan_verification.add_argument("--receipts")
     plan_verification.add_argument(
-        "--receipt-key-stdin", action="store_true", required=True,
-        help=(
-            "read broker-supplied authority bytes from standard input to "
-            "validate approval and any prior receipts"
-        ),
+        "--candidate-ref", default="HEAD",
+        help="Git commit or ref to verify (default: HEAD)",
+    )
+    plan_verification.add_argument(
+        "--include-worktree", action="store_true",
+        help="include staged, unstaged, and untracked changes",
     )
     plan_verification.add_argument("--output", required=True)
     plan_verification.set_defaults(handler=command_plan_verification)
@@ -4543,78 +3911,15 @@ def parser():
         "run-verification",
         help="execute exact local lanes from a fresh repository verification plan",
         description=(
-            "Revalidate the profile, source inputs, commands, and cache authority "
+            "Revalidate the profile, source inputs, commands, and plan identity "
             "before executing local argv arrays without a shell. Remote lanes "
-            "remain explicit pending receipts."
+            "remain explicit in the invocation result."
         ),
     )
     run_verification.add_argument("--repository-root", required=True)
     run_verification.add_argument("--profile", required=True)
     run_verification.add_argument("--plan", required=True)
-    run_verification.add_argument(
-        "--approval", required=True,
-        help="host-authenticated approval bound into the plan",
-    )
-    run_verification.add_argument("--receipts")
-    run_verification.add_argument(
-        "--receipt-key-stdin", action="store_true", required=True,
-        help=(
-            "read broker-supplied authority bytes from standard input; "
-            "standard input is consumed before repository commands start"
-        ),
-    )
-    run_verification.add_argument("--output", required=True)
     run_verification.set_defaults(handler=command_run_verification)
-
-    record_verification = commands.add_parser(
-        "record-verification-result",
-        help="authenticate one exact provider result for a remote lane",
-    )
-    record_verification.add_argument(
-        "--repository-root", required=True,
-        help="repository whose scope and selected inputs must match the plan",
-    )
-    record_verification.add_argument(
-        "--profile", required=True,
-        help="repository-owned verification profile bound into the plan",
-    )
-    record_verification.add_argument(
-        "--plan", required=True,
-        help="exact verification plan that selected the remote lane",
-    )
-    record_verification.add_argument(
-        "--approval", required=True,
-        help="sealed host approval authorizing this profile and execution closure",
-    )
-    record_verification.add_argument(
-        "--receipts",
-        help="existing receipt array used to preserve completed lane evidence",
-    )
-    record_verification.add_argument(
-        "--lane-id", required=True,
-        help="remote lane selected by the supplied verification plan",
-    )
-    record_verification.add_argument(
-        "--provider-attestation", required=True,
-        help=(
-            "broker-sealed JSON attestation produced only after provider-native "
-            "evidence, exact head SHA, outcome, and exit code are verified"
-        ),
-    )
-    record_verification.add_argument(
-        "--receipt-key-stdin", action="store_true", required=True,
-        help=(
-            "read broker-supplied host authority bytes from standard input "
-            "after provider identity and exact-SHA evidence are verified"
-        ),
-    )
-    record_verification.add_argument(
-        "--output", required=True,
-        help="destination for the updated authenticated receipt array",
-    )
-    record_verification.set_defaults(
-        handler=command_record_verification_result,
-    )
 
     def creation_command(name, handler):
         command = commands.add_parser(name, help="plan one managed Docker creation")

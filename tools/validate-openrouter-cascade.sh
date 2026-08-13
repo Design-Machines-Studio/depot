@@ -140,50 +140,6 @@ EOF
     any_failed=1
   fi
 
-  # A caller-controlled JSON object cannot prove human origin. Until a trusted
-  # single-use issuer/consumer exists, even a perfectly shaped self-asserted
-  # object must leave native_judgment unavailable.
-  printf '%s\n' '{"codex":{"state":"ok","remaining_pct":0},"openrouter":{"state":"unknown"}}' > "$probe_fixture"
-  native_expiry="$(( $(date -u +%s) + 3600 ))"
-  native_authorization="$(jq -nc \
-    --arg repository "$REPO_ROOT" --arg run_id native-headroom-test \
-    --argjson expiry "$native_expiry" \
-    '{humanGranted:true,authorizationId:"native-test",repository:$repository,runId:$run_id,expiresAtEpoch:$expiry}')"
-  set +e
-  native_out="$(DM_PROVIDER_REPOSITORY="$REPO_ROOT" DM_PROVIDER_RUN_ID=native-headroom-test \
-    DM_NATIVE_JUDGMENT_AUTHORIZATION="$native_authorization" CASCADE_EXHAUSTED_RAILS= \
-    "$cascade" --kind logic --prompt test --host codex \
-    --probe-file "$probe_fixture" 2>&1)"
-  native_rc=$?
-  set -e
-  if [ "$native_rc" -eq 76 ] && printf '%s' "$native_out" | grep -Fq 'ladder exhausted'; then
-    pass "self-asserted native judgment authorization is not authority"
-  else
-    fail "caller-controlled native judgment authorization must be rejected"
-    any_failed=1
-  fi
-
-  while IFS='|' read -r label invalid_authorization; do
-    set +e
-    DM_PROVIDER_REPOSITORY="$REPO_ROOT" DM_PROVIDER_RUN_ID=native-headroom-test \
-      DM_NATIVE_JUDGMENT_AUTHORIZATION="$invalid_authorization" CASCADE_EXHAUSTED_RAILS= \
-      "$cascade" --kind logic --prompt test --host codex \
-      --probe-file "$probe_fixture" >/dev/null 2>&1
-    invalid_native_rc=$?
-    set -e
-    if [ "$invalid_native_rc" -eq 76 ]; then
-      pass "$label native judgment authorization fails closed"
-    else
-      fail "$label native judgment authorization must leave the ladder exhausted"
-      any_failed=1
-    fi
-  done <<EOF
-absent|
-expired|{"humanGranted":true,"authorizationId":"native-test","repository":"$REPO_ROOT","runId":"native-headroom-test","expiresAtEpoch":1}
-repository-mismatched|{"humanGranted":true,"authorizationId":"native-test","repository":"not-this-repository","runId":"native-headroom-test","expiresAtEpoch":$native_expiry}
-run-mismatched|{"humanGranted":true,"authorizationId":"native-test","repository":"$REPO_ROOT","runId":"not-this-run","expiresAtEpoch":$native_expiry}
-EOF
-
   while IFS='|' read -r label openrouter_probe; do
     printf '%s\n' "{\"codex\":{\"state\":\"ok\",\"remaining_pct\":100},\"openrouter\":$openrouter_probe}" > "$probe_fixture"
     conservative_or_out="$(CASCADE_EXHAUSTED_RAILS= "$cascade" --kind docs --prompt test --host codex \
@@ -462,6 +418,15 @@ if grep -q 'OPENROUTER_CURL_CMD\|"\$CURL_CMD"' "$wrapper"; then
   any_failed=1
 else
   pass "wrapper retains fixed-path curl execution"
+fi
+
+if grep -q -- '-H "Authorization: Bearer \$OPENROUTER_API_KEY"' "$wrapper" ||
+   ! grep -q -- '-H "@\$authorization_header_file"' "$wrapper" ||
+   ! grep -q 'unset OPENROUTER_API_KEY OPENROUTER_API_KEY_FILE' "$wrapper"; then
+  fail "wrapper must keep the bearer value out of curl argv and environment"
+  any_failed=1
+else
+  pass "wrapper keeps the bearer value out of curl argv and environment"
 fi
 
 rm -f "$network_marker"

@@ -12,7 +12,7 @@
     {
       "name": "ned",
       "source": "./plugins/ned",
-      "version": "1.8.1",
+      "version": "1.8.2",
       "author": {
         "name": "Design Machines"
       },
@@ -133,7 +133,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "3.10.0",
+      "version": "3.10.1",
       "author": {
         "name": "Design Machines"
       },
@@ -277,7 +277,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.60.0",
+      "version": "1.60.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -355,12 +355,12 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.47.0",
+      "version": "1.47.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "Autonomous feature development pipeline with executable tiered verification, exact receipt reuse, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
+      "description": "Autonomous feature development pipeline with fresh executable tiered verification, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
       "capabilities_summary": {
         "skills": 4,
         "agents": 2,
@@ -382,7 +382,7 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.13.7",
+      "version": "0.14.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -429,7 +429,7 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.14.0",
+      "version": "1.14.2",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

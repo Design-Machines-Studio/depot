@@ -63,11 +63,11 @@ class PromotionTests(unittest.TestCase):
         )
         self.assertTrue(allowed.allowed)
 
-    def test_native_default_is_always_separate_human_decision(self):
+    def test_native_default_is_not_a_supported_kernel_promotion(self):
         decision = evaluate_promotion("native_available", "native_default", ())
         self.assertFalse(decision.allowed)
-        self.assertEqual(decision.reason_codes, ("separate_human_approval_required",))
-        self.assertEqual(decision.missing_evidence, ("separate_human_approval",))
+        self.assertEqual(decision.reason_codes, ("native_default_not_supported",))
+        self.assertEqual(decision.missing_evidence, ())
 
     def test_non_adjacent_transition_and_conflicting_evidence_fail_closed(self):
         invalid = evaluate_promotion("shadow", "native_available", ())

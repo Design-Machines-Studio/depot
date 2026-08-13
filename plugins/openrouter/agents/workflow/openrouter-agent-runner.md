@@ -367,7 +367,7 @@ SERVING_PROVIDER=""
 SERVING_PROVIDER_PROVENANCE=""
 if [ "$EXIT_CODE" -eq 0 ] && [ -s "$WRAPPER_RECEIPT" ]; then
   ACTUAL_MODEL=$(jq -er '.responseModel' "$WRAPPER_RECEIPT")
-  FALLBACK_USED=$(jq -er '.fallbackUsed' "$WRAPPER_RECEIPT")
+  FALLBACK_USED=$(jq -er '.fallbackUsed | if type == "boolean" then tostring else error("invalid fallbackUsed") end' "$WRAPPER_RECEIPT")
   GENERATION_ID=$(jq -r '.generationId // empty' "$WRAPPER_RECEIPT")
   SERVING_PROVIDER=$(jq -r '.servingProvider // empty' "$WRAPPER_RECEIPT")
   SERVING_PROVIDER_PROVENANCE=$(jq -er '.servingProviderProvenance' "$WRAPPER_RECEIPT")

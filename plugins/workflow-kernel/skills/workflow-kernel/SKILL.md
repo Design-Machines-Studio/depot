@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
-description: Use for workflow-state validation and replay, or when asked to batch repository tests, select focused/full verification lanes, authenticate reusable test receipts, or use Workflow Kernel pipeline/review mechanics.
-version: 0.8.0
+description: Use for workflow-state validation and replay, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
+version: 0.14.0
 ---
 
 # Workflow Kernel
@@ -23,7 +23,8 @@ first, then versioned cache directories under `~/.claude` and `~/.codex`
 ordered by parsed semver -- never `ls -td` mtime, so re-pulling an older
 version cannot shadow a newer one), verifies Python 3.12+, sets the module
 path, and execs `python3 -m workflow_kernel`. Compatibility is same-major at
-or above the declared `>=0.8.0` capability floor. The complete consumer-facing
+or above the declared capability floor. Repository-verification consumers use
+`>=0.14.0`. The complete consumer-facing
 resolution and fail-closed contract, including the launcher discovery
 snippet, is `references/runtime-resolution.md`; consuming plugins link there
 instead of restating it.
@@ -34,10 +35,10 @@ checkout or invoke the module with
 
 ## Operating Contract
 
-Initialize every run in shadow mode by default. Version 0.8.0 permits a
+Initialize every run in shadow mode by default. Version 0.14.0 permits a
 canonical caller to explicitly select an approved `enforce` or `native` mode
 and delegate the
-bounded authoritative mechanics for behavioral-contract binding/revision,
+bounded authoritative mechanics for immutable initial behavioral-contract binding,
 validation-retry decisions, review-contribution export, and guarded
 owned-resource cleanup. The kernel never selects providers, review findings,
 merge disposition, or cleanup policy. Append only validated events with the
@@ -64,11 +65,11 @@ evidence attachment and one cleanup reconciliation.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
-0.8.0 surface includes state/replay and inspection commands, repository
-verification planning/execution, contract bind/revise and retry
+0.14.0 surface includes state/replay and inspection commands, exact-ref
+repository verification planning/execution with deterministic fresh results,
+initial contract binding and retry
 decisions, prediction/observation/comparison, canonical review-contribution
-export, metrics, guarded resource planning/execution/reconciliation, and the
-canonical provider-dispatch construction and verification substrate.
+export, metrics, and guarded resource planning/execution/reconciliation.
 Consume successful operational output and errors as stable JSON. Treat
 `--help` output as plain text.
 
@@ -425,31 +426,19 @@ workflow-kernel-launcher.sh resolve-plugin-bundle \
   [--required-asset <readable-relative-path> ...] \
   [--required-executable <executable-relative-path> ...] \
   [--minimum-version <semver>] [--active-host <claude|codex>]
-workflow-kernel-launcher.sh approve-verification-profile \
-  --repository-root <root> --profile <repository-profile> \
-  --trusted-base-commit <sha> --candidate-commit <sha> [--include-worktree] \
-  --run-id <run-id> \
-  --authorization-event-id <event-id> --approved-at <iso-8601> \
-  --receipt-key-stdin --output <immutable-host-approval>
 workflow-kernel-launcher.sh plan-verification \
   --repository-root <root> --profile <repository-profile> \
   --boundary <chunk|revision_batch|execution_level|merge_candidate|post_merge> \
-  --risk <low|medium|high> --approval <immutable-host-approval> \
-  [--receipts <ledger>] --receipt-key-stdin \
+  --risk <low|medium|high> --base-ref <ref> [--candidate-ref <ref>] \
+  [--include-worktree] \
   --output <plan>
 workflow-kernel-launcher.sh run-verification \
   --repository-root <root> --profile <repository-profile> \
-  --plan <plan> --approval <immutable-host-approval> \
-  [--receipts <ledger>] --receipt-key-stdin --output <ledger>
-workflow-kernel-launcher.sh record-verification-result \
-  --repository-root <root> --profile <repository-profile> \
-  --plan <plan> --approval <immutable-host-approval> [--receipts <ledger>] \
-  --lane-id <id> --provider-attestation <broker-sealed-json> \
-  --receipt-key-stdin --output <ledger>
+  --plan <plan>
 ```
 
-Repository verification profiles, host authorization, authenticated exact-input
-receipt reuse, and the chunk/revision/level/candidate cadence are documented in
+Repository verification profiles, fresh bounded results, and
+the chunk/revision/level/candidate cadence are documented in
 `references/repository-verification.md`.
 
 Publication commands load their HMAC authority only from the current OS

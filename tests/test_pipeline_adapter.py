@@ -220,6 +220,19 @@ class PipelineAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             translate_pipeline_receipts(({"run_id": "r", "sequence": 0, "stage": "run_summary", "status": "succeeded", "occurred_at": "2026-07-14T00:00:00Z"},))
 
+    def test_retired_contract_revision_stages_are_rejected(self):
+        original = json.loads((FIXTURES / "pipeline-claude.json").read_text())
+        for stage in (
+            "verification_contract_revised",
+            "verification_contract_revision_authorized",
+        ):
+            receipt = copy.deepcopy(original[0])
+            receipt["stage"] = stage
+            with self.subTest(stage=stage), self.assertRaisesRegex(
+                ValueError, "unknown receipt stage",
+            ):
+                translate_pipeline_receipts([receipt])
+
     def test_receipts_require_one_run_contiguous_order_and_context_continuity(self):
         original = json.loads((FIXTURES / "pipeline-claude.json").read_text())
         mutations = []
@@ -564,170 +577,99 @@ class PipelineAdapterTests(unittest.TestCase):
                     claimed_contract_digest=claimed,
                 )
 
-    def test_contract_receipts_are_semantic_contiguous_and_current(self):
-        first = "sha256:" + "a" * 64
-        second = "sha256:" + "b" * 64
+    def test_contract_receipts_are_initial_immutable_and_current(self):
+        digest = "sha256:" + "a" * 64
         profile_id = "profile-sha256:" + "d" * 64
         profile_digest = "sha256:" + "e" * 64
         profile_ref = "verification-profiles/sha256-" + "e" * 64 + ".json"
-        approval_ref = "verification-approvals/sha256-" + "c" * 64 + ".json"
-
-        def contract_receipt(stage, sequence, digest, revision, previous):
-            return {
-                "run_id": "run-1", "sequence": sequence, "stage": stage,
-                "occurred_at": f"2026-07-14T00:00:0{sequence}Z",
-                "authoritative_receipt": f"receipts/{sequence}.json",
-                "workflow_class": "feature", "execution_mode": "generic",
-                "contract_id": "contract-1", "schema_version": 1,
-                "revision": revision, "contract_digest": digest,
-                "contract_ref": (
-                    "verification-contracts/sha256-"
-                    + digest.removeprefix("sha256:") + ".json"
-                ),
-                "previous_contract_digest": previous,
-                "reason_code": "approved_revision",
-                "human_approval_evidence_ref": (
-                    None if stage == "verification_contract_bound" else approval_ref
-                ),
-                "verification_profile_id": profile_id,
-                "verification_profile_digest": profile_digest,
-                "verification_profile_ref": profile_ref,
-            }
-
-        receipts = [
-            contract_receipt(
-                "verification_contract_bound", 0, first, 1, None,
-            ),
-            contract_receipt(
-                "verification_contract_revised", 2, second, 2, first,
-            ),
-            {
-                "run_id": "run-1", "sequence": 3, "stage": "dispatch",
-                "occurred_at": "2026-07-14T00:00:03Z",
-                "authoritative_receipt": "receipts/3.json",
-                "workflow_class": "feature", "execution_mode": "generic",
-                "contract_digest": second, "status": "completed",
-            },
-        ]
-        receipts.insert(1, {
-            "run_id": "run-1", "sequence": 1,
-            "stage": "verification_contract_revision_authorized",
+        bound = {
+            "run_id": "run-1", "sequence": 0,
+            "stage": "verification_contract_bound",
+            "occurred_at": "2026-07-14T00:00:00Z",
+            "authoritative_receipt": "receipts/0.json",
+            "workflow_class": "feature", "execution_mode": "generic",
+            "contract_id": "contract-1", "schema_version": 1,
+            "revision": 1, "contract_digest": digest,
+            "contract_ref": "verification-contracts/sha256-" + "a" * 64 + ".json",
+            "previous_contract_digest": None,
+            "reason_code": "initial_binding",
+            "verification_profile_id": profile_id,
+            "verification_profile_digest": profile_digest,
+            "verification_profile_ref": profile_ref,
+        }
+        dispatch = {
+            "run_id": "run-1", "sequence": 1, "stage": "dispatch",
             "occurred_at": "2026-07-14T00:00:01Z",
             "authoritative_receipt": "receipts/1.json",
             "workflow_class": "feature", "execution_mode": "generic",
-            "previous_contract_digest": first,
-            "candidate_contract_digest": second,
-            "approval_ref": approval_ref, "actor": "reviewer-1",
-            "authority": "design-machines-human-approval-v1",
-            "decision": "approved", "nonce": "approval-nonce-1",
-            "issued_at": "2026-07-14T00:00:00Z",
-            "expires_at": "2026-07-14T00:05:00Z",
-        })
-        events = translate_pipeline_receipts(receipts)
+            "contract_digest": digest, "status": "completed",
+        }
+        events = translate_pipeline_receipts([bound, dispatch])
         self.assertIn("verification_contract_bound", events[0].payload["evidence"])
-        self.assertIn("verification_contract_revised", events[2].payload["evidence"])
-        self.assertEqual(events[2].payload["revision"], 2)
-        self.assertEqual(events[2].payload["previous_contract_digest"], first)
-        self.assertEqual(events[3].payload["contract_digest"], second)
-        self.assertEqual(events[2].payload["verification_profile_id"], profile_id)
+        self.assertEqual(events[1].payload["contract_digest"], digest)
         self.assertTrue(all(
             event.payload["verification_contract_provenance"]
-            == "authoritative_receipt"
-            for event in events
+            == "authoritative_receipt" for event in events
         ))
 
-        prebinding = copy.deepcopy(receipts)
-        prebinding.insert(0, {
-            "run_id": "run-1", "sequence": 0, "stage": "manifest_validation",
-            "occurred_at": "2026-07-14T00:00:00Z",
-            "authoritative_receipt": "receipts/prebinding.json",
-            "workflow_class": "feature", "execution_mode": "generic",
-            "status": "completed",
+        second_binding = copy.deepcopy(bound)
+        second_binding.update({
+            "sequence": 1,
+            "contract_digest": "sha256:" + "b" * 64,
+            "contract_ref": "verification-contracts/sha256-" + "b" * 64 + ".json",
         })
-        for sequence, receipt in enumerate(prebinding):
-            receipt["sequence"] = sequence
-        translated = translate_pipeline_receipts(prebinding)
-        self.assertEqual(
-            translated[0].payload["verification_contract_provenance"],
-            "pre_binding",
-        )
-        for stage in (
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts([bound, second_binding])
+
+        stale = copy.deepcopy(dispatch)
+        stale["contract_digest"] = "sha256:" + "b" * 64
+        with self.assertRaises(ValueError):
+            translate_pipeline_receipts([bound, stale])
+
+    def test_only_declared_pre_contract_stages_are_allowed_before_binding(self):
+        digest = "sha256:" + "a" * 64
+        binding = {
+            "run_id": "run-1", "sequence": 1,
+            "stage": "verification_contract_bound",
+            "occurred_at": "2026-07-14T00:00:01Z",
+            "authoritative_receipt": "receipts/binding.json",
+            "workflow_class": "feature", "execution_mode": "generic",
+            "contract_id": "contract-1", "schema_version": 1,
+            "revision": 1, "contract_digest": digest,
+            "contract_ref": "verification-contracts/sha256-" + "a" * 64 + ".json",
+            "previous_contract_digest": None,
+            "reason_code": "initial_binding",
+            "verification_profile_id": None,
+            "verification_profile_digest": None,
+            "verification_profile_ref": None,
+        }
+
+        def receipt(stage):
+            return {
+                "run_id": "run-1", "sequence": 0, "stage": stage,
+                "status": "ready", "node_id": None,
+                "occurred_at": "2026-07-14T00:00:00Z",
+                "authoritative_receipt": f"receipts/{stage}.json",
+                "workflow_class": "feature", "execution_mode": "generic",
+            }
+
+        for stage in ("progress", "manifest_validation", "dependency_ready"):
+            with self.subTest(stage=stage):
+                events = translate_pipeline_receipts([receipt(stage), binding])
+                self.assertEqual(events[0].payload["stage"], stage)
+                self.assertEqual(
+                    events[0].payload["verification_contract_provenance"],
+                    "pre_binding",
+                )
+
+        prohibited = (
             "dispatch", "deterministic_validation", "evaluation_gate",
             "browser_verification", "merge_disposition", "chunk_cleanup",
-            "final_dm_review", "requirements_cross_check",
-            "terminal_reconciliation", "run_summary",
-        ):
-            bypass = copy.deepcopy(prebinding)
-            bypass[0]["stage"] = stage
-            with self.subTest(prebinding_stage=stage), self.assertRaises(ValueError):
-                translate_pipeline_receipts(bypass)
-
-        for snake, camel in (
-            ("schema_version", "schemaVersion"),
-            ("revision", "contractRevision"),
-        ):
-            conflicting_type = copy.deepcopy(receipts)
-            conflicting_type[0][camel] = True
-            with self.subTest(alias=camel), self.assertRaises(ValueError):
-                translate_pipeline_receipts(conflicting_type)
-
-            calls = []
-
-            class Hostile:
-                def __eq__(self, _other):
-                    calls.append("equality")
-                    raise RuntimeError("sk-secret-equality")
-
-            hostile = copy.deepcopy(receipts)
-            hostile[0][snake] = Hostile()
-            hostile[0][camel] = Hostile()
-            with self.subTest(hostile_alias=camel), self.assertRaises(ValueError) as raised:
-                translate_pipeline_receipts(hostile)
-            self.assertEqual(calls, [])
-            self.assertNotIn("sk-secret-equality", repr(raised.exception))
-
-        for name, mutate in (
-            ("revision_jump", lambda value: value[2].update({"revision": 3})),
-            ("stale_previous", lambda value: value[2].update({
-                "previous_contract_digest": "sha256:" + "c" * 64,
-            })),
-            ("stale_builder", lambda value: value[3].update({
-                "contract_digest": first,
-            })),
-            ("malformed_digest", lambda value: value[0].update({
-                "contract_digest": "sha256:not-a-digest",
-            })),
-            ("changed_contract_id", lambda value: value[2].update({
-                "contract_id": "other-contract",
-            })),
-            ("missing_builder_digest", lambda value: value[3].pop("contract_digest")),
-            ("unknown_contract_key", lambda value: value[0].update({
-                "contract_secret": "must-not-echo",
-            })),
-            ("unknown_version", lambda value: value[0].update({
-                "schema_version": 2,
-            })),
-        ):
-            candidate = copy.deepcopy(receipts)
-            mutate(candidate)
-            with self.subTest(name=name), self.assertRaises(ValueError) as raised:
-                translate_pipeline_receipts(candidate)
-            self.assertNotIn("must-not-echo", repr(raised.exception))
-
-        for name, mutate in (
-            ("missing_profile_id", lambda value: value[0].pop("verification_profile_id")),
-            ("missing_profile_ref", lambda value: value[0].pop("verification_profile_ref")),
-            ("non_content_approval", lambda value: value[2].update({
-                "human_approval_evidence_ref": "approvals/reviewer.json",
-            })),
-            ("missing_authorization", lambda value: value.pop(1)),
-        ):
-            candidate = copy.deepcopy(receipts)
-            mutate(candidate)
-            for sequence, receipt in enumerate(candidate):
-                receipt["sequence"] = sequence
-            with self.subTest(name=name), self.assertRaises(ValueError):
-                translate_pipeline_receipts(candidate)
+            "final_dm_review", "terminal_reconciliation", "run_summary",
+        )
+        for stage in prohibited:
+            with self.subTest(stage=stage), self.assertRaises(ValueError):
+                translate_pipeline_receipts([receipt(stage), binding])
 
     def test_final_review_is_a_literal_pipeline_stage(self):
         receipt = {

@@ -76,7 +76,7 @@
           "uniqueItems": true,
           "items": {"$ref": "#/$defs/safePath"}
         },
-        "authority_paths": {
+        "execution_paths": {
           "type": "array",
           "maxItems": 256,
           "uniqueItems": true,
@@ -95,22 +95,12 @@
           }
         },
         "required": {"type": "boolean"},
-        "cache": {"enum": ["content", "never"]},
         "risks": {
           "type": "array",
           "minItems": 1,
           "maxItems": 256,
           "uniqueItems": true,
           "items": {"enum": ["low", "medium", "high"]}
-        },
-        "cache_environment": {
-          "type": "array",
-          "maxItems": 256,
-          "uniqueItems": true,
-          "items": {
-            "type": "string",
-            "pattern": "^[A-Z_][A-Z0-9_]{0,63}$"
-          }
         },
         "required_environment": {
           "type": "array",
@@ -121,7 +111,7 @@
             "pattern": "^[A-Z_][A-Z0-9_]{0,63}$"
           }
         },
-        "authority_environment": {
+        "execution_environment": {
           "type": "array",
           "maxItems": 256,
           "uniqueItems": true,

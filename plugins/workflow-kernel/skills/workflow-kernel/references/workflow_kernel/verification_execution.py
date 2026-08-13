@@ -34,7 +34,7 @@ def execution_environment(profile, environment):
         name
         for lane in profile["lanes"]
         for name in (
-            *lane["cache_environment"], *lane["required_environment"],
+            *lane["execution_environment"], *lane["required_environment"],
         )
     }
     result = {"PATH": FIXED_SUBPROCESS_PATH}
@@ -234,9 +234,11 @@ def run_local_command(repository, lane, environment):
         )
     stdout = result["stdout"]
     stderr = result["stderr"]
+    # The CLI owns stdout as a single JSON result stream. Keep bounded command
+    # diagnostics visible without making that stream unparsable.
     if stdout:
-        sys.stdout.buffer.write(stdout)
-        sys.stdout.buffer.flush()
+        sys.stderr.buffer.write(stdout)
+        sys.stderr.buffer.flush()
     if stderr:
         sys.stderr.buffer.write(stderr)
         sys.stderr.buffer.flush()
@@ -250,7 +252,6 @@ def run_local_command(repository, lane, environment):
         "reason": result["reason"],
         "exit_code": result["exit_code"],
         "duration_seconds": result["duration_seconds"],
-        "source_receipt_digest": None,
         "stdout_digest": byte_digest(stdout),
         "stderr_digest": byte_digest(stderr),
         "stdout_bytes": result["stdout_bytes"],

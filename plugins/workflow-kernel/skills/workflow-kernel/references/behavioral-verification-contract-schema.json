@@ -84,14 +84,13 @@
     "revision_justification": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["reason_code", "summary", "added_obligation_ids", "retained_obligation_ids", "removed_obligation_ids", "human_approval_evidence_ref"],
+      "required": ["reason_code", "summary", "added_obligation_ids", "retained_obligation_ids", "removed_obligation_ids"],
       "properties": {
         "reason_code": {"$ref": "#/$defs/stable_id"},
         "summary": {"$ref": "#/$defs/nonempty_string"},
         "added_obligation_ids": {"type": "array", "uniqueItems": true, "maxItems": 4096, "items": {"$ref": "#/$defs/nonempty_string"}},
         "retained_obligation_ids": {"type": "array", "uniqueItems": true, "maxItems": 4096, "items": {"$ref": "#/$defs/nonempty_string"}},
-        "removed_obligation_ids": {"type": "array", "uniqueItems": true, "maxItems": 4096, "items": {"$ref": "#/$defs/nonempty_string"}},
-        "human_approval_evidence_ref": {"oneOf": [{"$ref": "#/$defs/source_ref"}, {"type": "null"}]}
+        "removed_obligation_ids": {"type": "array", "uniqueItems": true, "maxItems": 4096, "items": {"$ref": "#/$defs/nonempty_string"}}
       }
     }
   }

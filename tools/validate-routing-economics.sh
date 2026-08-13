@@ -404,16 +404,6 @@ require_text "$model_cascade" '"openrouter"' "model cascade defines OpenRouter c
 if [ -f "$model_cascade" ] && [ -f "$harness" ]; then
   jq -e '.cascades | has("claude") | not' "$model_cascade" >/dev/null || { printf "  FAIL  no Claude-native cascade class\n"; failures=1; }
   jq -e '
-    [.cascades[]
-      | .ladder as $ladder
-      | select(($ladder | index("native_judgment")) != null)
-      | ($ladder | index("native_judgment")) as $native
-      | ($ladder | index("premium_sub")) as $premium
-      | ($ladder | index("openrouter_exec")) as $openrouter
-      | ($premium != null and $openrouter != null and $native > $premium and $native > $openrouter)]
-    | all
-  ' "$model_cascade" >/dev/null || { printf "  FAIL  native_judgment ranks below present premium_sub and openrouter_exec rails in every cascade\n"; failures=1; }
-  jq -e '
     [.hosts[].roles | to_entries[]
       | select(.value.kind == "wrapper" or .value.kind == "openrouter_exec")
       | .value.models[]?
@@ -423,35 +413,10 @@ if [ -f "$model_cascade" ] && [ -f "$harness" ]; then
   jq -e '
     [.quality_rank | keys[] | select(test("^(openai|anthropic)/"))] | length == 0
   ' "$model_cascade" >/dev/null || { printf "  FAIL  model cascade excludes OpenRouter-prefixed native-vendor identities\n"; failures=1; }
-  # Generic (non-Claude, non-Codex) harnesses still have NO native vendor rail: the native
-  # rung must resolve to "none" there rather than being silently mapped onto OpenRouter.
-  if ! jq -e '.hosts.generic.roles.native_judgment.kind == "none"' "$harness" >/dev/null; then
-    printf "  FAIL  generic/native-vendor intent is unavailable rather than mapped to OpenRouter\n"
-    failures=1
-  fi
-  jq -e '.policy._comment_native_authorization | type == "string" and length > 0' "$model_cascade" >/dev/null || { printf "  FAIL  native_judgment authorization gate is documented in model-cascade policy\n"; failures=1; }
 fi
-require_text "$cascade" 'native_judgment_allowed() {' "native_judgment authorization gate function exists"
-require_text "$cascade" 'native_judgment_allowed || continue' "native_judgment refusal skips the gated rung in the ladder walk"
-require_text "$cascade" 'Environment JSON is never treated as authority.' "native_judgment rejects caller-controlled authorization"
-if sed -n '/^native_judgment_allowed() {$/,/^}$/p' "$cascade" | grep -Fq -- 'DM_NATIVE_JUDGMENT_AUTHORIZATION'; then
-  printf "  FAIL  native_judgment gate consumes caller-controlled environment authority\n"
-  failures=1
-else
-  printf "  OK    native_judgment gate rejects environment authority\n"
-fi
-if sed -n '/^native_judgment_allowed() {$/,/^}$/p' "$cascade" | grep -Fq -- 'DRYRUN'; then
-  printf "  FAIL  native_judgment authorization gate has no dry-run bypass\n"
-  failures=1
-else
-  printf "  OK    native_judgment authorization gate has no dry-run bypass\n"
-fi
-if grep -Fq -- 'nativeAuthorization' "$cascade"; then
-  printf "  FAIL  cascade retains the retired caller-owned native authorization directive\n"
-  failures=1
-else
-  printf "  OK    cascade removes the retired caller-owned native authorization directive\n"
-fi
+require_absent "$model_cascade" 'native_judgment' "model cascade removes the dormant native judgment rail"
+require_absent "$harness" 'native_judgment' "harness removes the dormant native judgment role"
+require_absent "$cascade" 'native_judgment' "dispatcher removes native judgment authorization machinery"
 if [ -f "$routing" ]; then
   jq -e '.targets.enforcement.varianceReceiptRequired == true' "$routing" >/dev/null || { printf "  FAIL  routing policy requires variance receipts\n"; failures=1; }
 fi
@@ -512,8 +477,9 @@ require_text "$dm_review" '| `security-auditor-openrouter` | `moonshotai/kimi-k3
 require_text "$dm_review" '7200s at or above 10K diff lines' "dm-review bulk analysis scales to a two-hour completion budget"
 require_absent "$cascade" 'OPENROUTER_PAYLOAD_AUTHORIZATION' "pipeline cascade does not trust environment disclosure authority"
 require_text "$authorization_contract" 'without an approval question' "pipeline preserves non-interactive native fallback"
-require_text "$cascade" 'exit 76' "pipeline distinguishes ladder exhaustion from provider-terminal exit 75"
-require_text "$orchestrator" 'Reserved RC 75' "orchestrator does not claim broker-backed terminal evidence"
+require_text "$cascade" 'exit 76' "pipeline exposes ladder exhaustion"
+require_absent "$cascade" 'rc -eq 75' "pipeline removes provider-terminal compatibility handling"
+require_absent "$orchestrator" 'RC 75' "orchestrator removes provider-terminal compatibility instructions"
 require_absent "$orchestrator" 'append the exact unmodified' "orchestrator removes active signed-broker receipt handling"
 require_text "$runner_policy_test" 'test_openrouter_noninteractive.py' "runner policy uses controlled loopback configured-key fixtures"
 require_text "$noninteractive_test" 'FixtureHandler.contacts' "configured-key fixtures count provider contacts"

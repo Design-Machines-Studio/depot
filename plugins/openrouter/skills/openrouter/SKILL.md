@@ -113,8 +113,8 @@ RESULT=$(env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
   bash "$WRAPPER_PATH" "$MODEL" - "$TIMEOUT" "${FALLBACK_MODEL:-}" < "$PROMPT_FILE")
 ```
 
-This is a single-pass path with no user-approval state. Workflow Authority
-presence or health has no bearing on configured-key availability.
+This is a single-pass path with no user-approval state. The configured-key
+path has no broker dependency.
 
 The wrapper JSON-encodes the prompt into private temporary storage, streams the
 response, and records a content-free receipt. The boundary refuses unmistakable

@@ -92,9 +92,9 @@ structured `plugin_bundle_unavailable` error and exits nonzero.
   `~/.codex/plugins/cache/depot/`.
 - Version compatibility is semantic: same-major versions at or above the
   consuming workflow's declared floor. Existing inspection, retry, and
-  behavioral-contract consumers may declare `>=0.5.0`; repository verification
-  planning/execution consumers require `>=0.6.1`; provider-dispatch consumers
-  require `>=0.7.0`; ordinary run-cost-summary consumers require `>=0.8.0`;
+  behavioral-contract consumers may declare `>=0.5.0`; exact-ref repository
+  verification planning/execution consumers require `>=0.14.0`; ordinary run-cost-summary
+  consumers require `>=0.8.0`;
   matrix-backed run-cost-summary consumers require `>=0.13.0`.
   Candidates are ordered by their parsed semver
   path segment, newest first, and the plugin manifest's declared name and
@@ -109,7 +109,7 @@ structured `plugin_bundle_unavailable` error and exits nonzero.
 - If the launcher, runtime, or any shadow prediction/observation/comparison/
   metrics step is unavailable or incompatible, preserve the authoritative
   Markdown result and record `shadow unavailable` with a safe reason.
-  Repository-verification runtime or authority failure remains a fail-closed
+  Repository-verification runtime, plan, or execution failure remains a fail-closed
   canonical blocker on profile-aware repositories. Launcher exit `4` means runtime
   unavailable; the kernel's stable exits are `0` success, `2` invalid
   input/schema, `3` unsafe/blocked/required verification failed or pending,

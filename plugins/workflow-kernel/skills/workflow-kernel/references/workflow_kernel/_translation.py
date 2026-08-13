@@ -56,12 +56,8 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "decision_profile", "decision_profile_defaulted",
     "contract_id", "schema_version", "revision", "contract_digest",
     "contract_ref", "previous_contract_digest", "reason_code",
-    "human_approval_evidence_ref", "verification_contract_bound",
-    "verification_profile_id", "verification_profile_digest",
-    "verification_profile_ref",
-    "actor", "authority", "decision", "issued_at", "expires_at", "nonce",
-    "approval_ref",
-    "candidate_contract_digest",
+    "verification_contract_bound", "verification_profile_id",
+    "verification_profile_digest", "verification_profile_ref",
     "verification_contract_provenance",
     "chunk_id", "usage_scope", "measurement_source", "usage_estimated",
     "input_usage_count", "output_usage_count", "cache_read_usage_count",
@@ -117,7 +113,6 @@ RECEIPT_FIELD_ALIASES = {
     "contractRef": "contract_ref",
     "previousContractDigest": "previous_contract_digest",
     "reasonCode": "reason_code",
-    "humanApprovalEvidenceRef": "human_approval_evidence_ref",
     "chunkId": "chunk_id",
     "usageScope": "usage_scope",
     "measurementSource": "measurement_source",
@@ -156,9 +151,7 @@ RECEIPT_FIELD_ALIASES = {
 }
 
 _MISSING = object()
-_CONTRACT_STAGES = frozenset({
-    "verification_contract_bound", "verification_contract_revised",
-})
+_CONTRACT_STAGES = frozenset({"verification_contract_bound"})
 _VALIDATION_INTERVENTION_REASONS = frozenset({
     "identical_failure_convergence", "retry_budget_exhausted",
     "replacement_adapter_dispatch_failed", "replacement_invalid_session_handle",
@@ -170,8 +163,8 @@ _PRE_CONTRACT_STAGES = frozenset({
 _CONTRACT_FIELDS = frozenset({
     "contract_id", "schema_version", "revision", "contract_digest",
     "contract_ref", "previous_contract_digest", "reason_code",
-    "human_approval_evidence_ref", "verification_profile_id",
-    "verification_profile_digest", "verification_profile_ref",
+    "verification_profile_id", "verification_profile_digest",
+    "verification_profile_ref",
 })
 _CONTRACT_BINDING_MARKERS = _CONTRACT_FIELDS - frozenset({"reason_code"})
 _RECEIPT_ENVELOPE_FIELDS = COMMON_RECEIPT_FIELDS | frozenset({
@@ -181,9 +174,6 @@ _CONTRACT_DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _CONTRACT_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
 _CONTRACT_REASON = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}\Z")
 _PROFILE_ID = re.compile(r"profile-sha256:[0-9a-f]{64}\Z")
-_APPROVAL_REF = re.compile(
-    r"verification-approvals/sha256-[0-9a-f]{64}\.json\Z"
-)
 _CREDENTIAL_LIKE = re.compile(
     r"(?i)^(?:sk-|gh[pousr]_|xox[baprs]-|bearer\s)",
 )
@@ -693,7 +683,7 @@ def validate_family_independence(receipt: Mapping[str, object]) -> None:
 
 
 def _validate_observation_receipt(receipt: dict) -> dict:
-    """Validate optional telemetry without assigning it workflow authority."""
+    """Validate optional telemetry without treating it as authoritative."""
     receipt.pop("human_intervention", None)
     if "decision_profile" in receipt:
         receipt["decision_profile"] = normalize_decision_profile(
@@ -1043,10 +1033,6 @@ def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict
     payload["evidence"] = [reference]
     if receipt.get("stage") == "verification_contract_bound":
         payload["evidence"].append("verification_contract_bound")
-    elif receipt.get("stage") == "verification_contract_revised":
-        payload["evidence"].extend((
-            "verification_contract_bound", "verification_contract_revised",
-        ))
     if receipt.get("stage") == "finding_contribution":
         payload["evidence"].append(receipt["evidence_ref"])
     elif receipt.get("stage") == "finding_contribution_coverage":
@@ -1071,29 +1057,7 @@ def _contract_reference(value: object, field: str, *, nullable: bool = False):
         raise ValueError("invalid verification contract receipt") from None
 
 
-def _validate_contract_authorization_receipt(receipt: dict, current: object):
-    if current is None:
-        raise ValueError("contract approval precedes initial binding")
-    previous = receipt.get("previous_contract_digest")
-    candidate = receipt.get("candidate_contract_digest")
-    approval_ref = _contract_reference(receipt.get("approval_ref"), "approval ref")
-    if (
-        receipt.get("decision") != "approved"
-        or previous != current[3]
-        or type(candidate) is not str or _CONTRACT_DIGEST.fullmatch(candidate) is None
-        or _APPROVAL_REF.fullmatch(approval_ref) is None
-        or not required_text(receipt.get("actor"), "approval actor")
-        or receipt.get("authority") != "design-machines-human-approval-v1"
-        or not required_text(receipt.get("nonce"), "approval nonce")
-        or not required_text(receipt.get("issued_at"), "approval issued_at")
-        or not required_text(receipt.get("expires_at"), "approval expires_at")
-    ):
-        raise ValueError("invalid verification contract authorization receipt")
-    return previous, candidate, approval_ref
-
-
-def _validate_contract_receipt(receipt: dict, current: object,
-                               pending_approval: object):
+def _validate_contract_receipt(receipt: dict, current: object):
     if set(receipt) - _RECEIPT_ENVELOPE_FIELDS:
         raise ValueError("invalid verification contract receipt")
     if not _CONTRACT_FIELDS <= set(receipt):
@@ -1129,10 +1093,6 @@ def _validate_contract_receipt(receipt: dict, current: object,
     reason = required_text(receipt["reason_code"], "contract reason code")
     if _CONTRACT_REASON.fullmatch(reason) is None:
         raise ValueError("invalid verification contract receipt")
-    approval_ref = _contract_reference(
-        receipt["human_approval_evidence_ref"], "contract approval",
-        nullable=True,
-    )
     profile_id = receipt["verification_profile_id"]
     profile_digest = receipt["verification_profile_digest"]
     profile_ref = _contract_reference(
@@ -1150,29 +1110,11 @@ def _validate_contract_receipt(receipt: dict, current: object,
     ) or (profile_id is None and profile_ref is not None):
         raise ValueError("invalid verification profile binding receipt")
     stage = receipt["stage"]
-    if stage == "verification_contract_bound":
-        if (
-            current is not None or revision != 1 or previous is not None
-            or approval_ref is not None or pending_approval is not None
-        ):
-            raise ValueError("invalid verification contract continuity")
-    elif (
-        current is None
-        or contract_id != current[0]
-        or receipt["schema_version"] != current[1]
-        or revision != current[2] + 1
-        or previous != current[3]
+    if (
+        stage != "verification_contract_bound" or current is not None
+        or revision != 1 or previous is not None
     ):
         raise ValueError("invalid verification contract continuity")
-    if stage == "verification_contract_revised":
-        profile_changed = (
-            profile_id, profile_digest, profile_ref
-        ) != current[4:7]
-        if approval_ref is not None:
-            if pending_approval != (previous, digest, approval_ref):
-                raise ValueError("revision lacks matching approval continuity")
-        elif pending_approval is not None or profile_changed:
-            raise ValueError("revision dropped required approval continuity")
     return (
         contract_id, receipt["schema_version"], revision, digest,
         profile_id, profile_digest, profile_ref,
@@ -1213,7 +1155,6 @@ def translate_receipts(
     decision_profile_defaulted = None
     isolation_strategy = None
     current_contract = None
-    pending_contract_approval = None
     contribution_sources = set()
     contribution_artifact_reviewers = {}
     for position, receipt in enumerate(normalized_values):
@@ -1310,17 +1251,8 @@ def translate_receipts(
         if node_id is not None:
             node_id = required_text(node_id, "node id")
         reference = safe_reference(receipt.get("authoritative_receipt"))
-        if stage == "verification_contract_revision_authorized":
-            if pending_contract_approval is not None:
-                raise ValueError("multiple pending contract approvals")
-            pending_contract_approval = _validate_contract_authorization_receipt(
-                receipt, current_contract,
-            )
-        elif stage in _CONTRACT_STAGES:
-            current_contract = _validate_contract_receipt(
-                receipt, current_contract, pending_contract_approval,
-            )
-            pending_contract_approval = None
+        if stage in _CONTRACT_STAGES:
+            current_contract = _validate_contract_receipt(receipt, current_contract)
         elif has_contract_binding:
             claimed = receipt.get("contract_digest", _MISSING)
             if current_contract is None:

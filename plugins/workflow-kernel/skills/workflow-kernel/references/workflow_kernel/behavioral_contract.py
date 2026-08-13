@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 import os
 import re
-from datetime import datetime, timezone
 from pathlib import Path
 
 from ._files import _OwnedResourceScope, bind_durable_path
@@ -19,8 +17,6 @@ from .redaction import (
 
 SCHEMA_VERSION = 1
 MAX_CONTRACT_BYTES = 1_048_576
-MAX_APPROVAL_BYTES = 65_536
-MAX_APPROVAL_CAPABILITY_BYTES = 8_192
 MAX_COLLECTION_ITEMS = 1_024
 MAX_ARGV_ITEMS = 256
 MAX_OBLIGATION_ITEMS = 4_096
@@ -40,7 +36,6 @@ _MANUAL_FIELDS = frozenset({"requirement_id", "reason_code", "evidence_ref"})
 _JUSTIFICATION_FIELDS = frozenset({
     "reason_code", "summary", "added_obligation_ids",
     "retained_obligation_ids", "removed_obligation_ids",
-    "human_approval_evidence_ref",
 })
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 _PROFILE_ID = re.compile(r"profile-sha256:[0-9a-f]{64}")
@@ -50,21 +45,6 @@ _REQUIREMENT_ID = re.compile(r"REQ-[A-Za-z0-9][A-Za-z0-9._-]{0,123}")
 _REGRESSION_ID = re.compile(r"REG-[A-Za-z0-9][A-Za-z0-9._-]{0,123}")
 _CHECK_ID = re.compile(r"CHK-[A-Za-z0-9][A-Za-z0-9._-]{0,123}")
 _BASELINE_EXPECTATIONS = frozenset({"must_fail", "may_pass", "not_runnable"})
-_BASELINE_STRENGTH = {"not_runnable": 0, "may_pass": 1, "must_fail": 2}
-_APPROVAL_FIELDS = frozenset({
-    "schema_version", "actor", "authority", "decision", "issued_at",
-    "expires_at", "run_id", "nonce", "previous_contract_digest",
-    "candidate_contract_digest", "signature",
-})
-_APPROVAL_SIGNED_FIELDS = _APPROVAL_FIELDS - frozenset({"signature"})
-_APPROVAL_CAPABILITY_FIELDS = frozenset({
-    "schema_version", "authority", "key_hex",
-})
-_APPROVAL_SIGNATURE = re.compile(r"hmac-sha256:[0-9a-f]{64}")
-_APPROVAL_KEY = re.compile(r"[0-9a-f]{64,256}")
-ALLOWED_APPROVAL_AUTHORITIES = frozenset({
-    "design-machines-human-approval-v1",
-})
 _SHELL_EXECUTABLES = frozenset({
     "ash", "bash", "csh", "dash", "fish", "ksh", "mksh", "powershell",
     "cmd", "cmd.exe", "powershell.exe", "pwsh", "pwsh.exe", "sh", "tcsh",
@@ -467,10 +447,6 @@ def validate_contract(value):
             raw_justification["removed_obligation_ids"], "removed obligation id",
             maximum=MAX_OBLIGATION_ITEMS,
         ),
-        "human_approval_evidence_ref": _nullable_reference(
-            raw_justification["human_approval_evidence_ref"],
-            "human approval evidence_ref",
-        ),
     }
     delta_sets = [
         set(justification[name]) for name in (
@@ -599,48 +575,6 @@ def validate_profile_binding(contract, profile):
     return canonical
 
 
-def _potential_weakening(previous, candidate):
-    previous_requirements = {item["id"]: item for item in previous["requirements"]}
-    candidate_requirements = {item["id"]: item for item in candidate["requirements"]}
-    previous_regressions = {item["id"]: item for item in previous["prohibited_regressions"]}
-    candidate_regressions = {item["id"]: item for item in candidate["prohibited_regressions"]}
-    if any(candidate_requirements.get(identifier) != item
-           for identifier, item in previous_requirements.items()
-           if identifier in candidate_requirements):
-        return True
-    if any(candidate_regressions.get(identifier) != item
-           for identifier, item in previous_regressions.items()
-           if identifier in candidate_regressions):
-        return True
-    previous_checks = {item["id"]: item for item in previous["checks"]}
-    candidate_checks = {item["id"]: item for item in candidate["checks"]}
-    for identifier, old in previous_checks.items():
-        new = candidate_checks.get(identifier)
-        if new is None:
-            continue
-        if old["argv"] != new["argv"]:
-            return True
-        if (_BASELINE_STRENGTH[new["baseline_expectation"]]
-                < _BASELINE_STRENGTH[old["baseline_expectation"]]):
-            return True
-    previous_manual = {
-        item["requirement_id"]: item for item in previous["manual_requirements"]
-    }
-    candidate_manual = {
-        item["requirement_id"]: item for item in candidate["manual_requirements"]
-    }
-    if any(candidate_manual.get(identifier) != item
-           for identifier, item in previous_manual.items()):
-        return True
-    if (
-        previous["verification_profile_id"] != candidate["verification_profile_id"]
-        or previous["verification_profile_digest"]
-        != candidate["verification_profile_digest"]
-    ):
-        return True
-    return False
-
-
 def validate_initial_binding(contract):
     canonical = validate_contract(contract)
     expected = sorted(obligations(canonical))
@@ -652,211 +586,9 @@ def validate_initial_binding(contract):
         or justification["added_obligation_ids"] != expected
         or justification["retained_obligation_ids"]
         or justification["removed_obligation_ids"]
-        or justification["human_approval_evidence_ref"] is not None
     ):
         _fail("invalid initial binding justification")
     return canonical
-
-
-def _approval_time(value, name):
-    text = _string(value, name, maximum=64)
-    try:
-        parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
-    except ValueError:
-        _fail(f"invalid {name}")
-    if parsed.tzinfo is None or parsed.utcoffset() is None or not text.endswith("Z"):
-        _fail(f"{name} must be timezone-aware")
-    parsed = parsed.astimezone(timezone.utc)
-    return parsed, parsed.isoformat().replace("+00:00", "Z")
-
-
-def validate_approval_evidence(value, *, previous_digest, candidate_digest, run_id):
-    """Validate one signed approval envelope for an exact transition."""
-    item = _object(value, _APPROVAL_FIELDS, "approval evidence")
-    if _strict_int(item["schema_version"], "approval schema_version", minimum=1) != 1:
-        _fail("unsupported approval schema_version")
-    actor = _string(item["actor"], "approval actor", pattern=_STABLE_ID, durable=False)
-    authority = _string(
-        item["authority"], "approval authority", pattern=_STABLE_ID, durable=False,
-    )
-    if authority not in ALLOWED_APPROVAL_AUTHORITIES:
-        _fail("approval authority is not allowlisted")
-    if item["decision"] != "approved":
-        _fail("approval decision is not approved")
-    issued, issued_at = _approval_time(item["issued_at"], "approval issued_at")
-    expires, expires_at = _approval_time(item["expires_at"], "approval expires_at")
-    if expires <= issued:
-        _fail("approval expiry must follow issuance")
-    if _string(item["run_id"], "approval run_id", pattern=_STABLE_ID, durable=False) != run_id:
-        _fail("approval run mismatch")
-    nonce = _string(item["nonce"], "approval nonce", pattern=_STABLE_ID, durable=False)
-    if item["previous_contract_digest"] != previous_digest:
-        _fail("approval prior contract digest mismatch")
-    if item["candidate_contract_digest"] != candidate_digest:
-        _fail("approval candidate contract digest mismatch")
-    signature = _string(
-        item["signature"], "approval signature", pattern=_APPROVAL_SIGNATURE,
-        durable=False,
-    )
-    return {
-        "schema_version": 1, "actor": actor, "authority": authority,
-        "decision": "approved", "issued_at": issued_at,
-        "expires_at": expires_at, "run_id": run_id, "nonce": nonce,
-        "previous_contract_digest": previous_digest,
-        "candidate_contract_digest": candidate_digest,
-        "signature": signature,
-    }
-
-
-def approval_signing_bytes(value, *, previous_digest, candidate_digest, run_id):
-    """Return the one canonical payload covered by the host signature."""
-    canonical = validate_approval_evidence(
-        value, previous_digest=previous_digest,
-        candidate_digest=candidate_digest, run_id=run_id,
-    )
-    payload = {name: canonical[name] for name in _APPROVAL_SIGNED_FIELDS}
-    return json.dumps(
-        payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
-    ).encode("utf-8")
-
-
-def verify_approval_capability(value, capability, *, previous_digest,
-                               candidate_digest, run_id, now=None):
-    """Verify allowlisted host HMAC authority and the bounded validity window."""
-    canonical = validate_approval_evidence(
-        value, previous_digest=previous_digest,
-        candidate_digest=candidate_digest, run_id=run_id,
-    )
-    if (
-        type(capability) is not tuple or len(capability) != 2
-        or capability[0] != canonical["authority"]
-        or capability[0] not in ALLOWED_APPROVAL_AUTHORITIES
-        or type(capability[1]) is not bytes or len(capability[1]) < 32
-    ):
-        _fail("invalid host approval capability")
-    expected = hmac.new(
-        capability[1], approval_signing_bytes(
-            canonical, previous_digest=previous_digest,
-            candidate_digest=candidate_digest, run_id=run_id,
-        ), hashlib.sha256,
-    ).hexdigest()
-    if not hmac.compare_digest(canonical["signature"], "hmac-sha256:" + expected):
-        _fail("invalid approval capability signature")
-    current = datetime.now(timezone.utc) if now is None else now
-    if type(current) is not datetime or current.tzinfo is None or current.utcoffset() is None:
-        _fail("invalid approval verification time")
-    issued, _ = _approval_time(canonical["issued_at"], "approval issued_at")
-    expires, _ = _approval_time(canonical["expires_at"], "approval expires_at")
-    current = current.astimezone(timezone.utc)
-    if current < issued or current >= expires:
-        _fail("approval capability is not currently valid")
-    return canonical
-
-
-def approval_bytes(value, *, previous_digest, candidate_digest, run_id):
-    canonical = validate_approval_evidence(
-        value, previous_digest=previous_digest,
-        candidate_digest=candidate_digest, run_id=run_id,
-    )
-    return json.dumps(
-        canonical, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
-    ).encode("utf-8")
-
-
-def load_host_approval_capability(path):
-    """Read one owner-only host key without retaining its path or bytes."""
-    binding = bind_durable_path(Path(path))
-    with _OwnedResourceScope() as owned:
-        directory = owned.pin(binding)
-        descriptor = owned.own(directory.open_regular(binding.path.name, os.O_RDONLY))
-        metadata = os.fstat(descriptor)
-        if (
-            metadata.st_mode & 0o077
-            or hasattr(os, "getuid") and metadata.st_uid != os.getuid()
-        ):
-            _fail("host approval capability permissions are unsafe")
-        chunks = []
-        total = 0
-        while True:
-            chunk = os.read(
-                descriptor, min(4096, MAX_APPROVAL_CAPABILITY_BYTES + 1 - total),
-            )
-            if not chunk:
-                break
-            chunks.append(chunk)
-            total += len(chunk)
-            if total > MAX_APPROVAL_CAPABILITY_BYTES:
-                _fail("host approval capability exceeds size limit")
-        directory.require_identity(descriptor, binding.path.name)
-    try:
-        text = b"".join(chunks).decode("utf-8")
-        parse_json_document(text)
-        value = json.loads(
-            text, parse_int=bounded_json_int,
-            parse_constant=lambda _raw: _fail("non-finite JSON constant"),
-            object_pairs_hook=_duplicate_rejecting_object,
-        )
-    except (UnicodeError, json.JSONDecodeError, RecursionError):
-        _fail("invalid host approval capability")
-    item = _object(value, _APPROVAL_CAPABILITY_FIELDS, "host approval capability")
-    if item["schema_version"] != 1 or type(item["schema_version"]) is not int:
-        _fail("unsupported host approval capability schema_version")
-    authority = _string(
-        item["authority"], "approval authority", pattern=_STABLE_ID, durable=False,
-    )
-    if authority not in ALLOWED_APPROVAL_AUTHORITIES:
-        _fail("approval authority is not allowlisted")
-    key_hex = item["key_hex"]
-    if (
-        type(key_hex) is not str or len(key_hex) % 2
-        or _APPROVAL_KEY.fullmatch(key_hex) is None
-    ):
-        _fail("invalid host approval capability")
-    return authority, bytes.fromhex(key_hex)
-
-
-def approval_digest(value, *, previous_digest, candidate_digest, run_id):
-    return "sha256:" + hashlib.sha256(approval_bytes(
-        value, previous_digest=previous_digest,
-        candidate_digest=candidate_digest, run_id=run_id,
-    )).hexdigest()
-
-
-def validate_revision(previous, candidate, previous_digest, *,
-                      approval_evidence=None, run_id=None):
-    previous = validate_contract(previous)
-    candidate = validate_contract(candidate)
-    if (
-        candidate["contract_id"] != previous["contract_id"]
-        or candidate["revision"] != previous["revision"] + 1
-        or candidate["previous_contract_digest"] != previous_digest
-        or candidate["revision_justification"]["reason_code"] == "initial_binding"
-    ):
-        _fail("revision does not extend immediately prior binding")
-    old = obligations(previous)
-    new = obligations(candidate)
-    expected = {
-        "added_obligation_ids": sorted(new - old),
-        "retained_obligation_ids": sorted(new & old),
-        "removed_obligation_ids": sorted(old - new),
-    }
-    justification = candidate["revision_justification"]
-    if any(justification[name] != values for name, values in expected.items()):
-        _fail("revision obligation deltas do not match contracts")
-    weakening = bool(old - new) or _potential_weakening(previous, candidate)
-    if weakening:
-        if justification["human_approval_evidence_ref"] is None:
-            _fail("weakening requires human approval evidence")
-        if approval_evidence is None or run_id is None:
-            _fail("weakening requires authenticated approval evidence")
-        validate_approval_evidence(
-            approval_evidence, previous_digest=previous_digest,
-            candidate_digest=contract_digest(candidate), run_id=run_id,
-        )
-    elif (approval_evidence is not None
-          or justification["human_approval_evidence_ref"] is not None):
-        _fail("approval evidence supplied for non-weakening revision")
-    return candidate
 
 
 def _duplicate_rejecting_object(pairs):
@@ -884,25 +616,6 @@ def parse_contract_bytes(raw):
     return validate_contract(value)
 
 
-def parse_approval_bytes(raw, *, previous_digest, candidate_digest, run_id):
-    if type(raw) is not bytes or len(raw) > MAX_APPROVAL_BYTES:
-        _fail("approval document exceeds size limit")
-    try:
-        text = raw.decode("utf-8")
-        parse_json_document(text)
-        value = json.loads(
-            text, parse_int=bounded_json_int,
-            parse_constant=lambda _raw: _fail("non-finite JSON constant"),
-            object_pairs_hook=_duplicate_rejecting_object,
-        )
-    except (UnicodeError, json.JSONDecodeError, RecursionError):
-        _fail("invalid approval JSON")
-    return validate_approval_evidence(
-        value, previous_digest=previous_digest,
-        candidate_digest=candidate_digest, run_id=run_id,
-    )
-
-
 def load_contract(path):
     """Read one symlink-safe bounded contract document."""
     binding = bind_durable_path(Path(path))
@@ -921,26 +634,3 @@ def load_contract(path):
                 _fail("contract document exceeds size limit")
         directory.require_identity(descriptor, binding.path.name)
         return parse_contract_bytes(b"".join(chunks))
-
-
-def load_approval(path, *, previous_digest, candidate_digest, run_id):
-    """Read one symlink-safe bounded approval receipt."""
-    binding = bind_durable_path(Path(path))
-    with _OwnedResourceScope() as owned:
-        directory = owned.pin(binding)
-        descriptor = owned.own(directory.open_regular(binding.path.name, os.O_RDONLY))
-        chunks = []
-        total = 0
-        while True:
-            chunk = os.read(descriptor, min(8192, MAX_APPROVAL_BYTES + 1 - total))
-            if not chunk:
-                break
-            chunks.append(chunk)
-            total += len(chunk)
-            if total > MAX_APPROVAL_BYTES:
-                _fail("approval document exceeds size limit")
-        directory.require_identity(descriptor, binding.path.name)
-        return parse_approval_bytes(
-            b"".join(chunks), previous_digest=previous_digest,
-            candidate_digest=candidate_digest, run_id=run_id,
-        )
