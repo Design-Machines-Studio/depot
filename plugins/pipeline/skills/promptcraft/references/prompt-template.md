@@ -88,7 +88,7 @@ Treat approximately 40 tool calls as an exploration checkpoint, not a terminatio
 
 ## Ambiguity Protocol
 
-This block is one of three layers in the pipeline's ambiguity defence. Sibling layers: `plan-adversary.md` Sprint Contract Negotiation (catches structural ambiguity at prompt-review time, cheapest) and `execution-orchestrator.md` Ambiguity Handling (autonomous-mode commit-trailer fallback). Keep the wording here in sync with those two.
+This block is one of three layers in the pipeline's ambiguity defence. Sibling layers: `plan-adversary.md` adversarial scope review (catches structural ambiguity at prompt-review time, cheapest) and `execution-orchestrator.md` Ambiguity Handling (autonomous-mode commit-trailer fallback). Keep the wording here in sync with those two.
 
 If the Task or Acceptance Criteria allow more than one reasonable interpretation, do not pick silently.
 

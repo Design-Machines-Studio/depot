@@ -13,6 +13,10 @@ A single-command code review system that launches parallel specialized agents ta
 
 P1 blocks merge and P2 must be fixed before merge. P3 is advisory: preserve its complete evidence, provenance, count, and detail in the report, but do not create mandatory work, drive convergence, or prevent `CLEAN`. See `${CLAUDE_SKILL_DIR}/references/severity-mapping.md` for the decision tree and `${CLAUDE_SKILL_DIR}/references/output-format.md` for the merge-recommendation logic.
 
+Every P1/P2 must name the affected current user or operator, the reachable actor/input/path, the realistic harm or regression, and the smallest adequate repair. A security P1/P2 must also name the actual trust boundary. For Design Machines work, default to the current context unless approved scope says otherwise: two developers, primarily private first-party repositories, trusted Fixture authors, and self-hosted co-op applications serving roughly 4--50 people. Do not invent a public Fixture marketplace or hostile third-party plugin channel. Hypothetical actors, future marketplaces, enterprise scale, a generic OWASP possibility, or defence-in-depth preferences are P3 at most and usually not findings.
+
+Keep real reachable boundaries blocking at their supported severity: authentication or authorization bypass, credential disclosure, unsafe destructive operations, corruptible state or backups, public untrusted input, release/update integrity failures, and false verification claims.
+
 ## Reviewer Output Style (applies to all review agents)
 
 Every review agent dispatched by this skill operates under a terse-output contract:
@@ -37,7 +41,7 @@ Match the review depth to the moment. Running full multi-round review on every c
 | **Per chunk during pipeline execution** | `dm-review-quick` | 2 core judgment lanes, plus applicable existing UI/build/domain verification lanes. |
 | **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + memory capture. Run once, not per chunk. |
 | **Bulk second opinions / large-diff first pass** | Model selected by `routing-policy.json` | Family-independent security analysis plus style, duplication, pattern, and doc-consistency lanes. The exact diff is content-scanned immediately before external disclosure; sensitive file sections stay local while eligible sections proceed. Security completion always includes mandatory full-diff independent-family sign-off. |
-| **Adversarial multi-round review** | full + iterate | Reserve for P1 findings and plan reviews. Do NOT multi-round every chunk. |
+| **Bounded repair review** | full + one repair | Use one repair batch and one affected-lane recheck for supported P1/P2 findings. Repeat broad review only when the original required review was incomplete or the repair changed a real sensitive boundary. |
 
 **Escalation exception:** quick review is an early feedback gate, not the final
 security boundary. Every PR still receives one full pre-merge review. Escalate
@@ -105,10 +109,10 @@ Write the exact declared dependent node IDs to the dependency JSON file, using `
 
 All review agents and fix workflows must follow these principles:
 
-1. **Right approach over quick fix** -- Always recommend the architecturally correct solution, not the fastest patch. Technical debt introduced by band-aids costs more than doing it properly now.
-2. **Best practices first** -- Fixes must follow framework conventions and best practices (Live Wires for CSS, Go idioms for Go, Craft patterns for Craft). Never recommend workarounds that bypass established patterns.
+1. **Smallest adequate repair** -- Recommend the clearest direct change that resolves the evidenced current failure within approved scope. A one-use handler or concrete implementation is valid when clear and tested.
+2. **Relevant practices first** -- Apply framework conventions when they serve the current requirement or reachable risk; a preferred layer or abstraction is not a repair by itself.
 3. **Replace, don't preserve** -- When old code is the problem, recommend replacing it. Don't wrap broken patterns in compatibility layers.
-4. **Especially during prototyping** -- Prototypes must be built on the cleanest possible foundation. A prototype that ships with hacks becomes production code that ships with hacks.
+4. **No scope expansion** -- A required fix may touch only the approved behavior and the evidenced defect. Unrelated hardening, future-marketplace defenses, and new product scope remain P3 alternatives and do not enter convergence.
 
 ### Prototype Hygiene
 
@@ -598,7 +602,7 @@ Project root: /path/to/project
 
 ## Fix Philosophy
 
-Follow the Fix Philosophy from the review skill: right approach over quick fix, best practices first, replace don't preserve. During prototyping, always recommend new migrations over patching existing ones, and never preserve example data at the expense of a clean schema.
+Follow the Fix Philosophy from the review skill: use the smallest adequate repair, apply relevant framework conventions, replace broken patterns rather than wrapping them, and reject unrelated hardening or product-scope expansion. During prototyping, recommend new migrations over patching existing ones, and never preserve example data at the expense of a clean schema.
 
 ## RAG Reference Library
 

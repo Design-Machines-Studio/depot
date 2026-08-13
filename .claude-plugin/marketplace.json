@@ -281,12 +281,12 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.60.1",
+      "version": "1.61.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "Code review orchestrator with proportional quick review, advisory P3 evidence, full security and browser coverage, stable finding identities, and contribution receipts",
+      "description": "Code review orchestrator with reachable-threat P1/P2 evidence, minimum-adequate repairs, proportional convergence, full security and browser coverage, and stable finding receipts",
       "capabilities_summary": {
         "skills": 3,
         "agents": 15,
@@ -359,12 +359,12 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.49.0",
+      "version": "1.50.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "Autonomous feature development pipeline with fresh executable tiered verification, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
+      "description": "Autonomous feature development pipeline with approved-scope intake, minimum-adequate planning, bounded adversarial review, fresh tiered verification, browser recovery, and isolated execution",
       "capabilities_summary": {
         "skills": 4,
         "agents": 2,

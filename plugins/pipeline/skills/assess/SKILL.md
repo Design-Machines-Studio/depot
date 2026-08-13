@@ -165,14 +165,28 @@ If no `tasks/lessons.md` exists, log `prior lessons check: no lessons file -- sk
 
 ### Phase 3: Consolidation
 
-Combine both reports into a single **Assessment Brief**. When running as part of `/pipeline`, the Assessment Brief also serves as the cached source of truth for the Key Requirements list (extracted from `original-prompt.md` once, referenced many times across phases).
+Combine both reports into a single **Assessment Brief**. When running as part of `/pipeline`, preserve the original prompt verbatim and distinguish in the existing assessment prose:
+
+- desired outcomes;
+- hard constraints and explicit approved decisions;
+- implementation mechanisms proposed by the user or an upstream prompt; and
+- future or conditional ideas.
+
+A proposed mechanism is not automatically a product requirement. Never silently discard an explicit request: when the smallest adequate solution would omit or replace a requested mechanism, show the smaller alternative at the existing assessment gate and obtain the user's decision. After the gate returns, apply that decision to the Scope Intake prose, rewrite the `keyRequirements` island with the resulting approved scope, and verify the extracted island reflects the selected option before research or planning begins. The pre-gate island is provisional; it does not become the cached source of truth merely because the assessment file exists.
 
 The brief is written as **HTML with a JSON data island**, not markdown -- assemble `templates/base.html` + `templates/sections/assessment.html` per `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/README.md`. The content outline below maps to the section's slots; the `keyRequirements`, `testPersonas`, `recentLessons`, and `baselineScreenshots` arrays also populate the `#pipeline-data` island so later phases read them with `extract-json-island.sh` instead of grepping prose.
 
 ```markdown
 # Assessment: [Area Name]
 
-## Key Requirements (cached from original-prompt.md)
+## Scope Intake
+- Desired outcomes: [...]
+- Hard constraints and approved decisions: [...]
+- Proposed mechanisms: [...]
+- Future or conditional ideas: [...]
+- Smallest adequate alternative and any user decision needed: [...]
+
+## Key Requirements (provisional until the assessment gate response is persisted)
 1. [Requirement 1 verbatim]
 2. [Requirement 2 verbatim]
 3. [Requirement N verbatim]

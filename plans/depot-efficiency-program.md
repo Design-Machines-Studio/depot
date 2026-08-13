@@ -1,6 +1,6 @@
 # Depot Efficiency Program -- Phase Index
 
-## Active coordination (refreshed 2026-08-12)
+## Active coordination (refreshed 2026-08-13)
 
 Shared cross-repository projection: [Assembly Coordination, Project
 1](https://github.com/orgs/Design-Machines-Studio/projects/1). GitHub Issues
@@ -10,28 +10,24 @@ external handoff only; it does not duplicate Baseplate's production roadmap.
 
 The current priority order is:
 
-1. **P1 -- make OpenRouter useful without ceremony.** Replace R3's mandatory
-   broker and repeated human approvals with a trusted-workstation path where a
-   configured OpenRouter key authorizes non-interactive use. Retain automatic
-   refusal of unmistakable credential/private-key payloads, cost receipts, and
-   native Codex supervision. Workflow Authority and its broker architecture are
-   removed; reintroduction requires a new owner decision backed by a
-   demonstrated threat or operational need.
-2. **P1 -- prove the cheaper path.** Run one bounded non-sensitive canary and
-   compare elapsed time, tokens, cost, and actionable defects with the native
-   fallback before expanding automated routing.
-3. **P2 -- unlock Fixture development.** Apply the proven workflow to the
-   existing Baseplate verifier -> canonical Jig chain as its external blockers
-   clear. Depot does not own that product work.
-4. **Other tooling is pull-based.** R4, R5, harness work, and new platform
-   improvements remain evidence-gated rather than moving ahead of Fixture work.
+1. **P1 -- proportional scope and review convergence.** Correct Pipeline intake,
+   minimum-adequate planning, adversarial review, and dm-review severity so
+   requested mechanisms do not become architecture by default and supported
+   P1/P2 repairs converge in one batch plus one affected-lane recheck.
+2. **P1 -- clear operator output.** Immediately after the policy correction,
+   ship the smallest usable Publish Preview workflow that gives an operator a
+   clear publication result without reviving its two six-chunk campaigns.
+3. **Evidence-gated follow-ons.** Workflow Kernel changes, R4, R5, new routing,
+   and speculative harness/platform tooling stay parked until a current failure
+   or measured workload proves the need.
+4. **P2 -- Fixture handoff remains external.** Baseplate and Jig own their
+   verifier/product repair; Depot supplies proportional policy, not product code.
 
 ### Single next Depot chunk
 
-PRs 37-43 are merged. They made review proportional, refreshed model evidence,
-made the Linux production build portable, repaired NED operation boundaries,
-fixed direct-envelope handling, and removed Notion from development
-coordination. Current trusted main is `981bf6c86cb1b4e70df9767786e9e5661eda0079`.
+Current trusted main for this correction is
+`345b1d44aa34d1209e33977295f7c60c9846d8ea`. Publish Preview is checkpointed in
+draft PR #51 so this branch can proceed without touching that session.
 
 R2 is closed **DONE / NO CODE**. Current `plan-verification` and
 `run-verification` already put repository proof before model review, keep passing
@@ -41,20 +37,15 @@ results. No measured workload justifies adding the authored caller-supplied
 `mechanical_globs` policy, so the old untracked R2 prompts are historical inputs,
 not executable work.
 
-The one immediate successor is **R3-simplify: non-interactive OpenRouter on a
-trusted developer workstation**. `OPENROUTER_API_KEY` or the existing validated
-key-file input is sufficient authorization. Direct `/openrouter`, eligible
-dm-review lanes, and the bounded Pipeline adapter must not ask for exact-digest,
-batch, FIDO, or broker approval. They keep the existing disclosure scan, output
-boundary, model restrictions, timeouts, fallbacks, and content-free cost/usage
-receipts. Missing credentials or an unavailable provider falls back to native
-Codex without blocking the run.
-
-This is a simplification of R3, not a new authorization framework. Reuse the
-existing non-interactive `trusted-boundary` byte-scan path where it fits; do not
-add another token, daemon, config service, approval artifact, or compatibility
-layer merely to rename the decision. Provider-side per-key spending limits are
-the preferred runaway-cost control.
+The immediate P1 is this proportional-scope correction. Its acceptance
+specimens are **Publish Preview** (a 2,231-word mechanism-heavy request expanded
+into two six-chunk campaigns and 12,586 words of prompts before testing a
+smaller publication workflow) and **Assembly Baseplate FIX-01** (PRs #657 and
+#662 / Issue #659, where trusted first-party Fixture code was modeled as a
+hostile marketplace and thousands of unnecessary lines followed). Passing means
+both preserve the real desired outcome and trust boundary while selecting the
+smallest adequate implementation; no specimen source tree or receipt is copied
+into Depot.
 
 ### Ordered Depot queue
 
@@ -65,21 +56,23 @@ the preferred runaway-cost control.
 | 2 | R2 pre-gates and evidence reuse | **DONE / NO CODE** | merged verification ordering, bounded receipts, and exact reuse cover the residual; no observed mechanical-glob class warrants another policy layer |
 | 3 | [#39](https://github.com/Design-Machines-Studio/depot/issues/39) / PR 40 R3a Linux portability proof | **DONE** | production-tag build passed on NED; no service was installed |
 | 4 | PR 44 production-root contract repair | **REVIEW / OPTIONAL** | exact-head review and owner merge decision; it does not block the new path and authorizes no broker continuation |
-| 5 | R3-simplify non-interactive configured-key OpenRouter | **NEXT** | direct, dm-review, and one bounded Pipeline lane complete without human approval; automatic sensitive-payload refusal and receipts still pass |
-| 6 | One real cheap-path canary | HOLD | R3-simplify merged and released; measured time/cost/quality receipt from a non-sensitive workload |
-| 7 | Minimal worker/advisor routing adjustment | HOLD / REASSESS | canary shows a concrete routing miss; otherwise current matrix stands |
-| 8 | Baseplate verifier -> canonical Jig Fixture handoff | EXTERNAL / P2 | producer checks and consumer proof clear in their owning repositories |
-| 9 | R4 static run report | LATER / REWRITE | a current failed run supplies a diagnosis specimen |
-| 10 | R5 Agent Plugins interop | PARK | a named client or distribution target exists |
-| 11 | Harness lessons: budgets then memory/codify | HOLD / REWRITE | current run evidence justifies the exact change |
-| 12 | Workflow Authority install, integration, and Darwin port | **REMOVED** | reintroduction requires a new owner decision backed by a demonstrated threat or operational need |
+| 5 | Proportional scope, threat model, and review convergence | **NEXT / P1** | Publish Preview and FIX-01 policy specimens select the smallest adequate outcome while real boundaries remain blocking |
+| 6 | Clear Publish Preview operator output | **NEXT AFTER P1** | smallest usable publication path returns an unambiguous operator result without campaign expansion |
+| 7 | One real cheap-path canary | HOLD | measured time/cost/quality receipt from a non-sensitive workload proves a current routing need |
+| 8 | Minimal worker/advisor routing adjustment | HOLD / REASSESS | canary shows a concrete routing miss; otherwise current matrix stands |
+| 9 | Baseplate verifier -> canonical Jig Fixture handoff | EXTERNAL / P2 | producer checks and consumer proof clear in their owning repositories |
+| 10 | R4 static run report | LATER / EVIDENCE-GATED | a current failed run supplies a diagnosis specimen |
+| 11 | R5 Agent Plugins interop | PARK / EVIDENCE-GATED | a named client or distribution target exists |
+| 12 | Workflow Kernel or speculative harness/platform changes | HOLD / EVIDENCE-GATED | a current reachable failure proves the smallest required change |
+| 13 | Workflow Authority install, integration, and Darwin port | **REMOVED** | reintroduction requires a new owner decision backed by a demonstrated threat or operational need |
 
 The Fixture-development handoff remains an external P2 lane and may advance in
 parallel when its Baseplate/Jig dependency chain clears; it does not displace
 the single `NEXT` Depot chunk.
 
-Only `NEXT` authorizes a new Depot execution session. DONE, HOLD, EXTERNAL,
-LATER, FUTURE, and PARK are not execution prompts.
+Only the immediate P1 authorizes this Depot execution session. `NEXT AFTER P1`
+requires the correction to merge first. DONE, HOLD, EXTERNAL, LATER, FUTURE,
+and PARK are not execution prompts.
 
 ### Cross-repository handoff
 

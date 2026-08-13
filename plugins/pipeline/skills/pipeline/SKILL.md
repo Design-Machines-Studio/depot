@@ -87,7 +87,7 @@ If you are tempted to skip a phase, STOP and re-read this section.
 
 When the user says "/pipeline" or asks to "run the pipeline" or "use the full pipeline process," you MUST invoke this skill. You MUST NOT manually replicate pipeline phases by hand -- launching Explore agents, writing plans, implementing directly, and calling it "the pipeline."
 
-The pipeline enforces gates, review loops, visual verification, memory capture, and sprint contracts that manual execution silently skips. "I already understand the code" is not a reason to bypass the pipeline -- the pipeline exists precisely because self-confidence is unreliable.
+The pipeline enforces gates, bounded review, visual verification, memory capture, and approved-scope contracts that manual execution silently skips. "I already understand the code" is not a reason to bypass the pipeline -- the pipeline exists precisely because self-confidence is unreliable.
 
 **What happens when you bypass the pipeline:**
 
@@ -112,11 +112,11 @@ Create this ledger with TodoWrite at the start. Update it as you complete each p
 6. Phase 3: Plan -- save plan to disk
 7. Phase 3 GATE: Pause for user input
 8. Phase 4: Generate prompts -- save manifest + prompts to disk
-9. Phase 4 VERIFY: Requirements coverage check against original-prompt.md
-10. Phase 5: Adversarial review -- iterate to APPROVED
+9. Phase 4 VERIFY: Requirements coverage check against approved Key Requirements
+10. Phase 5: One adversarial pass + at most one targeted blocker recheck
 11. Phase 5 GATE: Pause for user input (present prompts for approval)
 12. Phase 6: Launch execution-orchestrator agent (NOT manual execution)
-13. Phase 7: Deliver -- requirements cross-check against original-prompt.md
+13. Phase 7: Deliver -- requirements cross-check against approved Key Requirements
 14. Phase 7 GATE: Present results and ask user for next step
 ```
 
@@ -216,13 +216,13 @@ Do not proceed without a clear feature description.
 
 ## Original Prompt Preservation
 
-**Immediately** save the user's original input (verbatim) to `plans/<feature-slug>/original-prompt.md`. This is the ground truth. Every subsequent phase MUST check back against this file.
+**Immediately** save the user's original input verbatim to `plans/<feature-slug>/original-prompt.md`. Preserve every requested outcome, constraint, mechanism, and future idea exactly as written. This file is the request record, not an automatically approved implementation contract.
 
 **Slug validation:** the `<feature-slug>` MUST match `^[a-z0-9][a-z0-9-]{0,63}$`. If the derived slug contains `..`, `/`, spaces, uppercase, or exceeds 64 chars, regenerate it. Slug violations escape the `plans/` directory and are rejected.
 
 ### Re-read discipline (token budget)
 
-`original-prompt.md` is read canonically ONCE in Phase 1 (Assessment). Phase 1 extracts a `Key Requirements` list and saves it into the `keyRequirements` data island of `plans/<feature-slug>/assessment.html`. After that, Phases 3, 4, and 7 reference the cached Key Requirements list from the assessment island (read it with `templates/extract-json-island.sh plans/<feature-slug>/assessment.html`), NOT the full original-prompt.md.
+`original-prompt.md` is read canonically ONCE in Phase 1 (Assessment). Phase 1 separates desired outcomes, hard constraints and explicit approved decisions, proposed implementation mechanisms, and future or conditional ideas in the assessment prose. It must not promote a proposed mechanism into approved scope merely because the user named it. After the Phase 1 user gate resolves any scope choice, update the `keyRequirements` island of `plans/<feature-slug>/assessment.html` with only the resulting approved scope. Phases 3, 4, and 7 then reference that cached approved Key Requirements list (read it with `templates/extract-json-island.sh plans/<feature-slug>/assessment.html`), NOT the full original-prompt.md.
 
 **When to re-read original-prompt.md anyway:**
 
@@ -243,10 +243,6 @@ The file format:
 ## Date
 [YYYY-MM-DD]
 
-## Key Requirements Extracted
-1. [Requirement 1]
-2. [Requirement 2]
-3. [Requirement N]
 ```
 
 Mark ledger item 1 as complete. Proceed to Phase 0.
@@ -299,14 +295,16 @@ Load the assess skill from `plugins/pipeline/skills/assess/SKILL.md`.
 
 1. Determine the codebase area affected by the feature
 2. Run the pre-plan assessment (code + UX in parallel)
-3. Save the Assessment Brief to `plans/<feature-slug>/assessment.html` (per **Artifact Format** above). The cached Key Requirements go in the `keyRequirements` island.
-4. Present key findings to the user
+3. In the existing assessment prose, classify the request as: desired outcomes; hard constraints and explicit approved decisions; implementation mechanisms proposed by the user or upstream prompt; and future or conditional ideas. Never silently discard an explicit request.
+4. Identify the smallest adequate solution. If it would omit or replace a requested mechanism, present both the smaller alternative and the mechanism-preserving option at this gate. Do not choose for the user.
+5. Save the Assessment Brief to `plans/<feature-slug>/assessment.html` (per **Artifact Format** above). Before the gate, any proposed Key Requirements are provisional. After the user's response, update the `keyRequirements` island so it contains only the resulting approved outcomes, constraints, and decisions; proposed mechanisms enter it only when the user approves them as scope.
+6. Present key findings to the user
 
 Mark ledger item 2 as complete.
 
-**GATE (ledger item 3):** You MUST stop here and use AskUserQuestion to ask: "Assessment complete. Any corrections or context to add before I research?" Do NOT proceed by generating an answer to your own question. Do NOT combine this gate with Phase 2 work. The user's response is the gate -- without it, Phase 2 is blocked.
+**GATE (ledger item 3):** You MUST stop here and use AskUserQuestion to ask: "Assessment complete. Any corrections or context to add before I research?" When a smaller adequate solution omits or replaces a requested mechanism, include that exact choice in the question and obtain the user's decision. Do NOT proceed by generating an answer to your own question. Do NOT combine this gate with Phase 2 work. The user's response is the gate -- without it, Phase 2 is blocked and the Key Requirements cache is not authoritative.
 
-Mark item 3 when AskUserQuestion returns the user's response.
+After AskUserQuestion returns, apply the user's gate response to the Scope Intake prose and rewrite the `keyRequirements` island in `assessment.html`. Preserve every explicit request in the intake record, but cache only the outcomes, constraints, and mechanisms the user approved. Then run `templates/extract-json-island.sh plans/<feature-slug>/assessment.html` and verify that the extracted requirements reflect the selected smaller or mechanism-preserving option. If they do not, correct and re-extract the island. Only after this verification may you mark item 3 complete or enter Phase 2.
 
 ## Phase 2: Research
 
@@ -336,10 +334,12 @@ Create the implementation plan. Two options:
 **Option B:** If not available, create the plan directly:
 
 1. Use the cached Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html` (re-read original-prompt.md only if the user gave feedback since Phase 1)
-2. Break the feature into logical implementation steps. Each step is a chunk that maps to `prompts/NN-<slug>.md` -- record them in the plan's `chunks` island.
-3. Identify file paths, patterns, and dependencies
-4. Write acceptance criteria for each step
-5. Save to `plans/<feature-slug>/plan.html` (per **Artifact Format** above; `chunks`/`decisions`/`requirementsCoverage` island). For a high-level/epic plan that decomposes into sibling feature dirs, use the epic variant (`subPlans` island).
+2. State the **Smallest Usable Implementation** in the plan prose before decomposing it.
+3. For every proposed new abstraction, service, policy layer, background process, cache, transaction ledger, approval ceremony, receipt family, compatibility layer, or generalized extension point, name all three: its current consumer; the concrete present failure or realistic reachable harm it prevents; and the existing mechanism it replaces or why direct code is inadequate. If any answer is missing, delete it from current scope or list it as a non-blocking future idea.
+4. Break the approved smallest usable feature into logical implementation steps. Each step is a chunk that maps to `prompts/NN-<slug>.md` -- record them in the plan's `chunks` island.
+5. Identify file paths, patterns, and dependencies.
+6. Write acceptance criteria for each step.
+7. Save to `plans/<feature-slug>/plan.html` (per **Artifact Format** above; `chunks`/`decisions`/`requirementsCoverage` island). For a high-level/epic plan that decomposes into sibling feature dirs, use the epic variant (`subPlans` island). If the complete proposal needs sibling campaigns, show its total scope and the smaller usable alternative at this gate before generating either campaign; campaign splitting must not hide an oversized design.
 
 **Verification:** The plan file MUST exist on disk before proceeding. Run `ls plans/<feature-slug>/plan.html` to confirm.
 
@@ -459,7 +459,7 @@ If any requirement is uncovered, fix it before proceeding. Mark item 9 when cove
 
 Present the manifest summary: chunk count, parallel groups, overlap risk, requirements coverage.
 
-## Phase 5: Adversarial Review + Sprint Contract Negotiation
+## Phase 5: Adversarial Scope Review
 
 Codex is the required adversarial reviewer. Run its lens over the plan, prompts,
 manifest, and `original-prompt.md`. This planning phase stays native by policy;
@@ -476,13 +476,11 @@ Claude `plan-adversary` remains an optional independent second lens when
 `PIPELINE_CLAUDE_ADVERSARY=1` or when the user explicitly requests it. If Codex
 is unavailable, block or explicitly enable that Claude lens.
 
-1. Pass the plan, prompts, manifest, AND `original-prompt.md`
-2. Every available adversary reviews for feasibility, completeness, and DM standards
-3. Every available adversary produces a **sprint contract addendum** -- additional acceptance criteria per chunk that promptcraft may have missed (edge cases, error states, browser-verifiable criteria)
-4. Merge findings from all available outputs; deduplicate by chunk/file/acceptance criterion; a finding from any perspective is in-scope unless code or prompt evidence disproves it
-5. Merge the adversaries' proposed criteria into the chunk prompts
-6. If any verdict is REVISE: apply revisions and re-submit to every available perspective (max 3 rounds)
-7. When all available required perspectives are APPROVED: proceed, retaining the native-only planning coverage receipt
+1. Pass the plan, prompts, manifest, the assessment artifact with its approved `keyRequirements` island, AND `original-prompt.md`
+2. Run one complete adversarial pass for execution failures, approved-scope regressions, realistic reachable security/data defects, and unnecessary work.
+3. Apply supported blockers as one revision batch. Advisory improvements remain visible but do not expand scope, force criteria, or trigger another round.
+4. Run at most one targeted recheck of the revised blockers. Do not re-review unaffected prompts or criteria.
+5. Proceed when no supported blocking finding remains, retaining the native-only planning coverage receipt. A blocker may not introduce a product requirement unless it maps to an approved outcome or proves a concrete regression/security defect.
 
 Mark ledger item 10 as complete.
 
@@ -544,7 +542,7 @@ The three-layer ambiguity defence added in v1.10.0 leaves an audit trail. Inspec
 - **Commit trailers** -- each chunk commit may contain two trailers: `Chose: <interpretation>` and `Rejected: <alt-1>; <alt-2>`. Extract with `git log <featureBranch> --format=%B | git interpret-trailers --parse --only-trailers` or grep. Trailers are emitted only when a subagent had to pick between defensible interpretations in autonomous mode.
 - **Receipt flag** -- chunk receipts may include `ambiguity_resolved: true` with a one-line summary. Cross-check against the commit trailers.
 - **If trailers or the flag are present,** review the chosen path. If the chosen interpretation conflicts with what the user actually wanted, this is a Phase 7 gap -- fix inline on the feature branch, then re-run `/dm-review-quick` on the affected chunk.
-- **If neither signal is present,** either the chunks were unambiguous OR the subagents silently picked. The plan-adversary's Sprint Contract Negotiation should have caught the latter at Phase 5; if you suspect it didn't, sample one or two chunks' rendered output against the original prompt before approving merge.
+- **If neither signal is present,** either the chunks were unambiguous OR the subagents silently picked. The plan-adversary's scope review should have caught the latter at Phase 5; if you suspect it didn't, sample one or two chunks' rendered output against the approved Key Requirements before approving merge.
 
 ### Caller Verification Checklist (mandatory when ANY `renderedSurface: required` chunk was executed)
 
@@ -658,7 +656,7 @@ Before delivering to the user, verify your own compliance by answering these que
 4. Did I pause for user input at every GATE?
 5. Did I generate prompts and manifest to disk (not just in context)?
 6. Did I check requirements coverage against the cached Key Requirements?
-7. Did I run the adversarial review (max 4 rounds)?
+7. Did I run one complete adversarial pass and at most one targeted blocker recheck?
 8. Did I launch the actual execution-orchestrator agent (not run chunks manually)?
 9. Did the orchestrator run the risk-tiered evaluation gate after each chunk?
 10. Did the orchestrator run the manifest's approved final dm-review mode, and

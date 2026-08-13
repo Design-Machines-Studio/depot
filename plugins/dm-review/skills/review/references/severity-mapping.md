@@ -6,6 +6,17 @@ Rules for mapping each agent's native severity terminology to the unified P1/P2/
 
 P1 blocks merge and P2 must be fixed before merge. P3 is advisory: preserve complete evidence, provenance, count, and detail, but do not create mandatory work, drive convergence, or prevent `CLEAN`. See `plugins/dm-review/commands/dm-review.md` for the full policy statement.
 
+Every P1/P2 must include concrete current evidence:
+
+1. the affected current user or operator;
+2. the reachable actor, input, or path;
+3. the realistic harm or regression; and
+4. the smallest adequate repair.
+
+Security P1/P2 findings must additionally name the actual trust boundary. For Design Machines work, assume two developers, primarily first-party private repositories, trusted Fixture authors, and self-hosted co-op applications of roughly 4--50 people unless approved scope says otherwise. There is no public Fixture marketplace or hostile third-party plugin channel by default. Hypothetical actors, future marketplaces, enterprise scale, generic OWASP possibilities, and “defence in depth would be better” are P3 at most and usually not findings.
+
+Real reachable authentication or authorization bypass, credential disclosure, unsafe destructive operations, corruptible state or backups, public untrusted input, release/update integrity failures, and false verification claims remain blocking at their supported severity.
+
 ---
 
 ## Unified Severity Levels
@@ -23,7 +34,7 @@ P1 blocks merge and P2 must be fixed before merge. P3 is advisory: preserve comp
 For each finding, walk this tree to assign consistent severity across all agents:
 
 1. **Can the user complete their primary task?** NO -- P1
-2. **Is there a WCAG, security, or legal compliance failure?** YES -- P1
+2. **Is there a reachable WCAG, security, or legal compliance failure with concrete current harm?** YES -- P1
 3. **Can the user complete the task but with confusion or extra effort?** YES -- P2
 4. **Is this a pattern that erodes trust or professionalism?** YES -- P2
 5. **Is this a polish issue visible to a discerning eye?** YES -- P3
@@ -39,10 +50,10 @@ This tree ensures that a missing error state on a critical form (user stranded =
 
 | Agent | Critical/P1 | Serious/P2 | Moderate/P3 |
 |-------|------------|------------|-------------|
-| **code-simplicity-reviewer** | God functions (100+ lines), keyboard traps, dead code hiding bugs | Unnecessary abstraction, redundant logic, unclear naming | Verbose but correct code, minor style preferences |
+| **code-simplicity-reviewer** | Reachable correctness failure hidden by complexity | Unnecessary complexity with a demonstrated current regression or realistic harm | Numeric length/complexity thresholds, verbose but correct code, minor style preferences |
 | **security-auditor** | SQL injection, XSS, auth bypass, credential exposure | Missing CSRF token, permissive CORS, unvalidated input | Missing rate limiting, verbose error messages |
 | **pattern-recognition-specialist** | Circular dependencies, data races, resource leaks | Anti-patterns (God objects, feature envy), naming inconsistencies | Minor duplication, magic numbers in non-critical paths |
-| **architecture-reviewer** | Layer violations (templates calling DB), broken module boundaries | SOLID violations, excessive coupling, wrong package | Minor cohesion issues, suboptimal but functional structure |
+| **architecture-reviewer** | Broken trust/module boundary with concrete current harm | Coupling or placement that causes a current regression or reachable failure | SOLID preferences, file/function size thresholds, layer counts, interfaces, service/repository patterns, suboptimal but functional structure |
 | **doc-sync-reviewer** | API docs contradict implementation, CLAUDE.md has wrong paths | README outdated, missing docs for new features | Minor formatting, stale examples |
 | **test-coverage-reviewer** | Existing tests now fail | Changed code has no tests (when project has test infrastructure) | Missing edge case tests |
 | **go-build-verifier** | Compilation failure | `go vet` warnings | -- |
@@ -80,7 +91,7 @@ UX Design and Visual Design Quality phases have moved to **ux-quality-reviewer**
 2. **P2 present (any count, regardless of P3)** -> merge recommendation = `APPROVE WITH FIXES` (must fix before merge)
 3. **P3 only (no P1/P2)** -> merge recommendation = `CLEAN`. Render every P3 with complete evidence, source identity, raw reference, synthesis disposition, counts, and provenance.
 4. **Zero findings** -> merge recommendation = `CLEAN`
-5. **Security P1** always escalates -- no exceptions, no "we'll fix it later"
+5. **Supported security P1** always escalates when it names the current reachable path, realistic harm, actual trust boundary, and smallest adequate repair -- no exceptions, no "we'll fix it later"
 6. **Accessibility P1** always escalates -- legal compliance (EAA, ADA)
 7. **Governance P1** always escalates -- statutory requirements
 8. **Visual P1** always escalates -- if layout is completely broken or keyboard traps exist in the rendered page

@@ -1,6 +1,6 @@
 ---
 name: dm-review-loop
-description: Codex skill alias for /dm-review-loop. Run dm-review then dm-review-fix until no P1/P2 findings remain and required verification is complete
+description: Codex skill alias for /dm-review-loop. Run one review, one repair batch, and one affected-lane recheck by default, with required verification
 argument-hint: "[optional: --full, --max-iterations N, PR number, branch, or path]"
 ---
 
@@ -27,12 +27,14 @@ Automates the cycle of reviewing code, fixing required findings, and re-reviewin
 
 P1 blocks merge and P2 must be fixed before merge. P3 remains fully visible advisory evidence but never enters the fix queue, triggers another iteration, or blocks convergence. The loop is clean when no P1/P2 findings remain and all required verification and coverage gates are complete.
 
+The default convergence path is one repair batch followed by one affected-lane recheck. Repeat broad review only when the original required review was incomplete or the repair changed a real sensitive boundary.
+
 ## Arguments
 
 Parse the argument string for flags and pass-through values:
 
 - `--full` -- Use full dm-review instead of the applicability-driven quick roster
-- `--max-iterations N` -- Maximum review-fix cycles (default: 3)
+- `--max-iterations N` -- Maximum review/fix passes (default: 2: one review and, when needed, one affected-lane recheck)
 - Everything else -- Passed through to dm-review as the review target (PR number, branch, path)
 
 ## Environment Flags
@@ -48,7 +50,7 @@ Out-of-the-box, Claude tends toward shallow testing that misses subtle bugs (per
 - **Verify behavior, not just structure.** "The function exists" is not the same as "the function handles errors correctly."
 - **Check integration points.** Does the new code actually connect to what it's supposed to connect to?
 
-When invoking dm-review within the loop, pass this context to the review: "This is an automated review-fix loop. Be thorough. Check edge cases. Do not rubber-stamp."
+When invoking dm-review within the loop, pass this context to the review: "This is an automated review-fix loop. Verify reachable failures and approved-scope regressions. Required fixes must be the smallest adequate repair; reject unrelated hardening and new product scope."
 
 ## Process
 
@@ -56,7 +58,8 @@ When invoking dm-review within the loop, pass this context to the review: "This 
 
 ```text
 iteration = 0
-max_iterations = 3 (or from --max-iterations)
+max_iterations = 2 (or from --max-iterations)
+explicit_iteration_override = true only when --max-iterations was provided
 mode = "quick" (or "full" if --full flag present)
 target = remaining arguments after flag parsing
 prior_findings_signature = null  # for stalled-convergence detection
@@ -270,6 +273,14 @@ while iteration < max_iterations:
   prior_findings_signature = current_signature
   prior_finding_owner_lanes = union of validated exact source_agents from
                               required_finding_files
+
+  # The default convergence contract is one repair batch followed by one
+  # affected-lane recheck. Remaining or newly supported P1/P2 after that
+  # recheck require operator attention, not an automatic second repair batch.
+  if iteration > 1 and explicit_iteration_override == false:
+    Report: "{findings} supported finding(s) remain after the targeted recheck. Manual decision required."
+    List remaining todo files
+    STOP -- needs attention
 
   # Fix required findings only (P1/P2).
   Run /dm-review-fix with workflowClass and workflow_class_defaulted forwarded unchanged
