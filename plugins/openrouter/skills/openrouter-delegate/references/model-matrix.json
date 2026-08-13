@@ -218,7 +218,7 @@
       "top_provider_max_completion_tokens": 131072,
       "supports_tools": true,
       "supports_reasoning": true,
-      "quality_rank": 90,
+      "quality_rank": 80,
       "aa_scores": {
         "intelligence": 53.0,
         "coding": 68.8,
@@ -426,7 +426,7 @@
       "slug": "deepseek/deepseek-v4-flash-0731",
       "name": "DeepSeek V4 Flash 0731",
       "catalog_status": "available",
-      "recommendation_status": "recommendation-only-default-execution-candidate",
+      "recommendation_status": "active-provisional-default-bounded-execution",
       "catalog_name": "DeepSeek: DeepSeek V4 Flash 0731",
       "input_usd_per_m": 0.08,
       "output_usd_per_m": 0.18,
@@ -436,7 +436,7 @@
       "top_provider_max_completion_tokens": 384000,
       "supports_tools": true,
       "supports_reasoning": true,
-      "quality_rank": null,
+      "quality_rank": 90,
       "aa_scores": {
         "intelligence": 52.0,
         "coding": null,
@@ -449,7 +449,7 @@
         "metric_status": {"intelligence": "current", "coding": "unavailable", "agentic": "unavailable"},
         "evaluated_output_tokens_m": 210
       },
-      "role": "Provisional default candidate for bounded low-cost execution, especially scoped config, docs, and mechanical code changes. Avoid broad autonomous work and treat low token price cautiously because the max-effort evaluation was very verbose. Require Codex 5.6 scope, correctness, and unnecessary-complexity review; confidence is medium pending local 0731 task evidence.",
+      "role": "Active provisional default for bounded low-cost execution, especially scoped config, docs, and mechanical code changes. Avoid broad autonomous work and treat low token price cautiously because the max-effort evaluation was very verbose. Require Codex 5.6 scope, correctness, and unnecessary-complexity review; confidence is medium pending local 0731 task evidence.",
       "snapshot_date": "2026-08-12",
       "sources": [
         "https://openrouter.ai/deepseek/deepseek-v4-flash-0731",

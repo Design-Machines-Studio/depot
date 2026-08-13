@@ -47,7 +47,7 @@ else
   model="$(printf '%s' "$out" | jq -r '.model // empty' 2>/dev/null || true)"
   fixture_source="$(printf '%s' "$out" | jq -r '.probe_source // empty' 2>/dev/null || true)"
   if [ "$role" = "openrouter_exec" ] && [ "$kind" = "openrouter_exec" ] &&
-     [ "$model" = "z-ai/glm-5.2" ] && [ "$fixture_source" = "fixture" ]; then
+     [ "$model" = "deepseek/deepseek-v4-flash-0731" ] && [ "$fixture_source" = "fixture" ]; then
     pass "cascade skips explicitly exhausted Codex rail and descends to OpenRouter exec"
   else
     fail "cascade should descend to economical OpenRouter and must label caller probe files as fixture, never live"
@@ -65,6 +65,33 @@ else
     fail "UI coding must resolve to Codex-native execution, never Claude"
     any_failed=1
   fi
+
+  inherited_home="$(mktemp -d "${TMPDIR:-/tmp}/openrouter-inherited-binding.XXXXXX")"
+  inherited_marker="$inherited_home/forged-loader-ran"
+  inherited_root="$inherited_home/.codex/plugins/cache/depot/openrouter/9.9.9"
+  mkdir -p "$inherited_root/skills/openrouter-delegate/references"
+  cat > "$inherited_root/skills/openrouter-delegate/references/openrouter-credential.sh" <<EOF
+touch "$inherited_marker"
+load_openrouter_api_key() { return 1; }
+EOF
+  inherited_key="$inherited_home/key"
+  printf 'test\n' > "$inherited_key"
+  chmod 600 "$inherited_key"
+  set +e
+  HOME="$inherited_home" WORKFLOW_KERNEL=/bin/false OPENROUTER_API_KEY_FILE="$inherited_key" \
+    OPENROUTER_BUNDLE_REF='~/.codex/plugins/cache/depot/openrouter/9.9.9' \
+    OPENROUTER_BUNDLE_VERSION=9.9.9 OPENROUTER_BUNDLE_CACHE_CLASS=codex \
+    OPENROUTER_BUNDLE_REASON=forged OPENROUTER_BUNDLE_RESOLVED=1 \
+    "$cascade" --kind config --prompt test --host codex >/dev/null 2>&1
+  inherited_rc=$?
+  set -e
+  if [ "$inherited_rc" -eq 76 ] && [ ! -e "$inherited_marker" ]; then
+    pass "failed bundle resolution ignores inherited OpenRouter bindings"
+  else
+    fail "failed bundle resolution must clear inherited OpenRouter bindings"
+    any_failed=1
+  fi
+  rm -rf "$inherited_home"
 
   # Headroom is positive evidence, not an absence-of-error default. Every
   # unknown, missing, malformed, or at-threshold Codex reading must skip the
@@ -183,7 +210,7 @@ EOF
   if [ "$or_role" = "premium_sub" ] &&
      printf '%s' "$or_out" | jq -e '
        .requestedProvider == "openrouter" and
-       .requestedModel == "z-ai/glm-5.2" and
+       .requestedModel == "deepseek/deepseek-v4-flash-0731" and
        .attemptedProvider == "codex" and
        .attemptedModel == "gpt-5.6-sol" and
        .actualImplementer == "codex" and
@@ -892,16 +919,29 @@ documented_openrouter_exec="$(printf '%s\n' "$fallback_block" | awk -F'|' '
     found=1
   }
 ')"
-expected_openrouter_exec='GLM-5.2 -> DeepSeek V4 Flash -> Kimi K3 -> Grok 4.5 -> MiniMax-M3'
+expected_openrouter_exec='DeepSeek V4 Flash 0731 -> Grok 4.5 -> MiniMax-M3 -> GLM-5.2'
 if [ "$documented_openrouter_exec" = "$expected_openrouter_exec" ] &&
+   grep -Fq 'DeepSeek V4 Flash 0731 is the Pipeline agentic OpenRouter' \
+     "$REPO_ROOT/docs/cascade-migration.md" &&
+   grep -Fq 'openrouter_exec deepseek/deepseek-v4-flash-0731' \
+     "$REPO_ROOT/docs/cascade-migration.md" &&
    jq -e '
-     ["z-ai/glm-5.2", "deepseek/deepseek-v4-flash", "moonshotai/kimi-k3", "x-ai/grok-4.5", "minimax/minimax-m3"] as $expected
-     | [.hosts[].roles.openrouter_exec.models == $expected]
-     | all
+     ["deepseek/deepseek-v4-flash-0731", "x-ai/grok-4.5", "minimax/minimax-m3", "z-ai/glm-5.2"] as $expected
+     | [(.hosts[].roles.openrouter_exec.models == $expected)] | all
    ' "$REPO_ROOT/plugins/pipeline/references/harness-profile.json" >/dev/null; then
   pass "documented OpenRouter exec chain exactly matches every host profile"
 else
   fail "documented OpenRouter exec chain must exactly match every host profile"
+  any_failed=1
+fi
+
+if jq -e '
+  ["deepseek/deepseek-v4-flash-0731", "minimax/minimax-m3", "qwen/qwen3-coder", "z-ai/glm-5.2"] as $expected
+  | [(.hosts[].roles.cheap_api.models == $expected)] | all
+' "$REPO_ROOT/plugins/pipeline/references/harness-profile.json" >/dev/null; then
+  pass "cheap OpenRouter fallback uses refreshed DeepSeek and keeps GLM last"
+else
+  fail "cheap OpenRouter fallback must use refreshed DeepSeek and keep GLM last"
   any_failed=1
 fi
 

@@ -39,10 +39,16 @@ The cascade keys off the merged chunk vocabulary. `model-cascade.json` maps `kin
 
 | kind | class | primary | on cap, descends to |
 |------|-------|---------|---------------------|
-| `logic`, `integration`, `ui` | `codex` | Codex subscription | GLM-5.2 OpenRouter exec -> quality-first OpenRouter wrapper ladder |
-| `config`, `docs`, mechanical logic | `openrouter` | GLM-5.2 OpenRouter exec | Codex subscription -> quality-first OpenRouter wrapper ladder |
+| `logic`, `integration`, `ui` | `codex` | Codex subscription | DeepSeek V4 Flash 0731 OpenRouter exec -> Grok 4.5 -> MiniMax-M3 -> GLM-5.2 -> wrapper ladder |
+| `config`, `docs`, mechanical logic | `openrouter` | DeepSeek V4 Flash 0731 OpenRouter exec | Grok 4.5 -> MiniMax-M3 -> GLM-5.2 -> Codex subscription -> wrapper ladder |
 
-**Native Codex subscription capacity remains the first coding rail for logic, integration, and UI. GLM-5.2 is the Pipeline agentic OpenRouter execution head. Kimi K3 is the independent security and bulk-analysis head; Terra is its OpenRouter quality backup, while Luna is the economical dm-review mechanical rail.** The coding quality floor is 70. `harness-profile.json` is the only host-specific file (it resolves abstract roles to concrete rails per host).
+**Native Codex subscription capacity remains the first coding rail for logic,
+integration, and UI. DeepSeek V4 Flash 0731 is the Pipeline agentic OpenRouter
+execution head, followed by Grok 4.5 and MiniMax-M3, with GLM-5.2 last. Kimi K3
+is the independent security and bulk-analysis head; Terra is its OpenRouter
+quality backup, while Luna is the economical dm-review mechanical rail.** The
+coding quality floor is 70. `harness-profile.json` is the only host-specific
+file (it resolves abstract roles to concrete rails per host).
 
 ## One-shot vs agentic (important)
 
@@ -86,7 +92,7 @@ bash $D --dry-run --kind logic  --prompt x --host claude-code   # -> premium_sub
 bash $D --dry-run --kind ui     --prompt x --host claude-code   # -> premium_sub codex
 # mocked cap states drive the descent
 echo '{"codex":{"state":"limited"},"openrouter":{"state":"ok"}}' > /tmp/p.json
-bash $D --dry-run --kind logic --prompt x --host claude-code --probe-file /tmp/p.json  # -> openrouter_exec z-ai/glm-5.2
+bash $D --dry-run --kind logic --prompt x --host claude-code --probe-file /tmp/p.json  # -> openrouter_exec deepseek/deepseek-v4-flash-0731
 ```
 
 The wrapper exits 1 cleanly with no key; `usage-probe.sh` always emits valid JSON (openrouter `state: unknown` without creds).

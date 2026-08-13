@@ -28,7 +28,7 @@ no more than 15 minutes apart and use it only before expiry.
 | `deepseek/deepseek-v4-pro` | DeepSeek V4 Pro | $0.63168 / $1.26336; $0.053298 cache read | 1,048,576 | Legacy cheap fallback; old AA v4.1 evidence is stale |
 | `minimax/minimax-m3` | MiniMax-M3 | $0.30 / $1.20; $0.06 cache read | 1,048,576 model; top provider 524,288 | Capacity fallback; old AA v4.1 evidence is stale |
 | `deepseek/deepseek-v4-flash` | DeepSeek V4 Flash 0423 | $0.14 / $0.28; $0.028 cache read | 1,048,576 | Superseded routed identity; it is not the current 0731 release |
-| `deepseek/deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | $0.08 / $0.18; $0.016 cache read | 1,048,576 | Recommendation-only; AA v4.1.1 intelligence 52 at max and 210M evaluated output tokens; provisional default bounded-execution candidate |
+| `deepseek/deepseek-v4-flash-0731` | DeepSeek V4 Flash 0731 | $0.08 / $0.18; $0.016 cache read | 1,048,576 | Active provisional default for bounded execution; AA v4.1.1 intelligence 52 at max and 210M evaluated output tokens |
 | `qwen/qwen3-coder` | Qwen3 Coder | $0.30 / $1; $0.10 cache read | 262,144 | Lower-confidence final fallback; prior 1M description was misleading |
 
 OpenRouter returned every routed slug as available at `2026-08-11T22:42:37Z`.
@@ -211,40 +211,38 @@ a full code review, and no `anthropic/*` routing slug is permitted. Sources:
 
 ## dm-review target topology and direct OpenRouter delegation
 
-The tables in this section mirror executable policy as of this evidence-only
-refresh. They intentionally do not implement the recommendations above. In
-particular, bulk Kimi and GLM fallback seats remain visible until the later
-routing chunk changes and reviews them.
+The tables in this section mirror executable policy. The bounded-execution
+recommendation from the 2026-08-12 matrix refresh is active; review-specific
+Kimi, Terra, Luna, and GLM seats remain separately governed by the dm-review
+workload table below.
 
 These calls use the OpenRouter API and retain `implementedBy: openrouter` even when the selected slug begins with `openai/`. A later Codex fallback is a separate native attempt with its own receipt.
 
 | Workload | OpenRouter primary | OpenRouter fallback | Native completion |
 |----------|--------------------|---------------------|-------------------|
 | Direct `/openrouter` | Terra, unless `--model` overrides it | Kimi K3 | none implicit |
-| Mechanical dm-review lanes | Luna | GLM-5.2 | Codex if the OpenRouter attempt cannot complete |
+| Mechanical dm-review lanes | Luna | GPT-5.6 Terra | Codex if the OpenRouter attempt cannot complete |
 | Bulk / large-context dm-review | Kimi K3 | Terra | Codex if the OpenRouter attempt cannot complete |
-| Security dm-review lens | Kimi K3 | GLM-5.2 | same logical lane may complete locally; independent full-diff non-implementing-family sign-off is always required |
+| Security dm-review lens | Kimi K3 | GPT-5.6 Terra | same logical lane may complete locally; independent full-diff non-implementing-family sign-off is always required |
 | One-shot config / doc generation | Luna | Terra quality fallback | caller owns writing and verification |
 
 Review timeouts are 3600s, extended to 7200s for bulk diffs of at least 10K lines. One-shot config/doc generation uses 1800s.
 
 ## Pipeline execution cascade target topology
 
-Pipeline resolves abstract roles through `harness-profile.json`, then walks the class ladder in `model-cascade.json`. Its agentic OpenRouter executor is GLM-5.2-headed; Kimi remains a later capacity rung and the head of analysis-only frontier/bulk wrapper roles.
-
-That sentence reports current executable topology, not the refreshed
-recommendation. The proposal for the later routing chunk is to test the dated
-DeepSeek 0731 identity as the bounded execution head, use Grok 4.5 for harder
-bounded escalation, remove Kimi from implementation, and demote GLM-5.2 to an
-experimental last fallback. No order or policy changed in this refresh.
+Pipeline resolves abstract roles through `harness-profile.json`, then walks the
+class ladder in `model-cascade.json`. Its agentic OpenRouter executor uses the
+dated DeepSeek 0731 identity as the bounded-execution head, Grok 4.5 for harder
+bounded escalation, MiniMax-M3 as a capacity fallback, and GLM-5.2 only as the
+experimental last fallback. Kimi is review-only and does not implement.
 
 | Role | Kind | Ordered models |
 |------|------|----------------|
 | `premium_sub` | native Codex / Codex companion | host-specific native ordering above |
-| `openrouter_exec` | bounded agentic execution | GLM-5.2 -> DeepSeek V4 Flash -> Kimi K3 -> Grok 4.5 -> MiniMax-M3 |
-| `frontier_api` | single-turn wrapper analysis | Kimi K3 -> Grok 4.5 -> GLM-5.2 -> Muse Spark 1.1 -> Gemini 3.5 Flash |
-| `cheap_api` | single-turn wrapper text/analysis | DeepSeek V4 Flash -> GLM-5.2 -> MiniMax-M3 -> DeepSeek V4 Pro -> Qwen3 Coder |
-| `bulk_api` | single-turn bulk analysis | Kimi K3 -> GLM-5.2 -> DeepSeek V4 Pro -> MiniMax-M3 -> DeepSeek V4 Flash |
+| `openrouter_exec` | bounded agentic execution | DeepSeek V4 Flash 0731 -> Grok 4.5 -> MiniMax-M3 -> GLM-5.2 |
+| `frontier_api` | single-turn wrapper analysis | Kimi K3 -> Grok 4.5 -> Muse Spark 1.1 -> Gemini 3.5 Flash -> GLM-5.2 |
+| `cheap_api` | single-turn wrapper text/analysis | DeepSeek V4 Flash 0731 -> MiniMax-M3 -> Qwen3 Coder -> GLM-5.2 |
+| `bulk_api` | single-turn bulk analysis | Kimi K3 -> DeepSeek V4 Flash 0731 -> MiniMax-M3 -> Grok 4.5 -> GLM-5.2 |
 
 The `codex` class walks `premium_sub -> openrouter_exec -> frontier_api -> cheap_api`; the `openrouter` class walks `openrouter_exec -> premium_sub -> frontier_api -> cheap_api`. Wrapper roles never autonomously implement complex logic, UI, or integration work.
 
@@ -259,8 +257,8 @@ issuing a second client request:
 
 ```
 bulk:       moonshotai/kimi-k3 -> openai/gpt-5.6-terra -> separate Codex fallback
-mechanical: openai/gpt-5.6-luna -> z-ai/glm-5.2 -> separate Codex fallback
-security:   moonshotai/kimi-k3 -> z-ai/glm-5.2 -> same-lane local completion + independent non-implementing-family sign-off
+mechanical: openai/gpt-5.6-luna -> openai/gpt-5.6-terra -> separate Codex fallback
+security:   moonshotai/kimi-k3 -> openai/gpt-5.6-terra -> same-lane local completion + independent non-implementing-family sign-off
 direct:     openai/gpt-5.6-terra -> moonshotai/kimi-k3 -> stop
 ```
 

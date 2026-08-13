@@ -5,7 +5,7 @@ set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 
 MODE="run"
-MODEL="${OPENROUTER_EXEC_MODEL:-z-ai/glm-5.2}"
+MODEL="${OPENROUTER_EXEC_MODEL:-deepseek/deepseek-v4-flash-0731}"
 FALLBACK_MODEL="${OPENROUTER_EXEC_FALLBACK_MODEL:-}"
 TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-3600}"
 DEFERRED_VERIFY_CMD="${OPENROUTER_EXEC_VERIFY_CMD:-}"
@@ -55,24 +55,48 @@ if [ -z "${OPENROUTER_API_KEY:-}" ] && [ -z "${OPENROUTER_API_KEY_FILE:-}" ]; th
   exit 77
 fi
 
-resolve_openrouter_root() {
-  local cache root
-  for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-    root="$(ls -td "$cache"/openrouter/*/ 2>/dev/null | head -1)"
-    [ -n "$root" ] || continue
-    [ -x "$root/skills/openrouter-delegate/references/openrouter-wrapper.sh" ] &&
-      [ -r "$root/skills/openrouter-delegate/references/delegation-security-policy.json" ] &&
-      [ -x "$root/skills/openrouter-delegate/references/delegation-boundary.sh" ] || continue
-    printf '%s' "${root%/}"
-    return 0
-  done
-  return 1
+resolve_openrouter_bundle() {
+  local active_host=""
+  [ -n "${WORKFLOW_KERNEL:-}" ] && [ -x "$WORKFLOW_KERNEL" ] || return 1
+  [ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && active_host="claude"
+  [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && active_host="codex"
+  if [ -n "$active_host" ]; then
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.14.0 --active-host "$active_host" \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+  else
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.14.0 \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+  fi
 }
 
-OPENROUTER_ROOT="$(resolve_openrouter_root)" || {
+RESOLVED_BUNDLE_JSON="$(resolve_openrouter_bundle)" || {
   echo "openrouter-exec: coherent OpenRouter bundle unavailable; return to Codex" >&2
   exit 77
 }
+RESOLVED_BUNDLE_REF="$(printf '%s' "$RESOLVED_BUNDLE_JSON" | jq -r '.selected_root // empty')"
+RESOLVED_BUNDLE_VERSION="$(printf '%s' "$RESOLVED_BUNDLE_JSON" | jq -r '.version // empty')"
+RESOLVED_BUNDLE_CACHE_CLASS="$(printf '%s' "$RESOLVED_BUNDLE_JSON" | jq -r '.cache_class // empty')"
+RESOLVED_BUNDLE_REASON="$(printf '%s' "$RESOLVED_BUNDLE_JSON" | jq -r '.reason // empty')"
+if [ -n "${OPENROUTER_BUNDLE_REF:-}" ] &&
+   { [ "$RESOLVED_BUNDLE_REF" != "$OPENROUTER_BUNDLE_REF" ] ||
+     [ "$RESOLVED_BUNDLE_VERSION" != "${OPENROUTER_BUNDLE_VERSION:-}" ] ||
+     [ "$RESOLVED_BUNDLE_CACHE_CLASS" != "${OPENROUTER_BUNDLE_CACHE_CLASS:-}" ] ||
+     [ "$RESOLVED_BUNDLE_REASON" != "${OPENROUTER_BUNDLE_REASON:-}" ]; }; then
+  echo "openrouter-exec: OpenRouter bundle binding changed before transport; return to Codex" >&2
+  exit 77
+fi
+case "$RESOLVED_BUNDLE_REF" in
+  "~/"*) OPENROUTER_ROOT="$HOME/${RESOLVED_BUNDLE_REF#\~/}" ;;
+  *) echo "openrouter-exec: invalid OpenRouter bundle binding; return to Codex" >&2; exit 77 ;;
+esac
 WRAPPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 POLICY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
 BOUNDARY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
@@ -83,15 +107,37 @@ PROMPT_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.prompt.XXXXXX")"
 SYSTEM_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.system.XXXXXX")"
 ALLOWED_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.allowed.XXXXXX")"
 PATCH_PATHS_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.paths.XXXXXX")"
+CACHED_PATHS_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.cached.XXXXXX")"
 RECEIPT_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.receipt.XXXXXX")"
 PATCH_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.patch.XXXXXX")"
 MSG_FILE=""
-trap 'rm -f "$PROMPT_FILE" "$SYSTEM_FILE" "$ALLOWED_FILE" "$PATCH_PATHS_FILE" "$RECEIPT_FILE" "$PATCH_FILE" "$MSG_FILE"' EXIT
+MUTATION_ACTIVE=0
+cleanup() {
+  local original_rc=$?
+  if [ "$MUTATION_ACTIVE" = "1" ]; then
+    git apply -R --index "$PATCH_FILE" >/dev/null 2>&1 || {
+      echo "openrouter-exec: failed to roll back rejected patch transaction" >&2
+      original_rc=2
+    }
+  fi
+  rm -f "$PROMPT_FILE" "$SYSTEM_FILE" "$ALLOWED_FILE" "$PATCH_PATHS_FILE" \
+    "$CACHED_PATHS_FILE" "$RECEIPT_FILE" "$PATCH_FILE" "$MSG_FILE"
+  exit "$original_rc"
+}
+trap cleanup EXIT
 
 cat > "$PROMPT_FILE"
 printf '%s' "$SYSTEM" > "$SYSTEM_FILE"
 [ -s "$PROMPT_FILE" ] || { echo "openrouter-exec: empty prompt" >&2; exit 2; }
 printf '%s\n' "$OPENROUTER_EXEC_ALLOWED_PATHS" > "$ALLOWED_FILE"
+
+# This adapter owns the complete index transaction. Refuse an existing staged
+# set before any provider contact so unrelated caller state cannot enter the
+# generated commit.
+if ! git diff --cached --quiet; then
+  echo "openrouter-exec: staged changes already exist; return to Codex" >&2
+  exit 77
+fi
 
 # Scan the private outbound files immediately before the wrapper reads those
 # same files. This requires no human interaction.
@@ -152,13 +198,40 @@ else
   exit 2
 fi
 
-git apply --check "$PATCH_FILE"
-git apply "$PATCH_FILE"
-git --literal-pathspecs add --pathspec-from-file="$PATCH_PATHS_FILE" --pathspec-file-nul
+# Apply and stage as one index-bound transaction. Unlike a later `git add`,
+# `--index` refuses an approved file whose worktree already differs from the
+# index, so a disjoint caller edit in that file cannot hitchhike into the
+# model-authored commit.
+git apply --check --index "$PATCH_FILE"
+git apply --index "$PATCH_FILE"
+MUTATION_ACTIVE=1
 if git diff --cached --quiet; then
   echo "openrouter-exec: patch produced no staged changes" >&2
   exit 1
 fi
+
+# Confirm the staged set is exactly the boundary-approved patch set. The
+# nested NUL readers preserve every legal Git pathname except NUL itself.
+git diff --cached --name-only -z > "$CACHED_PATHS_FILE"
+path_in_nul_file() {
+  local wanted="$1" file="$2" candidate
+  while IFS= read -r -d '' candidate; do
+    [ "$candidate" = "$wanted" ] && return 0
+  done < "$file"
+  return 1
+}
+while IFS= read -r -d '' staged_path; do
+  path_in_nul_file "$staged_path" "$PATCH_PATHS_FILE" || {
+    echo "openrouter-exec: staged path escaped approved patch set; return to Codex" >&2
+    exit 77
+  }
+done < "$CACHED_PATHS_FILE"
+while IFS= read -r -d '' approved_path; do
+  path_in_nul_file "$approved_path" "$CACHED_PATHS_FILE" || {
+    echo "openrouter-exec: approved patch path was not staged; return to Codex" >&2
+    exit 77
+  }
+done < "$PATCH_PATHS_FILE"
 git diff --check --cached
 
 if [ -n "$DEFERRED_VERIFY_CMD" ]; then
@@ -169,7 +242,11 @@ fi
 MSG_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.msg.XXXXXX")"
 printf '%s\n\nImplementedBy: openrouter\nStructuralValidation: git diff --check --cached\nVerification: %s\n' \
   "$COMMIT_MSG" "$VERIFY_RESULT" > "$MSG_FILE"
-git commit -F "$MSG_FILE" >/dev/null
+PARENT_COMMIT="$(git rev-parse HEAD)"
+COMMIT_TREE="$(git write-tree)"
+NEW_COMMIT="$(git commit-tree "$COMMIT_TREE" -p "$PARENT_COMMIT" -F "$MSG_FILE")"
+git update-ref HEAD "$NEW_COMMIT" "$PARENT_COMMIT"
+MUTATION_ACTIVE=0
 
 FILES_CHANGED="$(git diff --name-only HEAD~1..HEAD | tr '\n' ',' | sed 's/,$//')"
 jq -n --arg commit "$(git rev-parse --short HEAD)" --arg files "$FILES_CHANGED" \
@@ -178,6 +255,9 @@ jq -n --arg commit "$(git rev-parse --short HEAD)" --arg files "$FILES_CHANGED" 
   --arg provider "$(jq -r '.servingProvider // ""' "$RECEIPT_FILE")" \
   --arg provider_provenance "$(jq -r '.servingProviderProvenance' "$RECEIPT_FILE")" \
   --arg generation_id "$(jq -r '.generationId' "$RECEIPT_FILE")" \
+  --arg bundle_version "$RESOLVED_BUNDLE_VERSION" \
+  --arg bundle_cache_class "$RESOLVED_BUNDLE_CACHE_CLASS" \
+  --arg bundle_reason "$RESOLVED_BUNDLE_REASON" \
   --arg request_digest "$(jq -r '.authorization.requestEnvelopeSha256' "$RECEIPT_FILE")" \
   --argjson usage "$(jq '.usage' "$RECEIPT_FILE")" \
   --argjson fallback "$(jq '.fallbackUsed' "$RECEIPT_FILE")" '
@@ -188,4 +268,5 @@ jq -n --arg commit "$(git rev-parse --short HEAD)" --arg files "$FILES_CHANGED" 
    requestEnvelopeSha256:$request_digest,responseModelProvenance:"response",
    servingProviderProvenance:$provider_provenance,fallback:$fallback,
    fallbackReason:(if $fallback then "openrouter-native-fallback" else "none" end),
+   openrouterBundle:{version:$bundle_version,cacheClass:$bundle_cache_class,reason:$bundle_reason},
    nativeVendorOriginInvariant:"passed",usage:$usage}'

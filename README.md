@@ -231,7 +231,7 @@ Unified external-model provider for quality-first agentic work and lower-cost me
 - **openrouter-delegate** -- Threat-classified delegation to permitted open
   models for non-secret work, including security-related content when output
   and execution controls remain active
-- **openrouter-bulk-analyst** (agent) -- Reviews eligible full diffs with quality-first Kimi K3 and a GLM-5.2 capacity fallback through the generic OpenRouter runner
+- **openrouter-bulk-analyst** (agent) -- Reviews eligible full diffs with quality-first Kimi K3 and a GPT-5.6 Terra fallback through the generic OpenRouter runner
 - **openrouter-agent-runner** (agent) -- Runs dm-review mechanical agents through OpenRouter model slugs
 - `/openrouter` -- Delegate a task to any configured OpenRouter model
 

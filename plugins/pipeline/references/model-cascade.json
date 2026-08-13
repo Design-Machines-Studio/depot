@@ -22,10 +22,11 @@
     "gpt-5.5": 94,
     "sonnet": 92,
     "x-ai/grok-4.5": 93,
-    "z-ai/glm-5.2": 90, "meta/muse-spark-1.1": 90,
+    "z-ai/glm-5.2": 80, "meta/muse-spark-1.1": 90,
     "gpt-5.6-luna": 90,
     "google/gemini-3.5-flash": 89,
     "deepseek/deepseek-v4-pro": 83, "minimax/minimax-m3": 83,
+    "deepseek/deepseek-v4-flash-0731": 90,
     "deepseek/deepseek-v4-flash": 78, "qwen/qwen3-coder": 72,
     "gpt-5.1-codex-mini": 70, "haiku": 60
   },

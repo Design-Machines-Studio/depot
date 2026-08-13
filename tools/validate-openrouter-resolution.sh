@@ -63,7 +63,8 @@ for relative in "${consumers[@]}"; do
       plugins/openrouter/agents/workflow/openrouter-agent-runner.md|plugins/dm-review/skills/review/SKILL.md) openrouter_floor="1.14.0" ;;
       plugins/openrouter/commands/openrouter.md|plugins/openrouter/skills/openrouter/SKILL.md|plugins/openrouter/skills/openrouter-delegate/SKILL.md|plugins/openrouter/skills/openrouter-delegate/references/invocation-protocol.md) openrouter_floor="1.14.0" ;;
       plugins/airlift/*) openrouter_floor="1.14.0" ;;
-      plugins/openrouter/*|plugins/pipeline/*) openrouter_floor="1.8.0" ;;
+      plugins/pipeline/*) openrouter_floor="1.14.0" ;;
+      plugins/openrouter/*) openrouter_floor="1.8.0" ;;
       *) openrouter_floor="1.7.0" ;;
     esac
     floor_calls="$(grep -Fc -- "--minimum-version $openrouter_floor" "$file" || true)"
@@ -87,6 +88,12 @@ for relative in "${consumers[@]}"; do
       failures=1
     }
   fi
+  if grep -Fq 'skills/openrouter-delegate/references/openrouter-wrapper.sh' "$file"; then
+    grep -Fq -- '--required-asset skills/openrouter-delegate/references/openrouter-credential.sh' "$file" || {
+      echo "  FAIL  OpenRouter credential loader is not bound into the coherent bundle: $relative"
+      failures=1
+    }
+  fi
   if ! is_configured_key_script "$relative" && grep -Fq 'skills/openrouter-delegate/references/delegation-boundary.sh' "$file"; then
     grep -Fq -- '--required-executable skills/openrouter-delegate/references/delegation-boundary.sh' "$file" &&
     ! grep -Fq -- '--required-asset skills/openrouter-delegate/references/delegation-boundary.sh' "$file" || {
@@ -107,6 +114,25 @@ for relative in "${consumers[@]}"; do
       }
     done
   fi
+done
+
+if ! "$ROOT/tools/test-openrouter-agent-runner-boundary.sh"; then
+  echo "  FAIL  OpenRouter agent runner behavioral one-pass boundary regression"
+  failures=1
+fi
+
+for relative in \
+  plugins/pipeline/references/cascade-dispatch.sh \
+  plugins/pipeline/references/openrouter-exec.sh
+do
+  file="$ROOT/$relative"
+  grep -Fq 'resolve-plugin-bundle --plugin openrouter' "$file" &&
+  grep -Fq -- '--minimum-version 1.14.0' "$file" &&
+  grep -Fq 'WORKFLOW_KERNEL' "$file" &&
+  ! grep -Eq 'ls -t[d]? .*openrouter' "$file" || {
+    echo "  FAIL  configured-key consumer bypasses coherent semver OpenRouter resolution: $relative"
+    failures=1
+  }
 done
 
 authorization_contract="$ROOT/plugins/pipeline/references/openrouter-authorization-contract.md"

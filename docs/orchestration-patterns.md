@@ -252,8 +252,8 @@ The external model is stateless -- each invocation is a fresh session with no me
 
 `plugins/openrouter/` wraps external model APIs behind one provider and credential. Agents using this pattern:
 
-- **openrouter-bulk-analyst** -- supplies large-context criteria to the generic runner, which sends eligible full-diff sections to Kimi K3 with a GLM-5.2 capacity fallback whenever policy selects the bulk lane.
-- **openrouter-agent-runner** -- routes dm-review's mechanical agents through OpenRouter models when `OPENROUTER_API_KEY` is set.
+- **openrouter-bulk-analyst** -- supplies large-context criteria to the generic runner, which sends eligible full-diff sections to Kimi K3 with a GPT-5.6 Terra fallback whenever policy selects the bulk lane.
+- **openrouter-agent-runner** -- routes dm-review's mechanical agents through OpenRouter models when `OPENROUTER_API_KEY` or a strictly validated `OPENROUTER_API_KEY_FILE` is configured.
 - The pipeline cascade (`cascade-dispatch.sh`) drives the OpenRouter wrapper as a one-shot rung for config/doc generation and second-opinion analysis.
 
 ### Failure modes

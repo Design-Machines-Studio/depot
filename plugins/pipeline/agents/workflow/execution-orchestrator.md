@@ -166,10 +166,12 @@ full dm-review is a run-postmortem miss.
 The four mechanical review lanes (pattern-recognition, code-simplicity,
 doc-sync, test-coverage) plus Kimi-led security analysis route through
 OpenRouter only when `dm-review:review` is invoked and `OPENROUTER_API_KEY` is
-set. Kimi security analysis always pairs with independent non-implementing-family full-diff
-sign-off. GLM-5.2 and DeepSeek V4 are model fallbacks inside the OpenRouter
-rail, not separate plugins or credentials. If you skip the skill invocation,
-the routing never engages. You MUST invoke the skill.
+set or a strictly validated `OPENROUTER_API_KEY_FILE` is configured. Kimi
+security analysis always pairs with independent non-implementing-family
+full-diff sign-off. Terra is the review fallback; the refreshed DeepSeek V4
+Flash 0731, Grok, MiniMax, and last-resort GLM seats remain models inside the
+OpenRouter rail, not separate plugins or credentials. If you skip the skill
+invocation, the routing never engages. You MUST invoke the skill.
 
 ## Codex Native Adapter Parity
 
@@ -905,14 +907,20 @@ OPENROUTER_EXEC="$PIPELINE_BUNDLE_ROOT/references/openrouter-exec.sh"
 USAGE_PROBE="$PIPELINE_BUNDLE_ROOT/references/usage-probe.sh"
 CASCADE_ACTIVE=0
 if [ -n "$CASCADE_DISPATCH" ] && [ -x "$CASCADE_DISPATCH" ] \
-   && { [ -n "${OPENROUTER_API_KEY:-}" ] || [ "${PIPELINE_CASCADE:-0}" = "1" ]; }; then
+   && { [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ] \
+        || [ "${PIPELINE_CASCADE:-0}" = "1" ]; }; then
   CASCADE_ACTIVE=1
 fi
+export WORKFLOW_KERNEL
 ```
 
 Persist only Pipeline bundle `version`, `cache_class`, and `reason` in durable receipts. Never persist the absolute selected root. The cascade and OpenRouter runner must use the same selected Pipeline root; a caller-supplied path or independently resolved asset is invalid.
 
-`OPENROUTER_API_KEY` or `PIPELINE_CASCADE=1` activates the cascade. **If `CASCADE_ACTIVE=0`, normalize any legacy `executor: claude` value to `codex`; an unavailable OpenRouter executor falls back to Codex. If Codex is also unavailable, fail the chunk rather than dispatching coding work to Claude.**
+`OPENROUTER_API_KEY`, the strictly validated `OPENROUTER_API_KEY_FILE`, or
+`PIPELINE_CASCADE=1` activates the cascade. **If `CASCADE_ACTIVE=0`, normalize
+any legacy `executor: claude` value to `codex`; an unavailable OpenRouter
+executor falls back to Codex. If Codex is also unavailable, fail the chunk
+rather than dispatching coding work to Claude.**
 
 **Step 3d.1 -- Select task-fit primary (cascade active only).** Determine the chunk's primary rail from `routing-policy.json`, not kind alone:
 

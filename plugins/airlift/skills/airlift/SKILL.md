@@ -83,7 +83,7 @@ Harness profile data lives in `${CLAUDE_SKILL_DIR}/references/harness-profiles.j
 
 The registry is keyed by harness id. Unknown targets fall back to the universal resume path: paste `RESUME_PROMPT.md` into a new session.
 
-`resume-via-deepseek` remains a first-class compatibility target. It routes through the OpenRouter plugin using the `deepseek/deepseek-v4-pro` model and requires `OPENROUTER_API_KEY`; no standalone DeepSeek plugin or key is required.
+`resume-via-deepseek` remains a first-class compatibility target. It routes through the OpenRouter plugin using `deepseek/deepseek-v4-flash-0731` with `x-ai/grok-4.5` fallback and accepts either configured OpenRouter key input; no standalone DeepSeek plugin or key is required.
 
 ## Honest limits
 

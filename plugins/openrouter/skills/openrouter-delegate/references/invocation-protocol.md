@@ -44,6 +44,7 @@ resolve_bundle() {
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
       --minimum-version 1.14.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
       --required-asset skills/openrouter-delegate/references/mcp-control-plane.md
@@ -51,6 +52,7 @@ resolve_bundle() {
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
       --minimum-version 1.14.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
       --required-asset skills/openrouter-delegate/references/mcp-control-plane.md
@@ -184,7 +186,7 @@ POST https://openrouter.ai/api/v1/chat/completions
 
 ```json
 {
-  "models": ["moonshotai/kimi-k3", "z-ai/glm-5.2"],
+  "models": ["moonshotai/kimi-k3", "openai/gpt-5.6-terra"],
   "provider": {
     "require_parameters": true,
     "allow_fallbacks": true,

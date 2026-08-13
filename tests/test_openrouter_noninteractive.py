@@ -75,13 +75,24 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
         installed.parent.mkdir(parents=True)
         shutil.copytree(OPENROUTER, installed)
         self.installed = installed
+        self.kernel = self.root / "workflow-kernel"
+        self.kernel.write_text(
+            "#!/usr/bin/env bash\n"
+            "case \"${1:-}\" in\n"
+            "  resolve-plugin-bundle) printf '%s\\n' "
+            "'{\"selected_root\":\"~/.codex/plugins/cache/depot/openrouter/1.14.0\"}' ;;\n"
+            "  *) exit 4 ;;\n"
+            "esac\n"
+        )
+        self.kernel.chmod(0o755)
 
     def tearDown(self) -> None:
         self.tmp.cleanup()
 
     def env(self) -> dict[str, str]:
         env = os.environ.copy()
-        env.update({"HOME": str(self.home), "OPENROUTER_API_KEY": "test", "OPENROUTER_BASE": self.base})
+        env.update({"HOME": str(self.home), "OPENROUTER_API_KEY": "test",
+                    "OPENROUTER_BASE": self.base, "WORKFLOW_KERNEL": str(self.kernel)})
         env.pop("OPENROUTER_API_KEY_FILE", None)
         return env
 
@@ -209,6 +220,67 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         self.assertEqual((repo / "blocked.txt").read_text(), "blocked\n")
         self.assertEqual(subprocess.check_output(["git", "-C", str(repo), "rev-list", "--count", "HEAD"], text=True).strip(), "1")
 
+    def test_pipeline_rejects_pre_staged_paths_before_provider_contact(self) -> None:
+        repo = self.init_repo()
+        (repo / "blocked.txt").write_text("pre-staged\n")
+        subprocess.run(["git", "-C", str(repo), "add", "blocked.txt"], check=True)
+        contacts = FixtureHandler.contacts
+        diff = ("diff --git a/allowed.txt b/allowed.txt\n--- a/allowed.txt\n"
+                "+++ b/allowed.txt\n@@ -1 +1 @@\n-before\n+after")
+        result = self.run_pipeline(repo, diff)
+        self.assertEqual(result.returncode, 77)
+        self.assertEqual(FixtureHandler.contacts, contacts)
+        self.assertEqual(subprocess.check_output(
+            ["git", "-C", str(repo), "rev-list", "--count", "HEAD"], text=True,
+        ).strip(), "1")
+
+    def test_pipeline_rejects_unstaged_edit_in_approved_file(self) -> None:
+        repo = self.init_repo()
+        (repo / "allowed.txt").write_text("one\ntwo\nthree\n")
+        subprocess.run(["git", "-C", str(repo), "add", "allowed.txt"], check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "--amend", "--no-edit", "-q"], check=True)
+        (repo / "allowed.txt").write_text("one\ntwo\nlocal unrelated\n")
+        contacts = FixtureHandler.contacts
+        diff = ("diff --git a/allowed.txt b/allowed.txt\n--- a/allowed.txt\n"
+                "+++ b/allowed.txt\n@@ -1,2 +1,2 @@\n-one\n+model\n two")
+        result = self.run_pipeline(repo, diff)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(FixtureHandler.contacts, contacts + 1)
+        self.assertEqual((repo / "allowed.txt").read_text(), "one\ntwo\nlocal unrelated\n")
+        self.assertEqual(subprocess.check_output(
+            ["git", "-C", str(repo), "rev-list", "--count", "HEAD"], text=True,
+        ).strip(), "1")
+
+    def test_pipeline_accepts_strict_key_file_without_env_key(self) -> None:
+        repo = self.init_repo()
+        key = self.root / "pipeline-key"
+        key.write_text("test\n")
+        key.chmod(0o600)
+        env = self.env()
+        env.pop("OPENROUTER_API_KEY")
+        env["OPENROUTER_API_KEY_FILE"] = str(key)
+        diff = ("diff --git a/allowed.txt b/allowed.txt\n--- a/allowed.txt\n"
+                "+++ b/allowed.txt\n@@ -1 +1 @@\n-before\n+after")
+        result = self.run_pipeline(repo, diff, env)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((repo / "allowed.txt").read_text(), "after\n")
+
+    def test_pipeline_rolls_back_when_commit_creation_fails(self) -> None:
+        repo = self.init_repo()
+        env = self.env()
+        env["GIT_AUTHOR_NAME"] = ""
+        diff = ("diff --git a/allowed.txt b/allowed.txt\n--- a/allowed.txt\n"
+                "+++ b/allowed.txt\n@@ -1 +1 @@\n-before\n+after")
+        result = self.run_pipeline(repo, diff, env)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual((repo / "allowed.txt").read_text(), "before\n")
+        self.assertEqual(subprocess.check_output(
+            ["git", "-C", str(repo), "status", "--porcelain"], text=True,
+        ), "")
+        self.assertEqual(subprocess.check_output(
+            ["git", "-C", str(repo), "rev-list", "--count", "HEAD"], text=True,
+        ).strip(), "1")
+
     def test_missing_or_invalid_key_falls_back_without_prompt(self) -> None:
         repo = self.init_repo()
         env = self.env()
@@ -245,6 +317,9 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         self.assertIn('OPENROUTER_API_KEY_FILE', review)
         self.assertIn('OPENROUTER_AVAILABLE=true', review)
         self.assertIn('OPENROUTER_BOUNDARY_PATH', review)
+        orchestrator = (REPO / "plugins/pipeline/agents/workflow/execution-orchestrator.md").read_text()
+        self.assertIn('[ -n "${OPENROUTER_API_KEY_FILE:-}" ]', orchestrator)
+        self.assertIn("export WORKFLOW_KERNEL", orchestrator)
 
         for state in ("absent", "ready", "broken"):
             with self.subTest(authority_state=state):

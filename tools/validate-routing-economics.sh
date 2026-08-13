@@ -276,7 +276,7 @@ if [ -f "$routing" ]; then
         "preferredProviderWhenIndependent":"codex",
         "codexImplementerProvider":"openrouter",
         "codexImplementerModel":"moonshotai/kimi-k3",
-        "codexImplementerFallbackModel":"z-ai/glm-5.2",
+        "codexImplementerFallbackModel":"openai/gpt-5.6-terra",
         "required":true,
         "inputScope":"full-diff",
         "reviewerFamilyConstraint":"must-differ-from-implementer-family",
@@ -300,11 +300,11 @@ if [ -f "$routing" ]; then
     | all(. == {
         "provider":"openrouter",
         "model":"openai/gpt-5.6-luna",
-        "fallbackModel":"z-ai/glm-5.2",
+        "fallbackModel":"openai/gpt-5.6-terra",
         "fallbackProvider":"codex",
         "rationale": .rationale
       })
-  ' "$routing" >/dev/null || { printf "  FAIL  mechanical reviewers use exact Luna -> GLM-5.2 -> Codex routing\n"; failures=1; }
+  ' "$routing" >/dev/null || { printf "  FAIL  mechanical reviewers use exact Luna -> Terra -> Codex routing\n"; failures=1; }
   jq -e '
     .agentType["openrouter-bulk-analyst"]
     | .provider == "openrouter"
@@ -508,7 +508,7 @@ require_text "$wrapper" 'IDLE_TIMEOUT="${OPENROUTER_IDLE_TIMEOUT:-600}"' "OpenRo
 require_text "$runner" 'TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-3600}"' "Pipeline OpenRouter execution inherits the one-hour completion budget"
 require_text "$cascade" 'openrouter-wrapper.sh' "pipeline cascade delegates request encoding to the canonical wrapper"
 require_text "$runner" 'openrouter-wrapper.sh' "OpenRouter exec delegates request encoding to the canonical wrapper"
-require_text "$dm_review" '| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 3600s |' "dm-review security analysis receives a one-hour completion budget"
+require_text "$dm_review" '| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `openai/gpt-5.6-terra` | 3600s |' "dm-review security analysis receives a one-hour completion budget"
 require_text "$dm_review" '7200s at or above 10K diff lines' "dm-review bulk analysis scales to a two-hour completion budget"
 require_absent "$cascade" 'OPENROUTER_PAYLOAD_AUTHORIZATION' "pipeline cascade does not trust environment disclosure authority"
 require_text "$authorization_contract" 'without an approval question' "pipeline preserves non-interactive native fallback"

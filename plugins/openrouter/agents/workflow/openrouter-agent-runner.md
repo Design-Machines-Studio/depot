@@ -25,7 +25,7 @@ The caller passes you these inputs in the prompt body:
 
 - `target_agent_path` -- absolute path to the agent definition file inside the depot repo or an installed depot plugin cache
 - `target_agent_name` -- bare agent ID (must match `^[a-z0-9-]+$`)
-- `target_model` -- full OpenRouter model slug such as `z-ai/glm-5.2` or `deepseek/deepseek-v4-pro`
+- `target_model` -- full OpenRouter model slug such as `deepseek/deepseek-v4-flash-0731` or `x-ai/grok-4.5`
 - `fallback_model` -- optional full OpenRouter model slug sent in the same
   ordered native fallback request
 - `target_timeout` -- positive integer seconds, below dm-review's orchestrator timeout
@@ -137,6 +137,7 @@ resolve_bundle() {
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
       --required-asset skills/openrouter-delegate/references/model-matrix.json \
@@ -147,6 +148,7 @@ resolve_bundle() {
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
       --required-asset skills/openrouter-delegate/references/model-matrix.json \
@@ -186,8 +188,8 @@ done
 case "$target_agent_name" in
   security-auditor*)
     [ "$target_model" = "moonshotai/kimi-k3" ] &&
-      [ "${fallback_model:-}" = "z-ai/glm-5.2" ] || {
-      echo "ERROR: security review role requires Kimi K3 primary and GLM-5.2 fallback" >&2
+      [ "${fallback_model:-}" = "openai/gpt-5.6-terra" ] || {
+      echo "ERROR: security review role requires Kimi K3 primary and GPT-5.6 Terra fallback" >&2
       exit 2
     }
     ;;
@@ -345,13 +347,6 @@ case "$target_agent_name" in
   openrouter-bulk-analyst) OPENROUTER_WORKLOAD_CLASS="bulk" ;;
   *) OPENROUTER_WORKLOAD_CLASS="quality" ;;
 esac
-
-if ! "$BOUNDARY_HELPER" --mode artifact-delegation \
-    --policy "$SECURITY_POLICY_RESOLVED" \
-    --content-file "$SYS_FILE" --content-file "$USER_FILE" >/dev/null; then
-  echo "RUNNER FAILURE: automatic disclosure boundary declined; route to Codex" >&2
-  exit 0
-fi
 
 RESULT=$( \
   env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYS_FILE" \

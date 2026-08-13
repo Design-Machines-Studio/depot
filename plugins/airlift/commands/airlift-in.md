@@ -53,7 +53,8 @@ Then continue from the `Next steps` section in `HANDOFF.md`.
 
 For `resume-via-deepseek`, require either `OPENROUTER_API_KEY` or the validated
 `OPENROUTER_API_KEY_FILE`. The target name remains stable for compatibility,
-but transport is through OpenRouter using `deepseek/deepseek-v4-pro`. Resolve
+but transport is through OpenRouter using `deepseek/deepseek-v4-flash-0731`
+with `x-ai/grok-4.5` fallback. Resolve
 one coherent OpenRouter bundle, then privately copy and screen both resume
 artifacts together before invoking the wrapper immediately:
 
@@ -71,12 +72,14 @@ resolve_bundle() {
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
       --minimum-version 1.14.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
       --minimum-version 1.14.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
   fi
@@ -104,10 +107,38 @@ HANDOFF_COPY="$PRIVATE_DIR/HANDOFF.md"
   --name HANDOFF.md >/dev/null || {
   echo "airlift-openrouter: private-copy-invalid" >&2; exit 2;
 }
-"$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
-  --content-file "$RESUME_COPY" --content-file "$HANDOFF_COPY"
-env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$RESUME_COPY" \
-  bash "$WRAPPER" "deepseek/deepseek-v4-pro" - 180 < "$HANDOFF_COPY"
+if "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
+    --content-file "$RESUME_COPY" --content-file "$HANDOFF_COPY"; then
+  :
+else
+  BOUNDARY_RC=$?
+  [ "$BOUNDARY_RC" -eq 3 ] && {
+    echo "airlift-openrouter: disclosure-declined" >&2; exit 3;
+  }
+  echo "airlift-openrouter: boundary-invalid" >&2; exit 2
+fi
+RECEIPT_FILE="$BUNDLE_DIR/OPENROUTER_RECEIPT.json"
+if env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$RESUME_COPY" \
+    OPENROUTER_RUN_ID="airlift-resume" OPENROUTER_LANE_ID="resume-via-deepseek" \
+    OPENROUTER_WORKLOAD="quality" OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
+    bash "$WRAPPER" "deepseek/deepseek-v4-flash-0731" - 180 "x-ai/grok-4.5" \
+    < "$HANDOFF_COPY"; then
+  :
+else
+  WRAPPER_RC=$?
+  echo "airlift-openrouter: wrapper-failed" >&2
+  exit "$WRAPPER_RC"
+fi
+jq -e '
+  .schemaVersion == 2 and .outcome == "success" and
+  .authorization.runId == "airlift-resume" and
+  .authorization.laneId == "resume-via-deepseek" and
+  (.authorization.requestEnvelopeSha256 | test("^[0-9a-f]{64}$")) and
+  ([(.. | objects) | keys[] |
+    select(test("^(prompt|response|content|api_?key|secret)$"; "i"))] | length) == 0
+' "$RECEIPT_FILE" >/dev/null || {
+  echo "airlift-openrouter: receipt-invalid" >&2; exit 2;
+}
 ```
 
 The trusted workflow-kernel copy command opens each bundle file
@@ -117,5 +148,6 @@ copy with mode `0600`. This makes the screened bytes exactly the bytes
 passed to the wrapper without allowing a bundle symlink or concurrent pathname
 swap to redirect disclosure. The secret scan runs once over those private
 copies immediately before wrapper invocation. A boundary decline, malformed
-input, missing coherent bundle, or copy failure stops before wrapper/network
-contact and remains a distinct receipt outcome.
+input, missing coherent bundle, copy failure, wrapper failure, or invalid
+content-free receipt stops distinctly. Successful delegation leaves the
+validated durable receipt at `.airlift/OPENROUTER_RECEIPT.json`.

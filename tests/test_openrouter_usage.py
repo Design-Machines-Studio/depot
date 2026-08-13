@@ -967,11 +967,8 @@ class RecordAttemptTests(unittest.TestCase):
         directory = tempfile.mkdtemp()
         receipts = os.path.join(directory, "authoritative-receipts.json")
         try:
+            # Consume the checked-in producer-faithful bound receipt unchanged.
             wrapper_receipt = _receipt(SUCCESS_FIXTURE)
-            wrapper_receipt["authorization"] = {
-                "mode": "trusted-boundary", "runId": "record-attempt-1",
-                "laneId": "security", "requestEnvelopeSha256": "b" * 64,
-            }
             wrapper_receipt_path = Path(directory) / "openrouter-receipt.json"
             wrapper_receipt_path.write_text(
                 json.dumps(wrapper_receipt), encoding="utf-8",
@@ -1076,7 +1073,6 @@ class RecordAttemptTests(unittest.TestCase):
             with self.subTest(field=field), tempfile.TemporaryDirectory() as directory:
                 receipt = _receipt(SUCCESS_FIXTURE)
                 receipt["authorization"] = {
-                    "mode": "trusted-boundary",
                     "runId": "record-attempt-1",
                     "laneId": "security",
                     "requestEnvelopeSha256": "b" * 64,
@@ -1099,7 +1095,6 @@ class RecordAttemptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "trusted-boundary",
                 "runId": "record-attempt-1",
                 "laneId": "security",
                 "requestEnvelopeSha256": "b" * 64,
@@ -1121,7 +1116,7 @@ class RecordAttemptTests(unittest.TestCase):
             receipts = os.path.join(directory, "authoritative-receipts.json")
             code, _, _ = _invoke(self._argv(
                 receipts, "security", 1,
-                openrouter_receipt=SUCCESS_FIXTURE,
+                openrouter_receipt=SUCCESS_NO_USAGE_FIXTURE,
                 request_envelope_sha256="b" * 64,
             ))
             self.assertNotEqual(code, 0)
@@ -1134,7 +1129,7 @@ class RecordAttemptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "trusted-boundary", "runId": "run-a",
+                "runId": "run-a",
                 "laneId": "security", "requestEnvelopeSha256": "b" * 64,
             }
             receipt_path = Path(directory) / "openrouter-receipt.json"
@@ -1181,7 +1176,7 @@ class RecordAttemptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "trusted-boundary", "runId": "record-attempt-1",
+                "runId": "record-attempt-1",
                 "laneId": "security", "requestEnvelopeSha256": "b" * 64,
             }
             receipt_path = Path(directory) / "openrouter-receipt.json"
@@ -1208,7 +1203,7 @@ class RecordAttemptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "trusted-boundary", "runId": "record-attempt-1",
+                "runId": "record-attempt-1",
                 "laneId": "security", "requestEnvelopeSha256": "b" * 64,
             }
             receipt_path = Path(directory) / "openrouter-receipt.json"
@@ -1240,7 +1235,7 @@ class RecordAttemptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "trusted-boundary", "runId": "record-attempt-1",
+                "runId": "record-attempt-1",
                 "laneId": "security", "requestEnvelopeSha256": "b" * 64,
             }
             receipt_path = Path(directory) / "openrouter-receipt.json"
@@ -1276,7 +1271,7 @@ class RecordAttemptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "trusted-boundary", "runId": "record-attempt-1",
+                "runId": "record-attempt-1",
                 "laneId": "security", "requestEnvelopeSha256": "b" * 64,
             }
             receipt_path = Path(directory) / "openrouter-receipt.json"
@@ -1311,7 +1306,6 @@ class RecordAttemptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "trusted-boundary",
                 "runId": "record-attempt-1",
                 "laneId": "security",
                 "requestEnvelopeSha256": "b" * 64,
@@ -1342,7 +1336,6 @@ class RecordAttemptTests(unittest.TestCase):
                 receipt = _receipt(FAILED_FIXTURE)
                 receipt["invocationId"] = invocation_id
                 receipt["authorization"] = {
-                    "mode": "trusted-boundary",
                     "runId": "record-attempt-1",
                     "laneId": "security",
                     "requestEnvelopeSha256": "b" * 64,
@@ -1367,7 +1360,6 @@ class RecordAttemptTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             receipt = _receipt(SUCCESS_FIXTURE)
             receipt["authorization"] = {
-                "mode": "trusted-boundary",
                 "runId": "record-attempt-1",
                 "laneId": "security",
                 "requestEnvelopeSha256": "b" * 64,

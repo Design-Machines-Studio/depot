@@ -120,13 +120,15 @@ ACTIVE_HOST=""
 if [ -n "$ACTIVE_HOST" ]; then
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
     --minimum-version 1.14.0 --active-host "$ACTIVE_HOST" \
-    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
     --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh)
 else
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
     --minimum-version 1.14.0 \
-    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
     --required-asset skills/openrouter-delegate/references/mcp-control-plane.md \
     --required-executable skills/openrouter-delegate/references/delegation-boundary.sh)
 fi

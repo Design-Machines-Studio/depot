@@ -220,6 +220,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+        --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
         --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
         --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
         --required-asset skills/openrouter-delegate/references/model-matrix.json \
@@ -230,6 +231,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+        --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
         --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
         --required-executable skills/openrouter-delegate/references/delegation-boundary.sh \
         --required-asset skills/openrouter-delegate/references/model-matrix.json \
@@ -443,11 +445,11 @@ Routing decisions come from `plugins/pipeline/references/routing-policy.json`, w
 
 | Agent ID | Primary model slug | Fallback model slug | Timeout |
 |---|---|---|---|
-| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `z-ai/glm-5.2` | 3600s |
-| `pattern-recognition-specialist` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
-| `code-simplicity-reviewer` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
-| `doc-sync-reviewer` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
-| `test-coverage-reviewer` | `openai/gpt-5.6-luna` | `z-ai/glm-5.2` | 1800s |
+| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `openai/gpt-5.6-terra` | 3600s |
+| `pattern-recognition-specialist` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
+| `code-simplicity-reviewer` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
+| `doc-sync-reviewer` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
+| `test-coverage-reviewer` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
 | `openrouter-bulk-analyst` | `moonshotai/kimi-k3` | `openai/gpt-5.6-terra` | 3600s; 7200s at or above 10K diff lines |
 
 When `routing-policy.json` supplies `model` and `fallbackModel`, those full OpenRouter slugs override the inline table. The table is the standalone dm-review fallback. Both models are invoked through the OpenRouter wrapper and billed to the OpenRouter rail.
@@ -911,7 +913,7 @@ Report the fallback in the Agent Summary table:
 
 | Agent | Provider | Status |
 |-------|----------|--------|
-| pattern-recognition-specialist | OpenRouter `z-ai/glm-5.2` | RUNNER FAILURE |
+| pattern-recognition-specialist | OpenRouter `openai/gpt-5.6-terra` | RUNNER FAILURE |
 | pattern-recognition-specialist | Codex (fallback) | Completed |
 | security-auditor-openrouter | OpenRouter `moonshotai/kimi-k3` | Completed (eligible sections) |
 | security-auditor-codex-signoff | Resolved independent family | Completed (full diff) |

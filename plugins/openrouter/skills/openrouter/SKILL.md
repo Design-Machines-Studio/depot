@@ -76,12 +76,14 @@ resolve_openrouter_bundle() {
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
       --minimum-version 1.14.0 --active-host "$ACTIVE_HOST" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
       --minimum-version 1.14.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
   fi

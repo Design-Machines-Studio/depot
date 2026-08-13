@@ -95,55 +95,24 @@ for candidate in "$MODEL" "$FALLBACK"; do
       ;;
   esac
 done
-if [ -n "${OPENROUTER_API_KEY:-}" ] && [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; then
-  echo "### RUNNER FAILURE: OPENROUTER_API_KEY and OPENROUTER_API_KEY_FILE are mutually exclusive" >&2
+CREDENTIAL_LOADER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/openrouter-credential.sh"
+[ -r "$CREDENTIAL_LOADER" ] || {
+  echo "### RUNNER FAILURE: coherent OpenRouter credential loader unavailable" >&2
   exit 2
+}
+# shellcheck source=openrouter-credential.sh
+. "$CREDENTIAL_LOADER"
+if load_openrouter_api_key; then
+  :
+else
+  credential_rc=$?
+  if [ "$credential_rc" -eq 2 ]; then
+    echo "### RUNNER FAILURE: OPENROUTER_API_KEY and OPENROUTER_API_KEY_FILE are mutually exclusive" >&2
+    exit 2
+  fi
+  echo "### RUNNER FAILURE: OPENROUTER_API_KEY_FILE must be a non-symlink regular file owned by the current UID with mode 0600 and one non-empty line" >&2
+  exit 1
 fi
-if [ -z "${OPENROUTER_API_KEY:-}" ]; then
-  [ -n "${OPENROUTER_API_KEY_FILE:-}" ] || {
-    echo "### RUNNER FAILURE: OPENROUTER_API_KEY or OPENROUTER_API_KEY_FILE required" >&2
-    exit 1
-  }
-  [ -x /usr/bin/python3 ] || {
-    echo "### RUNNER FAILURE: /usr/bin/python3 required to validate OPENROUTER_API_KEY_FILE" >&2
-    exit 1
-  }
-  OPENROUTER_API_KEY="$(/usr/bin/python3 -I - "$OPENROUTER_API_KEY_FILE" <<'PY'
-import os
-import stat
-import sys
-
-path = sys.argv[1]
-try:
-    metadata = os.lstat(path)
-    if not stat.S_ISREG(metadata.st_mode) or stat.S_ISLNK(metadata.st_mode):
-        raise ValueError
-    if metadata.st_uid != os.getuid() or stat.S_IMODE(metadata.st_mode) != 0o600:
-        raise ValueError
-    descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
-    try:
-        opened = os.fstat(descriptor)
-        if (opened.st_dev, opened.st_ino) != (metadata.st_dev, metadata.st_ino):
-            raise ValueError
-        value = os.read(descriptor, 8193)
-    finally:
-        os.close(descriptor)
-    if value.endswith(b"\r\n"):
-        value = value[:-2]
-    elif value.endswith(b"\n"):
-        value = value[:-1]
-    if not value or len(value) > 8192 or b"\n" in value or b"\r" in value or b"\0" in value:
-        raise ValueError
-    sys.stdout.write(value.decode("utf-8"))
-except (OSError, UnicodeDecodeError, ValueError):
-    raise SystemExit(1)
-PY
-)" || {
-    echo "### RUNNER FAILURE: OPENROUTER_API_KEY_FILE must be a non-symlink regular file owned by the current UID with mode 0600 and one non-empty line" >&2
-    exit 1
-  }
-fi
-export OPENROUTER_API_KEY
 
 PRODUCTION_BASE="https://openrouter.ai/api/v1"
 BASE="${OPENROUTER_BASE:-$PRODUCTION_BASE}"
@@ -224,8 +193,8 @@ case "$TARGET_AGENT_NAME" in
     # This caller label catches accidental role/model drift. It is not, by
     # itself, an adversarial identity boundary.
     [ "$MODEL" = "moonshotai/kimi-k3" ] &&
-      [ "$FALLBACK" = "z-ai/glm-5.2" ] || {
-      echo "### RUNNER FAILURE: security review role requires Kimi K3 primary and GLM-5.2 fallback" >&2
+      [ "$FALLBACK" = "openai/gpt-5.6-terra" ] || {
+      echo "### RUNNER FAILURE: security review role requires Kimi K3 primary and GPT-5.6 Terra fallback" >&2
       exit 2
     }
     ;;

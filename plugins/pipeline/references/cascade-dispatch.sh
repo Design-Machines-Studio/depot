@@ -90,18 +90,56 @@ dispatch_codex() {
   [ -z "$root" ] && return 127                       # Codex not installed -> unavailable
   node "${root}/scripts/codex-companion.mjs" task --write "$PROMPT" 2>&1
 }
+resolve_openrouter_bundle() {
+  local active_host=""
+  [ -n "${WORKFLOW_KERNEL:-}" ] && [ -x "$WORKFLOW_KERNEL" ] || return 1
+  [ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && active_host="claude"
+  [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && active_host="codex"
+  if [ -n "$active_host" ]; then
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.14.0 --active-host "$active_host" \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+  else
+    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
+      --minimum-version 1.14.0 \
+      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
+      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
+      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
+      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
+  fi
+}
+
+# Resolve the complete OpenRouter bundle once for this cascade process. Child
+# probes and executors receive the same version/cache/reason binding and must
+# compare it with their own pre-transport revalidation.
+unset OPENROUTER_BUNDLE_REF OPENROUTER_BUNDLE_VERSION \
+  OPENROUTER_BUNDLE_CACHE_CLASS OPENROUTER_BUNDLE_REASON \
+  OPENROUTER_BUNDLE_RESOLVED
+OPENROUTER_BUNDLE_JSON=""
+if [ "$DRYRUN" != "1" ] &&
+   { [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; }; then
+  OPENROUTER_BUNDLE_JSON="$(resolve_openrouter_bundle 2>/dev/null)" || OPENROUTER_BUNDLE_JSON=""
+fi
+if [ -n "$OPENROUTER_BUNDLE_JSON" ]; then
+  OPENROUTER_BUNDLE_REF="$(printf '%s' "$OPENROUTER_BUNDLE_JSON" | jq -r '.selected_root // empty')"
+  OPENROUTER_BUNDLE_VERSION="$(printf '%s' "$OPENROUTER_BUNDLE_JSON" | jq -r '.version // empty')"
+  OPENROUTER_BUNDLE_CACHE_CLASS="$(printf '%s' "$OPENROUTER_BUNDLE_JSON" | jq -r '.cache_class // empty')"
+  OPENROUTER_BUNDLE_REASON="$(printf '%s' "$OPENROUTER_BUNDLE_JSON" | jq -r '.reason // empty')"
+  OPENROUTER_BUNDLE_RESOLVED=1
+  export OPENROUTER_BUNDLE_REF OPENROUTER_BUNDLE_VERSION \
+    OPENROUTER_BUNDLE_CACHE_CLASS OPENROUTER_BUNDLE_REASON \
+    OPENROUTER_BUNDLE_RESOLVED
+fi
+
 resolve_openrouter_root() {
-  local cache root
-  for cache in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-    root="$(ls -td "$cache"/openrouter/*/ 2>/dev/null | head -1)"
-    [ -n "$root" ] || continue
-    [ -x "$root/skills/openrouter-delegate/references/openrouter-wrapper.sh" ] &&
-      [ -r "$root/skills/openrouter-delegate/references/delegation-security-policy.json" ] &&
-      [ -x "$root/skills/openrouter-delegate/references/delegation-boundary.sh" ] || continue
-    printf '%s' "${root%/}"
-    return 0
-  done
-  return 1
+  [ "${OPENROUTER_BUNDLE_RESOLVED:-0}" = "1" ] || return 1
+  case "${OPENROUTER_BUNDLE_REF:-}" in
+    "~/"*) printf '%s' "$HOME/${OPENROUTER_BUNDLE_REF#\~/}" ;;
+    *) return 1 ;;
+  esac
 }
 
 dispatch_wrapper() {
@@ -125,7 +163,7 @@ dispatch_wrapper() {
       rm -f "$system_file" "$prompt_file" "$receipt_file"; return 77;
     }
   response="$(env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$system_file" \
-    OPENROUTER_WORKLOAD="${DM_PROVIDER_WORKLOAD:-mechanical}" \
+    OPENROUTER_WORKLOAD="mechanical" \
     OPENROUTER_RECEIPT_FILE="$receipt_file" \
     bash "$root/skills/openrouter-delegate/references/openrouter-wrapper.sh" \
       "$model" - "$TIMEOUT" < "$prompt_file")"; rc=$?

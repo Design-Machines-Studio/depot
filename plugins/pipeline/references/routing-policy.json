@@ -146,28 +146,28 @@
     "pattern-recognition-specialist": {
       "provider": "openrouter",
       "model": "openai/gpt-5.6-luna",
-      "fallbackModel": "z-ai/glm-5.2",
+      "fallbackModel": "openai/gpt-5.6-terra",
       "fallbackProvider": "codex",
-      "rationale": "Pattern checks use low-cost Luna on the OpenRouter rail, then GLM-5.2, before Codex fallback."
+      "rationale": "Pattern checks use low-cost Luna on the OpenRouter rail, then Terra, before Codex fallback."
     },
     "code-simplicity-reviewer": {
       "provider": "openrouter",
       "model": "openai/gpt-5.6-luna",
-      "fallbackModel": "z-ai/glm-5.2",
+      "fallbackModel": "openai/gpt-5.6-terra",
       "fallbackProvider": "codex",
-      "rationale": "Simplification review uses low-cost Luna, then GLM-5.2, before Codex fallback."
+      "rationale": "Simplification review uses low-cost Luna, then Terra, before Codex fallback."
     },
     "doc-sync-reviewer": {
       "provider": "openrouter",
       "model": "openai/gpt-5.6-luna",
-      "fallbackModel": "z-ai/glm-5.2",
+      "fallbackModel": "openai/gpt-5.6-terra",
       "fallbackProvider": "codex",
       "rationale": "Documentation consistency uses OpenRouter large-context models at any diff size."
     },
     "test-coverage-reviewer": {
       "provider": "openrouter",
       "model": "openai/gpt-5.6-luna",
-      "fallbackModel": "z-ai/glm-5.2",
+      "fallbackModel": "openai/gpt-5.6-terra",
       "fallbackProvider": "codex",
       "rationale": "Coverage gap detection is read-heavy and uses the OpenRouter mechanical ladder."
     },
@@ -181,7 +181,7 @@
     "security-auditor-openrouter": {
       "provider": "openrouter",
       "model": "moonshotai/kimi-k3",
-      "fallbackModel": "z-ai/glm-5.2",
+      "fallbackModel": "openai/gpt-5.6-terra",
       "fallbackProvider": "codex",
       "rationale": "Kimi K3 analyzes only content-boundary-eligible sections; full or partial declines are completed under this same logical lane on Codex."
     },
@@ -190,7 +190,7 @@
       "preferredProviderWhenIndependent": "codex",
       "codexImplementerProvider": "openrouter",
       "codexImplementerModel": "moonshotai/kimi-k3",
-      "codexImplementerFallbackModel": "z-ai/glm-5.2",
+      "codexImplementerFallbackModel": "openai/gpt-5.6-terra",
       "required": true,
       "inputScope": "full-diff",
       "reviewerFamilyConstraint": "must-differ-from-implementer-family",

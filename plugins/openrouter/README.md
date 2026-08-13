@@ -31,7 +31,7 @@ Task-to-model routing is governed by `plugins/pipeline/references/routing-policy
 - **Primary external provider** for `pattern-recognition-specialist`, `code-simplicity-reviewer`, `doc-sync-reviewer`, and `test-coverage-reviewer`; each lane uses the model and fallback model selected by policy.
 - **Primary Kimi K3 security-analysis lens**, paired with mandatory independent non-implementing-family full-diff sign-off.
 - **Primary Kimi K3 bulk lane** for large-context / large-diff first-pass triage.
-- The GLM-5.2-headed cascade rail for `config` / `docs` / `mechanical-logic` chunk execution via `openrouter-exec`.
+- The DeepSeek V4 Flash 0731-headed cascade rail for `config` / `docs` / `mechanical-logic` chunk execution via `openrouter-exec`, with Grok 4.5 escalation and GLM-5.2 only as the experimental last fallback.
 
 ## Security boundary (non-negotiable)
 

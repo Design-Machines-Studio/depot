@@ -927,7 +927,7 @@ require_absent "$authority_threat_model" "only exact ordered content bytes" \
   "workflow-authority threat model does not revert to content-only binding"
 for f in "$openrouter_agent_runner" "$openrouter_wrapper"; do
   rel="${f#$REPO_ROOT/}"
-  require_text "$f" "security review role requires Kimi K3 primary and GLM-5.2 fallback" \
+  require_text "$f" "security review role requires Kimi K3 primary and GPT-5.6 Terra fallback" \
     "$rel binds security review routing to the approved model pair"
 done
 
