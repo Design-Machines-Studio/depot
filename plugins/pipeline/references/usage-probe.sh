@@ -24,18 +24,13 @@ PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export PATH
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROBE_SOURCE="live"
-if [ "${USAGE_PROBE_TEST_MODE:-0}" = "1" ]; then
-  PROBE_SOURCE="fixture"
-  echo "usage-probe: TEST FIXTURE MODE active; headroom is not live capacity evidence" >&2
-fi
 
 # Every emission path below builds JSON with jq. Without jq the script would
 # print a blank line and exit 0, and the consumer would see an unrecognized
 # shape rather than the mandated unknown object. Absent jq is exactly the
 # "tool is absent" case, so answer it in jq-free literal form and stop.
 if ! command -v jq >/dev/null 2>&1; then
-  printf '%s\n' "{\"probe_source\":\"$PROBE_SOURCE\",\"codex\":{\"state\":\"unknown\",\"remaining_pct\":0,\"window\":\"unknown\"},\"claude\":{\"state\":\"unknown\",\"remaining_pct\":0,\"window\":\"unknown\"},\"openrouter\":{\"state\":\"unknown\",\"balance_usd\":null}}"
+  printf '%s\n' '{"probe_source":"live","codex":{"state":"unknown","remaining_pct":0,"window":"unknown"},"claude":{"state":"unknown","remaining_pct":0,"window":"unknown"},"openrouter":{"state":"unknown","balance_usd":null}}'
   exit 0
 fi
 
@@ -97,58 +92,13 @@ aggregate_windows() {
     '
 }
 
-claude_statusline_input() {
-  # These three inputs are CALLER-SUPPLIED usage numbers, so they are test
-  # fixtures, not evidence. Accepting them in normal operation would let anyone
-  # who controls the environment assert used_percentage 0 for both required
-  # windows and report Claude "ok" while its real headroom is unknown or
-  # exhausted. That is the optimistic direction this file exists to prevent,
-  # so they are honoured only under an explicit test mode.
-  #
-  # Outside test mode this probe has no live Claude source: it is not a
-  # statusLine command and cannot see the runtime's rate_limits payload. It
-  # therefore reports Claude as unknown, which resolves to no headroom. That is
-  # the truthful answer, not a degradation.
-  [ "${USAGE_PROBE_TEST_MODE:-0}" = "1" ] || return 0
-  if [ -n "${USAGE_PROBE_CLAUDE_STATUSLINE_JSON:-}" ]; then
-    printf '%s' "$USAGE_PROBE_CLAUDE_STATUSLINE_JSON"
-  elif [ -n "${USAGE_PROBE_CLAUDE_STATUSLINE_FILE:-}" ] \
-       && [ -r "$USAGE_PROBE_CLAUDE_STATUSLINE_FILE" ]; then
-    command cat "$USAGE_PROBE_CLAUDE_STATUSLINE_FILE" 2>/dev/null || true
-  elif [ "${USAGE_PROBE_CLAUDE_STATUSLINE_STDIN:-0}" = "1" ] && [ ! -t 0 ]; then
-    # Only read stdin when the caller explicitly asks. Orchestrators routinely
-    # spawn scripts with an open-but-idle pipe on fd 0, and a bare `cat` there
-    # blocks until the writer closes -- hanging the probe rather than
-    # reporting unknown.
-    command cat 2>/dev/null || true
-  fi
-}
-
 claude_json() {
-  local statusline="" observations='[]'
-  statusline="$(claude_statusline_input)"
-  if [ -n "$statusline" ]; then
-    observations="$(printf '%s' "$statusline" | jq -c '
-      [ {window:"five_hour", value:(.rate_limits.five_hour // null)},
-        {window:"weekly", value:(.rate_limits.weekly // .rate_limits.seven_day // null)} ]
-      | map(select(.value != null and (.value.used_percentage | type) == "number")
-        | {window:.window, remaining_pct:([0, (100 - .value.used_percentage), 100] | sort | .[1])})
-    ' 2>/dev/null)" || observations='[]'
-  fi
-  [ -n "$observations" ] || observations='[]'
-
-  aggregate_windows '["five_hour","weekly"]' "$observations"
+  # This standalone probe cannot see Claude's runtime statusLine payload.
+  # Without a live source, both required windows remain conservatively unknown.
+  aggregate_windows '["five_hour","weekly"]' '[]'
 }
 
 codex_app_server_output() {
-  # The injected response is a deterministic parser fixture only. Production
-  # always obtains these bytes from the Codex app server itself.
-  if [ "${USAGE_PROBE_TEST_MODE:-0}" = "1" ] \
-     && [ -n "${USAGE_PROBE_CODEX_APP_SERVER_JSON:-}" ]; then
-    printf '%s\n' "$USAGE_PROBE_CODEX_APP_SERVER_JSON"
-    return 0
-  fi
-
   command -v codex >/dev/null 2>&1 || return 1
   {
     printf '%s\n' \
@@ -272,28 +222,18 @@ normalize_profile_probe() {
 
 operator_profile_path() {
   local root="" common_dir="" root_physical="" candidate="" candidate_parent=""
-  local resolved_parent="" expected_parent="" test_override=0
-  # An environment-selected profile path is a test fixture, not production
-  # input: the profile supplies argv this script executes, so letting the
-  # environment point it at any untracked file defeats the "developer-local
-  # config" boundary the contract claims. In normal operation only the
-  # canonical repository path is resolved.
-  if [ "${USAGE_PROBE_TEST_MODE:-0}" = "1" ] && [ -n "${DM_OPERATOR_PROFILE_FILE:-}" ]; then
-    candidate="$DM_OPERATOR_PROFILE_FILE"
-    test_override=1
-  else
-    # Resolve host-owned local configuration from the COMMON checkout, never
-    # from the ambient linked worktree. Pipeline chunk output lives in linked
-    # worktrees and must not be able to plant executable local configuration
-    # merely by writing an ignored `.dm` file there.
-    common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
-      || common_dir=""
-    [ -n "$common_dir" ] && [ -d "$common_dir" ] || return 0
-    common_dir="$(cd "$common_dir" 2>/dev/null && pwd -P)" || return 0
-    [ "${common_dir##*/}" = ".git" ] || return 0
-    root="${common_dir%/.git}"
-    candidate="$root/.dm/operator-profile.local.json"
-  fi
+  local resolved_parent="" expected_parent=""
+  # Resolve host-owned local configuration from the COMMON checkout, never
+  # from the ambient linked worktree. Pipeline chunk output lives in linked
+  # worktrees and must not be able to plant executable local configuration
+  # merely by writing an ignored `.dm` file there.
+  common_dir="$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)" \
+    || common_dir=""
+  [ -n "$common_dir" ] && [ -d "$common_dir" ] || return 0
+  common_dir="$(cd "$common_dir" 2>/dev/null && pwd -P)" || return 0
+  [ "${common_dir##*/}" = ".git" ] || return 0
+  root="${common_dir%/.git}"
+  candidate="$root/.dm/operator-profile.local.json"
   # A profile supplies probe argv that this script executes, so the file itself
   # is a trust boundary. It is legitimate only as untracked developer-local
   # config.
@@ -301,38 +241,32 @@ operator_profile_path() {
   # Refuse a symlink: it can redirect the read outside the checkout.
   [ -L "$candidate" ] && return 0
   [ -f "$candidate" ] || return 0
-  if [ "$test_override" -eq 0 ]; then
-    # `-L "$candidate"` checks only the final component. A tracked `.dm`
-    # symlink can otherwise redirect the regular profile file to a different
-    # repository path while the literal `.dm/operator-profile.local.json`
-    # path remains absent from the index. Compare physical parents so every
-    # intermediate component is covered without trusting `realpath(1)` to be
-    # present on stock macOS.
-    root_physical="$(cd "$root" 2>/dev/null && pwd -P)" || return 0
-    candidate_parent="$(dirname "$candidate")"
-    resolved_parent="$(cd "$candidate_parent" 2>/dev/null && pwd -P)" || return 0
-    expected_parent="$root_physical/.dm"
-    [ "$resolved_parent" = "$expected_parent" ] || return 0
-    candidate="$resolved_parent/operator-profile.local.json"
-  fi
+  # `-L "$candidate"` checks only the final component. A tracked `.dm`
+  # symlink can otherwise redirect the regular profile file to a different
+  # repository path while the literal `.dm/operator-profile.local.json`
+  # path remains absent from the index. Compare physical parents so every
+  # intermediate component is covered without trusting `realpath(1)` to be
+  # present on stock macOS.
+  root_physical="$(cd "$root" 2>/dev/null && pwd -P)" || return 0
+  candidate_parent="$(dirname "$candidate")"
+  resolved_parent="$(cd "$candidate_parent" 2>/dev/null && pwd -P)" || return 0
+  expected_parent="$root_physical/.dm"
+  [ "$resolved_parent" = "$expected_parent" ] || return 0
+  candidate="$resolved_parent/operator-profile.local.json"
   # Refuse a git-TRACKED profile. This is the live vector, not a theoretical
   # one: .gitignore is routinely defeated by `git add -f` in this repository
   # (several plans/ subtrees are ignored and tracked anyway), so a branch could
   # ship .dm/operator-profile.local.json and have every later run execute its
   # probes. An ignored-but-committed file is not developer-local config.
-  if [ "$test_override" -eq 0 ]; then
-    git -C "$root" ls-files --error-unmatch -- \
-      .dm/operator-profile.local.json >/dev/null 2>&1 && return 0
-  elif git ls-files --error-unmatch -- "$candidate" >/dev/null 2>&1; then
-    return 0
-  fi
+  git -C "$root" ls-files --error-unmatch -- \
+    .dm/operator-profile.local.json >/dev/null 2>&1 && return 0
   printf '%s\n' "$candidate"
 }
 
 profile="$(operator_profile_path)"
-result="$(jq -cn --arg source "$PROBE_SOURCE" --argjson codex "$(codex_json)" \
+result="$(jq -cn --argjson codex "$(codex_json)" \
   --argjson claude "$(claude_json)" --argjson openrouter "$(openrouter_json)" \
-  '{probe_source:$source,codex:$codex,claude:$claude,openrouter:$openrouter}')"
+  '{probe_source:"live",codex:$codex,claude:$claude,openrouter:$openrouter}')"
 
 if [ -n "$profile" ] && [ -r "$profile" ] \
    && jq -e 'type == "object"
