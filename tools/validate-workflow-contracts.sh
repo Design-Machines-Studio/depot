@@ -1111,7 +1111,15 @@ require_text "$review_output" '### Detailed Agent Reports' \
 require_text "$review_skill" 'Preserve the complete unified report and all' \
   "dm-review preserves complete report evidence"
 require_text "$review_skill" 'write the complete report to `.claude/ux-review/report.md`' \
-  "dm-review always writes the complete report before compact delivery"
+  "dm-review always writes the complete report"
+require_before "$review_skill" '### Phase 8: Repository Cleanup' '### Finalize Report and Deliver Handoff' \
+  "dm-review finalizes the report only after mandatory cleanup"
+require_before "$review_skill" '### Phase 8: Repository Cleanup' 'write the complete report to `.claude/ux-review/report.md`' \
+  "dm-review writes the complete report only after cleanup truth exists"
+require_before "$review_skill" 'write the complete report to `.claude/ux-review/report.md`' 'Deliver the compact human handoff' \
+  "dm-review delivers the compact handoff only after the complete report write"
+require_text "$review_skill" 'Do not write `.claude/ux-review/report.md` or deliver the compact human handoff' \
+  "dm-review consolidation explicitly forbids early final delivery"
 require_text "$lifecycle" '| `.claude/ux-review/report.md` | 3 |' \
   "dm-review complete report uses the existing artifact lifecycle"
 require_text "$review_consolidator" 'Coverage Gaps' \
@@ -1157,6 +1165,12 @@ require_text "$orchestrator" 'write both under `## Codify Proposals` in the mand
   "Pipeline preserves approval-ready codify proposals in the postmortem"
 require_text "$orchestrator" 'Detailed review: `.claude/ux-review/report.md`' \
   "Pipeline links the mandatory detailed review artifact"
+require_before "$orchestrator" '## Step 4c: Merge Policy Check' '## Step 6: Summary Report' \
+  "Pipeline records merge policy before final human delivery"
+require_text "$orchestrator" 'state `noMergeOnCompletion=true` in **Branch or PR** and make manual branch review the single **Recommended next action**' \
+  "Pipeline routes no-merge disposition into live compact-summary fields"
+require_absent "$orchestrator" 'Summary Report'"'"'s "Next Steps" section' \
+  "Pipeline no longer points no-merge runs at the deleted Next Steps section"
 require_text "$orchestrator" 'providerSplit: {claude: N, codex: N, openrouter: N}' \
   "Pipeline receipt retains provider provenance"
 require_text "$orchestrator" 'retained/blocked <J>' \

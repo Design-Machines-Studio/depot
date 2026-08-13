@@ -1985,7 +1985,7 @@ waive or manufacture it.
 
 Read `manifest.noMergeOnCompletion` (default `false` if the field is absent).
 
-- **If `true`:** log `merge_skipped: noMergeOnCompletion=true`. Do NOT merge the feature branch into `baseBranch`. The caller retains the branch for manual review. Note this in the Summary Report's "Next Steps" section.
+- **If `true`:** log `merge_skipped: noMergeOnCompletion=true`. Do NOT merge the feature branch into `baseBranch`. The caller retains the branch for manual review. In the compact Step 6 summary, state `noMergeOnCompletion=true` in **Branch or PR** and make manual branch review the single **Recommended next action**.
 - **If `false`:** proceed with the normal merge workflow (feature branch is already assembled via per-chunk merges; no additional action needed here unless your workflow performs a final base-branch merge).
 
 Mark `FINAL 3. Check manifest.noMergeOnCompletion` complete.
