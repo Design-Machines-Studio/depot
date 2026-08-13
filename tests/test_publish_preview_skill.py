@@ -10,6 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_ROOT = ROOT / "plugins/ned/skills/publish-preview"
+MUTATION_LOCK = "/home/ned/.local/state/design-machines/publish-preview/mutation.lock"
 
 
 class PublishPreviewSkillTest(unittest.TestCase):
@@ -39,6 +40,10 @@ class PublishPreviewSkillTest(unittest.TestCase):
             self.assertIn(operation, self.skill)
         self.assertIn("explicit approval", self.skill)
         self.assertIn("changed state invalidates approval", self.skill)
+
+    def test_mutation_lock_uses_the_exact_shared_ned_host_path(self) -> None:
+        self.assertIn(MUTATION_LOCK, self.skill)
+        self.assertIn(MUTATION_LOCK, self.runbook)
 
     def test_authority_and_no_dogfood_boundaries_are_explicit(self) -> None:
         for phrase in (

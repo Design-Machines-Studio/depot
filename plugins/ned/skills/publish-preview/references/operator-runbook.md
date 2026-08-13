@@ -18,9 +18,10 @@ This is the compact operational companion to `ned:publish-preview`. It assumes o
 
 After explicit approval of the current plan:
 
-1. Acquire the one host-wide publish-preview mutation lock. Hold it through final state discovery, every
-   Caddy/provider/Kuma mutation, rollback, and the terminal receipt write. Re-read inventory and every
-   relevant before-state fingerprint under that lock; reject a stale plan.
+1. As `ned` on NED, acquire one exclusive `flock` on
+   `/home/ned/.local/state/design-machines/publish-preview/mutation.lock` and hold it from final
+   before-state discovery through mutation, rollback if needed, and terminal receipt persistence. Re-read
+   inventory and every relevant before-state fingerprint under that lock; reject a stale plan.
 2. Create the durable receipt in `planned` state before mutation. Atomically replace it after every
    attempted/completed step and resource ID before moving to the next layer. After interruption, rediscover
    live state and resume only from this receipt; never reconstruct ownership from a hostname alone.

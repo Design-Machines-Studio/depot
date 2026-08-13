@@ -16,6 +16,7 @@ This publishes development and small client-review sites only. It never publishe
 
 - Inventory: `/home/ned/.config/design-machines/publish-preview/inventory.json`
 - Receipts and reviewed plans: `/home/ned/.local/state/design-machines/publish-preview/`
+- NED-host mutation lock: `/home/ned/.local/state/design-machines/publish-preview/mutation.lock`
 - Schema and fictional example: `references/inventory.schema.json` and
   `references/inventory.example.json`
 
@@ -61,10 +62,12 @@ Do not silently infer client identities or anonymous access.
    rollback, conflicts, and gaps.
 7. Show the plan and ask for explicit approval. Approval applies only to that plan and its before-state
    fingerprints. Re-read relevant state immediately before mutation; changed state invalidates approval.
-8. Acquire the host-wide publication lock, create the receipt before the first mutation, and hold the lock
-   through rollback or the terminal receipt. Apply one layer at a time and atomically persist that
-   step's non-secret ID, ownership, and outcome before advancing. Stop on malformed, ambiguous, or
-   conflicting state. Never report success for a manual or incomplete step.
+8. As `ned` on NED, acquire one exclusive `flock` on
+   `/home/ned/.local/state/design-machines/publish-preview/mutation.lock` and hold it from final
+   before-state discovery through mutation, rollback if needed, and terminal receipt persistence. Create
+   the receipt before the first mutation. Apply one layer at a time and atomically persist that step's
+   non-secret ID, ownership, and outcome before advancing. Stop on malformed, ambiguous, or conflicting
+   state. Never report success for a manual or incomplete step.
 9. Run the verification ladder. Authenticated Access evidence must come from a real browser session;
    curl, a login redirect, or caller-supplied assertions do not count.
 10. Save a receipt. On partial failure, state exactly what changed and the safest next action.
