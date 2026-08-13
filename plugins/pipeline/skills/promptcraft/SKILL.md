@@ -308,6 +308,15 @@ Every new manifest also carries the exact approved top-level
 reject malformed, multiple, extra-key, or conflicting profiles. Never infer it
 from `workflowClass`, risk, complexity, kind, executor, or routing data.
 
+Every new manifest also carries the approved branch and final-review controls.
+Validate exact plan/manifest equality for `branchMode`,
+`expectedFeatureHead`, `finalReviewMode`, and `finalReviewRationale`.
+`branchMode: reuse` requires exact remote-head hex and forbids the create-mode
+initial push; `create` requires the expected head to be null/absent.
+`finalReviewMode: quick` requires explicit approval, non-high consequence, and
+a proportionate rationale; security-sensitive final diffs still escalate to
+full. These controls never weaken per-chunk review or verification.
+
 ### Phase 3l.5: Behavioral Contract Readiness Gate
 
 Prepare deterministic contract inputs from the approved Key Requirements and
@@ -403,7 +412,19 @@ Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`, where `<chunk
 
 Generate `plans/<feature-slug>/manifest.json` following the schema in `references/manifest-schema.md`. The manifest is a Tier 2 (run-scoped) artifact -- auto-deleted after successful execution.
 
-Read top-level `workflowClass` and the exact closed `decisionProfile` from the approved plan data island, copy both explicitly into every generated manifest, and preserve those exact values through handoff. Missing, ambiguous, malformed, multiple, or conflicting plan data blocks generation and returns to the user gate. Security classification does not weaken or replace existing sensitive-path provider and approval rules.
+Read top-level `workflowClass`, the exact closed `decisionProfile`,
+`branchMode`, `expectedFeatureHead`, `finalReviewMode`, and
+`finalReviewRationale` from the approved plan data island. Copy them explicitly
+into every generated manifest and preserve those exact values through handoff.
+Missing, ambiguous, malformed, multiple, or conflicting plan data blocks
+generation and returns to the user gate. New plans use `branchMode:
+create|reuse`; `reuse` requires an exact lowercase 40- or 64-hex
+`expectedFeatureHead`, while `create` requires it to be null or absent. New
+plans use `finalReviewMode: full|quick` with a non-empty rationale. `quick`
+requires explicit plan approval and is invalid for `decisionProfile.consequence:
+high`; a final security-sensitive path match still escalates to full. These
+fields never weaken per-chunk sensitive review, repository/browser evidence,
+zero-deferral, or cleanup.
 
 Each chunk object in the manifest MUST include `kind`, `renderedSurface`, `renderedSurfaceRationale`, and `executor` fields (classified independently in Phase 1, step 7). Example:
 
@@ -441,9 +462,11 @@ The manifest encodes:
 - Parallel groups
 - Overlap analysis results
 - Feature branch naming
+- Branch creation or exact-head reuse semantics
 - Execution metadata
 - Workflow class for trusted kernel policy translation
 - Approved decision profile for depth-only planning and verification leverage
+- Approved full-or-quick final dm-review mode and rationale
 - Explicit rendered-surface applicability for visual/browser evidence
 
 ### Phase 6: Requirements Coverage Check

@@ -62,7 +62,11 @@ Choose lean versus full mode from dependency shape, risk, and verification needs
 **These stay mandatory regardless of provider:**
 
 - The adversarial review (Phase 5) -- self-evaluation is unreliable at any capability level.
-- A focused Codex review after ordinary chunks, full review for sensitive paths, and final full dm-review -- separating generator from evaluator is an architectural principle, not a model limitation.
+- A focused Codex review after ordinary chunks, full review for sensitive paths,
+  and the approved final dm-review mode. Full is the default; quick is allowed
+  only when the approved plan explicitly selects it, consequence is not high,
+  and the final diff is not security-sensitive. Separating generator from
+  evaluator is an architectural principle, not a model limitation.
 
 **Periodically question whether each pipeline component is still necessary.** Every component encodes an assumption about model limitations. Test whether scaffolding remains needed as models and effort levels improve.
 
@@ -73,7 +77,7 @@ You MUST execute every phase in order. You MUST NOT skip phases, combine phases,
 - You MUST NOT skip research because you think you have enough context
 - You MUST NOT execute chunks yourself -- you MUST launch the execution-orchestrator agent
 - You MUST NOT skip the risk-tiered evaluation gate after each chunk
-- You MUST NOT skip the final full dm-review
+- You MUST NOT skip the approved final dm-review gate or silently change its mode
 - You MUST pause for user input at every marked pause point
 - You MUST save all artifacts to disk (briefs, plans, prompts, manifest) -- not just hold them in context
 
@@ -143,7 +147,7 @@ After producing `independent-prediction-receipts.json` and before any correspond
 
 At each phase boundary, append the authoritative receipt to the cumulative
 ordered redacted ledger. Do not invoke the observer for every phase. After all
-implementation chunks are complete and before final full review, rewrite
+implementation chunks are complete and before the approved final review, rewrite
 `plans/<feature-slug>/authoritative-receipts.json` through the
 `all-chunks-complete` boundary and invoke exactly:
 
@@ -354,6 +358,23 @@ upstream profile; return to this user gate rather than choosing silently. Keep
 `decisionProfile` separate from `workflowClass`, `risk`, `overlapRisk`,
 `estimatedComplexity`, chunk `kind`/`executor`, and `routingOverride`.
 
+**Authoritative branch setup:** The approved plan MUST carry `branchMode:
+create|reuse`. `create` is the ordinary new-branch path and requires a
+null/absent `expectedFeatureHead`. `reuse` is the existing-branch path and
+requires an exact lowercase 40- or 64-hex `expectedFeatureHead` for the fetched
+remote `featureBranch`. Reuse performs no initial push and blocks on a missing
+remote ref, exact-head mismatch, divergent local branch, or another worktree
+already holding the branch. This is branch selection only; it never authorizes
+force-push, merge, publication, or external closeout.
+
+**Authoritative final review mode:** The approved plan MUST carry
+`finalReviewMode: full|quick` plus a non-empty `finalReviewRationale`. `full` is
+the default. `quick` requires explicit user/approved-plan intent and is invalid
+when `decisionProfile.consequence` is `high`. It preserves all per-chunk
+sensitive-path review, repository/browser verification, P1/P2 resolution, and
+cleanup. If the final diff matches dm-review's bounded security-sensitive path
+set, the quick protocol escalates to full and records the escalation.
+
 Read `decisionLeverage` from `plugins/pipeline/references/routing-policy.json`
 and apply it to depth only:
 
@@ -397,7 +418,18 @@ Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 6. Generate the manifest
 7. Save to `plans/<feature-slug>/manifest.json` and `plans/<feature-slug>/prompts/`
 
-The manifest MUST copy the approved plan island's explicit `workflowClass: chore|bug|feature|hotfix|security|investigation|migration` and exact closed `decisionProfile` unchanged. Never infer or independently reselect either from chunk kind, file paths, prompt prose, risk, or one another. If the approved plan lacks either field, contains malformed/multiple candidates, or conflicts with an upstream approval, return to the Phase 3 user gate. A legacy missing workflow class defaults only at consumption to `feature` with `workflow_class_defaulted=true`. A legacy missing decision profile follows the current standard path with `decision_profile_defaulted=true`; this is unknown provenance, not low/low evidence. Pass both validated values and their default provenance unchanged through execution receipts and metrics. Security keeps all existing provider and approval overrides.
+The manifest MUST copy the approved plan island's explicit `workflowClass:
+chore|bug|feature|hotfix|security|investigation|migration`, exact closed
+`decisionProfile`, `branchMode`, `expectedFeatureHead`, `finalReviewMode`, and
+`finalReviewRationale` unchanged. Never infer or independently reselect them
+from chunk kind, file paths, prompt prose, risk, or one another. If the approved
+plan lacks a required field, contains malformed/multiple candidates, or
+conflicts with an upstream approval, return to the Phase 3 user gate. A legacy
+missing workflow class defaults only at consumption to `feature` with
+`workflow_class_defaulted=true`; legacy missing decision/branch/review controls
+follow their documented safe defaults with explicit default receipts. Pass all
+validated values and provenance unchanged through execution receipts and
+metrics. Security keeps all existing provider and approval overrides.
 
 Every new chunk also carries `renderedSurface: required|not_applicable` and a
 non-empty `renderedSurfaceRationale`, derived independently from `kind`.
@@ -466,9 +498,17 @@ Mark item 11 when AskUserQuestion returns the user's explicit approval.
 
 1. Confirm bypass permissions mode is active
 2. Confirm git working tree has no blocking user-file changes (pipeline-owned artifacts may be committed/gitignored/force-added per the orchestrator)
-3. Confirm on `manifest.baseBranch` with latest changes, defaulting to `main` only when the field is absent
+3. Confirm branch authority according to `manifest.branchMode`: for `create`,
+   confirm `manifest.baseBranch` with latest changes; for `reuse`, fetch the
+   remote feature branch and require its tip to equal `expectedFeatureHead`
+   before checkout, with no initial push
 
-**You MUST launch the execution-orchestrator agent.** You MUST NOT execute chunks yourself with general-purpose agents. The execution-orchestrator handles worktree isolation, input guardrails, Fix Philosophy injection, output validation, focused Codex review for ordinary chunks, full review for sensitive chunks, merging, final full dm-review, and memory capture. If you skip it, all of those steps get skipped.
+**You MUST launch the execution-orchestrator agent.** You MUST NOT execute
+chunks yourself with general-purpose agents. The execution-orchestrator handles
+branch create/reuse semantics, worktree isolation, input guardrails, Fix
+Philosophy injection, output validation, focused Codex review for ordinary chunks,
+full review for sensitive chunks, merging, the approved final dm-review
+mode, and memory capture. If you skip it, all of those steps get skipped.
 
 **Codex Native Execution Adapter:** If this command is running in Codex and the session exposes `multi_agent_v1.spawn_agent`, use the adapter documented in `/pipeline-run` (`plugins/pipeline/commands/pipeline-run.md`) for Phase 6. The current Codex agent acts as the orchestrator in-process while following `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the contract, dispatches chunk workers with `multi_agent_v1.spawn_agent`, and applies the risk-tiered focused/full review adapter. This is equivalent pipeline execution and MUST record `executionMode: codex_native` in every receipt.
 
@@ -621,7 +661,8 @@ Before delivering to the user, verify your own compliance by answering these que
 7. Did I run the adversarial review (max 4 rounds)?
 8. Did I launch the actual execution-orchestrator agent (not run chunks manually)?
 9. Did the orchestrator run the risk-tiered evaluation gate after each chunk?
-10. Did the orchestrator run a final full dm-review?
+10. Did the orchestrator run the manifest's approved final dm-review mode, and
+    did any quick-mode security-sensitive diff escalate to full?
 11. Did the orchestrator record the session to ai-memory?
 12. **Browser authority audit:** Did every `renderedSurface: required` case produce browser evidence, or a blocked `human_help_required` receipt after primary quit, fresh-primary retry, and different-browser attempt? Did every `not_applicable` chunk carry a validated rationale? Curl and grep are not visual verification.
 13. **Runtime state audit:** For every new JS module added in this feature, did I verify it attached at runtime via `browser_evaluate` (typeof check, global presence, listener binding)? curl confirms the file exists; `browser_evaluate` confirms it runs.

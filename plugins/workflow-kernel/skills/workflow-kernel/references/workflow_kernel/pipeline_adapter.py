@@ -32,6 +32,7 @@ PIPELINE_STAGES = frozenset({
     "attempt_usage", "browser_recovery",
 })
 _RUN_ID_SEPARATORS = re.compile(r"[^a-z0-9]+")
+_EXACT_COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
 
 
 def _run_identity(value: object) -> str:
@@ -165,6 +166,43 @@ def translate_manifest(manifest: Mapping[str, object], profile: HostCapabilities
         manifest, "decision_profile", "decisionProfile", default=None,
     )
     decision_profile_defaulted = decision_profile is None
+    raw_branch_mode = dual_key(
+        manifest, "branch_mode", "branchMode", default=None,
+    )
+    branch_mode_defaulted = raw_branch_mode is None
+    branch_mode = "create" if branch_mode_defaulted else raw_branch_mode
+    if branch_mode not in {"create", "reuse"}:
+        raise ValueError("invalid branchMode")
+    expected_feature_head = dual_key(
+        manifest, "expected_feature_head", "expectedFeatureHead", default=None,
+    )
+    if branch_mode == "reuse":
+        if (
+            type(expected_feature_head) is not str
+            or _EXACT_COMMIT.fullmatch(expected_feature_head) is None
+        ):
+            raise ValueError("invalid expectedFeatureHead")
+    elif expected_feature_head is not None:
+        raise ValueError("invalid expectedFeatureHead")
+    raw_final_review_mode = dual_key(
+        manifest, "final_review_mode", "finalReviewMode", default=None,
+    )
+    if (raw_branch_mode is None) != (raw_final_review_mode is None):
+        raise ValueError("incomplete orchestration controls")
+    final_review_mode_defaulted = raw_final_review_mode is None
+    final_review_mode = (
+        "full" if final_review_mode_defaulted else raw_final_review_mode
+    )
+    if final_review_mode not in {"full", "quick"}:
+        raise ValueError("invalid finalReviewMode")
+    final_review_rationale = dual_key(
+        manifest, "final_review_rationale", "finalReviewRationale", default=None,
+    )
+    if final_review_mode_defaulted:
+        if final_review_rationale is not None:
+            raise ValueError("invalid finalReviewRationale")
+    elif type(final_review_rationale) is not str or not final_review_rationale.strip():
+        raise ValueError("invalid finalReviewRationale")
     context = WorkflowContext(
         changed_paths=tuple(changed_paths), requested_executor=requested_executor,
         risk=risk,
@@ -177,6 +215,12 @@ def translate_manifest(manifest: Mapping[str, object], profile: HostCapabilities
         nodes, chunks, levels, cached is not None and cached != levels,
         decision_profile=decision_profile,
         decision_profile_defaulted=decision_profile_defaulted,
+        branch_mode=branch_mode,
+        branch_mode_defaulted=branch_mode_defaulted,
+        expected_feature_head=expected_feature_head,
+        final_review_mode=final_review_mode,
+        final_review_mode_defaulted=final_review_mode_defaulted,
+        final_review_rationale=final_review_rationale,
     )
 
 

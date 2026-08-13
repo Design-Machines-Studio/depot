@@ -15,8 +15,12 @@ The manifest file (`manifest.json`) encodes everything the execution-orchestrato
     "rationale": "Approved requirements are bounded and reversibly implemented."
   },
   "executionMode": "full_cli",
+  "branchMode": "create",
   "baseBranch": "main",
   "featureBranch": "feature/feature-slug",
+  "expectedFeatureHead": null,
+  "finalReviewMode": "full",
+  "finalReviewRationale": "The approved plan does not narrow the final review gate.",
   "generatedAt": "2026-03-27T10:00:00Z",
   "overlapRisk": "low|medium|high",
   "noMergeOnCompletion": false,
@@ -147,6 +151,12 @@ creates a browser-verifiable product surface. New manifests therefore declare
 both fields explicitly and fail closed when the rendered-surface decision is
 uncertain.
 
+`branchMode` and `finalReviewMode` are independent orchestration inputs copied
+from the approved plan. `branchMode` controls only how Pipeline selects the
+feature branch; it never authorizes a merge or a force-push. `finalReviewMode`
+controls only the terminal dm-review roster; it never weakens sensitive-path
+per-chunk review, required verification, browser evidence, or P1/P2 resolution.
+
 ## Performance Contract
 
 The manifest describes product work, not pipeline closeout. Do not emit an
@@ -173,8 +183,12 @@ blocks correctness of an approved requirement.
 | `workflowClass` | enum | `chore`, `bug`, `feature`, `hotfix`, `security`, `investigation`, or `migration`. Promptcraft MUST copy the single approved value from the plan into every new manifest; missing/ambiguous plan data blocks and returns to the user gate. A legacy manifest with no field translates as `feature` and records `workflow_class_defaulted=true`; consumers MUST NOT infer a class from prompt text, paths, or chunk kinds. Pass the validated value unchanged into RunSpec, events, receipts, and metrics. Existing security routing and approval overrides remain authoritative. |
 | `decisionProfile` | closed object | Required on every new plan and manifest. Exact keys only: `uncertainty`, `consequence`, and `rationale`; both levels use `low|medium|high` and rationale is a non-empty string. Copy the one approved object byte-for-value unchanged. Multiple candidates, extra keys, malformed levels, empty rationale, or a plan/manifest conflict block generation/dispatch. A legacy manifest with no field follows the current standard path and records `decision_profile_defaulted=true`; absence is unknown provenance and MUST NOT be called low/low evidence. |
 | `executionMode` | enum | Optional. Closed set: `full_cli`, `codex_native`, `manual_walkthrough`, `generic`, or `generic_host`. This is the single execution-mode vocabulary shared by the execution-orchestrator's progress ledger, chunk receipts, receipt.md, and the workflow-kernel adapters -- `full_cli` (Claude orchestration tools available), `codex_native` (Codex adapter dispatch), `manual_walkthrough` (user is driving some steps), `generic` (neutral host default), `generic_host` (explicitly host-normalized observation). A manifest with no field translates as `generic`. Consumers MUST reject any other value; browser availability is a verification-evidence status, never an execution mode, and worktree isolation is carried by the separate `isolationStrategy` field, never by this one. |
+| `branchMode` | enum | Required on new manifests. Closed values: `"create"` or `"reuse"`. `create` uses `baseBranch` to create and publish a new feature branch. `reuse` selects the existing remote `featureBranch`, performs no initial push, and requires `expectedFeatureHead` to match the fetched remote tip exactly before checkout. Legacy manifests default to `create` and record `branch_mode_defaulted=true`. |
 | `baseBranch` | string | Branch to create feature branch from (usually "main") |
 | `featureBranch` | string | Name for the feature branch |
+| `expectedFeatureHead` | string or null | Required with `branchMode: "reuse"`: an exact lowercase 40- or 64-hex commit ID for the fetched `origin/<featureBranch>` tip. Must be null or absent with `create`. A mismatch, missing remote ref, divergent pre-existing local branch, or branch checked out in another worktree blocks before `run.started`. |
+| `finalReviewMode` | enum | Required on new manifests. Closed values: `"full"` or `"quick"`. Defaults to `full` only for legacy manifests and records `final_review_mode_defaulted=true`. `quick` is valid only when the approved plan explicitly selects it, `decisionProfile.consequence` is not `high`, and no final diff path matches dm-review's security-sensitive set; a security match escalates to `full` and is receipted. |
+| `finalReviewRationale` | string | Required with `finalReviewMode`; non-empty and copied from the approved plan. For `quick`, name the bounded scope and why the quick roster is proportionate. This field never changes per-chunk sensitive review, repository/browser verification, zero-deferral, or cleanup. |
 | `generatedAt` | string | ISO 8601 timestamp of manifest generation |
 | `overlapRisk` | enum | "low" (0-1 overlapping files), "medium" (2-4), "high" (5+) |
 | `noMergeOnCompletion` | boolean | Optional. Default `false`. When `true`, the execution-orchestrator runs every chunk and the final review, but does NOT merge the feature branch into `baseBranch`. The caller retains the branch for manual review. Use when you want pipeline automation without the final merge (e.g. review-first workflows, fix-pass runs that should keep the branch open for iteration). |
@@ -193,7 +207,7 @@ Decision leverage never selects a provider or model, changes an executor,
 creates a routing override, relaxes a security rule, changes `workflowClass`,
 reduces browser/persona coverage, skips review, changes cleanup, or changes run
 economics. It does not authorize open debate or a full review for every chunk.
-All existing sensitive-path, browser recovery, final review, required P1/P2 resolution,
+All existing sensitive-path, browser recovery, selected final review, required P1/P2 resolution,
 run-size, and exact-owned Docker cleanup rules remain authoritative.
 
 Bootstrap limitation: a run whose already-approved/current manifest predates

@@ -41,7 +41,22 @@ If no plans found, ask: "Provide a path to your plan file, or run `/pipeline` fo
 1. Read the plan file (`plans/<feature-slug>/plan.html` carries a `#pipeline-data` island; read its structured `chunks` with `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh`)
 2. Check for an Assessment Brief (`plans/<feature-slug>/assessment.html`) and Research Brief (`plans/<feature-slug>/research.html`) in the same directory
 3. Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`
-4. Require the approved plan's exact closed `decisionProfile` and copy it unchanged into the manifest. It controls workflow depth only: low/low keeps the optimized ordinary path; high uncertainty adds one independent planning opinion plus bounded synthesis; high consequence strengthens the existing independent verification seam. It never selects a provider, weakens security, changes browser/persona coverage, or adds full review to every ordinary chunk. Classify every chunk's `kind` and `renderedSurface` independently; include the closed `required|not_applicable` value and a concrete rationale in every new manifest.
+4. Require the approved plan's exact closed `decisionProfile`, `branchMode`,
+   `expectedFeatureHead`, `finalReviewMode`, and `finalReviewRationale`, and copy
+   them unchanged into the manifest. `branchMode: reuse` requires the exact
+   fetched remote feature-head commit and forbids the create-mode initial push;
+   `create` requires a null/absent expected head. `finalReviewMode: quick`
+   requires explicit plan approval, non-high consequence, and a proportionate
+   rationale; a security-sensitive final diff still escalates to full. The
+   decision profile controls workflow depth only: low/low keeps the optimized
+   ordinary path; high uncertainty adds one independent planning opinion plus
+   bounded synthesis; high consequence strengthens the existing independent
+   verification seam. None of these fields selects a provider, weakens
+   per-chunk security review, changes browser/persona coverage, or adds full
+   review to every ordinary chunk. Classify every chunk's `kind` and
+   `renderedSurface` independently; include the closed
+   `required|not_applicable` value and a concrete rationale in every new
+   manifest.
 5. Prepare the canonical verification-contract inputs from only the approved requirements, prohibited regressions, checks, and declared persona/browser cases. Use stable IDs and argv arrays; never invent coverage or shell command strings. During execution, the orchestrator materializes and binds `verification-contract.json` before dispatch with `bind-verification-contract`. The binding is immutable for that run; changed requirements require a newly planned run.
 6. Generate execution prompts with overlap analysis. Every prompt preserves the bounded deterministic-validation feedback protocol: one canonical `decide-validation-retry` decision per failure, same-builder resume only with proved continuity, otherwise an explicit replacement, and `human_help_required` on convergence or exhausted budget.
 7. Preserve the required browser ladder in prompts with `renderedSurface: required`: safe failed evidence, primary process/session quit, demonstrably fresh primary retry, genuinely different configured engine, then blocked `human_help_required` with exact case IDs. Curl remains diagnostic only. For `not_applicable`, keep persona/browser arrays empty and do not invent a route or visual criterion.

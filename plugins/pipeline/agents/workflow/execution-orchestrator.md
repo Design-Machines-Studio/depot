@@ -1,6 +1,6 @@
 ---
 name: execution-orchestrator
-description: Autonomously executes sub-prompts with focused proportional review and one final full dm-review fan-out
+description: Autonomously executes sub-prompts with focused proportional review and an approved full-or-quick final dm-review gate
 model: opus
 tools: Bash, Read, Write, Edit, Glob, Grep, Agent, TodoWrite, Skill
 ---
@@ -21,7 +21,9 @@ You MUST execute every step for every chunk. Specifically:
 
 - You MUST create a worktree for each chunk -- no executing in the main working tree
 - You MUST run the evaluation gate after EVERY chunk (see Chunk Classification below for what "evaluation" means per chunk type)
-- You MUST run a final full dm-review after all chunks merge -- not just a quick review
+- You MUST run the manifest's approved final dm-review mode after all chunks
+  merge. Full is the default. Quick is allowed only by the validated explicit
+  manifest contract and escalates to full on a security-sensitive final diff.
 - You MUST record the session to ai-memory
 - You MUST report what you actually did in the summary, honestly
 
@@ -70,7 +72,24 @@ The orchestrator (you) applies the fixes itself using the Edit/Write tools you a
 
 Same as single-pass, but pass `args="full <branch-name>"` to invoke ALL applicable agents (a11y, css, voice, governance, etc. -- everything dm-review's Phase 3 conditional table dispatches).
 
-### Full review-fix loop (sensitive chunks and final review)
+### Quick final review-fix loop (explicit eligible manifests only)
+
+When `finalReviewMode: quick` survives manifest validation, resolve and read the
+installed `dm-review-quick` command-skill protocol. Run its exact core lanes plus
+applicable build/UI/domain lanes against the feature branch. If its bounded
+security-sensitive path check matches, stop quick dispatch and run the full
+review-fix loop below; record `final_review_mode: quick`,
+`final_review_effective_mode: full`, and
+`final_review_escalation: security-sensitive-path`.
+
+For an ordinary eligible quick result, collect the complete P1/P2 finding set,
+apply one revision batch, run affected repository verification, and re-run the
+affected quick lanes once. P1/P2 must reach zero. Preserve P3 advisories. Record
+`final_review_mode: quick`, `final_review_effective_mode: quick`, the
+approved rationale, selected lanes, and any unavailable required lane. Never
+substitute a single generic reviewer for the installed quick protocol.
+
+### Full review-fix loop (sensitive chunks and full final review)
 
 ```text
 prior_signature = null
@@ -111,7 +130,7 @@ branch, not per ordinary chunk. Do not dispatch a multi-agent quick dm-review
 suite for an ordinary chunk.
 
 **Required receipt field.** Every chunk receipt MUST record `review_tier:
-focused-codex | full (sensitive path) | full (final gate)` plus a
+focused-codex | full (sensitive path) | full (final gate) | quick (final gate)` plus a
 `review_tier_why` line naming why -- the sensitive glob that matched,
 `ordinary chunk` when none did, or `final merge gate` for the end-of-run gate.
 A chunk receipt without `review_tier` is incomplete, not merely terse: the tier
@@ -185,7 +204,8 @@ Adapter parity requirements:
 - Implementation chunks are dispatched with `multi_agent_v1.spawn_agent` using worker agents after the worktree is created.
 - Worker prompts inline the complete chunk prompt and restrict writes to the chunk worktree.
 - Ordinary per-chunk review gates use one native focused Codex reviewer. Sensitive chunks use the dm-review inline protocol from `plugins/dm-review/skills/review/SKILL.md` in full mode.
-- The final review gate uses the same dm-review inline protocol in full mode against the feature branch.
+- The final review gate uses the validated full-or-quick dm-review inline
+  protocol against the feature branch; quick security matches escalate to full.
 - Zero-deferral, convergence limits, pending/done todo receipts, final requirements cross-check, cleanup, memory capture, and summary reporting remain mandatory.
 
 Do not stop merely because Codex lacks Claude's `Agent` or `Skill` tool names when the Codex adapter tools are available. Do stop if neither native tool invocation nor the Codex adapter can provide isolated worker dispatch and review gates.
@@ -255,7 +275,7 @@ For each chunk, you MUST complete ALL applicable steps in order:
 [chunk-id] 10. Clean up worktree
 [chunk-id] executionMode: full_cli | codex_native | manual_walkthrough
 [chunk-id] isolationStrategy: per-chunk-worktree | sequential-on-branch
-[chunk-id] review_tier: focused-codex | focused-codex (VIOLATED -- multi-agent suite dispatched) | full (sensitive path) | full (final gate)
+[chunk-id] review_tier: focused-codex | focused-codex (VIOLATED -- multi-agent suite dispatched) | full (sensitive path) | full (final gate) | quick (final gate)
 [chunk-id] review_tier_why: <matched sensitive glob> | ordinary chunk | final merge gate | tier evidence unavailable -- <what failed>
 [chunk-id] forced_full_review: yes (PIPELINE_FULL_TIER_REVIEW=1) | no
 ```
@@ -263,7 +283,7 @@ For each chunk, you MUST complete ALL applicable steps in order:
 After all chunks:
 
 ```text
-FINAL 1. Run full dm-review on feature branch
+FINAL 1. Run approved final dm-review mode on feature branch
 FINAL 2. Requirements cross-check against original-prompt.md (write final-requirements-crosscheck.md)
 FINAL 3. Check manifest.noMergeOnCompletion and decide merge policy
 FINAL 4. Record session to ai-memory
@@ -394,7 +414,7 @@ never selects ready nodes, schedules builders, changes Pipeline gates, or
 authorizes merge. Mark `0f` complete only after the binding receipt is durable.
 
 Append receipts to the cumulative ledger at every boundary, but invoke the
-observer only twice: at `all-chunks-complete` before final full review and at
+observer only twice: at `all-chunks-complete` before the approved final review and at
 terminal after the final authoritative receipt. Before either observation,
 atomically materialize the complete ordered redacted receipt array through that
 boundary at `plans/<feature-slug>/authoritative-receipts.json`, then invoke:
@@ -447,6 +467,25 @@ Before any git operations, validate the manifest:
    `rendered_surface_defaulted=true` plus the derived rationale in every
    receipt. Never use this field to change `kind`, provider routing, or review
    depth.
+7. **Branch mode:** New manifests require `branchMode: create|reuse`. `create`
+   requires `expectedFeatureHead` to be null/absent. `reuse` requires an exact
+   lowercase 40- or 64-hex `expectedFeatureHead`. A legacy manifest defaults to
+   `create` and records `branch_mode_defaulted=true`. Branch mode never
+   authorizes a force-push, merge, publication, or closeout mutation.
+8. **Final review mode:** New manifests require `finalReviewMode: full|quick`
+   and a non-empty `finalReviewRationale`. Reject `quick` when
+   `decisionProfile.consequence` is `high`. A legacy manifest defaults to
+   `full` and records `final_review_mode_defaulted=true`. Preserve requested
+   mode and rationale in final receipts; a security-sensitive final diff
+   escalates quick to full and records the effective mode and reason.
+
+Project these controls into every authoritative receipt using the kernel-owned
+field names `branch_mode`, `branch_mode_defaulted`, `expected_feature_head`,
+`final_review_mode`, `final_review_mode_defaulted`, and
+`final_review_rationale`. Omit `expected_feature_head` only for create mode.
+The final-review receipt additionally carries `final_review_effective_mode` and
+`final_review_escalation` (`none` or `security-sensitive-path`). Do not invent
+requested/effective aliases; receipt context must remain continuous.
 
 Read `decisionLeverage` from `routing-policy.json` and apply it only to workflow
 depth. Low/low uses the optimized standard path. High uncertainty consumes
@@ -623,9 +662,12 @@ git worktree list --porcelain > "${TMPDIR:-/tmp}/refs-before-<feature-slug>.txt"
 git branch --list > "${TMPDIR:-/tmp}/branches-before-<feature-slug>.txt"
 ```
 
-Open an in-run **ref registry**. Every worktree and branch this orchestrator creates is appended to it at creation time, with `kind` (`worktree`, `chunk-branch`, `feature-branch`) and its base. Nothing is cleaned that was not registered; nothing registered is dropped from the final inventory.
+Open an in-run **ref registry**. Every worktree and branch this orchestrator creates is appended to it at creation time, with `kind` (`worktree`, `chunk-branch`, `feature-branch`, `feature-branch-local-tracking`) and its base. Nothing is cleaned that was not registered; nothing registered is dropped from the final inventory.
 
-Register the feature branch itself once Step 1 creates it. The orchestrator records its disposition but **never deletes it** -- see Constraints.
+Register the feature branch when Step 1 creates it, including the local tracking
+branch created for reuse mode. Do not register a pre-existing local or remote
+feature branch as cleanup-owned. The orchestrator records any registered
+feature branch's disposition but **never deletes it** -- see Constraints.
 
 Log: `Ref registry initialized: N worktrees, M branches pre-existing.`
 
@@ -658,16 +700,48 @@ Do NOT stash automatically. Do NOT checkout another branch while user files are 
 
 ### 1b: Branch Setup
 
-Only after confirming there are no blocking user-file changes:
+Only after confirming there are no blocking user-file changes, execute the
+validated branch mode.
+
+For `branchMode: create`:
 
 ```bash
 BASE_BRANCH="${manifest.baseBranch:-main}"
-git checkout "$BASE_BRANCH" && git pull origin "$BASE_BRANCH"
-git checkout -b <featureBranch from manifest>
+git switch "$BASE_BRANCH" && git pull --ff-only origin "$BASE_BRANCH"
+git switch -c <featureBranch from manifest>
 git push -u origin <featureBranch>
 ```
 
-`manifest.baseBranch` may be any existing local or remote ref, including an unmerged feature branch, a stacked branch, or a hotfix base. Default to `main` only when the field is absent.
+`manifest.baseBranch` may be any existing local or remote branch, including an
+unmerged feature branch, stacked branch, or hotfix base. Default to `main` only
+when the field is absent. A raw object ID is not a pullable base branch.
+
+For `branchMode: reuse`, fetch and verify before changing branches:
+
+```bash
+FEATURE_BRANCH=<validated featureBranch>
+EXPECTED_HEAD=<validated expectedFeatureHead>
+git fetch origin --prune
+REMOTE_REF="refs/remotes/origin/$FEATURE_BRANCH"
+REMOTE_HEAD="$(git rev-parse --verify "$REMOTE_REF^{commit}")" || exit 1
+[ "$REMOTE_HEAD" = "$EXPECTED_HEAD" ] || exit 1
+
+if git show-ref --verify --quiet "refs/heads/$FEATURE_BRANCH"; then
+  LOCAL_HEAD="$(git rev-parse --verify "refs/heads/$FEATURE_BRANCH^{commit}")" || exit 1
+  [ "$LOCAL_HEAD" = "$EXPECTED_HEAD" ] || exit 1
+  git switch "$FEATURE_BRANCH"
+else
+  git switch --track -c "$FEATURE_BRANCH" "$REMOTE_REF"
+fi
+[ "$(git rev-parse HEAD)" = "$EXPECTED_HEAD" ] || exit 1
+```
+
+Any missing remote ref, mismatch, divergent local branch, or checkout failure
+(including another worktree already holding the branch) blocks before
+`run.started`. Do not reset, delete, recreate, or force-move an existing local
+branch. Do not push during reuse setup. Register only a newly created branch in
+the ref registry, with kind `feature-branch-local-tracking`; the remote branch
+is pre-existing and is never cleanup-owned.
 
 Create the progress ledger with TodoWrite. One set of 7 sub-steps per chunk, plus the final steps (FINAL 1 through FINAL 6, Present summary report).
 
@@ -683,7 +757,7 @@ In `sequential-on-branch` mode:
 
 1. Do not create per-chunk worktrees.
 2. Execute chunks sequentially on `<featureBranch>` in manifest order, even if the manifest has parallel groups.
-3. Preserve every other gate: input guardrails, implementation dispatch, build/test validation, anti-pattern scan, evaluation gate, final full review, requirements cross-check, receipt, and cleanup.
+3. Preserve every other gate: input guardrails, implementation dispatch, build/test validation, anti-pattern scan, evaluation gate, approved final review, requirements cross-check, receipt, and cleanup.
 4. Record `isolationStrategy: sequential-on-branch` in the ledger, chunk receipts, receipt file, and Summary Report. `executionMode` keeps its closed host-shaped value (`full_cli`, `codex_native`, `manual_walkthrough`, `generic`, `generic_host`) -- sequential-on-branch is an isolation strategy, not a host execution mode, and the workflow-kernel adapters reject any `executionMode` outside the closed set. Runs that use per-chunk worktrees record `isolationStrategy: per-chunk-worktree`.
 
 Tradeoff: no parallel isolation. This is acceptable for sequential manifests and required when Docker-mounted verification would otherwise test the wrong checkout.
@@ -1386,7 +1460,9 @@ verification.
 
 The evaluation depth depends on the chunk classification from Step 3a.
 
-**Per-chunk review uses Codex, not Claude.** Claude is outside the coding graph; dm-review is reserved for the final full review in Step 4 and also runs its coding lanes on Codex or OpenRouter.
+**Per-chunk review uses Codex, not Claude.** Claude is outside the coding graph;
+dm-review is reserved for the approved final review in Step 4 and also runs its
+coding lanes on Codex or OpenRouter.
 
 **UI chunks and Logic chunks -- Codex review loop:**
 
@@ -1729,9 +1805,12 @@ Record the current invocation result:
 LEVEL_VERIFICATION: <level> | passed: <N> | failed: <N>
 ```
 
-## Step 4: Final Full Review
+## Step 4: Approved Final Review
 
-**THIS STEP IS MANDATORY.** After ALL chunks are merged, you MUST run a full dm-review.
+**THIS STEP IS MANDATORY.** After ALL chunks are merged, run exactly the
+validated final dm-review mode. `full` runs the full fan-out. `quick` runs the
+installed dm-review-quick protocol only when consequence is not high and the
+final diff has no bounded security-sensitive path; otherwise escalate to full.
 
 Before dispatching the review, invoke the repository planner with boundary
 `merge_candidate` on the exact feature-branch tree and run the selected lanes.
@@ -1745,7 +1824,12 @@ First materialize the cumulative authoritative receipt array through the
 `all-chunks-complete` boundary and run the first `observe-pipeline` checkpoint.
 The observation remains shadow evidence and cannot approve the final review.
 
-Verification invariant: use Codex and OpenRouter as independent coding providers. The final review must run on the provider that did not implement the majority of code. If OpenRouter implemented a chunk, Codex reviews it; if Codex implemented it, OpenRouter reviews it. If either lane is unavailable, report the gap and do not substitute Claude coding review.
+Verification invariant: preserve provider independence required by the selected
+review protocol. Full mode runs on the provider family that did not implement
+the majority of code. Quick mode dispatches its two independent core judgment
+lanes and applicable build/UI/domain lanes; it may not collapse to the
+implementer's self-review. If a required lane is unavailable, report the gap
+and do not substitute Claude coding review.
 
 For `decisionProfile.consequence: high`, this existing final independent seam is
 the stronger verification depth: require all applicable independent lanes and
@@ -1754,10 +1838,17 @@ degraded required lane stops `human_help_required`; do not approve from the
 remaining lane. This escalation does not add a full review to each ordinary
 chunk and does not relax sensitive-path or browser requirements.
 
+Dispatch by the validated mode:
+
 ```text
-Run a full-mode review on the feature branch using the helper pattern above:
-`Skill(skill="dm-review:review", args="full <feature-branch>")`
+full  -> Skill(skill="dm-review:review", args="full <feature-branch>")
+quick -> load the installed dm-review-quick protocol and execute it against <feature-branch>
 ```
+
+Before quick dispatch, compute the review skill's bounded security-sensitive
+path match on the final diff. A match changes only the effective mode to full;
+it does not mutate the approved manifest. Receipt both requested and effective
+mode plus the escalation reason.
 
 When invoking the final dm-review, append the original requirements as caller-provided context in the review prompt:
 
@@ -1793,16 +1884,16 @@ If P1/P2 issues are found:
    `merge_candidate` once for the new exact tree. Do not test after every
    finding edit.
 4. Re-run only the affected lanes on the exact newly tested SHA. Repeat the
-   whole full fan-out only when the prior full review was incomplete or the
-   repair changed a security-sensitive boundary.
+   whole selected roster only when prior coverage was incomplete; if a repair
+   changes a security-sensitive boundary, escalate to or repeat full mode.
 5. Stop when no P1/P2 findings remain and every required affected lane and
    repository/browser/remote verification gate is complete.
 
 If P1/P2 findings remain after the bounded repair pass, stop as needs attention. P3 advisories do not participate in convergence.
 
-**Verification:** You MUST be able to state: "Final dm-review completed. Result: [CLEAN/N findings]."
+**Verification:** You MUST be able to state: "Final dm-review completed. Requested mode: [full/quick]. Effective mode: [full/quick]. Result: [CLEAN/N findings]."
 
-**Airlift checkpoint (after the final full review):** Once the final dm-review result is known, fire a tier-1 airlift checkpoint if airlift is resolvable from cache. This snapshots post-review feature-branch state with zero model budget. Airlift is an OPTIONAL dependency: run only when the engine resolves AND is executable; otherwise skip silently (see `plugins/pipeline/references/airlift-checkpoint.md`).
+**Airlift checkpoint (after the final review):** Once the final dm-review result is known, fire a tier-1 airlift checkpoint if airlift is resolvable from cache. This snapshots post-review feature-branch state with zero model budget. Airlift is an OPTIONAL dependency: run only when the engine resolves AND is executable; otherwise skip silently (see `plugins/pipeline/references/airlift-checkpoint.md`).
 
 ```bash
 ENGINE=""
@@ -1834,9 +1925,9 @@ or build-tag commands.
 
 **Doc-sync check:** Grep for `CLAUDE.md` and `README.md` in the repo root. If the feature introduced new patterns, modules, or architectural conventions, verify these files reflect the changes. Flag missing doc updates as P2.
 
-Mark `FINAL 1. Run full dm-review` complete.
+Mark `FINAL 1. Run approved final dm-review mode` complete.
 
-Append the authoritative full-review and lane-coverage receipts to the
+Append the authoritative final-review and lane-coverage receipts to the
 cumulative ledger. Missing/degraded review lanes remain canonical evidence and
 cannot be erased by normalized host parity.
 
@@ -2020,8 +2111,13 @@ Use this schema after Docker reconciliation, artifact cleanup, Git cleanup, and 
 
 - Date: YYYY-MM-DD
 - Branch: <featureBranch>
+- Branch mode: <create|reuse>
+- Expected feature head: <commit-or-null>
 - Base: <baseBranch from manifest.baseBranch, default main>
 - Merge: <merge recommendation from Step 4>
+- Final review requested: <full|quick>
+- Final review effective: <full|quick>
+- Final review escalation: <none|security-sensitive-path>
 - Chunks: <N> executed, <M> parallel
 - Mode: <executionMode>
 - Isolation: <isolationStrategy: per-chunk-worktree | sequential-on-branch>
@@ -2238,7 +2334,12 @@ Present this report:
 ## Feature: <feature-name>
 **Branch:** <featureBranch>
 **Base:** <baseBranch>
-Base may be any existing ref from `manifest.baseBranch`; `main` is only the absent-field default.
+**Branch mode:** create / reuse
+**Expected feature head:** <commit-or-null>
+For create mode, Base is the pullable branch from `manifest.baseBranch` and
+`main` is only the absent-field default. For reuse mode, Base is contextual
+only; execution starts from the exact fetched existing feature head and makes
+no setup push.
 
 ## Chunks Executed
 | Chunk | Status | Evaluation Gate Result | Notes |
@@ -2246,7 +2347,9 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 | chunk-id | clean/needs-attention | N iterations, M findings | |
 
 ## Final Review
-- **Mode:** Full (all agents)
+- **Requested mode:** full / quick
+- **Effective mode:** full / quick
+- **Escalation:** none / security-sensitive-path
 - **Result:** Clean / N findings remaining
 - **Merge Recommendation:** CLEAN / APPROVE WITH FIXES / BLOCKS MERGE / BLOCKED PENDING CALLER VERIFICATION / BLOCKED PENDING REMOTE VERIFICATION
 - **executionMode:** full_cli / codex_native / manual_walkthrough
@@ -2263,7 +2366,7 @@ Base may be any existing ref from `manifest.baseBranch`; `main` is only the abse
 - [x] Anti-pattern scan per chunk: yes/no (findings per chunk)
 - [x] Evaluation gate per chunk: yes/no (type and iterations per chunk)
 - [x] Playwright browser checks: N of M `renderedSurface: required` chunks checked; K `not_applicable` chunks recorded with rationale
-- [x] Final full dm-review: yes/no
+- [x] Approved final dm-review mode: yes/no
 - [x] final-requirements-crosscheck.md written: yes/no
 - [x] Merge policy honored (noMergeOnCompletion): yes/no
 - [x] ai-memory capture: yes/no
@@ -2348,7 +2451,7 @@ Before reporting any pipeline-blocking failure, run the Step 5b repository clean
 
 - Never force-push
 - Never modify main directly
-- Never skip the risk-tiered evaluation gate or final full dm-review
+- Never skip the risk-tiered evaluation gate or the approved final dm-review mode
 - Always clean up worktrees, even on failure
 - Always run Step 5b artifact cleanup, even on failure (Tier 1 always, Tier 2 only on success)
 - Always run the repository cleanup phase, even after review failure or an explicit gate

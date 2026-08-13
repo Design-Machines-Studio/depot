@@ -355,7 +355,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.48.2",
+      "version": "1.49.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -382,7 +382,7 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.15.0",
+      "version": "0.16.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

@@ -468,7 +468,7 @@ require_text "$orchestrator" '"fallback": true' "orchestrator feedback fallback 
 require_absent "$orchestrator" '"fallback": "openrouter->codex"' "orchestrator feedback never encodes fallback as a transition string"
 require_text "$orchestrator" 'stage: browser_recovery' "browser recovery remains a separate blocked receipt"
 require_before "$orchestrator" 'bind-verification-contract --state-dir' '### 3d: Dispatch Implementation Subagent' "contract evidence precedes implementation dispatch"
-require_text "$orchestrator" "final review must run on the provider that did not implement" "orchestrator enforces cross-provider final review"
+require_text "$orchestrator" "Full mode runs on the provider family that did not implement" "orchestrator enforces cross-provider full review"
 require_text "$orchestrator" "Run Post-Mortem" "orchestrator includes run post-mortem step"
 require_text "$orchestrator" "Claude JSONL delta" "postmortem measures Claude JSONL delta"
 require_text "$orchestrator" "AWAITING APPROVAL" "postmortem recommendations are proposal-only"
