@@ -10,7 +10,7 @@ Transform a plan into self-contained execution prompts with overlap-aware depend
 ## Input
 
 1. **Plan file** -- A pipeline `plan.html` carrying a `#pipeline-data` JSON island (`chunks`, `decisions`, `requirementsCoverage`). When invoked standalone on a hand-written markdown plan, parse the prose directly; within `/pipeline` the plan is HTML.
-2. **Original prompt** -- The user's verbatim input saved at `plans/<feature-slug>/original-prompt.md` with extracted Key Requirements (stays markdown)
+2. **Original prompt** -- The user's verbatim input saved at `plans/<feature-slug>/original-prompt.md` (stays markdown; requested mechanisms are not automatically approved scope)
 3. **Research Brief** (optional) -- `research.html` from the research skill
 4. **Assessment Brief** (optional) -- `assessment.html` from the assess skill (cached Key Requirements live in its `keyRequirements` island)
 
@@ -34,6 +34,7 @@ Read the plan and identify discrete chunks of work. A chunk is:
 - Testable in isolation (has its own acceptance criteria)
 
 **Decomposition rules:**
+0. Before chunking, require the plan prose to state the **Smallest Usable Implementation**. For every proposed new abstraction, service, policy layer, background process, cache, transaction ledger, approval ceremony, receipt family, compatibility layer, or generalized extension point, the plan must name its current consumer, a concrete present failure or realistic reachable harm, and what existing mechanism it replaces or why direct code is inadequate. Delete unsupported machinery from current scope or retain it only as a non-blocking future idea.
 1. Database/schema changes are always their own chunk and always run first
 2. Backend and frontend work on different files can be separate parallel chunks
 3. Integration work (wiring things together) depends on the pieces it connects
@@ -77,9 +78,11 @@ Read the plan and identify discrete chunks of work. A chunk is:
 
 - Default to no more than 8 total chunks and no more than 6 chunks classified
   `large`. This is a run budget, not permission to make oversized chunks.
-- If the approved work exceeds either limit, return to the planning user gate
-  with a campaign split. A single oversized run requires an explicit approved
-  rationale in the plan; promptcraft must not invent one.
+- If the complete proposal exceeds either limit, return to the planning user
+  gate with the total scope and the smaller usable alternative before
+  generating any sibling campaign. Campaign decomposition is not permission to
+  hide an oversized design. A single oversized run requires an explicit
+  approved rationale in the plan; promptcraft must not invent one.
 - Freeze scope when the execution prompts are approved. New desirable work is
   written to a follow-up manifest unless it is a correctness blocker for an
   approved requirement. Do not expand a running chunk merely because adjacent
@@ -471,7 +474,7 @@ The manifest encodes:
 
 ### Phase 6: Requirements Coverage Check
 
-Read the cached Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html` (`extract-json-island.sh`), re-reading `plans/<feature-slug>/original-prompt.md` only if the cache looks incomplete. Verify every Key Requirement is covered by at least one chunk's acceptance criteria. Produce a coverage map:
+Read the approved Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html` (`extract-json-island.sh`), re-reading `plans/<feature-slug>/original-prompt.md` only to verify that no explicit request was silently discarded. Proposed mechanisms that the assessment gate omitted or replaced are not coverage requirements unless the user approved them. Verify every approved Key Requirement is covered by at least one chunk's acceptance criteria. Produce a coverage map:
 
 ```
 Requirements Coverage:
@@ -523,7 +526,7 @@ Generated N prompts for feature "<name>":
   Sequential: [chunks that must run in order]
   Parallel groups: [groups of chunks that can run simultaneously]
   Estimated overlap risk: low/medium/high
-  Requirements covered: N/N from original prompt
+  Requirements covered: N/N from approved Key Requirements
 
 Manifest: plans/<feature-slug>/manifest.json
 Prompts: plans/<feature-slug>/prompts/

@@ -179,6 +179,8 @@ both sources, without losing either raw artifact reference.
 
 Apply the severity mapping rules from `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`. This covers all agent-specific term mappings (voice editor, CSS reviewer, governance domain, design review phases, etc.).
 
+Before retaining any P1/P2, verify that it names the affected current user or operator, reachable actor/input/path, realistic harm or regression, and smallest adequate repair; security findings must also name the actual trust boundary. Downgrade unsupported preferences to P3 or discard them when they have no current impact.
+
 ### Step 4: Determine Merge Recommendation
 
 Apply the merge recommendation logic from `${CLAUDE_SKILL_DIR}/references/output-format.md` -- see the "Merge Recommendation Logic" section.
@@ -208,7 +210,7 @@ If there are no gaps, state `Coverage Gaps: none -- all lanes completed within b
 7. Include skipped agents in the summary table with "Skipped" status and reason; include dead/capped agents with "Died" or "Partial" status and never relaunch them
 8. Count deduplicated findings, not raw findings (don't double-count)
 9. **P3 findings get full detail blocks** -- same format as P1/P2 (file, issue, fix, reference), with source identity, raw reference, evidence, synthesis disposition, counts, and provenance. Never abbreviate P3 to one-liners or send it to the fix queue.
-10. **Flag band-aid recommendations** -- if any agent recommends a quick fix, compatibility wrapper, or workaround that preserves broken patterns, escalate it to P2 and note "Band-aid fix recommended -- replace with proper solution." All fixes must follow the Fix Philosophy: right approach over quick fix, best practices first, replace don't preserve.
+10. **Reject scope-expanding repairs** -- a P1/P2 repair must be the smallest adequate change for the evidenced defect and approved behavior. Discard unrelated hardening and new product scope from the fix queue. A reviewer may retain a larger alternative as P3 advice, but it does not enter convergence or escalate merely because it is described as more architectural or "proper."
 11. **Dual-perspective findings are additive** -- Codex-native and OpenRouter review lanes are peers. Dedup overlapping findings; never discard a unique finding merely because the other coding provider did not mention it. Optional Claude voice/editorial findings remain additive but are non-coding.
 12. **Contradictions are reportable evidence** -- never flatten disagreement
     into one unattributed conclusion; preserve source severities, selected

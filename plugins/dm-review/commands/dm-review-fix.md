@@ -42,7 +42,7 @@ If an argument was provided:
 
 For each pending finding:
 1. Read the todo file
-2. Understand the problem and location
+2. Confirm it names the affected current user/operator, reachable actor/input/path, realistic harm or regression, and smallest adequate repair; security findings must also name the actual trust boundary. Unsupported architecture preferences or hypothetical hardening do not enter the fix batch.
 3. Read the affected source file(s)
 4. Plan the fix
 
@@ -54,8 +54,8 @@ Fix all pending findings in priority order: P1 first, then P2.
 
 For each finding:
 
-1. Implement the fix described in the todo file
-2. Follow the Fix Philosophy (see dm-review skill). Never apply band-aid fixes.
+1. Implement the smallest adequate repair described in the todo file
+2. Follow the Fix Philosophy (see dm-review skill). Do not add unrelated hardening, architecture layers, compatibility machinery, or product scope.
 3. Verify the acceptance criteria
 4. Rename the todo file: `pending` -> `done`
 

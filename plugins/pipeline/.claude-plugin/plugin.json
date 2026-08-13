@@ -1,13 +1,13 @@
 {
   "name": "pipeline",
-  "description": "Autonomous feature development pipeline with fresh executable tiered verification, approved decision-depth profiles, bounded feedback, browser recovery, risk-tiered review, and isolated execution",
-  "version": "1.49.0",
+  "description": "Autonomous feature development pipeline with approved-scope intake, minimum-adequate planning, bounded adversarial review, fresh tiered verification, browser recovery, and isolated execution",
+  "version": "1.50.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
   },
   "pluginDependencies": {
-    "dm-review": ">=1.60.1",
+    "dm-review": ">=1.61.0",
     "ned": ">=1.4.0",
     "workflow-kernel": ">=0.16.0"
   },

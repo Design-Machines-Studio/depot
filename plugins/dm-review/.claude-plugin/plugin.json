@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
-  "description": "Code review orchestrator with proportional quick review, advisory P3 evidence, full security and browser coverage, stable finding identities, and contribution receipts",
-  "version": "1.60.1",
+  "description": "Code review orchestrator with reachable-threat P1/P2 evidence, minimum-adequate repairs, proportional convergence, full security and browser coverage, and stable finding receipts",
+  "version": "1.61.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
