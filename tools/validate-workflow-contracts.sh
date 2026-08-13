@@ -737,6 +737,60 @@ require_text "$orchestrator" \
   "MUST record \`review_tier:" \
   "execution orchestrator requires the review_tier chunk-receipt field"
 
+# Implementation tool-call policy is a delivery checkpoint, not a hard stop.
+# Pin both canonical injection surfaces, the legacy-prompt override, and the
+# separate read-only/sweep caps that this repair must not broaden.
+prompt_template="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/prompt-template.md"
+eval_sweep="$REPO_ROOT/plugins/pipeline/skills/eval-sweep/SKILL.md"
+for f in "$prompt_template" "$orchestrator"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" "approximately 40 tool calls as an exploration checkpoint" \
+    "$rel defines the approximate exploration checkpoint"
+  require_text "$f" "stop new research, broad exploration, speculative refactoring, scope expansion, and unrelated improvements" \
+    "$rel stops scope growth at the exploration checkpoint"
+  require_text "$f" "inspect the current diff and status" \
+    "$rel permits closeout inspection calls"
+  require_text "$f" "run proportionate focused verification" \
+    "$rel permits focused verification calls"
+  require_text "$f" "targeted repair" \
+    "$rel permits targeted repair calls"
+  require_text "$f" "commit coherent work" \
+    "$rel permits commit calls"
+  require_text "$f" "push the branch" \
+    "$rel permits push calls"
+  require_text "$f" "create or update the PR" \
+    "$rel permits PR calls"
+  require_text "$f" "final report" \
+    "$rel permits final reporting calls"
+  require_text "$f" "After at most two targeted repair-and-recheck cycles" \
+    "$rel bounds repair churn"
+  require_text "$f" "Reaching the exploration checkpoint is never, by itself, a valid reason to leave implemented work unverified, uncommitted, unpushed, or unreported." \
+    "$rel preserves the delivery invariant"
+  require_text "$f" 'NOT-COVERED:' \
+    "$rel retains NOT-COVERED transparency"
+  require_text "$f" 'COMMANDS-RUN:' \
+    "$rel retains COMMANDS-RUN transparency"
+  require_absent "$f" "Hard cap: 40 tool calls" \
+    "$rel removes the hard implementation termination point"
+  require_absent "$f" "stop at 80% of budget" \
+    "$rel removes the early implementation stop rule"
+done
+require_text "$orchestrator" "Legacy generated prompts:" \
+  "execution orchestrator overrides legacy generated hard-cap prompts"
+require_text "$orchestrator" "Verification, targeted repair, commit, push, PR creation or update, and final reporting calls are exempt from the legacy cap." \
+  "legacy prompt override exempts delivery calls"
+
+for reviewer in \
+  architecture-reviewer code-simplicity-reviewer codex-perspective \
+  craft-reviewer doc-sync-reviewer go-build-verifier migration-validator \
+  pattern-recognition-specialist security-auditor test-coverage-reviewer; do
+  require_text "$REPO_ROOT/plugins/dm-review/agents/review/$reviewer.md" \
+    "Hard cap: 40 tool calls." \
+    "dm-review $reviewer retains its read-only hard cap"
+done
+require_text "$eval_sweep" "Hard cap: 40 tool calls" \
+  "pipeline eval-sweep retains its ledger-oriented hard cap"
+
 # --------------------------------------------------------------------------
 # Group 8: subscription-first and family-independent routing
 # --------------------------------------------------------------------------
