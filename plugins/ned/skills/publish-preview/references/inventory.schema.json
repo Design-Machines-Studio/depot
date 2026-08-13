@@ -1,0 +1,125 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/ned/publish-preview/inventory.schema.json",
+  "title": "NED preview inventory",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "projects"],
+  "properties": {
+    "version": {"const": 1},
+    "projects": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/project"}
+    }
+  },
+  "$defs": {
+    "project": {
+      "$comment": "Application validation must additionally require DM-NNN -> dmNNN.asmbly.app and siteSlug -> <siteSlug>.designmachines.xyz exact correspondence.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id", "type", "checkoutPath", "projectName", "serviceName", "internalPort",
+        "hostname", "environment", "purpose", "health", "restartExpectation",
+        "publication", "access", "kuma", "ownership"
+      ],
+      "properties": {
+        "id": {"type": "string", "pattern": "^[a-z][a-z0-9-]{1,62}$"},
+        "type": {"enum": ["assembly", "ddev", "compose"]},
+        "factoryCode": {"type": "string", "pattern": "^DM-[0-9]{3}$"},
+        "siteSlug": {"type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$"},
+        "checkoutPath": {
+          "type": "string",
+          "pattern": "^/home/ned/(assembly|sites|ai)(/[A-Za-z0-9][A-Za-z0-9._-]{0,126})+$"
+        },
+        "projectName": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$"},
+        "serviceName": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]{0,62}$"},
+        "internalPort": {"type": "integer", "minimum": 1024, "maximum": 65535},
+        "hostname": {
+          "type": "string",
+          "pattern": "^(dm[0-9]{3}\\.asmbly\\.app|[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.designmachines\\.xyz)$"
+        },
+        "environment": {"enum": ["development", "client-preview"]},
+        "purpose": {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[A-Za-z0-9][A-Za-z0-9 .,_()/-]*$"},
+        "health": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["path", "statuses"],
+          "properties": {
+            "path": {"type": "string", "pattern": "^/(?:[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*)?$"},
+            "statuses": {
+              "type": "array", "minItems": 1, "uniqueItems": true,
+              "items": {"type": "integer", "minimum": 100, "maximum": 599}
+            },
+            "keyword": {"type": "string", "minLength": 1, "maxLength": 120, "pattern": "^[A-Za-z0-9][A-Za-z0-9 .,_()/-]*$"}
+          }
+        },
+        "restartExpectation": {"enum": ["unless-stopped", "always"]},
+        "publication": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["tunnelPublished", "backendBinding"],
+          "properties": {
+            "tunnelPublished": {"type": "boolean"},
+            "backendBinding": {"const": "127.0.0.1"}
+          }
+        },
+        "access": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["mode", "identityFile"],
+          "properties": {
+            "mode": {"enum": ["protected", "anonymous"]},
+            "identityFile": {
+              "type": ["string", "null"],
+              "pattern": "^/home/ned/\\.config/design-machines/publish-preview/identities/[A-Za-z0-9._-]+\\.txt$"
+            }
+          }
+        },
+        "kuma": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["monitorName", "monitorId"],
+          "properties": {
+            "monitorName": {"type": "string", "minLength": 1, "maxLength": 160, "pattern": "^[A-Za-z0-9][A-Za-z0-9 ._()/-]*$"},
+            "monitorId": {"type": ["string", "null"], "pattern": "^[A-Za-z0-9_-]{1,128}$"}
+          }
+        },
+        "ownership": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["marker", "receiptId"],
+          "properties": {
+            "marker": {"type": "string", "pattern": "^ned-publish-preview/v1:[a-z][a-z0-9-]{1,62}$"},
+            "receiptId": {"type": ["string", "null"], "pattern": "^[a-f0-9]{32}$"}
+          }
+        }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"type": {"const": "assembly"}}},
+          "then": {
+            "required": ["factoryCode"],
+            "not": {"required": ["siteSlug"]},
+            "properties": {"hostname": {"pattern": "^dm[0-9]{3}\\.asmbly\\.app$"}}
+          }
+        },
+        {
+          "if": {"properties": {"type": {"enum": ["ddev", "compose"]}}},
+          "then": {
+            "required": ["siteSlug"],
+            "not": {"required": ["factoryCode"]},
+            "properties": {"hostname": {"pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\\.designmachines\\.xyz$"}}
+          }
+        },
+        {
+          "if": {"properties": {"access": {"properties": {"mode": {"const": "protected"}}}}},
+          "then": {"properties": {"access": {"properties": {"identityFile": {"type": "string"}}}}}
+        },
+        {
+          "if": {"properties": {"access": {"properties": {"mode": {"const": "anonymous"}}}}},
+          "then": {"properties": {"access": {"properties": {"identityFile": {"type": "null"}}}}}
+        }
+      ]
+    }
+  }
+}
