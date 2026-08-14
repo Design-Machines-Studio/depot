@@ -10,31 +10,33 @@ external handoff only; it does not duplicate Baseplate's production roadmap.
 
 The current priority order is:
 
-1. **P1 -- one real cheap-path canary.** Finish the remaining runtime resolver
-   hazard in [#28](https://github.com/Design-Machines-Studio/depot/issues/28)
-   with one bounded cheap-model implementation pass and one native Codex
-   supervisor pass. Measure elapsed time, cost, and accepted/rejected work
-   before changing routing policy.
-2. **Prepared after the canary -- reusable Assembly planning coordinator.**
+1. **P1 -- close out the real cheap-path canary.** PR
+   [#55](https://github.com/Design-Machines-Studio/depot/pull/55) merged the
+   runtime resolver repair. Issue
+   [#28](https://github.com/Design-Machines-Studio/depot/issues/28) remains open
+   in `Review` for owner closeout; do not invent more implementation work.
+2. **Next -- reusable Assembly planning coordinator.**
    [#54](https://github.com/Design-Machines-Studio/depot/issues/54) captures the
    shared GitHub-native planning, Design Machines context, prompt preparation,
-   and scope-guard workflow for both Travis and Jeremy. It is deliberately not
-   in Project 1 until it becomes the immediate safe successor.
-3. **Evidence-gated follow-ons.** Workflow Kernel changes, R4, R5, new routing,
+   and scope-guard workflow for both Travis and Jeremy.
+3. **Prepared P2 -- Assembly release-operations skill planning.** The
+   [planning prompt](assembly-release-skill/prompts/00-plan-assembly-release.md)
+   will decide the smallest reusable `/assembly-release` boundary from current
+   Depot and Baseplate evidence. It follows the optimization initiative, does
+   not delay live Baseplate or Fixture releases, and is not yet a Project item.
+4. **Evidence-gated follow-ons.** Workflow Kernel changes, R4, R5, new routing,
    and speculative harness/platform tooling stay parked until a current failure
    or measured workload proves the need.
-4. **P2 -- Fixture handoff remains external.** Baseplate and Jig own their
+5. **P2 -- Fixture handoff remains external.** Baseplate and Jig own their
    verifier/product repair; Depot supplies proportional policy, not product code.
 
 ### Single next Depot chunk
 
 Current trusted main for this chunk is
-`363900ed53fce1a563250f792b2a3c7067c3cbc7`. PR #53's exact head
-`ff02ccad352bbdf56da315f0acf40f6ac86f2b5e` landed through merge
-`ecc8533ff75d9e805d819938d228dbd5caad9a36`; `ghostwriter-v3.10.0`,
-`dm-review-v1.62.0`, and `pipeline-v1.51.0` peel to that merge. Claude and
-Codex caches both carry those versions. Clear human output, proportional-scope
-review, and Publish Preview output are done.
+`5afc8defd0f3151bad52fa8036f012c8b936fda6`. PR #55's exact head
+`d462e8f0c4e72eff07319289b9770b72d4e095e3` landed through that merge. The
+host-aware Pipeline and dm-review bundle resolution repair, its Bash 3
+compatibility repair, and required-bundle fail-closed correction are complete.
 
 R2 is closed **DONE / NO CODE**. Current `plan-verification` and
 `run-verification` already put repository proof before model review, keep passing
@@ -44,14 +46,10 @@ results. No measured workload justifies adding the authored caller-supplied
 `mechanical_globs` policy, so the old untracked R2 prompts are historical inputs,
 not executable work.
 
-The immediate P1 is the remaining runtime half of #28. Release preflight already
-detects a stale Codex cache; do not rebuild that gate. The canary must remove the
-silent wrong-harness asset choice from the active Pipeline/dm-review path by
-reusing the existing Workflow Kernel bundle/asset resolver where it fits. Do
-not create a generic resolver framework or sweep unrelated optional surfaces.
-If inspection proves there is no remaining reachable stale-selection path,
-close the issue with exact evidence and use a different real maintenance task;
-do not manufacture code to satisfy the canary.
+The immediate Depot successor is #54. It should turn the planning discipline
+used in this program into a small reusable coordinator for Travis and Jeremy.
+Issue #28 needs only owner review/closure against merged PR #55; that bookkeeping
+does not justify another implementation session.
 
 ### Ordered Depot queue
 
@@ -65,21 +63,23 @@ do not manufacture code to satisfy the canary.
 | 5 | Proportional scope, threat model, and review convergence | **DONE** | PR #52 exact head `f843d89` merged as `ed59991`; supported repairs converge proportionally |
 | 6 | Clear Publish Preview operator output | **DONE** | PR #51 exact head `6da69ba` landed through `3c2a276`; the playbook returns explicit publication status |
 | 7 | Clear human output for voice-check, dm-review, and Pipeline | **DONE** | PR #53 merged as `ecc8533`; three release tags and both installed harness caches are current |
-| 8 | [#28](https://github.com/Design-Machines-Studio/depot/issues/28) runtime cache-resolution repair as one real cheap-path canary | **NEXT / P1** | no active wrong-harness stale-selection path; measured cheap-worker time/cost and native supervisor disposition recorded |
-| 9 | [#54](https://github.com/Design-Machines-Studio/depot/issues/54) reusable Assembly planning-coordinator skill | **PREPARED / AFTER CANARY** | Travis and Jeremy recover the same live cross-repository successor and produce proportional prompts from a fresh session |
-| 10 | Minimal worker/advisor routing adjustment | HOLD / REASSESS | canary shows a concrete routing miss; otherwise current matrix stands |
-| 11 | Baseplate verifier -> canonical Jig Fixture handoff | EXTERNAL / P2 | producer checks and consumer proof clear in their owning repositories; roadmap remains external |
-| 12 | R4 static run report | LATER / EVIDENCE-GATED | a current failed run supplies a diagnosis specimen |
-| 13 | R5 Agent Plugins interop | PARK / EVIDENCE-GATED | a named client or distribution target exists |
-| 14 | Workflow Kernel or speculative harness/platform changes | HOLD / EVIDENCE-GATED | a current reachable failure proves the smallest required change |
-| 15 | Workflow Authority install, integration, and Darwin port | **REMOVED** | reintroduction requires a new owner decision backed by a demonstrated threat or operational need |
+| 8 | [#28](https://github.com/Design-Machines-Studio/depot/issues/28) / [PR #55](https://github.com/Design-Machines-Studio/depot/pull/55) runtime cache-resolution repair and cheap-path canary | **MERGED / ISSUE REVIEW** | exact head `d462e8f` merged as `5afc8de`; owner closes #28 after confirming the merged outcome |
+| 9 | [#54](https://github.com/Design-Machines-Studio/depot/issues/54) reusable Assembly planning-coordinator skill | **NEXT / P1** | Travis and Jeremy recover the same live cross-repository successor and produce proportional prompts from a fresh session |
+| 10 | [Assembly release-operations skill planning](assembly-release-skill/prompts/00-plan-assembly-release.md) | **PREPARED / P2 / AFTER OPTIMIZATION** | live Depot/Baseplate inspection proves the smallest command boundary and produces one implementation prompt without delaying active releases |
+| 11 | Minimal worker/advisor routing adjustment | HOLD / REASSESS | canary shows a concrete routing miss; otherwise current matrix stands |
+| 12 | Baseplate verifier -> canonical Jig Fixture handoff | EXTERNAL / P2 | producer checks and consumer proof clear in their owning repositories; roadmap remains external |
+| 13 | R4 static run report | LATER / EVIDENCE-GATED | a current failed run supplies a diagnosis specimen |
+| 14 | R5 Agent Plugins interop | PARK / EVIDENCE-GATED | a named client or distribution target exists |
+| 15 | Workflow Kernel or speculative harness/platform changes | HOLD / EVIDENCE-GATED | a current reachable failure proves the smallest required change |
+| 16 | Workflow Authority install, integration, and Darwin port | **REMOVED** | reintroduction requires a new owner decision backed by a demonstrated threat or operational need |
 
 The Fixture-development handoff remains an external P2 lane and may advance in
 parallel when its Baseplate/Jig dependency chain clears; it does not displace
 the single `NEXT` Depot chunk.
 
-Only #28 authorizes the next Depot execution session. #54 follows the canary;
-DONE, HOLD, EXTERNAL, LATER, FUTURE, and PARK are not execution prompts.
+Only #54 authorizes the next Depot execution session. The Assembly release
+prompt is prepared P2 planning work after the optimization initiative. DONE,
+HOLD, EXTERNAL, LATER, FUTURE, PARK, and PREPARED are not execution prompts.
 
 ### Cross-repository handoff
 
@@ -89,10 +89,12 @@ DONE, HOLD, EXTERNAL, LATER, FUTURE, and PARK are not execution prompts.
 | Baseplate Fixture verifier | [PR 662](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/662) open, non-draft, mergeable at `af2411a3a3ea3d7d55315bd909d7817cf72bb413`; required test, security, composer-security, and docker-startup checks pass; addresses [#659](https://github.com/Design-Machines-Studio/assembly-baseplate/issues/659) | exact-head owner review/merge and trusted verifier publication | Baseplate acts next. Safe in parallel with Depot; PR 660 is merged, so its former file collision is gone. |
 | Canonical Jig | [PR 11](https://github.com/Design-Machines-Studio/assembly-fixture-jig/pull/11) draft at `a1738fccc31f6738b546d36e0e7d949ae67ae0a6`; mergeable but unstable because `pull-request-checks` fails; [#8](https://github.com/Design-Machines-Studio/assembly-fixture-jig/issues/8) and [#10](https://github.com/Design-Machines-Studio/assembly-fixture-jig/issues/10) remain open | published Baseplate verifier, repaired exact-head check, required consumer proof, and retained browser evidence | Jig acts after Baseplate. No Depot file collision; dependency and red CI block closeout. |
 
-Project 1 carries #28 as `Next / P1 / Tooling` and the active Baseplate/Jig
-native items with their existing fields. Depot Issues #35 and #39 are `Done`.
-Issue #54 remains a native backlog item outside the Project until the canary
-clears. Do not create a free-form Project note for it.
+Project 1 carries #28 as `Review / P1 / Tooling`, #54 as the sole Depot
+`Next / P1 / Tooling` item, and the active Baseplate/Jig native items with their
+existing fields. Depot Issues #35 and #39 are `Done`. No native Issue exists yet
+for the Assembly release skill; its planner must inspect live Baseplate release
+state before admitting one. Do not create a free-form Project note for the
+prepared prompt.
 
 ### Operating doctrine
 
