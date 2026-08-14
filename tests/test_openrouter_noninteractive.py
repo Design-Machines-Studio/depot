@@ -18,6 +18,7 @@ REPO = Path(__file__).resolve().parents[1]
 OPENROUTER = REPO / "plugins/openrouter"
 PIPELINE_EXEC = REPO / "plugins/pipeline/references/openrouter-exec.sh"
 CASCADE = REPO / "plugins/pipeline/references/cascade-dispatch.sh"
+PIPELINE_PROFILE = REPO / "plugins/pipeline/references/harness-profile.json"
 KERNEL = REPO / "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"
 BOUNDARY = OPENROUTER / "skills/openrouter-delegate/references/delegation-boundary.sh"
 POLICY = OPENROUTER / "skills/openrouter-delegate/references/delegation-security-policy.json"
@@ -253,6 +254,25 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
                               cwd=repo, input=prompt, text=True,
                               capture_output=True, env=run_env)
 
+    def run_cascade(self, repo: Path, response: str, attempts: Path,
+                    prompt: str = "bounded fixture",
+                    env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
+        FixtureHandler.response_text = response
+        attempts.mkdir(parents=True)
+        probe = repo / "probe.json"
+        probe.write_text(json.dumps({
+            "codex": {"state": "ok", "remaining_pct": 100},
+            "openrouter": {"state": "ok", "balance_usd": 1.0},
+        }))
+        run_env = env or self.env()
+        run_env["OPENROUTER_EXEC_ALLOWED_PATHS"] = "allowed.txt"
+        template = attempts / "provider-{attempt}.json"
+        return subprocess.run([
+            str(CASCADE), "--class", "openrouter", "--prompt", prompt,
+            "--host", "codex", "--timeout", "10", "--probe-file", str(probe),
+            "--attempt-receipt-template", str(template.relative_to(repo)),
+        ], cwd=repo, text=True, capture_output=True, env=run_env)
+
     def test_pipeline_accepts_allowed_diff_and_emits_wrapper_evidence(self) -> None:
         repo = self.init_repo()
         attempt_dir = repo / "attempts"
@@ -276,20 +296,13 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
 
     def test_headerless_provider_result_retains_one_measured_failed_attempt(self) -> None:
         repo = self.init_repo()
-        attempts = repo / "plans/r4/receipts/openrouter"
-        attempts.mkdir(parents=True)
-        attempt_receipt = attempts / "chunk-a-attempt-1.json"
-        probe = repo / "probe.json"
-        probe.write_text(json.dumps({
-            "codex": {"state": "ok", "remaining_pct": 100},
-            "openrouter": {"state": "ok", "balance_usd": 1.0},
-        }))
+        attempts = repo / "plans/r4/receipts/openrouter/chunk-a-cascade-1"
+        attempt_receipt = attempts / "provider-1.json"
         task_tmp = repo / "task-tmp"
         task_tmp.mkdir()
         prompt_marker = "PROMPT_MARKER /private/acme/customer/repository"
         response_marker = "RAW_HEADERLESS_DIFF_MARKER"
         api_key_marker = "test"  # OPENROUTER_BASE accepts only the fixture key.
-        FixtureHandler.response_text = response_marker + "\n-old\n+new\n"
         env = self.env()
         env.update({
             "OPENROUTER_API_KEY": api_key_marker,
@@ -301,17 +314,20 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         before_head = subprocess.check_output(
             ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
         ).strip()
-        result = subprocess.run([
-            str(CASCADE), "--class", "openrouter", "--prompt", prompt_marker,
-            "--host", "codex", "--timeout", "10", "--probe-file", str(probe),
-            "--attempt-receipt", str(attempt_receipt.relative_to(repo)),
-        ], cwd=repo, text=True, capture_output=True, env=env)
+        result = self.run_cascade(
+            repo, response_marker + "\n-old\n+new\n", attempts,
+            prompt=prompt_marker, env=env,
+        )
 
-        self.assertEqual(result.returncode, 65, result.stderr)
+        self.assertEqual(result.returncode, 64, result.stderr)
         self.assertEqual(FixtureHandler.contacts, 1)
-        self.assertIn("headerless-diff", result.stderr)
+        self.assertEqual(result.stderr.count("headerless-diff"), 1)
         self.assertNotIn("engine error", result.stderr.lower())
         self.assertNotIn("ladder exhausted", result.stderr.lower())
+        fallback = json.loads(result.stdout)
+        self.assertEqual(fallback["dispatch"], "native")
+        self.assertEqual(fallback["probe_rail"], "codex")
+        self.assertEqual(sorted(attempts.iterdir()), [attempt_receipt])
         self.assertEqual((repo / "allowed.txt").read_text(), "before\n")
         self.assertEqual(subprocess.check_output(
             ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
@@ -389,39 +405,63 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         ):
             self.assertNotIn(forbidden, durable_and_human)
 
-    def test_unapplicable_provider_diff_stops_after_one_retained_attempt(self) -> None:
+    def test_unapplicable_provider_diff_retries_with_distinct_receipts(self) -> None:
         repo = self.init_repo()
         attempts = repo / "attempts"
-        attempts.mkdir()
-        attempt_receipt = attempts / "unapplicable.json"
-        probe = repo / "probe.json"
-        probe.write_text(json.dumps({
-            "codex": {"state": "ok", "remaining_pct": 100},
-            "openrouter": {"state": "ok", "balance_usd": 1.0},
-        }))
-        FixtureHandler.response_text = (
+        response = (
             "diff --git a/allowed.txt b/allowed.txt\n"
             "--- a/allowed.txt\n+++ b/allowed.txt\n"
             "@@ -1 +1 @@\n-not-the-current-line\n+after"
         )
-        env = self.env()
-        env["OPENROUTER_EXEC_ALLOWED_PATHS"] = "allowed.txt"
         before_head = subprocess.check_output(
             ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
         ).strip()
 
-        result = subprocess.run([
-            str(CASCADE), "--class", "openrouter", "--prompt", "bounded fixture",
-            "--host", "codex", "--timeout", "10", "--probe-file", str(probe),
-            "--attempt-receipt", str(attempt_receipt.relative_to(repo)),
-        ], cwd=repo, text=True, capture_output=True, env=env)
+        result = self.run_cascade(repo, response, attempts)
 
-        self.assertEqual(result.returncode, 65, result.stderr)
-        self.assertEqual(FixtureHandler.contacts, 1)
-        self.assertIn("patch-does-not-apply", result.stderr)
+        expected_models = json.loads(PIPELINE_PROFILE.read_text())[
+            "hosts"
+        ]["codex"]["roles"]["openrouter_exec"]["models"]
+        self.assertEqual(result.returncode, 64, result.stderr)
+        self.assertEqual(FixtureHandler.contacts, len(expected_models))
+        self.assertEqual(
+            result.stderr.count("patch-does-not-apply"), len(expected_models),
+        )
         self.assertNotIn("ladder exhausted", result.stderr.lower())
-        self.assertTrue(attempt_receipt.is_file())
-        self.assertEqual(json.loads(attempt_receipt.read_text())["usage"]["cost"], 0.0042)
+        self.assertEqual(json.loads(result.stdout)["dispatch"], "native")
+        receipts = [attempts / f"provider-{index}.json"
+                    for index in range(1, len(expected_models) + 1)]
+        self.assertEqual(sorted(attempts.iterdir()), receipts)
+        self.assertEqual(
+            [json.loads(path.read_text())["requestedModel"] for path in receipts],
+            expected_models,
+        )
+        self.assertTrue(all(
+            json.loads(path.read_text())["usage"]["cost"] == 0.0042
+            for path in receipts
+        ))
+        self.assertEqual((repo / "allowed.txt").read_text(), "before\n")
+        self.assertEqual(subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
+        ).strip(), before_head)
+
+    def test_blank_provider_diff_preserves_codex_fallback_and_receipt(self) -> None:
+        repo = self.init_repo()
+        attempts = repo / "attempts"
+        before_head = subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
+        ).strip()
+
+        result = self.run_cascade(repo, " ", attempts)
+
+        self.assertEqual(result.returncode, 64, result.stderr)
+        self.assertEqual(FixtureHandler.contacts, 1)
+        self.assertIn("empty-diff", result.stderr)
+        self.assertEqual(json.loads(result.stdout)["dispatch"], "native")
+        self.assertEqual(
+            sorted(attempts.iterdir()),
+            [attempts / "provider-1.json"],
+        )
         self.assertEqual((repo / "allowed.txt").read_text(), "before\n")
         self.assertEqual(subprocess.check_output(
             ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,

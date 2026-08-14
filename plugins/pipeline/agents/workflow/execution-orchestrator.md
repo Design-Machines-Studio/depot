@@ -365,15 +365,17 @@ accepting a caller-selected ledger.
 Each wrapper receipt is one-use measurement evidence; a retry must record the
 new receipt produced by that provider attempt rather than replay the prior one.
 For Pipeline OpenRouter execution, give `cascade-dispatch.sh` a fresh
-repository-relative `--attempt-receipt` path for every chunk attempt and export
-that attempt's `OPENROUTER_RUN_ID` and `OPENROUTER_LANE_ID`. The adapter writes
-the validated content-free wrapper receipt there before patch validation. A
-provider-completed patch rejection therefore records `status: failed` with the
-exact stable rejection reason and that receipt. If no wrapper receipt was
-produced, still call `record-attempt` without measurement evidence so the pair
-contains `attempt_unmeasured`; never estimate the missing usage. A successful
-attempt uses the same retained receipt once and must not also append standalone
-`openrouter-usage` evidence.
+repository-relative `--attempt-receipt-template` containing `{attempt}` and
+export that chunk attempt's `OPENROUTER_RUN_ID` and `OPENROUTER_LANE_ID`. The
+cascade substitutes a distinct positive sequence number for every provider
+attempt. The adapter writes each validated content-free wrapper receipt before
+patch validation, without changing the existing model-ladder or Codex-fallback
+result. A provider-completed patch rejection therefore records `status: failed`
+with the exact stable rejection reason and its receipt before the later attempt
+is recorded. If no wrapper receipt was produced, still call `record-attempt`
+without measurement evidence so the pair contains `attempt_unmeasured`; never
+estimate the missing usage. A successful attempt uses its retained receipt once
+and must not also append standalone `openrouter-usage` evidence.
 
 A `lanes: 0` cost summary after a run that executed chunks means this step was
 skipped. The terminal `emit-cost-summary` reports the count on the receipt line
@@ -1044,8 +1046,9 @@ PRIMARY_RAIL_STATUS="ready"
 # proactive probe proves the selected primary cannot run.
 # PRIMARY_RAIL_STATUS="capped-or-unavailable"
 OPENROUTER_EXEC_ALLOWED_PATHS="$CHUNK_FILES_TO_MODIFY_NEWLINE"
-OPENROUTER_ATTEMPT_RECEIPT="plans/<feature-slug>/receipts/openrouter/<chunk-id>-attempt-<n>.json"
-mkdir -p "$(dirname "$OPENROUTER_ATTEMPT_RECEIPT")"
+OPENROUTER_ATTEMPT_RECEIPT_DIR="plans/<feature-slug>/receipts/openrouter/<chunk-id>-cascade-<n>"
+OPENROUTER_ATTEMPT_RECEIPT_TEMPLATE="$OPENROUTER_ATTEMPT_RECEIPT_DIR/provider-{attempt}.json"
+mkdir -p "$OPENROUTER_ATTEMPT_RECEIPT_DIR"
 OPENROUTER_RUN_ID="<run-id>"
 OPENROUTER_LANE_ID="<chunk-id>"
 export OPENROUTER_EXEC_ALLOWED_PATHS OPENROUTER_RUN_ID OPENROUTER_LANE_ID
@@ -1055,11 +1058,11 @@ run_cascade() {
     printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
       --kind "<kind>" --prompt - --phase execute --timeout 3600 \
       --exhausted-rail "$exhausted_rail" \
-      --attempt-receipt "$OPENROUTER_ATTEMPT_RECEIPT"
+      --attempt-receipt-template "$OPENROUTER_ATTEMPT_RECEIPT_TEMPLATE"
   else
     printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
       --kind "<kind>" --prompt - --phase execute --timeout 3600 \
-      --attempt-receipt "$OPENROUTER_ATTEMPT_RECEIPT"
+      --attempt-receipt-template "$OPENROUTER_ATTEMPT_RECEIPT_TEMPLATE"
   fi
 }
 CASCADE_EXHAUSTED_RAIL=""
@@ -1086,20 +1089,23 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 | `CASCADE_RC` | Meaning | Orchestrator action |
 |---|---|---|
 | `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model` and `role`. **Re-dispatch IN-PROCESS through the current host's native path**, then apply **Native Model Descent** below. Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
-| `65` | OpenRouter reached the provider, retained its wrapper receipt when available, and rejected the returned implementation structurally. stderr names the stable reason, such as `headerless-diff`. | Call `record-attempt` exactly once with `status: failed`, the exact rejection reason, and the retained receipt when present. Do not apply or commit the patch. This is a non-cap quality failure: flag the chunk failed without retry or fallback. |
 | `0` | `openrouter_exec`, wrapper, or codex-companion rung executed; stdout is produced text or a receipt. | If stdout includes `implementedBy: openrouter` or a JSON receipt with `"implementedBy": "openrouter"`, treat it as an agentic OpenRouter implementation receipt. Otherwise apply the **one-shot validity rule** below. |
 | `76` | Ladder exhausted -- no configured rung above the quality floor had headroom. | Run **Step 3d.5 -- Rail-exhaustion ask gate** BEFORE any terminal receipt. The current exits are: **wait** -> parked resumable, `wait_category: human_gate` receipt carries the named reset time and resume instruction; **park, `PIPELINE_EXHAUSTION_ASK=0`, a fail-closed policy read, or any context that cannot reach the operator** -> flag the chunk failed and preserve resumable state. Do NOT silently ship partial output. |
 | `77` | Missing/invalid key, unavailable provider/bundle, or automatic disclosure/output boundary decline. | Record the exact reason, then use the Codex fallback without prompting. |
-| other | Bad args / engine error. | Fall back to Codex once. If Codex is unavailable, fail the chunk; do not route coding work to Claude. Never classify RC 65 or its stable rejection reason as an engine error. |
+| other | Bad args / engine error. | Fall back to Codex once. If Codex is unavailable, fail the chunk; do not route coding work to Claude. |
 
-After every cascade settlement, inspect only the caller-owned attempt receipt
-path for that attempt. When it exists, read its request-envelope digest and
-pass the same file to `record-attempt`; do not copy prompt, response, or patch
-content into the chunk receipt or human output. When a failed contacted attempt
-has no receipt, record it without `--openrouter-receipt`, producing
-`attempt_unmeasured`. Record the eventual Codex fallback, when policy permits
-one, as its own later attempt. This keeps one usage row per real attempt and
-prevents a successful fallback from erasing or double-counting the paid failed
+After every cascade settlement, inspect only the caller-owned numbered receipt
+files in that cascade attempt's fresh directory, in positive sequence order.
+Pair each rejected provider attempt with the corresponding content-free stable
+reason emitted on stderr, such as `headerless-diff`, then pass that file and its
+request-envelope digest to `record-attempt`. The last receipt is successful only
+when the cascade returned a committed `openrouter_exec` result; otherwise it is
+failed before the unchanged ladder or Codex fallback result. Do not copy prompt,
+response, or patch content into the chunk receipt or human output. When a failed
+contacted attempt has no receipt, record it without `--openrouter-receipt`,
+producing `attempt_unmeasured`. Record the eventual Codex fallback as its own
+later attempt. This keeps one usage row per real attempt and prevents a
+successful retry or fallback from erasing or double-counting the paid failed
 call.
 
 **Native Model Descent (RC 64).** `cascade-dispatch.sh` emits a directive for the FIRST model in the role's list that clears the quality floor and then `exit 64`s -- it does **not** walk the rest of that role's `models[]`. Walking the remainder is the orchestrator's job, and it is host-specific. Without this, every model after position 1 in a `kind: native` role is decorative.

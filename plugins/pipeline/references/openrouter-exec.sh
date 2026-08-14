@@ -250,8 +250,8 @@ jq -e '
 }
 
 [ -s "$PATCH_FILE" ] || {
-  echo "openrouter-exec: rejected model patch: empty-diff" >&2
-  exit 65
+  echo "openrouter-exec: model returned no unified diff" >&2
+  exit 1
 }
 if "$BOUNDARY" --policy "$POLICY" --changed-files "$ALLOWED_FILE" \
     --diff-file "$PATCH_FILE" --output-paths "$PATCH_PATHS_FILE" \
@@ -265,7 +265,6 @@ else
   case "$PATCH_REJECTION_REASON" in
     headerless-diff|empty-diff|non-unified-diff|diff-file-header|diff-file-prefix|diff-git-header|diff-git-prefix|diff-header-order|diff-header-mismatch|diff-quoted-path|binary-or-symlink-diff|malformed-hunk|hunk-count-mismatch)
       echo "openrouter-exec: rejected model patch: $PATCH_REJECTION_REASON" >&2
-      exit 65
       ;;
   esac
   if [ "$rc" -eq 2 ] || [ "$rc" -eq 3 ]; then
@@ -282,7 +281,7 @@ fi
 # model-authored commit.
 if ! git apply --check --index "$PATCH_FILE"; then
   echo "openrouter-exec: rejected model patch: patch-does-not-apply" >&2
-  exit 65
+  exit 1
 fi
 git apply --index "$PATCH_FILE"
 MUTATION_ACTIVE=1
