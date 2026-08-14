@@ -641,19 +641,26 @@ Never call an ignored, untracked receipt "durable" without surfacing which path 
 
 Read the repository cleanup contract. It governs every worktree and branch this run creates.
 
-The path below is depot-relative for readability, as with `guardrails.md` and `output-format.md` elsewhere in this file. Pipeline runs in worktrees outside the depot, so resolve it from the plugin cache before reading -- do not assume the depot-relative path exists:
+The asset name below is relative to the dm-review plugin root. Pipeline runs in worktrees outside the depot, so resolve it from the installed plugin bundle before reading -- do not assume a depot checkout exists:
 
 ```bash
-CONTRACT=""
-for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  CONTRACT=$(ls -t "$CACHE"/dm-review/*/skills/review/references/repo-cleanup-contract.md 2>/dev/null | head -1)
-  [ -n "$CONTRACT" ] && break
-done
-# Fall back to the depot-relative path when running inside the depot itself.
-[ -n "$CONTRACT" ] || CONTRACT="plugins/dm-review/skills/review/references/repo-cleanup-contract.md"
+: "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh before ref registry init}"
+CLEANUP_ACTIVE_HOST=""
+[ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && CLEANUP_ACTIVE_HOST="claude"
+[ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && CLEANUP_ACTIVE_HOST="codex"
+CLEANUP_ACTIVE_HOST_ARGS=()
+[ -n "$CLEANUP_ACTIVE_HOST" ] && CLEANUP_ACTIVE_HOST_ARGS=(--active-host "$CLEANUP_ACTIVE_HOST")
+if ! CONTRACT=$("$WORKFLOW_KERNEL" resolve-plugin-asset \
+  --plugin dm-review \
+  --asset skills/review/references/repo-cleanup-contract.md \
+  --minimum-version 1.62.0 \
+  "${CLEANUP_ACTIVE_HOST_ARGS[@]}"); then
+  echo "ERROR: required dm-review cleanup contract unavailable" >&2
+  exit 1
+fi
 ```
 
-If the contract cannot be resolved from either location, do not proceed with an improvised cleanup. Stop and report: the cleanup rules are what keep a failed run from destroying unmerged work.
+If the contract cannot be resolved from a compatible installed bundle, do not proceed with an improvised cleanup. Stop and report: the cleanup rules are what keep a failed run from destroying unmerged work.
 
 Capture the before-state so the final inventory reports a delta, not an absolute:
 

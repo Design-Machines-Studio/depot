@@ -316,18 +316,54 @@ Use `dm-review/*/agents/review/codex-perspective.md` as the compatibility-named 
 
 Add these agents based on which file extensions appear in the changed files:
 
-**Note on agent paths:** every path in the table below is depot-relative for readability, but the orchestrator MUST resolve each via the plugin cache before dispatch -- pipeline runs in worktrees outside the depot where these paths do not exist. The canonical resolver:
+**Note on agent paths:** every path in the table below is depot-relative for readability, but the orchestrator MUST resolve selected assets through Workflow Kernel before dispatch -- pipeline runs in worktrees outside the depot where these paths do not exist. After the roster is final, group its cache-relative agent paths by plugin. Add `agents/workflow/review-consolidator.md` to the dm-review group and, in full mode, add `agents/workflow/review-memory-recorder.md`. Resolve each plugin's complete selected group once:
 
 ```bash
-AGENT_PATH=""
-for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  AGENT_PATH=$(ls -t "$CACHE_ROOT"/<plugin>/*/agents/<category>/<agent-id>.md 2>/dev/null | head -1)
-  [ -n "$AGENT_PATH" ] && break
+: "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh once per review first}"
+CACHE_ACTIVE_HOST=""
+[ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && CACHE_ACTIVE_HOST="claude"
+[ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && CACHE_ACTIVE_HOST="codex"
+CACHE_ACTIVE_HOST_ARGS=()
+[ -n "$CACHE_ACTIVE_HOST" ] && CACHE_ACTIVE_HOST_ARGS=(--active-host "$CACHE_ACTIVE_HOST")
+
+declare -A PLUGIN_BUNDLE_ROOTS
+for PLUGIN in "${SELECTED_PLUGINS[@]}"; do
+  case "$PLUGIN" in
+    openrouter)
+      if [ -n "$OPENROUTER_BUNDLE_ROOT" ]; then
+        PLUGIN_BUNDLE_ROOTS["openrouter"]="$OPENROUTER_BUNDLE_ROOT"
+      else
+        echo "SKIP: optional plugin bundle unavailable: openrouter"
+      fi
+      continue
+      ;;
+    dm-review) PLUGIN_MINIMUM_VERSION="1.62.0" ;;
+    accessibility-compliance) PLUGIN_MINIMUM_VERSION="1.2.0" ;;
+    live-wires) PLUGIN_MINIMUM_VERSION="1.8.0" ;;
+    ghostwriter) PLUGIN_MINIMUM_VERSION="3.7.0" ;;
+    council) PLUGIN_MINIMUM_VERSION="1.5.0" ;;
+    *) echo "SKIP: optional plugin has no declared resolution floor: $PLUGIN"; continue ;;
+  esac
+  REQUIRED_ASSET_ARGS=()
+  while IFS= read -r ASSET; do
+    [ -n "$ASSET" ] && REQUIRED_ASSET_ARGS+=(--required-asset "$ASSET")
+  done <<< "${SELECTED_ASSETS_BY_PLUGIN[$PLUGIN]}"
+  if ! PLUGIN_BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle \
+    --plugin "$PLUGIN" --minimum-version "$PLUGIN_MINIMUM_VERSION" \
+    "${CACHE_ACTIVE_HOST_ARGS[@]}" "${REQUIRED_ASSET_ARGS[@]}"); then
+    echo "ERROR: required plugin bundle unavailable: $PLUGIN" >&2
+    exit 1
+  fi
+  PLUGIN_BUNDLE_REF=$(printf '%s' "$PLUGIN_BUNDLE_JSON" | jq -r '.selected_root // empty')
+  case "$PLUGIN_BUNDLE_REF" in
+    "~/"*) PLUGIN_BUNDLE_ROOTS["$PLUGIN"]="$HOME/${PLUGIN_BUNDLE_REF#\~/}" ;;
+    *) echo "ERROR: invalid plugin bundle root: $PLUGIN" >&2; exit 1 ;;
+  esac
 done
-[ -n "$AGENT_PATH" ] && [ -f "$AGENT_PATH" ]
+DM_REVIEW_BUNDLE_ROOT="${PLUGIN_BUNDLE_ROOTS[dm-review]:?required dm-review bundle unavailable}"
 ```
 
-Substitute `<plugin>`, `<category>` (`review` or `workflow`), and `<agent-id>` per row. Phase 3 shows the same pattern for the OpenRouter runner.
+`SELECTED_PLUGINS` and `SELECTED_ASSETS_BY_PLUGIN` are projections of the final roster, not a second selection mechanism. Strip the table's `<plugin>/*/` display prefix so each stored value is an asset path such as `agents/review/<agent-id>.md`. A missing required plugin fails closed; remove lanes belonging to an optional plugin that logged `SKIP` and do not fall back to a repository-relative path. Every path for a resolved plugin is derived from its one `PLUGIN_BUNDLE_ROOTS` entry. The dm-review root therefore binds its selected agents, consolidator, and applicable recorder coherently. Phase 3 shows the separate coherent resolver for the OpenRouter runner.
 
 | Condition | Agent | Cache-relative path components |
 |-----------|-------|--------------------------------|
@@ -499,7 +535,7 @@ authorization, invocation, fallback, and provenance implementation.
 1. **Read the openrouter-agent-runner definition** from `$OPENROUTER_RUNNER_PATH` in the coherent bundle selected in Phase 3. If the selection receipt was not preserved, rerun the same workflow-kernel `resolve-plugin-bundle` request for the complete asset set; never resolve one asset independently.
 2. **Build the runner prompt** by combining:
    - The full content of the runner definition file (this is the runner's instructions)
-   - `target_agent_path` -- path to the original agent's definition file
+   - `target_agent_path` -- `${PLUGIN_BUNDLE_ROOTS[$TARGET_PLUGIN]}/agents/<category>/<agent-id>.md`; if an optional plugin has no bound root, preserve its Phase 3 skip rather than re-resolving or using a depot-relative path
    - `target_agent_name` -- bare ID (e.g., `pattern-recognition-specialist`)
    - `target_model` -- full primary OpenRouter slug from policy or the inline table
    - `fallback_model` -- full fallback OpenRouter slug from policy or the inline table
@@ -523,18 +559,16 @@ authorization, invocation, fallback, and provenance implementation.
 
 **B. Otherwise, dispatch coding review on Codex:**
 
-1. **Read the agent definition file** by resolving the path components from the agent selection table via the plugin cache:
+1. **Read the agent definition file** from the plugin root bound after roster selection:
 
    ```bash
-   AGENT_PATH=""
-   for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-     AGENT_PATH=$(ls -t "$CACHE_ROOT"/<plugin>/*/agents/<category>/<agent-id>.md 2>/dev/null | head -1)
-     [ -n "$AGENT_PATH" ] && break
-   done
-   [ -n "$AGENT_PATH" ] && [ -f "$AGENT_PATH" ] || { echo "ERROR: agent not found in plugin cache: <plugin>/<agent-id>"; exit 1; }
+   PLUGIN_BUNDLE_ROOT="${PLUGIN_BUNDLE_ROOTS[<plugin>]:-}"
+   [ -n "$PLUGIN_BUNDLE_ROOT" ] || { echo "ERROR: selected plugin bundle not bound: <plugin>"; exit 1; }
+   AGENT_PATH="$PLUGIN_BUNDLE_ROOT/agents/<category>/<agent-id>.md"
+   [ -f "$AGENT_PATH" ] || { echo "ERROR: bound agent missing: <plugin>/<agent-id>"; exit 1; }
    ```
 
-   Substitute `<plugin>`, `<category>`, and `<agent-id>` per the table row. Never use depot-relative paths -- pipeline runs in worktrees.
+   Substitute `<plugin>`, `<category>`, and `<agent-id>` per the table row. Never re-resolve a file independently or use depot-relative paths -- pipeline runs in worktrees.
 
 2. **Build the agent prompt** by combining:
    - The full content of the agent definition file (this is the agent's system prompt)
@@ -547,7 +581,7 @@ Both A and B agents launch in parallel in the same message. The runner reads the
 
 **C. If the selected role is `second-perspective`:**
 
-1. Read `plugins/dm-review/agents/review/codex-perspective.md`.
+1. Read `$DM_REVIEW_BUNDLE_ROOT/agents/review/codex-perspective.md`.
 2. Build a read-only prompt with the changed files, diff content, project context, standard Fix Philosophy, `implementer_family`, `reviewer_family`, and `resolution_reason`.
 3. Dispatch on the resolved family:
    - OpenAI/Codex: run:
@@ -563,7 +597,7 @@ Both A and B agents launch in parallel in the same message. The runner reads the
 
 1. The compatibility lane ID remains stable, but provider resolution is family-aware. Codex is preferred when Codex did not implement the diff.
 2. When Codex is the implementer, use the strongest available non-implementing family under subscription-first resolution. After eligible subscription rails, use the matrix security head, currently Kimi K3, only through its authorized path. Never fall back to Codex for this sign-off.
-3. Dispatch `security-auditor.md` with the complete unfiltered diff. The sign-off remains mandatory and full-diff regardless of which family performs it.
+3. Dispatch `$DM_REVIEW_BUNDLE_ROOT/agents/review/security-auditor.md` with the complete unfiltered diff. The sign-off remains mandatory and full-diff regardless of which family performs it.
 4. Record `implementer_family`, `reviewer_family`, and `resolution_reason`, including every family swap and why it occurred. If no independent family can complete, the lane is incomplete and the review cannot be clean.
 
 **Authorization and failure handling:** Automated OpenRouter selection uses the
@@ -941,14 +975,11 @@ Before merging findings, apply the output guardrails from `${CLAUDE_SKILL_DIR}/r
 
 #### Consolidation steps
 
-Resolve the consolidator agent path via the plugin cache (same pattern as Phase 4) and read its instructions:
+Read the consolidator from the dm-review root already bound for the selected required asset set:
 
 ```bash
-CONSOLIDATOR_PATH=""
-for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  CONSOLIDATOR_PATH=$(ls -t "$CACHE_ROOT"/dm-review/*/agents/workflow/review-consolidator.md 2>/dev/null | head -1)
-  [ -n "$CONSOLIDATOR_PATH" ] && break
-done
+CONSOLIDATOR_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-consolidator.md"
+[ -f "$CONSOLIDATOR_PATH" ] || { echo "ERROR: bound dm-review consolidator missing" >&2; exit 1; }
 ```
 
 Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
@@ -1160,13 +1191,10 @@ Official and third-party Claude Code plugins that complement this skill:
 
 After issue tracking (or if skipped), record the review in ai-memory:
 
-1. Resolve the memory recorder path via the plugin cache and read its instructions:
+1. Read the memory recorder from the same dm-review root bound before dispatch:
    ```bash
-   RECORDER_PATH=""
-   for CACHE_ROOT in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-     RECORDER_PATH=$(ls -t "$CACHE_ROOT"/dm-review/*/agents/workflow/review-memory-recorder.md 2>/dev/null | head -1)
-     [ -n "$RECORDER_PATH" ] && break
-   done
+   RECORDER_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-memory-recorder.md"
+   [ -f "$RECORDER_PATH" ] || { echo "ERROR: bound dm-review memory recorder missing" >&2; exit 1; }
    ```
    Read from `$RECORDER_PATH`.
 2. Use the ai-memory MCP tools to:

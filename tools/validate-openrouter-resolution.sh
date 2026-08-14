@@ -117,6 +117,66 @@ for relative in "${consumers[@]}"; do
   fi
 done
 
+validate_active_cache_consumers() {
+  local dm_review_file="$1" pipeline_file="$2" consumer_failures=0
+
+  grep -Fq 'resolve-plugin-bundle \' "$dm_review_file" &&
+  grep -Fq -- '--plugin "$PLUGIN" --minimum-version "$PLUGIN_MINIMUM_VERSION"' "$dm_review_file" &&
+  grep -Fq -- 'CACHE_ACTIVE_HOST_ARGS=(--active-host "$CACHE_ACTIVE_HOST")' "$dm_review_file" &&
+  grep -Fq -- 'REQUIRED_ASSET_ARGS+=(--required-asset "$ASSET")' "$dm_review_file" &&
+  grep -Fq 'DM_REVIEW_BUNDLE_ROOT="${PLUGIN_BUNDLE_ROOTS[dm-review]' "$dm_review_file" &&
+  grep -Fq 'CONSOLIDATOR_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-consolidator.md"' "$dm_review_file" &&
+  grep -Fq 'RECORDER_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-memory-recorder.md"' "$dm_review_file" &&
+  grep -Fq 'SKIP: optional plugin bundle unavailable: openrouter' "$dm_review_file" || consumer_failures=1
+
+  if grep -Fq 'AGENT_PATH=$(ls -t "$CACHE_ROOT"/<plugin>/*/agents/' "$dm_review_file" ||
+     grep -Fq 'CONSOLIDATOR_PATH=$(ls -t "$CACHE_ROOT"/dm-review/*/agents/workflow/review-consolidator.md' "$dm_review_file" ||
+     grep -Fq 'RECORDER_PATH=$(ls -t "$CACHE_ROOT"/dm-review/*/agents/workflow/review-memory-recorder.md' "$dm_review_file"; then
+    consumer_failures=1
+  fi
+
+  grep -Fq 'resolve-plugin-asset \' "$pipeline_file" &&
+  grep -Fq -- '--plugin dm-review' "$pipeline_file" &&
+  grep -Fq -- '--asset skills/review/references/repo-cleanup-contract.md' "$pipeline_file" &&
+  grep -Fq -- '--minimum-version 1.62.0' "$pipeline_file" &&
+  grep -Fq 'CLEANUP_ACTIVE_HOST_ARGS=(--active-host "$CLEANUP_ACTIVE_HOST")' "$pipeline_file" || consumer_failures=1
+
+  if grep -Fq 'CONTRACT=$(ls -t "$CACHE"/dm-review/*/skills/review/references/repo-cleanup-contract.md' "$pipeline_file" ||
+     grep -Fq 'CONTRACT="plugins/dm-review/skills/review/references/repo-cleanup-contract.md"' "$pipeline_file"; then
+    consumer_failures=1
+  fi
+
+  [ "$consumer_failures" -eq 0 ]
+}
+
+dm_review_consumer="$ROOT/plugins/dm-review/skills/review/SKILL.md"
+pipeline_consumer="$ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
+if ! validate_active_cache_consumers "$dm_review_consumer" "$pipeline_consumer"; then
+  echo "  FAIL  active dm-review/Pipeline consumers lack coherent host-aware resolution"
+  failures=1
+fi
+
+consumer_fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/active-cache-consumers.XXXXXX")"
+trap 'rm -rf "$consumer_fixture_root"' EXIT
+cp "$dm_review_consumer" "$consumer_fixture_root/dm-review.md"
+cp "$pipeline_consumer" "$consumer_fixture_root/pipeline.md"
+printf '%s\n' 'AGENT_PATH=$(ls -t "$CACHE_ROOT"/<plugin>/*/agents/review/<agent-id>.md 2>/dev/null | head -1)' >> "$consumer_fixture_root/dm-review.md"
+if validate_active_cache_consumers "$consumer_fixture_root/dm-review.md" "$pipeline_consumer" >/dev/null 2>&1; then
+  echo "  FAIL  dm-review first-root mutation escaped active-consumer validation"
+  failures=1
+fi
+sed 's/SKIP: optional plugin bundle unavailable: openrouter/ERROR: optional plugin bundle unavailable: openrouter/' \
+  "$dm_review_consumer" > "$consumer_fixture_root/dm-review-optional-abort.md"
+if validate_active_cache_consumers "$consumer_fixture_root/dm-review-optional-abort.md" "$pipeline_consumer" >/dev/null 2>&1; then
+  echo "  FAIL  dm-review optional-skip mutation escaped active-consumer validation"
+  failures=1
+fi
+printf '%s\n' 'CONTRACT=$(ls -t "$CACHE"/dm-review/*/skills/review/references/repo-cleanup-contract.md 2>/dev/null | head -1)' >> "$consumer_fixture_root/pipeline.md"
+if validate_active_cache_consumers "$dm_review_consumer" "$consumer_fixture_root/pipeline.md" >/dev/null 2>&1; then
+  echo "  FAIL  Pipeline first-root mutation escaped active-consumer validation"
+  failures=1
+fi
+
 if ! "$ROOT/tools/test-openrouter-agent-runner-boundary.sh"; then
   echo "  FAIL  OpenRouter agent runner behavioral one-pass boundary regression"
   failures=1

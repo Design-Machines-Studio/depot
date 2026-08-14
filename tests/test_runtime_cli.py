@@ -1002,32 +1002,57 @@ class RuntimeCliTests(unittest.TestCase):
                 path.write_text("fixture\n")
             return root
 
-        with tempfile.TemporaryDirectory() as directory:
-            home = Path(directory)
-            install(home, "claude", "1.9.0")
-            highest = install(home, "codex", "1.10.0")
-            malformed = install(
-                home, "claude", "1.11.0", manifest_version="1.10.0",
-            )
-            selected = resolve_plugin_bundle(
-                "sample", ["skills/sample/SKILL.md"], home=home,
-                minimum_version="1.0.0", active_host="claude",
-            )
-            self.assertEqual(selected.root, highest.resolve())
-            self.assertEqual(selected.reason, "highest_compatible_semver")
-            self.assertNotEqual(selected.root, malformed.resolve())
+        with self.subTest("newer Codex beats stale active Claude"):
+            with tempfile.TemporaryDirectory() as directory:
+                home = Path(directory)
+                install(home, "claude", "1.9.0")
+                highest = install(home, "codex", "1.10.0")
+                malformed = install(
+                    home, "claude", "1.11.0", manifest_version="1.10.0",
+                )
+                selected = resolve_plugin_bundle(
+                    "sample", ["skills/sample/SKILL.md"], home=home,
+                    minimum_version="1.0.0", active_host="claude",
+                )
+                self.assertEqual(selected.root, highest.resolve())
+                self.assertEqual(selected.reason, "highest_compatible_semver")
+                self.assertNotEqual(selected.root, malformed.resolve())
 
-            claude_tie = install(home, "claude", "1.10.0")
-            selected = resolve_plugin_bundle(
-                "sample", ["skills/sample/SKILL.md"], home=home,
-                minimum_version="1.0.0", active_host="claude",
-            )
-            self.assertEqual(selected.root, claude_tie.resolve())
-            self.assertEqual(selected.reason, "active_host_equal_version_tiebreak")
-            durable = selected.to_dict()
-            self.assertEqual(durable["cache_class"], "claude")
-            self.assertTrue(durable["selected_root"].startswith("~/.claude/"))
-            self.assertNotIn(str(home), json.dumps(durable))
+        with self.subTest("newer Claude beats stale active Codex"):
+            with tempfile.TemporaryDirectory() as directory:
+                home = Path(directory)
+                install(home, "codex", "1.9.0")
+                highest = install(home, "claude", "1.10.0")
+                selected = resolve_plugin_bundle(
+                    "sample", ["skills/sample/SKILL.md"], home=home,
+                    minimum_version="1.0.0", active_host="codex",
+                )
+                self.assertEqual(selected.root, highest.resolve())
+                self.assertEqual(selected.reason, "highest_compatible_semver")
+
+        for active_host in ("claude", "codex"):
+            with self.subTest(
+                "equal version prefers active host", active_host=active_host,
+            ):
+                with tempfile.TemporaryDirectory() as directory:
+                    home = Path(directory)
+                    expected = install(home, active_host, "1.10.0")
+                    other_host = "codex" if active_host == "claude" else "claude"
+                    install(home, other_host, "1.10.0")
+                    selected = resolve_plugin_bundle(
+                        "sample", ["skills/sample/SKILL.md"], home=home,
+                        minimum_version="1.0.0", active_host=active_host,
+                    )
+                    self.assertEqual(selected.root, expected.resolve())
+                    self.assertEqual(
+                        selected.reason, "active_host_equal_version_tiebreak",
+                    )
+                    durable = selected.to_dict()
+                    self.assertEqual(durable["cache_class"], active_host)
+                    self.assertTrue(
+                        durable["selected_root"].startswith(f"~/.{active_host}/"),
+                    )
+                    self.assertNotIn(str(home), json.dumps(durable))
 
     def test_plugin_bundle_resolver_never_combines_assets_across_roots(self):
         from workflow_kernel.runtime_resolution import resolve_plugin_bundle

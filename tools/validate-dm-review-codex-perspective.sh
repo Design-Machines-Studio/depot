@@ -364,9 +364,9 @@ require_text "$review_skill" 'reachable actor/input/path' "P1/P2 requires a reac
 require_text "$review_skill" 'realistic harm or regression' "P1/P2 requires realistic harm"
 require_text "$review_skill" 'smallest adequate repair' "P1/P2 requires the smallest repair"
 require_text "$consolidator" 'Reject scope-expanding repairs' "consolidation rejects unrelated product scope"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.62.0"' "canonical dm-review version is 1.62.0"
-require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.62.0"' "generated dm-review version is 1.62.0"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.51.0"' "canonical Pipeline version is 1.51.0"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.62.1"' "canonical dm-review version is 1.62.1"
+require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.62.1"' "generated dm-review version is 1.62.1"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.51.1"' "canonical Pipeline version is 1.51.1"
 require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.62.0"' "generated Pipeline dependency floor is current"
 
 printf "Synthesis identity fixtures\n"
