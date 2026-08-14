@@ -18,6 +18,7 @@
 #   0   a wrapper/codex_companion/openrouter_exec rung executed -- output on stdout
 #   64  chosen rung is NATIVE -- directive JSON on stdout; the HOST orchestrator
 #       runs that model in-process (Claude subagent / Codex). The only host-specific action.
+#   65  provider completed, but its implementation failed structural validation
 #   76  ladder exhausted -- no rung had headroom above the floor
 #   77  disclosure declined -- use the trusted native fallback
 #   2   bad args
@@ -34,6 +35,7 @@ CASCADE="${CASCADE_FILE:-$DIR/model-cascade.json}"
 PROFILE="${PROFILE_FILE:-$DIR/harness-profile.json}"
 PROBE="${PROBE_CMD:-$DIR/usage-probe.sh}"
 CLASS=""; KIND=""; PROMPT=""; PHASE="execute"; HOST=""; TIMEOUT="3600"; DRYRUN=0; PROBE_FILE=""
+ATTEMPT_RECEIPT=""
 EXHAUSTED_RAILS="${CASCADE_EXHAUSTED_RAILS:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -45,6 +47,7 @@ while [ $# -gt 0 ]; do
     --timeout) TIMEOUT="$2"; shift 2;;
     --dry-run) DRYRUN=1; shift;;
     --probe-file) PROBE_FILE="$2"; shift 2;;
+    --attempt-receipt) ATTEMPT_RECEIPT="$2"; shift 2;;
     --exhausted-rail) EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}$2"; shift 2;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
@@ -185,7 +188,12 @@ resolve_openrouter_exec() {
 dispatch_openrouter_exec() {
   local runner; runner="$(resolve_openrouter_exec)"
   [ -z "$runner" ] && return 1
-  printf '%s' "$PROMPT" | "$runner" --model "$1" --timeout "$TIMEOUT"
+  if [ -n "$ATTEMPT_RECEIPT" ]; then
+    printf '%s' "$PROMPT" | "$runner" --model "$1" --timeout "$TIMEOUT" \
+      --attempt-receipt "$ATTEMPT_RECEIPT"
+  else
+    printf '%s' "$PROMPT" | "$runner" --model "$1" --timeout "$TIMEOUT"
+  fi
 }
 
 # Gate OpenRouter availability once before any external rung. Payload screening
@@ -359,6 +367,7 @@ for role in $LADDER; do
       openrouter_exec)
         out="$(dispatch_openrouter_exec "$model")"; rc=$?
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
+        [ $rc -eq 65 ] && exit 65
         if [ $rc -eq 77 ]; then
           OPENROUTER_GATE_STATE="denied"
           EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}openrouter"

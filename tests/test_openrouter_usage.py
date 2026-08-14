@@ -837,6 +837,7 @@ class RecordAttemptTests(unittest.TestCase):
 
     def _argv(self, receipts, lane, minute, **extra):
         run_id = extra.pop("run_id", "record-attempt-1")
+        status = extra.pop("status", "completed")
         if "openrouter_receipt" in extra and "state_dir" not in extra:
             scope_root = Path(extra.pop("_scope_root", Path(receipts).parent))
             if not (scope_root / ".git").exists():
@@ -851,7 +852,7 @@ class RecordAttemptTests(unittest.TestCase):
             "--run-id", run_id,
             "--occurred-at", "2026-08-07T09:%02d:00Z" % minute,
             "--authoritative-receipt", "receipts/%s.json" % lane,
-            "--stage", "review_dispatch", "--status", "completed",
+            "--stage", "review_dispatch", "--status", status,
             "--lane", lane, "--chunk-id", "chunk-a", "--node-id", lane,
             "--attempt", "1", "--host", "claude",
             "--duration-seconds", "5.0",
@@ -1441,6 +1442,32 @@ class RecordAttemptTests(unittest.TestCase):
             self.assertEqual(lane["measurement_source"], "attempt_unmeasured")
             self.assertIsNone(lane["cost_usd"])
             self.assertIsNone(lane["usage_count"])
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_failed_attempt_without_usage_is_explicitly_unmeasured(self):
+        """Missing provider evidence is visible and is never estimated."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        receipts = os.path.join(directory, "authoritative-receipts.json")
+        try:
+            code, _, error = _invoke(self._argv(
+                receipts, "failed-openrouter", 1, status="failed",
+                fallback_reason="receipt-unavailable",
+            ))
+            self.assertEqual(code, 0, error)
+            stream = self._stream(receipts)
+            self.assertEqual(len(stream), 2)
+            self.assertEqual(stream[0]["status"], "failed")
+            self.assertEqual(stream[1]["measurement_source"], "attempt_unmeasured")
+            self.assertFalse(stream[1]["usage_estimated"])
+            for field in (
+                "usage_count", "input_usage_count", "output_usage_count", "cost_usd",
+            ):
+                self.assertNotIn(field, stream[1])
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 

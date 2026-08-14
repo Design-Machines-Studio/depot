@@ -364,6 +364,16 @@ one-use receipt-consumption registry from the repository lease root rather than
 accepting a caller-selected ledger.
 Each wrapper receipt is one-use measurement evidence; a retry must record the
 new receipt produced by that provider attempt rather than replay the prior one.
+For Pipeline OpenRouter execution, give `cascade-dispatch.sh` a fresh
+repository-relative `--attempt-receipt` path for every chunk attempt and export
+that attempt's `OPENROUTER_RUN_ID` and `OPENROUTER_LANE_ID`. The adapter writes
+the validated content-free wrapper receipt there before patch validation. A
+provider-completed patch rejection therefore records `status: failed` with the
+exact stable rejection reason and that receipt. If no wrapper receipt was
+produced, still call `record-attempt` without measurement evidence so the pair
+contains `attempt_unmeasured`; never estimate the missing usage. A successful
+attempt uses the same retained receipt once and must not also append standalone
+`openrouter-usage` evidence.
 
 A `lanes: 0` cost summary after a run that executed chunks means this step was
 skipped. The terminal `emit-cost-summary` reports the count on the receipt line
@@ -1034,16 +1044,22 @@ PRIMARY_RAIL_STATUS="ready"
 # proactive probe proves the selected primary cannot run.
 # PRIMARY_RAIL_STATUS="capped-or-unavailable"
 OPENROUTER_EXEC_ALLOWED_PATHS="$CHUNK_FILES_TO_MODIFY_NEWLINE"
-export OPENROUTER_EXEC_ALLOWED_PATHS
+OPENROUTER_ATTEMPT_RECEIPT="plans/<feature-slug>/receipts/openrouter/<chunk-id>-attempt-<n>.json"
+mkdir -p "$(dirname "$OPENROUTER_ATTEMPT_RECEIPT")"
+OPENROUTER_RUN_ID="<run-id>"
+OPENROUTER_LANE_ID="<chunk-id>"
+export OPENROUTER_EXEC_ALLOWED_PATHS OPENROUTER_RUN_ID OPENROUTER_LANE_ID
 run_cascade() {
   local exhausted_rail="${1:-}"
   if [ -n "$exhausted_rail" ]; then
     printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
       --kind "<kind>" --prompt - --phase execute --timeout 3600 \
-      --exhausted-rail "$exhausted_rail"
+      --exhausted-rail "$exhausted_rail" \
+      --attempt-receipt "$OPENROUTER_ATTEMPT_RECEIPT"
   else
     printf '%s' "$CHUNK_PROMPT" | "$CASCADE_DISPATCH" \
-      --kind "<kind>" --prompt - --phase execute --timeout 3600
+      --kind "<kind>" --prompt - --phase execute --timeout 3600 \
+      --attempt-receipt "$OPENROUTER_ATTEMPT_RECEIPT"
   fi
 }
 CASCADE_EXHAUSTED_RAIL=""
@@ -1070,10 +1086,21 @@ Never parse model names yourself -- the script owns class->ladder->role->rail re
 | `CASCADE_RC` | Meaning | Orchestrator action |
 |---|---|---|
 | `64` | NATIVE rung. stdout is `{dispatch:"native",model,role,probe_rail}`. | Parse `model` and `role`. **Re-dispatch IN-PROCESS through the current host's native path**, then apply **Native Model Descent** below. Do NOT run anything from the script. Then proceed to Step 3e exactly as a normal dispatch. |
+| `65` | OpenRouter reached the provider, retained its wrapper receipt when available, and rejected the returned implementation structurally. stderr names the stable reason, such as `headerless-diff`. | Call `record-attempt` exactly once with `status: failed`, the exact rejection reason, and the retained receipt when present. Do not apply or commit the patch. This is a non-cap quality failure: flag the chunk failed without retry or fallback. |
 | `0` | `openrouter_exec`, wrapper, or codex-companion rung executed; stdout is produced text or a receipt. | If stdout includes `implementedBy: openrouter` or a JSON receipt with `"implementedBy": "openrouter"`, treat it as an agentic OpenRouter implementation receipt. Otherwise apply the **one-shot validity rule** below. |
 | `76` | Ladder exhausted -- no configured rung above the quality floor had headroom. | Run **Step 3d.5 -- Rail-exhaustion ask gate** BEFORE any terminal receipt. The current exits are: **wait** -> parked resumable, `wait_category: human_gate` receipt carries the named reset time and resume instruction; **park, `PIPELINE_EXHAUSTION_ASK=0`, a fail-closed policy read, or any context that cannot reach the operator** -> flag the chunk failed and preserve resumable state. Do NOT silently ship partial output. |
 | `77` | Missing/invalid key, unavailable provider/bundle, or automatic disclosure/output boundary decline. | Record the exact reason, then use the Codex fallback without prompting. |
-| other | Bad args / engine error. | Fall back to Codex once. If Codex is unavailable, fail the chunk; do not route coding work to Claude. |
+| other | Bad args / engine error. | Fall back to Codex once. If Codex is unavailable, fail the chunk; do not route coding work to Claude. Never classify RC 65 or its stable rejection reason as an engine error. |
+
+After every cascade settlement, inspect only the caller-owned attempt receipt
+path for that attempt. When it exists, read its request-envelope digest and
+pass the same file to `record-attempt`; do not copy prompt, response, or patch
+content into the chunk receipt or human output. When a failed contacted attempt
+has no receipt, record it without `--openrouter-receipt`, producing
+`attempt_unmeasured`. Record the eventual Codex fallback, when policy permits
+one, as its own later attempt. This keeps one usage row per real attempt and
+prevents a successful fallback from erasing or double-counting the paid failed
+call.
 
 **Native Model Descent (RC 64).** `cascade-dispatch.sh` emits a directive for the FIRST model in the role's list that clears the quality floor and then `exit 64`s -- it does **not** walk the rest of that role's `models[]`. Walking the remainder is the orchestrator's job, and it is host-specific. Without this, every model after position 1 in a `kind: native` role is decorative.
 
@@ -2048,7 +2075,7 @@ Measurement requirements:
 1. **Claude JSONL delta:** Snapshot cumulative Claude tokens at the start of Phase 6 and again here by parsing the current Claude session transcript JSONL. Sum `message.usage.{input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens}` grouped by `model`. Report the DELTA as this run's Claude main-loop spend.
 2. If `ccusage` is on PATH, run `ccusage blocks --json` as a cost/pricing cross-check. Prefer ccusage cost and the Claude JSONL delta for run-scoped token counts.
 3. **Codex:** sum each exec's `tokens used` lines from chunk receipts.
-4. **OpenRouter:** sum each API `usage` object from `openrouter-exec.sh`, `openrouter-agent-runner`, and `openrouter-bulk-analyst` receipts. Calls whose model slug is `deepseek/*` remain in this OpenRouter bucket.
+4. **OpenRouter:** use the `attempt_usage` rows paired by `record-attempt`, including retained receipts for structurally rejected `openrouter-exec.sh` calls. Do not rescan successful stdout or append standalone usage for those attempts. Calls whose model slug is `deepseek/*` remain in this OpenRouter bucket.
 5. Record shell-proxy or rtk savings separately as input-avoidance context. Do not mix them into providerSplit.
 
 Post-mortem content:
@@ -2351,6 +2378,7 @@ nonexistent optional artifact rather than inventing one:
 <What changed, or the exact blocker and what stopped.>
 
 **Verification:** <passed checks and final review result, or exact failed/pending evidence>
+**Attempt result:** <for a failed provider attempt: stable failure reason; usage/cost reported or unmeasured>
 **Branch or PR:** <branch and PR URL when present>
 **Recommended next action:** <one action; for blocked work, the smallest operator action>
 **Resumable work:** <preserved branch/worktree/artifact path; required when blocked>
@@ -2361,6 +2389,10 @@ nonexistent optional artifact rather than inventing one:
 - Postmortem: `plans/<feature-slug>/run-postmortem.md`
 - Detailed review: `.claude/ux-review/report.md`
 ```
+
+Omit `Attempt result` when no provider attempt failed. When present, keep it to
+one short line: what failed and whether usage/cost was reported; the existing
+`Recommended next action` remains the single action.
 
 The visible summary normally stays within roughly 250 words. Exceed that only
 for actionable P1/P2 findings or a real blocker. Do not omit required action.

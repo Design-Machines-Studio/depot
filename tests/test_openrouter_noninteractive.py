@@ -17,6 +17,8 @@ import unittest
 REPO = Path(__file__).resolve().parents[1]
 OPENROUTER = REPO / "plugins/openrouter"
 PIPELINE_EXEC = REPO / "plugins/pipeline/references/openrouter-exec.sh"
+CASCADE = REPO / "plugins/pipeline/references/cascade-dispatch.sh"
+KERNEL = REPO / "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"
 BOUNDARY = OPENROUTER / "skills/openrouter-delegate/references/delegation-boundary.sh"
 POLICY = OPENROUTER / "skills/openrouter-delegate/references/delegation-security-policy.json"
 WRAPPER = OPENROUTER / "skills/openrouter-delegate/references/openrouter-wrapper.sh"
@@ -45,7 +47,8 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
             {"id": "gen-fixture", "model": model, "provider": "fixture/provider",
              "choices": [{"delta": {"content": type(self).response_text}}]},
             {"id": "gen-fixture", "model": model, "provider": "fixture/provider",
-             "usage": {"prompt_tokens": 11, "completion_tokens": 7, "total_tokens": 18},
+             "usage": {"prompt_tokens": 11, "completion_tokens": 7,
+                       "total_tokens": 18, "cost": 0.0042},
              "choices": [{"delta": {}, "finish_reason": "stop"}]},
         ]
         body = "".join(f"data: {json.dumps(event)}\n\n" for event in events) + "data: [DONE]\n\n"
@@ -238,18 +241,25 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         return repo
 
     def run_pipeline(self, repo: Path, diff: str, env: dict[str, str] | None = None,
-                     prompt: str = "Implement the bounded harmless fixture.") -> subprocess.CompletedProcess[str]:
+                     prompt: str = "Implement the bounded harmless fixture.",
+                     attempt_receipt: Path | None = None) -> subprocess.CompletedProcess[str]:
         FixtureHandler.response_text = diff
         run_env = env or self.env()
         run_env["OPENROUTER_EXEC_ALLOWED_PATHS"] = "allowed.txt"
-        return subprocess.run([str(PIPELINE_EXEC), "--model", "z-ai/glm-5.2", "--timeout", "10"],
+        argv = [str(PIPELINE_EXEC), "--model", "z-ai/glm-5.2", "--timeout", "10"]
+        if attempt_receipt is not None:
+            argv += ["--attempt-receipt", str(attempt_receipt.relative_to(repo))]
+        return subprocess.run(argv,
                               cwd=repo, input=prompt, text=True,
                               capture_output=True, env=run_env)
 
     def test_pipeline_accepts_allowed_diff_and_emits_wrapper_evidence(self) -> None:
         repo = self.init_repo()
+        attempt_dir = repo / "attempts"
+        attempt_dir.mkdir()
+        attempt_receipt = attempt_dir / "success.json"
         diff = "diff --git a/allowed.txt b/allowed.txt\n--- a/allowed.txt\n+++ b/allowed.txt\n@@ -1 +1 @@\n-before\n+after"
-        result = self.run_pipeline(repo, diff)
+        result = self.run_pipeline(repo, diff, attempt_receipt=attempt_receipt)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual((repo / "allowed.txt").read_text(), "after\n")
         receipt = json.loads(result.stdout)
@@ -257,9 +267,165 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         self.assertEqual(receipt["actualModel"], "z-ai/glm-5.2")
         self.assertEqual(receipt["usage"]["total_tokens"], 18)
         self.assertRegex(receipt["requestEnvelopeSha256"], r"^[0-9a-f]{64}$")
+        retained = json.loads(attempt_receipt.read_text())
+        self.assertEqual(retained["usage"]["total_tokens"], 18)
+        self.assertEqual(retained["usage"]["cost"], 0.0042)
         serialized = json.dumps(receipt).lower()
         for forbidden in ("broker", "implement the bounded", "api_key", "secret", diff.lower()):
             self.assertNotIn(forbidden, serialized)
+
+    def test_headerless_provider_result_retains_one_measured_failed_attempt(self) -> None:
+        repo = self.init_repo()
+        attempts = repo / "plans/r4/receipts/openrouter"
+        attempts.mkdir(parents=True)
+        attempt_receipt = attempts / "chunk-a-attempt-1.json"
+        probe = repo / "probe.json"
+        probe.write_text(json.dumps({
+            "codex": {"state": "ok", "remaining_pct": 100},
+            "openrouter": {"state": "ok", "balance_usd": 1.0},
+        }))
+        task_tmp = repo / "task-tmp"
+        task_tmp.mkdir()
+        prompt_marker = "PROMPT_MARKER /private/acme/customer/repository"
+        response_marker = "RAW_HEADERLESS_DIFF_MARKER"
+        api_key_marker = "test"  # OPENROUTER_BASE accepts only the fixture key.
+        FixtureHandler.response_text = response_marker + "\n-old\n+new\n"
+        env = self.env()
+        env.update({
+            "OPENROUTER_API_KEY": api_key_marker,
+            "OPENROUTER_EXEC_ALLOWED_PATHS": "allowed.txt",
+            "OPENROUTER_RUN_ID": "r4-headerless",
+            "OPENROUTER_LANE_ID": "chunk-a",
+            "TMPDIR": str(task_tmp),
+        })
+        before_head = subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
+        ).strip()
+        result = subprocess.run([
+            str(CASCADE), "--class", "openrouter", "--prompt", prompt_marker,
+            "--host", "codex", "--timeout", "10", "--probe-file", str(probe),
+            "--attempt-receipt", str(attempt_receipt.relative_to(repo)),
+        ], cwd=repo, text=True, capture_output=True, env=env)
+
+        self.assertEqual(result.returncode, 65, result.stderr)
+        self.assertEqual(FixtureHandler.contacts, 1)
+        self.assertIn("headerless-diff", result.stderr)
+        self.assertNotIn("engine error", result.stderr.lower())
+        self.assertNotIn("ladder exhausted", result.stderr.lower())
+        self.assertEqual((repo / "allowed.txt").read_text(), "before\n")
+        self.assertEqual(subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
+        ).strip(), before_head)
+        self.assertEqual(list(task_tmp.iterdir()), [])
+
+        retained = json.loads(attempt_receipt.read_text())
+        request_digest = retained["authorization"]["requestEnvelopeSha256"]
+        self.assertEqual(retained["requestedModel"], "deepseek/deepseek-v4-flash-0731")
+        self.assertEqual(retained["responseModel"], "deepseek/deepseek-v4-flash-0731")
+        self.assertEqual(retained["servingProvider"], "fixture/provider")
+        self.assertEqual(retained["usage"], {
+            "prompt_tokens": 11, "completion_tokens": 7,
+            "total_tokens": 18, "cost": 0.0042,
+        })
+
+        state_dir = repo / ".workflow-kernel/runs/r4-headerless"
+        init = subprocess.run([
+            str(KERNEL), "init", str(state_dir), "--run-id", "r4-headerless",
+            "--mode", "shadow", "--occurred-at", "2026-08-14T01:00:00Z",
+        ], cwd=repo, text=True, capture_output=True)
+        self.assertEqual(init.returncode, 0, init.stderr)
+        receipts = repo / "plans/r4/authoritative-receipts.json"
+        recorded = subprocess.run([
+            str(KERNEL), "record-attempt", "--receipts", str(receipts),
+            "--run-id", "r4-headerless", "--occurred-at", "2026-08-14T01:00:01Z",
+            "--authoritative-receipt", "receipts/chunks/chunk-a-attempt-1.json",
+            "--stage", "progress", "--status", "failed", "--lane", "chunk-a",
+            "--chunk-id", "chunk-a", "--node-id", "chunk-a", "--attempt", "1",
+            "--host", "codex", "--duration-seconds", "0.25",
+            "--requested-executor", "openrouter", "--attempted-executor", "openrouter",
+            "--implemented-by", "openrouter", "--matrix-snapshot-date", "2026-08-03",
+            "--rung-rationale", "cost", "--fallback-reason", "headerless-diff",
+            "--openrouter-receipt", str(attempt_receipt),
+            "--request-envelope-sha256", request_digest,
+            "--state-dir", str(state_dir),
+        ], cwd=repo, text=True, capture_output=True)
+        self.assertEqual(recorded.returncode, 0, recorded.stderr)
+        stream = json.loads(receipts.read_text())
+        self.assertEqual(len(stream), 2)
+        self.assertEqual(stream[0]["status"], "failed")
+        self.assertEqual(stream[0]["fallback_reason"], "headerless-diff")
+        self.assertEqual(stream[1]["measurement_source"], "openrouter_api_receipt")
+        self.assertEqual(stream[1]["requested_provider"], "openrouter")
+        self.assertEqual(stream[1]["attempted_provider"], "openrouter")
+        self.assertEqual(stream[1]["provider"], "fixture/provider")
+        self.assertEqual(stream[1]["model"], "deepseek/deepseek-v4-flash-0731")
+        self.assertEqual(stream[1]["duration_seconds"], 0.25)
+        self.assertEqual(stream[1]["usage_count"], 18)
+        self.assertEqual(stream[1]["cost_usd"], 0.0042)
+
+        summary_path = repo / "plans/r4/run-cost-summary.json"
+        summarized = subprocess.run([
+            str(KERNEL), "run-cost-summary", "--events", str(receipts),
+            "--output", str(summary_path), "--repository-commit", before_head,
+        ], cwd=repo, text=True, capture_output=True)
+        self.assertEqual(summarized.returncode, 0, summarized.stderr)
+        summary = json.loads(summary_path.read_text())
+        self.assertEqual(len(summary["lanes"]), 1)
+        lane = summary["lanes"][0]
+        self.assertEqual(lane["usage_count"], 18)
+        self.assertEqual(lane["cost_usd"], 0.0042)
+        self.assertEqual(lane["provider"], "fixture/provider")
+        self.assertEqual(lane["model"], "deepseek/deepseek-v4-flash-0731")
+        self.assertEqual(lane["duration_seconds"], 0.25)
+
+        durable_and_human = "\n".join((
+            attempt_receipt.read_text(), receipts.read_text(), summary_path.read_text(),
+            result.stdout, result.stderr, recorded.stdout, recorded.stderr,
+        ))
+        for forbidden in (
+            prompt_marker, response_marker, "Bearer " + api_key_marker,
+            "OPENROUTER_API_KEY=" + api_key_marker,
+            str(repo), str(self.root),
+        ):
+            self.assertNotIn(forbidden, durable_and_human)
+
+    def test_unapplicable_provider_diff_stops_after_one_retained_attempt(self) -> None:
+        repo = self.init_repo()
+        attempts = repo / "attempts"
+        attempts.mkdir()
+        attempt_receipt = attempts / "unapplicable.json"
+        probe = repo / "probe.json"
+        probe.write_text(json.dumps({
+            "codex": {"state": "ok", "remaining_pct": 100},
+            "openrouter": {"state": "ok", "balance_usd": 1.0},
+        }))
+        FixtureHandler.response_text = (
+            "diff --git a/allowed.txt b/allowed.txt\n"
+            "--- a/allowed.txt\n+++ b/allowed.txt\n"
+            "@@ -1 +1 @@\n-not-the-current-line\n+after"
+        )
+        env = self.env()
+        env["OPENROUTER_EXEC_ALLOWED_PATHS"] = "allowed.txt"
+        before_head = subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
+        ).strip()
+
+        result = subprocess.run([
+            str(CASCADE), "--class", "openrouter", "--prompt", "bounded fixture",
+            "--host", "codex", "--timeout", "10", "--probe-file", str(probe),
+            "--attempt-receipt", str(attempt_receipt.relative_to(repo)),
+        ], cwd=repo, text=True, capture_output=True, env=env)
+
+        self.assertEqual(result.returncode, 65, result.stderr)
+        self.assertEqual(FixtureHandler.contacts, 1)
+        self.assertIn("patch-does-not-apply", result.stderr)
+        self.assertNotIn("ladder exhausted", result.stderr.lower())
+        self.assertTrue(attempt_receipt.is_file())
+        self.assertEqual(json.loads(attempt_receipt.read_text())["usage"]["cost"], 0.0042)
+        self.assertEqual((repo / "allowed.txt").read_text(), "before\n")
+        self.assertEqual(subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
+        ).strip(), before_head)
 
     def test_pipeline_rejects_disallowed_path_before_application(self) -> None:
         repo = self.init_repo()

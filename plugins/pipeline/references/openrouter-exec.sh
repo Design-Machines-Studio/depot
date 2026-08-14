@@ -10,6 +10,7 @@ FALLBACK_MODEL="${OPENROUTER_EXEC_FALLBACK_MODEL:-}"
 TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-3600}"
 DEFERRED_VERIFY_CMD="${OPENROUTER_EXEC_VERIFY_CMD:-}"
 COMMIT_MSG="${OPENROUTER_EXEC_COMMIT_MSG:-pipeline: implement openrouter chunk}"
+ATTEMPT_RECEIPT=""
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -19,6 +20,7 @@ while [ $# -gt 0 ]; do
     --timeout) TIMEOUT="$2"; shift 2;;
     --verify-cmd) DEFERRED_VERIFY_CMD="$2"; shift 2;;
     --commit-message) COMMIT_MSG="$2"; shift 2;;
+    --attempt-receipt) ATTEMPT_RECEIPT="$2"; shift 2;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
@@ -50,6 +52,36 @@ fi
   echo "openrouter-exec: OPENROUTER_EXEC_ALLOWED_PATHS is required" >&2
   exit 2
 }
+
+# A caller may retain the wrapper's existing content-free receipt for this one
+# attempt. Validate the destination before provider contact, require a fresh
+# repository-contained file, and never publish the caller's path in output.
+if [ -n "$ATTEMPT_RECEIPT" ]; then
+  case "$ATTEMPT_RECEIPT" in
+    /*|../*|*/../*|*/..|./*|*/./*|*/.|*//*|*$'\n'*|*$'\r'*|*$'\t'*)
+      echo "openrouter-exec: invalid attempt receipt destination" >&2
+      exit 2
+      ;;
+  esac
+  ATTEMPT_RECEIPT_PARENT="$(dirname -- "$ATTEMPT_RECEIPT")"
+  [ -d "$ATTEMPT_RECEIPT_PARENT" ] && [ ! -L "$ATTEMPT_RECEIPT_PARENT" ] || {
+    echo "openrouter-exec: attempt receipt parent is unavailable" >&2
+    exit 2
+  }
+  REPOSITORY_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+    echo "openrouter-exec: attempt receipt requires a git worktree" >&2
+    exit 2
+  }
+  RECEIPT_PARENT_REAL="$(cd "$ATTEMPT_RECEIPT_PARENT" && pwd -P)" || exit 2
+  case "$RECEIPT_PARENT_REAL/" in
+    "$REPOSITORY_ROOT/"|"$REPOSITORY_ROOT/"*) ;;
+    *) echo "openrouter-exec: attempt receipt escaped the git worktree" >&2; exit 2;;
+  esac
+  if [ -e "$ATTEMPT_RECEIPT" ] || [ -L "$ATTEMPT_RECEIPT" ]; then
+    echo "openrouter-exec: attempt receipt destination already exists" >&2
+    exit 2
+  fi
+fi
 if [ -z "${OPENROUTER_API_KEY:-}" ] && [ -z "${OPENROUTER_API_KEY_FILE:-}" ]; then
   echo "openrouter-exec: configured OpenRouter key unavailable; return to Codex" >&2
   exit 77
@@ -110,6 +142,8 @@ PATCH_PATHS_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.paths.XXXXXX")"
 CACHED_PATHS_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.cached.XXXXXX")"
 RECEIPT_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.receipt.XXXXXX")"
 PATCH_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.patch.XXXXXX")"
+BOUNDARY_ERROR_FILE="$(mktemp "$TASK_TMP_ROOT/openrouter-exec.boundary.XXXXXX")"
+ATTEMPT_RECEIPT_TMP=""
 MSG_FILE=""
 MUTATION_ACTIVE=0
 cleanup() {
@@ -121,7 +155,8 @@ cleanup() {
     }
   fi
   rm -f "$PROMPT_FILE" "$SYSTEM_FILE" "$ALLOWED_FILE" "$PATCH_PATHS_FILE" \
-    "$CACHED_PATHS_FILE" "$RECEIPT_FILE" "$PATCH_FILE" "$MSG_FILE"
+    "$CACHED_PATHS_FILE" "$RECEIPT_FILE" "$PATCH_FILE" \
+    "$BOUNDARY_ERROR_FILE" "$ATTEMPT_RECEIPT_TMP" "$MSG_FILE"
   exit "$original_rc"
 }
 trap cleanup EXIT
@@ -155,6 +190,32 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
   < "$PROMPT_FILE" > "$PATCH_FILE"
 rc=$?
 set -e
+
+RECEIPT_VALID=0
+if [ -s "$RECEIPT_FILE" ] && jq -e '
+  .schemaVersion == 2 and
+  (.outcome | type == "string" and length > 0) and
+  (.invocationId | type == "string" and test("^[0-9a-f]{64}$")) and
+  (.requestedModel | type == "string" and length > 0) and
+  (.authorization.requestEnvelopeSha256 | test("^[0-9a-f]{64}$")) and
+  (.usage == null or (.usage | type == "object")) and
+  ([(.. | objects) | keys[] |
+    select(test("^(prompt|response|content|api_?key|secret)$"; "i"))] | length) == 0
+' "$RECEIPT_FILE" >/dev/null 2>&1; then
+  RECEIPT_VALID=1
+fi
+if [ "$RECEIPT_VALID" = "1" ] && [ -n "$ATTEMPT_RECEIPT" ]; then
+  ATTEMPT_RECEIPT_TMP="${ATTEMPT_RECEIPT}.tmp.$$"
+  (
+    umask 077
+    jq -c '.' "$RECEIPT_FILE" > "$ATTEMPT_RECEIPT_TMP"
+  ) || {
+    echo "openrouter-exec: could not preserve attempt receipt" >&2
+    exit 2
+  }
+  mv "$ATTEMPT_RECEIPT_TMP" "$ATTEMPT_RECEIPT"
+  ATTEMPT_RECEIPT_TMP=""
+fi
 case "$rc" in
   0) ;;
   28|1)
@@ -171,6 +232,10 @@ case "$rc" in
     ;;
 esac
 
+if [ "$RECEIPT_VALID" != "1" ]; then
+  echo "openrouter-exec: wrapper receipt invalid" >&2
+  exit 2
+fi
 jq -e '
   .schemaVersion == 2 and .outcome == "success" and
   .requestedModel != null and .responseModel != null and
@@ -179,17 +244,30 @@ jq -e '
   (.usage == null or (.usage | type == "object")) and
   ([(.. | objects) | keys[] |
     select(test("^(prompt|response|content|api_?key|secret)$"; "i"))] | length) == 0
-' "$RECEIPT_FILE" >/dev/null || {
+' "$RECEIPT_FILE" >/dev/null 2>&1 || {
   echo "openrouter-exec: wrapper receipt invalid" >&2
   exit 2
 }
 
-[ -s "$PATCH_FILE" ] || { echo "openrouter-exec: model returned no unified diff" >&2; exit 1; }
+[ -s "$PATCH_FILE" ] || {
+  echo "openrouter-exec: rejected model patch: empty-diff" >&2
+  exit 65
+}
 if "$BOUNDARY" --policy "$POLICY" --changed-files "$ALLOWED_FILE" \
-    --diff-file "$PATCH_FILE" --output-paths "$PATCH_PATHS_FILE"; then
+    --diff-file "$PATCH_FILE" --output-paths "$PATCH_PATHS_FILE" \
+    2> "$BOUNDARY_ERROR_FILE"; then
   :
 else
   rc=$?
+  PATCH_REJECTION_REASON="$(sed -n \
+    's/^delegation-boundary: input-invalid:\([a-z0-9-][a-z0-9-]*\)$/\1/p' \
+    "$BOUNDARY_ERROR_FILE" | tail -n 1)"
+  case "$PATCH_REJECTION_REASON" in
+    headerless-diff|empty-diff|non-unified-diff|diff-file-header|diff-file-prefix|diff-git-header|diff-git-prefix|diff-header-order|diff-header-mismatch|diff-quoted-path|binary-or-symlink-diff|malformed-hunk|hunk-count-mismatch)
+      echo "openrouter-exec: rejected model patch: $PATCH_REJECTION_REASON" >&2
+      exit 65
+      ;;
+  esac
   if [ "$rc" -eq 2 ] || [ "$rc" -eq 3 ]; then
     echo "openrouter-exec: model patch exceeded chunk/security boundary; return to Codex" >&2
     exit 77
@@ -202,7 +280,10 @@ fi
 # `--index` refuses an approved file whose worktree already differs from the
 # index, so a disjoint caller edit in that file cannot hitchhike into the
 # model-authored commit.
-git apply --check --index "$PATCH_FILE"
+if ! git apply --check --index "$PATCH_FILE"; then
+  echo "openrouter-exec: rejected model patch: patch-does-not-apply" >&2
+  exit 65
+fi
 git apply --index "$PATCH_FILE"
 MUTATION_ACTIVE=1
 if git diff --cached --quiet; then
