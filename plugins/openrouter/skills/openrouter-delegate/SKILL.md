@@ -46,13 +46,19 @@ and defers correctness verification to native Codex.
 
 **Kimi K3 may lead security analysis, but never replaces the independent non-implementing-family security reviewer.** Enforce the OpenRouter-owned `references/delegation-security-policy.json` immediately before every delegation. Pipeline carries a validated mirror for self-contained planning, but the installed OpenRouter policy is authoritative at runtime:
 
-- **Threat/content boundary.** Inspect the exact bytes becoming OpenRouter system or user content. Decline high-confidence credentials, private keys, authenticated DSNs, access/session tokens, and explicitly classified private or regulated values. Recognized placeholders such as `<token>`, `REDACTED`, `example`, and environment-variable references are safe.
+- **Threat/content boundary.** Inspect the exact bytes becoming OpenRouter system or user content. Decline high-confidence credentials, private keys, authenticated DSNs, access/session tokens, and explicitly classified private or regulated values. Names, syntactically valid shell/CI source references, and unmistakable `*-secret-not-for-proof` / `*-access-not-for-proof` test sentinels are safe; actual values remain refused.
 - **No identity or path embargo.** Model nationality, vendor jurisdiction, security-looking directories, `.env` references, header names, and environment-variable names are not disclosure evidence. Non-secret auth, federation, deploy, and security code may pass.
 - **Execution mode -- bounded diffs only.** Accept only a non-empty validated unified diff whose normalized paths are all in the caller's exact owned-path list. The model has no command or verification authority. The runner performs only fixed structural Git checks; project build/test commands are deferred to the native Codex reviewer.
 - **Mechanical-review and artifact-review modes.** Mechanical review scans complete per-file diff sections (including removed lines), emits eligible sections, and returns declined path names for local Codex coverage. Artifact review scans exact bytes and remains all-or-nothing.
 - **Artifact-delegation mode.** Call `delegation-boundary.sh --mode artifact-delegation --policy POLICY --content-file FILE [--content-file FILE ...]` for arbitrary local text that will become OpenRouter content. Every explicit file is scanned byte-for-byte; the mode accepts no changed-file, diff, output-path, or execution authority.
 - **Independent sign-off.** High-consequence security work may use OpenRouter after these controls pass, but completion still requires a reviewer family different from the implementer.
 - **Intended lanes.** Security analysis with independent non-implementing-family sign-off, style, duplication, pattern-recognition, large-diff triage, and doc consistency.
+
+A safe payload that is unexpectedly declined should be fixed at this shared
+boundary and retried unchanged after the repair; do not manually narrow or
+rewrite harmless review input. A genuine disclosure decline gets one clear
+refusal and falls back to the native harness without repeated OpenRouter
+attempts.
 
 ## Invocation Protocol
 

@@ -168,6 +168,19 @@ except (KeyError, TypeError, json.JSONDecodeError):
     fail(2, "policy-contract")
 
 
+def high_confidence_literal(value):
+    value = value.strip().strip("'\"`").rstrip(".,;")
+    if len(value) < 16 or any(char.isspace() for char in value):
+        return False
+    classes = sum((
+        bool(re.search(r"[a-z]", value)),
+        bool(re.search(r"[A-Z]", value)),
+        bool(re.search(r"[0-9]", value)),
+        bool(re.search(r"[^A-Za-z0-9]", value)),
+    ))
+    return classes >= 2 or entropy(value) >= 3.5
+
+
 def placeholder(value):
     value = value.strip().strip("'\"`").rstrip(".,;")
     lowered = value.lower()
@@ -181,9 +194,24 @@ def placeholder(value):
         return True
     if re.fullmatch(r"\$\{?[A-Z][A-Z0-9_]*\}?", value):
         return True
+    shell_reference = re.fullmatch(
+        r"\$\{[A-Za-z_][A-Za-z0-9_]*(?:(:-|:\?|-)([^}\r\n]*))?\}",
+        value,
+    )
+    if shell_reference:
+        fallback = shell_reference.group(2) or ""
+        return not high_confidence_literal(fallback)
+    if re.fullmatch(
+        r"\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*\s*\}\}", value
+    ):
+        return True
     if re.fullmatch(r"[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|DSN)", value):
         return True
     if re.fullmatch(r"<[^>\r\n]*(?:token|secret|key|password|value|redacted|example)[^>\r\n]*>", lowered):
+        return True
+    if re.fullmatch(
+        r"[a-z][a-z0-9]*-(?:secret|access)-not-for-proof", lowered
+    ):
         return True
     return lowered.startswith(("example-", "test-", "dummy-", "placeholder-"))
 
@@ -196,15 +224,9 @@ def entropy(value):
 
 def high_confidence(value):
     value = value.strip().strip("'\"`").rstrip(".,;")
-    if placeholder(value) or len(value) < 16 or any(char.isspace() for char in value):
+    if placeholder(value):
         return False
-    classes = sum((
-        bool(re.search(r"[a-z]", value)),
-        bool(re.search(r"[A-Z]", value)),
-        bool(re.search(r"[0-9]", value)),
-        bool(re.search(r"[^A-Za-z0-9]", value)),
-    ))
-    return classes >= 2 or entropy(value) >= 3.5
+    return high_confidence_literal(value)
 
 
 def looks_like_jwt(value):
@@ -278,7 +300,11 @@ def disclosure_reason(text):
           |api[_-]?key|access[_-]?(?:key|token)|session[_-]?(?:token|secret)|
           session[_-]?id|client[_-]?secret|token|password
         )
-        ["']?\s*[:=]\s*["']?([^\s"',;#}]+)
+        ["']?\s*[:=]\s*["']?(
+          \$\{[A-Za-z_][A-Za-z0-9_]*(?:(?::-|:\?|-)[^}\r\n]*)?\}
+          |\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*\s*\}\}
+          |[^\s"',;#}]+
+        )
         """
     )
     for match in assignment.finditer(text):

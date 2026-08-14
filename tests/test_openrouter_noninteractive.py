@@ -24,6 +24,128 @@ BOUNDARY = OPENROUTER / "skills/openrouter-delegate/references/delegation-bounda
 POLICY = OPENROUTER / "skills/openrouter-delegate/references/delegation-security-policy.json"
 WRAPPER = OPENROUTER / "skills/openrouter-delegate/references/openrouter-wrapper.sh"
 
+PR_677_SAFE_SHAPES = """\
+secret_access_key="${UPDATE_R2_SECRET_ACCESS_KEY:-}"
+UPDATE_R2_SECRET_ACCESS_KEY=proof-secret-not-for-proof
+AWS_SECRET_ACCESS_KEY=aws-secret-not-for-proof
+CI_SECRET="${{ secrets.UPDATE_R2_SECRET_ACCESS_KEY }}"
+"""
+
+
+class DisclosureBoundaryTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self) -> None:
+        self.tmp.cleanup()
+
+    def boundary(self, mode: str, *args: str) -> subprocess.CompletedProcess[str]:
+        return subprocess.run(
+            [str(BOUNDARY), "--mode", mode, "--policy", str(POLICY), *args],
+            cwd=REPO, text=True, capture_output=True,
+        )
+
+    def artifact(self, content: str) -> subprocess.CompletedProcess[str]:
+        artifact = self.root / "artifact.txt"
+        artifact.write_text(content)
+        return self.boundary("artifact-delegation", "--content-file", str(artifact))
+
+    def review_diff(self, content: str) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
+        changed = self.root / "changed.txt"
+        source = self.root / "review.diff"
+        output = self.root / "filtered.diff"
+        declined = self.root / "declined.txt"
+        changed.write_text("deploy/release.sh\ndocs/notes.md\n")
+        source.write_text(content)
+        result = self.boundary(
+            "mechanical-review",
+            "--changed-files", str(changed),
+            "--diff-file", str(source),
+            "--output-diff", str(output),
+            "--output-declined-paths", str(declined),
+        )
+        return result, output, declined
+
+    def test_pr_677_safe_shapes_pass_artifact_delegation(self) -> None:
+        """Assembly Baseplate PR #677 at bf56524 must remain usable unchanged."""
+        result = self.artifact(PR_677_SAFE_SHAPES)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_pr_677_safe_shapes_pass_as_complete_review_section(self) -> None:
+        diff = (
+            "diff --git a/deploy/release.sh b/deploy/release.sh\n"
+            "--- a/deploy/release.sh\n+++ b/deploy/release.sh\n"
+            "@@ -1 +1,4 @@\n-old fixture\n"
+            + "".join(f"+{line}\n" for line in PR_677_SAFE_SHAPES.splitlines())
+            + "diff --git a/docs/notes.md b/docs/notes.md\n"
+            "--- a/docs/notes.md\n+++ b/docs/notes.md\n"
+            "@@ -1 +1 @@\n-before\n+after\n"
+        )
+        result, output, declined = self.review_diff(diff)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output.read_text(), diff)
+        self.assertEqual(declined.read_bytes(), b"")
+
+    def test_shell_parameter_and_ci_references_are_not_values(self) -> None:
+        references = """\
+AWS_SECRET_ACCESS_KEY=${SOURCE_SECRET}
+AWS_SECRET_ACCESS_KEY=${SOURCE_SECRET:-}
+AWS_SECRET_ACCESS_KEY=${SOURCE_SECRET-default}
+AWS_SECRET_ACCESS_KEY=${SOURCE_SECRET:?message}
+AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
+"""
+        result = self.artifact(references)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        invalid = self.artifact(
+            "AWS_SECRET_ACCESS_KEY=${SOURCE-SECRET:-abcdefghijklmnop}\n"
+        )
+        self.assertEqual(invalid.returncode, 3)
+
+    def test_only_explicit_not_for_proof_sentinels_are_accepted(self) -> None:
+        accepted = self.artifact(
+            "UPDATE_R2_SECRET_ACCESS_KEY=proof-secret-not-for-proof\n"
+            "AWS_SECRET_ACCESS_KEY=aws-secret-not-for-proof\n"
+        )
+        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        for content in (
+            "AWS_SECRET_ACCESS_KEY=proof-secret-for-production-1234567890\n",
+            "OPENROUTER_API_KEY=sk-or-v1-abcdefghijklmnop-not-for-proof\n",
+        ):
+            with self.subTest(content=content):
+                rejected = self.artifact(content)
+                self.assertEqual(rejected.returncode, 3)
+
+    def test_real_aws_secrets_remain_refused_in_assignment_shapes(self) -> None:
+        secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        cases = (
+            f"AWS_SECRET_ACCESS_KEY={secret}\n",
+            f'AWS_SECRET_ACCESS_KEY="${{SOURCE_SECRET:-{secret}}}"\n',
+            f'"AWS_SECRET_ACCESS_KEY": "{secret}"\n',
+        )
+        for content in cases:
+            with self.subTest(content=content):
+                result = self.artifact(content)
+                self.assertEqual(result.returncode, 3)
+                self.assertIn("high-confidence-credential", result.stderr)
+
+    def test_existing_sensitive_classes_remain_refused(self) -> None:
+        cases = {
+            "private-key": (
+                "-----BEGIN PRIVATE KEY-----\n"
+                "QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo1234567890=\n"
+                "-----END PRIVATE KEY-----\n"
+            ),
+            "access-token": "Authorization: Bearer AbCdEfGhIjKlMnOpQrStUvWxYz012345\n",
+            "authenticated-dsn": "DATABASE_URL=postgres://admin:correct-horse-battery@db.internal/app\n",
+            "classified-private-data": "data_classification: regulated\n",
+        }
+        for reason, content in cases.items():
+            with self.subTest(reason=reason):
+                result = self.artifact(content)
+                self.assertEqual(result.returncode, 3)
+                self.assertIn(reason, result.stderr)
+
 
 class FixtureHandler(http.server.BaseHTTPRequestHandler):
     contacts = 0
