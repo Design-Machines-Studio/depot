@@ -117,6 +117,134 @@ for relative in "${consumers[@]}"; do
   fi
 done
 
+validate_active_cache_consumers() {
+  local dm_review_file="$1" pipeline_file="$2" consumer_failures=0
+
+  grep -Fq 'resolve-plugin-bundle \' "$dm_review_file" &&
+  grep -Fq -- '--plugin "$PLUGIN" --minimum-version "$PLUGIN_MINIMUM_VERSION"' "$dm_review_file" &&
+  grep -Fq -- 'CACHE_ACTIVE_HOST_ARGS=(--active-host "$CACHE_ACTIVE_HOST")' "$dm_review_file" &&
+  grep -Fq 'DM_REVIEW_REQUIRED_ASSETS=(' "$dm_review_file" &&
+  grep -Fq '"agents/workflow/review-consolidator.md"' "$dm_review_file" &&
+  grep -Fq '"agents/workflow/review-memory-recorder.md"' "$dm_review_file" &&
+  grep -Fq 'append_selected_asset() {' "$dm_review_file" &&
+  grep -Fq 'local agent_plugin="$1" agent_asset="$2"' "$dm_review_file" &&
+  grep -Fq 'dm-review) DM_REVIEW_REQUIRED_ASSETS+=("$agent_asset") ;;' "$dm_review_file" &&
+  grep -Fq 'append_selected_asset "$AGENT_PLUGIN" "$AGENT_ASSET"' "$dm_review_file" &&
+  grep -Fq -- 'REQUIRED_ASSET_ARGS+=(--required-asset "$ASSET")' "$dm_review_file" &&
+  grep -Fq 'dm-review) DM_REVIEW_BUNDLE_ROOT="$PLUGIN_BUNDLE_ROOT" ;;' "$dm_review_file" &&
+  grep -Fq 'CONSOLIDATOR_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-consolidator.md"' "$dm_review_file" &&
+  grep -Fq 'RECORDER_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-memory-recorder.md"' "$dm_review_file" &&
+  grep -Fq 'ERROR: required plugin bundle unavailable: $PLUGIN' "$dm_review_file" &&
+  grep -Fq 'OPENROUTER_AVAILABLE=false' "$dm_review_file" &&
+  grep -Fq 'OPENROUTER_UNAVAILABLE_REASON=configured_key_or_bundle_unavailable' "$dm_review_file" &&
+  grep -Fq 'retries the lane on Codex without asking the' "$dm_review_file" || consumer_failures=1
+
+  if grep -Fq 'declare -A' "$dm_review_file" ||
+     grep -Fq 'SELECTED_ASSETS_BY_PLUGIN' "$dm_review_file" ||
+     grep -Fq 'SELECTED_PLUGINS' "$dm_review_file" ||
+     grep -Fq 'PLUGIN_BUNDLE_ROOTS' "$dm_review_file" ||
+     grep -Fq 'SKIP: optional plugin bundle unavailable: $PLUGIN' "$dm_review_file" ||
+     grep -Fq 'SKIP: required plugin bundle unavailable: $PLUGIN' "$dm_review_file" ||
+     grep -Fq 'AGENT_PATH=$(ls -t "$CACHE_ROOT"/<plugin>/*/agents/' "$dm_review_file" ||
+     grep -Fq 'CONSOLIDATOR_PATH=$(ls -t "$CACHE_ROOT"/dm-review/*/agents/workflow/review-consolidator.md' "$dm_review_file" ||
+     grep -Fq 'RECORDER_PATH=$(ls -t "$CACHE_ROOT"/dm-review/*/agents/workflow/review-memory-recorder.md' "$dm_review_file"; then
+    consumer_failures=1
+  fi
+
+  grep -Fq 'resolve-plugin-asset \' "$pipeline_file" &&
+  grep -Fq -- '--plugin dm-review' "$pipeline_file" &&
+  grep -Fq -- '--asset skills/review/references/repo-cleanup-contract.md' "$pipeline_file" &&
+  grep -Fq -- '--minimum-version 1.62.0' "$pipeline_file" &&
+  grep -Fq 'CLEANUP_ACTIVE_HOST_ARGS=(--active-host "$CLEANUP_ACTIVE_HOST")' "$pipeline_file" || consumer_failures=1
+
+  if grep -Fq 'CONTRACT=$(ls -t "$CACHE"/dm-review/*/skills/review/references/repo-cleanup-contract.md' "$pipeline_file" ||
+     grep -Fq 'CONTRACT="plugins/dm-review/skills/review/references/repo-cleanup-contract.md"' "$pipeline_file"; then
+    consumer_failures=1
+  fi
+
+  [ "$consumer_failures" -eq 0 ]
+}
+
+dm_review_consumer="$ROOT/plugins/dm-review/skills/review/SKILL.md"
+pipeline_consumer="$ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
+if ! validate_active_cache_consumers "$dm_review_consumer" "$pipeline_consumer"; then
+  echo "  FAIL  active dm-review/Pipeline consumers lack coherent host-aware resolution"
+  failures=1
+fi
+
+consumer_fixture_root="$(mktemp -d "${TMPDIR:-/tmp}/active-cache-consumers.XXXXXX")"
+trap 'rm -rf "$consumer_fixture_root"' EXIT
+cp "$dm_review_consumer" "$consumer_fixture_root/dm-review.md"
+cp "$pipeline_consumer" "$consumer_fixture_root/pipeline.md"
+awk '
+  /<!-- active-cache-resolution-shell:start -->/ { capture=1; next }
+  /<!-- active-cache-resolution-shell:end -->/ { exit }
+  capture && /^```/ { next }
+  capture { print }
+' "$dm_review_consumer" > "$consumer_fixture_root/dm-review-resolution.sh"
+cat > "$consumer_fixture_root/fake-workflow-kernel" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$*" >> "$RESOLVER_CALL_LOG"
+printf '%s\n' '{"selected_root":"~/.codex/plugins/cache/depot/dm-review/1.62.1"}'
+EOF
+chmod +x "$consumer_fixture_root/fake-workflow-kernel"
+if ! RESOLVER_CALL_LOG="$consumer_fixture_root/resolver-calls.log" \
+  WORKFLOW_KERNEL="$consumer_fixture_root/fake-workflow-kernel" \
+  AGENT_PLUGIN=dm-review \
+  AGENT_ASSET=agents/review/pattern-recognition-specialist.md \
+  bash "$consumer_fixture_root/dm-review-resolution.sh" >/dev/null; then
+  echo "  FAIL  dm-review indexed resolver fixture did not execute"
+  failures=1
+elif ! grep -Fq -- '--required-asset agents/workflow/review-consolidator.md' "$consumer_fixture_root/resolver-calls.log" ||
+     ! grep -Fq -- '--required-asset agents/workflow/review-memory-recorder.md' "$consumer_fixture_root/resolver-calls.log" ||
+     ! grep -Fq -- '--required-asset agents/review/pattern-recognition-specialist.md' "$consumer_fixture_root/resolver-calls.log"; then
+  echo "  FAIL  dm-review resolver ran without its populated coherent required-asset set"
+  failures=1
+fi
+cat > "$consumer_fixture_root/failing-workflow-kernel" <<'EOF'
+#!/usr/bin/env bash
+case " $* " in
+  *" --plugin accessibility-compliance "*) exit 1 ;;
+esac
+printf '%s\n' '{"selected_root":"~/.codex/plugins/cache/depot/dm-review/1.62.1"}'
+EOF
+chmod +x "$consumer_fixture_root/failing-workflow-kernel"
+if WORKFLOW_KERNEL="$consumer_fixture_root/failing-workflow-kernel" \
+  AGENT_PLUGIN=accessibility-compliance \
+  AGENT_ASSET=agents/review/a11y-html-reviewer.md \
+  bash "$consumer_fixture_root/dm-review-resolution.sh" >/dev/null 2>&1; then
+  echo "  FAIL  dm-review continued after a required dependency failed resolution"
+  failures=1
+fi
+printf '%s\n' 'AGENT_PATH=$(ls -t "$CACHE_ROOT"/<plugin>/*/agents/review/<agent-id>.md 2>/dev/null | head -1)' >> "$consumer_fixture_root/dm-review.md"
+if validate_active_cache_consumers "$consumer_fixture_root/dm-review.md" "$pipeline_consumer" >/dev/null 2>&1; then
+  echo "  FAIL  dm-review first-root mutation escaped active-consumer validation"
+  failures=1
+fi
+sed 's/ERROR: required plugin bundle unavailable: \$PLUGIN/SKIP: required plugin bundle unavailable: \$PLUGIN/' \
+  "$dm_review_consumer" > "$consumer_fixture_root/dm-review-required-skip.md"
+if validate_active_cache_consumers "$consumer_fixture_root/dm-review-required-skip.md" "$pipeline_consumer" >/dev/null 2>&1; then
+  echo "  FAIL  dm-review required-dependency skip mutation escaped active-consumer validation"
+  failures=1
+fi
+sed '/"agents\/workflow\/review-consolidator.md"/d' \
+  "$dm_review_consumer" > "$consumer_fixture_root/dm-review-empty-required-assets.md"
+if validate_active_cache_consumers "$consumer_fixture_root/dm-review-empty-required-assets.md" "$pipeline_consumer" >/dev/null 2>&1; then
+  echo "  FAIL  dm-review empty required-asset mutation escaped active-consumer validation"
+  failures=1
+fi
+cp "$dm_review_consumer" "$consumer_fixture_root/dm-review-bash4.md"
+printf '%s\n' 'declare -A PLUGIN_BUNDLE_ROOTS' >> "$consumer_fixture_root/dm-review-bash4.md"
+if validate_active_cache_consumers "$consumer_fixture_root/dm-review-bash4.md" "$pipeline_consumer" >/dev/null 2>&1; then
+  echo "  FAIL  dm-review Bash-4-only mutation escaped active-consumer validation"
+  failures=1
+fi
+printf '%s\n' 'CONTRACT=$(ls -t "$CACHE"/dm-review/*/skills/review/references/repo-cleanup-contract.md 2>/dev/null | head -1)' >> "$consumer_fixture_root/pipeline.md"
+if validate_active_cache_consumers "$dm_review_consumer" "$consumer_fixture_root/pipeline.md" >/dev/null 2>&1; then
+  echo "  FAIL  Pipeline first-root mutation escaped active-consumer validation"
+  failures=1
+fi
+
 if ! "$ROOT/tools/test-openrouter-agent-runner-boundary.sh"; then
   echo "  FAIL  OpenRouter agent runner behavioral one-pass boundary regression"
   failures=1
