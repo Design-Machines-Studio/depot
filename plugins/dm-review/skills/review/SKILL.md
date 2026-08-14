@@ -316,8 +316,9 @@ Use `dm-review/*/agents/review/codex-perspective.md` as the compatibility-named 
 
 Add these agents based on which file extensions appear in the changed files:
 
-**Note on agent paths:** every path in the table below is depot-relative for readability, but the orchestrator MUST resolve selected assets through Workflow Kernel before dispatch -- pipeline runs in worktrees outside the depot where these paths do not exist. After the roster is final, group its cache-relative agent paths by plugin. Add `agents/workflow/review-consolidator.md` to the dm-review group and, in full mode, add `agents/workflow/review-memory-recorder.md`. Resolve each plugin's complete selected group once:
+**Note on agent paths:** every path in the table below is depot-relative for readability, but the orchestrator MUST resolve selected assets through Workflow Kernel before dispatch -- pipeline runs in worktrees outside the depot where these paths do not exist. Build the fixed per-plugin indexed arrays below while selecting the roster: for every selected agent, strip the table's `<plugin>/*/` display prefix, set `AGENT_PLUGIN` and `AGENT_ASSET` from that row, and run the append `case` once. The dm-review array starts with the two workflow assets used later, so the required set is never empty. Resolve each non-empty plugin group once after the roster is final:
 
+<!-- active-cache-resolution-shell:start -->
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh once per review first}"
 CACHE_ACTIVE_HOST=""
@@ -326,44 +327,91 @@ CACHE_ACTIVE_HOST=""
 CACHE_ACTIVE_HOST_ARGS=()
 [ -n "$CACHE_ACTIVE_HOST" ] && CACHE_ACTIVE_HOST_ARGS=(--active-host "$CACHE_ACTIVE_HOST")
 
-declare -A PLUGIN_BUNDLE_ROOTS
-for PLUGIN in "${SELECTED_PLUGINS[@]}"; do
-  case "$PLUGIN" in
-    openrouter)
-      if [ -n "$OPENROUTER_BUNDLE_ROOT" ]; then
-        PLUGIN_BUNDLE_ROOTS["openrouter"]="$OPENROUTER_BUNDLE_ROOT"
-      else
-        echo "SKIP: optional plugin bundle unavailable: openrouter"
-      fi
-      continue
-      ;;
-    dm-review) PLUGIN_MINIMUM_VERSION="1.62.0" ;;
-    accessibility-compliance) PLUGIN_MINIMUM_VERSION="1.2.0" ;;
-    live-wires) PLUGIN_MINIMUM_VERSION="1.8.0" ;;
-    ghostwriter) PLUGIN_MINIMUM_VERSION="3.7.0" ;;
-    council) PLUGIN_MINIMUM_VERSION="1.5.0" ;;
-    *) echo "SKIP: optional plugin has no declared resolution floor: $PLUGIN"; continue ;;
+DM_REVIEW_REQUIRED_ASSETS=(
+  "agents/workflow/review-consolidator.md"
+  "agents/workflow/review-memory-recorder.md"
+)
+ACCESSIBILITY_REQUIRED_ASSETS=()
+LIVE_WIRES_REQUIRED_ASSETS=()
+GHOSTWRITER_REQUIRED_ASSETS=()
+COUNCIL_REQUIRED_ASSETS=()
+
+append_selected_asset() {
+  local agent_plugin="$1" agent_asset="$2"
+  case "$agent_plugin" in
+    dm-review) DM_REVIEW_REQUIRED_ASSETS+=("$agent_asset") ;;
+    accessibility-compliance) ACCESSIBILITY_REQUIRED_ASSETS+=("$agent_asset") ;;
+    live-wires) LIVE_WIRES_REQUIRED_ASSETS+=("$agent_asset") ;;
+    ghostwriter) GHOSTWRITER_REQUIRED_ASSETS+=("$agent_asset") ;;
+    council) COUNCIL_REQUIRED_ASSETS+=("$agent_asset") ;;
+    openrouter) ;; # Its complete runner bundle was bound earlier in Phase 3.
+    *) echo "SKIP: optional plugin has no declared resolution floor: $agent_plugin" ;;
   esac
+}
+# Run this call once for every selected roster row before resolving any bundle.
+append_selected_asset "$AGENT_PLUGIN" "$AGENT_ASSET"
+
+DM_REVIEW_BUNDLE_ROOT=""
+ACCESSIBILITY_BUNDLE_ROOT=""
+LIVE_WIRES_BUNDLE_ROOT=""
+GHOSTWRITER_BUNDLE_ROOT=""
+COUNCIL_BUNDLE_ROOT=""
+for PLUGIN in dm-review accessibility-compliance live-wires ghostwriter council; do
+  case "$PLUGIN" in
+    dm-review)
+      PLUGIN_MINIMUM_VERSION="1.62.0"
+      REQUIRED_ASSETS=("${DM_REVIEW_REQUIRED_ASSETS[@]}")
+      ;;
+    accessibility-compliance)
+      PLUGIN_MINIMUM_VERSION="1.2.0"
+      REQUIRED_ASSETS=("${ACCESSIBILITY_REQUIRED_ASSETS[@]}")
+      ;;
+    live-wires)
+      PLUGIN_MINIMUM_VERSION="1.8.0"
+      REQUIRED_ASSETS=("${LIVE_WIRES_REQUIRED_ASSETS[@]}")
+      ;;
+    ghostwriter)
+      PLUGIN_MINIMUM_VERSION="3.7.0"
+      REQUIRED_ASSETS=("${GHOSTWRITER_REQUIRED_ASSETS[@]}")
+      ;;
+    council)
+      PLUGIN_MINIMUM_VERSION="1.5.0"
+      REQUIRED_ASSETS=("${COUNCIL_REQUIRED_ASSETS[@]}")
+      ;;
+  esac
+  [ "${#REQUIRED_ASSETS[@]}" -gt 0 ] || continue
   REQUIRED_ASSET_ARGS=()
-  while IFS= read -r ASSET; do
-    [ -n "$ASSET" ] && REQUIRED_ASSET_ARGS+=(--required-asset "$ASSET")
-  done <<< "${SELECTED_ASSETS_BY_PLUGIN[$PLUGIN]}"
+  for ASSET in "${REQUIRED_ASSETS[@]}"; do
+    REQUIRED_ASSET_ARGS+=(--required-asset "$ASSET")
+  done
   if ! PLUGIN_BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle \
     --plugin "$PLUGIN" --minimum-version "$PLUGIN_MINIMUM_VERSION" \
     "${CACHE_ACTIVE_HOST_ARGS[@]}" "${REQUIRED_ASSET_ARGS[@]}"); then
-    echo "ERROR: required plugin bundle unavailable: $PLUGIN" >&2
-    exit 1
+    if [ "$PLUGIN" = "dm-review" ]; then
+      echo "ERROR: required plugin bundle unavailable: dm-review" >&2
+      exit 1
+    fi
+    echo "SKIP: optional plugin bundle unavailable: $PLUGIN"
+    continue
   fi
   PLUGIN_BUNDLE_REF=$(printf '%s' "$PLUGIN_BUNDLE_JSON" | jq -r '.selected_root // empty')
   case "$PLUGIN_BUNDLE_REF" in
-    "~/"*) PLUGIN_BUNDLE_ROOTS["$PLUGIN"]="$HOME/${PLUGIN_BUNDLE_REF#\~/}" ;;
+    "~/"*) PLUGIN_BUNDLE_ROOT="$HOME/${PLUGIN_BUNDLE_REF#\~/}" ;;
     *) echo "ERROR: invalid plugin bundle root: $PLUGIN" >&2; exit 1 ;;
   esac
+  case "$PLUGIN" in
+    dm-review) DM_REVIEW_BUNDLE_ROOT="$PLUGIN_BUNDLE_ROOT" ;;
+    accessibility-compliance) ACCESSIBILITY_BUNDLE_ROOT="$PLUGIN_BUNDLE_ROOT" ;;
+    live-wires) LIVE_WIRES_BUNDLE_ROOT="$PLUGIN_BUNDLE_ROOT" ;;
+    ghostwriter) GHOSTWRITER_BUNDLE_ROOT="$PLUGIN_BUNDLE_ROOT" ;;
+    council) COUNCIL_BUNDLE_ROOT="$PLUGIN_BUNDLE_ROOT" ;;
+  esac
 done
-DM_REVIEW_BUNDLE_ROOT="${PLUGIN_BUNDLE_ROOTS[dm-review]:?required dm-review bundle unavailable}"
+[ -n "$DM_REVIEW_BUNDLE_ROOT" ] || { echo "ERROR: required dm-review bundle unavailable" >&2; exit 1; }
 ```
+<!-- active-cache-resolution-shell:end -->
 
-`SELECTED_PLUGINS` and `SELECTED_ASSETS_BY_PLUGIN` are projections of the final roster, not a second selection mechanism. Strip the table's `<plugin>/*/` display prefix so each stored value is an asset path such as `agents/review/<agent-id>.md`. A missing required plugin fails closed; remove lanes belonging to an optional plugin that logged `SKIP` and do not fall back to a repository-relative path. Every path for a resolved plugin is derived from its one `PLUGIN_BUNDLE_ROOTS` entry. The dm-review root therefore binds its selected agents, consolidator, and applicable recorder coherently. Phase 3 shows the separate coherent resolver for the OpenRouter runner.
+The indexed arrays are the final roster's resolution projection, not a second selection mechanism. `AGENT_ASSET` is always a path such as `agents/review/<agent-id>.md`. A missing dm-review bundle fails closed; remove lanes belonging to an optional plugin that logged `SKIP` and do not fall back to a repository-relative path. Every path for a resolved plugin is derived from its one simple root variable. The dm-review root therefore binds its selected agents, consolidator, and recorder coherently. Phase 3 shows the separate coherent resolver for the OpenRouter runner.
 
 | Condition | Agent | Cache-relative path components |
 |-----------|-------|--------------------------------|
@@ -535,7 +583,7 @@ authorization, invocation, fallback, and provenance implementation.
 1. **Read the openrouter-agent-runner definition** from `$OPENROUTER_RUNNER_PATH` in the coherent bundle selected in Phase 3. If the selection receipt was not preserved, rerun the same workflow-kernel `resolve-plugin-bundle` request for the complete asset set; never resolve one asset independently.
 2. **Build the runner prompt** by combining:
    - The full content of the runner definition file (this is the runner's instructions)
-   - `target_agent_path` -- `${PLUGIN_BUNDLE_ROOTS[$TARGET_PLUGIN]}/agents/<category>/<agent-id>.md`; if an optional plugin has no bound root, preserve its Phase 3 skip rather than re-resolving or using a depot-relative path
+   - `target_agent_path` -- select the simple root variable bound for `TARGET_PLUGIN` (`DM_REVIEW_BUNDLE_ROOT`, `ACCESSIBILITY_BUNDLE_ROOT`, `LIVE_WIRES_BUNDLE_ROOT`, `GHOSTWRITER_BUNDLE_ROOT`, `COUNCIL_BUNDLE_ROOT`, or `OPENROUTER_BUNDLE_ROOT`) and append `TARGET_AGENT_ASSET`; if an optional plugin has no bound root, preserve its Phase 3 skip rather than re-resolving or using a depot-relative path
    - `target_agent_name` -- bare ID (e.g., `pattern-recognition-specialist`)
    - `target_model` -- full primary OpenRouter slug from policy or the inline table
    - `fallback_model` -- full fallback OpenRouter slug from policy or the inline table
@@ -562,13 +610,21 @@ authorization, invocation, fallback, and provenance implementation.
 1. **Read the agent definition file** from the plugin root bound after roster selection:
 
    ```bash
-   PLUGIN_BUNDLE_ROOT="${PLUGIN_BUNDLE_ROOTS[<plugin>]:-}"
-   [ -n "$PLUGIN_BUNDLE_ROOT" ] || { echo "ERROR: selected plugin bundle not bound: <plugin>"; exit 1; }
-   AGENT_PATH="$PLUGIN_BUNDLE_ROOT/agents/<category>/<agent-id>.md"
-   [ -f "$AGENT_PATH" ] || { echo "ERROR: bound agent missing: <plugin>/<agent-id>"; exit 1; }
+   case "$AGENT_PLUGIN" in
+     dm-review) PLUGIN_BUNDLE_ROOT="$DM_REVIEW_BUNDLE_ROOT" ;;
+     accessibility-compliance) PLUGIN_BUNDLE_ROOT="$ACCESSIBILITY_BUNDLE_ROOT" ;;
+     live-wires) PLUGIN_BUNDLE_ROOT="$LIVE_WIRES_BUNDLE_ROOT" ;;
+     ghostwriter) PLUGIN_BUNDLE_ROOT="$GHOSTWRITER_BUNDLE_ROOT" ;;
+     council) PLUGIN_BUNDLE_ROOT="$COUNCIL_BUNDLE_ROOT" ;;
+     openrouter) PLUGIN_BUNDLE_ROOT="$OPENROUTER_BUNDLE_ROOT" ;;
+     *) PLUGIN_BUNDLE_ROOT="" ;;
+   esac
+   [ -n "$PLUGIN_BUNDLE_ROOT" ] || { echo "ERROR: selected plugin bundle not bound: $AGENT_PLUGIN"; exit 1; }
+   AGENT_PATH="$PLUGIN_BUNDLE_ROOT/$AGENT_ASSET"
+   [ -f "$AGENT_PATH" ] || { echo "ERROR: bound agent missing: $AGENT_PLUGIN/$AGENT_ASSET"; exit 1; }
    ```
 
-   Substitute `<plugin>`, `<category>`, and `<agent-id>` per the table row. Never re-resolve a file independently or use depot-relative paths -- pipeline runs in worktrees.
+   Set `AGENT_PLUGIN` and `AGENT_ASSET` from the selected roster row. Never re-resolve a file independently or use depot-relative paths -- pipeline runs in worktrees.
 
 2. **Build the agent prompt** by combining:
    - The full content of the agent definition file (this is the agent's system prompt)
