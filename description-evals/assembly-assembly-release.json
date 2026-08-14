@@ -1,0 +1,66 @@
+[
+  {
+    "query": "Cut a beta release of Assembly Baseplate.",
+    "should_trigger": true
+  },
+  {
+    "query": "What is the current state of beta.18?",
+    "should_trigger": true
+  },
+  {
+    "query": "Resume the failed Assembly release.",
+    "should_trigger": true
+  },
+  {
+    "query": "Promote this accepted build from staging to beta.",
+    "should_trigger": true
+  },
+  {
+    "query": "Why did the R2 release stop?",
+    "should_trigger": true
+  },
+  {
+    "query": "Plan a stable Assembly release without changing anything.",
+    "should_trigger": true
+  },
+  {
+    "query": "The assets exist but the manifest never moved.",
+    "should_trigger": true
+  },
+  {
+    "query": "Check whether this release is actually running on staging.",
+    "should_trigger": true
+  },
+  {
+    "query": "Build and test Assembly.",
+    "should_trigger": false
+  },
+  {
+    "query": "Restore this Assembly database backup.",
+    "should_trigger": false
+  },
+  {
+    "query": "Deploy this tarball to a new DigitalOcean host.",
+    "should_trigger": false
+  },
+  {
+    "query": "Publish this static site as a client preview.",
+    "should_trigger": false
+  },
+  {
+    "query": "Fix the broken release workflow.",
+    "should_trigger": false
+  },
+  {
+    "query": "Change Assembly's default update channel.",
+    "should_trigger": false
+  },
+  {
+    "query": "Create a GitHub tag in an unrelated repository.",
+    "should_trigger": false
+  },
+  {
+    "query": "Review this pull request.",
+    "should_trigger": false
+  }
+]

@@ -139,7 +139,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "3.10.1",
+      "version": "3.11.0",
       "author": {
         "name": "Design Machines"
       },
@@ -147,7 +147,7 @@
       "capabilities_summary": {
         "skills": 3,
         "agents": 4,
-        "commands": 1,
+        "commands": 2,
         "tags": [
           "go",
           "templ",

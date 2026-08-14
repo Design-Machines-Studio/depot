@@ -103,7 +103,7 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 
 ## The Plugins
 
-18 plugins | 42 domain-facing skills + 1 internal workflow-kernel skill = 43 total skills | 34 generated Codex command-skill aliases | 38 agent cards | 34 commands
+18 plugins | 42 domain-facing skills + 1 internal workflow-kernel skill = 43 total skills | 35 generated Codex command-skill aliases | 38 agent cards | 35 commands
 
 The generated search index counts every manifest-discovered surface, including
 the internal kernel skill: 43 skills and 38 agents.
