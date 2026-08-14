@@ -152,6 +152,7 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
     requests: list[dict] = []
     authorizations: list[str | None] = []
     response_text = "fixture response"
+    response_mode = "complete"
     block_response = False
     request_seen = threading.Event()
     release_response = threading.Event()
@@ -166,15 +167,29 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
         if type(self).block_response:
             type(self).release_response.wait(timeout=5)
         model = payload.get("model") or payload.get("models", ["z-ai/glm-5.2"])[0]
+        content_event = {
+            "id": "gen-fixture", "model": model, "provider": "fixture/provider",
+            "choices": [{"delta": {"content": type(self).response_text}}],
+        }
+        stop_event = {
+            "id": "gen-fixture", "model": model, "provider": "fixture/provider",
+            "usage": {"prompt_tokens": 11, "completion_tokens": 7,
+                      "total_tokens": 18, "cost": 0.0042},
+            "choices": [{"delta": {}, "finish_reason": "stop"}],
+        }
+        error_event = {
+            "id": "gen-fixture", "model": model, "provider": "fixture/provider",
+            "error": {"code": 502, "message": "Provider disconnected unexpectedly"},
+            "choices": [{"index": 0, "delta": {"content": ""},
+                         "finish_reason": "error"}],
+        }
         events = [
-            {"id": "gen-fixture", "model": model, "provider": "fixture/provider",
-             "choices": [{"delta": {"content": type(self).response_text}}]},
-            {"id": "gen-fixture", "model": model, "provider": "fixture/provider",
-             "usage": {"prompt_tokens": 11, "completion_tokens": 7,
-                       "total_tokens": 18, "cost": 0.0042},
-             "choices": [{"delta": {}, "finish_reason": "stop"}]},
+            content_event,
+            error_event if type(self).response_mode == "stream_error" else stop_event,
         ]
-        body = "".join(f"data: {json.dumps(event)}\n\n" for event in events) + "data: [DONE]\n\n"
+        body = "".join(f"data: {json.dumps(event)}\n\n" for event in events)
+        if type(self).response_mode == "complete":
+            body += "data: [DONE]\n\n"
         self.send_response(200)
         self.send_header("Content-Type", "text/event-stream")
         self.send_header("Content-Length", str(len(body.encode())))
@@ -203,6 +218,7 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
         FixtureHandler.requests = []
         FixtureHandler.authorizations = []
         FixtureHandler.response_text = "fixture response"
+        FixtureHandler.response_mode = "complete"
         FixtureHandler.block_response = False
         FixtureHandler.request_seen.clear()
         FixtureHandler.release_response.clear()
@@ -253,6 +269,18 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         result.receipt_path = receipt  # type: ignore[attr-defined]
         return result
 
+    def transport(self, prompt: str) -> subprocess.CompletedProcess[str]:
+        """Exercise only the generic wrapper's request/SSE transport boundary."""
+        receipt = self.root / "transport-receipt.json"
+        result = subprocess.run(
+            [str(WRAPPER), "z-ai/glm-5.2", "-", "10"],
+            input=prompt, text=True, capture_output=True, env={
+                **self.env(), "OPENROUTER_RECEIPT_FILE": str(receipt),
+            },
+        )
+        result.receipt_path = receipt  # type: ignore[attr-defined]
+        return result
+
     def test_direct_is_one_pass_and_receipt_is_content_free(self) -> None:
         result = self.direct("Review harmless public configuration.")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -265,6 +293,44 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         serialized = json.dumps(receipt).lower()
         for forbidden in ("review harmless", "fixture response", "api_key", "secret"):
             self.assertNotIn(forbidden, serialized)
+
+    def test_wrapper_transmits_complete_generated_payloads_at_historical_sizes(self) -> None:
+        for prompt_bytes in (1024, 107 * 1024, 271 * 1024):
+            with self.subTest(prompt_bytes=prompt_bytes):
+                result = self.transport("x" * prompt_bytes)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(
+                    len(FixtureHandler.requests[-1]["messages"][1]["content"].encode()),
+                    prompt_bytes,
+                )
+                self.assertEqual(result.stdout, "fixture response\n")
+
+    def test_incomplete_stream_discards_partial_output_at_small_and_large_sizes(self) -> None:
+        FixtureHandler.response_mode = "incomplete"
+        FixtureHandler.response_text = "PARTIAL_RESPONSE_MARKER"
+        for prompt_bytes in (1024, 271 * 1024):
+            with self.subTest(prompt_bytes=prompt_bytes):
+                result = self.transport("x" * prompt_bytes)
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stdout, "")
+                receipt = json.loads(result.receipt_path.read_text())  # type: ignore[attr-defined]
+                self.assertEqual(receipt["outcome"], "error")
+                self.assertEqual(receipt["failureKind"], "incomplete_stream")
+                self.assertIsNone(receipt["usage"])
+                serialized = json.dumps(receipt)
+                self.assertNotIn("PARTIAL_RESPONSE_MARKER", serialized)
+
+    def test_official_midstream_error_without_done_is_stream_error(self) -> None:
+        FixtureHandler.response_mode = "stream_error"
+        FixtureHandler.response_text = "PARTIAL_RESPONSE_MARKER"
+        result = self.transport("Review harmless public configuration.")
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(result.stdout, "")
+        receipt = json.loads(result.receipt_path.read_text())  # type: ignore[attr-defined]
+        self.assertEqual(receipt["outcome"], "error")
+        self.assertEqual(receipt["failureKind"], "stream_error")
+        self.assertIsNone(receipt["usage"])
+        self.assertNotIn("PARTIAL_RESPONSE_MARKER", json.dumps(receipt))
 
     def test_transport_keeps_bearer_value_out_of_curl_argv_and_environment(self) -> None:
         wrapper = WRAPPER.read_text()
@@ -691,6 +757,27 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         self.assertEqual(subprocess.check_output(
             ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
         ).strip(), before_head)
+
+    def test_incomplete_stream_falls_back_once_to_native_with_failed_receipt(self) -> None:
+        repo = self.init_repo()
+        attempts = repo / "attempts"
+        FixtureHandler.response_mode = "incomplete"
+        FixtureHandler.response_text = "PARTIAL_RESPONSE_MARKER"
+
+        result = self.run_cascade(repo, "unused", attempts)
+
+        self.assertEqual(result.returncode, 64, result.stderr)
+        self.assertEqual(FixtureHandler.contacts, 1)
+        fallback = json.loads(result.stdout)
+        self.assertEqual(fallback["dispatch"], "native")
+        self.assertEqual(fallback["probe_rail"], "codex")
+        receipts = sorted(attempts.iterdir())
+        self.assertEqual(receipts, [attempts / "provider-1.json"])
+        retained = json.loads(receipts[0].read_text())
+        self.assertEqual(retained["outcome"], "error")
+        self.assertEqual(retained["failureKind"], "incomplete_stream")
+        self.assertIsNone(retained["usage"])
+        self.assertNotIn("PARTIAL_RESPONSE_MARKER", json.dumps(retained))
 
     def test_pipeline_rejects_disallowed_path_before_application(self) -> None:
         repo = self.init_repo()

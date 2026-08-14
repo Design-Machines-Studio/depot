@@ -596,6 +596,22 @@ awk '
   }
 ' "$stream_file" > "$events_file"
 
+# OpenRouter terminates a stream immediately after an in-band error event, so
+# that official error shape does not owe a later [DONE] marker. Classify a
+# well-formed error event before applying the generic completion-marker check;
+# buffered partial content remains private on either failure path.
+if [ -s "$events_file" ] && jq -s -e '
+  any(.[];
+    (.error? != null)
+    or (.choices[0].error? != null)
+    or (.choices[0].finish_reason? == "error")
+  )
+' "$events_file" >/dev/null 2>&1; then
+  write_failure_receipt error "stream_error" "" "$http" || true
+  echo "### RUNNER FAILURE: OpenRouter stream reported an error" >&2
+  exit 1
+fi
+
 if ! grep -Eq '^data:[[:space:]]*\[DONE\][[:space:]]*$' "$stream_file"; then
   write_failure_receipt error "incomplete_stream" "" "$http" || true
   echo "### RUNNER FAILURE: OpenRouter stream ended without [DONE]" >&2

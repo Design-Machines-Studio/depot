@@ -435,7 +435,7 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.14.3",
+      "version": "1.14.4",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
