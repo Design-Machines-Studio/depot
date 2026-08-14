@@ -386,8 +386,9 @@ class Handler(http.server.BaseHTTPRequestHandler):
                 self.wfile.flush()
                 if index == 0 and stall_stream.exists():
                     time.sleep(3)
-            self.wfile.write(b"data: [DONE]\n\n")
-            self.wfile.flush()
+            if not stream_error.exists():
+                self.wfile.write(b"data: [DONE]\n\n")
+                self.wfile.flush()
         except (BrokenPipeError, ConnectionResetError):
             pass
 
