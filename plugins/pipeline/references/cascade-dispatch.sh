@@ -11,6 +11,7 @@
 #   cascade-dispatch.sh --class <codex|openrouter> --prompt <text|-> \
 #       [--kind <ui|logic|integration|config>] [--phase <p>] [--host H] \
 #       [--timeout N] [--dry-run] [--probe-file <json>] \
+#       [--attempt-receipt-template <path-with-{attempt}>] \
 #       [--exhausted-rail <codex|openrouter>]
 #   (--kind is an alternative to --class; mapped via cascade.class_from_kind)
 #
@@ -34,6 +35,8 @@ CASCADE="${CASCADE_FILE:-$DIR/model-cascade.json}"
 PROFILE="${PROFILE_FILE:-$DIR/harness-profile.json}"
 PROBE="${PROBE_CMD:-$DIR/usage-probe.sh}"
 CLASS=""; KIND=""; PROMPT=""; PHASE="execute"; HOST=""; TIMEOUT="3600"; DRYRUN=0; PROBE_FILE=""
+ATTEMPT_RECEIPT_TEMPLATE=""
+OPENROUTER_ATTEMPT_INDEX=0
 EXHAUSTED_RAILS="${CASCADE_EXHAUSTED_RAILS:-}"
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -45,6 +48,7 @@ while [ $# -gt 0 ]; do
     --timeout) TIMEOUT="$2"; shift 2;;
     --dry-run) DRYRUN=1; shift;;
     --probe-file) PROBE_FILE="$2"; shift 2;;
+    --attempt-receipt-template) ATTEMPT_RECEIPT_TEMPLATE="$2"; shift 2;;
     --exhausted-rail) EXHAUSTED_RAILS="${EXHAUSTED_RAILS}${EXHAUSTED_RAILS:+,}$2"; shift 2;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
@@ -52,6 +56,12 @@ done
 command -v jq >/dev/null 2>&1 || { echo "cascade-dispatch: jq required" >&2; exit 2; }
 [ -z "$CLASS" ] && [ -n "$KIND" ] && CLASS="$(jq -r --arg k "$KIND" '.class_from_kind[$k] // empty' "$CASCADE")"
 [ -z "$CLASS" ] || [ -z "$PROMPT" ] && { echo "usage: $0 --class <codex|openrouter>|--kind <k> --prompt <p|-> [opts]" >&2; exit 2; }
+if [ -n "$ATTEMPT_RECEIPT_TEMPLATE" ]; then
+  case "$ATTEMPT_RECEIPT_TEMPLATE" in
+    *'{attempt}'*) ;;
+    *) echo "cascade-dispatch: attempt receipt template requires {attempt}" >&2; exit 2;;
+  esac
+fi
 [ "$PROMPT" = "-" ] && PROMPT="$(cat)"
 
 # --- host detection ----------------------------------------------------------
@@ -183,9 +193,16 @@ resolve_openrouter_exec() {
   [ -x "$DIR/openrouter-exec.sh" ] && printf '%s' "$DIR/openrouter-exec.sh"
 }
 dispatch_openrouter_exec() {
-  local runner; runner="$(resolve_openrouter_exec)"
+  local runner attempt_receipt=""
+  runner="$(resolve_openrouter_exec)"
   [ -z "$runner" ] && return 1
-  printf '%s' "$PROMPT" | "$runner" --model "$1" --timeout "$TIMEOUT"
+  if [ -n "$ATTEMPT_RECEIPT_TEMPLATE" ]; then
+    attempt_receipt="${ATTEMPT_RECEIPT_TEMPLATE//\{attempt\}/$2}"
+    printf '%s' "$PROMPT" | "$runner" --model "$1" --timeout "$TIMEOUT" \
+      --attempt-receipt "$attempt_receipt"
+  else
+    printf '%s' "$PROMPT" | "$runner" --model "$1" --timeout "$TIMEOUT"
+  fi
 }
 
 # Gate OpenRouter availability once before any external rung. Payload screening
@@ -357,7 +374,8 @@ for role in $LADDER; do
         [ $rc -eq 2 ] && exit 2
         continue;;                                     # wrapper error -> next model
       openrouter_exec)
-        out="$(dispatch_openrouter_exec "$model")"; rc=$?
+        OPENROUTER_ATTEMPT_INDEX=$((OPENROUTER_ATTEMPT_INDEX + 1))
+        out="$(dispatch_openrouter_exec "$model" "$OPENROUTER_ATTEMPT_INDEX")"; rc=$?
         [ $rc -eq 0 ] && { printf '%s\n' "$out"; exit 0; }
         if [ $rc -eq 77 ]; then
           OPENROUTER_GATE_STATE="denied"
