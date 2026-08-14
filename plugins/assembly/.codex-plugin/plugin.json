@@ -1,6 +1,6 @@
 {
   "name": "assembly",
-  "version": "3.10.1",
+  "version": "3.11.0",
   "description": "Assembly governance application development with Go, Templ, and Datastar",
   "author": {
     "name": "Design Machines"
@@ -148,6 +148,12 @@
         "name": "Assembly Build",
         "description": "Build and test via legacy Docker modes or tiered repository verification",
         "argumentHint": "[generate, build, test, full, focused, level, candidate, or post-merge]"
+      },
+      {
+        "id": "assembly-release",
+        "name": "Assembly Release",
+        "description": "Inspect, plan, publish, resume, or promote Assembly Baseplate releases",
+        "argumentHint": "[status|plan|publish|resume|promote] [tag] [channel]"
       }
     ]
   },
