@@ -387,12 +387,8 @@ for PLUGIN in dm-review accessibility-compliance live-wires ghostwriter council;
   if ! PLUGIN_BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle \
     --plugin "$PLUGIN" --minimum-version "$PLUGIN_MINIMUM_VERSION" \
     "${CACHE_ACTIVE_HOST_ARGS[@]}" "${REQUIRED_ASSET_ARGS[@]}"); then
-    if [ "$PLUGIN" = "dm-review" ]; then
-      echo "ERROR: required plugin bundle unavailable: dm-review" >&2
-      exit 1
-    fi
-    echo "SKIP: optional plugin bundle unavailable: $PLUGIN"
-    continue
+    echo "ERROR: required plugin bundle unavailable: $PLUGIN" >&2
+    exit 1
   fi
   PLUGIN_BUNDLE_REF=$(printf '%s' "$PLUGIN_BUNDLE_JSON" | jq -r '.selected_root // empty')
   case "$PLUGIN_BUNDLE_REF" in
@@ -411,7 +407,7 @@ done
 ```
 <!-- active-cache-resolution-shell:end -->
 
-The indexed arrays are the final roster's resolution projection, not a second selection mechanism. `AGENT_ASSET` is always a path such as `agents/review/<agent-id>.md`. A missing dm-review bundle fails closed; remove lanes belonging to an optional plugin that logged `SKIP` and do not fall back to a repository-relative path. Every path for a resolved plugin is derived from its one simple root variable. The dm-review root therefore binds its selected agents, consolidator, and recorder coherently. Phase 3 shows the separate coherent resolver for the OpenRouter runner.
+The indexed arrays are the final roster's resolution projection, not a second selection mechanism. `AGENT_ASSET` is always a path such as `agents/review/<agent-id>.md`. The five bundles in this loop are required dm-review dependencies, so failure to resolve any non-empty selected group fails closed; never remove one of their selected lanes or fall back to a repository-relative path. Every path for a resolved plugin is derived from its one simple root variable. The dm-review root therefore binds its selected agents, consolidator, and recorder coherently. OpenRouter remains outside this loop: Phase 3 preserves its separate optional availability check and Codex retry behavior.
 
 | Condition | Agent | Cache-relative path components |
 |-----------|-------|--------------------------------|

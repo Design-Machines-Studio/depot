@@ -134,12 +134,17 @@ validate_active_cache_consumers() {
   grep -Fq 'dm-review) DM_REVIEW_BUNDLE_ROOT="$PLUGIN_BUNDLE_ROOT" ;;' "$dm_review_file" &&
   grep -Fq 'CONSOLIDATOR_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-consolidator.md"' "$dm_review_file" &&
   grep -Fq 'RECORDER_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-memory-recorder.md"' "$dm_review_file" &&
-  grep -Fq 'SKIP: optional plugin bundle unavailable: $PLUGIN' "$dm_review_file" || consumer_failures=1
+  grep -Fq 'ERROR: required plugin bundle unavailable: $PLUGIN' "$dm_review_file" &&
+  grep -Fq 'OPENROUTER_AVAILABLE=false' "$dm_review_file" &&
+  grep -Fq 'OPENROUTER_UNAVAILABLE_REASON=configured_key_or_bundle_unavailable' "$dm_review_file" &&
+  grep -Fq 'retries the lane on Codex without asking the' "$dm_review_file" || consumer_failures=1
 
   if grep -Fq 'declare -A' "$dm_review_file" ||
      grep -Fq 'SELECTED_ASSETS_BY_PLUGIN' "$dm_review_file" ||
      grep -Fq 'SELECTED_PLUGINS' "$dm_review_file" ||
      grep -Fq 'PLUGIN_BUNDLE_ROOTS' "$dm_review_file" ||
+     grep -Fq 'SKIP: optional plugin bundle unavailable: $PLUGIN' "$dm_review_file" ||
+     grep -Fq 'SKIP: required plugin bundle unavailable: $PLUGIN' "$dm_review_file" ||
      grep -Fq 'AGENT_PATH=$(ls -t "$CACHE_ROOT"/<plugin>/*/agents/' "$dm_review_file" ||
      grep -Fq 'CONSOLIDATOR_PATH=$(ls -t "$CACHE_ROOT"/dm-review/*/agents/workflow/review-consolidator.md' "$dm_review_file" ||
      grep -Fq 'RECORDER_PATH=$(ls -t "$CACHE_ROOT"/dm-review/*/agents/workflow/review-memory-recorder.md' "$dm_review_file"; then
@@ -196,15 +201,30 @@ elif ! grep -Fq -- '--required-asset agents/workflow/review-consolidator.md' "$c
   echo "  FAIL  dm-review resolver ran without its populated coherent required-asset set"
   failures=1
 fi
+cat > "$consumer_fixture_root/failing-workflow-kernel" <<'EOF'
+#!/usr/bin/env bash
+case " $* " in
+  *" --plugin accessibility-compliance "*) exit 1 ;;
+esac
+printf '%s\n' '{"selected_root":"~/.codex/plugins/cache/depot/dm-review/1.62.1"}'
+EOF
+chmod +x "$consumer_fixture_root/failing-workflow-kernel"
+if WORKFLOW_KERNEL="$consumer_fixture_root/failing-workflow-kernel" \
+  AGENT_PLUGIN=accessibility-compliance \
+  AGENT_ASSET=agents/review/a11y-html-reviewer.md \
+  bash "$consumer_fixture_root/dm-review-resolution.sh" >/dev/null 2>&1; then
+  echo "  FAIL  dm-review continued after a required dependency failed resolution"
+  failures=1
+fi
 printf '%s\n' 'AGENT_PATH=$(ls -t "$CACHE_ROOT"/<plugin>/*/agents/review/<agent-id>.md 2>/dev/null | head -1)' >> "$consumer_fixture_root/dm-review.md"
 if validate_active_cache_consumers "$consumer_fixture_root/dm-review.md" "$pipeline_consumer" >/dev/null 2>&1; then
   echo "  FAIL  dm-review first-root mutation escaped active-consumer validation"
   failures=1
 fi
-sed 's/SKIP: optional plugin bundle unavailable: \$PLUGIN/ERROR: optional plugin bundle unavailable: \$PLUGIN/' \
-  "$dm_review_consumer" > "$consumer_fixture_root/dm-review-optional-abort.md"
-if validate_active_cache_consumers "$consumer_fixture_root/dm-review-optional-abort.md" "$pipeline_consumer" >/dev/null 2>&1; then
-  echo "  FAIL  dm-review optional-skip mutation escaped active-consumer validation"
+sed 's/ERROR: required plugin bundle unavailable: \$PLUGIN/SKIP: required plugin bundle unavailable: \$PLUGIN/' \
+  "$dm_review_consumer" > "$consumer_fixture_root/dm-review-required-skip.md"
+if validate_active_cache_consumers "$consumer_fixture_root/dm-review-required-skip.md" "$pipeline_consumer" >/dev/null 2>&1; then
+  echo "  FAIL  dm-review required-dependency skip mutation escaped active-consumer validation"
   failures=1
 fi
 sed '/"agents\/workflow\/review-consolidator.md"/d' \
