@@ -112,7 +112,7 @@ the internal kernel skill: 43 skills and 38 agents.
 |---|---|
 | **ned** | Personal knowledge graph, NED operations, preview publication, and session recorder |
 | **craft-developer** | Craft CMS 4/5 development patterns and query cookbook |
-| **project-manager** | LT10 methodology, Notion-integrated sprint planning |
+| **project-manager** | LT10 methodology, Notion-integrated sprint planning, and GitHub-native Assembly coordination |
 | **council** | Worker cooperative governance (BC Co-op Act) and decolonial content strategy |
 | **design-machines** | DM business strategy, catalog, partnerships, revenue model, design system |
 | **assembly** | Go/Templ/Datastar governance app development |

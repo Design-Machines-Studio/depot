@@ -17,7 +17,7 @@
         "id": "lt10",
         "name": "LT10 Methodology",
         "description": "Project management methodology based on Louder Than Ten principles for client services and creative agencies",
-        "triggers": ["how to estimate", "scope creep", "burn rate", "ROM estimate", "when to use agile", "how to price a project", "project buffer", "RACI matrix", "write a SOW"],
+        "triggers": ["how to estimate", "client scope creep", "burn rate", "ROM estimate", "when to use agile", "how to price a project", "project buffer", "RACI matrix", "write a SOW"],
         "tags": ["project-management", "estimation", "scoping", "pricing", "methodology"]
       },
       {
@@ -32,7 +32,7 @@
         "id": "assembly-coordinator",
         "name": "Assembly Planning Coordinator",
         "description": "GitHub-native cross-repository Assembly planning pulse and scope guard",
-        "triggers": ["fresh Assembly planning session", "Assembly Coordination Project", "next Assembly development chunk", "completed Assembly PR follow-up", "Fixture dependency planning", "bounded Pipeline prompt", "Assembly scope creep", "Jeremy planning context"],
+        "triggers": ["fresh Assembly planning session", "Assembly Coordination Project", "next Assembly development chunk", "completed Assembly PR follow-up", "Fixture dependency planning", "bounded Pipeline prompt", "Assembly tooling scope creep", "Jeremy planning context"],
         "tags": ["assembly", "coordination", "github", "cross-repository", "scope-guard", "fixture-planning"]
       }
     ],

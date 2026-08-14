@@ -40,11 +40,19 @@
     "should_trigger": true
   },
   {
+    "query": "Quick gut check: is this Baseplate tooling proposal technical scope creep?",
+    "should_trigger": true
+  },
+  {
     "query": "Organize my personal Notion sprint capacity, todos, calendar, and meetings for the coming two weeks.",
     "should_trigger": false
   },
   {
     "query": "Estimate a website redesign for this client using LT10.",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I handle commercial scope creep when a website client adds unpaid deliverables after contract approval?",
     "should_trigger": false
   },
   {

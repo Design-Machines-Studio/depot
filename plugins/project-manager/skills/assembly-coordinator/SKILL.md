@@ -1,6 +1,6 @@
 ---
 name: assembly-coordinator
-description: Assembly development planning context for fresh Assembly sessions, cross-repository Assembly coordination, Assembly Coordination Project triage, choosing the next development chunk, checking completed Assembly PRs before follow-up work, Baseplate-to-Jig Fixture verifier blockers, bounded Pipeline or dm-review prompt preparation, scope-creep and strategic-alignment checks, and Travis or Jeremy establishing the same current context.
+description: Assembly development planning context for fresh Assembly sessions, cross-repository Assembly coordination, Assembly Coordination Project triage, choosing the next development chunk, checking completed Assembly PRs before follow-up work, Baseplate-to-Jig Fixture verifier blockers, bounded Pipeline or dm-review prompt preparation, quick technical Assembly tooling or product scope-creep and strategic-alignment checks, and Travis or Jeremy establishing the same current context.
 ---
 
 # Assembly Planning Coordinator
@@ -15,7 +15,19 @@ Recover the live Assembly development picture and choose the next safe chunk. Ac
 - Do not use Notion, personal sprint state, or ai-memory for this workflow.
 - Do not copy Baseplate roadmaps or work-path documents. Link to the owning source and retain only the evidence needed for the current decision.
 
-## Establish the evidence base
+## Route the request proportionally
+
+Use the lightweight path when the user supplies a concrete Assembly tooling or product proposal and asks only whether it is scope creep or strategically aligned. Do not use it when the answer depends on current Issues, PRs, Project fields, dependencies, ownership, completed work, or next-chunk selection.
+
+For a lightweight check:
+
+1. Read only the proposal, the current repository instructions, and `design-machines:strategy`.
+2. Test the proposal against current ownership, an evidenced consumer, YAGNI, pragmatic DRY, and the real two-developer, 4–50-user context.
+3. Return exactly `Verdict`, `Reason`, and one `Action`.
+
+Stop there. Do not fetch GitHub, inspect worktrees, survey coordination documents, or run the full planning pass. Escalate to the full path only when live coordination evidence is necessary, and state why.
+
+## Establish the full evidence base
 
 1. Resolve the current repository from `git remote get-url origin`. Confirm the owner/repository instead of inferring it from the directory name.
 2. Fetch current remote refs with `git fetch origin --prune`, record the exact `origin/main` commit, and inspect the current branch, status, registered worktrees, and relevant remote branches without modifying, stashing, rebasing, cleaning, or checking out user work.
@@ -60,6 +72,8 @@ Use only these fields:
 - Workstream: `Tooling`, `Fixtures`, `Baseplate`, `Release`, or `Design`.
 
 Update Project fields only during an explicitly requested coordination session. Detect stale Project fields or repository coordination snapshots, show the live contradiction, and repair them only when the user authorized planning coordination changes. Native Issue/PR mutations still require explicit authority.
+
+When an authorized repair changes tracked planning or coordination files, make it in a clean branch or worktree, verify the diff, commit it, and push the commit before reporting completion so later sessions can recover the durable state. Record the exact branch and commit. Open or update a PR only when requested or required by repository instructions. If commit or push fails, report the exact failure and treat the repair as incomplete; do not leave it only as an uncommitted local edit.
 
 ## Choose the next chunk
 
