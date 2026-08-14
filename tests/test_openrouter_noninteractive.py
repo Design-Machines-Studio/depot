@@ -246,13 +246,18 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
                      attempt_receipt: Path | None = None) -> subprocess.CompletedProcess[str]:
         FixtureHandler.response_text = diff
         run_env = env or self.env()
-        run_env["OPENROUTER_EXEC_ALLOWED_PATHS"] = "allowed.txt"
+        run_env.setdefault("OPENROUTER_EXEC_ALLOWED_PATHS", "allowed.txt")
         argv = [str(PIPELINE_EXEC), "--model", "z-ai/glm-5.2", "--timeout", "10"]
         if attempt_receipt is not None:
             argv += ["--attempt-receipt", str(attempt_receipt.relative_to(repo))]
         return subprocess.run(argv,
                               cwd=repo, input=prompt, text=True,
                               capture_output=True, env=run_env)
+
+    def last_user_prompt(self) -> str:
+        messages = FixtureHandler.requests[-1]["messages"]
+        return next(message["content"] for message in messages
+                    if message["role"] == "user")
 
     def run_cascade(self, repo: Path, response: str, attempts: Path,
                     prompt: str = "bounded fixture",
@@ -275,24 +280,122 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
 
     def test_pipeline_accepts_allowed_diff_and_emits_wrapper_evidence(self) -> None:
         repo = self.init_repo()
+        (repo / "blocked.txt").write_text("UNRELATED_REPOSITORY_MARKER\n")
+        subprocess.run(["git", "-C", str(repo), "add", "blocked.txt"], check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "--amend", "--no-edit", "-q"], check=True)
         attempt_dir = repo / "attempts"
         attempt_dir.mkdir()
         attempt_receipt = attempt_dir / "success.json"
+        task = "ORIGINAL_TASK_MARKER: change the sole allowed line."
         diff = "diff --git a/allowed.txt b/allowed.txt\n--- a/allowed.txt\n+++ b/allowed.txt\n@@ -1 +1 @@\n-before\n+after"
-        result = self.run_pipeline(repo, diff, attempt_receipt=attempt_receipt)
+        result = self.run_pipeline(repo, diff, prompt=task,
+                                   attempt_receipt=attempt_receipt)
         self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(FixtureHandler.contacts, 1)
         self.assertEqual((repo / "allowed.txt").read_text(), "after\n")
+        outbound = self.last_user_prompt()
+        self.assertIn(task, outbound)
+        self.assertIn("EXACT ALLOWED PATHS:\nallowed.txt\n", outbound)
+        self.assertIn("FILE: allowed.txt\nSTATE: PRESENT_AT_HEAD", outbound)
+        self.assertIn("--- BEGIN EXACT COMMITTED CONTENT ---\nbefore\n", outbound)
+        self.assertNotIn("blocked.txt", outbound)
+        self.assertNotIn("UNRELATED_REPOSITORY_MARKER", outbound)
+        self.assertIn("You have no filesystem, shell, command, tool, or repository access", outbound)
+        for structural_line in ("diff --git", "---", "+++", "@@"):
+            self.assertIn(structural_line, outbound)
         receipt = json.loads(result.stdout)
         self.assertEqual(receipt["implementedBy"], "openrouter")
         self.assertEqual(receipt["actualModel"], "z-ai/glm-5.2")
         self.assertEqual(receipt["usage"]["total_tokens"], 18)
+        self.assertGreaterEqual(receipt["durationSeconds"], 0)
         self.assertRegex(receipt["requestEnvelopeSha256"], r"^[0-9a-f]{64}$")
+        commit_message = subprocess.check_output(
+            ["git", "-C", str(repo), "log", "-1", "--format=%B"], text=True,
+        )
+        self.assertIn("ImplementedBy: openrouter", commit_message)
         retained = json.loads(attempt_receipt.read_text())
         self.assertEqual(retained["usage"]["total_tokens"], 18)
         self.assertEqual(retained["usage"]["cost"], 0.0042)
         serialized = json.dumps(receipt).lower()
         for forbidden in ("broker", "implement the bounded", "api_key", "secret", diff.lower()):
             self.assertNotIn(forbidden, serialized)
+
+    def test_allowed_new_file_is_marked_absent_without_unrelated_context(self) -> None:
+        repo = self.init_repo()
+        (repo / "blocked.txt").write_text("NEW_FILE_UNRELATED_MARKER\n")
+        subprocess.run(["git", "-C", str(repo), "add", "blocked.txt"], check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "--amend", "--no-edit", "-q"], check=True)
+        env = self.env()
+        env["OPENROUTER_EXEC_ALLOWED_PATHS"] = "new.txt"
+        diff = (
+            "diff --git a/new.txt b/new.txt\nnew file mode 100644\n"
+            "--- /dev/null\n+++ b/new.txt\n@@ -0,0 +1 @@\n+created"
+        )
+
+        result = self.run_pipeline(repo, diff, env)
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual((repo / "new.txt").read_text(), "created\n")
+        outbound = self.last_user_prompt()
+        self.assertIn("FILE: new.txt\nSTATE: ABSENT_AT_HEAD (allowed new file)", outbound)
+        self.assertNotIn("allowed.txt\nSTATE: PRESENT_AT_HEAD", outbound)
+        self.assertNotIn("NEW_FILE_UNRELATED_MARKER", outbound)
+
+    def test_unsafe_repository_context_is_rejected_before_provider_contact(self) -> None:
+        cases = []
+
+        def tracked_symlink(repo: Path, env: dict[str, str]) -> None:
+            (repo / "allowed.txt").unlink()
+            (repo / "allowed.txt").symlink_to("blocked.txt")
+            subprocess.run(["git", "-C", str(repo), "add", "-A"], check=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "-qm", "symlink"], check=True)
+
+        def binary_blob(repo: Path, env: dict[str, str]) -> None:
+            (repo / "allowed.txt").write_bytes(b"before\0after\n")
+            subprocess.run(["git", "-C", str(repo), "add", "allowed.txt"], check=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "-qm", "binary"], check=True)
+
+        def escaping_path(repo: Path, env: dict[str, str]) -> None:
+            env["OPENROUTER_EXEC_ALLOWED_PATHS"] = "../outside.txt"
+
+        def unreadable_blob(repo: Path, env: dict[str, str]) -> None:
+            blob = subprocess.check_output(
+                ["git", "-C", str(repo), "rev-parse", "HEAD:allowed.txt"], text=True,
+            ).strip()
+            object_path = repo / ".git/objects" / blob[:2] / blob[2:]
+            object_path.unlink()
+
+        def unsupported_tree(repo: Path, env: dict[str, str]) -> None:
+            directory = repo / "allowed-dir"
+            directory.mkdir()
+            (directory / "child.txt").write_text("child\n")
+            subprocess.run(["git", "-C", str(repo), "add", "allowed-dir"], check=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "-qm", "tree"], check=True)
+            env["OPENROUTER_EXEC_ALLOWED_PATHS"] = "allowed-dir"
+
+        def over_limit(repo: Path, env: dict[str, str]) -> None:
+            (repo / "allowed.txt").write_text("x" * 262144)
+            subprocess.run(["git", "-C", str(repo), "add", "allowed.txt"], check=True)
+            subprocess.run(["git", "-C", str(repo), "commit", "-qm", "large"], check=True)
+
+        cases.extend([
+            ("symlink", tracked_symlink),
+            ("binary", binary_blob),
+            ("escaping", escaping_path),
+            ("unreadable", unreadable_blob),
+            ("unsupported", unsupported_tree),
+            ("over-limit", over_limit),
+        ])
+        for index, (label, prepare) in enumerate(cases):
+            with self.subTest(label=label):
+                repo = self.init_repo(f"unsafe-{index}")
+                env = self.env()
+                prepare(repo, env)
+                contacts = FixtureHandler.contacts
+                result = self.run_pipeline(repo, "unused", env)
+                self.assertEqual(result.returncode, 77, result.stderr)
+                self.assertEqual(FixtureHandler.contacts, contacts)
+                self.assertIn("repository context rejected", result.stderr)
 
     def test_headerless_provider_result_retains_one_measured_failed_attempt(self) -> None:
         repo = self.init_repo()
@@ -499,8 +602,9 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         diff = ("diff --git a/allowed.txt b/allowed.txt\n--- a/allowed.txt\n"
                 "+++ b/allowed.txt\n@@ -1,2 +1,2 @@\n-one\n+model\n two")
         result = self.run_pipeline(repo, diff)
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(FixtureHandler.contacts, contacts + 1)
+        self.assertEqual(result.returncode, 77)
+        self.assertEqual(FixtureHandler.contacts, contacts)
+        self.assertIn("allowed-path-dirty", result.stderr)
         self.assertEqual((repo / "allowed.txt").read_text(), "one\ntwo\nlocal unrelated\n")
         self.assertEqual(subprocess.check_output(
             ["git", "-C", str(repo), "rev-list", "--count", "HEAD"], text=True,

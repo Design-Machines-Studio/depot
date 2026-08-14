@@ -40,6 +40,15 @@ Pipeline keeps its existing workload boundary:
 
 - only the already-routed non-sensitive config/docs/mechanical workload;
 - `OPENROUTER_EXEC_ALLOWED_PATHS` is mandatory;
+- before contact, every allowed path must be a clean normalized repository-relative
+  path naming either a regular UTF-8 text blob at `HEAD` or an absent new file;
+- the outbound task includes the exact allowlist and exact committed `HEAD`
+  contents for those files only, with absent files marked explicitly and file
+  contents delimited as untrusted data;
+- symlinked, escaping, dirty, binary, unreadable, unsupported, or duplicate
+  allowed paths return to Codex before contact;
+- the complete user prompt is capped at 256 KiB; larger bounded contexts return
+  to Codex before contact rather than truncating committed file contents;
 - the model must return a non-empty unified diff;
 - every output path must be in the complete owned-path allowlist;
 - disclosure/output validation occurs before patch application;

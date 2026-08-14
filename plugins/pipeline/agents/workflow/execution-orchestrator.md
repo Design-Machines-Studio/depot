@@ -1017,7 +1017,11 @@ You may consult `usage-probe.sh` (resolved from the same pipeline cache dir) to 
 For an OpenRouter primary, the cascade invokes the bounded configured-key
 `openrouter-exec.sh` adapter. It remains limited to the existing non-sensitive
 workload and `OPENROUTER_EXEC_ALLOWED_PATHS`; missing/invalid credentials,
-automatic disclosure decline, or provider unavailability descends to Codex.
+unsafe or dirty allowed-path context, automatic disclosure decline, an
+over-limit prompt, or provider unavailability descends to Codex. The adapter
+builds the worker prompt from the original task, exact allowlist, and clean
+committed `HEAD` contents of allowed text files only; the orchestrator does not
+construct or transmit a broader repository snapshot.
 Legacy `executor: claude` values normalize to Codex.
 On success, proceed to Step 3e. On cap or provider unavailability, consult the
 cascade. On a non-cap quality failure, flag the chunk failed; do not change
