@@ -69,13 +69,13 @@
     {
       "name": "project-manager",
       "source": "./plugins/project-manager",
-      "version": "1.8.2",
+      "version": "1.9.0",
       "author": {
         "name": "Design Machines"
       },
-      "description": "Project management methodology based on Louder Than Ten principles",
+      "description": "LT10 project management, Notion sprint planning, and GitHub-native Assembly coordination",
       "capabilities_summary": {
-        "skills": 2,
+        "skills": 3,
         "agents": 0,
         "commands": 1,
         "tags": [
@@ -84,7 +84,9 @@
           "sprint-planning",
           "notion",
           "userback",
-          "velocity"
+          "velocity",
+          "assembly",
+          "github-coordination"
         ]
       }
     },
