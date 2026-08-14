@@ -2,7 +2,7 @@
   "schemaVersion": 1,
   "runId": "host-aware-cache-resolution-canary",
   "chunkId": "01-host-aware-cache-resolution",
-  "observedAt": "2026-08-14T09:32:14+08:00",
+  "observedAt": "2026-08-14T10:05:11+08:00",
   "policySource": "plugins/pipeline/references/routing-policy.json",
   "policySnapshot": {
     "activeSubscriptionProfile": "codex-20x",
@@ -25,8 +25,10 @@
   },
   "manifestExecutor": "openrouter",
   "policySelection": "codex",
-  "canaryDisposition": "not_attempted",
-  "reasonCode": "target_pressure_selected_codex",
+  "userCorrection": "direct configured-key OpenRouter execution authorized after the initial policy-only stop",
+  "canaryDisposition": "failed_output_validation",
+  "reasonCode": "headerless_diff",
+  "providerContacted": true,
   "requestedModel": "deepseek/deepseek-v4-flash-0731",
   "servedModel": null,
   "live_catalog": "unavailable, not required for normal execution",
@@ -34,14 +36,32 @@
   "inputTokens": null,
   "outputTokens": null,
   "billedCostUsd": null,
-  "workerElapsedSeconds": null,
-  "totalElapsedSeconds": 102,
+  "workerElapsedSeconds": 137,
+  "totalMeasuredExecutionSeconds": 239,
+  "wrapperReceipt": "unavailable because openrouter-exec removes its temporary wrapper receipt after output-boundary rejection",
+  "runnerEvidence": [
+    "delegation-boundary: input-invalid:headerless-diff",
+    "openrouter-exec: model patch exceeded chunk/security boundary; return to Codex"
+  ],
+  "preflightEvents": [
+    {
+      "result": "declined",
+      "reason": "high-confidence-credential in broad repository test-fixture context",
+      "providerContacted": false
+    },
+    {
+      "result": "accepted",
+      "reason": "exact narrowed resolver and consumer context",
+      "providerContacted": false
+    }
+  ],
   "fallbackUsed": false,
   "retries": 0,
   "workerHunks": {
     "accepted": 0,
-    "rejected": 0,
-    "rewritten": 0
+    "rejected": 1,
+    "rewritten": 0,
+    "countingUnit": "whole output; no parseable diff hunks"
   },
   "recommendation": "reject"
 }
