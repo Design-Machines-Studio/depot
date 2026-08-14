@@ -1,0 +1,47 @@
+{
+  "schemaVersion": 1,
+  "runId": "host-aware-cache-resolution-canary",
+  "chunkId": "01-host-aware-cache-resolution",
+  "observedAt": "2026-08-14T09:32:14+08:00",
+  "policySource": "plugins/pipeline/references/routing-policy.json",
+  "policySnapshot": {
+    "activeSubscriptionProfile": "codex-20x",
+    "strategy": "deficit-round-robin",
+    "targets": {
+      "codex": 65,
+      "claude": 0,
+      "openrouter": 35
+    },
+    "eligibleDispatchCountsBefore": {
+      "codex": 0,
+      "claude": 0,
+      "openrouter": 0
+    },
+    "cumulativeTargetDeficits": {
+      "codex": 0.65,
+      "claude": 0.0,
+      "openrouter": 0.35
+    }
+  },
+  "manifestExecutor": "openrouter",
+  "policySelection": "codex",
+  "canaryDisposition": "not_attempted",
+  "reasonCode": "target_pressure_selected_codex",
+  "requestedModel": "deepseek/deepseek-v4-flash-0731",
+  "servedModel": null,
+  "live_catalog": "unavailable, not required for normal execution",
+  "matrixSnapshotDate": "2026-08-12",
+  "inputTokens": null,
+  "outputTokens": null,
+  "billedCostUsd": null,
+  "workerElapsedSeconds": null,
+  "totalElapsedSeconds": 102,
+  "fallbackUsed": false,
+  "retries": 0,
+  "workerHunks": {
+    "accepted": 0,
+    "rejected": 0,
+    "rewritten": 0
+  },
+  "recommendation": "reject"
+}
