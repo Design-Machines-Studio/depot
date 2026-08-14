@@ -1,0 +1,82 @@
+[
+  {
+    "query": "Start a fresh Assembly planning session and tell me what comes next.",
+    "should_trigger": true
+  },
+  {
+    "query": "Refresh the Assembly Coordination Project from the current repos.",
+    "should_trigger": true
+  },
+  {
+    "query": "PR 55 merged; inspect it and prepare the next Depot prompt.",
+    "should_trigger": true
+  },
+  {
+    "query": "What is blocking Fixture Jig from consuming the Baseplate verifier?",
+    "should_trigger": true
+  },
+  {
+    "query": "Give Jeremy the same cross-repository Assembly planning context.",
+    "should_trigger": true
+  },
+  {
+    "query": "Check whether this proposed Pipeline chunk is scope creep.",
+    "should_trigger": true
+  },
+  {
+    "query": "Coordinate the next safe chunk across Depot, Baseplate, and the Fixtures.",
+    "should_trigger": true
+  },
+  {
+    "query": "Check the completed Assembly PR before preparing follow-up work.",
+    "should_trigger": true
+  },
+  {
+    "query": "Prepare a bounded dm-review prompt for the next Assembly dependency.",
+    "should_trigger": true
+  },
+  {
+    "query": "Does this Assembly tooling proposal still align with current strategy?",
+    "should_trigger": true
+  },
+  {
+    "query": "Quick gut check: is this Baseplate tooling proposal technical scope creep?",
+    "should_trigger": true
+  },
+  {
+    "query": "Organize my personal Notion sprint capacity, todos, calendar, and meetings for the coming two weeks.",
+    "should_trigger": false
+  },
+  {
+    "query": "Estimate a website redesign for this client using LT10.",
+    "should_trigger": false
+  },
+  {
+    "query": "How do I handle commercial scope creep when a website client adds unpaid deliverables after contract approval?",
+    "should_trigger": false
+  },
+  {
+    "query": "Review pull request 55 for code defects and security bugs.",
+    "should_trigger": false
+  },
+  {
+    "query": "Implement a Go handler for the member directory.",
+    "should_trigger": false
+  },
+  {
+    "query": "Run /pipeline and implement the approved feature now.",
+    "should_trigger": false
+  },
+  {
+    "query": "Publish Assembly version 1.2 and create its release tag.",
+    "should_trigger": false
+  },
+  {
+    "query": "Write a Design Machines pitch for a cooperative federation.",
+    "should_trigger": false
+  },
+  {
+    "query": "Triage bugs and feature requests in an unrelated open-source GitHub library.",
+    "should_trigger": false
+  }
+]

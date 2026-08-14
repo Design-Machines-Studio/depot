@@ -103,16 +103,16 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 
 ## The Plugins
 
-18 plugins | 41 domain-facing skills + 1 internal workflow-kernel skill = 42 total skills | 34 generated Codex command-skill aliases | 38 agent cards | 34 commands
+18 plugins | 42 domain-facing skills + 1 internal workflow-kernel skill = 43 total skills | 34 generated Codex command-skill aliases | 38 agent cards | 34 commands
 
 The generated search index counts every manifest-discovered surface, including
-the internal kernel skill: 42 skills and 38 agents.
+the internal kernel skill: 43 skills and 38 agents.
 
 | Plugin | Purpose |
 |---|---|
 | **ned** | Personal knowledge graph, NED operations, preview publication, and session recorder |
 | **craft-developer** | Craft CMS 4/5 development patterns and query cookbook |
-| **project-manager** | LT10 methodology, Notion-integrated sprint planning |
+| **project-manager** | LT10 methodology, Notion-integrated sprint planning, and GitHub-native Assembly coordination |
 | **council** | Worker cooperative governance (BC Co-op Act) and decolonial content strategy |
 | **design-machines** | DM business strategy, catalog, partnerships, revenue model, design system |
 | **assembly** | Go/Templ/Datastar governance app development |

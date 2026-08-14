@@ -1,11 +1,15 @@
 ---
 name: lt10
-description: Project management methodology based on Louder Than Ten (LT10) principles for client services, creative agencies, and construction projects. Use when the user needs guidance on estimation (ROM, 90th percentile, red flags), scoping (product vs project scope, scope creep management), pricing (burn rate, rate calculations), scheduling (buffers, Gantt, timeboxing), risk management (red flags, mitigation), stakeholder alignment (communication plans, RACI), change control, methodology selection (Waterfall, Agile, Scrum, Kanban, Hybrid/Agifall), team dynamics, and professional development. Trigger this skill for ANY project management question -- how to estimate, how to price a project, how to handle scope creep, when to use agile vs waterfall, how to run meetings, how to deal with a difficult stakeholder, how to write a SOW, or how to protect scope. Also trigger when Travis is scoping Assembly pilot engagements, pricing co-op work, planning sprints, estimating house construction phases, or asks about any project management concept even casually. Applies to digital projects, house construction, and any complex multi-stakeholder initiative.
+description: Louder Than Ten (LT10) methodology for client services, creative agencies, construction, and commercial pilot engagements. Use for client or commercial estimates (ROM, 90th percentile, red flags), client scope-creep and deliverable changes, pricing (burn rates, fixed-fee, time and materials), timelines and buffers, risk, stakeholder changes, communication, RACI, change control, SOWs, contracts, methodology selection (Waterfall, Agile, Scrum, Kanban, Hybrid/Agifall), team dynamics, and multi-stakeholder delivery.
 ---
 
 # Louder Than Ten Project Management Methodology
 
 Human-centered PM approach emphasizing realistic estimation, stakeholder alignment, and adaptive methodology selection.
+
+## Trigger boundary
+
+Use LT10 for commercial or client scope: estimates, pricing, contracts, deliverables, engagement changes, and Assembly pilot work. Use `project-manager:assembly-coordinator` for repository-native Assembly tooling or product coordination, technical scope-creep checks, GitHub Project triage, PR dependencies, and next development chunks.
 
 ## Quick Reference Cheat Sheet
 

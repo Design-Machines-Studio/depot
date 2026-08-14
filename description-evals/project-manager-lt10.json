@@ -40,6 +40,10 @@
     "should_trigger": true
   },
   {
+    "query": "Our Assembly pilot client added unpaid workshops; how should I handle that commercial scope creep?",
+    "should_trigger": true
+  },
+  {
     "query": "What should I work on today?",
     "should_trigger": false
   },
@@ -77,6 +81,10 @@
   },
   {
     "query": "What's a good recipe for chicken adobo?",
+    "should_trigger": false
+  },
+  {
+    "query": "Is this proposed Assembly Pipeline chunk technical scope creep relative to current Baseplate tooling ownership and repository plans?",
     "should_trigger": false
   }
 ]
