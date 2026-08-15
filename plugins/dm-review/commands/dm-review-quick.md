@@ -37,9 +37,12 @@ Do not infer extra security triggers from generic handlers, shell scripts,
 dependency manifests, or configuration files. Quick review is early feedback;
 the one final full pre-merge review remains the complete security boundary.
 
-## Finding Policy
+## Zero-Deferral Finding Policy
 
-Quick mode uses the same severities as full mode: P1 blocks merge, P2 must be fixed before merge, and P3 remains a fully detailed advisory that does not enter the fix queue or prevent `CLEAN`.
+Quick mode follows the full policy: every retained P1, P2, and P3 finding
+enters the fix queue and must be resolved before `CLEAN`. Reject invalid or
+scope-expanding reviewer suggestions during consolidation; do not retain them
+as optional P3 debt.
 
 ## Process
 

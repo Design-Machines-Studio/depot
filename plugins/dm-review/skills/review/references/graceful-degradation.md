@@ -93,8 +93,10 @@ if any P1:
   BLOCKS MERGE
 elif any P2:
   APPROVE WITH FIXES
+elif any P3:
+  APPROVE WITH FIXES
 else:
-  CLEAN   (including P3-only, with complete advisory evidence retained)
+  CLEAN
 ```
 
 Then overlay failure status:

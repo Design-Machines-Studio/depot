@@ -48,7 +48,7 @@ Each agent runs in its own context. They don't share a budget.
 
 1. visual-browser-tester (LOW -- has its own fallback chain, requires dev server)
 2. voice-editor (LOW -- style, not correctness)
-3. test-coverage-reviewer (LOW -- advisory only)
+3. test-coverage-reviewer (LOW -- supplementary changed-path coverage)
 4. openrouter-bulk-analyst (MEDIUM -- supplementary full-diff analysis, requires the OpenRouter provider plugin)
 5. craft-reviewer (MEDIUM -- domain-specific)
 6. governance-domain (MEDIUM -- domain-specific)

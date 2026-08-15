@@ -146,7 +146,8 @@ Free-form reason codes are invalid. Every merge or discard names the retained
 canonical finding (when one exists), cites the evidence, and explains the
 decision. `not-reproducible` requires the Phase 5 verify-before-close evidence
 at HEAD. `out-of-scope` records a rejected reviewer input; it never defers an
-in-scope P1/P2 finding or changes the recommendation. P3 remains advisory.
+in-scope P1/P2/P3 finding or changes the recommendation. Every retained
+severity is mandatory work.
 
 Exact duplicates merge without count inflation. Findings at the same location
 with distinct root causes remain separate. Same-line and adjacent-line rules
@@ -179,7 +180,12 @@ both sources, without losing either raw artifact reference.
 
 Apply the severity mapping rules from `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`. This covers all agent-specific term mappings (voice editor, CSS reviewer, governance domain, design review phases, etc.).
 
-Before retaining any P1/P2, verify that it names the affected current user or operator, reachable actor/input/path, realistic harm or regression, and smallest adequate repair; security findings must also name the actual trust boundary. Downgrade unsupported preferences to P3 or discard them when they have no current impact.
+Before retaining any finding, verify that it names an observable current defect,
+its location or reachable path, and the smallest adequate repair. P1/P2 must
+also name the affected current user or operator and realistic harm or
+regression; security P1/P2 must name the actual trust boundary. Discard
+unsupported preferences and speculative scope rather than retaining optional
+P3 debt.
 
 ### Step 4: Determine Merge Recommendation
 
@@ -212,7 +218,9 @@ complete.
 
 ## Rules
 
-1. Every finding from every agent must appear in the report -- don't drop anything
+1. Every source finding from every agent must appear in the sealed raw inventory
+   and synthesis decision trail. Only retained findings appear as actionable
+   work; discarded inputs keep their closed reason and provenance.
 2. Deduplication merges findings without count inflation; its decision trail
    preserves every source position and raw reference
 3. The merge recommendation is mechanical -- follow the logic exactly
@@ -221,8 +229,8 @@ complete.
 6. Include agents that found nothing in the summary table with "Clean" status
 7. Include skipped agents in the summary table with "Skipped" status and reason; include dead/capped agents with "Died" or "Partial" status and never relaunch them
 8. Count deduplicated findings, not raw findings (don't double-count)
-9. **P3 findings get full detail blocks** -- same format as P1/P2 (file, issue, fix, reference), with source identity, raw reference, evidence, synthesis disposition, counts, and provenance. Never abbreviate P3 to one-liners or send it to the fix queue.
-10. **Reject scope-expanding repairs** -- a P1/P2 repair must be the smallest adequate change for the evidenced defect and approved behavior. Discard unrelated hardening and new product scope from the fix queue. A reviewer may retain a larger alternative as P3 advice, but it does not enter convergence or escalate merely because it is described as more architectural or "proper."
+9. **P3 findings get full detail blocks** -- same format as P1/P2 (file, issue, fix, reference), with source identity, raw reference, evidence, synthesis disposition, counts, and provenance. Every retained P3 enters the fix queue.
+10. **Reject scope-expanding repairs** -- every P1/P2/P3 repair must be the smallest adequate change for the evidenced defect and approved behavior. Discard unrelated hardening, new product scope, and larger preference-only alternatives instead of retaining optional debt.
 11. **Dual-perspective findings are additive** -- Codex-native and OpenRouter review lanes are peers. Dedup overlapping findings; never discard a unique finding merely because the other coding provider did not mention it. Optional Claude voice/editorial findings remain additive but are non-coding.
 12. **Contradictions are reportable evidence** -- never flatten disagreement
     into one unattributed conclusion; preserve source severities, selected
@@ -230,8 +238,8 @@ complete.
 13. **Provenance is literal** -- if a requested provider falls back, retain the
     requested, attempted, and implemented-by values. Never silently relabel a
     Codex fallback as OpenRouter work.
-14. **The handoff is bounded** -- list every P1/P2 once when there are at most
-    eight; otherwise show the highest-impact eight, the exact remaining count,
-    and the complete-report pointer. Show P3 only as a count plus evidence
-    pointer there. Never expand provider tables, transcripts, synthesis ledgers,
+14. **The handoff is bounded** -- list every retained P1/P2/P3 once when there
+    are at most eight; otherwise show the highest-impact eight, the exact
+    remaining count, and the complete-report pointer. Never expand provider
+    tables, transcripts, synthesis ledgers,
     cleanup tables, or raw reports in the visible handoff.

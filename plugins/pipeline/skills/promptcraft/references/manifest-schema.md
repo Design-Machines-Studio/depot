@@ -155,7 +155,7 @@ uncertain.
 from the approved plan. `branchMode` controls only how Pipeline selects the
 feature branch; it never authorizes a merge or a force-push. `finalReviewMode`
 controls only the terminal dm-review roster; it never weakens sensitive-path
-per-chunk review, required verification, browser evidence, or P1/P2 resolution.
+per-chunk review, required verification, browser evidence, or P1/P2/P3 resolution.
 
 ## Performance Contract
 
@@ -207,7 +207,7 @@ Decision leverage never selects a provider or model, changes an executor,
 creates a routing override, relaxes a security rule, changes `workflowClass`,
 reduces browser/persona coverage, skips review, changes cleanup, or changes run
 economics. It does not authorize open debate or a full review for every chunk.
-All existing sensitive-path, browser recovery, selected final review, required P1/P2 resolution,
+All existing sensitive-path, browser recovery, selected final review, required P1/P2/P3 resolution,
 run-size, and exact-owned Docker cleanup rules remain authoritative.
 
 Bootstrap limitation: a run whose already-approved/current manifest predates

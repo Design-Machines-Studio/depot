@@ -8,9 +8,14 @@ argument-hint: "[optional: --full, --max-iterations N, PR number, branch, or pat
 
 Automates the cycle of reviewing code, fixing required findings, and re-reviewing affected lanes until clean.
 
-## Finding Policy
+## Zero-Deferral Finding Policy
 
-P1 blocks merge and P2 must be fixed before merge. P3 remains fully retained advisory evidence but never enters the fix queue, triggers another iteration, or blocks convergence; the compact handoff shows its exact count and evidence pointer. The loop is clean when no P1/P2 findings remain and all required verification and coverage gates are complete.
+Every retained P1, P2, and P3 finding enters the fix queue and must be resolved.
+Severity controls priority, not whether work is owed. The loop is clean only
+when no findings remain and every required verification and coverage gate is
+complete. Invalid, duplicate, disproved, and scope-expanding reviewer
+suggestions must be rejected during consolidation; retaining one and calling it
+advisory is forbidden.
 
 The default convergence path is one repair batch followed by one affected-lane recheck. Repeat broad review only when the original required review was incomplete or the repair changed a real sensitive boundary.
 
@@ -49,7 +54,7 @@ mode = "quick" (or "full" if --full flag present)
 target = remaining arguments after flag parsing
 prior_findings_signature = null  # for stalled-convergence detection
 prior_review_head = null  # HEAD commit the prior iteration reviewed
-prior_finding_owner_lanes = empty set  # owners of P1/P2 findings just repaired
+prior_finding_owner_lanes = empty set  # owners of P1/P2/P3 findings just repaired
 rerun_lanes = null  # null = full fan-out; a set = narrowed lane selection
 selective_rerun = false
 review_is_full_fanout = false
@@ -97,17 +102,17 @@ while iteration < max_iterations:
       selective_rerun = false
       rerun_reasons = every lane in selected_full_set -> ["initial_full_fanout"]
     else:
-      # (a) every lane that owned a P1/P2 finding repaired in the prior fix
+      # (a) every lane that owned a P1/P2/P3 finding repaired in the prior fix
       #     step, plus every lane owning a finding that remains pending. Capture
       #     repaired owners before dm-review-fix removes their todo files.
-      For every repaired or pending P1/P2 finding, require source_agents is a non-empty list and
+      For every repaired or pending P1/P2/P3 finding, require source_agents is a non-empty list and
         every named owner resolves to exactly one member of selected_full_set.
         An unknown owner, alias, or criterion-level ID shared by multiple
         logical lanes is a selection error. In particular, bare
         security-auditor is ambiguous because security-auditor-codex-signoff
         and security-auditor-openrouter are separate logical lanes.
       lanes_a = prior_finding_owner_lanes union the validated exact source_agents
-                lane IDs from remaining pending P1/P2 findings
+                lane IDs from remaining pending P1/P2/P3 findings
       # (b) every lane whose file-trigger set matches a file the fixes touched.
       #     dm-review-fix does not commit, so a committed-range diff alone
       #     would silently miss every uncommitted fix. Consult both.
@@ -234,8 +239,8 @@ while iteration < max_iterations:
     BEFORE invoking observe-review. The persisted receipt field
     `selection_fallback_reason` is the loop-local fallback_reason value.
 
-  # Check for required findings. P3 advisories exist only in the report/receipts.
-  required_finding_files = todos/*-pending-p1-*.md plus todos/*-pending-p2-*.md
+  # Check for required findings. Every retained severity participates.
+  required_finding_files = todos/*-pending-p1-*.md plus todos/*-pending-p2-*.md plus todos/*-pending-p3-*.md
   Count findings in required_finding_files
 
   current_signature = sorted list of required_finding_files
@@ -244,7 +249,7 @@ while iteration < max_iterations:
     if required_verification_complete == false:
       Report the nested review's REVIEW INCOMPLETE or exact coverage failure
       STOP -- needs attention
-    Report: "Clean after {iteration} iteration(s). No open P1/P2 findings; P3 advisories retained."
+    Report: "Clean after {iteration} iteration(s). No open P1/P2/P3 findings."
     STOP -- success
 
   # Stalled-convergence short-circuit (token saver):
@@ -260,14 +265,14 @@ while iteration < max_iterations:
                               required_finding_files
 
   # The default convergence contract is one repair batch followed by one
-  # affected-lane recheck. Remaining or newly supported P1/P2 after that
+  # affected-lane recheck. Remaining or newly supported findings after that
   # recheck require operator attention, not an automatic second repair batch.
   if iteration > 1 and explicit_iteration_override == false:
     Report: "{findings} supported finding(s) remain after the targeted recheck. Manual decision required."
     List remaining todo files
     STOP -- needs attention
 
-  # Fix required findings only (P1/P2).
+  # Fix every retained finding (P1/P2/P3).
   Run /dm-review-fix with workflowClass and workflow_class_defaulted forwarded unchanged
   # dm-review-fix resolves and cleans up todo files
 
@@ -287,7 +292,7 @@ while iteration < max_iterations:
       the truthful selective_rerun value and reason
       "max_iterations_affected_lane_verification", after coverage validates; append it to
       authoritative-receipts.json BEFORE observe-review.
-    Count remaining todos/*-pending-p1-*.md and todos/*-pending-p2-*.md
+    Count remaining todos/*-pending-p1-*.md, todos/*-pending-p2-*.md, and todos/*-pending-p3-*.md
     if findings == 0:
       if required_verification_complete == false:
         Report the nested review's REVIEW INCOMPLETE or exact coverage failure
@@ -302,9 +307,9 @@ while iteration < max_iterations:
 
 #### Selective Lane Re-run (iteration 2+)
 
-Iteration 1 is always a full fan-out in the selected mode. From iteration 2 onward the loop re-reviews only what the fixes could have affected. Before each fix step, preserve the exact owner lanes of every pending P1/P2 finding so deleting a resolved todo cannot erase its verification obligation. The re-run lane set is the union of:
+Iteration 1 is always a full fan-out in the selected mode. From iteration 2 onward the loop re-reviews only what the fixes could have affected. Before each fix step, preserve the exact owner lanes of every pending P1/P2/P3 finding so deleting a resolved todo cannot erase its verification obligation. The re-run lane set is the union of:
 
-- **(a) Finding-owning lanes** -- every lane named in the `source_agents` frontmatter of a P1/P2 finding repaired by the prior fix step, plus every lane owning a P1/P2 finding that remains pending. The loop snapshots repaired owners before `dm-review-fix` deletes completed todos.
+- **(a) Finding-owning lanes** -- every lane named in the `source_agents` frontmatter of a P1/P2/P3 finding repaired by the prior fix step, plus every lane owning a P1/P2/P3 finding that remains pending. The loop snapshots repaired owners before `dm-review-fix` deletes completed todos.
 - **(b) File-trigger lanes** -- every lane whose file-trigger set matches any file the fixes touched since the prior review. `dm-review-fix` does not commit, so the touched-file set is the union of `git diff --name-only <prior-review-head>..HEAD` and the paths reported by `git status --porcelain`. A committed-range diff alone would report an empty change set for a perfectly normal uncommitted fix pass, and would then narrow on false evidence.
 
 Before either rule may narrow coverage, recompute a non-empty `selected_full_set` containing only unique exact logical lane IDs. Every owner in every pending finding's `source_agents` must resolve to exactly one member of that set. Unknown owners, aliases, and criterion-level IDs shared by more than one logical lane are not narrowing signals; each fails open to full coverage with an explicit `fallback_reason`. The naming trap is deliberate: `security-auditor-codex-signoff` and `security-auditor-openrouter` are two logical lanes sharing one criterion, so bare `security-auditor` is ambiguous and fails open. An empty computed lane set is never dispatched.
@@ -334,7 +339,7 @@ The restriction is passed as the internal loop-to-review input `review_lane_allo
 
 **Current state of the receiving interface -- read this before claiming a saving.** Review Phase 3 now receives `review_lane_allowlist` under the validation contract above. The loop still never assumes that a restriction was honored: after every pass it consumes the authoritative coverage receipt and derives attempted and skipped lanes from that evidence. If the receiver reports the input absent, invalid, or not applied, the loop sets `selective_rerun` to false and persists the receiver's exact fallback reason. Input-byte savings may be claimed only from a receipt proving the narrowed input was applied.
 
-**Convergence requires no open P1/P2 findings and complete required coverage for the verification pass.** P3 advisories never trigger another pass. A selective affected-lane pass may establish convergence when every required selected lane completes; missing required coverage reports `REVIEW INCOMPLETE`. Repeat the whole full fan-out only when the prior full review was incomplete or a repair changed a security-sensitive boundary.
+**Convergence requires no open P1/P2/P3 findings and complete required coverage for the verification pass.** Every retained finding triggers repair and affected-lane verification. A selective affected-lane pass may establish convergence when every required selected lane completes; missing required coverage reports `REVIEW INCOMPLETE`. Repeat the whole full fan-out only when the prior full review was incomplete or a repair changed a security-sensitive boundary.
 
 #### Selective Re-run Receipt
 
@@ -351,7 +356,7 @@ Each pass report carries:
 - `promoted_to_full: true` only when an incomplete prior full review or a security-boundary repair requires another full fan-out.
 - `lanes_rerun` -- the exact logical lane IDs from the coverage receipt's ATTEMPTED rows, not the loop's intended set. A receiver that silently drops an intended lane therefore cannot falsely report it as re-run.
 - `lanes_skipped` -- for a proven selective pass only, `coverage_selected_set` minus the applied allowlist: the lanes deliberately omitted by narrowing. Each skipped lane records `no_rule_a_or_b_match` and receives no kernel `record-attempt` call. Every non-selective full fan-out reports an empty skip set. A lane selected or allowlisted but missing from ATTEMPTED because dispatch never began is neither re-run nor skipped; the nested review reports `REVIEW INCOMPLETE`.
-- `rerun_reasons` -- a per-lane map using only `a_prior_unresolved_finding`, `b_fix_file_trigger`, `initial_full_fanout`, and `selection_fail_open`. The stable `a_prior_unresolved_finding` receipt value covers a prior P1/P2 finding owner whether the finding was repaired or remains unresolved. A lane selected by more than one rule records every applicable reason. Full fan-outs use `initial_full_fanout`; fail-open full fan-outs use `selection_fail_open`.
+- `rerun_reasons` -- a per-lane map using only `a_prior_unresolved_finding`, `b_fix_file_trigger`, `initial_full_fanout`, and `selection_fail_open`. The stable `a_prior_unresolved_finding` receipt value covers a prior P1/P2/P3 finding owner whether the finding was repaired or remains unresolved. A lane selected by more than one rule records every applicable reason. Full fan-outs use `initial_full_fanout`; fail-open full fan-outs use `selection_fail_open`.
 - `selection_fallback_reason: <reason>` whenever selection failed open to a full fan-out or the receiver rejected or ignored selective input, and `full_fanout_override: true` whenever `DM_REVIEW_LOOP_FULL_FANOUT=1` disabled selection. `selection_fallback_reason` is the persisted receipt field for the loop-local `fallback_reason`. The local variable resets at the start of every iteration so a fail-open on one iteration never leaks into the next iteration's receipt.
 
 Example (affected-lane verification):
@@ -405,6 +410,7 @@ dm-review-loop: N finding(s) remain after M iteration(s).
 Mode: quick|full
 Remaining:
 - 001-pending-p2-description
+- 002-pending-p3-description
 
 These findings could not be auto-resolved. Manual review needed.
 ```

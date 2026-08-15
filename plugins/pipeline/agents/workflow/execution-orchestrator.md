@@ -82,9 +82,9 @@ review-fix loop below; record `final_review_mode: quick`,
 `final_review_effective_mode: full`, and
 `final_review_escalation: security-sensitive-path`.
 
-For an ordinary eligible quick result, collect the complete P1/P2 finding set,
+For an ordinary eligible quick result, collect the complete P1/P2/P3 finding set,
 apply one revision batch, run affected repository verification, and re-run the
-affected quick lanes once. P1/P2 must reach zero. Preserve P3 advisories. Record
+affected quick lanes once. Every retained finding must reach zero. Record
 `final_review_mode: quick`, `final_review_effective_mode: quick`, the
 approved rationale, selected lanes, and any unavailable required lane. Never
 substitute a single generic reviewer for the installed quick protocol.
@@ -117,7 +117,8 @@ for iteration in 1..max_iterations (default 2):
 
   if iteration == max_iterations:
     Skill(skill="dm-review:review", args="full <worktree-path>")  -- final verify
-    if pending after final: log each as DEFERRED with explicit justification
+    if pending after final: report NEEDS ATTENTION with each remaining finding
+      and stop; do not mark the chunk clean or merge it
 ```
 
 The stalled-convergence check is critical -- without it, the orchestrator can loop wasting tokens on findings that don't auto-resolve.
@@ -514,7 +515,7 @@ verification seam and blocks on degraded/missing lane coverage. High/high does
 both; other combinations retain standard depth. Never use the profile to
 select a provider/model/executor, create a routing override, relax security,
 alter workflow class, reduce browser/persona cases, skip focused/sensitive/final
-review, weaken required P1/P2 resolution or cleanup, alter economics, or add full review to
+review, weaken required P1/P2/P3 resolution or cleanup, alter economics, or add full review to
 every ordinary chunk.
 
 **Bootstrap limitation:** If this current bootstrap manifest predates
@@ -1526,11 +1527,12 @@ dm-review is reserved for the approved final review in Step 4 and also runs its
 coding lanes on Codex or OpenRouter.
 
 Every per-chunk review receives the approved requirements and compact alignment
-context inlined for that chunk. Flag as P1/P2, proportional to reachable harm:
+context inlined for that chunk. Flag as P1/P2/P3, proportional to reachable harm:
 work outside approved scope; conflict with explicit project constraints;
 unnecessary architecture; changes owned by another repository; or technically
-correct work that misses the chunk's approved outcome. Adjacent useful work is
-reported as an advisory and stays out of the diff.
+correct work that misses the chunk's approved outcome. Reject adjacent useful
+work from the finding set when it does not repair an observable defect in the
+approved scope; it stays out of the diff.
 
 **UI chunks and Logic chunks -- Codex review loop:**
 
@@ -1558,31 +1560,33 @@ Same as above, but after Codex review passes, also check cross-chunk wiring: are
 
 Run `/codex:review` once. If zero findings, proceed. If findings, fix and re-run once. No full loop.
 
-**Finding policy (all chunk types):** P1/P2 findings must be fixed. P3 is advisory and remains visible in the chunk receipt without entering the repair queue:
+**Zero-deferral finding policy (all chunk types):** Every retained P1/P2/P3
+finding must be fixed and verified before the chunk can be clean. There is no
+deferral flag and an existing tracker does not waive the repair:
 
 - **P1:** Security vulnerabilities, data corruption, breaking changes
 - **P2:** Performance issues, architectural concerns, reliability
-- **P3:** Simplification, cleanup, minor improvements (advisory)
+- **P3:** Observable minor defects with a bounded repair
 
-Every P1/P2 accepted into the repair queue must identify the affected current
-user or operator, reachable actor/input/path, realistic harm or regression,
-and smallest adequate repair. Security findings must also identify the actual
-trust boundary. A revision batch may touch only the approved behavior and the
-evidenced defect; unrelated hardening and new product scope are rejected.
+Every retained finding must identify an observable current defect, its location
+or reachable path, and the smallest adequate repair. P1/P2 must additionally
+identify the affected current user or operator and realistic harm or regression;
+security P1/P2 must name the actual trust boundary. Reject unsupported
+preferences, speculative hardening, future-scale concerns, and unrelated new
+product scope during consolidation instead of retaining them as P3 debt.
 
-**If P1/P2 findings remain after max iterations, do NOT silently continue.** Instead:
+**If P1/P2/P3 findings remain after max iterations, do NOT silently continue.** Instead:
 
 1. STOP chunk processing. Do NOT proceed to merge.
 2. Read each remaining finding and apply targeted fixes to the specific lines cited in the worktree -- do not re-implement sections wholesale or launch another subagent.
 3. Re-run `/codex:review` to verify manual fixes (or dm-review Skill pattern if Codex unavailable).
-4. If P1/P2 findings STILL remain after this manual pass, stop the run as needs attention. P2 cannot be deferred past merge.
-
-P3 advisories never trigger the manual repair pass or another review iteration.
+4. If any retained finding STILL remains after this manual pass, stop the run
+   as needs attention. No retained severity can be deferred past merge.
 
 **Evaluation receipt (structural interlock):** After completing the evaluation gate, you MUST output this exact line:
 
 ```text
-EVAL_GATE_PASSED: [chunk-id] | classification: [type] | iterations: [N] | findings_remaining: [N] | p3_advisories: [N]
+EVAL_GATE_PASSED: [chunk-id] | classification: [type] | iterations: [N] | findings_remaining: [N] | p3_findings: [N]
 ```
 
 Append `requestedProvider: <provider>`, `attemptedProvider: <provider>`,
@@ -1721,7 +1725,7 @@ After completing all checks, output this structured receipt:
 BROWSER_VERIFIED: [chunk-id] | screenshots: [N] | element_screenshots: [N] | spec_checks: [N passed]/[N total] | visual_criteria: [N passed]/[N total] | issues: [list or "none"]
 ```
 
-Report all findings as P1 (spec deviation, page doesn't load), P2 (visual criterion failure, console errors, broken interactions), or P3 (minor visual friction). Add only P1/P2 findings to the review fix queue; retain P3 in the evidence.
+Report all findings as P1 (spec deviation, page doesn't load), P2 (visual criterion failure, console errors, broken interactions), or P3 (observable minor visual defect). Add every retained finding to the review fix queue. Reject taste-only preferences that lack an observable defect.
 
 For required browser-tooling failure, first persist safe attempt evidence, then quit the primary browser process/engine session (closing a tab is insufficient), launch a fresh primary profile with a changed session identity and retry once, then recheck the target and try a genuinely different configured engine. If restart or alternate launch cannot be proved, record that explicitly. Exhaustion ends `human_help_required` with all attempts and exact missing case IDs; it is never skipped, approved, empty coverage, or curl-verified. Product/application assertion failures are terminal findings and do not trigger browser restart. Curl and reachability are diagnostics only and never satisfy `BROWSER_VERIFIED`.
 
@@ -1945,7 +1949,8 @@ goal/outcome as P2 even when tests pass.
 
 This catches cross-chunk integration issues that focused per-chunk reviews miss.
 
-Fix every P1/P2 finding. Preserve each P3 with full evidence and provenance as an advisory.
+Fix every retained P1/P2/P3 finding. Reject unsupported or preference-only
+suggestions during consolidation instead of carrying them as debt.
 
 The review output follows the unified format (per `plugins/dm-review/skills/review/references/output-format.md`):
 
@@ -1953,7 +1958,7 @@ The review output follows the unified format (per `plugins/dm-review/skills/revi
 - **Findings by severity:** P1, P2, P3 with file:line references
 - **Agent Summary:** agents run, status, finding counts
 
-If P1/P2 issues are found:
+If P1/P2/P3 issues are found:
 
 1. Collect the complete finding set from the review pass and fix it as one
    revision batch on the feature branch.
@@ -1966,10 +1971,11 @@ If P1/P2 issues are found:
 4. Re-run only the affected lanes on the exact newly tested SHA. Repeat the
    whole selected roster only when prior coverage was incomplete; if a repair
    changes a security-sensitive boundary, escalate to or repeat full mode.
-5. Stop when no P1/P2 findings remain and every required affected lane and
+5. Stop when no P1/P2/P3 findings remain and every required affected lane and
    repository/browser/remote verification gate is complete.
 
-If P1/P2 findings remain after the bounded repair pass, stop as needs attention. P3 advisories do not participate in convergence.
+If any retained P1/P2/P3 finding remains after the bounded repair pass, stop as
+needs attention. Every retained severity participates in convergence.
 
 **Verification:** You MUST be able to state: "Final dm-review completed. Requested mode: [full/quick]. Effective mode: [full/quick]. Result: [CLEAN/N findings]."
 
@@ -1986,8 +1992,8 @@ if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "revi
 
 **Merge recommendation emission:** After the final review, emit ONE of these recommendation strings:
 
-- `CLEAN` -- no P1/P2 findings remain; P3 advisories may remain visible. Dev server and all required visual/verification coverage passed.
-- `APPROVE WITH FIXES` -- zero P1 and at least one P2 remains. P2 must be fixed before merge.
+- `CLEAN` -- no P1/P2/P3 findings remain. Dev server and all required visual/verification coverage passed.
+- `APPROVE WITH FIXES` -- zero P1 and at least one P2 or P3 remains. Every retained finding must be fixed before merge.
 - `BLOCKS MERGE` -- any P1 remains.
 - `BLOCKED PENDING CALLER VERIFICATION` -- any required browser case has a `human_help_required` receipt or lacks complete passing browser evidence. Emit this regardless of review findings. The caller must resolve the blocked case and complete browser verification before merge is considered safe. Do NOT use the phrase "merge is safe", "ready to merge", or equivalent in any output while this flag is set.
 - `BLOCKED PENDING REMOTE VERIFICATION` -- any non-browser lane with
@@ -2085,7 +2091,7 @@ or `/pipeline-run` caller applies it and records the capture outcome.
 
 ### 5.2 Codify (run only if the run had friction)
 
-A clean run with no P1/P2 findings, one review iteration per chunk, and no resolved ambiguities needs no
+A clean run with no P1/P2/P3 findings, one review iteration per chunk, and no resolved ambiguities needs no
 codify -- skip to the mark below. Otherwise run the codify loop so this run's lessons harden the next
 one. **Trigger codify when ANY of:** a chunk took >1 review iteration, the final review surfaced
 findings, a subagent emitted an `ambiguity_resolved` receipt flag, or a guardrail/lint guard had to
@@ -2228,7 +2234,7 @@ Use this schema after Docker reconciliation, artifact cleanup, Git cleanup, and 
 - Ephemeral removed: <count> files
 - Pre-shadow run-scoped removed: <count> files
 - Feature-scoped retained: <count> files
-- Deferred findings: none | <list with justifications>
+- Remaining findings: none | <list; any entry means NEEDS ATTENTION>
 - Docker resources: created <N>, removed <M>, missing <K>, retained/blocked <J>
 - Reconciliation: <complete|blocked|unavailable> -- <reason>
 
@@ -2452,9 +2458,9 @@ one short line: what failed and whether usage/cost was reported; the existing
 `Recommended next action` remains the single action.
 
 The visible summary normally stays within roughly 250 words. Exceed that only
-for actionable P1/P2 findings or a real blocker. Do not omit required action.
+for actionable P1/P2/P3 findings or a real blocker. Do not omit required action.
 Keep chunk tables, `Steps Completed`, provider accounting, cleanup inventory,
-evaluation receipts, P3 detail, browser receipts, synthesis/provenance ledgers,
+evaluation receipts, expanded finding detail, browser receipts, synthesis/provenance ledgers,
 and raw reports in the evidence artifacts. The compact summary must still name
 any coverage gap or blocked browser evidence that requires human action and
 must never report blocked cleanup as complete.
@@ -2464,7 +2470,7 @@ Successful-run specimen:
 ```markdown
 ## Done
 The membership validation change is committed and ready for review.
-**Verification:** Unit tests and the approved final review passed; no P1/P2 findings remain.
+**Verification:** Unit tests and the approved final review passed; no P1/P2/P3 findings remain.
 **Branch or PR:** `enhance/member-validation` -- PR #123
 **Recommended next action:** Review and merge PR #123.
 **Evidence:** receipt, requirements crosscheck, postmortem, and detailed review under `plans/member-validation/`.

@@ -62,7 +62,7 @@ The Plan (Phase 3) MUST have one section per numbered finding. Structure:
 ```markdown
 ## Fix 1: <finding title>
 **Source:** <findings-doc>#finding-1
-**Status:** pending | resolved | partial | deferred
+**Status:** pending | resolved | rejected
 **Approach:** <2-3 sentences>
 **Files touched:** <list>
 **Acceptance criteria:**
@@ -84,11 +84,15 @@ In Phase 7, append a Findings Resolution Table to the delivery report:
 | # | Finding | Status | Evidence | Before | After |
 |---|---------|--------|----------|--------|-------|
 | 1 | <title> | resolved | screenshot:plans/<slug>/baselines-post-fix/route-desktop.png | baselines-pre-fix/... | baselines-post-fix/... |
-| 2 | <title> | partial | grep:... | ... | ... |
-| 3 | <title> | deferred | -- | ... | -- |
+| 2 | <title> | rejected | <evidence that it is invalid, duplicate, or outside approved scope> | ... | ... |
 ```
 
-Rows marked `deferred` require explicit user sign-off. Use AskUserQuestion: "Finding #N is marked deferred. Reason: justification. Approve deferral, or re-plan?" Do NOT deliver with unexplained deferrals. Zero-deferral applies to fix-passes -- see `plugins/dm-review/skills/review/references/severity-mapping.md`.
+Every retained finding must be `resolved` before delivery. `rejected` is valid
+only when current evidence disproves the report, establishes an exact duplicate,
+or shows that it never described an observable defect in the approved scope.
+Record that evidence in the row. Do not use `rejected` as a softer deferral and
+do not offer a deferral option. See
+`plugins/dm-review/skills/review/references/severity-mapping.md`.
 
 ## Delegate to /pipeline
 
@@ -102,7 +106,7 @@ In addition to `/pipeline`'s normal self-audit, verify:
 - Did I capture pre-fix baselines for every affected route?
 - Did I capture post-fix screenshots for every affected route?
 - Does every finding have a row in the Findings Resolution Table?
-- Are all `deferred` rows explicitly approved by the user?
+- Is every retained finding `resolved`, with every `rejected` row backed by evidence that it is not a valid in-scope finding?
 - For findings that were behavioral bugs, did the fix follow `superpowers:systematic-debugging` (root cause, not symptom)? Is each `resolved` row backed by fresh evidence per `superpowers:verification-before-completion`, not an assertion? See `docs/skill-authoring.md`.
 
 If any answer is "no," do not deliver. Fix-pass quality hinges on the 1:1 mapping from findings to fixes.

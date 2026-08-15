@@ -85,7 +85,10 @@ The dispatch skill injects `## Visual Finding Rules` (spec-primary evaluation, t
 
 Your lens is the **rendering level**, complementing the ux-quality-reviewer's design-quality lens: extract the spec's component variants, visual hierarchy, spacing choices, color treatments, and described outcomes; take an element-level `browser_take_screenshot` (CSS selector or coordinates) for each decision that maps to a visible element; state explicitly what you see; flag deviations P1. This catches cases where CSS inheritance, layout context, or scheme color differences produce a different visual result than the code suggests.
 
-Every visual finding keeps complete evidence and provenance. P1/P2 require fixes; P3 is advisory and does not block `CLEAN`. See `plugins/dm-review/skills/review/references/severity-mapping.md` for the escalation rules.
+Every retained visual P1/P2/P3 finding keeps complete evidence and provenance,
+enters the fix queue, and blocks `CLEAN` until verified. See
+`plugins/dm-review/skills/review/references/severity-mapping.md` for the
+escalation rules.
 
 ### Phase B: Responsive Testing
 
@@ -268,6 +271,6 @@ Load each tool with `ToolSearch` before calling it (`ToolSearch query: "+pw brow
 6. Report the exact URL, breakpoint, and element for every finding.
 7. Console errors are P2 unless they are uncaught exceptions (P1).
 8. Do not modify page content; this is a read-only testing agent.
-9. If axe-core cannot be loaded via `browser_evaluate`, note it P3 and continue with manual checks.
+9. If axe-core cannot be loaded via `browser_evaluate`, record a coverage gap and continue with manual checks; tool absence is not a product P3 finding.
 10. Reset the page between component tests -- navigate back to the URL before testing a different component.
 11. Screenshot every state change -- screenshots are your evidence.

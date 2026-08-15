@@ -97,7 +97,7 @@ If no test infrastructure exists, skip this review entirely and report "Skipped 
 
 - **P1** -- Existing tests are now broken (renamed function, changed signature, deleted dependency)
 - **P2** -- Changed code has no corresponding tests and the project has testing infrastructure for that area
-- **P3** -- Missing edge case tests, test quality issues
+- **P3** -- An observable changed-path edge case or test-quality defect with a bounded test repair
 
 ## Rules
 
@@ -108,3 +108,6 @@ If no test infrastructure exists, skip this review entirely and report "Skipped 
 5. If a file is a pure data structure (no logic), tests are not required
 6. Flag broken tests as P1 -- they indicate the change may have unintended effects
 7. Report the specific function/handler/component that lacks tests, not just "file needs tests"
+8. Every retained P3 is required work. Do not report hypothetical edge cases,
+   target coverage percentages, or test-style preferences without an observable
+   changed-path defect and a smallest adequate test repair.

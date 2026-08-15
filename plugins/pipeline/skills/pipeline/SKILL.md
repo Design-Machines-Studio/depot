@@ -66,7 +66,7 @@ what to do.
   recommended next action, and links or paths to the receipt, requirements
   crosscheck, postmortem, and detailed review when present.
 - A blocked message names the exact blocker, the smallest operator action that
-  can clear it, and where resumable work is preserved. Required P1/P2 findings,
+  can clear it, and where resumable work is preserved. Required P1/P2/P3 findings,
   coverage gaps, blocked browser evidence, cleanup truth, and provenance remain
   in the linked durable evidence.
 - Put `Recommended next action` before any additional option. Show other options
@@ -74,7 +74,7 @@ what to do.
   multiple-choice menu.
 
 The visible summary should normally fit within roughly 250 words. Exceed that
-only to expose actionable P1/P2 findings or a real blocker. Never hide required
+only to expose actionable P1/P2/P3 findings or a real blocker. Never hide required
 action to meet the budget. Do not print `Steps Completed`, provider accounting,
 cleanup inventories, every evaluation receipt, or raw review output in chat by
 default; keep them in `receipt.md`, `run-postmortem.md`, the requirements
@@ -515,7 +515,7 @@ prompt generation may copy them but must never infer replacements.
 `finalReviewMode: full|quick` plus a non-empty `finalReviewRationale`. `full` is
 the default. `quick` requires explicit user/approved-plan intent and is invalid
 when `decisionProfile.consequence` is `high`. It preserves all per-chunk
-sensitive-path review, repository/browser verification, P1/P2 resolution, and
+sensitive-path review, repository/browser verification, P1/P2/P3 resolution, and
 cleanup. If the final diff matches dm-review's bounded security-sensitive path
 set, the quick protocol escalates to full and records the escalation.
 
@@ -532,7 +532,7 @@ Do not turn high uncertainty into debate or a full review per chunk. Decision
 leverage never selects a provider/model/executor, creates a routing override,
 relaxes security, alters `workflowClass`, overrides browser/persona coverage,
 changes cleanup, or changes economics. The existing quick/focused review,
-sensitive-path, final-review, required P1/P2 resolution, run-size, and exact-owned Docker
+sensitive-path, final-review, required P1/P2/P3 resolution, run-size, and exact-owned Docker
 rules remain unchanged.
 
 **Plan self-review (before presenting):** Re-read your own plan and check:

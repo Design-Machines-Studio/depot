@@ -10,7 +10,8 @@ Fix pending review findings tracked in `todos/` from a previous `/dm-review` run
 
 ## Finding Policy
 
-This command fixes pending P1 and P2 findings. P3 advisories remain visible in the review report and receipts but never enter this fix queue.
+This command fixes every pending P1, P2, and P3 finding. Severity controls fix
+order, not whether the finding is owed.
 
 ## Process
 
@@ -24,33 +25,39 @@ written. See `docs/skill-authoring.md`.
 ### 1. Find Pending Findings
 
 ```bash
-ls todos/*-pending-p1-*.md todos/*-pending-p2-*.md 2>/dev/null
+ls todos/*-pending-p1-*.md todos/*-pending-p2-*.md todos/*-pending-p3-*.md 2>/dev/null
 ```
-
-Historical `todos/*-pending-p3-*.md` files from releases before 1.59.0 are
-advisory artifacts. Leave them owner-managed and report them separately; they
-do not enter this fix queue or block completion.
 
 If no pending findings exist, tell the user and stop.
 
 If an argument was provided:
 - Number (e.g., `001`) -- resolve only that finding
 - Priority (e.g., `p1`) -- resolve all findings of that priority
-- No argument -- resolve all pending findings, P1 first
+- No argument -- resolve all pending findings in P1, P2, then P3 order
 
 ### 2. Plan Fixes
 
 For each pending finding:
 1. Read the todo file
-2. Confirm it names the affected current user/operator, reachable actor/input/path, realistic harm or regression, and smallest adequate repair; security findings must also name the actual trust boundary. Unsupported architecture preferences or hypothetical hardening do not enter the fix batch.
+2. Confirm it names an observable current defect, its location or reachable path,
+   and the smallest adequate repair. P1/P2 findings must additionally name the
+   affected current user/operator and realistic harm or regression; security
+   P1/P2 findings must name the actual trust boundary. Reject unsupported
+   architecture preferences or hypothetical hardening rather than treating
+   them as pending work.
 3. Read the affected source file(s)
 4. Plan the fix
+
+If current evidence disproves a pending finding or shows that it was duplicate,
+speculative, or outside the approved scope, record the evidence-backed rejection
+in the summary and remove that pending todo. Rejection closes invalid input; it
+must never be used to avoid a valid repair.
 
 Group related findings that touch the same files -- fix them together.
 
 ### 3. Implement Fixes
 
-Fix all pending findings in priority order: P1 first, then P2.
+Fix all pending findings in priority order: P1 first, then P2, then P3.
 
 For each finding:
 
@@ -71,6 +78,8 @@ After resolving all findings:
 Resolved N of M findings:
 - [done] 001-p1-description
 - [done] 002-p2-description
+- [done] 003-p3-description
+- [rejected] 004-p3-description -- <current evidence proving invalidity>
 
 Remaining: X pending findings
 ```
