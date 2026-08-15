@@ -80,12 +80,16 @@ the copy buttons. Only `<script defer>` is used.
 
 // plan.html (feature) -- chunks map 1:1 to prompts/NN-<slug>.md
 { "artifact": "plan", "slug": "<slug>",
-  "chunks": [{"n":"01","slug":"reader-service","scope","acceptance","deps":[]}],
+  "baseBranch":"<base>", "featureBranch":"<feature>",
+  "branchMode":"create|reuse", "expectedFeatureHead":"<sha>|null",
+  "chunks": [{"n":"01","slug":"reader-service","scope","acceptance","deps":[]}], // full mode only; absent in Lean, whose single-pass scope is rendered prose
   "decisions": [{"id","decision","rationale","alternatives"}],
   "requirementsCoverage": [{"requirement","chunk"}] }
 
 // plan.html (epic / high-level) -- enumerates sibling sub-plans
 { "artifact": "plan", "slug": "<slug>",
+  "baseBranch":"<base>", "featureBranch":"<feature>",
+  "branchMode":"create|reuse", "expectedFeatureHead":"<sha>|null",
   "subPlans": [{"n","slug","featureDir"}], "decisions": [...], "requirementsCoverage": [...] }
 ```
 
@@ -96,7 +100,7 @@ Downstream agents read the island instead of grepping prose:
 
 ```bash
 bash plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh \
-  plans/<slug>/plan.html | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["chunks"]))'
+  plans/<slug>/plan.html | python3 -c 'import json,sys; print(json.load(sys.stdin)["artifact"])'
 ```
 
 ## Editable copy-back loop

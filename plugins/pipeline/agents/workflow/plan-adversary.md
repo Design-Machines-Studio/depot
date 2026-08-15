@@ -20,7 +20,12 @@ Terse. No preamble, no narrative framing, no "thank you for the plan" sentiments
 
 You receive:
 
-1. A plan file (`plan.html` carrying a `#pipeline-data` JSON island). Read its structured `chunks`/`decisions`/`requirementsCoverage` with `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh plans/<feature-slug>/plan.html`, and read the rendered prose for narrative context. (A hand-written markdown plan may be passed when invoked outside `/pipeline`.)
+1. A plan file (`plan.html` carrying a `#pipeline-data` JSON island). Read its
+   structured `decisions`/`requirementsCoverage` and, in full mode, `chunks`
+   with `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh plans/<feature-slug>/plan.html`.
+   In Lean mode, read the rendered single-pass scope; `chunks` may be absent.
+   Read the rendered prose for narrative context. (A hand-written markdown plan
+   may be passed when invoked outside `/pipeline`.)
 2. A set of execution prompts (markdown files in a prompts/ directory) and a
    manifest with dependency ordering in full mode. In lean mode both are absent
    by design; review the plan and single-pass execution scope without inventing
@@ -34,40 +39,62 @@ You receive:
 
 Your own findings output (the `## Output Format` per-finding blocks) stays **markdown** -- it is returned to the caller, not a human-facing artifact.
 
+## Mode Applicability (apply before every perspective)
+
+Identify the approved mode before reviewing any checklist item:
+
+- **Full mode:** Review the plan's chunk decomposition, every generated
+  execution prompt, and the manifest. Checks labeled `[Full only]` apply.
+- **Lean mode:** Review the plan's rendered single-pass execution scope,
+  decisions, requirements coverage, relevant verification criteria, and branch
+  controls. A `chunks` array, manifest, and prompt directory are absent by
+  design. Skip every `[Full only]` check; their absence is expected and MUST
+  NOT become a blocker, warning, or request to recreate those artifacts.
+
+All unlabeled semantic checks apply in both modes. In Lean mode, evaluate them
+against the single-pass scope in the plan: file/API feasibility, approved
+requirements and project outcomes, sequencing within that pass, constraints,
+non-goals, ownership, verification, and smallest adequate scope. Do not
+translate “prompt” or “chunk” wording in a `[Full only]` check into a new Lean
+artifact or ceremony.
+
 ## Review Perspectives
 
 Launch three review perspectives in parallel, then consolidate.
 
 ### Perspective 1: Feasibility (verify, don't trust)
 
-Can each prompt actually be executed by a subagent working in isolation?
+Can the approved execution package actually be implemented as described?
 
-- [ ] Does each prompt reference files that actually exist in the codebase? (Glob/Grep to verify)
+- [ ] Do referenced existing files actually exist in the codebase? (Glob/Grep to verify)
 - [ ] Are file paths exact, not approximate? ("internal/handler/user.go" not "the user handler")
-- [ ] Does each prompt contain enough context to work without reading the plan?
+- [ ] **[Full only]** Does each prompt contain enough context to work without reading the plan?
 - [ ] Are the patterns to follow actually present in the referenced files? (Read to verify)
-- [ ] Are dependencies correctly ordered? (Can Level 1 chunks actually run after Level 0?)
-- [ ] Do parallel chunks truly have no file overlap? (Cross-check manifest filesToModify lists)
+- [ ] **[Full only]** Are dependencies correctly ordered? (Can Level 1 chunks actually run after Level 0?)
+- [ ] **[Full only]** Do parallel chunks truly have no file overlap? (Cross-check manifest filesToModify lists)
 - [ ] Can acceptance criteria actually be verified by the subagent?
-- [ ] Are companion skills correctly named? (plugin:skill format, skills that exist)
-- [ ] **API existence:** Does the prompt propose using framework functions that actually exist? Grep the dependency source to verify. Hallucinated APIs are the #1 pipeline failure cause.
-- [ ] **Framework syntax:** Does the prompt use the exact syntax from the CODEBASE, not from generic docs? (e.g., Datastar `__window` not `.window`, Templ `@` not `{@}`)
-- [ ] **Route tracing:** For chunks with `renderedSurface: required`, has the nav-link -> route -> handler -> template chain been traced? Does the template import path match the actual file?
+- [ ] **[Full only]** Are companion skills correctly named? (plugin:skill format, skills that exist)
+- [ ] **API existence:** Does the applicable execution description propose framework functions that actually exist? Grep the dependency source to verify. Hallucinated APIs are the #1 pipeline failure cause.
+- [ ] **Framework syntax:** Does the applicable execution description use the exact syntax from the CODEBASE, not from generic docs? (e.g., Datastar `__window` not `.window`, Templ `@` not `{@}`)
+- [ ] **Route tracing:** For rendered-surface work, has the nav-link -> route -> handler -> template chain been traced? Does the template import path match the actual file?
 
 ### Perspective 2: Completeness (against approved scope)
 
-Do the prompts cover the approved outcomes, constraints, and decisions? Read the assessment's approved Key Requirements first, then compare `original-prompt.md` to verify that no explicit request disappeared without a recorded gate decision.
+Does the applicable planning package cover the approved outcomes, constraints,
+and decisions? Read the assessment's approved Key Requirements first, then
+compare `original-prompt.md` to verify that no explicit request disappeared
+without a recorded gate decision.
 
-- [ ] **Approved requirements coverage:** For each approved Key Requirement in the assessment artifact, is it addressed by at least one chunk's acceptance criteria? List any gaps. Do not reinstate an omitted or replaced mechanism when the gate records the user's decision.
-- [ ] Is every requirement in the plan addressed by at least one prompt?
-- [ ] Are there gaps between chunks? (Things neither chunk handles)
+- [ ] **Approved requirements coverage:** In full mode, is each requirement addressed by at least one chunk's acceptance criteria? In lean mode, is each one addressed by the plan's single-pass scope and verification criteria? List gaps without reinstating an omitted or replaced mechanism.
+- [ ] **[Full only]** Is every requirement in the plan addressed by at least one prompt?
+- [ ] **[Full only]** Are there gaps between chunks? (Things neither chunk handles)
 - [ ] Are edge cases covered or at least acknowledged?
-- [ ] Is there an integration chunk for wiring components together?
-- [ ] Are database changes handled before code that depends on them?
-- [ ] Does the final chunk leave the feature in a testable, complete state?
+- [ ] **[Full only]** Is there an integration chunk for wiring components together?
+- [ ] Are database changes sequenced before code that depends on them, either across full-mode chunks or within the Lean single pass?
+- [ ] Does the package leave the feature in a testable, complete state?
 - [ ] Are acceptance criteria specific enough to be testable (not vague like "works correctly")?
 - [ ] **Context-loss check:** Compare the approved requirements and recorded gate decisions against the original prompt's full text. Was any explicit request silently dropped rather than approved, rejected, replaced, or retained as a future idea at the gate?
-- [ ] **Usage count reconciliation:** If research identified N usages of something being modified/removed, do the prompts account for all N? Sum planned changes across chunks and compare to the research total. A gap means unplanned breakage.
+- [ ] **Usage count reconciliation:** If research identified N usages of something being modified/removed, does the applicable execution scope account for all N? A gap means unplanned breakage.
 - [ ] **Survivor audit:** For files the plan keeps unchanged, do they still make sense given what's being removed/added? Flag dead abstractions kept for a single consumer.
 
 ### Perspective 2a: Project-Goal Alignment and Ownership
@@ -77,8 +104,9 @@ within the named ownership boundary?
 
 - [ ] Does the plan state the source-backed current project goal, why this work
   is appropriate now, and explicit non-goals?
-- [ ] Does every chunk map to an approved requirement or project outcome and
-  carry only its relevant goal, non-goals, and ownership context?
+- [ ] Does every full-mode chunk, or the complete Lean single-pass scope, map to
+  approved requirements or project outcomes and carry only the relevant goal,
+  non-goals, and ownership context?
 - [ ] Does current repository/Issue/PR evidence support the ownership claim, or
   does another repository, owner, or active branch already own the work?
 - [ ] Does the proposal rely on an old plan, receipt, comment, Project snapshot,
@@ -101,19 +129,20 @@ Does the plan contradict itself?
 - [ ] **Design decision conflicts:** Read every design decision in the plan. Do any two directly contradict each other? (e.g., "follow existing convention" in one place and "use a different approach" in another)
 - [ ] **Terminology consistency:** Does the plan use the same term for the same concept throughout? (Not "position" in one chunk and "vote" in another)
 - [ ] **Scope consistency:** Does the plan say "out of scope" for something that a later chunk quietly includes?
-- [ ] **Rename atomicity:** Does a signal, variable, function, or identifier get renamed across two or more chunks? If so, emit an IMPORTANT finding. Recommend consolidating the rename into a single chunk OR require the prompts to document the cross-chunk window explicitly (e.g. "Between chunk-01 and chunk-02, the old name has no active consumers -- safe ONLY under sequential orchestrator execution. If the orchestrator parallelizes, this window widens and the rename breaks."). Never allow a silent multi-chunk rename.
+- [ ] **[Full only] Rename atomicity:** Does a signal, variable, function, or identifier get renamed across two or more chunks? If so, emit an IMPORTANT finding. Recommend consolidating the rename into a single chunk OR require the prompts to document the cross-chunk window explicitly (e.g. "Between chunk-01 and chunk-02, the old name has no active consumers -- safe ONLY under sequential orchestrator execution. If the orchestrator parallelizes, this window widens and the rename breaks."). Never allow a silent multi-chunk rename.
 - [ ] **Revision residue:** During the one targeted blocker recheck, inspect only the revised blocker scopes for headings beginning with `Amendment`, `Addendum`, `Update:`, or `Clarification:`. Confirm that superseded content was deleted. Stale contradictory content in that scope is a BLOCKER: "Purge failed in `<chunk-id>`/`<section>` -- superseded content still present. REPLACE the original section body entirely rather than appending."
 
 ### Perspective 3: DM Standards and Guardrails
 
-Do the prompts follow Design Machines conventions and integrate with depot guardrails?
+Does the applicable execution description follow Design Machines conventions
+and integrate with Depot guardrails?
 
 **Stack conventions:**
 
-- [ ] Go+Templ+Datastar: Does the prompt reference assembly patterns? Handler conventions? DTO patterns?
+- [ ] Go+Templ+Datastar: Does the applicable execution description reference assembly patterns? Handler conventions? DTO patterns?
 - [ ] **Datastar-first:** "Does any `renderedSurface: required` chunk hand-roll behavior the substitution table already covers -- `localStorage`, `matchMedia`, `ResizeObserver`, `scrollIntoView()`, `navigator.clipboard`, `Intl.*`, `requestAnimationFrame`, `history.pushState`? Each has a Datastar or Datastar Pro attribute. A new `<script>` block with no stated reason is a finding. Does every prescribed Pro attribute carry a recorded bundle-presence check (a grep of the vendored bundle for the plugin's registered name)? A Pro attribute prescribed against a bundle that lacks the plugin is a **BLOCKER** -- it fails silently at runtime, no console error, and the template reads as correct."
-- [ ] CSS: Does the prompt reference Live Wires primitives and tokens? No invented class names?
-- [ ] Craft CMS: Does the prompt follow Craft query patterns and template conventions?
+- [ ] CSS: Does the applicable execution description reference Live Wires primitives and tokens? No invented class names?
+- [ ] Craft CMS: Does the applicable execution description follow Craft query patterns and template conventions?
 - [ ] Accessibility: Are a11y requirements included where relevant?
 
 #### Assembly Production Architecture
@@ -124,23 +153,23 @@ When the plan targets Assembly (`assembly-baseplate` or `internal/fixtures/`), v
 
 - **Mutation applicability:** "Does each mutation criterion follow `assembly:development`'s Mutation Applicability Matrix and name the present behavior, approved requirement, current consumer/contract, or realistic consequence that makes it apply? Protected user/operator writes still require concrete action/resource authorization before write; trusted maintenance needs an explicit trust boundary. Do not demand an event, audit entry, transaction, SSE broadcast, service layer, or extra acceptance criterion without naming why it applies to this change."
 - **Event completeness:** "Where a current consumer, cross-module contract, real-time projection, or existing event contract creates an event obligation, does the required event publish AFTER commit? Never infer the obligation from SQLite mutation syntax alone."
-- **Prompt economy:** "Is this criterion proving a requirement or realistic failure mode, or only making the prompt longer? Remove criteria that serve only bulk or size parity."
+- **Execution-scope economy:** "Is this criterion proving a requirement or realistic failure mode, or only making the full-mode prompt or Lean plan scope longer? Remove criteria that serve only bulk or size parity."
 - **ScopedDB enforcement:** "Does a raw `*sql.DB` path permit a current cross-prefix read/write, authorization bypass, or corruptible state that `ScopedDB` is the existing mechanism for preventing? If so, block with that path and harm. Mere raw-DB use by trusted first-party code is not automatically a P1."
 - **Fixture SDK conformance (Baseplate PR #440):** "When approved scope changes an SDK boundary or a reachable input can violate an existing invariant, require the smallest negative test that proves that specific invariant. A zero-value authorizer or actor that allows a protected user/operator action is a blocker. Do not require a full conformance harness, marketplace defenses, or unrelated negative-test families merely because trusted first-party code lives under `internal/fixtures/`."
-- **Membership and settings data integrity (Baseplate PR #447):** "For chunks touching membership, settings, or permissions rows: do the acceptance criteria require server-issued stable row identity (never an array index or DOM order), cloned rows regenerating their ID rather than inheriting it, fail-closed validation on unknown or missing fields, and a live-region announcement for every async row mutation? Row identity derived from position silently corrupts the wrong record after a sort or filter."
+- **Membership and settings data integrity (Baseplate PR #447):** "For work touching membership, settings, or permissions rows: do the acceptance criteria require server-issued stable row identity (never an array index or DOM order), cloned rows regenerating their ID rather than inheriting it, fail-closed validation on unknown or missing fields, and a live-region announcement for every async row mutation? Row identity derived from position silently corrupts the wrong record after a sort or filter."
 - **Size and layering heuristics:** "Do file length, function length, layer count, interfaces, or service/repository patterns reveal a concrete execution failure or approved-scope regression? Numeric thresholds and architecture preferences are signals for inspection, never blockers by themselves. A clear, tested, one-use handler or concrete implementation is valid."
 - **Federation security:** "Are federation endpoints (if any) HTTPS-only with validated `return_url`? Link tokens must have 5-minute TTL, single-use nonce, and audience validation."
-- **Federation reactivity (Baseplate PR #271/#275, #273/#277):** "For cross-install push/share/notification work, do the prompts require: signed push payloads verified against the pinned key BEFORE processing (idempotent, replay-protected); SSE fan-out that re-authorizes each subscriber per emit and scopes events to the granted resource; and a real two-install verification (live sender + receiver) as the acceptance bar, not a single-install mock? Flag chunks that verify federation behavior only in-process."
-- **Behavior-preserving decomposition:** "Is any chunk a decomposition of an oversized trust/share/repair/membership/federation file (e.g. #234, #258)? If so, the chunk must be move-only: it states target files + line counts, names the public symbols that must stay stable, and relies on the existing test suite as proof (no new behavior, no new tests). Flag any decomposition chunk that mixes logic edits with the move, changes an exported signature, or introduces whole-struct DTOs across the new seam."
-- **Release / updater supply chain (Baseplate PR #279):** "For updater/release chunks, do the prompts require verify-before-extract (checksum + signature against a pinned key before extraction or exec), archive extraction safety (zip-slip/symlink/size guards), snapshot-before-apply with recoverable partial-success and atomic handoff, GoReleaser dry-run only in CI (no real publish/sign), and provider-agnostic manifest origins? A 'verified' claim with no actual verify call is a BLOCKER."
-- **Production readiness preflight (Baseplate PRs #399, #438, #436/#437):** "For chunks touching config loading, the updater, release tooling, shutdown, or key rotation, do the prompts require: config validation that is **fail-closed at boot** (invalid config exits non-zero, never defaults through); an **update candidate preflighted before replacement** (checksum + signature + version ordering verified on the candidate before any file is swapped -- #438); update-failure recovery copy that names the recovery command rather than saying 'an error occurred'; explicit shutdown ordering (drain HTTP -> stop consumers -> flush -> close DB, not an incidental `defer` stack); email and federation key rotation with responder-side key-check fairness and a stated old-key grace window; server-side double-submit protection on repair and recovery forms (an idempotency token, not a disabled button -- these run when the system is already unhealthy); and a **release receipt** enumerating active-install monitoring and beta-finalization proof (#436/#437)? Are runbooks and docs updated in the same chunk rather than deferred? Flag any chunk that validates config by warning and continuing."
-- **Federation share transport, both sides (Baseplate PR #447):** "Federation work is routinely built and verified only from the requester's side. Do the prompts cover the **responder**: serving shared assets (install logo, document preview), checking the requesting key fairly, and re-checking the share grant on every fetch rather than once at link time? Do they enforce the **public/private URL boundary** -- never serializing an internal base URL (`http://app:8080/...`, LAN hostname, `localhost:port`) into a federated payload; deriving every cross-install asset URL from configuration rather than the inbound `Host` header; refusing to emit a payload when the public URL is unset rather than falling back to the internal address; and validating that a signed inbound fetch targets a resource actually covered by the grant (a signature proves *identity*, never *authorization*)? Flag any federation chunk whose acceptance bar is a single-install mock rather than a live sender plus live receiver."
+- **Federation reactivity (Baseplate PR #271/#275, #273/#277):** "For cross-install push/share/notification work, does the applicable execution scope require: signed push payloads verified against the pinned key BEFORE processing (idempotent, replay-protected); SSE fan-out that re-authorizes each subscriber per emit and scopes events to the granted resource; and a real two-install verification (live sender + receiver) as the acceptance bar, not a single-install mock?"
+- **Behavior-preserving decomposition:** "Is any full-mode chunk or Lean single-pass scope a decomposition of an oversized trust/share/repair/membership/federation file (e.g. #234, #258)? If so, that execution unit must be move-only: it states target files + line counts, names the public symbols that must stay stable, and relies on the existing test suite as proof (no new behavior, no new tests). Flag any decomposition that mixes logic edits with the move, changes an exported signature, or introduces whole-struct DTOs across the new seam."
+- **Release / updater supply chain (Baseplate PR #279):** "For updater/release work, does the applicable execution scope require verify-before-extract (checksum + signature against a pinned key before extraction or exec), archive extraction safety (zip-slip/symlink/size guards), snapshot-before-apply with recoverable partial-success and atomic handoff, GoReleaser dry-run only in CI (no real publish/sign), and provider-agnostic manifest origins? A 'verified' claim with no actual verify call is a BLOCKER."
+- **Production readiness preflight (Baseplate PRs #399, #438, #436/#437):** "For work touching config loading, the updater, release tooling, shutdown, or key rotation, does the applicable execution scope require: config validation that is **fail-closed at boot** (invalid config exits non-zero, never defaults through); an **update candidate preflighted before replacement** (checksum + signature + version ordering verified on the candidate before any file is swapped -- #438); update-failure recovery copy that names the recovery command rather than saying 'an error occurred'; explicit shutdown ordering (drain HTTP -> stop consumers -> flush -> close DB, not an incidental `defer` stack); email and federation key rotation with responder-side key-check fairness and a stated old-key grace window; server-side double-submit protection on repair and recovery forms (an idempotency token, not a disabled button -- these run when the system is already unhealthy); and a **release receipt** enumerating active-install monitoring and beta-finalization proof (#436/#437)? Are runbooks and docs updated in the same execution scope rather than deferred? Flag validation that warns and continues."
+- **Federation share transport, both sides (Baseplate PR #447):** "Federation work is routinely built and verified only from the requester's side. Does the applicable execution scope cover the **responder**: serving shared assets (install logo, document preview), checking the requesting key fairly, and re-checking the share grant on every fetch rather than once at link time? Does it enforce the **public/private URL boundary** -- never serializing an internal base URL (`http://app:8080/...`, LAN hostname, `localhost:port`) into a federated payload; deriving every cross-install asset URL from configuration rather than the inbound `Host` header; refusing to emit a payload when the public URL is unset rather than falling back to the internal address; and validating that a signed inbound fetch targets a resource actually covered by the grant (a signature proves *identity*, never *authorization*)? Flag a single-install mock acceptance bar."
 - **Input validation:** "Is external input validated before every write? When the applicability matrix selects a service boundary, does the validated DTO cross that boundary instead of raw request data?"
-- **Migration sequencing:** "Are migration numbers sequential with no gaps or duplicates? Does every schema migration precede the handler/service chunks that depend on the new tables or columns? Verify by checking `ls migrations/*.sql | sort | tail -1` in the target repo."
+- **Migration sequencing:** "Are migration numbers sequential with no gaps or duplicates? Does every schema migration precede the handler/service work that depends on the new tables or columns? Verify by checking `ls migrations/*.sql | sort | tail -1` in the target repo."
 - **Destructive confirmation:** "Do destructive operations (delete, archive, revoke) require server-verified confirmation? Client-only `confirm()` dialogs are insufficient -- the handler must validate a confirmation token or re-authenticate."
 - **Generated Templ files:** "Do any acceptance criteria or `filesToModify` lists include `*_templ.go` files? These are generated artifacts -- only `.templ` source files should appear. Flag any `*_templ.go` reference as a BLOCKER."
-- **Install / auth-boundary browser proof (Baseplate PR #278, #274):** "Do install-flow or auth-boundary chunks prove reachable allowed/denied/stale-direct-request states and server-side validation of async-populated defaults at the affected interface? An existing Auth Boundary Map may help, but do not require a new threat-model document or receipt solely for review."
-- **Companion skills validation:** "Do Assembly-targeting chunks include `assembly:development` in their `companionSkills` list? Missing companion skills cause subagents to miss domain conventions."
+- **Install / auth-boundary browser proof (Baseplate PR #278, #274):** "Does install-flow or auth-boundary work prove reachable allowed/denied/stale-direct-request states and server-side validation of async-populated defaults at the affected interface? An existing Auth Boundary Map may help, but do not require a new threat-model document or receipt solely for review."
+- **[Full only] Companion skills validation:** "Do Assembly-targeting chunks include `assembly:development` in their `companionSkills` list? Missing companion skills cause subagents to miss domain conventions."
 
 **Minimum adequate scope:**
 
@@ -148,10 +177,11 @@ When the plan targets Assembly (`assembly-baseplate` or `internal/fixtures/`), v
 - [ ] For every new abstraction, service, policy layer, background process, cache, transaction ledger, approval ceremony, receipt family, compatibility layer, or generalized extension point, does it name a current consumer, a concrete present failure or realistic reachable harm, and what it replaces or why direct code is inadequate?
 - [ ] Before adding any acceptance criterion or mechanism, ask: Can this be deleted? Can direct code or an existing mechanism handle it? Is the threat reachable under the approved trust model? Is it required now, or merely desirable hardening?
 - [ ] Delete unsupported machinery from current scope or leave it as a non-blocking future idea. If sibling campaigns are proposed, does the user gate show the complete total scope and the smaller usable alternative before either campaign is generated?
-- [ ] During prototyping, do prompts recommend new migrations over patching?
-- [ ] Do prompts avoid preserving broken patterns with compatibility layers?
-- [ ] Does each chunk exist because an approved requirement or project outcome
-  needs it, rather than because adjacent useful work was discovered?
+- [ ] During prototyping, does the applicable execution scope recommend new migrations over patching?
+- [ ] Does the applicable execution scope avoid preserving broken patterns with compatibility layers?
+- [ ] Does each full-mode chunk, or the Lean single-pass scope as a whole,
+  exist because an approved requirement or project outcome needs it rather
+  than because adjacent useful work was discovered?
 
 **Execution guardrails:**
 
@@ -164,27 +194,28 @@ When the plan targets Assembly (`assembly-baseplate` or `internal/fixtures/`), v
 - [ ] Does `finalReviewMode` match explicit approved intent and carry a
   non-empty rationale? Is `quick` rejected for high consequence and guaranteed
   to escalate to full on a security-sensitive final diff?
-- [ ] Are prompt files small enough for the token budget (~80K per subagent)?
-- [ ] Do any prompts reference `.env`, credentials, or secrets that should be stripped?
+- [ ] **[Full only]** Are prompt files small enough for the token budget (~80K per subagent)?
+- [ ] **[Full only]** Do any prompts reference `.env`, credentials, or secrets that should be stripped?
 - [ ] Are severity levels consistent with P1/P2/P3 definitions (per `plugins/dm-review/skills/review/references/severity-mapping.md`)?
 - [ ] Will the review output follow the unified format (per `plugins/dm-review/skills/review/references/output-format.md`)?
-- [ ] Do prompts avoid touching shared config files (routes, main) that should be in an integration chunk?
+- [ ] **[Full only]** Do prompts avoid touching shared config files (routes, main) that should be in an integration chunk?
 
 ### Perspective 4: Visual Verification Readiness
 
-First audit the independent rendered-surface declaration for every chunk:
+Apply the mode-specific rendered-surface audit:
 
-- [ ] Does the manifest carry both `renderedSurface` and a non-empty `renderedSurfaceRationale`?
-- [ ] For `not_applicable`, does the rationale name every `.templ`, `.twig`, `.html`, `.css`, route, `main.go`, navigation, or wiring trigger and prove why it is unserved or non-rendering?
-- [ ] Does the prompt avoid visual/browser claims, served routes, or client interactions that contradict `not_applicable`?
-- [ ] Are mixed or uncertain chunks classified `required`? A syntactic trigger with an incomplete rationale is a **BLOCKER**, not permission to skip browser evidence.
+- [ ] **[Full only]** Does the manifest carry `renderedSurface` and a non-empty `renderedSurfaceRationale` for every chunk?
+- [ ] **[Full only]** Does each prompt agree with its manifest applicability and avoid contradictory visual/browser claims?
+- [ ] **[Lean only]** Does the plan's single-pass scope state whether rendered verification is required and give a non-empty rationale?
+- [ ] In either mode, does a `not_applicable` rationale account for every `.templ`, `.twig`, `.html`, `.css`, route, `main.go`, navigation, or wiring trigger? Mixed or uncertain scope is `required`.
 
-For each chunk with `renderedSurface: required`, verify the prompts are set up for visual quality enforcement:
+For required rendered work, verify the applicable prompts (full) or single-pass
+plan scope (Lean) is set up for visual quality enforcement:
 
-- [ ] Does the chunk have a `## Visual References` section citing a design spec, the `brainstorm.html` `visualDecisions` island, or approved visual requirements? If no visual baseline exists, flag as **IMPORTANT**: "Rendered-surface chunk [chunk-id] has no visual baseline to verify against -- visual quality will be evaluated by heuristics only, which has a documented history of missing implementation gaps."
-- [ ] Does the chunk have `### Visual Acceptance Criteria` with at least 2 criteria describing visual IMPRESSIONS (not just structural class names)? "Button uses `button--outline-danger` class" is structural. "Block and Abstain buttons are visually smaller and lighter than the main position buttons" is an impression. Both are needed; impressions catch the gap between "correct class" and "correct visual effect."
+- [ ] Does the full-mode prompt or Lean single-pass scope cite a design spec, the `brainstorm.html` `visualDecisions` island, or approved visual requirements? If no visual baseline exists, flag the applicable execution scope as **IMPORTANT** because visual quality would otherwise be evaluated by heuristics only.
+- [ ] Does the full-mode prompt or Lean single-pass scope contain at least 2 visual acceptance criteria describing visual IMPRESSIONS (not just structural class names)? "Button uses `button--outline-danger` class" is structural. "Block and Abstain buttons are visually smaller and lighter than the main position buttons" is an impression. Both are needed; impressions catch the gap between "correct class" and "correct visual effect."
 - [ ] Does each visual acceptance criterion include a browser-verifiable test? A criterion is browser-verifiable if it can be confirmed by screenshot comparison or getComputedStyle extraction. "Code is clean" is not verifiable. "Button has font-size < 1rem per getComputedStyle" is verifiable.
-- [ ] For chunks modifying the same visual area (e.g., sidebar, form, card), do the visual criteria align across chunks? One chunk shouldn't say "prominent headings" while another says "subdued headings."
+- [ ] **[Full only]** For chunks modifying the same visual area (e.g., sidebar, form, card), do the visual criteria align across chunks? One chunk shouldn't say "prominent headings" while another says "subdued headings."
 - [ ] If the approved scope or plan says "visually identical," "match the existing," "same as," or "these should be the same component" between two pages or elements, is there an explicit **Visual Parity Criterion**? (See below.)
 
 **Visual Diff Protocol:**
@@ -192,7 +223,7 @@ For each chunk with `renderedSurface: required`, verify the prompts are set up f
 Two triggers. The first is stated, the second is implied.
 
 1. **Stated parity.** The approved scope or plan says "these should look the same," "visually identical," "match X," or "same component."
-2. **Implied parity (auto-trigger).** One Templ component is rendered on two or more routes -- a shared editor, form, or dialog. Sharing a component *is* the parity claim, whether or not anyone wrote it down. A route-specific wrapper or a stale CSS override breaks it silently, and the code review passes because the component source is identical. Grep the plan's `filesToModify` for a component invoked from more than one page package; each hit needs the criteria below.
+2. **Implied parity (auto-trigger).** One Templ component is rendered on two or more routes -- a shared editor, form, or dialog. Sharing a component *is* the parity claim, whether or not anyone wrote it down. A route-specific wrapper or a stale CSS override breaks it silently, and the code review passes because the component source is identical. In full mode, inspect the planned `filesToModify`; in Lean mode, inspect the files named in the single-pass scope. A component invoked from more than one page package needs the criteria below.
 
 In either case, the acceptance criteria MUST include:
 
@@ -200,7 +231,7 @@ In either case, the acceptance criteria MUST include:
 2. A computed style comparison criterion: "getComputedStyle on [selector] for [A] and [B] must match for: font-size, font-weight, color, padding, margin, background-color, border"
 3. Both criteria are **P1** -- visual parity requirements from the user are not optional polish.
 
-If an approved visual-parity requirement lacks these criteria, emit one blocker scoped to the affected chunk.
+If an approved visual-parity requirement lacks these criteria, emit one blocker scoped to the affected full-mode chunk or Lean single-pass scope.
 
 ## Targeted Criteria Review
 
@@ -215,13 +246,20 @@ For every proposed criterion or mechanism, answer these questions first:
 
 The adversary may not introduce a new product requirement unless it maps to an approved outcome or proves a concrete regression or security defect. A blocking finding must name the exact execution failure, approved-scope regression, or realistic reachable security/data defect it prevents.
 
-**Mutation applicability coverage:** For an Assembly mutation chunk, first name
+**Mutation applicability coverage:** For an Assembly mutation chunk, or a Lean
+single-pass mutation scope, first name
 the controls selected by `assembly:development`'s Mutation Applicability Matrix
 and the present evidence that makes each one apply. Add criteria only for selected controls whose obligation is missing from the existing
 acceptance criteria. Never add authorization, a service, transaction, audit,
 event, or SSE criterion merely because the chunk mutates SQLite.
 
-**Ambiguity surfacing:** Before a chunk reaches the execution-orchestrator, inspect its Task and Acceptance Criteria for phrases that allow multiple reasonable interpretations (comparative adjectives without a baseline, verbs like "improve/fix/clean up" without a specific failure, noun phrases like "the right way" or "better UX"). If the prompt would force a subagent to pick silently between defensible paths, emit a finding with perspective `Completeness` and action verb `INSERT` that adds an explicit interpretation block to the chunk. This is the cheapest of three layers -- the sibling layers are `promptcraft/references/prompt-template.md` Ambiguity Protocol (shipped into every chunk prompt) and `execution-orchestrator.md` Ambiguity Handling (autonomous-mode runtime fallback). The subagent's inline protocol is a last-resort safety net; catching ambiguity here is cheaper. Keep wording aligned across all three layers.
+**Ambiguity surfacing:** In full mode, inspect each chunk Task and Acceptance
+Criteria before it reaches the execution-orchestrator. In Lean mode, inspect
+the plan's single-pass scope and criteria before execution. If either would
+force a worker to pick silently between defensible interpretations, emit a
+finding with perspective `Completeness` and action verb `INSERT` that adds an
+explicit interpretation block to the existing applicable artifact. Do not
+create a prompt merely to hold the Lean clarification.
 
 **Key principle from Anthropic's harness research:** Generators and evaluators should negotiate success criteria before each sprint. Vague criteria produce vague results. Specific, testable criteria drive specific, testable implementations.
 
@@ -233,7 +271,7 @@ For each issue found:
 ### [SEVERITY] Issue Title
 
 **Perspective:** Feasibility | Completeness | Project Alignment | DM Standards | Visual Verification Readiness
-**Chunk:** [chunk-id] or "Overall"
+**Chunk:** [chunk-id], "Single-pass scope", or "Overall"
 **Issue:** [Clear description of the problem]
 **Action:** [IMPERATIVE VERB + specific instruction]
 **Scope:** [what part of what file]

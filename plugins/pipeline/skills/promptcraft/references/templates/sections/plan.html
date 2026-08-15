@@ -7,6 +7,7 @@
     { artifact:"plan", slug, baseBranch, featureBranch,
       branchMode:"create|reuse", expectedFeatureHead,
       chunks:[{ n:"01", slug:"reader-service", scope, acceptance, deps:[] }],
+      // chunks is full-mode-only; Lean carries its single-pass scope in prose.
       decisions:[{ id, decision, rationale, alternatives }],
       requirementsCoverage:[{ requirement, chunk }] }
   Epic-plan variant: replace the chunk table with the sub-plan roadmap and emit
