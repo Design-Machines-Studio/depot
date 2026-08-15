@@ -2317,7 +2317,7 @@ git status --porcelain          # expect: empty
 
 ### 5. Final authoritative cleanup/terminal receipt and report
 
-Now create `plans/<feature-slug>/receipt.md` using the schema above. Every Docker, artifact, worktree, branch, readiness, and repository-status field must come from the completed authoritative outcomes in Steps 1-4. A receipt field cannot predict, precede, or be backfilled from shadow state.
+Now create `plans/<feature-slug>/receipt.md` using the schema above. Every Docker, artifact, worktree, branch, readiness, and repository-status field must come from the completed authoritative outcomes in Steps 1-4. A receipt field cannot predict, precede, or be backfilled from shadow state. This Step 5b base receipt MUST omit the caller-owned `- Memory capture:` field. After Step 6 returns the handoff, the capable caller appends exactly one terminal memory-capture field with its observed outcome.
 
 Log cleanup stats: `Artifact cleanup before shadow: removed N ephemeral + M run-scoped files, retained K feature-scoped files.` The authoritative receipt does not predict the later shadow/input disposition; Step 6 reports those post-receipt deletions separately after they occur.
 

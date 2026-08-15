@@ -39,7 +39,7 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | `research.html` | 3 | Findings from research phase (HTML + island) |
 | `plan.html` | 3 | Implementation plan (HTML + `chunks`/`decisions` island) |
 | `final-requirements-crosscheck.md` | 3 | Delivery proof with evidence types |
-| `receipt.md` | 3 | Compact post-cleanup summary (written by Step 5b) |
+| `receipt.md` | 3 | Compact post-cleanup summary; Step 5b writes the base receipt and the capable caller appends memory-capture status |
 
 ### Pipeline git refs
 
@@ -130,7 +130,12 @@ Before creating today's screenshot directory, delete all previous date directori
 
 ## Receipt Format
 
-Written by Step 5b after cleanup. Under 2 KB. This is the durable record that remains after ephemeral/run-scoped artifacts are deleted.
+Completed in two stages and kept under 2 KB. Step 5b writes the base receipt
+after cleanup and MUST omit any `- Memory capture:` field because the
+orchestrator does not know the caller-side result. After consuming the handoff,
+the capable caller appends exactly one terminal `- Memory capture: written |
+already-present | skipped -- <reason>` field. The caller never rewrites the
+authoritative Step 5b fields.
 
 ```markdown
 # Pipeline Receipt: <feature-slug>
@@ -146,7 +151,6 @@ Written by Step 5b after cleanup. Under 2 KB. This is the durable record that re
 - eligibleProviderSplit: `{codex: N, openrouter: N, targetProfile: <name>, routingVariance: <measured>}`
 - Workflow class: chore | bug | feature | hotfix | security | investigation | migration
 - Workflow class defaulted: true | false
-- Memory capture: written | already-present | skipped -- <reason>
 
 ## Evidence
 | # | Requirement | Evidence |
