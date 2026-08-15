@@ -64,7 +64,8 @@ the copy buttons. Only `<script defer>` is used.
 ## Data-island schema
 
 ```jsonc
-// assessment.html -- keyRequirements IS the cached requirements source
+// assessment.html -- keyRequirements becomes authoritative only after the
+// combined discovery response; compact Project Alignment remains rendered prose
 { "artifact": "assessment", "slug": "<slug>",
   "keyRequirements": ["..."], "testPersonas": [{"name","id","role","useFor"}],
   "recentLessons": ["..."], "baselineScreenshots": [{"route","viewport","path"}] }

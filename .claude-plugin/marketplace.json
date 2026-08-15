@@ -361,7 +361,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.51.4",
+      "version": "1.52.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

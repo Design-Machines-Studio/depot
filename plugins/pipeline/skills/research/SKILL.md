@@ -9,15 +9,22 @@ Gather context from all available DM knowledge sources before planning a feature
 
 ## Input
 
-Requires two things:
-1. **Feature description** -- What the user wants to build or change
-2. **Assessment Brief** (optional) -- Output from the assess skill, if available
+Requires:
+1. **Original request** -- The user's verbatim feature description
+2. **Provisional Assessment Brief** -- Including its compact Project Alignment record
+3. **Current repository evidence** -- Identity, source state, and relevant instructions/plans
+
+The assessment's `keyRequirements` remain provisional during research. Do not
+describe them as approved or use them to override a current authority.
 
 ## Process
 
 ### Phase 1: Source Detection
 
-Determine which research sources are available. Check each and note availability:
+Determine which research sources are both available and relevant. Availability
+alone is not a reason to query a source. Select the smallest source set that can
+test current project alignment and implementation claims, and note material
+unavailability:
 
 | Source | How to Check | Required |
 |--------|-------------|----------|
@@ -26,6 +33,10 @@ Determine which research sources are available. Check each and note availability
 | Web search | WebSearch tool available | No -- graceful skip |
 | Context7 | `mcp__plugin_context7_context7__resolve-library-id` available | No -- graceful skip |
 | compound-engineering | Check if repo-research-analyst agent is available | No -- graceful skip |
+
+Inspect the supplied or safely discoverable native Issue/PR when it is relevant.
+Consult a coordination Project only when the repository or user declares one.
+Do not perform a generic organization-wide GitHub survey for every run.
 
 ### Phase 2: Project Type Detection
 
@@ -39,9 +50,18 @@ Detect the project type to determine which domain plugins to load as companions.
 | Design/UX context in feature description | Design practice | design-practice skills |
 | Cooperative governance context | Governance | council `governance` |
 
+For Assembly-related work, preserve the real operating context: a two-person
+development team, trusted first-party repositories, small self-hosted Go
+applications, and roughly 4--50 users per installation. Apply YAGNI and
+pragmatic DRY. Keep strong security at real credential, authorization,
+release-integrity, and data-loss boundaries, but do not add enterprise
+architecture without a demonstrated current consumer.
+
 ### Phase 3: Parallel Research Dispatch
 
-Launch all available research agents simultaneously. Each agent gets the feature description and assessment brief (if available).
+Launch the selected applicable research agents simultaneously. Each gets the
+original request, provisional assessment, compact Project Alignment record, and
+current repository evidence. Do not query unrelated company/domain sources.
 
 **Executor routing:** Default read-heavy research fan-out to Codex, with Claude
 as the local fallback when Codex is unavailable. This phase remains native by
@@ -106,11 +126,17 @@ If compound-engineering is not installed, perform basic codebase research direct
 - Read CLAUDE.md files for conventions
 - Check git log for related recent changes
 
+When a native Issue/PR or declared coordination Project is in scope, verify only
+the named repository/ownership/dependency state needed for this request. Record
+conflicts between live GitHub state and stale tracked prose without treating the
+coordination projection as architectural authority.
+
 **Agent 6: Web Search Researcher** (Claude-native grounding, if WebSearch available)
 
 Use native web tools for current, cited results:
 
-1. Formulate 2-3 search queries from the feature description targeting current best practices, recent framework changes, and community patterns
+1. Formulate at most 2-3 focused queries only when current external technical
+   evidence is needed, targeting the specific framework/API claim
 2. Run `WebSearch` for each query. From the results, select the most authoritative sources (official docs, maintainer posts, recognized practitioners)
 3. `WebFetch` the top sources to extract specifics and capture exact URLs for citation
 4. Extract: authoritative sources with URLs, recent changes or deprecations, community consensus, version-specific guidance
@@ -136,6 +162,23 @@ node -e "console.log(Object.keys(require('package-name')))"
 ```
 
 Do NOT propose using an API that hasn't been verified to exist in the installed version. Hallucinated APIs are the #1 cause of pipeline failures.
+
+**0. Project Alignment Verification**
+
+Before technical verification, test the proposal against the compact alignment
+record and current sources:
+
+- Does it advance the current project goal?
+- Does another repository, active branch, or named owner already own it?
+- Is any supporting plan, comment, receipt, or remembered state stale?
+- Is the requested mechanism necessary, or does a smaller direct solution
+  preserve the approved outcome?
+- Does it add speculative scale, ceremony, or machinery without a current
+  consumer?
+
+Surface real authority conflicts for the combined discovery gate. Never let a
+technically attractive approach silently override the repository's current
+project goal.
 
 **2. Codebase Pattern Verification**
 
@@ -193,7 +236,8 @@ Collect results from all agents and produce a **Research Brief**. Write it as **
 [2-3 sentence summary of what was found]
 
 ## Project Context
-[From ai-memory: prior decisions, known constraints, related work]
+[Current project goal, source-backed relevance now, ownership/dependency state,
+and stale or conflicting context. Prior memory is supporting context only.]
 
 ## Domain Knowledge
 [From domain plugins: applicable patterns, conventions, requirements]
@@ -210,15 +254,21 @@ Collect results from all agents and produce a **Research Brief**. Write it as **
 ## Constraints and Risks
 [Anything that could complicate implementation]
 
+## Alignment Verdict
+[Whether the work advances the current goal; smallest supported scope; explicit
+non-goals; ownership conflicts; any owner choice that remains]
+
 ## Key Decisions Needed
-[Questions that planning will need to answer]
+[Only user-owned decisions to resolve at the combined discovery gate]
 ```
 
 Save the brief to `plans/<feature-slug>/research.html` in the target project (detect host CSS first; on `FALLBACK` inline `templates/baseline.css`).
 
 ### Phase 5: Handoff
 
-If running as part of `/pipeline`, pass the Research Brief forward to the planning phase. If running standalone, present it to the user.
+If running as part of `/pipeline`, pass the Research Brief and provisional
+assessment to the combined discovery gate. Research does not have a separate
+human approval pause. If running standalone, present it to the user.
 
 ## Graceful Degradation
 

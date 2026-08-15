@@ -82,8 +82,11 @@ feature + epic variants) are defined canonically in **`docs/html-artifacts.md`
 §Data-island schema** (repo root). It is the single source of truth -- do not
 duplicate the field list here; link to it so the two cannot drift.
 
-`keyRequirements` in `assessment.html` is the cached Key Requirements source the
-pipeline re-reads in Phases 3/4/7. `chunks[].n` + `chunks[].slug` map 1:1 onto
+`keyRequirements` in `assessment.html` becomes the cached authoritative source
+only after the combined discovery response is persisted and verified. The
+compact Project Alignment record stays in the existing rendered assessment
+prose rather than creating a second island schema. Pipeline re-reads the
+approved requirements in Phases 3/4/7. `chunks[].n` + `chunks[].slug` map 1:1 onto
 `prompts/NN-<slug>.md` (assembly-baseplate chunk-prompt convention).
 
 ## Reading the island downstream

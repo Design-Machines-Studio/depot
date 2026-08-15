@@ -21,9 +21,15 @@ Terse. No preamble, no narrative framing, no "thank you for the plan" sentiments
 You receive:
 
 1. A plan file (`plan.html` carrying a `#pipeline-data` JSON island). Read its structured `chunks`/`decisions`/`requirementsCoverage` with `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh plans/<feature-slug>/plan.html`, and read the rendered prose for narrative context. (A hand-written markdown plan may be passed when invoked outside `/pipeline`.)
-2. A set of execution prompts (markdown files in a prompts/ directory)
-3. A manifest.json with dependency ordering
-4. An assessment artifact whose `keyRequirements` island contains the approved scope after the user gate
+2. A set of execution prompts (markdown files in a prompts/ directory) and a
+   manifest with dependency ordering in full mode. In lean mode both are absent
+   by design; review the plan and single-pass execution scope without inventing
+   them.
+3. An assessment artifact whose `keyRequirements` island contains the scope
+   approved at the combined discovery gate, plus its compact rendered Project
+   Alignment record.
+4. Relevant findings from `research.html`, including current ownership or
+   stale-context evidence.
 5. An `original-prompt.md` with the user's verbatim request record. Mechanisms named only in the original prompt are not automatically approved scope.
 
 Your own findings output (the `## Output Format` per-finding blocks) stays **markdown** -- it is returned to the caller, not a human-facing artifact.
@@ -63,6 +69,30 @@ Do the prompts cover the approved outcomes, constraints, and decisions? Read the
 - [ ] **Context-loss check:** Compare the approved requirements and recorded gate decisions against the original prompt's full text. Was any explicit request silently dropped rather than approved, rejected, replaced, or retained as a future idea at the gate?
 - [ ] **Usage count reconciliation:** If research identified N usages of something being modified/removed, do the prompts account for all N? Sum planned changes across chunks and compare to the research total. A gap means unplanned breakage.
 - [ ] **Survivor audit:** For files the plan keeps unchanged, do they still make sense given what's being removed/added? Flag dead abstractions kept for a single consumer.
+
+### Perspective 2a: Project-Goal Alignment and Ownership
+
+Does the complete planning package advance the approved current project goal
+within the named ownership boundary?
+
+- [ ] Does the plan state the source-backed current project goal, why this work
+  is appropriate now, and explicit non-goals?
+- [ ] Does every chunk map to an approved requirement or project outcome and
+  carry only its relevant goal, non-goals, and ownership context?
+- [ ] Does current repository/Issue/PR evidence support the ownership claim, or
+  does another repository, owner, or active branch already own the work?
+- [ ] Does the proposal rely on an old plan, receipt, comment, Project snapshot,
+  or remembered state as if it proved current GitHub status?
+- [ ] Is any technically valid chunk irrelevant to, contradictory with, or an
+  unjustified expansion of the approved project goal?
+- [ ] Does any new machinery lack a current consumer, a concrete present
+  failure or realistic reachable harm, or an explanation of why direct code is
+  inadequate?
+
+Block duplicated ownership, stale-context assumptions, scope creep, and work
+that is technically sound but does not advance the approved goal. Name the
+correct owner or the unresolved owner decision. Do not create a new goal ID,
+schema, roadmap copy, or alignment artifact.
 
 ### Perspective 2b: Internal Consistency
 
@@ -120,6 +150,8 @@ When the plan targets Assembly (`assembly-baseplate` or `internal/fixtures/`), v
 - [ ] Delete unsupported machinery from current scope or leave it as a non-blocking future idea. If sibling campaigns are proposed, does the user gate show the complete total scope and the smaller usable alternative before either campaign is generated?
 - [ ] During prototyping, do prompts recommend new migrations over patching?
 - [ ] Do prompts avoid preserving broken patterns with compatibility layers?
+- [ ] Does each chunk exist because an approved requirement or project outcome
+  needs it, rather than because adjacent useful work was discovered?
 
 **Execution guardrails:**
 
@@ -197,7 +229,7 @@ For each issue found:
 ```markdown
 ### [SEVERITY] Issue Title
 
-**Perspective:** Feasibility | Completeness | DM Standards | Visual Verification Readiness
+**Perspective:** Feasibility | Completeness | Project Alignment | DM Standards | Visual Verification Readiness
 **Chunk:** [chunk-id] or "Overall"
 **Issue:** [Clear description of the problem]
 **Action:** [IMPERATIVE VERB + specific instruction]

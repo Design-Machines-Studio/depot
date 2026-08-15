@@ -184,6 +184,8 @@ assembly_nats_skill="$REPO_ROOT/plugins/assembly/skills/nats-jetstream/SKILL.md"
 assembly_workflows="$REPO_ROOT/plugins/assembly/skills/development/workflows.md"
 promptcraft="$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
 assess_skill="$REPO_ROOT/plugins/pipeline/skills/assess/SKILL.md"
+research_skill="$REPO_ROOT/plugins/pipeline/skills/research/SKILL.md"
+prompt_template="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/prompt-template.md"
 assessment_template="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/templates/sections/assessment.html"
 plan_adversary="$REPO_ROOT/plugins/pipeline/agents/workflow/plan-adversary.md"
 security_mapping="$REPO_ROOT/plugins/dm-review/skills/review/references/severity-mapping.md"
@@ -596,11 +598,41 @@ printf "\nProportional-scope regression specimens (Publish Preview and FIX-01):\
 # approved scope before the user sees the smaller usable publication workflow.
 require_text "$pipeline_cmd" "not an automatically approved implementation contract" "proposed mechanisms are not automatically approved scope"
 require_text "$assess_skill" "Never silently discard an explicit request" "explicit user requests cannot disappear during intake"
-require_text "$pipeline_cmd" 'gate response to the Scope Intake prose and rewrite the `keyRequirements` island' "Publish Preview mechanism choice is persisted after the user gate"
-require_text "$pipeline_cmd" "verify that the extracted requirements reflect the selected smaller or mechanism-preserving option" "downstream coverage reads the user's selected scope"
-require_before "$pipeline_cmd" "After AskUserQuestion returns, apply the user's gate response" "## Phase 2: Research" "approved scope is persisted before research begins"
-require_text "$assessment_template" "provisional until the assessment gate response is persisted" "pre-gate assessment does not masquerade as approved scope"
+require_text "$pipeline_cmd" 'Apply the response to the assessment Scope Intake and Project Alignment' "Publish Preview mechanism choice is persisted after combined discovery"
+require_text "$pipeline_cmd" "verify the extracted requirements" "downstream coverage reads the user's selected scope"
+require_text "$assessment_template" "provisional until the combined discovery response is persisted" "pre-discovery assessment does not masquerade as approved scope"
 require_text "$promptcraft" "total scope and the smaller usable alternative" "oversized campaign decomposition exposes the minimum adequate alternative first"
+
+printf "\nPipeline two-gate planning and alignment contract:\n"
+require_absent "$pipeline_cmd" "Phase 1 GATE" "retired assessment gate is absent"
+require_absent "$pipeline_cmd" "Phase 2 GATE" "retired research gate is absent"
+require_absent "$pipeline_cmd" "Phase 3 GATE" "retired standalone plan gate is absent"
+require_absent "$pipeline_cmd" "Assessment complete. Any corrections or context to add before I research?" "retired assessment question cannot return"
+require_absent "$pipeline_cmd" "Research complete. Ready to plan, or want to adjust the scope?" "retired research question cannot return"
+require_absent "$pipeline_cmd" 'Plan ready at `plans/<feature-slug>/plan.html`' "retired plan question cannot return"
+require_before "$pipeline_cmd" "## Phase 2: Research" "## Combined Discovery Gate" "research precedes combined discovery gate"
+require_before "$pipeline_cmd" "## Combined Discovery Gate" "## Phase 3: Plan" "combined discovery precedes planning"
+require_text "$pipeline_cmd" "Only this combined discovery response makes the Key Requirements authoritative" "only discovery approval makes requirements authoritative"
+require_text "$pipeline_cmd" 'recommended `workflowClass`, `decisionProfile`, `branchMode`' "discovery resolves workflow, decision, and branch controls"
+require_text "$pipeline_cmd" '`expectedFeatureHead`, `finalReviewMode`, and `finalReviewRationale`' "discovery resolves expected head and final review controls"
+require_before "$pipeline_cmd" "## Phase 5: Adversarial Scope Review" "## Final Planning Gate" "bounded adversarial review precedes final planning gate"
+require_before "$pipeline_cmd" "## Final Planning Gate" "## Phase 6: Execute" "final planning gate precedes execution"
+require_text "$pipeline_cmd" "Execution MUST NOT begin without explicit approval of this final package" "execution requires explicit final planning approval"
+require_text "$pipeline_cmd" 'plans/<feature-slug>/manifest.json' "full final gate presents the manifest"
+require_text "$pipeline_cmd" 'plans/<feature-slug>/prompts/' "full final gate presents the prompt directory"
+require_text "$pipeline_cmd" "no manifest or prompt directory exists by design" "lean final gate does not fabricate artifacts"
+require_text "$assessment_template" '<h2 id="project-alignment">Project Alignment</h2>' "assessment renders compact project alignment"
+require_text "$research_skill" "Does it advance the current project goal?" "research tests project-goal alignment"
+require_text "$research_skill" "Do not perform a generic organization-wide GitHub survey" "research keeps GitHub discovery proportional"
+require_text "$prompt_template" "the larger approved project goal this chunk serves" "chunk context carries the larger project goal"
+require_text "$prompt_template" "the relevant non-goals and ownership boundary" "chunk context carries compact boundaries"
+require_text "$plan_adversary" "Project-Goal Alignment and Ownership" "plan adversary reviews project alignment"
+require_text "$plan_adversary" "another repository, owner, or active branch already own the work" "plan adversary checks duplicated ownership"
+require_text "$plan_adversary" "stale-context assumptions" "plan adversary checks stale context"
+require_text "$orchestrator" "approved scope cached after the combined discovery gate" "execution carries discovery-approved requirements"
+require_text "$orchestrator" "correct work that misses the chunk's approved outcome" "per-chunk review checks outcome alignment"
+require_text "$orchestrator" "final-requirements-crosscheck.md" "final delivery retains requirements cross-check"
+require_text "$orchestrator" "A branch that passes tests but fails an approved" "tests cannot override a missed project outcome"
 # FIX-01: trusted first-party Fixture code must not be reviewed as a hypothetical
 # hostile marketplace, while real reachable trust boundaries remain blocking.
 require_text "$plan_adversary" "Do not model trusted Fixture authors as hostile third parties" "plan adversary uses the approved current Fixture trust model"
@@ -631,7 +663,7 @@ require_text "$orchestrator" '| `execution_level` | Every chunk in one dependenc
 require_text "$orchestrator" '| `merge_candidate` | All levels are merged and before final review |' "orchestrator binds exact candidate evidence"
 require_text "$orchestrator" "Do not test after every" "final review fixes are batched before re-verification"
 require_text "$orchestrator" "[FULL PROMPT CONTENT INLINED HERE]" "legacy Codex worker receives the complete chunk prompt"
-require_before "$orchestrator" "[INLINE THE APPROVED KEY REQUIREMENTS LIST HERE]" "[FULL PROMPT CONTENT INLINED HERE]" "legacy Codex worker places approved requirements before the complete chunk prompt"
+require_before "$orchestrator" "[INLINE ONLY THE APPROVED KEY REQUIREMENTS MAPPED TO THIS CHUNK HERE]" "[FULL PROMPT CONTENT INLINED HERE]" "legacy Codex worker places chunk-relevant approved requirements before the complete prompt"
 require_before "$orchestrator" "[FULL PROMPT CONTENT INLINED HERE]" "When done:" "legacy Codex worker places the complete chunk prompt before closeout instructions"
 require_text "$pipeline_run" "Do not execute a full or race suite after each chunk" "Codex adapter forbids repeated full-suite execution"
 require_text "$assembly_build" "Planner modes never fall back to the legacy" "assembly planner modes reject legacy hardcoded fallback"
@@ -1257,8 +1289,8 @@ require_absent "$pipeline_run" 'Feature branch `<branch>` is ready. Options:' \
   "pipeline-run rejects the old standing action menu"
 require_text "$pipeline_cmd" 'Keep the complete coverage map in the existing plan/manifest artifacts' \
   "Pipeline phase gate keeps detailed coverage durable"
-require_text "$pipeline_cmd" 'At the gate, present only the chunk count' \
-  "Pipeline phase gate stays compact"
+require_text "$pipeline_cmd" 'State the approved project goal, smallest usable implementation, chunk count,' \
+  "Pipeline final planning gate stays compact and decision-focused"
 require_absent "$pipeline_cmd" 'Then reproduce the inventory' \
   "Pipeline cleanup delivery does not dump the complete inventory"
 
@@ -1268,4 +1300,4 @@ if [ "$failures" -ne 0 ]; then
   exit 1
 fi
 
-printf "OK    Workflow contracts intact (repository cleanup, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, routing invariants, configured-key OpenRouter authorization)\n"
+printf "OK    Workflow contracts intact (repository cleanup, two-gate Pipeline planning/alignment, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, routing invariants, configured-key OpenRouter authorization)\n"

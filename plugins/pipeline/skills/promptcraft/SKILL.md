@@ -12,7 +12,10 @@ Transform a plan into self-contained execution prompts with overlap-aware depend
 1. **Plan file** -- A pipeline `plan.html` carrying a `#pipeline-data` JSON island (`chunks`, `decisions`, `requirementsCoverage`). When invoked standalone on a hand-written markdown plan, parse the prose directly; within `/pipeline` the plan is HTML.
 2. **Original prompt** -- The user's verbatim input saved at `plans/<feature-slug>/original-prompt.md` (stays markdown; requested mechanisms are not automatically approved scope)
 3. **Research Brief** (optional) -- `research.html` from the research skill
-4. **Assessment Brief** (optional) -- `assessment.html` from the assess skill (cached Key Requirements live in its `keyRequirements` island)
+4. **Assessment Brief** (required within `/pipeline`) -- `assessment.html` from
+   the assess skill. Its `keyRequirements` island is authoritative only after
+   the combined discovery response; its rendered Project Alignment section is
+   the compact source for goal, non-goals, constraints, and ownership.
 
 ## Process
 
@@ -34,7 +37,17 @@ Read the plan and identify discrete chunks of work. A chunk is:
 - Testable in isolation (has its own acceptance criteria)
 
 **Decomposition rules:**
-0. Before chunking, require the plan prose to state the **Smallest Usable Implementation**. For every proposed new abstraction, service, policy layer, background process, cache, transaction ledger, approval ceremony, receipt family, compatibility layer, or generalized extension point, the plan must name its current consumer, a concrete present failure or realistic reachable harm, and what existing mechanism it replaces or why direct code is inadequate. Delete unsupported machinery from current scope or retain it only as a non-blocking future idea.
+0. Before chunking, require the plan prose to state the current project goal,
+   why the work is appropriate now, explicit non-goals, and the **Smallest
+   Usable Implementation**. Every chunk must map through the existing
+   requirements-coverage map to at least one approved requirement or project
+   outcome. For every proposed new abstraction, service, policy layer,
+   background process, cache, transaction ledger, approval ceremony, receipt
+   family, compatibility layer, or generalized extension point, the plan must
+   name its current consumer, a concrete present failure or realistic reachable
+   harm, and what existing mechanism it replaces or why direct code is
+   inadequate. Delete unsupported machinery from current scope or retain it
+   only as a non-blocking future idea.
 1. Database/schema changes are always their own chunk and always run first
 2. Backend and frontend work on different files can be separate parallel chunks
 3. Integration work (wiring things together) depends on the pieces it connects
@@ -79,7 +92,7 @@ Read the plan and identify discrete chunks of work. A chunk is:
 - Default to no more than 8 total chunks and no more than 6 chunks classified
   `large`. This is a run budget, not permission to make oversized chunks.
 - If the complete proposal exceeds either limit, return to the planning user
-  gate with the total scope and the smaller usable alternative before
+  discovery gate with the total scope and the smaller usable alternative before
   generating any sibling campaign. Campaign decomposition is not permission to
   hide an oversized design. A single oversized run requires an explicit
   approved rationale in the plan; promptcraft must not invent one.
@@ -93,7 +106,7 @@ Read the plan and identify discrete chunks of work. A chunk is:
 object with exactly `uncertainty`, `consequence`, and `rationale`; the first two
 are `low|medium|high` and the rationale is a non-empty string. Extra keys,
 malformed values, multiple profiles, or conflict with approved upstream data
-blocks prompt generation and returns to the Phase 3 user gate.
+blocks prompt generation and returns to the combined discovery gate.
 
 Keep `decisionProfile` distinct from `workflowClass`, `risk`, `overlapRisk`,
 `estimatedComplexity`, `kind`, `renderedSurface`, `executor`, and
@@ -117,12 +130,20 @@ must not be retrofitted even if its approved plan can explain a profile.
 
 For each chunk, extract from the plan, research brief, and assessment brief:
 
-1. **What to build** -- The specific deliverable
-2. **File paths** -- Every file the chunk will read or modify
-3. **Patterns to follow** -- Existing code patterns from the assessment
-4. **References** -- Relevant research findings
-5. **Acceptance criteria** -- How to know the chunk is done
-6. **Companion skills** -- Which domain plugins to load (assembly, live-wires, etc.)
+1. **Project goal** -- The larger approved goal this chunk serves
+2. **Chunk purpose** -- Why this chunk exists and which approved requirement or
+   project outcome it addresses
+3. **Boundaries** -- Relevant non-goals, ownership boundary, and scope limits
+4. **What to build** -- The specific deliverable
+5. **File paths** -- Every file the chunk will read or modify
+6. **Patterns to follow** -- Existing code patterns from the assessment
+7. **References** -- Only research findings relevant to this chunk
+8. **Acceptance criteria** -- How to know the chunk is done
+9. **Companion skills** -- Which domain plugins to load (assembly, live-wires, etc.)
+
+Do not paste the whole roadmap, assessment, research brief, or Project snapshot
+into a prompt. Use the existing Context section and requirement identifiers;
+do not introduce a second project-goal identifier system.
 
 Read `references/prompt-template.md` for the exact prompt structure.
 
@@ -304,7 +325,7 @@ Validate the generated manifest against the required schema before handoff.
 
 **Rule:** Every chunk object in the authoritative `chunks[]` array must include: `id`, `title`, `prompt`, `kind`, `renderedSurface`, `renderedSurfaceRationale`, `executor`, `filesToModify`, `dependsOn`, `companionSkills`, `estimatedComplexity`. Missing fields cause orchestrator dispatch failures. `renderedSurface` accepts only `required|not_applicable`; its rationale must be non-empty, and `not_applicable` must account for every UI/integration syntactic trigger. When the selected executor differs from the routing-policy default, `routingOverride` is also required and must include `splitAttempted`; omit the object when no override occurred.
 
-Every new manifest also carries the explicit top-level `workflowClass` copied unchanged from the approved plan island. Accepted values are `chore|bug|feature|hotfix|security|investigation|migration`. If the plan does not contain exactly one approved value, stop and return to the pipeline Phase 3 user gate; promptcraft never chooses or infers it from filenames, chunk kinds, prompt prose, risk, or keyword heuristics. The legacy absent-field default belongs only to manifest consumption and records `feature` plus `workflow_class_defaulted=true`.
+Every new manifest also carries the explicit top-level `workflowClass` copied unchanged from the approved plan island. Accepted values are `chore|bug|feature|hotfix|security|investigation|migration`. If the plan does not contain exactly one approved value, stop and return to the combined discovery gate; promptcraft never chooses or infers it from filenames, chunk kinds, prompt prose, risk, or keyword heuristics. The legacy absent-field default belongs only to manifest consumption and records `feature` plus `workflow_class_defaulted=true`.
 
 Every new manifest also carries the exact approved top-level
 `decisionProfile`. Validate the closed shape and exact plan/manifest equality;
@@ -408,6 +429,9 @@ For each chunk, generate a self-contained execution prompt using the template fr
 3. **Scoped** -- Only touches the files listed, nothing else
 4. **Testable** -- Clear acceptance criteria the subagent can verify
 5. **Visually specified** (`renderedSurface: required`) -- Include the Visual Reference Summary from Phase 2.5 and generate both structural AND visual acceptance criteria (see prompt template)
+6. **Project-aligned** -- Its Context names the larger project goal, why the
+   chunk exists, the approved requirement or outcome it addresses, and only the
+   relevant non-goals and ownership boundary
 
 Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`, where `<chunk-id>` is the `NN-<slug>` from the plan island's `chunks` (zero-padded, ordered; e.g. `00-preflight`, `01-reader-service`, ... `10-doc-sync`). Prompts stay **markdown** -- they are Tier 2 (run-scoped) agent-only artifacts, auto-deleted by the orchestrator's cleanup phase after successful execution.
 
@@ -474,7 +498,7 @@ The manifest encodes:
 
 ### Phase 6: Requirements Coverage Check
 
-Read the approved Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html` (`extract-json-island.sh`), re-reading `plans/<feature-slug>/original-prompt.md` only to verify that no explicit request was silently discarded. Proposed mechanisms that the assessment gate omitted or replaced are not coverage requirements unless the user approved them. Verify every approved Key Requirement is covered by at least one chunk's acceptance criteria. Produce a coverage map:
+Read the approved Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html` (`extract-json-island.sh`), re-reading `plans/<feature-slug>/original-prompt.md` only to verify that no explicit request was silently discarded. Proposed mechanisms that the combined discovery gate omitted or replaced are not coverage requirements unless the user approved them. Verify every approved Key Requirement or project outcome is covered by at least one chunk's acceptance criteria, and every chunk maps back to one or more approved entries. Produce a coverage map:
 
 ```
 Requirements Coverage:
