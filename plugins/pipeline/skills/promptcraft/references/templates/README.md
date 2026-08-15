@@ -36,6 +36,14 @@ extract-json-island.sh    # prints an artifact's island JSON
    emitted `<link>` tag verbatim.
 2. **Fill the section.** Take `sections/<kind>.html` and replace its `{{...}}`
    content slots with rendered HTML.
+   - For a **full-mode plan**, set `EXECUTION_SCOPE_HEADING` to `Chunk
+     Decomposition`. Set `EXECUTION_SCOPE_BODY` to an editable
+     `data-island-key="chunks"` wrapper containing the chunk table and the note
+     that each row becomes `prompts/NN-<slug>.md`.
+   - For a **Lean-mode plan**, set `EXECUTION_SCOPE_HEADING` to `Single-pass
+     Execution Scope`. Set `EXECUTION_SCOPE_BODY` to the reviewed single-pass
+     scope and verification criteria as rendered prose. Do not emit a chunk
+     table, a `data-island-key="chunks"` wrapper, or any prompt-file link.
 3. **Add widgets and visuals where needed.** Splice `decision-table.html` (rows
    filled) into the section's editable areas. Add `mockup-frame.html` /
    `diagram-mermaid.html` as needed. If any decision-table is present, inline
@@ -71,9 +79,11 @@ extract-json-island.sh    # prints an artifact's island JSON
 `{{TITLE}}` `{{ARTIFACT_KIND}}` `{{GENERATED_AT}}` `{{HOST_CSS_HREF}}`
 `{{SIBLING_NAV}}` `{{BODY}}` `{{WIDGET_SCRIPTS}}` `{{DATA_ISLAND}}`
 
-`{{SIBLING_NAV}}` is a `<ul>` of links to the run's other artifacts
-(`assessment.html`, `research.html`, and `prompts/` for a plan) -- relative links
-within the same `plans/<feature-slug>/` directory.
+`{{SIBLING_NAV}}` is a `<ul>` of relative links within the same
+`plans/<feature-slug>/` directory. A full-mode plan links `assessment.html`,
+`research.html`, and `prompts/`. A Lean-mode plan links `assessment.html` and
+`research.html` only; it MUST NOT link `prompts/` or `manifest.json`, because
+those artifacts do not exist in Lean mode.
 
 ## Data island schemas
 
@@ -86,14 +96,16 @@ duplicate the field list here; link to it so the two cannot drift.
 only after the combined discovery response is persisted and verified. The
 compact Project Alignment record stays in the existing rendered assessment
 prose rather than creating a second island schema. Pipeline re-reads the
-approved requirements in Phases 3/4/7. `chunks[].n` + `chunks[].slug` map 1:1 onto
-`prompts/NN-<slug>.md` (assembly-baseplate chunk-prompt convention).
+approved requirements in Phases 3/4/7. In full mode, `chunks[].n` +
+`chunks[].slug` map 1:1 onto `prompts/NN-<slug>.md` (the assembly-baseplate
+chunk-prompt convention). In Lean mode, `chunks` is absent and each
+`requirementsCoverage` entry maps its requirement to `single-pass scope`.
 
 ## Reading the island downstream
 
 ```bash
 bash "${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh" \
-  plans/<slug>/plan.html | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["chunks"]))'
+  plans/<slug>/plan.html | python3 -c 'import json,sys; print(json.load(sys.stdin)["artifact"])'
 ```
 
 ## Copy-back round-trip
@@ -107,8 +119,10 @@ into the artifact's `#pipeline-data` island. Each editable section sets
 
 ## Plans directory convention (assembly-baseplate)
 
-Artifacts live in flat sibling feature dirs under `plans/`:
-`plans/<feature-slug>/{assessment,research,brainstorm,plan}.html` alongside
-`prompts/NN-<slug>.md`, `manifest.json`, `original-prompt.md`, and evidence dirs.
+Artifacts live in flat sibling feature dirs under `plans/`. Both modes contain
+`plans/<feature-slug>/{assessment,research,brainstorm,plan}.html`,
+`original-prompt.md`, and applicable evidence directories. Full mode also
+contains `prompts/NN-<slug>.md` and `manifest.json`; Lean mode deliberately
+contains neither.
 A high-level/epic plan is its own dir whose `prompts/<major>.<minor>-<slug>.md`
 seed sibling feature dirs; its `plan.html` uses the epic variant (`subPlans`).

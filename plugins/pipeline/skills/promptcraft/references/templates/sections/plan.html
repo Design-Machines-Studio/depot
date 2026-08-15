@@ -1,18 +1,21 @@
 <!--
   Plan section body. Fills the base.html BODY slot for kind "plan".
   Layout-aware per the assembly-baseplate plans/ convention:
-    - the base.html SIBLING_NAV slot links assessment.html, research.html, prompts/.
-    - Chunk rows map 1:1 onto prompts/NN-<slug>.md (promptcraft Phase 4 output).
+    - Full-mode SIBLING_NAV links assessment.html, research.html, and prompts/;
+      Lean SIBLING_NAV omits prompts/ because that directory does not exist.
+    - EXECUTION_SCOPE_HEADING and EXECUTION_SCOPE_BODY are filled according to
+      the approved mode; see templates/README.md for the exact contract.
   Island schema (feature plan):
     { artifact:"plan", slug, baseBranch, featureBranch,
       branchMode:"create|reuse", expectedFeatureHead,
       chunks:[{ n:"01", slug:"reader-service", scope, acceptance, deps:[] }],
       // chunks is full-mode-only; Lean carries its single-pass scope in prose.
       decisions:[{ id, decision, rationale, alternatives }],
-      requirementsCoverage:[{ requirement, chunk }] }
-  Epic-plan variant: replace the chunk table with the sub-plan roadmap and emit
-    "subPlans":[{ n, slug, featureDir }] instead of "chunks".
-  The chunk and decision tables use the decision-table widget (editable + copy-back).
+      requirementsCoverage:[{ requirement, chunk }] } // Lean uses chunk:"single-pass scope".
+  Epic-plan variant: fill the execution-scope section with the sub-plan roadmap
+    and emit "subPlans":[{ n, slug, featureDir }] instead of "chunks".
+  Full-mode chunk tables and all decision tables use the decision-table widget
+    (editable + copy-back).
 -->
 <h1>Plan: {{FEATURE_NAME}}</h1>
 
@@ -21,10 +24,9 @@
   {{OVERVIEW}}
 </section>
 
-<section aria-labelledby="chunks" class="widget--edit" data-island-key="chunks">
-  <h2 id="chunks">Chunk Decomposition</h2>
-  <p>Each row becomes <code>prompts/NN-&lt;slug&gt;.md</code>. Edit cells inline, then Copy to round-trip into the data island.</p>
-  {{CHUNK_TABLE}}
+<section aria-labelledby="execution-scope">
+  <h2 id="execution-scope">{{EXECUTION_SCOPE_HEADING}}</h2>
+  {{EXECUTION_SCOPE_BODY}}
 </section>
 
 <section aria-labelledby="decisions" class="widget--edit" data-island-key="decisions">
@@ -34,6 +36,6 @@
 
 <section aria-labelledby="coverage">
   <h2 id="coverage">Requirements Coverage</h2>
-  <p>Maps each cached Key Requirement (from <a href="assessment.html">assessment.html</a>) to the chunk that satisfies it.</p>
+  <p>Maps each approved Key Requirement (from <a href="assessment.html">assessment.html</a>) to the applicable execution scope that satisfies it.</p>
   {{COVERAGE_TABLE}}
 </section>
