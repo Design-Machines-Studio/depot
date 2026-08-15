@@ -133,7 +133,7 @@ The `chunks` array is authoritative. The `executionPlan` object is a cached deno
 `workflowClass` and `decisionProfile` are separate policy inputs, not cached
 execution structure. New manifests copy both unchanged from the user-approved
 plan island; absent, duplicated, malformed, or conflicting plan data returns to
-the planning user gate and blocks generation. `decisionProfile` is the exact
+the combined discovery gate and blocks generation. `decisionProfile` is the exact
 closed object `{uncertainty: low|medium|high, consequence: low|medium|high,
 rationale: non-empty string}`. It never derives or changes `workflowClass`,
 `risk`, `overlapRisk`, `estimatedComplexity`, `kind`, `executor`, or
@@ -167,7 +167,7 @@ include one only when it also delivers actual product integration code required
 by an acceptance criterion.
 
 The default single-run budget is 8 total chunks and 6 `large` chunks. Exceeding
-either limit returns to the planning user gate for a campaign split unless the
+either limit returns to the combined discovery gate for a campaign split unless the
 approved plan contains an explicit single-run rationale. Approval freezes run
 scope: newly discovered desirable work goes to a follow-up manifest unless it
 blocks correctness of an approved requirement.

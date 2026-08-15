@@ -64,7 +64,8 @@ the copy buttons. Only `<script defer>` is used.
 ## Data-island schema
 
 ```jsonc
-// assessment.html -- keyRequirements IS the cached requirements source
+// assessment.html -- keyRequirements becomes authoritative only after the
+// combined discovery response; compact Project Alignment remains rendered prose
 { "artifact": "assessment", "slug": "<slug>",
   "keyRequirements": ["..."], "testPersonas": [{"name","id","role","useFor"}],
   "recentLessons": ["..."], "baselineScreenshots": [{"route","viewport","path"}] }
@@ -77,14 +78,19 @@ the copy buttons. Only `<script defer>` is used.
 { "artifact": "brainstorm", "slug": "<slug>",
   "visualDecisions": [{"area","decision","variant|token|treatment","rationale"}] }
 
-// plan.html (feature) -- chunks map 1:1 to prompts/NN-<slug>.md
+// plan.html (feature) -- full-mode chunks map 1:1 to prompts/NN-<slug>.md;
+// Lean renders one single-pass scope and has no chunks array or prompt directory
 { "artifact": "plan", "slug": "<slug>",
-  "chunks": [{"n":"01","slug":"reader-service","scope","acceptance","deps":[]}],
+  "baseBranch":"<base>", "featureBranch":"<feature>",
+  "branchMode":"create|reuse", "expectedFeatureHead":"<sha>|null",
+  "chunks": [{"n":"01","slug":"reader-service","scope","acceptance","deps":[]}], // full mode only; absent in Lean, whose single-pass scope is rendered prose
   "decisions": [{"id","decision","rationale","alternatives"}],
-  "requirementsCoverage": [{"requirement","chunk"}] }
+  "requirementsCoverage": [{"requirement","chunk"}] } // Lean uses chunk:"single-pass scope"
 
 // plan.html (epic / high-level) -- enumerates sibling sub-plans
 { "artifact": "plan", "slug": "<slug>",
+  "baseBranch":"<base>", "featureBranch":"<feature>",
+  "branchMode":"create|reuse", "expectedFeatureHead":"<sha>|null",
   "subPlans": [{"n","slug","featureDir"}], "decisions": [...], "requirementsCoverage": [...] }
 ```
 
@@ -95,7 +101,7 @@ Downstream agents read the island instead of grepping prose:
 
 ```bash
 bash plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh \
-  plans/<slug>/plan.html | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["chunks"]))'
+  plans/<slug>/plan.html | python3 -c 'import json,sys; print(json.load(sys.stdin)["artifact"])'
 ```
 
 ## Editable copy-back loop
@@ -124,13 +130,15 @@ once in `widgets/widget-scripts.js`.
 
 Artifacts live in flat sibling **feature dirs** under `plans/` (the
 assembly-baseplate convention): `plans/<feature-slug>/{assessment,research,
-brainstorm,plan}.html` alongside `prompts/NN-<slug>.md`, `manifest.json`,
-`original-prompt.md`, and the `baselines/` / `prototype-evidence/` dirs. A
+brainstorm,plan}.html` alongside `original-prompt.md` and the `baselines/` /
+`prototype-evidence/` dirs. Full mode also emits `prompts/NN-<slug>.md` and
+`manifest.json`; Lean mode deliberately emits neither. A
 **high-level/epic plan** is its own dir whose `prompts/<major>.<minor>-<slug>.md`
 seed sibling feature dirs; its `plan.html` uses the epic variant (`subPlans`).
 The pipeline does not auto-generate the epic->sub-plan tree -- that orchestration
-stays a manual workflow layer; `plan.html` is merely layout-aware (it links
-siblings and maps chunks to `prompts/NN-*.md`).
+stays a manual workflow layer; `plan.html` is merely layout-aware (full mode
+links prompts and maps chunks to them, while Lean renders its single-pass scope
+without prompt navigation).
 
 ## Validation
 

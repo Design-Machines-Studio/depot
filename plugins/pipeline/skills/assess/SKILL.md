@@ -20,6 +20,42 @@ The user provides a feature idea, area description, or specific file paths. If v
 
 ## Process
 
+### Phase 0: Project Alignment
+
+Before implementation-detail assessment, resolve the smallest relevant project
+context in this order:
+
+1. Resolve repository identity and current source state.
+2. Read root `AGENTS.md`, `CLAUDE.md`, and only directly referenced instruction
+   files applicable to the request.
+3. Inspect relevant active repository plans, coordination documents,
+   engineering principles, and `tasks/lessons.md` when present.
+4. Inspect a supplied or safely discoverable native Issue or PR.
+5. Consult a coordination Project only when the repository or user declares
+   one, and load only relevant installed company, product, or domain strategy
+   skills.
+6. Identify the current project goal, ownership boundary, and why the proposed
+   work is appropriate now.
+
+Keep authority boundaries explicit. Native Issues and PRs own live status,
+ownership, dependencies, reviews, checks, and linkage. Repository instructions
+and tracked documents own architecture, product scope, project goals,
+implementation policy, and durable lessons. A declared coordination Project
+owns only its current projection. Old plans, receipts, comments, or remembered
+state are not evidence of current GitHub status.
+
+Do not require GitHub Projects, an Assembly-specific layout, one planning
+document shape, or a project-management plugin. Do not copy a roadmap. Carry a
+compact rendered `Project Alignment` record in the existing assessment:
+
+- Current project goal
+- Evidence/source
+- How the request advances it
+- Relevant constraints and decisions
+- Explicit non-goals
+- Dependencies or ownership conflicts
+- Stale or unknown context
+
 ### Phase 1: Scope Detection
 
 Determine what to assess based on the user's input:
@@ -172,7 +208,14 @@ Combine both reports into a single **Assessment Brief**. When running as part of
 - implementation mechanisms proposed by the user or an upstream prompt; and
 - future or conditional ideas.
 
-A proposed mechanism is not automatically a product requirement. Never silently discard an explicit request: when the smallest adequate solution would omit or replace a requested mechanism, show the smaller alternative at the existing assessment gate and obtain the user's decision. After the gate returns, apply that decision to the Scope Intake prose, rewrite the `keyRequirements` island with the resulting approved scope, and verify the extracted island reflects the selected option before research or planning begins. The pre-gate island is provisional; it does not become the cached source of truth merely because the assessment file exists.
+A proposed mechanism is not automatically a product requirement. Never silently discard an explicit request: when the smallest adequate solution would
+omit or replace a requested mechanism, carry the smaller alternative and the
+mechanism-preserving option through research to the combined discovery gate.
+Assessment may identify scope questions, conflicts, and alternatives, but it
+must not pause research. Only the combined discovery response updates Scope
+Intake and Project Alignment, rewrites the `keyRequirements` island with the
+approved scope, and makes that cache authoritative. Before then the island is
+provisional even though the file exists.
 
 The brief is written as **HTML with a JSON data island**, not markdown -- assemble `templates/base.html` + `templates/sections/assessment.html` per `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/README.md`. The content outline below maps to the section's slots; the `keyRequirements`, `testPersonas`, `recentLessons`, and `baselineScreenshots` arrays also populate the `#pipeline-data` island so later phases read them with `extract-json-island.sh` instead of grepping prose.
 
@@ -186,7 +229,16 @@ The brief is written as **HTML with a JSON data island**, not markdown -- assemb
 - Future or conditional ideas: [...]
 - Smallest adequate alternative and any user decision needed: [...]
 
-## Key Requirements (provisional until the assessment gate response is persisted)
+## Project Alignment
+- Current project goal: [...]
+- Evidence/source: [...]
+- How the request advances it: [...]
+- Relevant constraints and decisions: [...]
+- Explicit non-goals: [...]
+- Dependencies or ownership conflicts: [...]
+- Stale or unknown context: [...]
+
+## Key Requirements (provisional until the combined discovery response is persisted)
 1. [Requirement 1 verbatim]
 2. [Requirement 2 verbatim]
 3. [Requirement N verbatim]
@@ -229,7 +281,9 @@ Save the brief to `plans/<feature-slug>/assessment.html` in the target project (
 
 ### Phase 4: Handoff
 
-Present the Assessment Brief to the user. If running as part of `/pipeline`, pass it forward to the research phase. If running standalone via `/pipeline-assess`, present it and stop.
+If running as part of `/pipeline`, pass the provisional Assessment Brief and
+compact Project Alignment record directly to research without a human approval
+pause. If running standalone via `/pipeline-assess`, present it and stop.
 
 ## Companion Skills
 

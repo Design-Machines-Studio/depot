@@ -9,7 +9,13 @@ Each generated prompt follows this structure. The goal is a self-contained docum
 
 ## Context
 
-[2-3 sentences explaining what this chunk is part of and why it matters. Include the feature name and how this chunk fits into the larger work.]
+[Keep this compact and chunk-specific. State:
+- the larger approved project goal this chunk serves;
+- why this chunk exists now;
+- the approved requirement or project outcome it addresses; and
+- the relevant non-goals and ownership boundary.
+
+Do not paste the full roadmap, assessment, research brief, or Project snapshot.]
 
 ## Task
 
@@ -103,6 +109,9 @@ If the Task or Acceptance Criteria allow more than one reasonable interpretation
 - Follow existing patterns -- do not introduce new abstractions
 - Do not refactor surrounding code unless required for the task
 - Only lines that directly serve the Acceptance Criteria should change. If you notice unrelated issues in files you are editing, list them at the end of your response as "Noted, not fixed" -- do not include them in the diff.
+- Every changed line must serve an approved requirement or project outcome from
+  Context. Keep adjacent improvements and work owned by another repository out
+  of the diff; report them as "Noted, not fixed."
 - Do not reformat, rewrite comments, tighten types, or adjust imports on lines you are not otherwise changing for this chunk.
 - Do not create or modify `*_templ.go` files. Run `docker compose exec app templ generate` to regenerate them after editing `.templ` source files.
 - When adding database migrations, verify the next sequence number: `ls migrations/*.sql | sort | tail -1`. Use the next consecutive number.

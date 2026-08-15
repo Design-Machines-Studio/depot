@@ -3,10 +3,10 @@
   Mirrors the Assessment Brief markdown structure (skills/assess/SKILL.md Phase 3).
   Island schema: { artifact:"assessment", slug, keyRequirements[], testPersonas[],
                     recentLessons[], baselineScreenshots[] }
-  keyRequirements IS provisional until the assessment gate response is applied,
+  keyRequirements IS provisional until the combined discovery response is applied,
   rewritten, extracted, and verified. It then becomes the approved-scope cache
   the pipeline re-reads in Phases 3/4/7. Proposed mechanisms stay in prose unless
-  the assessment gate explicitly approves them as scope.
+  the combined discovery gate explicitly approves them as scope.
 -->
 <h1>Assessment: {{AREA_NAME}}</h1>
 
@@ -15,8 +15,13 @@
   {{SCOPE_INTAKE}}
 </section>
 
+<section aria-labelledby="project-alignment">
+  <h2 id="project-alignment">Project Alignment</h2>
+  {{PROJECT_ALIGNMENT}}
+</section>
+
 <section aria-labelledby="key-requirements">
-  <h2 id="key-requirements">Key Requirements <small>(provisional until the assessment gate response is persisted)</small></h2>
+  <h2 id="key-requirements">Key Requirements <small>(provisional until the combined discovery response is persisted)</small></h2>
   <ol>{{KEY_REQUIREMENTS_LIST}}</ol>
 </section>
 
