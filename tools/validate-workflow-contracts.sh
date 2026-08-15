@@ -1159,6 +1159,31 @@ for f in "$pipeline_cmd" "$pipeline_alias" "$pipeline_run" "$pipeline_run_skill"
   require_text "$f" 'Blocked' "$rel includes the blocked outcome token"
   require_text "$f" 'Recommended next action' "$rel requires one recommended next action"
 done
+require_text "$orchestrator" 'Memory observation handoff: <observation>' \
+  "Pipeline orchestrator returns the compact caller handoff"
+require_text "$orchestrator" 'Keep the observation under 300 characters.' \
+  "Pipeline orchestrator bounds the memory handoff"
+require_absent "$orchestrator" 'If ai-memory unavailable, skip silently.' \
+  "Pipeline orchestrator does not silently skip memory capture"
+require_absent "$orchestrator" '`search_entities`' \
+  "restricted Pipeline orchestrator does not call ai-memory"
+for f in "$pipeline_cmd" "$pipeline_run"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" 'Read the entity and check its same-day observations for the exact handoff.' \
+    "$rel deduplicates the caller memory handoff"
+  require_text "$f" 'If absent, call `add_observation`, then `save`.' \
+    "$rel writes and saves the caller memory handoff"
+  require_text "$f" '`written`, `already-present`, or' \
+    "$rel records the closed memory-capture outcomes"
+  require_text "$f" '`skipped -- <reason>`' \
+    "$rel requires an explicit memory skip reason"
+  require_text "$f" 'Do not show the raw handoff in ordinary human-facing chat.' \
+    "$rel keeps the internal memory handoff out of chat"
+done
+require_before "$pipeline_cmd" 'Record exactly one outcome: `written`, `already-present`, or' '## Phase 7: Deliver' \
+  "Pipeline applies memory capture before human delivery"
+require_before "$pipeline_run" 'Record exactly one outcome: `written`, `already-present`, or' 'Present the compact summary from the orchestrator.' \
+  "pipeline-run applies memory capture before human presentation"
 require_text "$orchestrator" '## <Done | Needs fixes | Blocked>' \
   "Pipeline final summary leads with the outcome"
 require_text "$orchestrator" '**Recommended next action:** <one action; for blocked work, the smallest operator action>' \

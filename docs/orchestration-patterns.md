@@ -187,7 +187,7 @@ The pipeline plugin combines:
 
 1. **Companion Skill Loading** -- Each phase loads domain skills (ai-memory from ned, development from assembly, livewires from live-wires, etc.)
 2. **Multi-Agent Dispatch** -- Research phase dispatches 5 parallel research agents; adversarial review dispatches 3 perspective agents; execution dispatches subagents per chunk
-3. **Memory-Mediated Coordination** -- Records pipeline sessions to ai-memory for cross-session learning
+3. **Memory-Mediated Coordination** -- The execution orchestrator returns one compact observation and the capable Pipeline caller records it to ai-memory for cross-session learning
 4. **Worktree Isolation** -- Each execution chunk runs in its own worktree, merged back after passing review
 5. **Review-Fix Convergence** -- dm-review-loop runs proportional affected-lane verification after each chunk; P1/P2 are fixed and P3 remains advisory
 
@@ -213,7 +213,7 @@ assess (parallel: code + UX agents)
 - Phase 3 (Plan): User or compound-engineering creates the plan
 - Phase 4 (Prompts): Promptcraft skill generates manifests with overlap-aware ordering
 - Phase 5 (Adversarial Review): Plan-adversary agent iterates to convergence
-- Phase 6 (Execute): Execution-orchestrator manages worktrees, subagents, and dm-review-loop; records to ai-memory via ned
+- Phase 6 (Execute): Execution-orchestrator manages worktrees, subagents, and dm-review-loop; returns one compact memory observation to the capable caller
 - Phase 7 (Deliver): Final review, branch summary, PR option
 
 ### Failure modes
@@ -224,7 +224,7 @@ assess (parallel: code + UX agents)
 | Review-fix loop doesn't converge (max iterations) | Flag chunk as "needs attention," continue pipeline |
 | Merge conflict after chunk | Attempt auto-resolution; if complex, flag and continue |
 | Worktree creation fails | Fall back to branch-based execution without worktree isolation |
-| ai-memory unavailable | Skip memory capture, note in final report |
+| ai-memory unavailable | Caller records `skipped -- <reason>` in durable receipt/summary evidence; delivery remains non-blocking |
 
 ---
 
