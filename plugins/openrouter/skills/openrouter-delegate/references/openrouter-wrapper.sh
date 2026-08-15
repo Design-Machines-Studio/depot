@@ -326,6 +326,7 @@ build_provider() {
 
 write_failure_receipt() {
   local outcome="$1" failure_kind="$2" timeout_kind="$3" http_status="${4:-}"
+  local failure_reason="${5:-}"
   local receipt_tmp
   [ -z "${OPENROUTER_RECEIPT_FILE:-}" ] && return 0
   receipt_tmp="${OPENROUTER_RECEIPT_FILE}.tmp.$$"
@@ -335,6 +336,7 @@ write_failure_receipt() {
       --arg outcome "$outcome" \
       --arg invocation "$INVOCATION_ID" \
       --arg failure "$failure_kind" \
+      --arg reason "$failure_reason" \
       --arg timeout "$timeout_kind" \
       --arg http "$http_status" \
       --arg requested "$MODEL" \
@@ -349,6 +351,7 @@ write_failure_receipt() {
         invocationId: $invocation,
         outcome: $outcome,
         failureKind: $failure,
+        failureReason: (if $reason == "" then null else $reason end),
         timeout: (if $timeout == "" then null else {kind: $timeout} end),
         httpStatus: (if $http == "" then null else ($http | tonumber) end),
         requestedModel: $requested,
@@ -404,6 +407,7 @@ write_success_receipt() {
         invocationId: $invocation,
         outcome: "success",
         failureKind: null,
+        failureReason: null,
         timeout: null,
         httpStatus: 200,
         generationId: .id,
@@ -584,8 +588,51 @@ if [ "$curl_rc" -ne 0 ]; then
   exit 1
 fi
 if [ "$http" != "200" ]; then
-  write_failure_receipt error "http_error" "" "$http" || true
-  echo "### RUNNER FAILURE ($MODEL, HTTP $http)" >&2
+  http_failure_reason="unknown_http_error"
+  case "$http" in
+    402) http_failure_reason="insufficient_credits" ;;
+    429) http_failure_reason="rate_limited" ;;
+    *)
+      if jq -e --argjson status "$http" '
+        type == "object"
+        and (.error | type) == "object"
+        and (.error.code | type) == "number"
+        and .error.code == $status
+        and (.error.message | type) == "string"
+        and ((.error.metadata? // {}) | type) == "object"
+      ' "$stream_file" >/dev/null 2>&1; then
+        if jq -e '.error.metadata.error_type? == "payment_required"' \
+          "$stream_file" >/dev/null 2>&1; then
+          http_failure_reason="insufficient_credits"
+        elif jq -e '.error.metadata.error_type? == "rate_limit_exceeded"' \
+          "$stream_file" >/dev/null 2>&1; then
+          http_failure_reason="rate_limited"
+        elif [ "$http" = "403" ] && jq -e '
+          .error.message
+          | test("^[[:space:]]*Budget limit exceeded \\(monthly limit\\)\\. Contact your org admin\\.[[:space:]]*$")
+        ' "$stream_file" >/dev/null 2>&1; then
+          http_failure_reason="organization_monthly_budget_exceeded"
+        elif [ "$http" = "403" ] && jq -e '
+          (.error.metadata.error_type? == "content_policy_violation")
+          or (.error.message | startswith("Request blocked:"))
+        ' "$stream_file" >/dev/null 2>&1; then
+          http_failure_reason="guardrail_blocked"
+        elif [ "$http" = "403" ]; then
+          http_failure_reason="key_permission_denied"
+        fi
+      fi
+      ;;
+  esac
+  case "$http_failure_reason" in
+    organization_monthly_budget_exceeded) http_failure_label="organization monthly budget exceeded" ;;
+    key_permission_denied) http_failure_label="key permission denied" ;;
+    guardrail_blocked) http_failure_label="guardrail blocked" ;;
+    insufficient_credits) http_failure_label="insufficient credits" ;;
+    rate_limited) http_failure_label="rate limited" ;;
+    unknown_http_error) http_failure_label="unknown HTTP error" ;;
+  esac
+  write_failure_receipt error "http_error" "" "$http" "$http_failure_reason" || true
+  echo "### RUNNER FAILURE ($MODEL, HTTP $http: $http_failure_label)" >&2
   exit 1
 fi
 

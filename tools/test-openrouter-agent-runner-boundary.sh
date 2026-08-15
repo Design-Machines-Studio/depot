@@ -88,4 +88,51 @@ grep -Fq -- 'artifact-delegation' "$FIXTURE/args"
 [ "$(wc -l < "$FIXTURE/screened-digests" | tr -d ' ')" = "2" ]
 cmp "$FIXTURE/screened-digests" "$FIXTURE/wrapper-digests"
 
-echo "  OK    OpenRouter agent runner performs one behavioral boundary scan"
+{
+  printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail'
+  sed -n '/^read_http_failure_reason() {/,/^}/p' "$SOURCE"
+  sed -n '/^map_wrapper_failure_reason() {/,/^}/p' "$SOURCE"
+  cat <<'EOF'
+receipt="$1"
+expected="$2"
+[ "$(read_http_failure_reason "$receipt")" = "$expected" ]
+EOF
+} > "$FIXTURE/read-failure-reason"
+chmod +x "$FIXTURE/read-failure-reason"
+
+for reason in \
+  organization_monthly_budget_exceeded key_permission_denied guardrail_blocked \
+  insufficient_credits rate_limited unknown_http_error; do
+  jq -n --arg reason "$reason" '{
+    schemaVersion: 2,
+    outcome: "error",
+    failureKind: "http_error",
+    failureReason: $reason
+  }' > "$FIXTURE/receipt"
+  "$FIXTURE/read-failure-reason" "$FIXTURE/receipt" "$reason"
+done
+
+for invalid in unexpected_reason null; do
+  if [ "$invalid" = null ]; then
+    value=null
+  else
+    value='"unexpected_reason"'
+  fi
+  printf '{"schemaVersion":2,"outcome":"error","failureKind":"http_error","failureReason":%s}\n' \
+    "$value" > "$FIXTURE/receipt"
+  ! "$FIXTURE/read-failure-reason" "$FIXTURE/receipt" "$invalid" >/dev/null 2>&1
+done
+printf 'not-json\n' > "$FIXTURE/receipt"
+! "$FIXTURE/read-failure-reason" "$FIXTURE/receipt" ignored >/dev/null 2>&1
+
+{
+  sed -n '/^map_wrapper_failure_reason() {/,/^}/p' "$SOURCE"
+  printf '%s\n' 'map_wrapper_failure_reason organization_monthly_budget_exceeded'
+} > "$FIXTURE/map-failure-reason"
+organization_reason=$(bash "$FIXTURE/map-failure-reason")
+[ "$organization_reason" = "The OpenRouter organization monthly budget is exhausted; its administrator must raise or reset that limit" ]
+case "$organization_reason" in
+  *"buy"*|*"credit"*|*"replace"*|*"key"*) exit 1 ;;
+esac
+
+echo "  OK    OpenRouter agent runner performs one behavioral boundary scan and validates closed HTTP failure reasons"

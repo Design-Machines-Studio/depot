@@ -316,6 +316,51 @@ WRAPPER_RECEIPT=$(mktemp)
 printf '%s' "$TARGET_BODY" > "$SYS_FILE"
 printf '%s' "$USER_PROMPT" > "$USER_FILE"
 
+read_http_failure_reason() {
+  jq -er '
+    select(
+      .schemaVersion == 2
+      and .outcome == "error"
+      and .failureKind == "http_error"
+    )
+    | .failureReason
+    | select(
+        . == "organization_monthly_budget_exceeded"
+        or . == "key_permission_denied"
+        or . == "guardrail_blocked"
+        or . == "insufficient_credits"
+        or . == "rate_limited"
+        or . == "unknown_http_error"
+      )
+  ' "$1"
+}
+
+map_wrapper_failure_reason() {
+  case "$1" in
+    organization_monthly_budget_exceeded)
+      printf '%s' "The OpenRouter organization monthly budget is exhausted; its administrator must raise or reset that limit"
+      ;;
+    key_permission_denied)
+      printf '%s' "OpenRouter denied permission for the configured key"
+      ;;
+    guardrail_blocked)
+      printf '%s' "OpenRouter blocked the request with a guardrail"
+      ;;
+    insufficient_credits)
+      printf '%s' "OpenRouter reports insufficient account or key credits"
+      ;;
+    rate_limited)
+      printf '%s' "OpenRouter rate limited the request"
+      ;;
+    unknown_http_error)
+      printf '%s' "OpenRouter returned an unknown HTTP error"
+      ;;
+    *)
+      printf '%s' "All models exhausted, key missing, or HTTP error"
+      ;;
+  esac
+}
+
 if "$BOUNDARY_HELPER" --mode artifact-delegation \
     --policy "$SECURITY_POLICY_RESOLVED" \
     --content-file "$SYS_FILE" \
@@ -365,6 +410,7 @@ FALLBACK_USED=false
 GENERATION_ID=""
 SERVING_PROVIDER=""
 SERVING_PROVIDER_PROVENANCE=""
+WRAPPER_FAILURE_REASON=""
 if [ "$EXIT_CODE" -eq 0 ] && [ -s "$WRAPPER_RECEIPT" ]; then
   ACTUAL_MODEL=$(jq -er '.responseModel' "$WRAPPER_RECEIPT")
   FALLBACK_USED=$(jq -er '.fallbackUsed | if type == "boolean" then tostring else error("invalid fallbackUsed") end' "$WRAPPER_RECEIPT")
@@ -373,6 +419,8 @@ if [ "$EXIT_CODE" -eq 0 ] && [ -s "$WRAPPER_RECEIPT" ]; then
   SERVING_PROVIDER_PROVENANCE=$(jq -er '.servingProviderProvenance' "$WRAPPER_RECEIPT")
 elif [ "$EXIT_CODE" -eq 0 ]; then
   EXIT_CODE=1
+elif [ "$EXIT_CODE" -eq 1 ] && [ -s "$WRAPPER_RECEIPT" ]; then
+  WRAPPER_FAILURE_REASON=$(read_http_failure_reason "$WRAPPER_RECEIPT" 2>/dev/null || true)
 fi
 ```
 
@@ -382,7 +430,7 @@ fi
 |---|---|---|
 | `0` | Success | Continue to output validation |
 | `28` | Timeout | `Timed out at ${target_timeout}s` |
-| `1` | Models exhausted, key missing, or HTTP error | `All models exhausted, key missing, or HTTP error` |
+| `1` | Models exhausted, key missing, or HTTP error | Validated HTTP receipt reason, otherwise `All models exhausted, key missing, or HTTP error` |
 | `2` | Invalid runner arguments | `Invocation error -- bad runner arguments` |
 | other | API or transport error | `Wrapper exited $EXIT_CODE` |
 
@@ -390,7 +438,9 @@ fi
 case "$EXIT_CODE" in
   0) ;;
   28) FAILURE_REASON="Timed out at ${target_timeout}s" ;;
-  1) FAILURE_REASON="All models exhausted, key missing, or HTTP error" ;;
+  1)
+    FAILURE_REASON=$(map_wrapper_failure_reason "$WRAPPER_FAILURE_REASON")
+    ;;
   2) FAILURE_REASON="Invocation error -- bad runner arguments" ;;
   *) FAILURE_REASON="Wrapper exited $EXIT_CODE" ;;
 esac

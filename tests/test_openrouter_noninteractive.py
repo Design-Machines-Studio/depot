@@ -153,6 +153,8 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
     authorizations: list[str | None] = []
     response_text = "fixture response"
     response_mode = "complete"
+    response_status = 200
+    response_body: dict | str = {}
     block_response = False
     request_seen = threading.Event()
     release_response = threading.Event()
@@ -166,6 +168,18 @@ class FixtureHandler(http.server.BaseHTTPRequestHandler):
         type(self).request_seen.set()
         if type(self).block_response:
             type(self).release_response.wait(timeout=5)
+        if type(self).response_status != 200:
+            response_body = type(self).response_body
+            encoded = (
+                response_body if isinstance(response_body, str)
+                else json.dumps(response_body)
+            ).encode()
+            self.send_response(type(self).response_status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(encoded)))
+            self.end_headers()
+            self.wfile.write(encoded)
+            return
         model = payload.get("model") or payload.get("models", ["z-ai/glm-5.2"])[0]
         content_event = {
             "id": "gen-fixture", "model": model, "provider": "fixture/provider",
@@ -219,6 +233,8 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
         FixtureHandler.authorizations = []
         FixtureHandler.response_text = "fixture response"
         FixtureHandler.response_mode = "complete"
+        FixtureHandler.response_status = 200
+        FixtureHandler.response_body = {}
         FixtureHandler.block_response = False
         FixtureHandler.request_seen.clear()
         FixtureHandler.release_response.clear()
@@ -289,6 +305,7 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         self.assertNotRegex(result.stdout + result.stderr, r"approval_required|APPROVAL REQUIRED|exit 78|batch|broker")
         receipt = json.loads(result.receipt_path.read_text())  # type: ignore[attr-defined]
         self.assertRegex(receipt["authorization"]["requestEnvelopeSha256"], r"^[0-9a-f]{64}$")
+        self.assertIsNone(receipt["failureReason"])
         self.assertEqual(receipt["usage"]["total_tokens"], 18)
         serialized = json.dumps(receipt).lower()
         for forbidden in ("review harmless", "fixture response", "api_key", "secret"):
@@ -316,6 +333,7 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
                 receipt = json.loads(result.receipt_path.read_text())  # type: ignore[attr-defined]
                 self.assertEqual(receipt["outcome"], "error")
                 self.assertEqual(receipt["failureKind"], "incomplete_stream")
+                self.assertIsNone(receipt["failureReason"])
                 self.assertIsNone(receipt["usage"])
                 serialized = json.dumps(receipt)
                 self.assertNotIn("PARTIAL_RESPONSE_MARKER", serialized)
@@ -329,8 +347,82 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         receipt = json.loads(result.receipt_path.read_text())  # type: ignore[attr-defined]
         self.assertEqual(receipt["outcome"], "error")
         self.assertEqual(receipt["failureKind"], "stream_error")
+        self.assertIsNone(receipt["failureReason"])
         self.assertIsNone(receipt["usage"])
         self.assertNotIn("PARTIAL_RESPONSE_MARKER", json.dumps(receipt))
+
+    def test_http_failures_expose_only_closed_content_safe_reasons(self) -> None:
+        prompt_marker = "PRIVATE_PROMPT_MARKER_68"
+        reflected_marker = "REFLECTED_INPUT_MARKER_68"
+        cases = (
+            (
+                "organization budget", 403,
+                {"error": {"code": 403, "message":
+                 " \nBudget limit exceeded (monthly limit). Contact your org admin.\t "}},
+                "organization_monthly_budget_exceeded",
+                "organization monthly budget exceeded",
+            ),
+            (
+                "generic permission", 403,
+                {"error": {"code": 403, "message": "Provider permission detail"}},
+                "key_permission_denied", "key permission denied",
+            ),
+            (
+                "guardrail", 403,
+                {"error": {"code": 403, "message": f"Request blocked: {reflected_marker}",
+                 "metadata": {"error_type": "content_policy_violation",
+                              "patterns": [reflected_marker],
+                              "flagged_input": reflected_marker}},
+                 "openrouter_metadata": {"summary": reflected_marker}},
+                "guardrail_blocked", "guardrail blocked",
+            ),
+            (
+                "malformed", 403, f"not-json {reflected_marker}",
+                "unknown_http_error", "unknown HTTP error",
+            ),
+            (
+                "mismatched envelope", 403,
+                {"error": {"code": 401, "message": "Mismatched private detail"}},
+                "unknown_http_error", "unknown HTTP error",
+            ),
+            (
+                "insufficient credits", 402,
+                {"error": {"code": 402, "message": "Private payment detail",
+                 "metadata": {"error_type": "payment_required"}}},
+                "insufficient_credits", "insufficient credits",
+            ),
+            (
+                "rate limit", 429,
+                {"error": {"code": 429, "message": "Private rate detail",
+                 "metadata": {"error_type": "rate_limit_exceeded"}}},
+                "rate_limited", "rate limited",
+            ),
+        )
+        for name, status, body, reason, label in cases:
+            with self.subTest(name=name):
+                FixtureHandler.response_status = status
+                FixtureHandler.response_body = body
+                result = self.transport(prompt_marker)
+                self.assertEqual(result.returncode, 1)
+                self.assertEqual(result.stdout, "")
+                receipt_text = result.receipt_path.read_text()  # type: ignore[attr-defined]
+                receipt = json.loads(receipt_text)
+                self.assertEqual(receipt["failureKind"], "http_error")
+                self.assertEqual(receipt["failureReason"], reason)
+                self.assertEqual(
+                    result.stderr,
+                    f"### RUNNER FAILURE (z-ai/glm-5.2, HTTP {status}: {label})\n",
+                )
+                visible = result.stdout + result.stderr + receipt_text
+                raw_body = body if isinstance(body, str) else json.dumps(body)
+                for forbidden in (
+                    prompt_marker, reflected_marker, raw_body, "flagged_input",
+                    "openrouter_metadata", '"metadata"',
+                    "Budget limit exceeded", "Contact your org admin",
+                    "Provider permission detail", "Mismatched private detail",
+                    "Private payment detail", "Private rate detail",
+                ):
+                    self.assertNotIn(forbidden, visible)
 
     def test_transport_keeps_bearer_value_out_of_curl_argv_and_environment(self) -> None:
         wrapper = WRAPPER.read_text()
