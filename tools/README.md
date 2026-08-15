@@ -1,5 +1,27 @@
 # Depot Tools
 
+## generate-agent-plugins-canary.py
+
+Generates and validates the single allowlisted Agent Plugins v1 canary at
+`plugins/craft-developer/plugin.json` from the canonical Claude manifest. The
+vendored official v1.0.0 schema comes from
+`https://agent-plugins.org/schemas/1.0.0/plugin.schema.json` and has SHA-256
+`0a4aad95ce337878ad38802ebf0daa3fde76abe3f65400c86bcbb1ec0b3ab883`.
+Agent Plugins v1.0.0 remains a Working Draft.
+
+```bash
+./tools/generate-agent-plugins-canary.py
+./tools/generate-agent-plugins-canary.py --check
+./tools/generate-agent-plugins-canary.py --self-test
+```
+
+This canary proves fixed-location skills portability only. Craft MCP portability
+is unsupported by the current format/runtime contract because its command must
+run in the consuming Craft project while portable stdio working directories are
+limited to the plugin root or client-managed plugin data. No workaround or root
+`mcp.json` is included, and no claim is made that all craft-developer
+capabilities are portable.
+
 ## generate-codex-manifests.py
 
 Generates Codex compatibility manifests from the Claude marketplace manifests.
