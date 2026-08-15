@@ -135,4 +135,53 @@ case "$organization_reason" in
   *"buy"*|*"credit"*|*"replace"*|*"key"*) exit 1 ;;
 esac
 
-echo "  OK    OpenRouter agent runner performs one behavioral boundary scan and validates closed HTTP failure reasons"
+cat > "$REFS/openrouter-wrapper.sh" <<'EOF'
+#!/usr/bin/env bash
+jq -n '{
+  schemaVersion: 2,
+  outcome: "error",
+  failureKind: "http_error",
+  failureReason: "organization_monthly_budget_exceeded"
+}' > "$OPENROUTER_RECEIPT_FILE"
+printf '%s\n' 'PRIVATE_PROVIDER_BODY_MARKER' >&2
+exit 1
+EOF
+chmod +x "$REFS/openrouter-wrapper.sh"
+
+{
+  printf '%s\n' '#!/usr/bin/env bash' 'set -uo pipefail'
+  printf '%s\n' \
+    'target_agent_name="doc-sync-reviewer"' \
+    'target_model="openai/gpt-5.6-luna"' \
+    'fallback_model="openai/gpt-5.6-terra"' \
+    'target_timeout=10' \
+    'review_run_id="runner-http-failure-test"' \
+    'TARGET_BODY="Review documentation consistency."' \
+    'USER_PROMPT="Review this harmless fixture."' \
+    'SECURITY_POLICY_RESOLVED="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"'
+  sed -n '/^WRAPPER_PATH=/,/^EXIT_CODE=\$?/p' "$SOURCE"
+  sed -n '/^ACTUAL_MODEL=/,/^fi$/p' "$SOURCE"
+  sed -n '/^case "\$EXIT_CODE" in/,/^fi$/p' "$SOURCE"
+} > "$FIXTURE/run-http-failure"
+chmod +x "$FIXTURE/run-http-failure"
+
+runner_failure_output=$(HOME="$FIXTURE/home" OPENROUTER_ROOT="$OPENROUTER_ROOT" \
+  BOUNDARY_HELPER="$FIXTURE/boundary" BOUNDARY_COUNT="$FIXTURE/http-count" \
+  BOUNDARY_ARGS="$FIXTURE/http-args" WRAPPER_SENTINEL="$FIXTURE/http-wrapper-called" \
+  EVENT_LOG="$FIXTURE/http-events" SCREENED_FILES="$FIXTURE/http-screened-files" \
+  SCREENED_DIGESTS="$FIXTURE/http-screened-digests" WRAPPER_DIGESTS="$FIXTURE/http-wrapper-digests" \
+  "$FIXTURE/run-http-failure")
+
+case "$runner_failure_output" in
+  *"### RUNNER FAILURE"*) ;;
+  *) exit 1 ;;
+esac
+case "$runner_failure_output" in
+  *"OpenRouter runner (doc-sync-reviewer): The OpenRouter organization monthly budget is exhausted; its administrator must raise or reset that limit. Review unavailable."*) ;;
+  *) exit 1 ;;
+esac
+case "$runner_failure_output" in
+  *"PRIVATE_PROVIDER_BODY_MARKER"*|*"All models exhausted, key missing, or HTTP error"*) exit 1 ;;
+esac
+
+echo "  OK    OpenRouter agent runner scans once and propagates closed HTTP failure reasons"
