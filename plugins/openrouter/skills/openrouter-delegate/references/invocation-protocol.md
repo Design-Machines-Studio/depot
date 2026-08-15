@@ -122,7 +122,13 @@ protocol below before invoking it.
   stream becomes review evidence.
 - `OPENROUTER_RECEIPT_FILE`: optional path for a content-free JSON success or
   failure receipt. Failure receipts record timeout/error classification without
-  prompt, partial completion, inferred provider, or usage content.
+  prompt, partial completion, inferred provider, or usage content. The nullable
+  `failureReason` is non-null only for HTTP failures and is restricted to
+  `organization_monthly_budget_exceeded`, `key_permission_denied`,
+  `guardrail_blocked`, `insufficient_credits`, `rate_limited`, or
+  `unknown_http_error`. Provider messages, moderation details, and error
+  metadata are inspected only inside the private temporary run directory and
+  are never durable output.
 
 ## Security Hardening
 
@@ -154,6 +160,13 @@ all use one pass:
 No OpenRouter caller asks for user approval. The configured-key path has no
 broker dependency. Provider-side per-key spending limits are the recommended
 runaway-cost control.
+
+Account credit balance, an organization's monthly budget, and a per-key
+spending limit are separate controls. A positive account balance and a
+successful `/auth/key` lookup establish neither organization-budget headroom
+nor remaining key-limit headroom. An exhausted organization monthly budget
+must be raised or reset by that organization's administrator; buying credits or
+replacing an otherwise valid key does not address that distinct limit.
 
 ### Codex network allowlist
 
@@ -207,7 +220,7 @@ POST https://openrouter.ai/api/v1/chat/completions
 |------|---------|--------|
 | `0` | Success | stdout is the model's text content. |
 | `28` | Timeout | Report the first-byte, idle, or overall timeout from the failure receipt; proceed without OpenRouter input. Do not issue a blind client retry. |
-| `1` | Exhausted / error | Bad API response or non-recoverable HTTP. The wrapper prints `### RUNNER FAILURE ...` to stderr. Skip gracefully. |
+| `1` | Exhausted / error | Bad API response or non-recoverable HTTP. The wrapper prints `### RUNNER FAILURE ...` using only a hard-coded label derived from the closed `failureReason` enum. Skip gracefully. |
 | `2` | Bad args / origin rejection | Missing arguments or an `anthropic/*` primary or fallback. |
 
 When a fallback is present, OpenRouter receives both models in one ordered

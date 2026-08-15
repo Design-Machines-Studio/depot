@@ -58,3 +58,27 @@ Every live caller selects one coherent installed plugin root with workflow-kerne
   immediately pass those same files to the wrapper.
 - Use provider-side per-key spending limits for runaway-cost control.
 - Optional OpenRouter MCP: `codex mcp add openrouter --url https://mcp.openrouter.ai/mcp`, then `codex mcp login openrouter`. Its expiring OAuth key does not replace the persistent team API key.
+
+## Budgets and content-safe HTTP failures
+
+OpenRouter account credit balance, organization monthly budget, and per-key
+spending limit are independent controls. A positive credit balance and a
+successful `/auth/key` lookup do not prove that the organization monthly budget
+or the key's spending limit has headroom. When the organization monthly budget
+is exhausted, its administrator must raise or reset that limit; buying credits
+or replacing an otherwise valid key is not the remedy for that condition.
+
+HTTP failure receipts keep `failureKind: http_error` and expose only the closed,
+nullable `failureReason` vocabulary:
+
+- `organization_monthly_budget_exceeded`
+- `key_permission_denied`
+- `guardrail_blocked`
+- `insufficient_credits`
+- `rate_limited`
+- `unknown_http_error`
+
+The wrapper derives stderr from fixed labels for those values. Provider
+messages, moderation reasons or patterns, `flagged_input`, arbitrary error
+metadata, `openrouter_metadata`, prompts, and raw response bodies remain inside
+the private temporary run directory and are not printed or stored in receipts.
