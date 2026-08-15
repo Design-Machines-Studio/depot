@@ -2,18 +2,24 @@
 
 Rules for mapping each agent's native severity terminology to the unified P1/P2/P3 system.
 
-## Finding Policy
+## Zero-Deferral Finding Policy
 
-P1 blocks merge and P2 must be fixed before merge. P3 is advisory: preserve complete evidence, provenance, count, and detail, but do not create mandatory work, drive convergence, or prevent `CLEAN`. See `plugins/dm-review/commands/dm-review.md` for the full policy statement.
+Every retained P1, P2, and P3 finding must be fixed and rechecked before
+`CLEAN`. Severity controls ordering and merge language, not whether work is
+owed. Reject unsupported preferences and speculative scope during consolidation
+instead of retaining optional findings. See
+`plugins/dm-review/commands/dm-review.md` for the full policy statement.
 
-Every P1/P2 must include concrete current evidence:
+Every retained finding must include an observable current defect, its location
+or reachable path, and the smallest adequate repair. Every P1/P2 must also
+include concrete current evidence for:
 
 1. the affected current user or operator;
 2. the reachable actor, input, or path;
 3. the realistic harm or regression; and
 4. the smallest adequate repair.
 
-Security P1/P2 findings must additionally name the actual trust boundary. For Design Machines work, assume two developers, primarily first-party private repositories, trusted Fixture authors, and self-hosted co-op applications of roughly 4--50 people unless approved scope says otherwise. There is no public Fixture marketplace or hostile third-party plugin channel by default. Hypothetical actors, future marketplaces, enterprise scale, generic OWASP possibilities, and “defence in depth would be better” are P3 at most and usually not findings.
+Security P1/P2 findings must additionally name the actual trust boundary. For Design Machines work, assume two developers, primarily first-party private repositories, trusted Fixture authors, and self-hosted co-op applications of roughly 4--50 people unless approved scope says otherwise. There is no public Fixture marketplace or hostile third-party plugin channel by default. Hypothetical actors, future marketplaces, enterprise scale, generic OWASP possibilities, and “defence in depth would be better” are not findings by themselves; retain one only when direct evidence establishes an observable current defect.
 
 Real reachable authentication or authorization bypass, credential disclosure, unsafe destructive operations, corruptible state or backups, public untrusted input, release/update integrity failures, and false verification claims remain blocking at their supported severity.
 
@@ -24,8 +30,8 @@ Real reachable authentication or authorization bypass, credential disclosure, un
 | Level | Label | Meaning | Merge Impact |
 |-------|-------|---------|-------------|
 | **P1** | Blocks Merge | Must fix before merging | Review recommendation = BLOCKS MERGE |
-| **P2** | Should Fix | Fix soon, track if not immediate | Review recommendation = APPROVE WITH FIXES |
-| **P3** | Advisory | Improvement recommendation. Retain visibly with full evidence and provenance; no mandatory fix. | CLEAN when no P1/P2 |
+| **P2** | Important Fix | Must fix before merging | Review recommendation = APPROVE WITH FIXES |
+| **P3** | Required Fix | Observable minor defect or maintainability debt. Must fix before merging. | Review recommendation = APPROVE WITH FIXES |
 
 ---
 
@@ -50,10 +56,10 @@ This tree ensures that a missing error state on a critical form (user stranded =
 
 | Agent | Critical/P1 | Serious/P2 | Moderate/P3 |
 |-------|------------|------------|-------------|
-| **code-simplicity-reviewer** | Reachable correctness failure hidden by complexity | Unnecessary complexity with a demonstrated current regression or realistic harm | Numeric length/complexity thresholds, verbose but correct code, minor style preferences |
-| **security-auditor** | SQL injection, XSS, auth bypass, credential exposure | Missing CSRF token, permissive CORS, unvalidated input | Missing rate limiting, verbose error messages |
-| **pattern-recognition-specialist** | Circular dependencies, data races, resource leaks | Anti-patterns (God objects, feature envy), naming inconsistencies | Minor duplication, magic numbers in non-critical paths |
-| **architecture-reviewer** | Broken trust/module boundary with concrete current harm | Coupling or placement that causes a current regression or reachable failure | SOLID preferences, file/function size thresholds, layer counts, interfaces, service/repository patterns, suboptimal but functional structure |
+| **code-simplicity-reviewer** | Reachable correctness failure hidden by complexity | Unnecessary complexity with a demonstrated current regression or realistic harm | Bounded duplication or complexity with an observable current maintenance defect; numeric thresholds and style preferences alone are discarded |
+| **security-auditor** | SQL injection, XSS, auth bypass, credential exposure | Missing CSRF token, permissive CORS, unvalidated input | Minor reachable disclosure or abuse defect at an actual current boundary; generic hardening suggestions are discarded |
+| **pattern-recognition-specialist** | Circular dependencies, data races, resource leaks | Anti-patterns (God objects, feature envy), naming inconsistencies | Minor duplication that has diverged or a magic value that obscures changed behavior; preferences alone are discarded |
+| **architecture-reviewer** | Broken trust/module boundary with concrete current harm | Coupling or placement that causes a current regression or reachable failure | Bounded current boundary or maintainability defect; SOLID preferences, size thresholds, layer counts, and optional abstractions alone are discarded |
 | **doc-sync-reviewer** | API docs contradict implementation, CLAUDE.md has wrong paths | README outdated, missing docs for new features | Minor formatting, stale examples |
 | **test-coverage-reviewer** | Existing tests now fail | Changed code has no tests (when project has test infrastructure) | Missing edge case tests |
 | **go-build-verifier** | Compilation failure | `go vet` warnings | -- |
@@ -69,9 +75,9 @@ This tree ensures that a missing error state on a critical form (user stranded =
 | **a11y-html-reviewer** | accessibility-compliance | Missing form labels, keyboard traps, no alt on functional images | Broken heading hierarchy, missing landmarks, generic link text | Missing aria-describedby, suboptimal ARIA |
 | **a11y-css-reviewer** | accessibility-compliance | `outline: none` without replacement, failing contrast on primary text | Animations without motion check, reflow broken at 320px | Low contrast on secondary text, missing forced-colors |
 | **a11y-dynamic-content-reviewer** | accessibility-compliance | Click handlers on non-interactive elements, no live regions for state changes | Focus lost after morph, loading states silent | ARIA states not synced, suboptimal focus target |
-| **css-reviewer** | live-wires | -- (errors) | Cascade layer violations, class invention, naming rule breaks | Token recommendations, container query suggestions |
+| **css-reviewer** | live-wires | -- (errors) | Cascade layer violations, class invention, naming rule breaks | Observable token or responsive defect with a bounded repair; alternative patterns alone are discarded |
 | **voice-editor** | ghostwriter | -- | Spine failure (no point of view), AI pattern detected | Rhythm issues, minor register drift |
-| **governance-domain** | council | Legal compliance failure (wrong voting threshold) | Architecture violation (fixture boundaries) | Naming recommendations, values alignment |
+| **governance-domain** | council | Legal compliance failure (wrong voting threshold) | Architecture violation (fixture boundaries) | Observable terminology or values mismatch against approved policy; recommendations alone are discarded |
 
 ---
 
@@ -79,7 +85,7 @@ This tree ensures that a missing error state on a critical form (user stranded =
 
 | Agent | Phase | Critical/P1 | Serious/P2 | Moderate/P3 |
 |-------|-------|------------|------------|-------------|
-| **visual-browser-tester** | Live Wires CSS Compliance | -- | Invented classes when primitives exist, arbitrary values instead of tokens, media queries instead of container queries | Minor token recommendations, alternative primitive patterns (advisory) |
+| **visual-browser-tester** | Live Wires CSS Compliance | -- | Invented classes when primitives exist, arbitrary values instead of tokens, media queries instead of container queries | Observable minor token or primitive defect; preference-only alternatives are discarded |
 
 UX Design and Visual Design Quality phases have moved to **ux-quality-reviewer** (see dm-review Agents table above).
 
@@ -89,15 +95,15 @@ UX Design and Visual Design Quality phases have moved to **ux-quality-reviewer**
 
 1. **Any P1 from any agent** -> merge recommendation = `BLOCKS MERGE`
 2. **P2 present (any count, regardless of P3)** -> merge recommendation = `APPROVE WITH FIXES` (must fix before merge)
-3. **P3 only (no P1/P2)** -> merge recommendation = `CLEAN`. Render every P3 with complete evidence, source identity, raw reference, synthesis disposition, counts, and provenance.
+3. **P3 present with no P1** -> merge recommendation = `APPROVE WITH FIXES` (must fix before merge)
 4. **Zero findings** -> merge recommendation = `CLEAN`
 5. **Supported security P1** always escalates when it names the current reachable path, realistic harm, actual trust boundary, and smallest adequate repair -- no exceptions, no "we'll fix it later"
 6. **Accessibility P1** always escalates -- legal compliance (EAA, ADA)
 7. **Governance P1** always escalates -- statutory requirements
 8. **Visual P1** always escalates -- if layout is completely broken or keyboard traps exist in the rendered page
 
-## De-escalation Rules
+## Validity and De-escalation Rules
 
-1. P3 findings are shown in the report with full detail (same format as P1/P2) as visible advisories. They do not create todos/issues, enter the fix queue, drive convergence, or block merge.
+1. P3 findings use the same complete evidence, todo/issue, fix-queue, and convergence path as P1/P2. A preference or future improvement without an observable current defect is not a P3; discard it.
 2. Findings from agents that partially overlap (e.g., both a11y-css-reviewer and css-reviewer flag the same file) count as ONE finding at the higher severity.
-3. If a P1/P2 finding is already tracked in a known issue/TODO, note the tracker reference and still follow the required fix policy. Existing user-owned P3 trackers are left untouched; dm-review does not create new ones.
+3. If a retained finding is already tracked in a known issue/TODO, note the tracker reference and still follow the required fix policy. An existing tracker never makes the current review clean.

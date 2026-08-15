@@ -66,7 +66,7 @@ graph LR
 | dm-review | openrouter | optional | `>=1.14.2` |
 | ghostwriter | design-machines | optional | `>=1.5.0` |
 | ned | superpowers | optional | `>=1.0.0` |
-| pipeline | dm-review | required | `>=1.62.0` |
+| pipeline | dm-review | required | `>=1.63.0` |
 | pipeline | ned | required | `>=1.4.0` |
 | pipeline | workflow-kernel | required | `>=0.16.0` |
 | pipeline | design-machines | optional | `>=1.3.0` |

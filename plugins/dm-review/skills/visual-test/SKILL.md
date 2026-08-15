@@ -116,7 +116,7 @@ Summary of screenshots taken during testing.
 
 After the report, suggest next steps:
 
-- If findings exist: "Fix the P1/P2 issues and re-run `/dm-review-visual` to verify."
+- If findings exist: "Fix every P1/P2/P3 issue and re-run `/dm-review-visual` to verify."
 - If clean: "Visual tests passed. Run `/dm-review` for a full code review."
 
 ## Reference Files

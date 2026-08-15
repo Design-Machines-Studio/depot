@@ -165,7 +165,7 @@ authoritative Step 5b fields.
 - Ephemeral removed: N files
 - Pre-shadow run-scoped removed: N files
 - Feature-scoped retained: N files
-- Deferred findings: none | <list>
+- Remaining findings: none | <list; any entry means NEEDS ATTENTION>
 - Docker resources: created N, removed M, missing K, retained/blocked J
 - Docker inventory: before <digest/count>, after <digest/count>
 - Reconciliation: complete | blocked | unavailable (reason)

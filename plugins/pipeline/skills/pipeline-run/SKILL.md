@@ -34,7 +34,7 @@ verification result, branch or PR, and one recommended next action. Link the
 existing `receipt.md`, `final-requirements-crosscheck.md`,
 `run-postmortem.md`, and detailed review when present. For blocked work, name
 the exact blocker, the smallest operator action, and the preserved resumable
-location. Normally stay within roughly 250 words, except for required P1/P2
+location. Normally stay within roughly 250 words, except for required P1/P2/P3
 findings or a real blocker.
 
 Do not repeat `Steps Completed`, provider accounting, cleanup inventory, every
@@ -91,7 +91,7 @@ Before executing, verify:
     `decisionProfile.consequence: high`; a security-sensitive final diff
     escalates it to full and records the escalation. Legacy manifests default
     to `full` with `final_review_mode_defaulted=true`. This field never weakens
-    per-chunk sensitive review, repository/browser evidence, P1/P2 resolution,
+    per-chunk sensitive review, repository/browser evidence, P1/P2/P3 resolution,
     or cleanup.
 
 If any check fails, report the issue and stop.
@@ -207,7 +207,7 @@ references.
 
 **Review adapter:** Codex sessions do not expose a generic nested `Skill(skill="dm-review:review", ...)` callable. Use this risk-tiered contract in the current orchestrator context:
 
-- For ordinary non-sensitive chunks, run one focused read-only Codex review against the chunk diff and allow at most one P1/P2 repair/recheck pass. Preserve pending/done todo receipts.
+- For ordinary non-sensitive chunks, run one focused read-only Codex review against the chunk diff and allow at most one P1/P2/P3 repair/recheck pass. Preserve pending/done todo receipts.
 - For sensitive-path chunks, run the full inline `plugins/dm-review/skills/review/SKILL.md` protocol against the chunk worktree, with at most two passes.
 - For the final gate, read `finalReviewMode`. `full` runs the review skill's
   full-mode protocol. `quick` loads and executes the installed
@@ -215,7 +215,7 @@ references.
   a bounded security-sensitive path, escalate to full and receipt the effective
   mode.
 - Use `multi_agent_v1.spawn_agent` for the focused Codex reviewer or for review agents selected by the chosen dm-review protocol when available.
-- Fix P1/P2 findings and retain complete P3 advisory evidence. Verify repairs with affected lanes; repeat the full fan-out only if its coverage was incomplete or a repair changed a security-sensitive boundary.
+- Fix every retained P1/P2/P3 finding and verify repairs with affected lanes; repeat the full fan-out only if its coverage was incomplete or a repair changed a security-sensitive boundary. Reject unsupported preference-only suggestions during consolidation instead of deferring them.
 - Write/read the same `todos/*-pending-*.md` and `todos/*-done-*.md` receipts that dm-review uses.
 
 Do not report "Skill tool unavailable" in Codex when this adapter can run. That message is only valid if the session lacks both nested skill invocation and enough local access to execute the dm-review inline protocol.

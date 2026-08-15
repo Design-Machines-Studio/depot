@@ -17,7 +17,7 @@ verdict from the complete report. Keep the explanation to one plain sentence.
 <One plain sentence explaining the verdict.>
 
 ### Actionable findings
-<For each retained P1/P2, once only: `path:anchor -- problem -- smallest adequate fix`>
+<For each retained P1/P2/P3, once only: `path:anchor -- problem -- smallest adequate fix`>
 <If none: `None.`>
 
 ### Coverage gap requiring action
@@ -28,15 +28,14 @@ verdict from the complete report. Keep the explanation to one plain sentence.
 
 ### Complete evidence
 `Full report: .claude/ux-review/report.md`.
-<If P3 exists: `P3 advisories: N -- <evidence pointer>.`>
+<If findings exist: `Open findings: N -- <evidence pointer>.`>
 ```
 
-When there are at most eight P1/P2 findings, list each exactly once. When there
-are more than eight, list the highest-impact eight, state `N additional P1/P2
-findings` with the exact remaining count, and point to the complete report.
-Never imply that omitted findings do not exist. P3 advisories appear only as an
-exact count and evidence pointer in this handoff; they remain fully detailed in
-the report and never enter the fix queue.
+When there are at most eight retained findings across all severities, list each
+exactly once. When there are more than eight, list the highest-impact eight,
+state `N additional findings` with the exact remaining count, and point to the
+complete report. Never imply that omitted findings do not exist. Chat keeps P3
+compact, but it follows the same fix queue and convergence path as P1/P2.
 
 Do not repeat provider tables, agent transcripts, synthesis ledgers, cleanup
 tables, or raw reports in the handoff. Write them to the established durable
@@ -50,7 +49,7 @@ Clean review:
 
 ```markdown
 ## CLEAN
-No P1/P2 findings were found, and all required lanes completed.
+No P1/P2/P3 findings were found, and all required lanes completed.
 ### Actionable findings
 None.
 ### Coverage gap requiring action
@@ -58,23 +57,24 @@ None.
 ### Recommended next action
 Merge the reviewed head.
 ### Complete evidence
-Full report: `.claude/ux-review/report.md` (P3 advisories: 0).
+Full report: `.claude/ux-review/report.md` (open findings: 0).
 ```
 
 Review with actionable findings:
 
 ```markdown
 ## APPROVE WITH FIXES
-Two P2 findings must be fixed before merge.
+Two P2 findings and one P3 finding must be fixed before merge.
 ### Actionable findings
 - `internal/members/handler.go:Create` -- validation accepts an empty name -- reject an empty trimmed value.
 - `web/templates/member.templ:member-form` -- error text is not associated with the field -- add the existing error ID to `aria-describedby`.
+- `web/templates/member.templ:member-actions` -- spacing breaks the established rhythm -- use the existing compact stack token.
 ### Coverage gap requiring action
 Safari browser evidence is blocked -- run the retained case on a Safari-capable host.
 ### Recommended next action
-Fix the two P2 findings, then rerun their affected lanes and the blocked browser case.
+Fix all three findings, then rerun their affected lanes and the blocked browser case.
 ### Complete evidence
-Full report: `.claude/ux-review/report.md` (P3 advisories: 2).
+Full report: `.claude/ux-review/report.md` (open findings: 3).
 ```
 
 ## Complete Report Template
@@ -129,7 +129,7 @@ Full report: `.claude/ux-review/report.md` (P3 advisories: 2).
 
 ---
 
-### P3 -- Advisory
+### P3 -- Required Fix
 
 #### [Finding Title]
 - **Finding ID:** `finding-v1:sha256(<normalized-key>)`
@@ -296,7 +296,7 @@ The consolidator preserves the original citation format from each agent.
 
 1. **P1 findings get full detail blocks** -- file, issue, fix, reference
 2. **P2 findings get detail blocks** -- same format as P1
-3. **P3 findings get full detail blocks** -- same format as P1/P2. Preserve source identity, raw reference, evidence, synthesis disposition, counts, and provenance even though P3 is advisory.
+3. **P3 findings get full detail blocks** -- same format as P1/P2. Preserve source identity, raw reference, evidence, synthesis disposition, counts, and provenance; every retained P3 enters the fix queue.
 4. **Clean agents are noted** in the summary table but don't get detail sections
 5. **Skipped agents are listed** with the reason (file type not changed, project type mismatch)
 6. **Deduplicated findings** show all source agents: `**Source:** a11y-css-reviewer, css-reviewer`
@@ -309,7 +309,7 @@ The consolidator preserves the original citation format from each agent.
     provenance, evidence, raw ref, agreement, disposition, closed reason code,
     and rationale; raw reviewer reports remain verbatim below
 11. **Human delivery is compact** -- the exact verdict, one-sentence explanation,
-    actionable P1/P2 findings, human-action coverage gaps, one recommended next
+    actionable P1/P2/P3 findings, human-action coverage gaps, one recommended next
     action, and complete-evidence pointer appear before the report
 
 ## Merge Recommendation Logic
@@ -318,13 +318,10 @@ The consolidator preserves the original citation format from each agent.
 if any P1 findings:
   recommendation = "BLOCKS MERGE"
   summary = "X critical issues must be fixed before merging."
-elif any P2 findings:
+elif any P2 or P3 findings:
   recommendation = "APPROVE WITH FIXES"
   summary = "X issue(s) must be addressed before merging."
 else:
   recommendation = "CLEAN"
-  if any P3 findings:
-    summary = "No P1/P2 findings. X P3 advisory finding(s) retained below."
-  else:
-    summary = "No issues found. Ready to merge."
+  summary = "No issues found. Ready to merge."
 ```

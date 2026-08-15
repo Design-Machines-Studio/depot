@@ -8,14 +8,20 @@ argument-hint: "[optional: PR number, branch name, or file path]"
 
 Run a comprehensive code review using all applicable agents for the current project stack.
 
-## Finding Policy
+## Zero-Deferral Finding Policy
 
-P1 blocks merge and P2 must be fixed before merge. P3 is advisory: retain its complete evidence, provenance, count, and detail, but do not create mandatory work, drive convergence, or prevent `CLEAN`. `/dm-review` surfaces all findings; `/dm-review-fix` resolves pending P1/P2 findings; `/dm-review-loop` automates fix-until-clean for required work.
+Every retained P1, P2, and P3 finding is mandatory work. `/dm-review` surfaces
+and tracks it, `/dm-review-fix` resolves it, and `/dm-review-loop` repairs and
+rechecks until no findings remain. Severity controls ordering and impact; it
+never turns a valid finding into optional debt. Reject a speculative,
+duplicate, disproved, or out-of-scope reviewer suggestion during consolidation
+instead of retaining it as a finding and deferring it. There is no deferral
+flag and no clean-with-P3s outcome.
 
 The merge recommendation reflects this policy:
 
 - **Zero findings:** `CLEAN` -- safe to merge.
-- **P3 only (no P1/P2):** `CLEAN` -- retain every P3 in complete evidence; show only the exact count and evidence pointer in the compact handoff.
+- **P3 only:** `APPROVE WITH FIXES`. Must fix.
 - **P2 present:** `APPROVE WITH FIXES`. Must fix.
 - **P1 present:** `BLOCKS MERGE`. Must fix.
 

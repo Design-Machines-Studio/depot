@@ -376,7 +376,7 @@ printf "\nBaseplate evidence gates:\n"
 require_text "$promptcraft" "Phase 3m: Fixture SDK Conformance Gate" "promptcraft gates fixture SDK conformance"
 require_text "$promptcraft" "Phase 3n: Production Readiness Preflight Gate" "promptcraft gates production preflight"
 require_text "$arch" "Fixture SDK Conformance Gap" "architecture-reviewer checks reachable fixture conformance gaps"
-require_text "$arch" "Missing Auth Boundary Map Receipt (P3)" "Auth Boundary Map absence is advisory without a reachable defect"
+require_text "$arch" "Its absence is a coverage note, not a product finding" "Auth Boundary Map absence is a coverage note without a reachable defect"
 require_absent "$arch" "Missing Auth Boundary Map Receipt (P2)" "Auth Boundary Map absence is not automatically blocking"
 require_text "$sec" "Public/Private URL Boundary" "security-auditor guards the public/private URL boundary"
 require_text "$sec" "Update / Release Preflight" "security-auditor checks update/release preflight"
@@ -511,8 +511,8 @@ for loop_contract in "$review_loop" "$review_loop_skill"; do
   for receipt_field in selective_rerun lanes_rerun lanes_skipped rerun_reasons selection_fallback_reason; do
     require_text "$loop_contract" "\`$receipt_field\`" "$loop_contract_relative preserves $receipt_field receipt field"
   done
-  require_text "$loop_contract" '**Convergence requires no open P1/P2 findings and complete required coverage for the verification pass.**' "$loop_contract_relative defines proportional convergence"
-  require_text "$loop_contract" 'P3 advisories never trigger another pass.' "$loop_contract_relative excludes P3 from convergence"
+  require_text "$loop_contract" '**Convergence requires no open P1/P2/P3 findings and complete required coverage for the verification pass.**' "$loop_contract_relative defines zero-deferral convergence"
+  require_text "$loop_contract" 'Every retained finding triggers repair and affected-lane verification.' "$loop_contract_relative includes every retained severity in convergence"
   require_text "$loop_contract" 'the touched-file set is the union of `git diff --name-only <prior-review-head>..HEAD` and the paths reported by `git status --porcelain`' "$loop_contract_relative unions committed and uncommitted changed paths"
   require_text "$loop_contract" "An empty computed lane set is never dispatched." "$loop_contract_relative never dispatches an empty selection"
   require_text "$loop_contract" 'selection fails open to a full fan-out with `fallback_reason: empty selection`' "$loop_contract_relative fails open on an empty selection"
@@ -520,14 +520,14 @@ for loop_contract in "$review_loop" "$review_loop_skill"; do
   require_text "$loop_contract" '`max-iterations-verification-receipt.json`' "$loop_contract_relative names the max-iterations receipt artifact"
   require_text "$loop_contract" 'Repeat the whole full fan-out only when the prior full review was incomplete or a repair changed a security-sensitive boundary.' "$loop_contract_relative limits repeated full fan-out"
   require_text "$loop_contract" 'prior_finding_owner_lanes = union of validated exact source_agents' "$loop_contract_relative preserves repaired finding ownership"
-  require_text "$loop_contract" 'required_finding_files = todos/*-pending-p1-*.md plus todos/*-pending-p2-*.md' "$loop_contract_relative excludes P3 artifacts from convergence"
+  require_text "$loop_contract" 'required_finding_files = todos/*-pending-p1-*.md plus todos/*-pending-p2-*.md plus todos/*-pending-p3-*.md' "$loop_contract_relative includes P3 artifacts in convergence"
   require_text "$loop_contract" 'security_boundary_changed: security_boundary_changed' "$loop_contract_relative binds security repair classification"
   require_line "$loop_contract" '          rerun_lanes = lanes_a union lanes_b' "$loop_contract_relative keeps affected-lane assignment inside the non-promotion branch"
   require_line "$loop_contract" '          promoted_to_full = true' "$loop_contract_relative records ordinary full-review promotion"
 done
 require_text "$review_skill" '`review_lane_allowlist`' "review receiver names the selective lane allowlist"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.14.0"' "dm-review requires the simplified verification kernel release"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.62.0"' "pipeline requires compact-handoff dm-review release"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.63.0"' "pipeline requires zero-deferral dm-review release"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'family-independent second-opinion review' "dm-review manifest describes family-independent perspective resolution"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'Full mode only.' "migration-validator registry limits the lane to full mode"
@@ -691,13 +691,13 @@ require_text "$plan_adversary" "targeted recheck of only those revised blocker s
 require_text "$sec" "reachable actor, input, and path" "security P1/P2 evidence requires a reachable threat"
 require_text "$sec" "realistic harm or regression" "security P1/P2 evidence requires realistic current harm"
 require_text "$sec" "actual trust boundary crossed" "security P1/P2 evidence names the actual trust boundary"
-require_text "$arch" "not automatic P1/P2 findings" "architecture preferences are heuristic rather than blocking"
+require_text "$arch" "not findings by themselves" "architecture preferences are heuristic rather than blocking"
 require_absent "$arch" "Layer violations are P1 when they create circular dependencies, P2 otherwise" "architecture review rejects automatic layer-violation severity"
-require_text "$arch" "A layer violation is P1 or P2 only when it causes a concrete current failure, reachable harm, or approved-scope regression" "architecture layer findings require current evidence"
+require_text "$arch" "Report a layer violation only when it causes a concrete current failure" "architecture layer findings require current evidence"
 require_text "$arch" "Direct one-use handlers and concrete implementations are valid" "direct clear implementations remain valid"
 require_text "$arch" "Mere direct access in trusted first-party Fixture code is not automatically a finding" "architecture review requires a reachable Fixture boundary defect"
 require_text "$simplicity" "the number alone is not a finding" "numeric simplicity thresholds are not automatically blocking"
-require_text "$review_consolidator" "Discard unrelated hardening and new product scope from the fix queue" "review repairs cannot introduce unrelated hardening or product scope"
+require_text "$review_consolidator" "Discard unrelated hardening, new product scope" "review repairs cannot introduce unrelated hardening or product scope"
 require_text "$review_fix" "Do not add unrelated hardening, architecture layers, compatibility machinery, or product scope" "dm-review-fix keeps repairs inside evidenced approved scope"
 require_text "$security_mapping" "authentication or authorization bypass, credential disclosure, unsafe destructive operations, corruptible state or backups, public untrusted input, release/update integrity failures, and false verification claims remain blocking" "real sensitive boundaries and verification integrity remain blocking"
 require_text "$review_loop" "one repair batch followed by one" "default review convergence uses one repair batch"
@@ -1197,11 +1197,11 @@ require_absent "$voice_check" 'Provide 2-3 rewritten passages' \
 require_before "$review_output" '## Compact Human Handoff' '## Complete Report Template' \
   "dm-review leads with compact handoff before complete evidence"
 require_text "$review_output" 'path:anchor -- problem -- smallest adequate fix' \
-  "dm-review handoff has the compact P1/P2 row shape"
+  "dm-review handoff has the compact P1/P2/P3 row shape"
 require_text "$review_output" 'findings` with the exact remaining count' \
   "dm-review discloses the exact overflow count"
-require_text "$review_output" 'exact count and evidence pointer in this handoff' \
-  "dm-review keeps P3 advisory detail out of the handoff"
+require_text "$review_output" 'Chat keeps P3' \
+  "dm-review keeps P3 compact while preserving its required fix path"
 require_text "$review_output" '### Synthesis Decisions' \
   "dm-review retains the complete synthesis ledger"
 require_text "$review_output" '### Repository Cleanup' \
@@ -1242,8 +1242,8 @@ require_absent "$review_skill" 'Output the full report to the user.' \
   "dm-review rejects the old visible full-report dump"
 for f in "$review_command" "$review_alias"; do
   rel="${f#$REPO_ROOT/}"
-  require_text "$f" 'show only the exact count and evidence pointer in the compact handoff' \
-    "$rel keeps P3 detail in complete evidence"
+  require_text "$f" '**P3 only:** `APPROVE WITH FIXES`. Must fix.' \
+    "$rel rejects a clean result with retained P3 findings"
   require_absent "$f" 'retain every P3 as a visible advisory' \
     "$rel rejects expanded P3 delivery"
 done
@@ -1326,8 +1326,8 @@ require_text "$orchestrator" 'providerSplit: {claude: N, codex: N, openrouter: N
   "Pipeline receipt retains provider provenance"
 require_text "$orchestrator" 'retained/blocked <J>' \
   "Pipeline receipt retains cleanup truth"
-require_text "$orchestrator" 'P1/P2' \
-  "Pipeline still preserves actionable findings"
+require_text "$orchestrator" 'P1/P2/P3' \
+  "Pipeline preserves every actionable finding severity"
 require_text "$orchestrator" 'human_help_required' \
   "Pipeline still preserves blocked browser evidence"
 require_absent "$orchestrator" '# Pipeline Execution Complete' \

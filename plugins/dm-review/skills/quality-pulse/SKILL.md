@@ -16,7 +16,8 @@ rendering inputs.
 
 A quality pulse is **not a merge recommendation**. Informational telemetry is
 not an interactive review finding and must not be added to the normal dm-review
-P1/P2 fix ledger or P3 advisory report.
+P1/P2/P3 fix ledger. If a later interactive review accepts an observation as a
+finding, the normal zero-deferral policy applies.
 
 ## Inputs
 

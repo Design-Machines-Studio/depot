@@ -177,7 +177,7 @@ quality pulses. 3 skills, 15 agents, 6 commands.
 - `/dm-review-quick` -- Quick review with two core judgment lanes plus applicable UI/build/domain verification; bounded security-sensitive paths escalate to full review
 - `/dm-review-fix` -- Resolve pending review findings from todos/
 - `/dm-review-visual` -- Visual browser testing on rendered pages
-- `/dm-review-loop` -- Review-fix convergence until no P1/P2 findings remain; P3 stays advisory
+- `/dm-review-loop` -- Review-fix convergence until no retained P1/P2/P3 findings remain; no deferrals
 - `/dm-review-quality-pulse` -- Run the repository quality-pulse workflow
 
 ### the-local
@@ -211,7 +211,7 @@ Autonomous feature development pipeline. 4 skills, 2 agents, 5 commands.
 - **promptcraft** -- Generates self-contained execution prompts with overlap-aware dependency ordering
 - **eval-sweep** -- Ledger-first system-wide route, breakpoint, and accessibility evaluation
 - **plan-adversary** (agent) -- Adversarial review of plans and prompts, iterating to convergence
-- **execution-orchestrator** (agent) -- Autonomous worktree execution with batched P1/P2 review fixes, advisory P3 evidence, and tiered repository verification
+- **execution-orchestrator** (agent) -- Autonomous worktree execution with batched P1/P2/P3 review fixes, zero-deferral convergence, and tiered repository verification
 - `/pipeline` -- Full autonomous pipeline: assess, research, plan, prompt, review, execute, deliver
 - `/pipeline-assess` -- Pre-plan assessment of current state
 - `/pipeline-prompts` -- Generate execution prompts from an existing plan

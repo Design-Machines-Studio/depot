@@ -44,7 +44,7 @@ If `.templ` files were changed:
 ```bash
 templ generate
 ```
-Check for generation errors. If `templ` is not installed, note it as a P3 finding and continue.
+Check for generation errors. If `templ` is not installed, record a coverage gap and continue; tool absence is not a product P3 finding.
 
 ### Step 2: Go Vet
 Run static analysis:
@@ -89,7 +89,7 @@ Report any compilation errors.
 
 - **P1** -- Compilation failure (`go build` or `templ generate` fails)
 - **P2** -- `go vet` warnings (these indicate likely bugs)
-- **P3** -- Tool not available (templ not installed)
+- **P3** -- Observable minor generation or build hygiene defect with a concrete repair
 
 ## Rules
 

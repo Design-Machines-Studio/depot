@@ -308,13 +308,13 @@ require_text "$issue_tracking" 'source_agents:' "todo source_agents metadata rem
 require_text "$consolidator" 'Coverage Gaps' "coverage gaps remain explicit"
 require_text "$graceful_degradation" 'REVIEW INCOMPLETE' "core-lane incomplete behavior remains compatible"
 require_text "$graceful_degradation" 'Degraded: all conditional agents unavailable' "degraded-lane behavior remains compatible"
-require_text "$output_format" 'if any P3 findings:' "P3-only recommendation retains advisory branch"
-require_text "$output_format" 'recommendation = "CLEAN"' "P3-only maps to CLEAN"
-require_text "$output_format" 'source identity, raw reference, evidence, synthesis disposition, counts, and provenance' "P3 report retains complete advisory evidence"
-require_text "$issue_tracking" 'P3 -- Advisory' "P3 is advisory in issue-tracking policy"
-require_text "$issue_tracking" 'No -- retain in report and receipts only' "P3 does not create todo or issue work"
-require_text "$review_loop" 'never enters the fix queue' "P3 does not enter convergence fix queue"
-require_text "$review_loop" 'required_finding_files = todos/*-pending-p1-*.md plus todos/*-pending-p2-*.md' "review loop excludes legacy P3 todos from convergence"
+require_text "$output_format" 'elif any P2 or P3 findings:' "P3-only recommendation requires fixes"
+require_text "$output_format" 'recommendation = "APPROVE WITH FIXES"' "P3-only cannot map to CLEAN"
+require_text "$output_format" 'every retained P3 enters the fix queue' "P3 report preserves evidence and requires repair"
+require_text "$issue_tracking" 'P3 -- Required Fix' "P3 is required in issue-tracking policy"
+require_text "$issue_tracking" '| `p3` | Yes -- always |' "P3 creates tracked work"
+require_text "$review_loop" 'Every retained finding triggers repair and affected-lane verification.' "P3 participates in convergence"
+require_text "$review_loop" 'required_finding_files = todos/*-pending-p1-*.md plus todos/*-pending-p2-*.md plus todos/*-pending-p3-*.md' "review loop includes P3 todos in convergence"
 require_text "$review_loop" 'prior_finding_owner_lanes = union of validated exact source_agents' "review loop preserves repaired finding owners"
 require_text "$review_loop" 'promoted_to_full = true' "review loop records full-review promotion"
 reject_text "$review_skill" 'Phase 5.5: Simplification Pass' "active simplification phase is retired"
@@ -354,20 +354,32 @@ require_text "$pipeline_orchestrator" 'one **focused Codex review**' "Pipeline k
 require_text "$pipeline_orchestrator" 'validated final dm-review mode' "Pipeline runs the approved final review mode"
 require_text "$pipeline_orchestrator" 'Re-run only the affected lanes' "Pipeline verifies repairs with affected lanes"
 require_text "$pipeline_orchestrator" 'whole selected roster only when prior coverage was incomplete' "Pipeline limits repeated final-review fan-out"
-require_text "$pipeline_orchestrator" 'p3_advisories: [N]' "Pipeline evaluation receipt names P3 advisories"
+require_text "$pipeline_orchestrator" 'p3_findings: [N]' "Pipeline evaluation receipt counts P3 findings"
 reject_text "$pipeline_orchestrator" 'findings_remaining: [N] | deferred: [N]' "Pipeline evaluation receipt retires undefined deferred count"
 require_text "$REPO_ROOT/README.md" 'Quick review with two core judgment lanes' "README describes proportional quick roster"
-require_text "$REPO_ROOT/README.md" 'P3 stays advisory' "README describes proportional convergence"
+require_text "$REPO_ROOT/README.md" 'no retained P1/P2/P3 findings remain; no deferrals' "README describes zero-deferral convergence"
 reject_text "$REPO_ROOT/plugins/project-scaffolder/skills/scaffolding/references/claude-md-templates/dm-standard.md" '--allow-defer-p3' "scaffold template retires P3 deferral flag"
-require_text "$review_skill" 'Every P1/P2 must name the affected current user or operator' "P1/P2 requires current affected-user evidence"
-require_text "$review_skill" 'reachable actor/input/path' "P1/P2 requires a reachable path"
+require_text "$review_skill" 'P1/P2 must also name' "P1/P2 requires additional impact evidence"
+require_text "$review_skill" 'affected current user or operator' "P1/P2 requires current affected-user evidence"
+require_text "$review_skill" 'observable current defect, its location' "every severity requires a current defect and location"
 require_text "$review_skill" 'realistic harm or regression' "P1/P2 requires realistic harm"
 require_text "$review_skill" 'smallest adequate repair' "P1/P2 requires the smallest repair"
 require_text "$consolidator" 'Reject scope-expanding repairs' "consolidation rejects unrelated product scope"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.62.1"' "canonical dm-review version is 1.62.1"
-require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.62.1"' "generated dm-review version is 1.62.1"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.52.0"' "canonical Pipeline version is 1.52.0"
-require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.62.0"' "generated Pipeline dependency floor is current"
+for zero_deferral_surface in \
+  "$review_skill" \
+  "$output_format" \
+  "$issue_tracking" \
+  "$review_loop" \
+  "$pipeline_orchestrator" \
+  "$REPO_ROOT/README.md"; do
+  reject_text "$zero_deferral_surface" 'P3 is advisory' "${zero_deferral_surface#$REPO_ROOT/} rejects advisory P3 policy"
+  reject_text "$zero_deferral_surface" 'P3 advisories' "${zero_deferral_surface#$REPO_ROOT/} rejects deferred P3 evidence"
+  reject_text "$zero_deferral_surface" 'P3 stays advisory' "${zero_deferral_surface#$REPO_ROOT/} rejects clean-with-P3 policy"
+done
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.63.0"' "canonical dm-review version is 1.63.0"
+require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.63.0"' "generated dm-review version is 1.63.0"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.53.0"' "canonical Pipeline version is 1.53.0"
+require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.63.0"' "generated Pipeline dependency floor is current"
 
 printf "Synthesis identity fixtures\n"
 base_id=$(fixture_finding_id \

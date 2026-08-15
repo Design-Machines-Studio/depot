@@ -39,7 +39,7 @@ Every P1/P2 finding must state:
 - the actual trust boundary crossed; and
 - the smallest adequate repair.
 
-Hypothetical actors, future marketplaces, enterprise-scale concerns, generic OWASP possibilities, and defence-in-depth preferences are P3 at most and usually not findings. Do not weaken real boundaries: reachable authentication or authorization bypass, credential disclosure, unsafe destructive operations, corruptible state or backups, public untrusted input, release/update integrity failures, and false verification claims remain blocking at their supported severity.
+Hypothetical actors, future marketplaces, enterprise-scale concerns, generic OWASP possibilities, and defence-in-depth preferences are not findings by themselves. Retain one only when direct evidence establishes an observable current defect. Do not weaken real boundaries: reachable authentication or authorization bypass, credential disclosure, unsafe destructive operations, corruptible state or backups, public untrusted input, release/update integrity failures, and false verification claims remain blocking at their supported severity.
 
 ## Review Scope
 

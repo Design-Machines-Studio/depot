@@ -9,11 +9,28 @@ argument-hint: "[scope: PR number, branch, path, or blank]"
 
 A single-command code review system that launches parallel specialized agents tailored to Design Machines stacks: Go+Templ+Datastar, Craft CMS+Twig, and Live Wires CSS.
 
-## Finding Policy
+## Zero-Deferral Finding Policy
 
-P1 blocks merge and P2 must be fixed before merge. P3 is advisory: preserve its complete evidence, provenance, count, and detail in the report, but do not create mandatory work, drive convergence, or prevent `CLEAN`. See `${CLAUDE_SKILL_DIR}/references/severity-mapping.md` for the decision tree and `${CLAUDE_SKILL_DIR}/references/output-format.md` for the merge-recommendation logic.
+Every retained P1, P2, and P3 finding is mandatory work and prevents `CLEAN`
+until fixed and rechecked. Severity controls priority and merge language; it
+never makes a valid finding optional. Reject speculative, duplicate, disproved,
+preference-only, or scope-expanding reviewer input during consolidation instead
+of retaining it as a finding and deferring it. There is no deferral flag and no
+clean-with-P3s outcome. See `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`
+for the decision tree and `${CLAUDE_SKILL_DIR}/references/output-format.md` for
+the merge-recommendation logic.
 
-Every P1/P2 must name the affected current user or operator, the reachable actor/input/path, the realistic harm or regression, and the smallest adequate repair. A security P1/P2 must also name the actual trust boundary. For Design Machines work, default to the current context unless approved scope says otherwise: two developers, primarily private first-party repositories, trusted Fixture authors, and self-hosted co-op applications serving roughly 4--50 people. Do not invent a public Fixture marketplace or hostile third-party plugin channel. Hypothetical actors, future marketplaces, enterprise scale, a generic OWASP possibility, or defence-in-depth preferences are P3 at most and usually not findings.
+Every retained finding must identify an observable current defect, its location
+or reachable path, and the smallest adequate repair. Every P1/P2 must also name
+the affected current user or operator and realistic harm or regression. A
+security P1/P2 must additionally name the actual trust boundary. For Design
+Machines work, default to the current context unless approved scope says
+otherwise: two developers, primarily private first-party repositories, trusted
+Fixture authors, and self-hosted co-op applications serving roughly 4--50
+people. Do not invent a public Fixture marketplace or hostile third-party
+plugin channel. Hypothetical actors, future marketplaces, enterprise scale, a
+generic OWASP possibility, defence-in-depth preferences, and abstractions with
+no current consumer are not findings.
 
 Keep real reachable boundaries blocking at their supported severity: authentication or authorization bypass, credential disclosure, unsafe destructive operations, corruptible state or backups, public untrusted input, release/update integrity failures, and false verification claims.
 
@@ -41,7 +58,7 @@ Match the review depth to the moment. Running full multi-round review on every c
 | **Per chunk during pipeline execution** | `dm-review-quick` | 2 core judgment lanes, plus applicable existing UI/build/domain verification lanes. |
 | **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + memory capture. Run once, not per chunk. |
 | **Bulk second opinions / large-diff first pass** | Model selected by `routing-policy.json` | Family-independent security analysis plus style, duplication, pattern, and doc-consistency lanes. The exact diff is content-scanned immediately before external disclosure; sensitive file sections stay local while eligible sections proceed. Security completion always includes mandatory full-diff independent-family sign-off. |
-| **Bounded repair review** | full + one repair | Use one repair batch and one affected-lane recheck for supported P1/P2 findings. Repeat broad review only when the original required review was incomplete or the repair changed a real sensitive boundary. |
+| **Bounded repair review** | full + one repair | Use one repair batch and one affected-lane recheck for supported P1/P2/P3 findings. Repeat broad review only when the original required review was incomplete or the repair changed a real sensitive boundary. |
 
 **Escalation exception:** quick review is an early feedback gate, not the final
 security boundary. Every PR still receives one full pre-merge review. Escalate
@@ -112,7 +129,7 @@ All review agents and fix workflows must follow these principles:
 1. **Smallest adequate repair** -- Recommend the clearest direct change that resolves the evidenced current failure within approved scope. A one-use handler or concrete implementation is valid when clear and tested.
 2. **Relevant practices first** -- Apply framework conventions when they serve the current requirement or reachable risk; a preferred layer or abstraction is not a repair by itself.
 3. **Replace, don't preserve** -- When old code is the problem, recommend replacing it. Don't wrap broken patterns in compatibility layers.
-4. **No scope expansion** -- A required fix may touch only the approved behavior and the evidenced defect. Unrelated hardening, future-marketplace defenses, and new product scope remain P3 alternatives and do not enter convergence.
+4. **No scope expansion** -- A required fix may touch only the approved behavior and the evidenced defect. Reject unrelated hardening, future-marketplace defenses, and new product scope during consolidation; do not retain them as P3 findings.
 
 ### Prototype Hygiene
 
@@ -453,7 +470,7 @@ but `lanes` omits it, discard the entire allowlist, dispatch the unfiltered
 roster, and report `selective_lanes_omit_required_lane`. Never silently drop a
 required lane and never silently add it back to an otherwise honored allowlist.
 
-When the input is honored, dispatch only the exact lanes in `lanes`. Every member of the recomputed selected full set outside `lanes` is a deliberate selective non-dispatch, not a failed lane, and must be identified that way in the coverage receipt. A selective affected-lane repair verification can support `CLEAN` only after an earlier complete full review, when no P1/P2 findings remain and every required selected verification lane completes. It never substitutes for the initial full-review boundary.
+When the input is honored, dispatch only the exact lanes in `lanes`. Every member of the recomputed selected full set outside `lanes` is a deliberate selective non-dispatch, not a failed lane, and must be identified that way in the coverage receipt. A selective affected-lane repair verification can support `CLEAN` only after an earlier complete full review, when no P1/P2/P3 findings remain and every required selected verification lane completes. It never substitutes for the initial full-review boundary.
 
 #### Report Selection
 
@@ -1061,7 +1078,7 @@ Read from `$CONSOLIDATOR_PATH` and follow the instructions exactly:
 5. **Determine merge recommendation** using `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic. In summary:
    - Any P1 -> "BLOCKS MERGE"
    - Any P2 -> "APPROVE WITH FIXES"
-   - P3 only -> "CLEAN" with every P3 retained in complete evidence and an exact count plus pointer in the compact handoff
+   - Any P3 with no P1 -> "APPROVE WITH FIXES"
    - Zero findings -> "CLEAN"
 6. **Generate the unified report** following the template in `${CLAUDE_SKILL_DIR}/references/output-format.md`, including the compact required `Synthesis Decisions` section and full raw agent reports.
 
@@ -1118,7 +1135,9 @@ Acceptable evidence:
 - A focused test/build command that exercises the cited path.
 - Direct file inspection at the current `HEAD` showing the finding no longer applies.
 
-If evidence is missing or points the other way, keep the finding open. Route P1/P2 through the normal fix flow and retain P3 as advisory evidence. Record the command or file evidence in the report when marking anything stale or already fixed.
+If evidence is missing or points the other way, keep the finding open and route
+every retained severity through the normal fix flow. Record the command or file
+evidence in the report when marking anything stale or already fixed.
 
 **Airlift checkpoint (`dm-review-consolidation`):** Fire a tier-1 airlift checkpoint once the consolidated report exists so partially-complete review findings survive a usage cap, rate limit, or model switch. This is a guarded resolve-from-cache: it is tier-1 deterministic (pure local file + git work, NO model budget, no agent call, no network) and is skipped silently when airlift is absent (OPTIONAL dependency). On an early-warning trip (e.g. a budget threshold crossed mid-run), do not wait for the next phase boundary -- flush this checkpoint immediately so the consolidated findings are not lost.
 
@@ -1135,13 +1154,11 @@ The `[ -n "$ENGINE" ]` guard covers "airlift not installed"; the `[ -x "$ENGINE"
 
 ---
 
-### Phase 6: Issue Tracking (Full mode only)
-
-**Skip this phase in Quick mode.**
+### Phase 6: Issue Tracking
 
 After consolidation, determine tracking method automatically:
 
-**1. If `todos/` directory exists** in the project root -- use text file tracking automatically. Do NOT ask the user. Create todo files for P1 and P2 findings only. P3 advisories remain in the report and receipts.
+**1. If `todos/` directory exists** in the project root -- use text file tracking automatically. Do NOT ask the user. Create todo files for every retained P1, P2, and P3 finding.
 
 **2. If `todos/` does not exist** -- ask the user:
 
@@ -1149,8 +1166,10 @@ After consolidation, determine tracking method automatically:
 No todos/ directory found. How should I track these findings?
 1. Create todos/ directory with text file tracking
 2. GitHub Issues
-3. Skip tracking
 ```
+
+Tracking may change location, but it never waives the finding or permits a
+clean recommendation. Do not offer a skip or defer option.
 
 **Text file tracking:**
 
@@ -1160,7 +1179,7 @@ Before creating new todo files, clean up stale completed files from previous ses
 rm -- todos/*-done-*.md 2>/dev/null
 ```
 
-Create `todos/` directory if it doesn't exist. For each P1 and P2 finding, create a file following the template in `${CLAUDE_SKILL_DIR}/references/issue-tracking.md`:
+Create `todos/` directory if it doesn't exist. For each retained finding, create a file following the template in `${CLAUDE_SKILL_DIR}/references/issue-tracking.md`:
 
 ```
 todos/{id}-pending-{priority}-{slug}.md
@@ -1170,6 +1189,7 @@ Examples:
 ```
 todos/001-pending-p1-sql-injection-in-search.md
 todos/002-pending-p2-missing-csrf-protection.md
+todos/003-pending-p3-heading-rhythm.md
 ```
 
 After creating all files, summarize what was created:
@@ -1177,13 +1197,14 @@ After creating all files, summarize what was created:
 Created N todo files in todos/:
 - 001-pending-p1-... (description)
 - 002-pending-p2-... (description)
+- 003-pending-p3-... (description)
 
 Resolve with: /dm-review-fix
 ```
 
 **GitHub Issues:**
 
-For each P1 and P2 finding, create a GitHub Issue using `gh issue create`:
+For each retained P1, P2, and P3 finding, create a GitHub Issue using `gh issue create`:
 
 ```bash
 gh issue create --title "[P1] Finding title" \
