@@ -523,7 +523,8 @@ chunks yourself with general-purpose agents. The execution-orchestrator handles
 branch create/reuse semantics, worktree isolation, input guardrails, Fix
 Philosophy injection, output validation, focused Codex review for ordinary chunks,
 full review for sensitive chunks, merging, the approved final dm-review
-mode, and memory capture. If you skip it, all of those steps get skipped.
+mode, and memory-handoff preparation. If you skip it, all of those steps get
+skipped.
 
 **Codex Native Execution Adapter:** If this command is running in Codex and the session exposes `multi_agent_v1.spawn_agent`, use the adapter documented in `/pipeline-run` (`plugins/pipeline/commands/pipeline-run.md`) for Phase 6. The current Codex agent acts as the orchestrator in-process while following `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the contract, dispatches chunk workers with `multi_agent_v1.spawn_agent`, and applies the risk-tiered focused/full review adapter. This is equivalent pipeline execution and MUST record `executionMode: codex_native` in every receipt.
 
