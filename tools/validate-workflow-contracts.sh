@@ -175,6 +175,8 @@ persona_verification_runtime="$REPO_ROOT/plugins/workflow-kernel/skills/workflow
 verification_execution="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/verification_execution.py"
 repository_verification="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/repository-verification.md"
 assembly_build="$REPO_ROOT/plugins/assembly/commands/assembly-build.md"
+assembly_release="$REPO_ROOT/plugins/assembly/commands/assembly-release.md"
+assembly_release_skill="$REPO_ROOT/plugins/assembly/skills/assembly-release/SKILL.md"
 assembly_test_runner="$REPO_ROOT/plugins/assembly/agents/workflow/go-test-runner.md"
 assembly_go_tests="$REPO_ROOT/plugins/assembly/agents/workflow/go-test-runner.md"
 assembly_verification_profile="$REPO_ROOT/plugins/assembly/references/repository-verification-profile.example.json"
@@ -381,6 +383,25 @@ require_absent "$arch" "Missing Auth Boundary Map Receipt (P2)" "Auth Boundary M
 require_text "$sec" "Public/Private URL Boundary" "security-auditor guards the public/private URL boundary"
 require_text "$sec" "Update / Release Preflight" "security-auditor checks update/release preflight"
 require_text "$sec" "Responder-side share transport" "security-auditor reviews the federation responder side"
+
+printf "\nAssembly release invocation-authority contract:\n"
+for release_surface in "$assembly_release" "$assembly_release_skill"; do
+  release_rel="${release_surface#$REPO_ROOT/}"
+  require_text "$release_surface" "The invocation is the operator authorization." "$release_rel treats the exact invocation as authorization"
+  require_text "$release_surface" "second confirmation before mutation" "$release_rel removes redundant confirmation prompts"
+  require_text "$release_surface" "exact tag and channel" "$release_rel requires bounded mutating input"
+  require_text "$release_surface" "execute every currently valid incomplete transition" "$release_rel resumes all valid incomplete work"
+  require_text "$release_surface" "Do not artificially limit a resume invocation to one transition." "$release_rel rejects one-step resume churn"
+  require_text "$release_surface" "stable-promotion approval; do not ask" "$release_rel makes stable intent explicit once"
+  require_text "$release_surface" "Before the first mutation, mechanically bind and validate:" "$release_rel keeps deterministic pre-mutation validation"
+  require_text "$release_surface" "Do not turn machine-checkable facts into a human review checklist." "$release_rel prefers code validation"
+  require_text "$release_surface" 'return `BLOCKED` with the exact missing decision and one corrected invocation' "$release_rel blocks only on a concrete unresolved decision"
+  require_text "$release_surface" "GitHub environment wait or other repository-owned approval" "$release_rel preserves repository-owned external gates"
+  require_absent "$release_surface" "## Exact authorization gate" "$release_rel removes the Depot authorization gate"
+  require_absent "$release_surface" "PAUSED FOR APPROVAL" "$release_rel removes the paused-for-approval state"
+  require_absent "$release_surface" "Present the authorization envelope once" "$release_rel removes the authorization envelope"
+  require_absent "$release_surface" "at most the one smallest valid next transition" "$release_rel removes the one-transition resume cap"
+done
 
 # --------------------------------------------------------------------------
 # Group 4: Workflow-kernel integration anchors
