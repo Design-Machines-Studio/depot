@@ -1,0 +1,18 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "craft-developer",
+  "version": "2.6.0",
+  "description": "Craft CMS development expertise including content modeling, template development, debugging, and AI-assisted workflows via MCP integration. Covers Craft 4 and 5 patterns.",
+  "author": {
+    "name": "Design Machines",
+    "url": "https://designmachines.io"
+  },
+  "repository": "https://github.com/design-machines/craft-developer",
+  "keywords": [
+    "craft-cms",
+    "content-modeling",
+    "twig",
+    "graphql",
+    "mcp"
+  ]
+}

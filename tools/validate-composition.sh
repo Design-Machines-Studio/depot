@@ -626,6 +626,11 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  printf "\n${BOLD}Agent Plugins v1 canary:${RESET}\n"
+  if ! "$SCRIPT_DIR/generate-agent-plugins-canary.py" --check; then
+    any_failed=1
+  fi
+
   printf "\n${BOLD}Dual compatibility:${RESET}\n"
   if ! "$SCRIPT_DIR/validate-dual-compat.sh"; then
     any_failed=1
