@@ -155,9 +155,12 @@ When the plan targets Assembly (`assembly-baseplate` or `internal/fixtures/`), v
 
 **Execution guardrails:**
 
-- [ ] Does `branchMode` match the approved plan? For `reuse`, does the
-  manifest carry an exact fetched remote `expectedFeatureHead`, forbid the
-  initial setup push, and block instead of resetting a divergent local branch?
+- [ ] Do `baseBranch`, `featureBranch`, `branchMode`, and
+  `expectedFeatureHead` match the approved plan? In full mode, does the
+  manifest copy them exactly? In lean mode, does execution consume them
+  directly from the approved plan? For `reuse`, is the expected head exact,
+  the initial setup push forbidden, and a divergent local branch blocked rather
+  than reset?
 - [ ] Does `finalReviewMode` match explicit approved intent and carry a
   non-empty rationale? Is `quick` rejected for high consequence and guaranteed
   to escalate to full on a security-sensitive final diff?

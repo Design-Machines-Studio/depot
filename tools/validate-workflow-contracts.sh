@@ -187,6 +187,7 @@ assess_skill="$REPO_ROOT/plugins/pipeline/skills/assess/SKILL.md"
 research_skill="$REPO_ROOT/plugins/pipeline/skills/research/SKILL.md"
 prompt_template="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/prompt-template.md"
 assessment_template="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/templates/sections/assessment.html"
+plan_template="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/templates/sections/plan.html"
 plan_adversary="$REPO_ROOT/plugins/pipeline/agents/workflow/plan-adversary.md"
 security_mapping="$REPO_ROOT/plugins/dm-review/skills/review/references/severity-mapping.md"
 simplicity="$REPO_ROOT/plugins/dm-review/agents/review/code-simplicity-reviewer.md"
@@ -613,14 +614,34 @@ require_absent "$pipeline_cmd" 'Plan ready at `plans/<feature-slug>/plan.html`' 
 require_before "$pipeline_cmd" "## Phase 2: Research" "## Combined Discovery Gate" "research precedes combined discovery gate"
 require_before "$pipeline_cmd" "## Combined Discovery Gate" "## Phase 3: Plan" "combined discovery precedes planning"
 require_text "$pipeline_cmd" "Only this combined discovery response makes the Key Requirements authoritative" "only discovery approval makes requirements authoritative"
-require_text "$pipeline_cmd" 'recommended `workflowClass`, `decisionProfile`, `branchMode`' "discovery resolves workflow, decision, and branch controls"
+require_text "$pipeline_cmd" 'recommended `workflowClass`, `decisionProfile`, `baseBranch`' "discovery resolves workflow, decision, and branch controls"
 require_text "$pipeline_cmd" '`expectedFeatureHead`, `finalReviewMode`, and `finalReviewRationale`' "discovery resolves expected head and final review controls"
+require_text "$pipeline_cmd" 'non-empty `baseBranch` and `featureBranch`' "approved plan carries branch identities"
+require_text "$pipeline_cmd" '`branchMode: create|reuse`, and `expectedFeatureHead`' "approved plan carries branch mode and expected head"
 require_before "$pipeline_cmd" "## Phase 5: Adversarial Scope Review" "## Final Planning Gate" "bounded adversarial review precedes final planning gate"
 require_before "$pipeline_cmd" "## Final Planning Gate" "## Phase 6: Execute" "final planning gate precedes execution"
 require_text "$pipeline_cmd" "Execution MUST NOT begin without explicit approval of this final package" "execution requires explicit final planning approval"
 require_text "$pipeline_cmd" 'plans/<feature-slug>/manifest.json' "full final gate presents the manifest"
 require_text "$pipeline_cmd" 'plans/<feature-slug>/prompts/' "full final gate presents the prompt directory"
 require_text "$pipeline_cmd" "no manifest or prompt directory exists by design" "lean final gate does not fabricate artifacts"
+require_text "$pipeline_cmd" '**Full-mode branch preflight:** Read `baseBranch`, `featureBranch`' "full preflight reads branch controls from manifest"
+require_text "$pipeline_cmd" '**Lean-mode branch preflight:** Extract the approved data island from' "lean preflight reads branch controls from plan"
+require_absent "$pipeline_cmd" 'Confirm branch authority according to `manifest.branchMode`' "shared preflight no longer assumes a manifest"
+lean_preflight_block="$(awk '
+  /\*\*Lean-mode branch preflight:\*\*/ { capture=1 }
+  capture && /^4\. / { exit }
+  capture { print }
+' "$pipeline_cmd")"
+if grep -Eq 'manifest|prompts/' <<<"$lean_preflight_block"; then
+  printf "  FAIL  lean preflight has no manifest or prompt-directory dependency\n"
+  failures=1
+else
+  printf "  OK    lean preflight has no manifest or prompt-directory dependency\n"
+fi
+require_text "$plan_template" 'baseBranch, featureBranch,' "plan island schema carries branch identities"
+require_text "$plan_template" 'branchMode:"create|reuse", expectedFeatureHead' "plan island schema carries branch mode and expected head"
+require_text "$promptcraft" 'Validate exact plan/manifest equality for `baseBranch`, `featureBranch`' "full manifest copies approved plan branch controls"
+require_text "$plan_adversary" 'In lean mode, does execution consume them' "plan adversary checks lean branch-control authority"
 require_text "$assessment_template" '<h2 id="project-alignment">Project Alignment</h2>' "assessment renders compact project alignment"
 require_text "$research_skill" "Does it advance the current project goal?" "research tests project-goal alignment"
 require_text "$research_skill" "Do not perform a generic organization-wide GitHub survey" "research keeps GitHub discovery proportional"

@@ -333,8 +333,9 @@ reject malformed, multiple, extra-key, or conflicting profiles. Never infer it
 from `workflowClass`, risk, complexity, kind, executor, or routing data.
 
 Every new manifest also carries the approved branch and final-review controls.
-Validate exact plan/manifest equality for `branchMode`,
-`expectedFeatureHead`, `finalReviewMode`, and `finalReviewRationale`.
+Validate exact plan/manifest equality for `baseBranch`, `featureBranch`,
+`branchMode`, `expectedFeatureHead`, `finalReviewMode`, and
+`finalReviewRationale`.
 `branchMode: reuse` requires exact remote-head hex and forbids the create-mode
 initial push; `create` requires the expected head to be null/absent.
 `finalReviewMode: quick` requires explicit approval, non-high consequence, and
@@ -440,9 +441,10 @@ Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`, where `<chunk
 Generate `plans/<feature-slug>/manifest.json` following the schema in `references/manifest-schema.md`. The manifest is a Tier 2 (run-scoped) artifact -- auto-deleted after successful execution.
 
 Read top-level `workflowClass`, the exact closed `decisionProfile`,
-`branchMode`, `expectedFeatureHead`, `finalReviewMode`, and
-`finalReviewRationale` from the approved plan data island. Copy them explicitly
-into every generated manifest and preserve those exact values through handoff.
+`baseBranch`, `featureBranch`, `branchMode`, `expectedFeatureHead`,
+`finalReviewMode`, and `finalReviewRationale` from the approved plan data
+island. Copy them explicitly into every generated manifest and preserve those
+exact values through handoff.
 Missing, ambiguous, malformed, multiple, or conflicting plan data blocks
 generation and returns to the user gate. New plans use `branchMode:
 create|reuse`; `reuse` requires an exact lowercase 40- or 64-hex

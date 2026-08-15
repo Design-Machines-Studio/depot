@@ -425,8 +425,9 @@ AskUserQuestion. Present a compact combined outcome with:
 - any ownership/dependency conflict or stale-context uncertainty;
 - the smallest recommended scope and any real owner choice between it and a
   larger requested mechanism;
-- recommended `workflowClass`, `decisionProfile`, `branchMode`,
-  `expectedFeatureHead`, `finalReviewMode`, and `finalReviewRationale`; and
+- recommended `workflowClass`, `decisionProfile`, `baseBranch`,
+  `featureBranch`, `branchMode`, `expectedFeatureHead`, `finalReviewMode`, and
+  `finalReviewRationale`; and
 - links to `assessment.html` and `research.html`.
 
 This one response resolves every user-owned planning decision formerly deferred
@@ -498,14 +499,17 @@ upstream context; return to the combined discovery gate rather than choosing sil
 `decisionProfile` separate from `workflowClass`, `risk`, `overlapRisk`,
 `estimatedComplexity`, chunk `kind`/`executor`, and `routingOverride`.
 
-**Authoritative branch setup:** The plan MUST carry the discovery-approved `branchMode:
-create|reuse`. `create` is the ordinary new-branch path and requires a
-null/absent `expectedFeatureHead`. `reuse` is the existing-branch path and
-requires an exact lowercase 40- or 64-hex `expectedFeatureHead` for the fetched
-remote `featureBranch`. Reuse performs no initial push and blocks on a missing
-remote ref, exact-head mismatch, divergent local branch, or another worktree
-already holding the branch. This is branch selection only; it never authorizes
-force-push, merge, publication, or external closeout.
+**Authoritative branch setup:** The plan MUST carry the complete
+discovery-approved branch controls: non-empty `baseBranch` and `featureBranch`,
+`branchMode: create|reuse`, and `expectedFeatureHead`. `create` is the ordinary
+new-branch path and requires a null/absent `expectedFeatureHead`. `reuse` is the
+existing-branch path and requires an exact lowercase 40- or 64-hex
+`expectedFeatureHead` for the fetched remote `featureBranch`. Reuse performs no
+initial push and blocks on a missing remote ref, exact-head mismatch, divergent
+local branch, or another worktree already holding the branch. This is branch
+selection only; it never authorizes force-push, merge, publication, or external
+closeout. Full and lean execution both consume these exact approved plan values;
+prompt generation may copy them but must never infer replacements.
 
 **Authoritative final review mode:** The plan MUST carry the discovery-approved
 `finalReviewMode: full|quick` plus a non-empty `finalReviewRationale`. `full` is
@@ -562,10 +566,11 @@ Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 
 The manifest MUST copy the approved plan island's explicit `workflowClass:
 chore|bug|feature|hotfix|security|investigation|migration`, exact closed
-`decisionProfile`, `branchMode`, `expectedFeatureHead`, `finalReviewMode`, and
-`finalReviewRationale` unchanged. Never infer or independently reselect them
-from chunk kind, file paths, prompt prose, risk, or one another. If the approved
-plan lacks a required field, contains malformed/multiple candidates, or
+`decisionProfile`, `baseBranch`, `featureBranch`, `branchMode`,
+`expectedFeatureHead`, `finalReviewMode`, and `finalReviewRationale` unchanged.
+Never infer or independently reselect them from chunk kind, file paths, prompt
+prose, risk, or one another. If the approved plan lacks a required field,
+contains malformed/multiple candidates, or
    conflicts with an upstream approval, return to the combined discovery gate. A legacy
 missing workflow class defaults only at consumption to `feature` with
 `workflow_class_defaulted=true`; legacy missing decision/branch/review controls
@@ -664,10 +669,16 @@ approval. Approval of assessment, research, or a draft plan is insufficient.
 
 1. Confirm bypass permissions mode is active
 2. Confirm git working tree has no blocking user-file changes (pipeline-owned artifacts may be committed/gitignored/force-added per the orchestrator)
-3. Confirm branch authority according to `manifest.branchMode`: for `create`,
-   confirm `manifest.baseBranch` with latest changes; for `reuse`, fetch the
-   remote feature branch and require its tip to equal `expectedFeatureHead`
-   before checkout, with no initial push
+3. Resolve the complete branch controls from the mode's approved artifact:
+   - **Full-mode branch preflight:** Read `baseBranch`, `featureBranch`,
+     `branchMode`, and `expectedFeatureHead` from
+     `plans/<feature-slug>/manifest.json`.
+   - **Lean-mode branch preflight:** Extract the approved data island from
+     `plans/<feature-slug>/plan.html` and read the same four controls from it.
+4. Validate those controls before checkout: for `create`, update the named
+   `baseBranch` and create the named `featureBranch`, requiring a null/absent
+   expected head; for `reuse`, fetch the named remote feature branch, require
+   its tip to equal `expectedFeatureHead`, and perform no initial push
 
 **Full mode:** You MUST launch the execution-orchestrator agent. You MUST NOT execute
 chunks yourself with general-purpose agents. The execution-orchestrator handles

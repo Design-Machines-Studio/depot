@@ -4,7 +4,8 @@
     - the base.html SIBLING_NAV slot links assessment.html, research.html, prompts/.
     - Chunk rows map 1:1 onto prompts/NN-<slug>.md (promptcraft Phase 4 output).
   Island schema (feature plan):
-    { artifact:"plan", slug,
+    { artifact:"plan", slug, baseBranch, featureBranch,
+      branchMode:"create|reuse", expectedFeatureHead,
       chunks:[{ n:"01", slug:"reader-service", scope, acceptance, deps:[] }],
       decisions:[{ id, decision, rationale, alternatives }],
       requirementsCoverage:[{ requirement, chunk }] }
