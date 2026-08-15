@@ -8,30 +8,26 @@ and pull requests own live status, review, checks, dependencies, and
 assignees. This file owns Depot's reusable tooling sequence and a compact
 external handoff only; it does not duplicate Baseplate's production roadmap.
 
-Depot currently has no open pull requests or Issues. The current priority order
-is:
+Depot trusted main is `40b6e00762b175158f16007f4105d71f846a0c5d`, the
+merge commit for PR #69. Depot has no open pull requests or Issues. The current
+priority order is:
 
-1. **P1 -- review the caller-side Pipeline memory-capture repair.** The narrow
-   repair is implemented on its feature branch and pending exact-head PR review
-   and merge. It returns one compact observation to the capable `/pipeline` or
-   `/pipeline-run` caller without adding a generalized transport.
-2. **Completed optimization sequence.** PR #58 completed the evidenced R4
-   residual, PR #59 supplied bounded worker context, PR #60 accepted safe
-   credential references, PR #61 classified terminal stream failures, and PR
-   #62 added `/assembly-release`.
-3. **Evidence-gated follow-ons.** R5, new routing, and additional Workflow
-   Kernel or harness abstractions stay parked until a named consumer or measured
-   failure proves the need. R2 remains done/no-code and Workflow Authority
-   remains removed.
-4. **P2 -- Fixture handoff remains external.** Baseplate and Jig own their
-   verifier/product repair; Depot supplies proportional policy, not product code.
+1. **P1 -- no new Depot implementation.** The active efficiency sequence is
+   complete. New routing, review, kernel, or harness work requires a measured
+   current failure rather than another speculative layer.
+2. **P2 -- finish the external Fixture release handoff.** Baseplate and Jig own
+   that product work. Depot supplies the already-landed proportional workflow,
+   release command, routing, and review support without duplicating their plan.
+3. **Housekeeping is pull-based.** Expand the Agent Plugins canary or add another
+   workflow abstraction only after a live consumer or failed run proves the need.
 
 ### Single next Depot action
 
-Current trusted main for this chunk is
-`0e104093947ed71d919f68bc86f0e10ea4032497`, the merge commit for PR #62.
-The host-aware cache and current OpenRouter execution/receipt repairs through
-PRs #55 and #58-#61 are complete.
+**None.** Do not start another Depot execution chunk from this plan. The next
+Assembly action is the already-owned Baseplate Fixture-release sequence under
+[Issue #561](https://github.com/Design-Machines-Studio/assembly-baseplate/issues/561).
+Its two live PRs overlap heavily, so resolve the superseded/conflicting PR #681
+owner decision before treating draft PR #682 as review-ready.
 
 R2 is closed **DONE / NO CODE**. Current `plan-verification` and
 `run-verification` already put repository proof before model review, keep passing
@@ -42,12 +38,12 @@ results. No measured workload justifies adding the authored caller-supplied
 not executable work.
 
 The historical harness-lessons phase had one reachable residual: caller-side
-capture of the compact Pipeline run observation. Its smallest repair is now
-implemented and pending exact-head PR review/merge. Lane claims are parked
-because current worktree isolation and exact-head reuse leave no recurring
-collision; run budgets are solved/obsolete under the existing planning limits
-and soft checkpoints; authorization friction is solved/superseded by PRs #46
-and #47. Codify recommendations remain proposal-only.
+capture of the compact Pipeline run observation. PR #63 landed that repair at
+`8637552`. Lane claims remain parked because current worktree isolation and
+exact-head reuse leave no recurring collision; run budgets are solved/obsolete
+under the existing planning limits and soft checkpoints; authorization friction
+is solved/superseded by PRs #46 and #47. Codify recommendations remain
+proposal-only.
 
 ### Ordered Depot queue
 
@@ -63,40 +59,37 @@ and #47. Codify recommendations remain proposal-only.
 | 7 | Clear human output for voice-check, dm-review, and Pipeline | **DONE** | PR #53 merged as `ecc8533`; three release tags and both installed harness caches are current |
 | 8 | [#28](https://github.com/Design-Machines-Studio/depot/issues/28) / [PR #55](https://github.com/Design-Machines-Studio/depot/pull/55) runtime cache-resolution repair and cheap-path canary | **DONE** | exact head `d462e8f` merged as `5afc8de`; Depot now has no open Issues |
 | 9 | [#54](https://github.com/Design-Machines-Studio/depot/issues/54) / PR #57 reusable Assembly planning-coordinator skill | **DONE** | merged at `844fc1b`; live Project 1 records the native issue Done |
-| 10 | `/assembly-release` | **DONE** | PR #62 merged as trusted main `0e10409` |
+| 10 | `/assembly-release` | **DONE** | PR #62 merged as `0e10409` |
 | 11 | Minimal worker/advisor routing adjustment | HOLD / REASSESS | canary shows a concrete routing miss; otherwise current matrix stands |
 | 12 | Baseplate verifier -> canonical Jig Fixture handoff | EXTERNAL / P2 | producer checks and consumer proof clear in their owning repositories; roadmap remains external |
 | 13 | R4 rejected OpenRouter attempt evidence | **DONE** | PR #58 landed the evidenced residual at `9e5ee92` |
-| 14 | R5 Agent Plugins interop | PARK / EVIDENCE-GATED | a named client or distribution target exists |
+| 14 | R5 Agent Plugins interop canary | **DONE** | Issue #64 / PR #65 landed one generated `craft-developer` skills-discovery canary; live-client proof remains unavailable |
 | 15 | Harness lane claims | PARK / EVIDENCE-GATED | a recurring concurrent-writer collision survives worktree isolation and exact-head reuse |
 | 16 | Workflow Authority install, integration, and Darwin port | **REMOVED** | reintroduction requires a new owner decision backed by a demonstrated threat or operational need |
 | 17 | Bounded OpenRouter worker context | **DONE** | PR #59 merged at `367f9d8` |
 | 18 | Safe credential-reference handling | **DONE** | PR #60 merged at `730d2db` |
 | 19 | Terminal-stream failure classification | **DONE** | PR #61 merged at `662fcd5` |
 | 20 | Harness run budgets | **SOLVED / OBSOLETE** | existing 8/6 planning limits, scope freeze, exploration checkpoint, and long-run soft continuation cover the evidenced need |
-| 21 | Caller-side Pipeline memory capture | **IMPLEMENTED / PENDING REVIEW** | review the feature branch at its exact head, open its PR, and merge only after required checks pass |
+| 21 | Caller-side Pipeline memory capture | **DONE** | PR #63 merged at `8637552` |
 | 22 | Harness authorization friction | **SOLVED / SUPERSEDED** | PRs #46 and #47 removed per-call approval and Workflow Authority |
+| 23 | Pipeline two-gate planning and project alignment | **DONE** | Issue #66 / PR #67 merged at `9a2d3cf` |
+| 24 | Content-safe OpenRouter HTTP failure reasons | **DONE** | Issue #68 / PR #69 merged at `40b6e00`; `openrouter-v1.14.5` and both installed harness caches are current |
 
-The Fixture-development handoff remains an external P2 lane and may advance in
-parallel when its Baseplate/Jig dependency chain clears; it does not displace
-the pending-review Depot action.
-
-The next Depot action is exact-head PR review and merge of the caller-side
-memory-capture repair. No additional harness code is authorized absent fresh
-evidence. DONE, HOLD, EXTERNAL, LATER, FUTURE, PARK, and PREPARED are not
-execution prompts.
+The Fixture-development handoff is now the active external P2 lane. No
+additional Depot harness code is authorized absent fresh evidence. DONE, HOLD,
+EXTERNAL, LATER, FUTURE, PARK, and PREPARED are not execution prompts.
 
 ### Cross-repository handoff
 
 | Owner | Native item and exact state | Clearing event | Next actor / collision |
 |---|---|---|---|
-| Baseplate tooling | [PR 660](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/660) exact head `5a38dd1915ee83f4060b8d920e04ae15ae057e28` merged as `23609303ebd207add0cc2fad22add482db877ff4`; exact-head required checks passed | complete | No Depot collision. |
-| Baseplate Fixture verifier | [PR 662](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/662) open, non-draft, mergeable at `af2411a3a3ea3d7d55315bd909d7817cf72bb413`; required test, security, composer-security, and docker-startup checks pass; addresses [#659](https://github.com/Design-Machines-Studio/assembly-baseplate/issues/659) | exact-head owner review/merge and trusted verifier publication | Baseplate acts next. Safe in parallel with Depot; PR 660 is merged, so its former file collision is gone. |
-| Canonical Jig | [PR 11](https://github.com/Design-Machines-Studio/assembly-fixture-jig/pull/11) draft at `a1738fccc31f6738b546d36e0e7d949ae67ae0a6`; mergeable but unstable because `pull-request-checks` fails; [#8](https://github.com/Design-Machines-Studio/assembly-fixture-jig/issues/8) and [#10](https://github.com/Design-Machines-Studio/assembly-fixture-jig/issues/10) remain open | published Baseplate verifier, repaired exact-head check, required consumer proof, and retained browser evidence | Jig acts after Baseplate. No Depot file collision; dependency and red CI block closeout. |
+| Baseplate Fixture verifier | [PR #662](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/662) exact head `af2411a` merged as `9306074`; [Issue #659](https://github.com/Design-Machines-Studio/assembly-baseplate/issues/659) remains open in Review | trusted consumer proof closes the native issue | Baseplate and Jig owners act; no Depot collision. |
+| Canonical Jig | [PR #11](https://github.com/Design-Machines-Studio/assembly-fixture-jig/pull/11) exact head `a37cfb4` merged as `2c27506`; [Issue #8](https://github.com/Design-Machines-Studio/assembly-fixture-jig/issues/8) remains open in Review | trusted exact-head Baseplate conformance and consumer evidence close the native issue | Jig owner acts; no Depot collision. |
+| Private Fixture releases | [PR #680](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/680) merged as `1087c40`; PR #681 remains open at `c0e7d0d`, conflicts with main, and substantially overlaps the landed outcome | owner confirms whether #681 has unique work, then closes or rebases it | Baseplate owner decision first; high collision with #682 across composer docs, code, tests, and task files. |
+| Private Baseplate release assets | [PR #682](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/682) is draft and mergeable at `b4d172b`; all hosted checks are skipped | finish scope decisions, move out of draft, and obtain exact-head checks/review | Existing Baseplate session owns it; do not start a duplicate branch. |
 
 Depot has no open pull requests or Issues. Project 1 remains the external
-cross-repository projection; no duplicate Issue or free-form note is needed for
-this single caller-side capture repair.
+cross-repository projection; no duplicate Issue or free-form note is needed.
 
 ### Operating doctrine
 
@@ -114,9 +107,10 @@ this single caller-side capture repair.
   make one a prerequisite for Pipeline or dm-review without a new owner decision
   backed by a demonstrated threat or operational need.
 - R2 is closed rather than run as authored. The old R4 report proposal is
-  retired in favor of the evidenced receipt-retention residual. R5 waits for a
-  real consumer. Old prompts remain historical inputs until explicitly
-  refreshed and marked NEXT.
+  retired in favor of the evidenced receipt-retention residual. R5's single
+  skills-discovery canary is complete; any fleet rollout or MCP portability work
+  waits for live-client evidence. Old prompts remain historical inputs until
+  explicitly refreshed and marked NEXT.
 
 The historical program below is retained as provenance. Its old `Next`,
 `PENDING`, and entry-gate labels do not override the active queue above.
@@ -173,9 +167,8 @@ completes (no file conflicts with it, but serialize merges). Sunset
 Harness-lessons phase was historically AUTHORED at `plans/harness-lessons/`
 (4 chunks). The 2026-08-15 reassessment makes that local plan provenance only:
 lane claims are parked, run budgets are solved/obsolete, authorization friction
-is solved/superseded, and the caller-side memory-capture residual is implemented
-and pending exact-head review. Codify auto-apply is rejected; recommendations
-remain proposal-only.
+is solved/superseded, and PR #63 completed the caller-side memory-capture
+residual. Codify auto-apply is rejected; recommendations remain proposal-only.
 
 Kill switches introduced by this program (all fail OPEN to full coverage; every
 receipt records active switches): `DM_REVIEW_LOOP_FULL_FANOUT`,
