@@ -251,11 +251,28 @@ Ask-then-default-park is the only headless behavior: a non-interactive session, 
    - focused Codex review after ordinary chunks; full review for sensitive paths
    - Merge back to feature branch
    - Approved final dm-review mode, with security escalation
-   - ai-memory session recording
+   - preparation of one compact memory observation for the capable caller
    - cumulative shadow observation after all chunks and at terminal, when the trusted runtime is available
-6. Present the execution summary
+6. Apply the caller-side memory handoff below
+7. Present the execution summary
 
 ## After Execution
+
+Immediately after the execution-orchestrator returns and before presenting its
+human summary, consume the single `Memory observation handoff:` field from the
+agent result. Keep the raw observation internal. Validate that it is the dated
+Pipeline format for exact entity `DepotPlugin:pipeline` and is under 300
+characters, then use the caller's ai-memory capability to:
+
+1. `search_entities` for `DepotPlugin:pipeline`; create it as type `Tool` with
+   `add_entity` only when missing.
+2. Read the entity and check its same-day observations for the exact handoff.
+3. If absent, call `add_observation`, then `save`.
+
+Record exactly one outcome: `written`, `already-present`, or
+`skipped -- <reason>`. Memory capture is non-blocking, but never silent. Append
+`Memory capture: <outcome>` to `plans/<feature>/receipt.md` and retain the same
+outcome in the existing internal summary evidence before presentation. Do not show the raw handoff in ordinary human-facing chat.
 
 After the authoritative terminal receipt is appended to the cumulative receipt array, run exactly:
 

@@ -24,7 +24,7 @@ You MUST execute every step for every chunk. Specifically:
 - You MUST run the manifest's approved final dm-review mode after all chunks
   merge. Full is the default. Quick is allowed only by the validated explicit
   manifest contract and escalates to full on a security-sensitive final diff.
-- You MUST record the session to ai-memory
+- You MUST prepare the compact session observation for caller-side ai-memory capture
 - You MUST report what you actually did in the summary, honestly
 
 Exception: use the `sequential-on-branch` isolation strategy instead of per-chunk worktrees only when Step 1c detects a container-mounted test harness whose build/test commands execute against the repo root rather than the chunk worktree. This preserves the review and evaluation gates but trades parallel isolation for truthful verification. It is an isolation strategy recorded as `isolationStrategy`, never an `executionMode` value.
@@ -286,7 +286,7 @@ After all chunks:
 FINAL 1. Run approved final dm-review mode on feature branch
 FINAL 2. Requirements cross-check against the assessment's approved Key Requirements (write final-requirements-crosscheck.md)
 FINAL 3. Check manifest.noMergeOnCompletion and decide merge policy
-FINAL 4. Record session to ai-memory
+FINAL 4. Prepare session observation for caller-side ai-memory capture
 FINAL 5. Run Post-Mortem (measured providerSplit, misroutes, quality ledger, proposals)
 FINAL 5b. Artifact and repository cleanup (receipt, artifacts, worktrees/branches, inventory)
 FINAL 5c. Campaign state write (when campaignSlug present)
@@ -2038,13 +2038,17 @@ Mark `FINAL 3. Check manifest.noMergeOnCompletion` complete.
 
 ### 5.1 Record the run
 
-Record the session to ai-memory (per `docs/plugin-memory-schema.md`):
+Prepare exactly one caller handoff using the existing observation format from
+`docs/plugin-memory-schema.md`:
 
-1. Search for `DepotPlugin:pipeline` entity -- create if missing (type: Tool)
-2. Add observation: `[YYYY-MM-DD] Pipeline: <feature-slug>. <N> chunks, <M> parallel. Review: <per-chunk iteration counts>. Final: <clean/N findings>.`
-3. Call `save`
+`[YYYY-MM-DD] Pipeline: <feature-slug>. <N> chunks, <M> parallel. Review: <per-chunk iteration counts>. Final: <clean/N findings>.`
 
-If ai-memory unavailable, skip silently.
+Keep the observation under 300 characters. Return it once as
+`Memory observation handoff: <observation>` in the existing final agent result
+from Step 6. This is an internal caller field: do not show it in the compact
+human report and do not write a handoff file. The orchestrator does not call
+ai-memory or claim that the observation was persisted; the capable `/pipeline`
+or `/pipeline-run` caller applies it and records the capture outcome.
 
 ### 5.2 Codify (run only if the run had friction)
 
@@ -2057,8 +2061,11 @@ fire more than once.
 Run the **5-Minute Codify Checklist** (see the `ned:codify` skill) against this run: what broke, what
 rule prevents it, what automated check catches it earlier, what becomes the default. For each lesson:
 
-- **Situational lesson** -> add an observation to `DepotPlugin:pipeline` or the project entity, format
-  `[YYYY-MM-DD] Lesson: <what broke> -> <rule/check that prevents it>. Encoded in: <target or "proposed">.`
+- **Situational lesson** -> draft a proposed observation for
+  `DepotPlugin:pipeline` or the project entity, format `[YYYY-MM-DD] Lesson:
+  <what broke> -> <rule/check that prevents it>. Encoded in: <target or
+  "proposed">.`, and place it under `## Codify Proposals` in the run
+  postmortem for human approval.
 - **Novel pipeline failure pattern** -> if the pattern is **not already** in CLAUDE.md "Known Pipeline
   Failure Modes" (grep to confirm), draft both:
   1. a `docs/post-mortems/YYYY-MM-DD-<slug>.md` stub (symptom, root cause, hardening proposal), and
@@ -2071,10 +2078,10 @@ rule prevents it, what automated check catches it earlier, what becomes the defa
 This converts the previously reactive "someone remembers to write a postmortem" ritual into an
 automatic proposal emitted every time a novel failure occurs.
 
-If ai-memory is unavailable, still write the Codify Proposals to the run
-postmortem; skip only the memory write.
+Codify output remains proposal-only. Do not edit tracked sources, routing
+policy, review policy, or security policy from run output.
 
-Mark `FINAL 4. Record session to ai-memory` complete.
+Mark `FINAL 4. Prepare session observation for caller-side ai-memory capture` complete.
 
 ## Step 5a: Run Post-Mortem
 
@@ -2103,7 +2110,7 @@ Post-mortem content:
 - Proposal-only status: every recommendation is labeled `AWAITING APPROVAL`. NEVER auto-edit plugin sources or routing policy from the post-mortem.
 - Recurrence promotion: if the same recommendation appears in at least `N` runs (default `3`) in `docs/pipeline-metrics/ledger.md`, promote it to a Standing Recommendation with citations.
 
-Append one line to `docs/pipeline-metrics/ledger.md` with date, feature, providerSplit, tokens/cost by provider, top recommendation, and status. Add an ai-memory `DepotPlugin` observation if ai-memory is available.
+Append one line to `docs/pipeline-metrics/ledger.md` with date, feature, providerSplit, tokens/cost by provider, top recommendation, and status.
 
 Mark `FINAL 5. Run Post-Mortem` complete.
 
@@ -2400,6 +2407,13 @@ nonexistent optional artifact rather than inventing one:
 - Detailed review: `.claude/ux-review/report.md`
 ```
 
+After the compact report, return the single internal line prepared in Step 5.1:
+
+`Memory observation handoff: <observation>`
+
+The Pipeline caller consumes this line before human presentation. It must not
+forward the raw observation into ordinary chat.
+
 Omit `Attempt result` when no provider attempt failed. When present, keep it to
 one short line: what failed and whether usage/cost was reported; the existing
 `Recommended next action` remains the single action.
@@ -2456,7 +2470,7 @@ Before reporting any pipeline-blocking failure, run the Step 5b repository clean
 **Degraded operation (continue with note):**
 
 - If the `dm-review:review` skill itself is unavailable, fall back to a manual review pass using the `Agent` tool to dispatch general-purpose review subagents directly. Flag as "Degraded" in the chunk receipt. NEVER report "slash command not callable" -- the slash command was never the mechanism; the skill was.
-- ai-memory unavailable -- skip capture, note in report
+- caller-side ai-memory unavailable -- return the handoff; the caller records `skipped -- <reason>` without blocking delivery
 - Input guardrails can't estimate tokens -- proceed untruncated, note in log
 
 ## Constraints

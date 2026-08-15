@@ -73,7 +73,7 @@ Refs are not artifacts -- they are not deleted by tier, but by the safe-to-delet
 
 | Record | Store | Written by |
 |--------|-------|------------|
-| Pipeline session observation | ai-memory (`DepotPlugin:pipeline`) | Orchestrator Step 5 |
+| Pipeline session observation | ai-memory (`DepotPlugin:pipeline`) | Pipeline caller after orchestrator Step 5 prepares the handoff |
 | Review session observation | ai-memory (project entity) | review-memory-recorder agent |
 
 Protected builder restore blobs are not ordinary artifacts. Store them only in permission-restricted package-owned storage with their own retention/deletion policy. Artifacts, receipts, events, shadow reports, Airlift bundles, and checkpoints may contain only a safe digest projection plus an authoritative receipt reference, never blob bytes or credentials.
@@ -146,6 +146,7 @@ Written by Step 5b after cleanup. Under 2 KB. This is the durable record that re
 - eligibleProviderSplit: `{codex: N, openrouter: N, targetProfile: <name>, routingVariance: <measured>}`
 - Workflow class: chore | bug | feature | hotfix | security | investigation | migration
 - Workflow class defaulted: true | false
+- Memory capture: written | already-present | skipped -- <reason>
 
 ## Evidence
 | # | Requirement | Evidence |

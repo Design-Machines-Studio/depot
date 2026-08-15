@@ -1,6 +1,10 @@
 # Pipeline Run Post-Mortem Schema
 
-Every full pipeline run writes `plans/<slug>/run-postmortem.md` after memory capture and before the final Summary Report.
+Every full pipeline run writes `plans/<slug>/run-postmortem.md` after the
+orchestrator prepares the compact memory handoff. The capable Pipeline caller
+then applies that handoff, records `written`, `already-present`, or
+`skipped -- <reason>` in the existing receipt/summary evidence, and only then
+presents the final Summary Report.
 
 ## Required Sections
 
