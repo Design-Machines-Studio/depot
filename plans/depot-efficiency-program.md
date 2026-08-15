@@ -11,10 +11,10 @@ external handoff only; it does not duplicate Baseplate's production roadmap.
 Depot currently has no open pull requests or Issues. The current priority order
 is:
 
-1. **P1 -- repair caller-side Pipeline memory capture.** The restricted
-   execution orchestrator cannot call ai-memory but currently requires a direct
-   write and silently skips it. Return one compact observation to the capable
-   `/pipeline` or `/pipeline-run` caller; do not add a generalized transport.
+1. **P1 -- review the caller-side Pipeline memory-capture repair.** The narrow
+   repair is implemented on its feature branch and pending exact-head PR review
+   and merge. It returns one compact observation to the capable `/pipeline` or
+   `/pipeline-run` caller without adding a generalized transport.
 2. **Completed optimization sequence.** PR #58 completed the evidenced R4
    residual, PR #59 supplied bounded worker context, PR #60 accepted safe
    credential references, PR #61 classified terminal stream failures, and PR
@@ -26,7 +26,7 @@ is:
 4. **P2 -- Fixture handoff remains external.** Baseplate and Jig own their
    verifier/product repair; Depot supplies proportional policy, not product code.
 
-### Single next Depot chunk
+### Single next Depot action
 
 Current trusted main for this chunk is
 `0e104093947ed71d919f68bc86f0e10ea4032497`, the merge commit for PR #62.
@@ -41,12 +41,13 @@ results. No measured workload justifies adding the authored caller-supplied
 `mechanical_globs` policy, so the old untracked R2 prompts are historical inputs,
 not executable work.
 
-The historical harness-lessons phase has one reachable residual: caller-side
-capture of the compact Pipeline run observation. Lane claims are parked because
-current worktree isolation and exact-head reuse leave no recurring collision;
-run budgets are solved/obsolete under the existing planning limits and soft
-checkpoints; authorization friction is solved/superseded by PRs #46 and #47.
-Codify recommendations remain proposal-only.
+The historical harness-lessons phase had one reachable residual: caller-side
+capture of the compact Pipeline run observation. Its smallest repair is now
+implemented and pending exact-head PR review/merge. Lane claims are parked
+because current worktree isolation and exact-head reuse leave no recurring
+collision; run budgets are solved/obsolete under the existing planning limits
+and soft checkpoints; authorization friction is solved/superseded by PRs #46
+and #47. Codify recommendations remain proposal-only.
 
 ### Ordered Depot queue
 
@@ -73,16 +74,17 @@ Codify recommendations remain proposal-only.
 | 18 | Safe credential-reference handling | **DONE** | PR #60 merged at `730d2db` |
 | 19 | Terminal-stream failure classification | **DONE** | PR #61 merged at `662fcd5` |
 | 20 | Harness run budgets | **SOLVED / OBSOLETE** | existing 8/6 planning limits, scope freeze, exploration checkpoint, and long-run soft continuation cover the evidenced need |
-| 21 | Caller-side Pipeline memory capture | **CURRENT / P1** | capable caller persists one returned compact observation and reports `written`, `already-present`, or `skipped -- <reason>` |
+| 21 | Caller-side Pipeline memory capture | **IMPLEMENTED / PENDING REVIEW** | review the feature branch at its exact head, open its PR, and merge only after required checks pass |
 | 22 | Harness authorization friction | **SOLVED / SUPERSEDED** | PRs #46 and #47 removed per-call approval and Workflow Authority |
 
 The Fixture-development handoff remains an external P2 lane and may advance in
 parallel when its Baseplate/Jig dependency chain clears; it does not displace
-the single `CURRENT` Depot chunk.
+the pending-review Depot action.
 
-Only the caller-side memory-capture residual authorizes the next Depot
-execution session. DONE, HOLD, EXTERNAL, LATER, FUTURE, PARK, and PREPARED are
-not execution prompts.
+The next Depot action is exact-head PR review and merge of the caller-side
+memory-capture repair. No additional harness code is authorized absent fresh
+evidence. DONE, HOLD, EXTERNAL, LATER, FUTURE, PARK, and PREPARED are not
+execution prompts.
 
 ### Cross-repository handoff
 
@@ -171,8 +173,9 @@ completes (no file conflicts with it, but serialize merges). Sunset
 Harness-lessons phase was historically AUTHORED at `plans/harness-lessons/`
 (4 chunks). The 2026-08-15 reassessment makes that local plan provenance only:
 lane claims are parked, run budgets are solved/obsolete, authorization friction
-is solved/superseded, and only caller-side memory capture remains current.
-Codify auto-apply is rejected; recommendations remain proposal-only.
+is solved/superseded, and the caller-side memory-capture residual is implemented
+and pending exact-head review. Codify auto-apply is rejected; recommendations
+remain proposal-only.
 
 Kill switches introduced by this program (all fail OPEN to full coverage; every
 receipt records active switches): `DM_REVIEW_LOOP_FULL_FANOUT`,
