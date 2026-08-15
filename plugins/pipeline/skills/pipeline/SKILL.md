@@ -538,7 +538,8 @@ chunks yourself with general-purpose agents. The execution-orchestrator handles
 branch create/reuse semantics, worktree isolation, input guardrails, Fix
 Philosophy injection, output validation, focused Codex review for ordinary chunks,
 full review for sensitive chunks, merging, the approved final dm-review
-mode, and memory capture. If you skip it, all of those steps get skipped.
+mode, and memory-handoff preparation. If you skip it, all of those steps get
+skipped.
 
 **Codex Native Execution Adapter:** If this command is running in Codex and the session exposes `multi_agent_v1.spawn_agent`, use the adapter documented in `/pipeline-run` (`plugins/pipeline/commands/pipeline-run.md`) for Phase 6. The current Codex agent acts as the orchestrator in-process while following `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the contract, dispatches chunk workers with `multi_agent_v1.spawn_agent`, and applies the risk-tiered focused/full review adapter. This is equivalent pipeline execution and MUST record `executionMode: codex_native` in every receipt.
 
@@ -551,6 +552,24 @@ Launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/e
 - The feature branch name from the manifest
 
 Wait for the orchestrator to complete. Mark ledger item 12 as complete.
+
+### Caller-side memory capture
+
+Immediately after the execution-orchestrator returns and before presenting its
+human summary, consume the single `Memory observation handoff:` field from the
+agent result. Keep the raw observation internal. Validate that it is the dated
+Pipeline format for exact entity `DepotPlugin:pipeline` and is under 300
+characters, then use the caller's ai-memory capability to:
+
+1. `search_entities` for `DepotPlugin:pipeline`; create it as type `Tool` with
+   `add_entity` only when missing.
+2. Read the entity and check its same-day observations for the exact handoff.
+3. If absent, call `add_observation`, then `save`.
+
+Record exactly one outcome: `written`, `already-present`, or
+`skipped -- <reason>`. Memory capture is non-blocking, but never silent. Append
+`Memory capture: <outcome>` to `plans/<feature-slug>/receipt.md` and retain the
+same outcome in the existing internal summary evidence before Phase 7. Do not show the raw handoff in ordinary human-facing chat.
 
 ## Phase 7: Deliver
 
@@ -690,7 +709,9 @@ Before delivering to the user, verify your own compliance by answering these que
 9. Did the orchestrator run the risk-tiered evaluation gate after each chunk?
 10. Did the orchestrator run the manifest's approved final dm-review mode, and
     did any quick-mode security-sensitive diff escalate to full?
-11. Did the orchestrator record the session to ai-memory?
+11. Did the orchestrator return one compact memory observation, and did I apply
+    it before presentation with an explicit `written`, `already-present`, or
+    `skipped -- <reason>` outcome in the durable receipt?
 12. **Browser authority audit:** Did every `renderedSurface: required` case produce browser evidence, or a blocked `human_help_required` receipt after primary quit, fresh-primary retry, and different-browser attempt? Did every `not_applicable` chunk carry a validated rationale? Curl and grep are not visual verification.
 13. **Runtime state audit:** For every new JS module added in this feature, did I verify it attached at runtime via `browser_evaluate` (typeof check, global presence, listener binding)? curl confirms the file exists; `browser_evaluate` confirms it runs.
 14. If the feature involved UI work, did I (the caller) visually verify the rendered output in the browser, rather than trusting the orchestrator's self-report?

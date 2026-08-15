@@ -123,6 +123,27 @@ require_before() {
   fi
 }
 
+require_count() {
+  local file="$1"
+  local pattern="$2"
+  local expected="$3"
+  local label="$4"
+  local actual
+
+  if [ ! -f "$file" ]; then
+    printf "  FAIL  %s (missing file: %s)\n" "$label" "${file#$REPO_ROOT/}"
+    failures=1
+    return
+  fi
+  actual="$(grep -Fc -- "$pattern" "$file" || true)"
+  if [ "$actual" -eq "$expected" ]; then
+    printf "  OK    %s\n" "$label"
+  else
+    printf "  FAIL  %s (expected %s, found %s)\n" "$label" "$expected" "$actual"
+    failures=1
+  fi
+}
+
 # --------------------------------------------------------------------------
 # Group 1: Repository cleanup contract
 # --------------------------------------------------------------------------
@@ -1159,6 +1180,43 @@ for f in "$pipeline_cmd" "$pipeline_alias" "$pipeline_run" "$pipeline_run_skill"
   require_text "$f" 'Blocked' "$rel includes the blocked outcome token"
   require_text "$f" 'Recommended next action' "$rel requires one recommended next action"
 done
+require_text "$orchestrator" 'Memory observation handoff: <observation>' \
+  "Pipeline orchestrator returns the compact caller handoff"
+require_text "$orchestrator" 'Keep the observation under 300 characters.' \
+  "Pipeline orchestrator bounds the memory handoff"
+require_absent "$orchestrator" 'If ai-memory unavailable, skip silently.' \
+  "Pipeline orchestrator does not silently skip memory capture"
+require_absent "$orchestrator" '`search_entities`' \
+  "restricted Pipeline orchestrator does not call ai-memory"
+for f in "$pipeline_cmd" "$pipeline_run"; do
+  rel="${f#$REPO_ROOT/}"
+  require_text "$f" 'Read the entity and check its same-day observations for the exact handoff.' \
+    "$rel deduplicates the caller memory handoff"
+  require_text "$f" 'If absent, call `add_observation`, then `save`.' \
+    "$rel writes and saves the caller memory handoff"
+  require_text "$f" '`written`, `already-present`, or' \
+    "$rel records the closed memory-capture outcomes"
+  require_text "$f" '`skipped -- <reason>`' \
+    "$rel requires an explicit memory skip reason"
+  require_text "$f" 'Do not show the raw handoff in ordinary human-facing chat.' \
+    "$rel keeps the internal memory handoff out of chat"
+done
+require_before "$pipeline_cmd" 'Record exactly one outcome: `written`, `already-present`, or' '## Phase 7: Deliver' \
+  "Pipeline applies memory capture before human delivery"
+require_before "$pipeline_run" 'Record exactly one outcome: `written`, `already-present`, or' 'Present the compact summary from the orchestrator.' \
+  "pipeline-run applies memory capture before human presentation"
+require_before "$lifecycle" 'Step 5b writes the base receipt' 'After consuming the handoff,' \
+  "artifact lifecycle orders the base receipt before caller memory status"
+require_count "$lifecycle" 'appends exactly one terminal `- Memory capture:' 1 \
+  "artifact lifecycle has one caller-owned terminal append instruction"
+require_count "$lifecycle" '- Memory capture:' 2 \
+  "artifact lifecycle limits memory-status syntax to the two-stage instructions"
+require_before "$orchestrator" 'This Step 5b base receipt MUST omit the caller-owned `- Memory capture:` field.' 'After the compact report, return the single internal line prepared in Step 5.1:' \
+  "orchestrator completes the base receipt before returning the memory handoff"
+require_count "$orchestrator" 'the capable caller appends exactly one terminal memory-capture field' 1 \
+  "orchestrator assigns exactly one terminal memory-status append to the caller"
+require_count "$orchestrator" '- Memory capture:' 1 \
+  "orchestrator keeps caller-owned memory syntax out of the Step 5b template"
 require_text "$orchestrator" '## <Done | Needs fixes | Blocked>' \
   "Pipeline final summary leads with the outcome"
 require_text "$orchestrator" '**Recommended next action:** <one action; for blocked work, the smallest operator action>' \

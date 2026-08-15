@@ -39,7 +39,7 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | `research.html` | 3 | Findings from research phase (HTML + island) |
 | `plan.html` | 3 | Implementation plan (HTML + `chunks`/`decisions` island) |
 | `final-requirements-crosscheck.md` | 3 | Delivery proof with evidence types |
-| `receipt.md` | 3 | Compact post-cleanup summary (written by Step 5b) |
+| `receipt.md` | 3 | Compact post-cleanup summary; Step 5b writes the base receipt and the capable caller appends memory-capture status |
 
 ### Pipeline git refs
 
@@ -73,7 +73,7 @@ Refs are not artifacts -- they are not deleted by tier, but by the safe-to-delet
 
 | Record | Store | Written by |
 |--------|-------|------------|
-| Pipeline session observation | ai-memory (`DepotPlugin:pipeline`) | Orchestrator Step 5 |
+| Pipeline session observation | ai-memory (`DepotPlugin:pipeline`) | Pipeline caller after orchestrator Step 5 prepares the handoff |
 | Review session observation | ai-memory (project entity) | review-memory-recorder agent |
 
 Protected builder restore blobs are not ordinary artifacts. Store them only in permission-restricted package-owned storage with their own retention/deletion policy. Artifacts, receipts, events, shadow reports, Airlift bundles, and checkpoints may contain only a safe digest projection plus an authoritative receipt reference, never blob bytes or credentials.
@@ -130,7 +130,12 @@ Before creating today's screenshot directory, delete all previous date directori
 
 ## Receipt Format
 
-Written by Step 5b after cleanup. Under 2 KB. This is the durable record that remains after ephemeral/run-scoped artifacts are deleted.
+Completed in two stages and kept under 2 KB. Step 5b writes the base receipt
+after cleanup and MUST omit any `- Memory capture:` field because the
+orchestrator does not know the caller-side result. After consuming the handoff,
+the capable caller appends exactly one terminal `- Memory capture: written |
+already-present | skipped -- <reason>` field. The caller never rewrites the
+authoritative Step 5b fields.
 
 ```markdown
 # Pipeline Receipt: <feature-slug>
