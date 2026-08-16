@@ -1,7 +1,7 @@
 ---
 name: assembly-release
 description: Codex skill alias for /assembly-release. Assembly Baseplate release operations for current release state, release planning, failed or stopped release resumption, R2 publication failures, existing assets and manifest recovery when pointers never moved, staging acceptance, and beta or stable promotion
-argument-hint: "[status|plan|publish|resume|promote] [tag] [channel]"
+argument-hint: "[status|plan|publish|resume|promote] [tag] [channel] [--minimum-version <tag>]"
 ---
 
 # Codex Command Alias: /assembly-release
@@ -30,17 +30,22 @@ repository's runbooks and workflows.
 Parse `$ARGUMENTS` as:
 
 ```text
-[status|plan|publish|resume|promote] [tag] [channel]
+[status|plan|publish|resume|promote] [tag] [channel] [--minimum-version <tag>]
 ```
 
 - No arguments means `status`.
 - Accept only `status`, `plan`, `publish`, `resume`, and `promote`.
-- Reject extra or speculative modes.
+- Accept only the optional `--minimum-version <canonical tag>` flag. Reject
+  unknown flags, extra arguments, and speculative modes.
 - `status` and `plan` are read-only. They must not create or move a tag, edit or
   publish a GitHub Release, dispatch a workflow, write a manifest, operate a
   provider, change a deployment, or create a credential.
-- `publish`, `resume`, and `promote` require the exact authorization gate below
-  before their first mutation. Read-only inspection before that gate is allowed.
+- `publish`, `resume`, and `promote` require an exact tag and channel in the
+  current invocation. The invocation is the operator authorization. Do not ask
+  for a second confirmation before mutation. Read-only inspection before
+  mutation is allowed and required.
+- If a required argument is absent or invalid, return `BLOCKED` with one exact
+  corrected invocation. Do not replace missing input with an approval screen.
 
 ## Resolve authority first
 
@@ -147,7 +152,7 @@ are:
 | Alpha | staging only |
 | Beta | staging, then beta |
 | RC | staging, then beta |
-| Stable | staging, beta acceptance, explicit approval, stable |
+| Stable | staging, beta acceptance, explicit `promote <tag> stable` invocation, stable |
 
 Reject a tag/channel combination that current policy does not allow. If this
 table and the current repository disagree, stop and report the disagreement.
@@ -183,24 +188,29 @@ Produce one exact read-only plan for the selected candidate, tag, class,
 channel, storage target, deliberate `minimum_version`, and current workflow
 head. Name each transition and its evidence prerequisite, but keep the normal
 response compact. Do not dispatch a dry run: a workflow dispatch is not a
-read-only plan.
+read-only plan. Prefer mechanically derived facts over a checklist for the
+operator to re-verify.
 
 ### `publish`
 
 Use only for a new release plan. Reconstruct state and reject candidate drift,
 tag collision, unsupported class/channel posture, missing authored notes, or
-an incomplete exact plan. Present the authorization envelope once. After exact
-authorization, execute only the named plan and its idempotent checks, respecting
-repository-defined GitHub approval gates. Never move, delete, or recreate a
-pushed tag.
+an incomplete exact plan. Mechanically bind and validate the invocation as
+described below, then execute the repository-defined valid transitions toward
+the requested channel without another confirmation. Verify every transition
+before continuing and respect any live repository-defined GitHub environment
+gate. Never move, delete, or recreate a pushed tag.
 
 ### `resume`
 
 This is the preferred mode for a partial release. Rebuild live state, then
-identify and execute at most the one smallest valid next transition covered by
-the exact authorization. Reuse the exact pushed tag and byte-identical existing
-artifacts. Retry a failed gate without rebuilding or republishing completed
-irreversible work merely to make a cleaner receipt.
+identify and execute every currently valid incomplete transition toward the
+exact requested channel. Reuse the exact pushed tag and byte-identical existing
+artifacts. Verify each completed transition before starting the next. Stop at
+the first failed, conflicting, approval-waiting, or genuinely non-automatable
+gate. Do not artificially limit a resume invocation to one transition. Retry a
+failed gate without rebuilding or republishing completed irreversible work
+merely to make a cleaner receipt.
 
 Required distinctions include:
 
@@ -232,8 +242,9 @@ the source manifest, immutable public bytes, current destination manifest,
 release posture, deliberate support floor, and required staging/beta acceptance
 evidence. Use the current manifest workflow; do not invoke artifact builds or
 publication. Alpha cannot promote, beta/RC cannot promote to stable, and stable
-requires both staging and distinct beta acceptance plus explicit stable
-approval under current policy.
+requires both staging and distinct beta acceptance. The explicit
+`promote <tag> stable` invocation is the stable-promotion approval; do not ask
+for a second confirmation.
 
 ## Credential and configuration semantics
 
@@ -259,12 +270,16 @@ credential pairs from memory or old receipts. For a missing credential, say:
 
 Classify a missing configured name as configuration, not a workflow defect. If
 code repair is actually required, stop and report that as a separate next
-action; release authorization never includes patching Baseplate.
+action; invocation authority never includes patching Baseplate.
 
-## Exact authorization gate
+## Invocation authority and deterministic checks
 
-`publish`, `resume`, and `promote` must pause before mutation and request one
-explicit authorization containing all of:
+`publish`, `resume`, and `promote` mutate only when the current invocation
+contains an exact tag and channel. That invocation is the operator
+authorization. Do not ask "are you sure?", present an authorization envelope,
+or emit a paused-for-approval state.
+
+Before the first mutation, mechanically bind and validate:
 
 ```text
 candidate commit: <40-character SHA>
@@ -277,16 +292,31 @@ transition: <exact workflow dispatch or state change, including dry_run posture>
 workflow head: <40-character SHA>
 ```
 
-Use `PAUSED FOR APPROVAL` until the user explicitly approves that exact
-envelope. A vague "continue" from before the envelope is not authorization.
-Once approved, do not add repeated Depot-owned confirmations for internal reads
-or idempotent checks, but continue to respect repository-defined environment
-approvals.
+Resolve `minimum_version` in this order:
 
-Authorization never expands to repairing code/workflows, moving tags, changing
-the support floor, creating credentials, changing the default update channel,
-or altering DNS, firewall, backups, staging topology, Cloudflare configuration,
-unrelated GitHub Projects, or other releases.
+1. an explicit `--minimum-version` value in the current invocation;
+2. for `resume`, the verified input of the release attempt being resumed;
+3. for `promote`, the verified source manifest floor; or
+4. one unambiguous value required by current executable repository policy.
+
+Reject conflicting sources. Validate the selected floor against current tag
+policy, channel rules, manifest-forward-movement rules, and supported-upgrade
+evidence. An explicit flag supplies a product choice; it never overrides those
+checks. If the floor or another bound value cannot be determined mechanically,
+return `BLOCKED` with the exact missing decision and one corrected invocation.
+Do not turn machine-checkable facts into a human review checklist.
+
+A vague `continue` without an exact tag and channel cannot mutate. An exact
+invocation does not need a second approval. Continue to respect an actual live
+GitHub environment wait or other repository-owned approval that the workflow
+itself enforces, and report that external wait plainly instead of adding a
+Depot-owned gate.
+
+Invocation authority never expands to repairing code/workflows, moving tags,
+changing the support floor beyond an explicit validated `--minimum-version`,
+creating credentials, changing the default update channel, altering DNS,
+firewall, backups, staging topology, Cloudflare configuration, unrelated GitHub
+Projects, or other releases.
 
 ## Receipts
 
@@ -302,7 +332,7 @@ Keep the receipt compact:
 - state before and after;
 - workflow URLs and conclusions;
 - public artifact and manifest hashes;
-- exact authorization received;
+- exact invocation mode, tag, channel, and resolved floor;
 - remaining gaps; and
 - commands actually run.
 
@@ -316,7 +346,6 @@ Every response begins with exactly one of:
 ```text
 READY
 IN PROGRESS
-PAUSED FOR APPROVAL
 BLOCKED
 FAILED
 COMPLETE

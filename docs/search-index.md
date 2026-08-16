@@ -131,7 +131,7 @@ Common questions mapped to the right skill:
 | airlift | /airlift-in | [path] | Resume from an existing .airlift handoff bundle in the current harness. |
 | airlift | /airlift-install | [wire | unwire | status] | Wire, unwire, or check the airlift Tier-3 early-warning monitor in settings.json (statusLine chain + StopFailure hook). Preserves the existing statusLine; ccusage optional. |
 | assembly | /assembly-build | [generate, build, test, full, focused, level, candidate, or post-merge] | Build and test via legacy Docker modes or tiered repository verification |
-| assembly | /assembly-release | [status|plan|publish|resume|promote] [tag] [channel] | Inspect, plan, publish, resume, or promote Assembly Baseplate releases |
+| assembly | /assembly-release | [status|plan|publish|resume|promote] [tag] [channel] [--minimum-version <tag>] | Inspect, plan, publish, resume, or promote Assembly Baseplate releases |
 | chef | /meal-plan | [number of days, any constraints or preferences] | Generate a meal plan following Eve Persak's timing framework |
 | chef | /recipe-check | [paste recipe text, URL, or Mela recipe name] | Analyze a recipe against Eve Persak's dietary framework |
 | chef | /recipe-convert | [recipe name from Mela, URL, or paste recipe text] | Convert a recipe to a healthy, Bali-friendly version and export as .melarecipe |
