@@ -1,6 +1,6 @@
 # openrouter
 
-OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to quality- and cost-ranked OpenRouter model slugs over one endpoint. The matrix includes GPT-5.6 Terra and Luna, GLM-5.2 (`z-ai/glm-5.2`), DeepSeek V4, and Kimi K3. OpenAI models may run through OpenRouter as an economical API rail; Anthropic remains native Claude-only.
+OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to exact versioned OpenRouter model slugs over one endpoint. The evidence matrix catalogs current candidates; ordered role lists in Pipeline and dm-review decide which models actually run. Anthropic remains native Claude-only.
 
 > **Current release mode:** a configured key plus one coherent installed bundle
 > makes OpenRouter available for direct, eligible dm-review, and bounded
@@ -29,9 +29,9 @@ run.
 Task-to-model routing is governed by `plugins/pipeline/references/routing-policy.json`; the installed OpenRouter delegation policy owns the security boundary. The following matrix is available to configured-key dm-review and bounded Pipeline dispatch and remains observable through dry-run routing:
 
 - **Primary external provider** for `pattern-recognition-specialist`, `code-simplicity-reviewer`, `doc-sync-reviewer`, and `test-coverage-reviewer`; each lane uses the model and fallback model selected by policy.
-- **Primary Kimi K3 security-analysis lens**, paired with mandatory independent non-implementing-family full-diff sign-off.
-- **Primary Kimi K3 bulk lane** for large-context / large-diff first-pass triage.
-- The DeepSeek V4 Flash 0731-headed cascade rail for `config` / `docs` / `mechanical-logic` chunk execution via `openrouter-exec`, with Grok 4.5 escalation and GLM-5.2 only as the experimental last fallback.
+- **Kimi K3 only for focused applicable security analysis**, paired with mandatory independent non-implementing-family full-diff sign-off.
+- **Qwen3.8 Max for bulk and ordinary independent review**, with DeepSeek V4 Pro 0813 or Grok 4.6 as role-specific fallbacks.
+- **DeepSeek V4 Flash 0731 for routine documentation/test review and bounded `config` / `docs` / `mechanical-logic` execution**, with Luna as the routine-review fallback and Grok 4.6 as the bounded-execution escalation.
 
 ## Security boundary (non-negotiable)
 
@@ -43,7 +43,7 @@ The canonical policy is `skills/openrouter-delegate/references/delegation-securi
 - **Bounded execution.** Model output is accepted only as a validated unified diff restricted to the caller's exact owned-path allowlist. The runner performs fixed structural Git validation and allowlist-only staging; executable project verification is deferred to native Codex review.
 - **Intended lanes.** Security analysis with independent non-implementing-family sign-off, style, duplication, pattern-recognition, large-diff first-pass triage, and doc consistency.
 
-High-consequence security completion still requires a reviewer family different from the implementer. GLM, DeepSeek, Kimi, and other third-party models are not banned by nationality.
+High-consequence security completion still requires a reviewer family different from the implementer. OpenRouter is transport provenance, not a model family. GLM 5.2 is catalogued as evidence but appears in no active ladder.
 
 Every live caller selects one coherent installed plugin root with workflow-kernel `resolve-plugin-bundle`, then derives its wrapper, policy, boundary, protocols, and templates from that root. Semantic version wins over mtime; the active host breaks only equal-version ties. Durable receipts keep the version, cache class, and reason, never the absolute home path.
 

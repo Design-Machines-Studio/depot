@@ -119,7 +119,7 @@ If you are tempted to skip a phase, STOP and re-read this section.
 
 When the user says "/pipeline" or asks to "run the pipeline" or "use the full pipeline process," you MUST invoke this skill. You MUST NOT manually replicate pipeline phases by hand -- launching Explore agents, writing plans, implementing directly, and calling it "the pipeline."
 
-The pipeline enforces gates, bounded review, visual verification, memory capture, and approved-scope contracts that manual execution silently skips. "I already understand the code" is not a reason to bypass the pipeline -- the pipeline exists precisely because self-confidence is unreliable.
+The pipeline enforces gates, bounded review, visual verification, and approved-scope contracts that manual execution silently skips, with optional memory enrichment when callable. "I already understand the code" is not a reason to bypass the pipeline -- the pipeline exists precisely because self-confidence is unreliable.
 
 **What happens when you bypass the pipeline:**
 
@@ -706,26 +706,36 @@ manifest, prompt directory, chunk receipts, or per-chunk ceremony.
 
 Wait for execution to complete. Mark ledger item 10 as complete.
 
-### Caller-side memory capture
+### Caller-side optional memory enrichment
 
 In full mode, immediately after the execution-orchestrator returns and before
 presenting its human summary, consume the single `Memory observation handoff:`
 field from the agent result. In lean mode, form the same single compact
 observation directly from the bounded implementation and final-review result;
 do not invent an orchestrator handoff or a second memory schema. Keep the raw
-observation internal. Validate that it is the dated Pipeline format for exact
-entity `DepotPlugin:pipeline` and is under 300 characters, then use the caller's
-ai-memory capability to:
+observation internal. Determine availability from the callable-tool inventory
+or tool search without making a probe call. Capability availability is the
+complete rule; do not use identity, environment, or repository heuristics.
+
+If the required ai-memory tools are callable, validate that the observation is
+the dated Pipeline format for exact entity `DepotPlugin:pipeline` and is under
+300 characters, then:
 
 1. `search_entities` for `DepotPlugin:pipeline`; create it as type `Tool` with
    `add_entity` only when missing.
 2. Read the entity and check its same-day observations for the exact handoff.
 3. If absent, call `add_observation`, then `save`.
 
-Record exactly one outcome: `written`, `already-present`, or
-`skipped -- <reason>`. Memory capture is non-blocking, but never silent. Append
-`Memory capture: <outcome>` to `plans/<feature-slug>/receipt.md` and retain the
-same outcome in the existing internal summary evidence before Phase 7. Do not show the raw handoff in ordinary human-facing chat.
+After a successful write or exact duplicate, append `Memory capture: written`
+or `Memory capture: already-present` to `plans/<feature-slug>/receipt.md` and
+retain that outcome in internal summary evidence before Phase 7. If callable
+tools fail during lookup or write, append `Memory capture: failed -- <safe reason>`
+and retain the same nonblocking operational evidence without marking delivery
+incomplete. If the tools are absent, omit the write and every receipt or summary mention.
+Do not show the raw handoff in ordinary human-facing chat, mark delivery
+incomplete because optional memory is absent, or ask the user to install or
+configure the personal source. Only an explicit user request for an ai-memory
+operation makes an unavailable capability reportable.
 
 ## Phase 7: Deliver
 
@@ -879,10 +889,11 @@ Before delivering to the user, verify your own compliance by answering these que
 9. In full mode, did the orchestrator run the risk-tiered evaluation gate after each chunk?
 10. Did the approved final dm-review mode run, and did any quick-mode
     security-sensitive diff escalate to full?
-11. Did the full-mode orchestrator return one compact memory observation, or
-    did the lean caller form the equivalent from the bounded result, and did I
-    apply it before presentation with an explicit `written`,
-    `already-present`, or `skipped -- <reason>` outcome in the durable receipt?
+11. Did the full-mode orchestrator return one compact optional memory
+    observation, or did the lean caller form the equivalent from the bounded
+    result? When ai-memory was callable, did I apply it before presentation and
+    record `written`, `already-present`, or nonblocking `failed -- <safe
+    reason>` evidence; when it was not callable, did I omit it silently?
 12. **Browser authority audit:** Did every `renderedSurface: required` case produce browser evidence, or a blocked `human_help_required` receipt after primary quit, fresh-primary retry, and different-browser attempt? Did every `not_applicable` chunk carry a validated rationale? Curl and grep are not visual verification.
 13. **Runtime state audit:** For every new JS module added in this feature, did I verify it attached at runtime via `browser_evaluate` (typeof check, global presence, listener binding)? curl confirms the file exists; `browser_evaluate` confirms it runs.
 14. If the feature involved UI work, did I (the caller) visually verify the rendered output in the browser, rather than trusting the orchestrator's self-report?

@@ -61,10 +61,10 @@ for relative in "${consumers[@]}"; do
   if [ "$openrouter_calls" -gt 0 ]; then
     case "$relative" in
       plugins/openrouter/agents/workflow/openrouter-agent-runner.md) openrouter_floor="1.14.0" ;;
-      plugins/dm-review/skills/review/SKILL.md) openrouter_floor="1.14.2" ;;
+      plugins/dm-review/skills/review/SKILL.md) openrouter_floor="1.15.0" ;;
       plugins/openrouter/commands/openrouter.md|plugins/openrouter/skills/openrouter/SKILL.md|plugins/openrouter/skills/openrouter-delegate/SKILL.md|plugins/openrouter/skills/openrouter-delegate/references/invocation-protocol.md) openrouter_floor="1.14.0" ;;
       plugins/airlift/*) openrouter_floor="1.14.0" ;;
-      plugins/pipeline/*) openrouter_floor="1.14.0" ;;
+      plugins/pipeline/*) openrouter_floor="1.15.0" ;;
       plugins/openrouter/*) openrouter_floor="1.8.0" ;;
       *) openrouter_floor="1.7.0" ;;
     esac
@@ -256,7 +256,7 @@ for relative in \
 do
   file="$ROOT/$relative"
   grep -Fq 'resolve-plugin-bundle --plugin openrouter' "$file" &&
-  grep -Fq -- '--minimum-version 1.14.0' "$file" &&
+  grep -Fq -- '--minimum-version 1.15.0' "$file" &&
   grep -Fq 'WORKFLOW_KERNEL' "$file" &&
   ! grep -Eq 'ls -t[d]? .*openrouter' "$file" || {
     echo "  FAIL  configured-key consumer bypasses coherent semver OpenRouter resolution: $relative"

@@ -6,6 +6,10 @@ Maps research needs to the best available sources in the DM ecosystem.
 
 ### ai-memory (ned plugin)
 
+Optional personal enrichment. Discover it from the callable-tool inventory or
+tool search without making a probe call. If it is absent during incidental
+Pipeline research, omit it silently.
+
 **What it knows:** Projects, people, companies, decisions, finances, relationships, architecture observations, prior review findings.
 
 **Best for:**
@@ -21,6 +25,10 @@ Maps research needs to the best available sources in the DM ecosystem.
 **Search strategy:** Start broad (feature keywords), then narrow by entity type. Check relationships between entities for hidden context.
 
 ### RAG (global MCP)
+
+Optional personal enrichment. Discover it from the callable-tool inventory or
+tool search without making a probe call. If it is absent during incidental
+Pipeline research, omit it silently.
 
 **What it knows:** Personal knowledge library -- articles, books, design resources, saved references.
 
@@ -89,6 +97,10 @@ Maps research needs to the best available sources in the DM ecosystem.
 - Check git log for recent related changes
 
 ## Research Priority by Feature Type
+
+The lists below order sources that are both callable and relevant. Repository
+and codebase evidence remains sufficient when neither optional personal source
+is callable; omit missing personal sources without a notice.
 
 ### New Feature
 1. ai-memory (prior decisions, constraints)

@@ -1,0 +1,11 @@
+{
+  "name": "served-html-remains-ui",
+  "filesToModify": [
+    "web/templates/settings.html"
+  ],
+  "kind": "ui",
+  "executor": "codex",
+  "renderedSurface": "required",
+  "renderedSurfaceRationale": "the changed template is served product UI",
+  "routingOverride": null
+}

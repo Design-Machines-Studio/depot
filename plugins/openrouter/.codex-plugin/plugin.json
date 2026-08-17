@@ -1,7 +1,7 @@
 {
   "name": "openrouter",
-  "version": "1.14.5",
-  "description": "Configured-key OpenRouter provider plugin with automatic sensitive-payload refusal, Kimi K3-led security and bulk analysis, Terra quality fallback, Luna economical mechanical routing, and an optional official MCP control plane.",
+  "version": "1.15.0",
+  "description": "OpenRouter provider with sensitive-payload refusal, routed DeepSeek/Qwen/Grok/Kimi/Luna workflows, and MCP controls.",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -56,12 +56,13 @@
         "id": "openrouter-bulk-analyst",
         "name": "OpenRouter Bulk Diff Analyst",
         "category": "review",
-        "description": "Policy-selected Kimi K3 bulk and security analysis with Terra or GLM capacity fallback and independent non-implementing-family sign-off. Produces P1/P2/P3 findings for dm-review consolidation.",
+        "description": "Policy-selected Qwen3.8 Max bulk analysis with DeepSeek V4 Pro 0813 fallback. Produces P1/P2/P3 findings for dm-review consolidation.",
         "tags": [
           "diff",
           "review",
           "large-context",
-          "kimi-k3",
+          "qwen3.8-max",
+          "deepseek-v4-pro-0813",
           "openrouter"
         ]
       },
@@ -92,8 +93,8 @@
   "optionalPluginDependencies": {},
   "interface": {
     "displayName": "Openrouter",
-    "shortDescription": "Configured-key OpenRouter provider plugin with automatic sensitive-payload refusal, Kimi K3-led security and bulk analys",
-    "longDescription": "Configured-key OpenRouter provider plugin with automatic sensitive-payload refusal, Kimi K3-led security and bulk analysis, Terra quality fallback, Luna economical mechanical routing, and an optional official MCP control plane.",
+    "shortDescription": "OpenRouter provider with sensitive-payload refusal, routed DeepSeek/Qwen/Grok/Kimi/Luna workflows, and MCP controls.",
+    "longDescription": "OpenRouter provider with sensitive-payload refusal, routed DeepSeek/Qwen/Grok/Kimi/Luna workflows, and MCP controls.",
     "developerName": "Design Machines",
     "category": "Developer Tools",
     "capabilities": [

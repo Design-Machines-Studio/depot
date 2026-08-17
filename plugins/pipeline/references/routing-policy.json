@@ -1,7 +1,7 @@
 {
   "_comment": "Single provider-routing policy shared by promptcraft, execution-orchestrator, cascade-dispatch, dm-review, assess, and research. Keep task-fit decisions here so provider routing does not drift across plugin docs.",
   "subscriptionFirst": {
-    "invariant": "subscription rails first while live headroom clears the threshold for BOTH the weekly cap and the 5-hour window; API rails next by quality-per-price from the model matrix; never start planned multi-chunk work that projected spend would push below threshold mid-run",
+    "invariant": "subscription rails first while live headroom clears the threshold for BOTH the weekly cap and the 5-hour window; API rails next from this policy's authoritative ordered role definitions after family exclusions; never start planned multi-chunk work that projected spend would push below threshold mid-run",
     "headroomSource": "usage-probe.sh live probe; a subscription rail is available only when its record is well-formed, state is exactly ok, and numeric remaining_pct is above the threshold. Unknown, missing, malformed, at-threshold, limited, and low subscription readings are unavailable. OpenRouter is an auto-reloading API balance rail: it is available only when state is exactly ok and balance_usd is a finite non-negative number; it has no legacy $5 minimum.",
     "thresholdRef": "model-cascade.json policy.headroom_threshold_pct"
   },
@@ -145,55 +145,63 @@
   "agentType": {
     "pattern-recognition-specialist": {
       "provider": "openrouter",
-      "model": "openai/gpt-5.6-luna",
-      "fallbackModel": "openai/gpt-5.6-terra",
+      "model": "deepseek/deepseek-v4-pro-0813",
+      "fallbackModel": "qwen/qwen3.8-max",
       "fallbackProvider": "codex",
-      "rationale": "Pattern checks use low-cost Luna on the OpenRouter rail, then Terra, before Codex fallback."
+      "rationale": "Pattern analysis uses the canary-proven long-context DeepSeek Pro candidate, then a different Qwen family before Codex."
     },
     "code-simplicity-reviewer": {
       "provider": "openrouter",
-      "model": "openai/gpt-5.6-luna",
-      "fallbackModel": "openai/gpt-5.6-terra",
+      "model": "qwen/qwen3.8-max",
+      "fallbackModel": "deepseek/deepseek-v4-pro-0813",
       "fallbackProvider": "codex",
-      "rationale": "Simplification review uses low-cost Luna, then Terra, before Codex fallback."
+      "rationale": "Simplification review uses canary-supported Qwen complex judgment, then DeepSeek Pro before Codex."
     },
     "doc-sync-reviewer": {
       "provider": "openrouter",
-      "model": "openai/gpt-5.6-luna",
-      "fallbackModel": "openai/gpt-5.6-terra",
+      "model": "deepseek/deepseek-v4-flash-0731",
+      "fallbackModel": "openai/gpt-5.6-luna",
       "fallbackProvider": "codex",
-      "rationale": "Documentation consistency uses OpenRouter large-context models at any diff size."
+      "rationale": "Routine documentation consistency attempts DeepSeek Flash first and retains Luna as an economical mechanical fallback."
     },
     "test-coverage-reviewer": {
       "provider": "openrouter",
-      "model": "openai/gpt-5.6-luna",
-      "fallbackModel": "openai/gpt-5.6-terra",
+      "model": "deepseek/deepseek-v4-flash-0731",
+      "fallbackModel": "openai/gpt-5.6-luna",
       "fallbackProvider": "codex",
-      "rationale": "Coverage gap detection is read-heavy and uses the OpenRouter mechanical ladder."
+      "rationale": "Routine coverage review attempts DeepSeek Flash first and retains Luna as an economical mechanical fallback."
     },
     "openrouter-bulk-analyst": {
       "provider": "openrouter",
-      "model": "moonshotai/kimi-k3",
-      "fallbackModel": "openai/gpt-5.6-terra",
+      "model": "qwen/qwen3.8-max",
+      "fallbackModel": "deepseek/deepseek-v4-pro-0813",
       "fallbackProvider": "codex",
-      "rationale": "Bulk/large-context analysis keeps Kimi K3 primary for provider diversity, with Terra then Codex as capacity fallbacks."
+      "rationale": "Bulk and independent review uses canary-supported Qwen Max, with long-context DeepSeek Pro then Codex as fallbacks."
+    },
+    "second-perspective": {
+      "provider": "implementer-aware-independent-family",
+      "model": "qwen/qwen3.8-max",
+      "fallbackModel": "x-ai/grok-4.6",
+      "fallbackProvider": "implementer-aware-independent-family",
+      "reviewerFamilyConstraint": "must-differ-from-every-implementer-family",
+      "rationale": "After eligible subscription rails, ordinary independent review starts with Qwen Max rather than Kimi and preserves family independence."
     },
     "security-auditor-openrouter": {
       "provider": "openrouter",
       "model": "moonshotai/kimi-k3",
-      "fallbackModel": "openai/gpt-5.6-terra",
+      "fallbackModel": "x-ai/grok-4.6",
       "fallbackProvider": "codex",
-      "rationale": "Kimi K3 analyzes only content-boundary-eligible sections; full or partial declines are completed under this same logical lane on Codex."
+      "rationale": "Kimi K3 is reserved for focused applicable security analysis; Grok 4.6 is the different-family OpenRouter fallback before policy-valid native completion."
     },
     "security-auditor-codex-signoff": {
       "provider": "implementer-aware-independent-family",
       "preferredProviderWhenIndependent": "codex",
       "codexImplementerProvider": "openrouter",
       "codexImplementerModel": "moonshotai/kimi-k3",
-      "codexImplementerFallbackModel": "openai/gpt-5.6-terra",
+      "codexImplementerFallbackModel": "x-ai/grok-4.6",
       "required": true,
       "inputScope": "full-diff",
-      "reviewerFamilyConstraint": "must-differ-from-implementer-family",
+      "reviewerFamilyConstraint": "must-differ-from-every-implementer-family",
       "failureResolution": {
         "runner_failure": "remaining-non-implementing-family-or-review-incomplete",
         "full_disclosure_decline": "remaining-non-implementing-family-or-review-incomplete",

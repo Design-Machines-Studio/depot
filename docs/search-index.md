@@ -67,7 +67,7 @@ Common questions mapped to the right skill:
 | ned | publish-preview | ned-operations, preview, cloudflare-access, caddy, uptime-kuma, rootless-docker | -- | "publish this project as dmNNN.asmbly.app", "publish this site as <slug>.designmachines.xyz", "make this NED preview public", "dm023.asmbly.app", "designmachines.xyz preview", ... |
 | openrouter | openrouter-delegate | openrouter, glm, delegation, bulk-diff, code-review, cost-optimization, subagent | -- | "use openrouter", "ask openrouter", "delegate to openrouter", "openrouter review", "cheaper big-diff review", ... |
 | pipeline | assess | assessment, pre-plan, current-state, code-review, ux-review | -- | "assess current state", "review before planning", "what's the current state of", "pre-plan review", "evaluate what exists" |
-| pipeline | research | research, context-gathering, ai-memory, rag, domain-knowledge | ai-memory, rag | "research for feature", "gather context for planning", "what do we know about", "research before building" |
+| pipeline | research | research, context-gathering, ai-memory, rag, domain-knowledge | -- | "research for feature", "gather context for planning", "what do we know about", "research before building" |
 | pipeline | promptcraft | prompts, chunking, orchestration, dependency-ordering, manifest | -- | "generate execution prompts", "create prompts from plan", "break plan into chunks", "generate manifest" |
 | pipeline | eval-sweep | evaluation, browser-sweep, accessibility, ledger-first, system-wide, audit | -- | "evaluate the whole app", "system-wide evaluation", "sweep every route", "audit every page", "screenshot every route", ... |
 | project-manager | lt10 | project-management, estimation, scoping, pricing, methodology | -- | "how to estimate", "client scope creep", "burn rate", "ROM estimate", "when to use agile", ... |
@@ -117,7 +117,7 @@ Common questions mapped to the right skill:
 | ghostwriter | voice-editor | review | voice, editing, review, writing |
 | ghostwriter | social-publisher | workflow | social-media, content-creation, multi-platform |
 | live-wires | css-reviewer | review | css, review, compliance, live-wires |
-| openrouter | openrouter-bulk-analyst | review | diff, review, large-context, kimi-k3, openrouter |
+| openrouter | openrouter-bulk-analyst | review | diff, review, large-context, qwen3.8-max, deepseek-v4-pro-0813, openrouter |
 | openrouter | openrouter-agent-runner | workflow | workflow, review, delegation, openrouter, provider-routing |
 | pipeline | plan-adversary | workflow | review, adversarial, plan-review, convergence |
 | pipeline | execution-orchestrator | workflow | orchestration, worktrees, autonomous, execution, proportional-review, token-efficiency, review-loop |

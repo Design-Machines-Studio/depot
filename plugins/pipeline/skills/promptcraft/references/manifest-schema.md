@@ -266,12 +266,12 @@ The `kind` field is inferred from `filesToModify` during prompt generation (Phas
 
 | Kind | Condition |
 |------|-----------|
-| `ui` | Any file ends in `.templ`, `.twig`, `.html`, `.css`, or lives in a `pages/`, `templates/`, `views/` directory |
+| `ui` | Any served/product file ends in `.templ`, `.twig`, `.html`, `.css`, or lives in a `pages/`, `templates/`, `views/` directory; unserved non-rendered planning HTML under `plans/**` is excluded |
 | `logic` | Files end in `.go`, `.py`, `.ts`, `.php` and are handlers, services, or migrations -- no templates |
 | `integration` | Prompt contains wiring verbs ("wire," "integrate," "connect") OR chunk modifies route files, `main.go`, or navigation templates |
-| `config` | Only `.md`, `.json`, `.yaml`, `.toml`, documentation, or configuration files |
+| `config` | Only `.md`, `.json`, `.yaml`, `.toml`, documentation, configuration, or unserved non-rendered planning HTML under `plans/**` |
 
-When a chunk's files span multiple categories, classify up: `ui` > `integration` > `logic` > `config`.
+When a chunk's files span multiple categories, first apply the narrow planning-HTML exception, then classify up: `ui` > `integration` > `logic` > `config`. Split offline planning artifacts from served UI or live-tool work when that split is direct and useful.
 
 ## Rendered-Surface Applicability
 
@@ -308,6 +308,12 @@ The `executor` field is derived from `kind`, `estimatedComplexity`, and `routing
 | complex `logic` | `codex` | New service methods and refactors need agentic code execution before falling back |
 | `ui` | `codex` | UI-classified implementation uses Codex; browser and Live Wires evidence are mandatory when `renderedSurface` is `required` |
 | `integration` | `codex` | Cross-chunk wiring and route verification are code-heavy orchestration |
+
+An unserved, non-rendered planning artifact under `plans/**.html` is part of the
+`config`/docs route, even though `.html` normally signals UI. A chunk containing
+planning Markdown plus `plans/**/work-paths.html` therefore remains OpenRouter-
+eligible without `routingOverride`. This exception does not apply to served UI,
+templates, browser-dependent work, or mixed/uncertain product surfaces.
 
 Before overriding a policy-selected OpenRouter chunk because it needs a connector or other host-only tool, split the live-tool operation from offline analysis/config/docs whenever ownership permits. A valid override has this shape:
 

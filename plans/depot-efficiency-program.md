@@ -8,12 +8,8 @@ and pull requests own live status, review, checks, dependencies, and
 assignees. This file owns Depot's reusable tooling sequence and a compact
 external handoff only; it does not duplicate Baseplate's production roadmap.
 
-Depot trusted main is `a120fb0180353219461d263e8c9a85f9d951e348`.
-[Issue #73](https://github.com/Design-Machines-Studio/depot/issues/73) and
-[PR #74](https://github.com/Design-Machines-Studio/depot/pull/74) own the active
-OpenRouter routing refresh. PR #74 is open at exact pushed head
-`2730590cc4cb3fdbf721cc426f6beefc4f0cb7f7`, with additional uncommitted review
-repairs preserved in its isolated worktree. The current priority order is:
+Depot trusted baseline is the current `main` branch; live PR and Issue status remains GitHub-authoritative.
+The current priority order is:
 
 1. **P1 -- finish Issue #73 / PR #74.** Complete the routing repair and make
    private `ai-memory`/RAG enrichment a silent optional skip for teammates who
@@ -126,8 +122,7 @@ is needed for the prepared successor before #74 completes.
   parallel Codex-only copies. Prefer concise goals, hard constraints, success
   criteria, and on-demand references over repeated step-by-step prose.
 - Kimi K3 is review-only, especially focused security. DeepSeek V4 Flash 0731
-  leads bounded execution, Grok 4.5 handles harder escalation, and GLM-5.2 is
-  the experimental last fallback. Native Fable 5 or Codex 5.6 provides one
+  leads bounded execution. Grok 4.6 handles independent review escalation, and GLM-5.2 remains outside active routing. Native Fable 5 or Codex 5.6 provides one
   proportional supervisor checkpoint rather than duplicating the worker's implementation.
 - A deliberately configured OpenRouter key is authorization on a trusted
   developer workstation. Do not add a second human-approval ceremony. Keep

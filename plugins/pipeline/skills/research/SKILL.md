@@ -1,6 +1,6 @@
 ---
 name: research
-description: Gathers context from ai-memory, RAG, web search, and DM domain plugins for feature planning. Use when starting a feature and needing comprehensive background before planning. Dispatches parallel research agents across all DM knowledge sources -- ai-memory knowledge graph, personal RAG library, web search, Context7 framework docs, and compound-engineering research agents. Invoke with /pipeline (research phase) or load directly when planning any DM project feature.
+description: Gathers repository context and enriches it from any available relevant sources for feature planning. Use when starting a feature and needing comprehensive background before planning. May dispatch research agents across repository evidence, domain plugins, web search, Context7, and optional personal sources when those capabilities are callable. Invoke with /pipeline (research phase) or load directly when planning any DM project feature.
 ---
 
 # DM Research Orchestrator
@@ -23,16 +23,27 @@ describe them as approved or use them to override a current authority.
 
 Determine which research sources are both available and relevant. Availability
 alone is not a reason to query a source. Select the smallest source set that can
-test current project alignment and implementation claims, and note material
-unavailability:
+test current project alignment and implementation claims. Discover optional
+personal-source capability only from the current callable-tool inventory or a
+tool-search result; never invoke a tool merely to probe whether it exists.
+Capability availability is the complete rule; never infer it from usernames,
+environment variables, repository ownership, or other identity heuristics.
 
 | Source | How to Check | Required |
 |--------|-------------|----------|
-| ai-memory | Call `mcp__ai-memory__search_entities` with a test query | Yes (hard dep on ned) |
-| RAG | Call `mcp__rag__rag_search` with a test query | No -- graceful skip |
+| Repository evidence | Read relevant tracked files, instructions, history, issues, and PR context | Yes |
+| ai-memory | Look for the required ai-memory tools in the callable-tool inventory or tool search | No -- optional personal enrichment |
+| RAG | Look for `mcp__rag__rag_search` in the callable-tool inventory or tool search | No -- optional personal enrichment |
 | Web search | WebSearch tool available | No -- graceful skip |
 | Context7 | `mcp__plugin_context7_context7__resolve-library-id` available | No -- graceful skip |
 | compound-engineering | Check if repo-research-analyst agent is available | No -- graceful skip |
+
+When an optional personal source is callable, continue using it for relevant
+enrichment. When it is absent during incidental Pipeline research, omit that
+lookup silently: do not mention the source in the brief, receipts, coverage,
+completion status, or user guidance. Never ask the user to install or configure
+it. Only an explicit user request for an ai-memory or RAG operation makes an
+unavailable personal source reportable.
 
 Inspect the supplied or safely discoverable native Issue/PR when it is relevant.
 Consult a coordination Project only when the repository or user declares one.
@@ -74,7 +85,7 @@ references/openrouter-authorization-contract.md --active-host <claude|codex>`
 and read the current-mode contract from that selected root. Never use a
 target-repository copy.
 
-**Agent 1: ai-memory Researcher**
+**Agent 1: ai-memory Researcher** (only when callable and relevant)
 
 Search the knowledge graph for everything related to the feature area:
 
@@ -84,7 +95,7 @@ Search the knowledge graph for everything related to the feature area:
 4. For each relevant entity, get full details with `get_entity`
 5. Extract: prior decisions, known constraints, related work, key contacts
 
-**Agent 2: RAG Researcher** (if available)
+**Agent 2: RAG Researcher** (only when callable and relevant)
 
 Search the personal knowledge library:
 
@@ -243,7 +254,7 @@ and stale or conflicting context. Prior memory is supporting context only.]
 [From domain plugins: applicable patterns, conventions, requirements]
 
 ## Design References
-[From RAG: relevant design principles, methodology guidance]
+[From available relevant sources: design principles, methodology guidance]
 
 ## Technical References
 [From web/Context7: current docs, best practices, version guidance]
@@ -272,12 +283,13 @@ human approval pause. If running standalone, present it to the user.
 
 ## Graceful Degradation
 
-Each research source operates independently. If a source is unavailable:
-- Note it in the brief: "RAG search unavailable -- personal knowledge library not consulted"
-- Continue with remaining sources
-- The brief is still useful with partial research
-
-Minimum viable research requires only ai-memory (hard dependency on ned).
+Each research source operates independently. Minimum viable research is
+repository evidence plus any other available relevant sources. Missing
+optional personal sources do not make research partial or incomplete and
+produce no brief, assessment, receipt, coverage, or delivery notice. If a
+non-personal source is unavailable, continue with the remaining relevant
+evidence and report it only when its absence materially limits a user-requested
+outcome.
 
 ## Reference Loading Discipline
 

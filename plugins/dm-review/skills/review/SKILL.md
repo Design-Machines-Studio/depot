@@ -46,7 +46,7 @@ Every review agent dispatched by this skill operates under a terse-output contra
 
 ## Usage
 
-- `/dm-review` -- Full review: all applicable agents + memory capture
+- `/dm-review` -- Full review: all applicable agents + optional memory enrichment when callable
 - `/dm-review quick` -- Quick review: 2 core judgment lanes, plus applicable existing UI/build/domain verification lanes
 
 ## Review Tiers (token-economy policy)
@@ -56,7 +56,7 @@ Match the review depth to the moment. Running full multi-round review on every c
 | When | Tier | What runs |
 |------|------|-----------|
 | **Per chunk during pipeline execution** | `dm-review-quick` | 2 core judgment lanes, plus applicable existing UI/build/domain verification lanes. |
-| **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + memory capture. Run once, not per chunk. |
+| **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + optional memory enrichment when callable. Run once, not per chunk. |
 | **Bulk second opinions / large-diff first pass** | Model selected by `routing-policy.json` | Family-independent security analysis plus style, duplication, pattern, and doc-consistency lanes. The exact diff is content-scanned immediately before external disclosure; sensitive file sections stay local while eligible sections proceed. Security completion always includes mandatory full-diff independent-family sign-off. |
 | **Bounded repair review** | full + one repair | Use one repair batch and one affected-lane recheck for supported P1/P2/P3 findings. Repeat broad review only when the original required review was incomplete or the repair changed a real sensitive boundary. |
 
@@ -212,9 +212,14 @@ Select which agents to launch based on mode, changed file extensions, and projec
 
 #### Routing Policy for Mechanical Agents
 
+For API candidates, "quality-per-price" means the explicit ordered role in
+`routing-policy.json`, after family exclusions; `quality_rank` is only a
+compatibility floor. Ordinary second perspective starts Qwen3.8 Max then Grok
+4.6. Security starts Kimi K3 then Grok 4.6.
+
 Read `plugins/pipeline/references/routing-policy.json` before selecting models **when it is present**. When dm-review is installed standalone, use the inline model table. Family means provider lineage: OpenAI/Codex, Anthropic/Claude, and each OpenRouter-served third party under its own vendor family; OpenRouter is a transport, not a family. The second-perspective reviewer model family MUST differ from the family that implemented the diff under review. For a mixed-family diff, treat every contributing family as implementing and select outside that set. The same family exclusion applies to the mandatory full-diff security sign-off.
 
-Resolve both family-independent roles subscription-first: an eligible non-implementing family with live subscription headroom for both `five_hour` and `weekly` beats every API family, then API candidates follow matrix quality-per-price. Unknown subscription headroom is treated as at-threshold, never as available. Do not start a planned multi-chunk review whose projected subscription spend would cross the threshold mid-run. Apply `.dm/operator-profile.local.json` only after policy derivation: it may rank and remove derived candidates, never add one or override `neverOfferable`, disclosure/security controls, or family independence. No profile means policy defaults. This is the remove-only precedence defined by `plugins/pipeline/references/operator-profile-schema.json` (`properties.precedence`), not a separate override system.
+Resolve both family-independent roles subscription-first: an eligible non-implementing family with live subscription headroom for both `five_hour` and `weekly` beats every API family, then use the applicable ordered role in `routing-policy.json` after removing implementing families. Ordinary second perspective uses `second-perspective`; security sign-off uses its dedicated implementer-aware route. Unknown subscription headroom is treated as at-threshold, never as available. Do not start a planned multi-chunk review whose projected subscription spend would cross the threshold mid-run. Apply `.dm/operator-profile.local.json` only after policy derivation: it may rank and remove derived candidates, never add one or override `neverOfferable`, disclosure/security controls, or family independence. No profile means policy defaults. This is the remove-only precedence defined by `plugins/pipeline/references/operator-profile-schema.json` (`properties.precedence`), not a separate override system.
 
 Every `second-perspective` and independent-family security sign-off receipt records `implementer_family`, `reviewer_family`, and `resolution_reason`. For mixed implementation, `implementer_family` records `mixed(<sorted families>)`. A receipt with equal implementing and reviewing families is invalid and leaves the required lane incomplete.
 
@@ -237,7 +242,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
   resolve_openrouter_bundle() {
     if [ -n "$OPENROUTER_ACTIVE_HOST" ]; then
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.14.2 --active-host "$OPENROUTER_ACTIVE_HOST" \
+        --minimum-version 1.15.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -248,7 +253,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     else
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.14.2 \
+        --minimum-version 1.15.0 \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -325,7 +330,7 @@ These 5 review criteria run as 6 logical lanes when OpenRouter is available:
 
 When the lane is enabled, add **second-perspective** as a parallel read-only reviewer in full mode only. This is the default dual-perspective review lane at the integration boundary; it caught distinct blockers in real pipeline closeout runs. Independence is the property that caught those blockers, so this role is not tied to the orchestrating harness or a named provider.
 
-Resolve the role by the subscription-first family rules above. When the implementer is OpenAI/Codex, select native Claude if both subscription windows have headroom; otherwise select the highest matrix quality-per-price eligible OpenRouter frontier family through its authorized path. Never resolve back to OpenAI/Codex for that diff. When another family implemented the diff, Codex is the preferred resolution when its subscription has headroom, followed by the remaining policy-derived families.
+Resolve the role by the subscription-first family rules above. When the implementer is OpenAI/Codex, select native Claude if both subscription windows have headroom; otherwise walk the ordered `second-perspective` role (`qwen/qwen3.8-max`, then `x-ai/grok-4.6`) after excluding every implementing family. Never resolve back to OpenAI/Codex for that diff. When another family implemented the diff, Codex is the preferred resolution when its subscription has headroom, followed by that same filtered ordered role.
 
 Use `dm-review/*/agents/review/codex-perspective.md` as the compatibility-named default agent definition for the role. Dispatch it on the resolved family, normalize output to P1/P2/P3, and let the consolidator merge every finding as in-scope. The filename does not select the provider.
 
@@ -546,12 +551,12 @@ Routing decisions come from `plugins/pipeline/references/routing-policy.json`, w
 
 | Agent ID | Primary model slug | Fallback model slug | Timeout |
 |---|---|---|---|
-| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `openai/gpt-5.6-terra` | 3600s |
-| `pattern-recognition-specialist` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
-| `code-simplicity-reviewer` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
-| `doc-sync-reviewer` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
-| `test-coverage-reviewer` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
-| `openrouter-bulk-analyst` | `moonshotai/kimi-k3` | `openai/gpt-5.6-terra` | 3600s; 7200s at or above 10K diff lines |
+| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `x-ai/grok-4.6` | 3600s |
+| `pattern-recognition-specialist` | `deepseek/deepseek-v4-pro-0813` | `qwen/qwen3.8-max` | 1800s |
+| `code-simplicity-reviewer` | `qwen/qwen3.8-max` | `deepseek/deepseek-v4-pro-0813` | 1800s |
+| `doc-sync-reviewer` | `deepseek/deepseek-v4-flash-0731` | `openai/gpt-5.6-luna` | 1800s |
+| `test-coverage-reviewer` | `deepseek/deepseek-v4-flash-0731` | `openai/gpt-5.6-luna` | 1800s |
+| `openrouter-bulk-analyst` | `qwen/qwen3.8-max` | `deepseek/deepseek-v4-pro-0813` | 3600s; 7200s at or above 10K diff lines |
 
 When `routing-policy.json` supplies `model` and `fallbackModel`, those full OpenRouter slugs override the inline table. The table is the standalone dm-review fallback. Both models are invoked through the OpenRouter wrapper and billed to the OpenRouter rail.
 
@@ -559,7 +564,7 @@ When `routing-policy.json` supplies `model` and `fallbackModel`, those full Open
 
 ```
 Provider routing (OPENROUTER_AVAILABLE={true|false}, authorization={trusted-boundary|none}):
-- N analyses -> OpenRouter (Kimi security, pattern-recognition, code-simplicity, doc-sync, test-coverage, openrouter-bulk-analyst when selected)
+- N analyses -> OpenRouter (Kimi security only; DeepSeek pattern/docs/tests; Qwen simplicity/bulk/ordinary second perspective)
 - N native coding agents -> Codex (architecture, visual/UI, unavailable-provider and sensitive-section coverage)
 - 1 required security sign-off -> resolved independent family (full diff)
 - 1 second perspective -> resolved independent family when enabled
@@ -709,7 +714,28 @@ Follow the Fix Philosophy from the review skill: use the smallest adequate repai
 
 ## RAG Reference Library
 
-When uncertain about design principles, CSS best practices, typography, layout, accessibility, or UX patterns, search the RAG knowledge library using `mcp__rag__rag_search` for reference material from books and guides.
+RAG and ai-memory are optional personal enhancements. Determine RAG and
+ai-memory availability from the callable-tool inventory or tool search, never
+by invoking either source as a probe. Capability availability is the complete
+rule; do not infer identity from usernames, environment variables, repository
+ownership, or any other heuristic.
+
+When callable, preserve the existing RAG lookup and ai-memory write behavior.
+When absent during incidental review enrichment, omit the lookup or write
+silently: create no warning, skipped lane, coverage gap, receipt, summary, or
+degraded-completion message, and never ask the user to install or configure the
+source. Only an explicit user request for an ai-memory or RAG operation makes an
+unavailable personal source reportable.
+
+Absence and operational failure are distinct. If discovered callable ai-memory
+tools fail during lookup, write, or save, retain nonblocking
+`Memory capture: failed -- <safe reason>` evidence. Do not turn that enrichment
+failure into a review finding, coverage gap, incomplete review, or install
+request, and never mislabel it as silent capability absence.
+
+When RAG is callable and relevant to uncertainty about design principles, CSS
+best practices, typography, layout, accessibility, or UX patterns, search it
+using `mcp__rag__rag_search` for reference material from books and guides.
 
 ## Caller-Provided Context
 
@@ -1016,7 +1042,7 @@ Report the fallback in the Agent Summary table:
 
 | Agent | Provider | Status |
 |-------|----------|--------|
-| pattern-recognition-specialist | OpenRouter `openai/gpt-5.6-terra` | RUNNER FAILURE |
+| pattern-recognition-specialist | OpenRouter `deepseek/deepseek-v4-pro-0813` | RUNNER FAILURE |
 | pattern-recognition-specialist | Codex (fallback) | Completed |
 | security-auditor-openrouter | OpenRouter `moonshotai/kimi-k3` | Completed (eligible sections) |
 | security-auditor-codex-signoff | Resolved independent family | Completed (full diff) |
@@ -1254,15 +1280,20 @@ Official and third-party Claude Code plugins that complement this skill:
 | **pr-review-toolkit** | `/review-pr` | PR-specific deep analysis (comments, error handling, types) |
 | **superpowers** | `/verify` | After applying review fixes, verify nothing broke |
 | **code-review** | `/code-review` | Alternative single-pass confidence-scored review |
-| **rag** (global MCP) | `mcp__rag__rag_search` | Search the personal knowledge library for design, typography, layout, accessibility, UX, and editorial design references. Use during design reviews and when uncertain about best practices. |
+| **rag** (optional global MCP) | `mcp__rag__rag_search` | When callable, search the personal knowledge library for design, typography, layout, accessibility, UX, and editorial design references. Its absence is silent during incidental review enrichment. |
 
 ---
 
-### Phase 7: Memory Capture (Full mode only)
+### Phase 7: Optional Memory Enrichment (Full mode only)
 
 **Skip this phase in Quick mode.**
 
-After issue tracking (or if skipped), record the review in ai-memory:
+After issue tracking (or if skipped), inspect the callable-tool inventory or
+tool-search result for the required ai-memory tools. Do not invoke a memory tool
+merely to probe availability. If they are absent, omit Phase 7 and Phase 7b
+silently with no lane, coverage, receipt, summary, or completion entry.
+
+When the tools are callable, record the review in ai-memory:
 
 1. Read the memory recorder from the same dm-review root bound before dispatch:
    ```bash
@@ -1276,8 +1307,6 @@ After issue tracking (or if skipped), record the review in ai-memory:
    - Add P1 architectural observations if any
 3. Call `save` to persist
 
-If ai-memory tools are not available, skip silently.
-
 #### Phase 7b: Depot Agent Metrics
 
 After the project-level memory capture, record depot-level metrics. This tracks which agents fire across reviews, feeding back into marketplace analytics.
@@ -1290,7 +1319,7 @@ After the project-level memory capture, record depot-level metrics. This tracks 
 4. Add the review skill invocation: `[YYYY-MM-DD] Invocation: review -- correct`
 5. Call `save` to persist
 
-If ai-memory tools are not available, skip silently. See `docs/plugin-memory-schema.md` for entity conventions and rollup policy.
+See `docs/plugin-memory-schema.md` for entity conventions and rollup policy.
 
 ---
 

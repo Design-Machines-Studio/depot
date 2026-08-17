@@ -14,13 +14,17 @@ Your command has a multi-phase workflow where certain phases need domain experti
 
 ### How to declare
 
-**In plugin.json:** Add the companion plugin to `pluginDependencies`:
+**In plugin.json:** Add required companion plugins to `pluginDependencies` and
+incidental enrichment plugins to `optionalPluginDependencies`:
 
 ```json
 {
   "pluginDependencies": {
     "ghostwriter": ">=3.7.0",
     "council": ">=1.5.0"
+  },
+  "optionalPluginDependencies": {
+    "ned": ">=1.4.0"
   }
 }
 ```
@@ -49,7 +53,7 @@ Load these skills when reaching their relevant phases:
 
 | Failure | Handling |
 |---------|----------|
-| Companion plugin not installed | Skip that phase. Note: "Skipped Phase 7 -- ghostwriter not installed." |
+| Optional enrichment plugin not installed | Omit its incidental lookup or write silently; do not weaken or relabel the workflow. |
 | Companion skill removed in newer version | Dependency version constraint should prevent this. If it happens, skip the phase. |
 | Companion skill loads but returns unexpected data | The command owns the workflow -- treat companion output as advisory, not authoritative. |
 
@@ -124,11 +128,15 @@ See `plugins/dm-review/skills/review/references/guardrails.md` and `references/g
 
 ## Pattern 3: Memory-Mediated Coordination
 
-Plugins write observations to ai-memory entities. Other plugins (or the same plugin in a later session) read those observations for context.
+Plugins may write observations to ai-memory entities when the required tools
+are callable. Other plugins (or the same plugin in a later session) can read
+those observations for optional context.
 
 ### When to use
 
-You need state that persists across sessions. One plugin produces information that another plugin consumes -- but they don't run at the same time, so they can't pass data directly. ai-memory is the shared state layer.
+You want optional state that persists across sessions. One plugin produces
+information that another plugin can consume later, but shared workflows remain
+complete without that personal state layer.
 
 ### How to declare
 
@@ -162,6 +170,15 @@ allowed-tools:
 
 ### Failure modes
 
+Discover optional personal sources from the callable-tool inventory or tool
+search; never invoke them merely to probe availability. Capability availability
+is the complete rule; do not infer identity from usernames, environment
+variables, or repository ownership. When tools are callable, retain the normal
+deduplicated lookup/write/save behavior. When they are absent during incidental
+enrichment, omit the operation and every warning, coverage, receipt, summary,
+or degraded-completion notice. Only an explicitly user-requested ai-memory or
+RAG operation may report that its requested capability is unavailable.
+
 | Failure | Handling |
 |---------|----------|
 | ai-memory MCP not available | Skip silently. Never block a workflow on memory writes. |
@@ -185,9 +202,9 @@ You have a multi-step development workflow that needs to run autonomously: asses
 
 The pipeline plugin combines:
 
-1. **Companion Skill Loading** -- Each phase loads domain skills (ai-memory from ned, development from assembly, livewires from live-wires, etc.)
-2. **Multi-Agent Dispatch** -- Research phase dispatches 5 parallel research agents; adversarial review dispatches 3 perspective agents; execution dispatches subagents per chunk
-3. **Memory-Mediated Coordination** -- The execution orchestrator returns one compact observation and the capable Pipeline caller records it to ai-memory for cross-session learning
+1. **Companion Skill Loading** -- Each phase loads required domain skills and any callable optional enrichment (for example, ai-memory from ned, development from assembly, or livewires from live-wires)
+2. **Multi-Agent Dispatch** -- Research dispatches only applicable agents from its five source roles; adversarial review dispatches 3 perspective agents; execution dispatches subagents per chunk
+3. **Optional Memory-Mediated Coordination** -- The execution orchestrator returns one compact internal observation; a Pipeline caller records it only when ai-memory is callable
 4. **Worktree Isolation** -- Each execution chunk runs in its own worktree, merged back after passing review
 5. **Review-Fix Convergence** -- dm-review-loop runs proportional affected-lane verification after each chunk; P1/P2 are fixed and P3 remains advisory
 
@@ -209,7 +226,7 @@ assess (parallel: code + UX agents)
 `plugins/pipeline/commands/pipeline.md` orchestrates the full workflow:
 
 - Phase 1 (Assess): Assess skill with parallel code + UX agents
-- Phase 2 (Research): Research skill with 5 parallel research sources
+- Phase 2 (Research): Research skill with applicable repository, domain, current-web, and callable optional personal sources
 - Phase 3 (Plan): User or compound-engineering creates the plan
 - Phase 4 (Prompts): Promptcraft skill generates manifests with overlap-aware ordering
 - Phase 5 (Adversarial Review): Plan-adversary agent iterates to convergence
@@ -224,7 +241,7 @@ assess (parallel: code + UX agents)
 | Review-fix loop doesn't converge (max iterations) | Flag chunk as "needs attention," continue pipeline |
 | Merge conflict after chunk | Attempt auto-resolution; if complex, flag and continue |
 | Worktree creation fails | Fall back to branch-based execution without worktree isolation |
-| ai-memory unavailable | Caller records `skipped -- <reason>` in durable receipt/summary evidence; delivery remains non-blocking |
+| Optional ai-memory or RAG capability absent | Omit the incidental lookup/write silently; research, execution, review, receipts, and delivery remain complete. |
 
 ---
 
@@ -252,7 +269,7 @@ The external model is stateless -- each invocation is a fresh session with no me
 
 `plugins/openrouter/` wraps external model APIs behind one provider and credential. Agents using this pattern:
 
-- **openrouter-bulk-analyst** -- supplies large-context criteria to the generic runner, which sends eligible full-diff sections to Kimi K3 with a GPT-5.6 Terra fallback whenever policy selects the bulk lane.
+- **openrouter-bulk-analyst** -- supplies large-context criteria to the generic runner, which sends eligible full-diff sections to Qwen3.8 Max with a DeepSeek V4 Pro 0813 fallback whenever policy selects the bulk lane.
 - **openrouter-agent-runner** -- routes dm-review's mechanical agents through OpenRouter models when `OPENROUTER_API_KEY` or a strictly validated `OPENROUTER_API_KEY_FILE` is configured.
 - The pipeline cascade (`cascade-dispatch.sh`) drives the OpenRouter wrapper as a one-shot rung for config/doc generation and second-opinion analysis.
 
