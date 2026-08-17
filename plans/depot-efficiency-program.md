@@ -8,8 +8,8 @@ and pull requests own live status, review, checks, dependencies, and
 assignees. This file owns Depot's reusable tooling sequence and a compact
 external handoff only; it does not duplicate Baseplate's production roadmap.
 
-Depot trusted baseline is the current `main` branch; live PR and Issue status
-remain GitHub-authoritative. The current priority order is:
+Depot trusted baseline is the current `main` branch; live PR and Issue status remains GitHub-authoritative.
+The current priority order is:
 
 1. **P1 -- finish Issue #73 / PR #74.** Complete the routing repair and make
    private `ai-memory`/RAG enrichment a silent optional skip for teammates who
