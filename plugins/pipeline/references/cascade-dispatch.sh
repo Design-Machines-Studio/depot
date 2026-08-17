@@ -106,14 +106,14 @@ resolve_openrouter_bundle() {
   [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && active_host="codex"
   if [ -n "$active_host" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.14.0 --active-host "$active_host" \
+      --minimum-version 1.15.0 --active-host "$active_host" \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
       --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.14.0 \
+      --minimum-version 1.15.0 \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
       --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
       --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \

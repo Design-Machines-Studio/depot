@@ -111,17 +111,21 @@ Migration required: All three behaviors must be replicated in replacement approa
 
 ## Step 6: Project History Check
 
-Load the `ai-memory` skill from ned and search for:
+Always inspect repository history; enrich it from ai-memory only when the
+callable-tool inventory exposes the required tools. Do not call ai-memory merely
+to probe availability, and do not mention its incidental absence in the report.
+
+Check git log for recent changes:
+```bash
+git log --oneline -20 -- <paths>
+```
+
+When ai-memory is callable, also search for:
 
 1. The project entity -- any recent observations about this area
 2. Known bugs or incidents related to these files
 3. Architectural decisions that affect this area
 4. Prior review findings that may still be relevant
-
-If ai-memory is unavailable, check git log for recent changes:
-```bash
-git log --oneline -20 -- <paths>
-```
 
 ## Step 6: Produce Report
 
@@ -149,5 +153,5 @@ Structure the Current State Report as:
 - Reverse: [what depends on this]
 
 ## Project History
-- [Relevant observations from ai-memory or git log]
+- [Relevant repository history, enriched by optional available sources]
 ```

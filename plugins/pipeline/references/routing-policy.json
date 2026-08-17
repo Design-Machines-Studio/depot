@@ -1,7 +1,7 @@
 {
   "_comment": "Single provider-routing policy shared by promptcraft, execution-orchestrator, cascade-dispatch, dm-review, assess, and research. Keep task-fit decisions here so provider routing does not drift across plugin docs.",
   "subscriptionFirst": {
-    "invariant": "subscription rails first while live headroom clears the threshold for BOTH the weekly cap and the 5-hour window; API rails next by quality-per-price from the model matrix; never start planned multi-chunk work that projected spend would push below threshold mid-run",
+    "invariant": "subscription rails first while live headroom clears the threshold for BOTH the weekly cap and the 5-hour window; API rails next from this policy's authoritative ordered role definitions after family exclusions; never start planned multi-chunk work that projected spend would push below threshold mid-run",
     "headroomSource": "usage-probe.sh live probe; a subscription rail is available only when its record is well-formed, state is exactly ok, and numeric remaining_pct is above the threshold. Unknown, missing, malformed, at-threshold, limited, and low subscription readings are unavailable. OpenRouter is an auto-reloading API balance rail: it is available only when state is exactly ok and balance_usd is a finite non-negative number; it has no legacy $5 minimum.",
     "thresholdRef": "model-cascade.json policy.headroom_threshold_pct"
   },
@@ -182,7 +182,7 @@
       "provider": "implementer-aware-independent-family",
       "model": "qwen/qwen3.8-max",
       "fallbackModel": "x-ai/grok-4.6",
-      "fallbackProvider": "codex",
+      "fallbackProvider": "implementer-aware-independent-family",
       "reviewerFamilyConstraint": "must-differ-from-every-implementer-family",
       "rationale": "After eligible subscription rails, ordinary independent review starts with Qwen Max rather than Kimi and preserves family independence."
     },
@@ -201,7 +201,7 @@
       "codexImplementerFallbackModel": "x-ai/grok-4.6",
       "required": true,
       "inputScope": "full-diff",
-      "reviewerFamilyConstraint": "must-differ-from-implementer-family",
+      "reviewerFamilyConstraint": "must-differ-from-every-implementer-family",
       "failureResolution": {
         "runner_failure": "remaining-non-implementing-family-or-review-incomplete",
         "full_disclosure_decline": "remaining-non-implementing-family-or-review-incomplete",

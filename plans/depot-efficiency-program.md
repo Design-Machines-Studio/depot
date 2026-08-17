@@ -1,6 +1,6 @@
 # Depot Efficiency Program -- Phase Index
 
-## Active coordination (refreshed 2026-08-15)
+## Active coordination (refreshed 2026-08-17)
 
 Shared cross-repository projection: [Assembly Coordination, Project
 1](https://github.com/orgs/Design-Machines-Studio/projects/1). GitHub Issues
@@ -8,9 +8,8 @@ and pull requests own live status, review, checks, dependencies, and
 assignees. This file owns Depot's reusable tooling sequence and a compact
 external handoff only; it does not duplicate Baseplate's production roadmap.
 
-Depot trusted main is `40b6e00762b175158f16007f4105d71f846a0c5d`, the
-merge commit for PR #69. Depot has no open pull requests or Issues. The current
-priority order is:
+Depot trusted baseline is the current `main` branch; live PR and Issue status remains GitHub-authoritative.
+The current priority order is:
 
 1. **P1 -- no new Depot implementation.** The active efficiency sequence is
    complete. New routing, review, kernel, or harness work requires a measured
@@ -97,8 +96,7 @@ cross-repository projection; no duplicate Issue or free-form note is needed.
   maintained by a two-person team. YAGNI, pragmatic DRY, ergonomics, runtime
   performance, elapsed time, and token cost are design constraints.
 - Kimi K3 is review-only, especially focused security. DeepSeek V4 Flash 0731
-  leads bounded execution, Grok 4.5 handles harder escalation, and GLM-5.2 is
-  the experimental last fallback. Native Fable 5 or Codex 5.6 provides one
+  leads bounded execution. Grok 4.6 handles independent review escalation, and GLM-5.2 remains outside active routing. Native Fable 5 or Codex 5.6 provides one
   proportional supervisor checkpoint rather than duplicating the worker's implementation.
 - A deliberately configured OpenRouter key is authorization on a trusted
   developer workstation. Do not add a second human-approval ceremony. Keep

@@ -1017,7 +1017,7 @@ require_text "$review_skill" \
 if jq -e '
   .agentType["security-auditor-codex-signoff"] as $lane
   | $lane.provider == "implementer-aware-independent-family"
-    and $lane.reviewerFamilyConstraint == "must-differ-from-implementer-family"
+    and $lane.reviewerFamilyConstraint == "must-differ-from-every-implementer-family"
     and $lane.preferredProviderWhenIndependent == "codex"
     and $lane.codexImplementerProvider == "openrouter"
     and ($lane.failureResolution | [
@@ -1284,8 +1284,8 @@ require_text "$orchestrator" 'Memory observation handoff: <observation>' \
   "Pipeline orchestrator returns the compact caller handoff"
 require_text "$orchestrator" 'Keep the observation under 300 characters.' \
   "Pipeline orchestrator bounds the memory handoff"
-require_absent "$orchestrator" 'If ai-memory unavailable, skip silently.' \
-  "Pipeline orchestrator does not silently skip memory capture"
+require_text "$orchestrator" 'Personal-memory enrichment is optional.' \
+  "Pipeline orchestrator treats personal memory as optional enrichment"
 require_absent "$orchestrator" '`search_entities`' \
   "restricted Pipeline orchestrator does not call ai-memory"
 for f in "$pipeline_cmd" "$pipeline_run"; do
@@ -1294,27 +1294,31 @@ for f in "$pipeline_cmd" "$pipeline_run"; do
     "$rel deduplicates the caller memory handoff"
   require_text "$f" 'If absent, call `add_observation`, then `save`.' \
     "$rel writes and saves the caller memory handoff"
-  require_text "$f" '`written`, `already-present`, or' \
-    "$rel records the closed memory-capture outcomes"
-  require_text "$f" '`skipped -- <reason>`' \
-    "$rel requires an explicit memory skip reason"
-  require_text "$f" 'Do not show the raw handoff in ordinary human-facing chat.' \
+  require_text "$f" '`Memory capture: written`' \
+    "$rel records successful memory capture"
+  require_text "$f" '`Memory capture: already-present`' \
+    "$rel records deduplicated memory capture"
+  require_absent "$f" '`skipped -- <reason>`' \
+    "$rel omits incidental memory-unavailable status"
+  require_text "$f" 'omit the write and every' \
+    "$rel silently omits unavailable incidental memory"
+  require_text "$f" 'Do not show the raw handoff in ordinary human-facing' \
     "$rel keeps the internal memory handoff out of chat"
 done
-require_before "$pipeline_cmd" 'Record exactly one outcome: `written`, `already-present`, or' '## Phase 7: Deliver' \
-  "Pipeline applies memory capture before human delivery"
-require_before "$pipeline_run" 'Record exactly one outcome: `written`, `already-present`, or' 'Present the compact summary from the orchestrator.' \
-  "pipeline-run applies memory capture before human presentation"
-require_before "$lifecycle" 'Step 5b writes the base receipt' 'After consuming the handoff,' \
-  "artifact lifecycle orders the base receipt before caller memory status"
-require_count "$lifecycle" 'appends exactly one terminal `- Memory capture:' 1 \
+require_before "$pipeline_cmd" 'After a successful write or exact duplicate' '## Phase 7: Deliver' \
+  "Pipeline applies available memory enrichment before human delivery"
+require_before "$pipeline_run" 'After a successful write or exact duplicate' 'Present the compact summary from the orchestrator.' \
+  "pipeline-run applies available memory enrichment before human presentation"
+require_before "$lifecycle" 'Step 5b writes the base' 'A capable caller that successfully consumes the handoff' \
+  "artifact lifecycle orders the base receipt before optional caller memory status"
+require_count "$lifecycle" 'exactly one terminal `- Memory capture:' 1 \
   "artifact lifecycle has one caller-owned terminal append instruction"
 require_count "$lifecycle" '- Memory capture:' 2 \
   "artifact lifecycle limits memory-status syntax to the two-stage instructions"
-require_before "$orchestrator" 'This Step 5b base receipt MUST omit the caller-owned `- Memory capture:` field.' 'After the compact report, return the single internal line prepared in Step 5.1:' \
+require_before "$orchestrator" 'This Step 5b base receipt MUST omit the caller-owned `- Memory capture:` field.' 'After the compact report, return the optional internal line prepared in Step 5.1:' \
   "orchestrator completes the base receipt before returning the memory handoff"
-require_count "$orchestrator" 'the capable caller appends exactly one terminal memory-capture field' 1 \
-  "orchestrator assigns exactly one terminal memory-status append to the caller"
+require_count "$orchestrator" 'may append exactly one terminal memory-capture field' 1 \
+  "orchestrator permits one optional memory-status append"
 require_count "$orchestrator" '- Memory capture:' 1 \
   "orchestrator keeps caller-owned memory syntax out of the Step 5b template"
 require_text "$orchestrator" '## <Done | Needs fixes | Blocked>' \

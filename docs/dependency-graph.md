@@ -15,16 +15,16 @@ graph LR
   dm-review --> live-wires
   dm-review --> ghostwriter
   dm-review --> council
-  dm-review --> ned
   dm-review --> workflow-kernel
+  dm-review -.-> ned
   dm-review -.-> superpowers
   dm-review -.-> airlift
   dm-review -.-> openrouter
   ghostwriter -.-> design-machines
   ned -.-> superpowers
   pipeline --> dm-review
-  pipeline --> ned
   pipeline --> workflow-kernel
+  pipeline -.-> ned
   pipeline -.-> design-machines
   pipeline -.-> assembly
   pipeline -.-> live-wires
@@ -59,16 +59,16 @@ graph LR
 | dm-review | live-wires | required | `>=1.8.0` |
 | dm-review | ghostwriter | required | `>=3.7.0` |
 | dm-review | council | required | `>=1.5.0` |
-| dm-review | ned | required | `>=1.4.0` |
 | dm-review | workflow-kernel | required | `>=0.14.0` |
+| dm-review | ned | optional | `>=1.4.0` |
 | dm-review | superpowers | optional | `>=1.0.0` |
 | dm-review | airlift | optional | `>=1.0.0` |
 | dm-review | openrouter | optional | `>=1.15.0` |
 | ghostwriter | design-machines | optional | `>=1.5.0` |
 | ned | superpowers | optional | `>=1.0.0` |
 | pipeline | dm-review | required | `>=1.64.0` |
-| pipeline | ned | required | `>=1.4.0` |
 | pipeline | workflow-kernel | required | `>=0.16.0` |
+| pipeline | ned | optional | `>=1.4.0` |
 | pipeline | design-machines | optional | `>=1.3.0` |
 | pipeline | assembly | optional | `>=3.10.1` |
 | pipeline | live-wires | optional | `>=1.8.0` |

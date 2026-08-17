@@ -107,7 +107,7 @@ plugins/dm-review/agents/review/ui-standards-reviewer.md
 plugins/dm-review/agents/review/codex-perspective.md
 ```
 
-The visual-browser-tester, ux-quality-reviewer, and ui-standards-reviewer all use Playwright MCP tools (`mcp__plugin_compound-engineering_pw__browser_*`) and require a running dev server. The **visual-browser-tester** runs six phases (Baseline, Responsive, State Testing, Accessibility Runtime, Live Wires, Live Wires CSS Compliance). The **ux-quality-reviewer** runs nine phases focused on design quality and usability (Information Hierarchy, Spacing, State Completeness, Navigation, Content, Typography, Layout, Edge Cases, Interaction Polish), uses the RAG knowledge library, and saves screenshots to `.claude/ux-review/`. If Playwright fails, visual-browser-tester follows a fallback chain; ux-quality-reviewer reports "Skipped."
+The visual-browser-tester, ux-quality-reviewer, and ui-standards-reviewer all use Playwright MCP tools (`mcp__plugin_compound-engineering_pw__browser_*`) and require a running dev server. The **visual-browser-tester** runs six phases (Baseline, Responsive, State Testing, Accessibility Runtime, Live Wires, Live Wires CSS Compliance). The **ux-quality-reviewer** runs nine phases focused on design quality and usability (Information Hierarchy, Spacing, State Completeness, Navigation, Content, Typography, Layout, Edge Cases, Interaction Polish), optionally uses the RAG knowledge library when its tool is callable, and saves screenshots to `.claude/ux-review/`. Incidental RAG absence is silent and does not skip or degrade the lane. If Playwright fails, visual-browser-tester follows a fallback chain; ux-quality-reviewer reports "Skipped."
 
 ---
 

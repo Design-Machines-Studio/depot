@@ -94,7 +94,7 @@ Read the `references/code-assessment-protocol.md` for the full protocol. In summ
 - Dependencies: What does this area depend on? What depends on it?
 - Tech debt: Band-aids, TODOs, complexity hotspots, dead code
 - Patterns: Naming conventions, error handling, testing approach
-- Known issues: Check ai-memory for project history (load `ai-memory` skill from ned as companion)
+- Known issues: Inspect repository history. If callable, ai-memory may enrich project history; otherwise omit it silently.
 
 Produce a **Current State Report** covering:
 - Architecture summary (1-2 paragraphs)
@@ -287,7 +287,7 @@ pause. If running standalone via `/pipeline-assess`, present it and stop.
 
 ## Companion Skills
 
-- **ai-memory** (from ned) -- Loaded during code assessment to check project history
+- **ai-memory** (from ned, optional) -- When its tools appear in the callable-tool inventory or tool search, it may enrich repository-backed project history. Do not invoke it merely to probe availability.
 - **Domain skills** (assembly, live-wires, craft-developer) -- Loaded based on project type detection for pattern evaluation
 
 ## Graceful Degradation
@@ -295,5 +295,10 @@ pause. If running standalone via `/pipeline-assess`, present it and stop.
 - No Playwright MCP: discovery may continue, but required UI/integration browser
   coverage is blocked. Follow the shared recovery ladder and return
   `human_help_required`; never mark required proof skipped or curl-verified.
-- No ai-memory MCP: Skip project history check, note in report
+- Optional personal sources: detect them only from callable-tool inventory or
+  tool search. If ai-memory is not callable, omit the lookup and any mention of
+  its absence; repository history still supplies the project-history evidence.
+  Do not ask the user to install or configure incidental enrichment. Only an
+  explicit user-requested personal-memory operation may report that its named
+  capability is unavailable.
 - No domain plugins: Use general patterns only, note which plugins would have helped

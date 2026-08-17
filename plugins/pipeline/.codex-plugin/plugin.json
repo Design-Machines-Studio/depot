@@ -45,11 +45,7 @@
       {
         "id": "research",
         "name": "DM Research Orchestrator",
-        "description": "Gathers context from ai-memory, RAG, web search, and DM domain plugins for feature planning",
-        "mcpDependencies": [
-          "ai-memory",
-          "rag"
-        ],
+        "description": "Gathers repository context and enriches it from any available relevant research sources for feature planning",
         "triggers": [
           "research for feature",
           "gather context for planning",
@@ -168,10 +164,10 @@
   },
   "pluginDependencies": {
     "dm-review": ">=1.64.0",
-    "ned": ">=1.4.0",
     "workflow-kernel": ">=0.16.0"
   },
   "optionalPluginDependencies": {
+    "ned": ">=1.4.0",
     "design-machines": ">=1.3.0",
     "assembly": ">=3.10.1",
     "live-wires": ">=1.8.0",

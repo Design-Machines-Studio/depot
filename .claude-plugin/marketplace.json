@@ -440,7 +440,7 @@
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "Configured-key OpenRouter provider plugin with automatic sensitive-payload refusal, DeepSeek bounded execution and routine review, Qwen bulk and independent review, Grok escalation, Kimi security-only analysis, Luna mechanical fallback, and an optional official MCP control plane.",
+      "description": "OpenRouter provider with sensitive-payload refusal, routed DeepSeek/Qwen/Grok/Kimi/Luna workflows, and MCP controls.",
       "capabilities_summary": {
         "skills": 1,
         "agents": 2,

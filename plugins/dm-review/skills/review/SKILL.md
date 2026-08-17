@@ -46,7 +46,7 @@ Every review agent dispatched by this skill operates under a terse-output contra
 
 ## Usage
 
-- `/dm-review` -- Full review: all applicable agents + memory capture
+- `/dm-review` -- Full review: all applicable agents + optional memory enrichment when callable
 - `/dm-review quick` -- Quick review: 2 core judgment lanes, plus applicable existing UI/build/domain verification lanes
 
 ## Review Tiers (token-economy policy)
@@ -56,7 +56,7 @@ Match the review depth to the moment. Running full multi-round review on every c
 | When | Tier | What runs |
 |------|------|-----------|
 | **Per chunk during pipeline execution** | `dm-review-quick` | 2 core judgment lanes, plus applicable existing UI/build/domain verification lanes. |
-| **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + memory capture. Run once, not per chunk. |
+| **Pre-merge, once per PR** | full `dm-review` | All applicable agents + consolidation + optional memory enrichment when callable. Run once, not per chunk. |
 | **Bulk second opinions / large-diff first pass** | Model selected by `routing-policy.json` | Family-independent security analysis plus style, duplication, pattern, and doc-consistency lanes. The exact diff is content-scanned immediately before external disclosure; sensitive file sections stay local while eligible sections proceed. Security completion always includes mandatory full-diff independent-family sign-off. |
 | **Bounded repair review** | full + one repair | Use one repair batch and one affected-lane recheck for supported P1/P2/P3 findings. Repeat broad review only when the original required review was incomplete or the repair changed a real sensitive boundary. |
 
@@ -242,7 +242,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
   resolve_openrouter_bundle() {
     if [ -n "$OPENROUTER_ACTIVE_HOST" ]; then
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.14.2 --active-host "$OPENROUTER_ACTIVE_HOST" \
+        --minimum-version 1.15.0 --active-host "$OPENROUTER_ACTIVE_HOST" \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -253,7 +253,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
         --required-asset skills/openrouter-delegate/references/prompt-templates.md
     else
       "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-        --minimum-version 1.14.2 \
+        --minimum-version 1.15.0 \
         --required-asset agents/workflow/openrouter-agent-runner.md \
         --required-asset agents/review/openrouter-bulk-analyst.md \
         --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -714,7 +714,28 @@ Follow the Fix Philosophy from the review skill: use the smallest adequate repai
 
 ## RAG Reference Library
 
-When uncertain about design principles, CSS best practices, typography, layout, accessibility, or UX patterns, search the RAG knowledge library using `mcp__rag__rag_search` for reference material from books and guides.
+RAG and ai-memory are optional personal enhancements. Determine RAG and
+ai-memory availability from the callable-tool inventory or tool search, never
+by invoking either source as a probe. Capability availability is the complete
+rule; do not infer identity from usernames, environment variables, repository
+ownership, or any other heuristic.
+
+When callable, preserve the existing RAG lookup and ai-memory write behavior.
+When absent during incidental review enrichment, omit the lookup or write
+silently: create no warning, skipped lane, coverage gap, receipt, summary, or
+degraded-completion message, and never ask the user to install or configure the
+source. Only an explicit user request for an ai-memory or RAG operation makes an
+unavailable personal source reportable.
+
+Absence and operational failure are distinct. If discovered callable ai-memory
+tools fail during lookup, write, or save, retain nonblocking
+`Memory capture: failed -- <safe reason>` evidence. Do not turn that enrichment
+failure into a review finding, coverage gap, incomplete review, or install
+request, and never mislabel it as silent capability absence.
+
+When RAG is callable and relevant to uncertainty about design principles, CSS
+best practices, typography, layout, accessibility, or UX patterns, search it
+using `mcp__rag__rag_search` for reference material from books and guides.
 
 ## Caller-Provided Context
 
@@ -1259,15 +1280,20 @@ Official and third-party Claude Code plugins that complement this skill:
 | **pr-review-toolkit** | `/review-pr` | PR-specific deep analysis (comments, error handling, types) |
 | **superpowers** | `/verify` | After applying review fixes, verify nothing broke |
 | **code-review** | `/code-review` | Alternative single-pass confidence-scored review |
-| **rag** (global MCP) | `mcp__rag__rag_search` | Search the personal knowledge library for design, typography, layout, accessibility, UX, and editorial design references. Use during design reviews and when uncertain about best practices. |
+| **rag** (optional global MCP) | `mcp__rag__rag_search` | When callable, search the personal knowledge library for design, typography, layout, accessibility, UX, and editorial design references. Its absence is silent during incidental review enrichment. |
 
 ---
 
-### Phase 7: Memory Capture (Full mode only)
+### Phase 7: Optional Memory Enrichment (Full mode only)
 
 **Skip this phase in Quick mode.**
 
-After issue tracking (or if skipped), record the review in ai-memory:
+After issue tracking (or if skipped), inspect the callable-tool inventory or
+tool-search result for the required ai-memory tools. Do not invoke a memory tool
+merely to probe availability. If they are absent, omit Phase 7 and Phase 7b
+silently with no lane, coverage, receipt, summary, or completion entry.
+
+When the tools are callable, record the review in ai-memory:
 
 1. Read the memory recorder from the same dm-review root bound before dispatch:
    ```bash
@@ -1281,8 +1307,6 @@ After issue tracking (or if skipped), record the review in ai-memory:
    - Add P1 architectural observations if any
 3. Call `save` to persist
 
-If ai-memory tools are not available, skip silently.
-
 #### Phase 7b: Depot Agent Metrics
 
 After the project-level memory capture, record depot-level metrics. This tracks which agents fire across reviews, feeding back into marketplace analytics.
@@ -1295,7 +1319,7 @@ After the project-level memory capture, record depot-level metrics. This tracks 
 4. Add the review skill invocation: `[YYYY-MM-DD] Invocation: review -- correct`
 5. Call `save` to persist
 
-If ai-memory tools are not available, skip silently. See `docs/plugin-memory-schema.md` for entity conventions and rollup policy.
+See `docs/plugin-memory-schema.md` for entity conventions and rollup policy.
 
 ---
 

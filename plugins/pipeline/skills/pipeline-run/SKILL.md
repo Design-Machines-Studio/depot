@@ -177,7 +177,7 @@ nonnegative `duration_seconds` and exactly one `wait_category` from
 the non-overlapping orchestrator-level interval, not one per parallel worker.
 Never estimate an interval or classify active implementation/review as waiting.
 
-**Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: branch create/reuse semantics, worktree isolation or the documented `sequential-on-branch` isolation strategy (recorded as `isolationStrategy`, never as `executionMode`) for container-mounted test harnesses, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, the approved final review mode, memory capture, cleanup, and summary.
+**Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: branch create/reuse semantics, worktree isolation or the documented `sequential-on-branch` isolation strategy (recorded as `isolationStrategy`, never as `executionMode`) for container-mounted test harnesses, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, the approved final review mode, cleanup, and summary. Personal-memory enrichment remains optional.
 
 **Implementation dispatch:** For each chunk, create the worktree first, inline the full prompt content, then call `multi_agent_v1.spawn_agent` with `agent_type: "worker"`. The worker prompt MUST include:
 
@@ -274,20 +274,31 @@ Ask-then-default-park is the only headless behavior: a non-interactive session, 
 ## After Execution
 
 Immediately after the execution-orchestrator returns and before presenting its
-human summary, consume the single `Memory observation handoff:` field from the
-agent result. Keep the raw observation internal. Validate that it is the dated
-Pipeline format for exact entity `DepotPlugin:pipeline` and is under 300
-characters, then use the caller's ai-memory capability to:
+human summary, consume the single optional `Memory observation handoff:` field
+from the agent result. Keep the raw observation internal. Determine availability
+from the callable-tool inventory or tool search without making a probe call.
+Capability availability is the complete rule; do not use identity, environment,
+or repository heuristics.
+
+If the required ai-memory tools are callable, validate that the observation is
+the dated Pipeline format for exact entity `DepotPlugin:pipeline` and is under
+300 characters, then:
 
 1. `search_entities` for `DepotPlugin:pipeline`; create it as type `Tool` with
    `add_entity` only when missing.
 2. Read the entity and check its same-day observations for the exact handoff.
 3. If absent, call `add_observation`, then `save`.
 
-Record exactly one outcome: `written`, `already-present`, or
-`skipped -- <reason>`. Memory capture is non-blocking, but never silent. Append
-`Memory capture: <outcome>` to `plans/<feature>/receipt.md` and retain the same
-outcome in the existing internal summary evidence before presentation. Do not show the raw handoff in ordinary human-facing chat.
+After a successful write or exact duplicate, append `Memory capture: written`
+or `Memory capture: already-present` to `plans/<feature>/receipt.md` and retain
+that outcome in internal summary evidence before presentation. If callable
+tools fail during lookup or write, append `Memory capture: failed -- <safe reason>`
+and retain the same nonblocking operational evidence without marking execution
+or delivery incomplete. If the tools are absent, omit the write and every receipt or summary mention.
+Do not show the raw handoff in ordinary human-facing chat, mark execution or
+delivery incomplete because optional memory is absent, or ask the user to
+install or configure the personal source. Only an explicit user request for an
+ai-memory operation makes an unavailable capability reportable.
 
 After the authoritative terminal receipt is appended to the cumulative receipt array, run exactly:
 

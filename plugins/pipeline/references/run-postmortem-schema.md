@@ -1,10 +1,13 @@
 # Pipeline Run Post-Mortem Schema
 
 Every full pipeline run writes `plans/<slug>/run-postmortem.md` after the
-orchestrator prepares the compact memory handoff. The capable Pipeline caller
-then applies that handoff, records `written`, `already-present`, or
-`skipped -- <reason>` in the existing receipt/summary evidence, and only then
-presents the final Summary Report.
+orchestrator prepares the compact optional memory handoff. When the required
+ai-memory tools are callable, the Pipeline caller applies that handoff and
+records `written` or `already-present` in the existing receipt evidence before
+presenting the final Summary Report. `Memory capture: failed -- <safe reason>`
+retains nonblocking evidence when discovered callable tools fail during lookup
+or write. When the tools are absent, the caller omits the write and all receipt
+or summary mention; delivery remains complete.
 
 ## Required Sections
 

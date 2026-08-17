@@ -25,11 +25,51 @@ pass() {
   printf "  ${GREEN}OK${RESET}    %s\n" "$1"
 }
 
+routine_review_routes_valid() {
+  local source="$1"
+  jq -e '
+    .agentType as $a
+    | $a["pattern-recognition-specialist"].provider == "openrouter"
+      and $a["pattern-recognition-specialist"].model == "deepseek/deepseek-v4-pro-0813"
+      and $a["pattern-recognition-specialist"].fallbackModel == "qwen/qwen3.8-max"
+      and $a["pattern-recognition-specialist"].fallbackProvider == "codex"
+      and $a["code-simplicity-reviewer"].provider == "openrouter"
+      and $a["code-simplicity-reviewer"].model == "qwen/qwen3.8-max"
+      and $a["code-simplicity-reviewer"].fallbackModel == "deepseek/deepseek-v4-pro-0813"
+      and $a["code-simplicity-reviewer"].fallbackProvider == "codex"
+      and $a["doc-sync-reviewer"].provider == "openrouter"
+      and $a["doc-sync-reviewer"].model == "deepseek/deepseek-v4-flash-0731"
+      and $a["doc-sync-reviewer"].fallbackModel == "openai/gpt-5.6-luna"
+      and $a["doc-sync-reviewer"].fallbackProvider == "codex"
+      and $a["test-coverage-reviewer"].provider == "openrouter"
+      and $a["test-coverage-reviewer"].model == "deepseek/deepseek-v4-flash-0731"
+      and $a["test-coverage-reviewer"].fallbackModel == "openai/gpt-5.6-luna"
+      and $a["test-coverage-reviewer"].fallbackProvider == "codex"
+  ' "$source" >/dev/null 2>&1
+}
+
+expect_routine_review_route_reject() {
+  local label="$1"
+  local filter="$2"
+  local mutated
+
+  if ! mutated="$(jq -c "$filter" "$routing_policy")"; then
+    fail "routine review mutation fixture builds: $label"
+    any_failed=1
+  elif printf '%s\n' "$mutated" | routine_review_routes_valid -; then
+    fail "routine review routes reject mutation: $label"
+    any_failed=1
+  else
+    pass "routine review routes reject mutation: $label"
+  fi
+}
+
 cascade="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
 wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 boundary="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-boundary.sh"
 security_policy="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
 model_selection="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-selection.md"
+matrix_refresh_receipt="$REPO_ROOT/docs/openrouter-model-matrix-refreshes/2026-08-17.md"
 orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
 
 any_failed=0
@@ -1101,6 +1141,14 @@ check_active_routing_semantics() {
     any_failed=1
   fi
 
+  if jq -e '[.models[] | select(.slug == "qwen/qwen3.8-2.4t-a95b") | .input_modalities] == [["text","image","video"]]' "$model_matrix" >/dev/null &&
+     grep -Fq '| `qwen/qwen3.8-2.4t-a95b` | $2 / $6 | $0.25 / — | 1,048,576 / 1,000,000 | 262,144 | text/image/video input; tools, reasoning, effort, structured output |' "$matrix_refresh_receipt"; then
+    pass "Qwen 3.8 2.4T matrix modalities match the catalog refresh receipt"
+  else
+    fail "Qwen 3.8 2.4T matrix modalities must match the catalog refresh receipt"
+    any_failed=1
+  fi
+
   if jq -e --slurpfile matrix "$model_matrix" '
     ($matrix[0].models | map(select(.catalog_status == "available") | .slug)) as $available
     | ([.agentType[] | .model?, .fallbackModel?, .codexImplementerModel?, .codexImplementerFallbackModel?]
@@ -1122,17 +1170,17 @@ check_active_routing_semantics() {
     any_failed=1
   fi
 
-  if jq -e '
+  if routine_review_routes_valid "$routing_policy" &&
+     jq -e '
     .agentType as $a
-    | $a["pattern-recognition-specialist"].model == "deepseek/deepseek-v4-pro-0813"
-      and $a["code-simplicity-reviewer"].model == "qwen/qwen3.8-max"
-      and $a["doc-sync-reviewer"].model == "deepseek/deepseek-v4-flash-0731"
-      and $a["test-coverage-reviewer"].model == "deepseek/deepseek-v4-flash-0731"
-      and $a["openrouter-bulk-analyst"].model == "qwen/qwen3.8-max"
+    | $a["openrouter-bulk-analyst"].model == "qwen/qwen3.8-max"
       and $a["second-perspective"].model == "qwen/qwen3.8-max"
       and $a["second-perspective"].fallbackModel == "x-ai/grok-4.6"
+      and $a["second-perspective"].fallbackProvider == "implementer-aware-independent-family"
+      and $a["second-perspective"].reviewerFamilyConstraint == "must-differ-from-every-implementer-family"
       and $a["security-auditor-openrouter"].model == "moonshotai/kimi-k3"
       and $a["security-auditor-openrouter"].fallbackModel == "x-ai/grok-4.6"
+      and $a["security-auditor-codex-signoff"].reviewerFamilyConstraint == "must-differ-from-every-implementer-family"
       and ([ $a | to_entries[] | select(.key | test("security") | not)
              | .value | .model?, .fallbackModel? ]
            | map(select(. == "moonshotai/kimi-k3")) | length == 0)
@@ -1149,6 +1197,15 @@ check_active_routing_semantics() {
     fail "active routing violates role reachability, Kimi/GLM isolation, or host parity"
     any_failed=1
   fi
+  expect_routine_review_route_reject "simplicity fallback model" '.agentType["code-simplicity-reviewer"].fallbackModel = "openai/gpt-5.6-terra"'
+  expect_routine_review_route_reject "simplicity fallback provider" '.agentType["code-simplicity-reviewer"].fallbackProvider = "claude"'
+  expect_routine_review_route_reject "pattern provider" '.agentType["pattern-recognition-specialist"].provider = "claude"'
+  expect_routine_review_route_reject "pattern fallback model" '.agentType["pattern-recognition-specialist"].fallbackModel = "openai/gpt-5.6-terra"'
+  expect_routine_review_route_reject "pattern fallback provider" '.agentType["pattern-recognition-specialist"].fallbackProvider = "claude"'
+  expect_routine_review_route_reject "documentation fallback model" '.agentType["doc-sync-reviewer"].fallbackModel = "openai/gpt-5.6-terra"'
+  expect_routine_review_route_reject "documentation fallback provider" '.agentType["doc-sync-reviewer"].fallbackProvider = "claude"'
+  expect_routine_review_route_reject "test fallback model" '.agentType["test-coverage-reviewer"].fallbackModel = "openai/gpt-5.6-terra"'
+  expect_routine_review_route_reject "test fallback provider" '.agentType["test-coverage-reviewer"].fallbackProvider = "claude"'
 }
 
 # Drift check 3: the matrix snapshot_date (top level and every entry) must match

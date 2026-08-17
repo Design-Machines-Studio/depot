@@ -76,6 +76,15 @@ This hierarchy creates no provider quota. Applicability, disclosure,
 availability, output validation, and family requirements still decide whether
 a lane may run or must fall back to native Codex.
 
+## Provider privacy
+
+Provider privacy follows quality, price, and speed in the routing priority.
+`OPENROUTER_ZDR=1` is opt-in and restricts a call to endpoints whose data policy
+denies training and retention; use it for genuinely sensitive eligible material.
+If ZDR leaves no eligible Kimi endpoint, the ordered security fallback may serve Grok 4.6.
+See `invocation-protocol.md` for the complete
+provider-routing controls and receipt behavior.
+
 ## dm-review and direct delegation topology
 
 | Workload | OpenRouter primary | OpenRouter fallback |
@@ -91,8 +100,9 @@ a lane may run or must fall back to native Codex.
 
 The fallback is part of one OpenRouter request when the wrapper is allowed to
 use fallback. Native completion is a separate attempt with separate
-provenance. Review timeouts remain 3600 seconds, or 7200 seconds for diffs of
-at least 10,000 lines.
+provenance. Routine pattern, simplicity, documentation, and test review lanes use 1800
+seconds. Focused security and ordinary bulk analysis use 3600 seconds. Bulk
+analysis uses 7200 seconds at or above 10,000 diff lines.
 
 ## Pipeline execution cascade
 

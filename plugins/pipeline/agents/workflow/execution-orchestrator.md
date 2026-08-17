@@ -24,7 +24,7 @@ You MUST execute every step for every chunk. Specifically:
 - You MUST run the manifest's approved final dm-review mode after all chunks
   merge. Full is the default. Quick is allowed only by the validated explicit
   manifest contract and escalates to full on a security-sensitive final diff.
-- You MUST prepare the compact session observation for caller-side ai-memory capture
+- You MUST prepare the compact optional session observation for a capable caller
 - You MUST report what you actually did in the summary, honestly
 
 Exception: use the `sequential-on-branch` isolation strategy instead of per-chunk worktrees only when Step 1c detects a container-mounted test harness whose build/test commands execute against the repo root rather than the chunk worktree. This preserves the review and evaluation gates but trades parallel isolation for truthful verification. It is an isolation strategy recorded as `isolationStrategy`, never an `executionMode` value.
@@ -209,7 +209,7 @@ Adapter parity requirements:
 - Ordinary per-chunk review gates use one native focused Codex reviewer. Sensitive chunks use the dm-review inline protocol from `plugins/dm-review/skills/review/SKILL.md` in full mode.
 - The final review gate uses the validated full-or-quick dm-review inline
   protocol against the feature branch; quick security matches escalate to full.
-- Zero-deferral, convergence limits, pending/done todo receipts, final requirements cross-check, cleanup, memory capture, and summary reporting remain mandatory.
+- Zero-deferral, convergence limits, pending/done todo receipts, final requirements cross-check, cleanup, and summary reporting remain mandatory. Personal-memory enrichment is optional.
 
 Do not stop merely because Codex lacks Claude's `Agent` or `Skill` tool names when the Codex adapter tools are available. Do stop if neither native tool invocation nor the Codex adapter can provide isolated worker dispatch and review gates.
 
@@ -289,7 +289,7 @@ After all chunks:
 FINAL 1. Run approved final dm-review mode on feature branch
 FINAL 2. Requirements cross-check against the assessment's approved Key Requirements (write final-requirements-crosscheck.md)
 FINAL 3. Check manifest.noMergeOnCompletion and decide merge policy
-FINAL 4. Prepare session observation for caller-side ai-memory capture
+FINAL 4. Prepare optional session observation for a capable caller
 FINAL 5. Run Post-Mortem (measured providerSplit, misroutes, quality ledger, proposals)
 FINAL 5b. Artifact and repository cleanup (receipt, artifacts, worktrees/branches, inventory)
 FINAL 5c. Campaign state write (when campaignSlug present)
@@ -2075,7 +2075,7 @@ Read `manifest.noMergeOnCompletion` (default `false` if the field is absent).
 
 Mark `FINAL 3. Check manifest.noMergeOnCompletion` complete.
 
-## Step 5: Memory Capture + Codify
+## Step 5: Optional Memory Handoff + Codify
 
 ### 5.1 Record the run
 
@@ -2088,8 +2088,10 @@ Keep the observation under 300 characters. Return it once as
 `Memory observation handoff: <observation>` in the existing final agent result
 from Step 6. This is an internal caller field: do not show it in the compact
 human report and do not write a handoff file. The orchestrator does not call
-ai-memory or claim that the observation was persisted; the capable `/pipeline`
-or `/pipeline-run` caller applies it and records the capture outcome.
+ai-memory or claim that the observation was persisted. A `/pipeline` or
+`/pipeline-run` caller uses it only when the required tools are visible in the
+callable-tool inventory or tool search; otherwise the caller discards it
+silently without a receipt, coverage, completion, or delivery notice.
 
 ### 5.2 Codify (run only if the run had friction)
 
@@ -2099,8 +2101,11 @@ one. **Trigger codify when ANY of:** a chunk took >1 review iteration, the final
 findings, a subagent emitted an `ambiguity_resolved` receipt flag, or a guardrail/lint guard had to
 fire more than once.
 
-Run the **5-Minute Codify Checklist** (see the `ned:codify` skill) against this run: what broke, what
-rule prevents it, what automated check catches it earlier, what becomes the default. For each lesson:
+Run the **5-Minute Codify Checklist** against this run: what broke, what rule
+prevents it, what automated check catches it earlier, what becomes the default.
+When `ned:codify` is discoverable in the installed skill inventory, load it; otherwise apply the inline checklist below silently.
+Do not invoke the skill merely to probe availability or report its incidental
+absence. For each lesson:
 
 - **Situational lesson** -> draft a proposed observation for
   `DepotPlugin:pipeline` or the project entity, format `[YYYY-MM-DD] Lesson:
@@ -2122,7 +2127,7 @@ automatic proposal emitted every time a novel failure occurs.
 Codify output remains proposal-only. Do not edit tracked sources, routing
 policy, review policy, or security policy from run output.
 
-Mark `FINAL 4. Prepare session observation for caller-side ai-memory capture` complete.
+Mark `FINAL 4. Prepare optional session observation for a capable caller` complete.
 
 ## Step 5a: Run Post-Mortem
 
@@ -2358,7 +2363,7 @@ git status --porcelain          # expect: empty
 
 ### 5. Final authoritative cleanup/terminal receipt and report
 
-Now create `plans/<feature-slug>/receipt.md` using the schema above. Every Docker, artifact, worktree, branch, readiness, and repository-status field must come from the completed authoritative outcomes in Steps 1-4. A receipt field cannot predict, precede, or be backfilled from shadow state. This Step 5b base receipt MUST omit the caller-owned `- Memory capture:` field. After Step 6 returns the handoff, the capable caller appends exactly one terminal memory-capture field with its observed outcome.
+Now create `plans/<feature-slug>/receipt.md` using the schema above. Every Docker, artifact, worktree, branch, readiness, and repository-status field must come from the completed authoritative outcomes in Steps 1-4. A receipt field cannot predict, precede, or be backfilled from shadow state. This Step 5b base receipt MUST omit the caller-owned `- Memory capture:` field. After Step 6 returns the handoff, a caller with callable ai-memory tools may append exactly one terminal memory-capture field (`written`, `already-present`, or nonblocking `failed -- <safe reason>`). Without that capability, the base receipt remains unchanged and no absence is reported.
 
 Log cleanup stats: `Artifact cleanup before shadow: removed N ephemeral + M run-scoped files, retained K feature-scoped files.` The authoritative receipt does not predict the later shadow/input disposition; Step 6 reports those post-receipt deletions separately after they occur.
 
@@ -2448,12 +2453,13 @@ nonexistent optional artifact rather than inventing one:
 - Detailed review: `.claude/ux-review/report.md`
 ```
 
-After the compact report, return the single internal line prepared in Step 5.1:
+After the compact report, return the optional internal line prepared in Step 5.1:
 
 `Memory observation handoff: <observation>`
 
-The Pipeline caller consumes this line before human presentation. It must not
-forward the raw observation into ordinary chat.
+The Pipeline caller consumes this line before human presentation only when the
+required ai-memory tools are callable. It must not forward the raw observation
+or incidental source absence into ordinary chat.
 
 Omit `Attempt result` when no provider attempt failed. When present, keep it to
 one short line: what failed and whether usage/cost was reported; the existing
@@ -2511,7 +2517,6 @@ Before reporting any pipeline-blocking failure, run the Step 5b repository clean
 **Degraded operation (continue with note):**
 
 - If the `dm-review:review` skill itself is unavailable, fall back to a manual review pass using the `Agent` tool to dispatch general-purpose review subagents directly. Flag as "Degraded" in the chunk receipt. NEVER report "slash command not callable" -- the slash command was never the mechanism; the skill was.
-- caller-side ai-memory unavailable -- return the handoff; the caller records `skipped -- <reason>` without blocking delivery
 - Input guardrails can't estimate tokens -- proceed untruncated, note in log
 
 ## Constraints

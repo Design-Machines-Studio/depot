@@ -132,6 +132,49 @@ expect_decision_leverage_reject() {
   fi
 }
 
+routine_review_routes_valid() {
+  local source="$1"
+  jq -e '
+    .agentType as $a
+    | $a["pattern-recognition-specialist"]
+    | .provider == "openrouter"
+      and .model == "deepseek/deepseek-v4-pro-0813"
+      and .fallbackModel == "qwen/qwen3.8-max"
+      and .fallbackProvider == "codex"
+      and ($a["code-simplicity-reviewer"]
+        | .provider == "openrouter"
+          and .model == "qwen/qwen3.8-max"
+          and .fallbackModel == "deepseek/deepseek-v4-pro-0813"
+          and .fallbackProvider == "codex")
+      and ($a["doc-sync-reviewer"]
+        | .provider == "openrouter"
+          and .model == "deepseek/deepseek-v4-flash-0731"
+          and .fallbackModel == "openai/gpt-5.6-luna"
+          and .fallbackProvider == "codex")
+      and ($a["test-coverage-reviewer"]
+        | .provider == "openrouter"
+          and .model == "deepseek/deepseek-v4-flash-0731"
+          and .fallbackModel == "openai/gpt-5.6-luna"
+          and .fallbackProvider == "codex")
+  ' "$source" >/dev/null 2>&1
+}
+
+expect_routine_review_route_reject() {
+  local label="$1"
+  local filter="$2"
+  local mutated
+
+  if ! mutated="$(jq -c "$filter" "$routing")"; then
+    printf "  FAIL  routine review mutation fixture builds: %s\n" "$label"
+    failures=1
+  elif printf '%s\n' "$mutated" | routine_review_routes_valid -; then
+    printf "  FAIL  routine review routes reject mutation: %s\n" "$label"
+    failures=1
+  else
+    printf "  OK    routine review routes reject mutation: %s\n" "$label"
+  fi
+}
+
 routing="$REPO_ROOT/plugins/pipeline/references/routing-policy.json"
 schema="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/manifest-schema.md"
 promptcraft="$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
@@ -154,11 +197,13 @@ wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/ope
 mcp_control="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/mcp-control-plane.md"
 dm_review="$REPO_ROOT/plugins/dm-review/skills/review/SKILL.md"
 dm_review_cmd="$REPO_ROOT/plugins/dm-review/commands/dm-review.md"
+model_selection="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-selection.md"
 kernel_metrics="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/metrics.py"
 kernel_pipeline_adapter="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/pipeline_adapter.py"
 kernel_translation="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/_translation.py"
 assess="$REPO_ROOT/plugins/pipeline/skills/assess/SKILL.md"
 research="$REPO_ROOT/plugins/pipeline/skills/research/SKILL.md"
+efficiency_plan="$REPO_ROOT/plans/depot-efficiency-program.md"
 pipeline_cmd="$REPO_ROOT/plugins/pipeline/commands/pipeline.md"
 postmortem_schema="$REPO_ROOT/plugins/pipeline/references/run-postmortem-schema.md"
 ledger="$REPO_ROOT/docs/pipeline-metrics/ledger.md"
@@ -356,6 +401,7 @@ fi
 
 [ -f "$routing" ] || { printf "  FAIL  shared routing-policy.json exists\n"; failures=1; }
 if [ -f "$routing" ]; then
+  jq -e '.subscriptionFirst.invariant == "subscription rails first while live headroom clears the threshold for BOTH the weekly cap and the 5-hour window; API rails next from this policy\u0027s authoritative ordered role definitions after family exclusions; never start planned multi-chunk work that projected spend would push below threshold mid-run"' "$routing" >/dev/null || { printf "  FAIL  subscription-first invariant names ordered role definitions as API authority\n"; failures=1; }
   jq -e '.chunkKind.config.provider == "openrouter"' "$routing" >/dev/null || { printf "  FAIL  routing policy maps config chunks to OpenRouter\n"; failures=1; }
   jq -e '.chunkKind.ui.provider == "codex" and .chunkKind.integration.provider == "codex"' "$routing" >/dev/null || { printf "  FAIL  UI and integration coding route to Codex\n"; failures=1; }
   jq -e '
@@ -373,7 +419,7 @@ if [ -f "$routing" ]; then
         "codexImplementerFallbackModel":"x-ai/grok-4.6",
         "required":true,
         "inputScope":"full-diff",
-        "reviewerFamilyConstraint":"must-differ-from-implementer-family",
+        "reviewerFamilyConstraint":"must-differ-from-every-implementer-family",
         "failureResolution":{
           "runner_failure":"remaining-non-implementing-family-or-review-incomplete",
           "full_disclosure_decline":"remaining-non-implementing-family-or-review-incomplete",
@@ -381,16 +427,24 @@ if [ -f "$routing" ]; then
         },
         "rationale":"Independent full-diff security completion is mandatory. The stable lane id does not select Codex when Codex implemented the diff."
       }
+      and .agentType["second-perspective"] == {
+        "provider":"implementer-aware-independent-family",
+        "model":"qwen/qwen3.8-max",
+        "fallbackModel":"x-ai/grok-4.6",
+        "fallbackProvider":"implementer-aware-independent-family",
+        "reviewerFamilyConstraint":"must-differ-from-every-implementer-family",
+        "rationale":"After eligible subscription rails, ordinary independent review starts with Qwen Max rather than Kimi and preserves family independence."
+      }
       and .agentType["architecture-reviewer"].provider == "codex"
   ' "$routing" >/dev/null || { printf "  FAIL  external security analysis and implementer-aware sign-off have separate lane identities\n"; failures=1; }
   jq -e '.agentType["doc-sync-reviewer"].provider == "openrouter"' "$routing" >/dev/null || { printf "  FAIL  routing policy maps doc-sync-reviewer to OpenRouter\n"; failures=1; }
-  jq -e '
-    .agentType as $a
-    | $a["pattern-recognition-specialist"] | .provider == "openrouter" and .model == "deepseek/deepseek-v4-pro-0813" and .fallbackModel == "qwen/qwen3.8-max" and .fallbackProvider == "codex"
-    and ($a["code-simplicity-reviewer"].model == "qwen/qwen3.8-max")
-    and ($a["doc-sync-reviewer"].model == "deepseek/deepseek-v4-flash-0731")
-    and ($a["test-coverage-reviewer"].model == "deepseek/deepseek-v4-flash-0731")
-  ' "$routing" >/dev/null || { printf "  FAIL  routine reviewers use the intended DeepSeek/Qwen primaries\n"; failures=1; }
+  routine_review_routes_valid "$routing" || { printf "  FAIL  routine reviewers use the intended provider/model/fallback tuples\n"; failures=1; }
+  expect_routine_review_route_reject "simplicity fallback model" '.agentType["code-simplicity-reviewer"].fallbackModel = "openai/gpt-5.6-terra"'
+  expect_routine_review_route_reject "simplicity fallback provider" '.agentType["code-simplicity-reviewer"].fallbackProvider = "claude"'
+  expect_routine_review_route_reject "documentation fallback model" '.agentType["doc-sync-reviewer"].fallbackModel = "openai/gpt-5.6-terra"'
+  expect_routine_review_route_reject "documentation fallback provider" '.agentType["doc-sync-reviewer"].fallbackProvider = "claude"'
+  expect_routine_review_route_reject "test fallback model" '.agentType["test-coverage-reviewer"].fallbackModel = "openai/gpt-5.6-terra"'
+  expect_routine_review_route_reject "test fallback provider" '.agentType["test-coverage-reviewer"].fallbackProvider = "claude"'
   jq -e '
     .agentType["openrouter-bulk-analyst"]
     | .provider == "openrouter"
@@ -418,7 +472,8 @@ if [ -f "$routing" ]; then
       and ($targets.enforcement.varianceReceiptRequired == true)
       and ($targets.providerSplit == null)
   ' "$routing" >/dev/null || { printf "  FAIL  active subscription profile is the sole valid 100%% routing target\n"; failures=1; }
-  jq -e '[.agentType[] | select(.fallbackProvider? != null) | .fallbackProvider == "codex"] | all' "$routing" >/dev/null || { printf "  FAIL  coding reviewer fallbacks return to Codex\n"; failures=1; }
+  jq -e '[.agentType[] | select(.provider != "implementer-aware-independent-family") | select(.fallbackProvider? != null) | .fallbackProvider == "codex"] | all' "$routing" >/dev/null || { printf "  FAIL  ordinary coding reviewer fallbacks return to Codex\n"; failures=1; }
+  jq -e '[.agentType[] | select(.provider == "implementer-aware-independent-family") | .fallbackProvider? // "implementer-aware-independent-family"] | all(. == "implementer-aware-independent-family")' "$routing" >/dev/null || { printf "  FAIL  independent reviewer fallbacks preserve family exclusion\n"; failures=1; }
   if decision_leverage_valid "$routing"; then
     printf "  OK    decision leverage is an exact closed depth-only policy\n"
   else
@@ -592,7 +647,24 @@ require_text "$runner" 'TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-3600}"' "Pipeline Op
 require_text "$cascade" 'openrouter-wrapper.sh' "pipeline cascade delegates request encoding to the canonical wrapper"
 require_text "$runner" 'openrouter-wrapper.sh' "OpenRouter exec delegates request encoding to the canonical wrapper"
 require_text "$dm_review" '| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `x-ai/grok-4.6` | 3600s |' "dm-review security analysis receives a one-hour completion budget"
+require_text "$dm_review" '| `pattern-recognition-specialist` | `deepseek/deepseek-v4-pro-0813` | `qwen/qwen3.8-max` | 1800s |' "dm-review routine analysis receives a 30-minute completion budget"
 require_text "$dm_review" '7200s at or above 10K diff lines' "dm-review bulk analysis scales to a two-hour completion budget"
+require_text "$model_selection" 'Routine pattern, simplicity, documentation, and test review lanes use 1800' "OpenRouter guidance preserves routine review timeouts"
+require_text "$model_selection" 'Focused security and ordinary bulk analysis use 3600 seconds.' "OpenRouter guidance preserves security and bulk review timeouts"
+require_text "$model_selection" 'analysis uses 7200 seconds at or above 10,000 diff lines.' "OpenRouter guidance preserves large-diff bulk timeouts"
+require_text "$model_selection" '`OPENROUTER_ZDR=1` is opt-in' "OpenRouter model guidance preserves the ZDR privacy control"
+require_text "$model_selection" 'If ZDR leaves no eligible Kimi endpoint, the ordered security fallback may serve Grok 4.6.' "OpenRouter model guidance preserves ZDR-aware security fallback behavior"
+require_text "$efficiency_plan" 'Depot trusted baseline is the current `main` branch; live PR and Issue status remains GitHub-authoritative.' "efficiency plan avoids a mutable trusted-main hash"
+require_text "$efficiency_plan" 'Grok 4.6 handles independent review escalation, and GLM-5.2 remains outside active routing.' "efficiency plan retains the enforced Grok and GLM routing doctrine"
+require_absent "$efficiency_plan" 'Grok 4.5' "efficiency plan removes the retired Grok route"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md" 'model=`deepseek/deepseek-v4-pro-0813`, agent=`pattern-recognition-specialist`' "dm-review contribution example uses the current pattern-review primary"
+if [ "$(grep -Fc -- '--minimum-version 1.15.0' "$dm_review")" -eq 2 ] &&
+   ! grep -Fq -- '--minimum-version 1.14.2' "$dm_review"; then
+  printf "  OK    dm-review resolves only OpenRouter bundles compatible with the 1.15.0 route contract\n"
+else
+  printf "  FAIL  dm-review resolves only OpenRouter bundles compatible with the 1.15.0 route contract\n"
+  failures=1
+fi
 require_absent "$cascade" 'OPENROUTER_PAYLOAD_AUTHORIZATION' "pipeline cascade does not trust environment disclosure authority"
 require_text "$authorization_contract" 'without an approval question' "pipeline preserves non-interactive native fallback"
 require_text "$cascade" 'exit 76' "pipeline exposes ladder exhaustion"

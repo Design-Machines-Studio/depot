@@ -174,7 +174,7 @@
       "top_provider_context_tokens": 1000000,
       "top_provider_max_completion_tokens": 262144,
       "per_request_limits": null,
-      "input_modalities": ["text"],
+      "input_modalities": ["text", "image", "video"],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
