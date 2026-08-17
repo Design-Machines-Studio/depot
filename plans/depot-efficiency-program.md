@@ -1,6 +1,6 @@
 # Depot Efficiency Program -- Phase Index
 
-## Active coordination (refreshed 2026-08-15)
+## Active coordination (refreshed 2026-08-17)
 
 Shared cross-repository projection: [Assembly Coordination, Project
 1](https://github.com/orgs/Design-Machines-Studio/projects/1). GitHub Issues
@@ -8,26 +8,47 @@ and pull requests own live status, review, checks, dependencies, and
 assignees. This file owns Depot's reusable tooling sequence and a compact
 external handoff only; it does not duplicate Baseplate's production roadmap.
 
-Depot trusted main is `40b6e00762b175158f16007f4105d71f846a0c5d`, the
-merge commit for PR #69. Depot has no open pull requests or Issues. The current
-priority order is:
+Depot trusted main is `a120fb0180353219461d263e8c9a85f9d951e348`.
+[Issue #73](https://github.com/Design-Machines-Studio/depot/issues/73) and
+[PR #74](https://github.com/Design-Machines-Studio/depot/pull/74) own the active
+OpenRouter routing refresh. PR #74 is open at exact pushed head
+`2730590cc4cb3fdbf721cc426f6beefc4f0cb7f7`, with additional uncommitted review
+repairs preserved in its isolated worktree. The current priority order is:
 
-1. **P1 -- no new Depot implementation.** The active efficiency sequence is
-   complete. New routing, review, kernel, or harness work requires a measured
-   current failure rather than another speculative layer.
-2. **P2 -- finish the external Fixture release handoff.** Baseplate and Jig own
+1. **P1 -- finish Issue #73 / PR #74.** Complete the routing repair and make
+   private `ai-memory`/RAG enrichment a silent optional skip for teammates who
+   do not have Travis's personal services. Do not start another Depot worktree
+   against its overlapping Pipeline, dm-review, or OpenRouter files.
+2. **P1 -- Codex-first workflow context diet.** After PR #74 merges, reduce the
+   recurring context carried by Pipeline and dm-review while preserving project
+   alignment, proportional review, zero-deferral findings, model routing, and
+   real release/credential/destructive-operation boundaries. Codex GPT-5.6 is
+   the primary acceptance rail; Claude compatibility remains generated from the
+   same canonical content. Measure representative tasks before and after rather
+   than judging the rewrite by prose volume alone.
+3. **P2 -- finish the external Fixture release handoff.** Baseplate and Jig own
    that product work. Depot supplies the already-landed proportional workflow,
    release command, routing, and review support without duplicating their plan.
-3. **Housekeeping is pull-based.** Expand the Agent Plugins canary or add another
+4. **Housekeeping is pull-based.** Expand the Agent Plugins canary or add another
    workflow abstraction only after a live consumer or failed run proves the need.
 
 ### Single next Depot action
 
-**None.** Do not start another Depot execution chunk from this plan. The next
-Assembly action is the already-owned Baseplate Fixture-release sequence under
-[Issue #561](https://github.com/Design-Machines-Studio/assembly-baseplate/issues/561).
-Its two live PRs overlap heavily, so resolve the superseded/conflicting PR #681
-owner decision before treating draft PR #682 as review-ready.
+**Finish PR #74; then run one Codex-first workflow-context-diet chunk from its
+merge commit.** The successor must use a clean isolated worktree and must not be
+started from the currently dirty PR #74 worktree. It should thin the hot
+Pipeline and dm-review entry paths through progressive disclosure, remove
+duplicated instructions, and replace prose checks with existing deterministic
+validators where practical. It must not add a context service, prompt compiler,
+per-model workflow fork, or new approval ceremony.
+
+The first successor is one bounded implementation PR, not a new program of
+ceremonial planning phases. Establish the exact current context baseline, make
+the smallest coherent simplification, and compare the same representative
+Codex tasks before and after. Preserve hard boundaries for credentials,
+destructive or external mutations, release integrity, data loss, and honest
+verification. Treat absent personal `ai-memory` or RAG services as a silent
+optional skip unless the user explicitly invokes a personal workflow.
 
 R2 is closed **DONE / NO CODE**. Current `plan-verification` and
 `run-verification` already put repository proof before model review, keep passing
@@ -74,6 +95,8 @@ proposal-only.
 | 22 | Harness authorization friction | **SOLVED / SUPERSEDED** | PRs #46 and #47 removed per-call approval and Workflow Authority |
 | 23 | Pipeline two-gate planning and project alignment | **DONE** | Issue #66 / PR #67 merged at `9a2d3cf` |
 | 24 | Content-safe OpenRouter HTTP failure reasons | **DONE** | Issue #68 / PR #69 merged at `40b6e00`; `openrouter-v1.14.5` and both installed harness caches are current |
+| 25 | OpenRouter matrix and active routing repair | **IN REVIEW** | Issue #73 / PR #74; merge exact reviewed head and sync the released plugin caches before its successor starts |
+| 26 | Codex-first Pipeline/dm-review context diet | **PREPARED / BLOCKED BY #74** | same-task Codex comparison shows materially lower input/context use without loss of requirements, defect detection, project alignment, or zero-deferral behavior |
 
 The Fixture-development handoff is now the active external P2 lane. No
 additional Depot harness code is authorized absent fresh evidence. DONE, HOLD,
@@ -88,14 +111,20 @@ EXTERNAL, LATER, FUTURE, PARK, and PREPARED are not execution prompts.
 | Private Fixture releases | [PR #680](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/680) merged as `1087c40`; PR #681 remains open at `c0e7d0d`, conflicts with main, and substantially overlaps the landed outcome | owner confirms whether #681 has unique work, then closes or rebases it | Baseplate owner decision first; high collision with #682 across composer docs, code, tests, and task files. |
 | Private Baseplate release assets | [PR #682](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/682) is draft and mergeable at `b4d172b`; all hosted checks are skipped | finish scope decisions, move out of draft, and obtain exact-head checks/review | Existing Baseplate session owns it; do not start a duplicate branch. |
 
-Depot has no open pull requests or Issues. Project 1 remains the external
-cross-repository projection; no duplicate Issue or free-form note is needed.
+Depot has one open Issue (#73) and one open PR (#74), already represented in
+Project 1 as P1 / Tooling / Review. No duplicate Issue or free-form Project note
+is needed for the prepared successor before #74 completes.
 
 ### Operating doctrine
 
 - Assembly means small self-hosted Go applications for 4-50-person co-ops,
   maintained by a two-person team. YAGNI, pragmatic DRY, ergonomics, runtime
   performance, elapsed time, and token cost are design constraints.
+- Codex is Travis's daily driver and the primary acceptance environment for
+  workflow changes. Keep one canonical shared workflow surface, generate Codex
+  aliases from it, and verify actual Sol/Terra/Luna behavior rather than adding
+  parallel Codex-only copies. Prefer concise goals, hard constraints, success
+  criteria, and on-demand references over repeated step-by-step prose.
 - Kimi K3 is review-only, especially focused security. DeepSeek V4 Flash 0731
   leads bounded execution, Grok 4.5 handles harder escalation, and GLM-5.2 is
   the experimental last fallback. Native Fable 5 or Codex 5.6 provides one
