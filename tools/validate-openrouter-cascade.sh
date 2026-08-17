@@ -878,21 +878,21 @@ fi
 fallback_block="$(awk '/## Pipeline execution cascade/{flag=1; next} /## Direct wrapper fallback behavior/{flag=0} flag' "$model_selection")"
 documented_openrouter_exec="$(printf '%s\n' "$fallback_block" | awk -F'|' '
   $2 ~ /^[[:space:]]*`openrouter_exec`[[:space:]]*$/ {
-    value=$4
+    value=$3
     sub(/^[[:space:]]*/, "", value)
     sub(/[[:space:]]*$/, "", value)
     if (!found) print value
     found=1
   }
 ')"
-expected_openrouter_exec='DeepSeek V4 Flash 0731 -> Grok 4.5 -> MiniMax-M3 -> GLM-5.2'
+expected_openrouter_exec='DeepSeek V4 Flash 0731 -> Grok 4.6'
 if [ "$documented_openrouter_exec" = "$expected_openrouter_exec" ] &&
-   grep -Fq 'DeepSeek V4 Flash 0731 is the Pipeline agentic OpenRouter' \
+   grep -Fq 'DeepSeek V4 Flash 0731 is the bounded Pipeline' \
      "$REPO_ROOT/docs/cascade-migration.md" &&
    grep -Fq 'openrouter_exec deepseek/deepseek-v4-flash-0731' \
      "$REPO_ROOT/docs/cascade-migration.md" &&
    jq -e '
-     ["deepseek/deepseek-v4-flash-0731", "x-ai/grok-4.5", "minimax/minimax-m3", "z-ai/glm-5.2"] as $expected
+     ["deepseek/deepseek-v4-flash-0731", "x-ai/grok-4.6"] as $expected
      | [(.hosts[].roles.openrouter_exec.models == $expected)] | all
    ' "$REPO_ROOT/plugins/pipeline/references/harness-profile.json" >/dev/null; then
   pass "documented OpenRouter exec chain exactly matches every host profile"
@@ -902,12 +902,12 @@ else
 fi
 
 if jq -e '
-  ["deepseek/deepseek-v4-flash-0731", "minimax/minimax-m3", "qwen/qwen3-coder", "z-ai/glm-5.2"] as $expected
+  ["deepseek/deepseek-v4-flash-0731", "qwen/qwen3.8-max"] as $expected
   | [(.hosts[].roles.cheap_api.models == $expected)] | all
 ' "$REPO_ROOT/plugins/pipeline/references/harness-profile.json" >/dev/null; then
-  pass "cheap OpenRouter fallback uses refreshed DeepSeek and keeps GLM last"
+  pass "cheap OpenRouter fallback uses exact DeepSeek then Qwen order"
 else
-  fail "cheap OpenRouter fallback must use refreshed DeepSeek and keep GLM last"
+  fail "cheap OpenRouter fallback must use exact DeepSeek then Qwen order"
   any_failed=1
 fi
 
@@ -1083,6 +1083,74 @@ check_routing_policy_slugs() {
   fi
 }
 
+check_active_routing_semantics() {
+  local harness="$REPO_ROOT/plugins/pipeline/references/harness-profile.json"
+  local required='["deepseek/deepseek-v4-flash-0731","deepseek/deepseek-v4-pro-0813","qwen/qwen3.8-max","qwen/qwen3.8-2.4t-a95b","qwen/qwen3.8-27b","qwen/qwen3.7-flash","x-ai/grok-4.6","google/gemini-3.7-flash","meta/muse-spark-1.2","z-ai/glm-5.2","moonshotai/kimi-k3","openai/gpt-5.6-luna","openai/gpt-5.6-terra"]'
+
+  if jq -e --argjson required "$required" '
+    ([.models[].slug] | sort) == ($required | sort)
+    and ([.models[].slug | select(test("^[^/]+/[^/]+$") | not)] | length == 0)
+    and ([.models[].slug | select(test("(^|[-_/])latest($|[-_/])"; "i"))] | length == 0)
+    and ([.models[] | select(.slug == "deepseek/deepseek-v4-pro-0813" or .slug == "qwen/qwen3.7-flash" or .slug == "x-ai/grok-4.6" or .slug == "openai/gpt-5.6-luna" or .slug == "openai/gpt-5.6-terra")
+          | (.pricing_overrides | type == "array" and length > 0)] | all)
+    and ([.models[].per_request_limits] | all(. == null))
+  ' "$model_matrix" >/dev/null; then
+    pass "matrix contains the exact refreshed versioned candidate set and catalog price overrides"
+  else
+    fail "matrix must contain the refreshed versioned candidates, overrides, and per-request limits"
+    any_failed=1
+  fi
+
+  if jq -e --slurpfile matrix "$model_matrix" '
+    ($matrix[0].models | map(select(.catalog_status == "available") | .slug)) as $available
+    | ([.agentType[] | .model?, .fallbackModel?, .codexImplementerModel?, .codexImplementerFallbackModel?]
+       | map(select(. != null)) | unique) as $active
+    | all($active[]; (. as $slug | ($available | index($slug)) != null)
+        and test("^[^/]+/[^/]+$")
+        and (test("(^|[-_/])latest($|[-_/])"; "i") | not))
+  ' "$routing_policy" >/dev/null &&
+     jq -e --slurpfile matrix "$model_matrix" '
+       ($matrix[0].models | map(select(.catalog_status == "available") | .slug)) as $available
+       | [.hosts[].roles[] | select(.kind == "wrapper" or .kind == "openrouter_exec") | .models[]] as $active
+       | all($active[]; (. as $slug | ($available | index($slug)) != null)
+           and test("^[^/]+/[^/]+$")
+           and (test("(^|[-_/])latest($|[-_/])"; "i") | not))
+     ' "$harness" >/dev/null; then
+    pass "active candidates are available exact matrix entries"
+  else
+    fail "unavailable, missing, malformed, or moving-alias candidates must not enter active routing"
+    any_failed=1
+  fi
+
+  if jq -e '
+    .agentType as $a
+    | $a["pattern-recognition-specialist"].model == "deepseek/deepseek-v4-pro-0813"
+      and $a["code-simplicity-reviewer"].model == "qwen/qwen3.8-max"
+      and $a["doc-sync-reviewer"].model == "deepseek/deepseek-v4-flash-0731"
+      and $a["test-coverage-reviewer"].model == "deepseek/deepseek-v4-flash-0731"
+      and $a["openrouter-bulk-analyst"].model == "qwen/qwen3.8-max"
+      and $a["second-perspective"].model == "qwen/qwen3.8-max"
+      and $a["second-perspective"].fallbackModel == "x-ai/grok-4.6"
+      and $a["security-auditor-openrouter"].model == "moonshotai/kimi-k3"
+      and $a["security-auditor-openrouter"].fallbackModel == "x-ai/grok-4.6"
+      and ([ $a | to_entries[] | select(.key | test("security") | not)
+             | .value | .model?, .fallbackModel? ]
+           | map(select(. == "moonshotai/kimi-k3")) | length == 0)
+      and ([ $a[] | .model?, .fallbackModel?, .codexImplementerModel?, .codexImplementerFallbackModel? ]
+           | map(select(. == "z-ai/glm-5.2")) | length == 0)
+  ' "$routing_policy" >/dev/null &&
+     jq -e '
+       ([.hosts[].roles[] | select(.kind == "wrapper" or .kind == "openrouter_exec") | .models[]]
+        | map(select(. == "z-ai/glm-5.2" or . == "moonshotai/kimi-k3")) | length == 0)
+       and (([.hosts[].roles | {openrouter_exec:.openrouter_exec.models, frontier_api:.frontier_api.models, cheap_api:.cheap_api.models, bulk_api:.bulk_api.models}] | unique) | length == 1)
+     ' "$harness" >/dev/null; then
+    pass "dm-review roles and host ladders enforce DeepSeek/Qwen reachability and Kimi/GLM isolation"
+  else
+    fail "active routing violates role reachability, Kimi/GLM isolation, or host parity"
+    any_failed=1
+  fi
+}
+
 # Drift check 3: the matrix snapshot_date (top level and every entry) must match
 # the snapshot date stated in the model-selection.md prose.
 check_matrix_snapshot_date() {
@@ -1120,6 +1188,7 @@ if check_matrix_readable; then
   check_refresh_provenance_domains
   check_quality_rank_drift
   check_routing_policy_slugs
+  check_active_routing_semantics
   check_matrix_snapshot_date
 fi
 

@@ -212,9 +212,14 @@ Select which agents to launch based on mode, changed file extensions, and projec
 
 #### Routing Policy for Mechanical Agents
 
+For API candidates, "quality-per-price" means the explicit ordered role in
+`routing-policy.json`, after family exclusions; `quality_rank` is only a
+compatibility floor. Ordinary second perspective starts Qwen3.8 Max then Grok
+4.6. Security starts Kimi K3 then Grok 4.6.
+
 Read `plugins/pipeline/references/routing-policy.json` before selecting models **when it is present**. When dm-review is installed standalone, use the inline model table. Family means provider lineage: OpenAI/Codex, Anthropic/Claude, and each OpenRouter-served third party under its own vendor family; OpenRouter is a transport, not a family. The second-perspective reviewer model family MUST differ from the family that implemented the diff under review. For a mixed-family diff, treat every contributing family as implementing and select outside that set. The same family exclusion applies to the mandatory full-diff security sign-off.
 
-Resolve both family-independent roles subscription-first: an eligible non-implementing family with live subscription headroom for both `five_hour` and `weekly` beats every API family, then API candidates follow matrix quality-per-price. Unknown subscription headroom is treated as at-threshold, never as available. Do not start a planned multi-chunk review whose projected subscription spend would cross the threshold mid-run. Apply `.dm/operator-profile.local.json` only after policy derivation: it may rank and remove derived candidates, never add one or override `neverOfferable`, disclosure/security controls, or family independence. No profile means policy defaults. This is the remove-only precedence defined by `plugins/pipeline/references/operator-profile-schema.json` (`properties.precedence`), not a separate override system.
+Resolve both family-independent roles subscription-first: an eligible non-implementing family with live subscription headroom for both `five_hour` and `weekly` beats every API family, then use the applicable ordered role in `routing-policy.json` after removing implementing families. Ordinary second perspective uses `second-perspective`; security sign-off uses its dedicated implementer-aware route. Unknown subscription headroom is treated as at-threshold, never as available. Do not start a planned multi-chunk review whose projected subscription spend would cross the threshold mid-run. Apply `.dm/operator-profile.local.json` only after policy derivation: it may rank and remove derived candidates, never add one or override `neverOfferable`, disclosure/security controls, or family independence. No profile means policy defaults. This is the remove-only precedence defined by `plugins/pipeline/references/operator-profile-schema.json` (`properties.precedence`), not a separate override system.
 
 Every `second-perspective` and independent-family security sign-off receipt records `implementer_family`, `reviewer_family`, and `resolution_reason`. For mixed implementation, `implementer_family` records `mixed(<sorted families>)`. A receipt with equal implementing and reviewing families is invalid and leaves the required lane incomplete.
 
@@ -325,7 +330,7 @@ These 5 review criteria run as 6 logical lanes when OpenRouter is available:
 
 When the lane is enabled, add **second-perspective** as a parallel read-only reviewer in full mode only. This is the default dual-perspective review lane at the integration boundary; it caught distinct blockers in real pipeline closeout runs. Independence is the property that caught those blockers, so this role is not tied to the orchestrating harness or a named provider.
 
-Resolve the role by the subscription-first family rules above. When the implementer is OpenAI/Codex, select native Claude if both subscription windows have headroom; otherwise select the highest matrix quality-per-price eligible OpenRouter frontier family through its authorized path. Never resolve back to OpenAI/Codex for that diff. When another family implemented the diff, Codex is the preferred resolution when its subscription has headroom, followed by the remaining policy-derived families.
+Resolve the role by the subscription-first family rules above. When the implementer is OpenAI/Codex, select native Claude if both subscription windows have headroom; otherwise walk the ordered `second-perspective` role (`qwen/qwen3.8-max`, then `x-ai/grok-4.6`) after excluding every implementing family. Never resolve back to OpenAI/Codex for that diff. When another family implemented the diff, Codex is the preferred resolution when its subscription has headroom, followed by that same filtered ordered role.
 
 Use `dm-review/*/agents/review/codex-perspective.md` as the compatibility-named default agent definition for the role. Dispatch it on the resolved family, normalize output to P1/P2/P3, and let the consolidator merge every finding as in-scope. The filename does not select the provider.
 
@@ -546,12 +551,12 @@ Routing decisions come from `plugins/pipeline/references/routing-policy.json`, w
 
 | Agent ID | Primary model slug | Fallback model slug | Timeout |
 |---|---|---|---|
-| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `openai/gpt-5.6-terra` | 3600s |
-| `pattern-recognition-specialist` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
-| `code-simplicity-reviewer` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
-| `doc-sync-reviewer` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
-| `test-coverage-reviewer` | `openai/gpt-5.6-luna` | `openai/gpt-5.6-terra` | 1800s |
-| `openrouter-bulk-analyst` | `moonshotai/kimi-k3` | `openai/gpt-5.6-terra` | 3600s; 7200s at or above 10K diff lines |
+| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `x-ai/grok-4.6` | 3600s |
+| `pattern-recognition-specialist` | `deepseek/deepseek-v4-pro-0813` | `qwen/qwen3.8-max` | 1800s |
+| `code-simplicity-reviewer` | `qwen/qwen3.8-max` | `deepseek/deepseek-v4-pro-0813` | 1800s |
+| `doc-sync-reviewer` | `deepseek/deepseek-v4-flash-0731` | `openai/gpt-5.6-luna` | 1800s |
+| `test-coverage-reviewer` | `deepseek/deepseek-v4-flash-0731` | `openai/gpt-5.6-luna` | 1800s |
+| `openrouter-bulk-analyst` | `qwen/qwen3.8-max` | `deepseek/deepseek-v4-pro-0813` | 3600s; 7200s at or above 10K diff lines |
 
 When `routing-policy.json` supplies `model` and `fallbackModel`, those full OpenRouter slugs override the inline table. The table is the standalone dm-review fallback. Both models are invoked through the OpenRouter wrapper and billed to the OpenRouter rail.
 
@@ -559,7 +564,7 @@ When `routing-policy.json` supplies `model` and `fallbackModel`, those full Open
 
 ```
 Provider routing (OPENROUTER_AVAILABLE={true|false}, authorization={trusted-boundary|none}):
-- N analyses -> OpenRouter (Kimi security, pattern-recognition, code-simplicity, doc-sync, test-coverage, openrouter-bulk-analyst when selected)
+- N analyses -> OpenRouter (Kimi security only; DeepSeek pattern/docs/tests; Qwen simplicity/bulk/ordinary second perspective)
 - N native coding agents -> Codex (architecture, visual/UI, unavailable-provider and sensitive-section coverage)
 - 1 required security sign-off -> resolved independent family (full diff)
 - 1 second perspective -> resolved independent family when enabled
@@ -1016,7 +1021,7 @@ Report the fallback in the Agent Summary table:
 
 | Agent | Provider | Status |
 |-------|----------|--------|
-| pattern-recognition-specialist | OpenRouter `openai/gpt-5.6-terra` | RUNNER FAILURE |
+| pattern-recognition-specialist | OpenRouter `deepseek/deepseek-v4-pro-0813` | RUNNER FAILURE |
 | pattern-recognition-specialist | Codex (fallback) | Completed |
 | security-auditor-openrouter | OpenRouter `moonshotai/kimi-k3` | Completed (eligible sections) |
 | security-auditor-codex-signoff | Resolved independent family | Completed (full diff) |

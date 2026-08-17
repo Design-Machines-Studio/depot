@@ -59,10 +59,10 @@ Read the plan and identify discrete chunks of work. A chunk is:
    They may appear in a product chunk only when that chunk also contains real
    integration code required by its acceptance criteria.
 7. After determining `filesToModify` for each chunk, classify its `kind` using the file-extension heuristic:
-   - `ui`: any `.templ`, `.twig`, `.html`, `.css`, or files in `pages/`, `templates/`, `views/`
+   - `ui`: any served or product-rendered `.templ`, `.twig`, `.html`, `.css`, or files in `pages/`, `templates/`, `views/`
    - `logic`: `.go`, `.py`, `.ts`, `.php` handlers/services/migrations without templates
    - `integration`: prompt contains wiring verbs ("wire," "integrate," "connect") OR modifies route files / `main.go`
-   - `config`: `.md`, `.json`, `.yaml`, `.toml`, docs
+   - `config`: `.md`, `.json`, `.yaml`, `.toml`, docs, and unserved non-rendered planning HTML under `plans/**` (including `plans/**/work-paths.html`)
 
    Then derive `executor` from the shared routing policy at `plugins/pipeline/references/routing-policy.json`, not from hardcoded local rules:
    - `config` / docs / pure prose -> `openrouter`
@@ -71,7 +71,7 @@ Read the plan and identify discrete chunks of work. A chunk is:
    - `ui` -> `codex`
    - `integration` -> `codex`
 
-   When a chunk's files span multiple categories, classify up: `ui` > `integration` > `logic` > `config`.
+   Planning HTML is an explicit narrow exception to the `.html` UI trigger: a chunk containing only planning Markdown/JSON/YAML plus unserved `plans/**.html` artifacts remains `config` and OpenRouter-eligible without a routing override. If direct splitting separates offline planning artifacts from served UI or live-tool work, split it; mixed or uncertain product surfaces still classify up: `ui` > `integration` > `logic` > `config`.
 
    Then classify rendered-output applicability independently. Every new chunk
    MUST carry `renderedSurface: required|not_applicable` and a non-empty

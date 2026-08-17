@@ -63,10 +63,10 @@ graph LR
 | dm-review | workflow-kernel | required | `>=0.14.0` |
 | dm-review | superpowers | optional | `>=1.0.0` |
 | dm-review | airlift | optional | `>=1.0.0` |
-| dm-review | openrouter | optional | `>=1.14.2` |
+| dm-review | openrouter | optional | `>=1.15.0` |
 | ghostwriter | design-machines | optional | `>=1.5.0` |
 | ned | superpowers | optional | `>=1.0.0` |
-| pipeline | dm-review | required | `>=1.63.0` |
+| pipeline | dm-review | required | `>=1.64.0` |
 | pipeline | ned | required | `>=1.4.0` |
 | pipeline | workflow-kernel | required | `>=0.16.0` |
 | pipeline | design-machines | optional | `>=1.3.0` |
@@ -77,7 +77,7 @@ graph LR
 | pipeline | ghostwriter | optional | `>=3.7.0` |
 | pipeline | superpowers | optional | `>=1.0.0` |
 | pipeline | airlift | optional | `>=1.0.0` |
-| pipeline | openrouter | optional | `>=1.14.1` |
+| pipeline | openrouter | optional | `>=1.15.0` |
 | project-manager | ned | required | `>=1.4.0` |
 | project-manager | design-machines | required | `>=1.3.0` |
 | project-manager | ghostwriter | required | `>=3.7.0` |

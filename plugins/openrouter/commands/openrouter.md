@@ -1,6 +1,6 @@
 ---
 name: openrouter
-description: Direct OpenRouter invocation with model selection. Delegates a prompt to an OpenRouter model and returns the response. Uses Terra by default with Kimi K3 as the quality fallback.
+description: Direct OpenRouter invocation with model selection. Delegates a prompt to an OpenRouter model and returns the response. Uses Qwen3.8 Max by default with Grok 4.6 as the quality fallback.
 argument-hint: "<prompt> [--model <slug>]"
 ---
 
@@ -14,8 +14,8 @@ developer workstation.
 ```
 /openrouter Review this function for potential race conditions
 /openrouter --model moonshotai/kimi-k3 Perform an adversarial security review
-/openrouter --model deepseek/deepseek-v4-pro Analyze the architectural coupling between these modules
-/openrouter --model z-ai/glm-5.2 Find duplicated validation patterns in this diff
+/openrouter --model deepseek/deepseek-v4-pro-0813 Analyze the architectural coupling between these modules
+/openrouter --model qwen/qwen3.8-max Find duplicated validation patterns in this diff
 ```
 
 An OpenRouter security result is a preliminary external lens. Consequential
@@ -29,7 +29,7 @@ than the implementation family.
 Extract the prompt and optional `--model` flag from the user's input.
 
 - If `--model` is specified, use that slug exactly.
-- Otherwise use `openai/gpt-5.6-terra` with `moonshotai/kimi-k3` as fallback.
+- Otherwise use `qwen/qwen3.8-max` with `x-ai/grok-4.6` as fallback.
 - Reject any primary or fallback slug beginning with `anthropic/`; Anthropic
   remains native-Claude-only.
 

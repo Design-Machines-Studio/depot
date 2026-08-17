@@ -39,14 +39,14 @@ The cascade keys off the merged chunk vocabulary. `model-cascade.json` maps `kin
 
 | kind | class | primary | on cap, descends to |
 |------|-------|---------|---------------------|
-| `logic`, `integration`, `ui` | `codex` | Codex subscription | DeepSeek V4 Flash 0731 OpenRouter exec -> Grok 4.5 -> MiniMax-M3 -> GLM-5.2 -> wrapper ladder |
-| `config`, `docs`, mechanical logic | `openrouter` | DeepSeek V4 Flash 0731 OpenRouter exec | Grok 4.5 -> MiniMax-M3 -> GLM-5.2 -> Codex subscription -> wrapper ladder |
+| `logic`, `integration`, `ui` | `codex` | Codex subscription | eligible OpenRouter roles only after native capacity descent |
+| `config`, `docs`, mechanical logic | `openrouter` | DeepSeek V4 Flash 0731 OpenRouter exec | Grok 4.6 -> Codex subscription -> wrapper ladder |
 
 **Native Codex subscription capacity remains the first coding rail for logic,
-integration, and UI. DeepSeek V4 Flash 0731 is the Pipeline agentic OpenRouter
-execution head, followed by Grok 4.5 and MiniMax-M3, with GLM-5.2 last. Kimi K3
-is the independent security and bulk-analysis head; Terra is its OpenRouter
-quality backup, while Luna is the economical dm-review mechanical rail.** The
+integration, and served UI. DeepSeek V4 Flash 0731 is the bounded Pipeline
+OpenRouter execution head, followed by Grok 4.6. Kimi K3 is reserved for
+focused applicable security analysis; Qwen3.8 Max leads bulk and ordinary
+independent review, while Luna is an economical routine-review fallback.** The
 coding quality floor is 70. `harness-profile.json` is the only host-specific
 file (it resolves abstract roles to concrete rails per host).
 
@@ -72,7 +72,7 @@ export OPENROUTER_API_KEY="sk-or-..."   # required for live configured-key calls
 ## dm-review big-diff selection (>5000 lines)
 
 ```
-configured key + eligible payload -> openrouter-bulk-analyst (Kimi K3 primary, Terra fallback)
+configured key + eligible payload -> openrouter-bulk-analyst (Qwen3.8 Max primary, DeepSeek V4 Pro 0813 fallback)
 missing/invalid key or decline     -> native Codex
 ```
 

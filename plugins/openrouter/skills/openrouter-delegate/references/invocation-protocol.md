@@ -17,7 +17,7 @@ enforcement.
 openrouter-wrapper.sh <model-slug> <prompt|-> [timeout_s] [fallback-slug]
 ```
 
-- `<model-slug>` -- OpenRouter model ID, e.g. `moonshotai/kimi-k3` or `z-ai/glm-5.2`
+- `<model-slug>` -- exact OpenRouter model ID, e.g. `qwen/qwen3.8-max` or `deepseek/deepseek-v4-flash-0731`
 - `<prompt|->` -- literal prompt string, or `-` to read the prompt from stdin (use for large diffs)
 - `[timeout_s]` -- overall streamed completion budget in seconds (default
   `3600`; use `7200` for very large or bulk review)
@@ -78,7 +78,7 @@ before it reaches this low-level wrapper:
 
 ```text
 /openrouter --model moonshotai/kimi-k3 your prompt
-/openrouter --model z-ai/glm-5.2 analyze this bounded mechanical change
+/openrouter --model deepseek/deepseek-v4-flash-0731 analyze this bounded mechanical change
 ```
 
 The positional wrapper syntax above is an implementation interface, not an
@@ -103,7 +103,7 @@ protocol below before invoking it.
 - `OPENROUTER_ZDR` (`1` to enable): restrict to providers that do **not** train on / retain data (`data_collection: deny`). Opt-in only -- privacy is demoted (Quality > Price > Speed > Provider privacy); set for genuinely sensitive material (client code under NDA, credentials-adjacent diffs).
 - `OPENROUTER_WORKLOAD` (`quality|security|direct|bulk|mechanical`, default
   `quality`): selects the default routing strategy. Direct, bulk, and mechanical
-  requests prefer throughput; quality and security Kimi requests prefer Exacto.
+  requests prefer throughput; quality and security requests prefer Exacto.
 - `OPENROUTER_REQUIRE_PARAMS` (default `1`): skip providers that do not support the requested params (keeps agentic calls from silently degrading).
 - `OPENROUTER_PROVIDER_SORT` (`throughput|latency|price|exacto`): explicitly
   override workload routing.
@@ -199,7 +199,7 @@ POST https://openrouter.ai/api/v1/chat/completions
 
 ```json
 {
-  "models": ["moonshotai/kimi-k3", "openai/gpt-5.6-terra"],
+  "models": ["qwen/qwen3.8-max", "x-ai/grok-4.6"],
   "provider": {
     "require_parameters": true,
     "allow_fallbacks": true,

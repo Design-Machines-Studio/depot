@@ -193,8 +193,8 @@ case "$TARGET_AGENT_NAME" in
     # This caller label catches accidental role/model drift. It is not, by
     # itself, an adversarial identity boundary.
     [ "$MODEL" = "moonshotai/kimi-k3" ] &&
-      [ "$FALLBACK" = "openai/gpt-5.6-terra" ] || {
-      echo "### RUNNER FAILURE: security review role requires Kimi K3 primary and GPT-5.6 Terra fallback" >&2
+      [ "$FALLBACK" = "x-ai/grok-4.6" ] || {
+      echo "### RUNNER FAILURE: security review role requires Kimi K3 primary and Grok 4.6 fallback" >&2
       exit 2
     }
     ;;

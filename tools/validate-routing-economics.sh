@@ -136,6 +136,8 @@ routing="$REPO_ROOT/plugins/pipeline/references/routing-policy.json"
 schema="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/manifest-schema.md"
 promptcraft="$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
 orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
+planning_html_fixture="$REPO_ROOT/tests/fixtures/routing/planning-html-docs.json"
+served_html_fixture="$REPO_ROOT/tests/fixtures/routing/served-html-ui.json"
 cascade="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
 usage_probe="$REPO_ROOT/plugins/pipeline/references/usage-probe.sh"
 usage_probe_fixture="$REPO_ROOT/tools/run-usage-probe-fixture.sh"
@@ -160,6 +162,25 @@ research="$REPO_ROOT/plugins/pipeline/skills/research/SKILL.md"
 pipeline_cmd="$REPO_ROOT/plugins/pipeline/commands/pipeline.md"
 postmortem_schema="$REPO_ROOT/plugins/pipeline/references/run-postmortem-schema.md"
 ledger="$REPO_ROOT/docs/pipeline-metrics/ledger.md"
+
+classify_fixture_kind() {
+  local fixture="$1"
+  local derived="config"
+  local path
+  while IFS= read -r path; do
+    case "$path" in
+      plans/*.html) ;;
+      *.templ|*.twig|*.html|*.css|pages/*|*/pages/*|templates/*|*/templates/*|views/*|*/views/*)
+        derived="ui"
+        break
+        ;;
+      *.go|*.py|*.ts|*.php)
+        derived="logic"
+        ;;
+    esac
+  done < <(jq -r '.filesToModify[]' "$fixture")
+  printf '%s\n' "$derived"
+}
 
 require_text "$usage_probe" 'select($data.total_credits | type == "number")' "OpenRouter probe requires numeric total credits"
 require_text "$usage_probe" 'select($data.total_usage | type == "number")' "OpenRouter probe requires numeric total usage"
@@ -342,13 +363,14 @@ if [ -f "$routing" ]; then
     | .agentType["security-auditor-codex-signoff"] as $signoff
     | $external.provider == "openrouter"
       and $external.model == "moonshotai/kimi-k3"
+      and $external.fallbackModel == "x-ai/grok-4.6"
       and $external.fallbackProvider == "codex"
       and $signoff == {
         "provider":"implementer-aware-independent-family",
         "preferredProviderWhenIndependent":"codex",
         "codexImplementerProvider":"openrouter",
         "codexImplementerModel":"moonshotai/kimi-k3",
-        "codexImplementerFallbackModel":"openai/gpt-5.6-terra",
+        "codexImplementerFallbackModel":"x-ai/grok-4.6",
         "required":true,
         "inputScope":"full-diff",
         "reviewerFamilyConstraint":"must-differ-from-implementer-family",
@@ -363,27 +385,19 @@ if [ -f "$routing" ]; then
   ' "$routing" >/dev/null || { printf "  FAIL  external security analysis and implementer-aware sign-off have separate lane identities\n"; failures=1; }
   jq -e '.agentType["doc-sync-reviewer"].provider == "openrouter"' "$routing" >/dev/null || { printf "  FAIL  routing policy maps doc-sync-reviewer to OpenRouter\n"; failures=1; }
   jq -e '
-    [
-      .agentType["pattern-recognition-specialist"],
-      .agentType["code-simplicity-reviewer"],
-      .agentType["doc-sync-reviewer"],
-      .agentType["test-coverage-reviewer"]
-    ]
-    | all(. == {
-        "provider":"openrouter",
-        "model":"openai/gpt-5.6-luna",
-        "fallbackModel":"openai/gpt-5.6-terra",
-        "fallbackProvider":"codex",
-        "rationale": .rationale
-      })
-  ' "$routing" >/dev/null || { printf "  FAIL  mechanical reviewers use exact Luna -> Terra -> Codex routing\n"; failures=1; }
+    .agentType as $a
+    | $a["pattern-recognition-specialist"] | .provider == "openrouter" and .model == "deepseek/deepseek-v4-pro-0813" and .fallbackModel == "qwen/qwen3.8-max" and .fallbackProvider == "codex"
+    and ($a["code-simplicity-reviewer"].model == "qwen/qwen3.8-max")
+    and ($a["doc-sync-reviewer"].model == "deepseek/deepseek-v4-flash-0731")
+    and ($a["test-coverage-reviewer"].model == "deepseek/deepseek-v4-flash-0731")
+  ' "$routing" >/dev/null || { printf "  FAIL  routine reviewers use the intended DeepSeek/Qwen primaries\n"; failures=1; }
   jq -e '
     .agentType["openrouter-bulk-analyst"]
     | .provider == "openrouter"
-      and .model == "moonshotai/kimi-k3"
-      and .fallbackModel == "openai/gpt-5.6-terra"
+      and .model == "qwen/qwen3.8-max"
+      and .fallbackModel == "deepseek/deepseek-v4-pro-0813"
       and .fallbackProvider == "codex"
-  ' "$routing" >/dev/null || { printf "  FAIL  bulk analysis uses exact Kimi K3 -> Terra -> Codex routing\n"; failures=1; }
+  ' "$routing" >/dev/null || { printf "  FAIL  bulk analysis uses exact Qwen Max -> DeepSeek Pro -> Codex routing\n"; failures=1; }
   jq -e '
     .targets as $targets
     | ($targets.subscriptionProfiles[$targets.activeSubscriptionProfile]) as $active
@@ -451,6 +465,38 @@ require_text "$promptcraft" "routingOverride" "promptcraft requires explicit exe
 require_text "$promptcraft" "splitAttempted" "promptcraft splits tool-dependent and offline work first"
 require_text "$promptcraft" "one independent" "promptcraft bounds high-uncertainty planning depth"
 require_text "$promptcraft" "decision_profile_defaulted=true" "promptcraft documents legacy standard-depth provenance"
+if jq -e '
+  .executor == "openrouter"
+  and .renderedSurface == "not_applicable"
+  and .routingOverride == null
+  and (.filesToModify == ["plans/model-routing/notes.md", "plans/model-routing/work-paths.html"])
+  and .expectedPrimaryModel == "deepseek/deepseek-v4-flash-0731"
+' "$planning_html_fixture" >/dev/null &&
+   grep -Fq 'plans/**/work-paths.html' "$promptcraft"; then
+  planning_probe="$profile_fixture_root/planning-probe.json"
+  printf '%s\n' '{"probe_source":"fixture","codex":{"state":"ok","remaining_pct":100},"openrouter":{"state":"ok","balance_usd":1}}' > "$planning_probe"
+  planning_kind="$(classify_fixture_kind "$planning_html_fixture")"
+  planning_result="$(CASCADE_EXHAUSTED_RAILS= "$cascade" --kind "$planning_kind" --prompt planning-fixture --host codex --dry-run --probe-file "$planning_probe")"
+  planning_executor="$(printf '%s' "$planning_result" | jq -r '.kind // empty')"
+  planning_model="$(printf '%s' "$planning_result" | jq -r '.model // empty')"
+else
+  planning_kind=""
+  planning_executor=""
+  planning_model=""
+fi
+if [ "$planning_executor" = "openrouter_exec" ] &&
+   [ "$planning_model" = "$(jq -r '.expectedPrimaryModel' "$planning_html_fixture")" ] &&
+   [ "$planning_kind" = "config" ] &&
+   [ "$(classify_fixture_kind "$served_html_fixture")" = "ui" ] &&
+   jq -e '.kind == "ui" and .executor == "codex" and .renderedSurface == "required" and .routingOverride == null' "$served_html_fixture" >/dev/null; then
+  printf "  OK    unserved planning HTML plus Markdown remains OpenRouter-eligible without an override\n"
+else
+  printf "  FAIL  planning HTML regression fixture must remain OpenRouter-eligible without an override\n"
+  failures=1
+fi
+require_absent "$dm_review" 'matrix quality-per-price' "dm-review does not let matrix rank select independent reviewers"
+require_absent "$REPO_ROOT/plugins/dm-review/agents/review/codex-perspective.md" 'matrix quality-per-price' "second-perspective agent defers to its ordered role"
+require_absent "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'matrix quality-per-price' "agent registry defers to ordered roles"
 require_text "$orchestrator" "MUST NOT implement it in-process" "orchestrator forbids absorbing externally routed chunks"
 require_text "$orchestrator" 'integration) PRIMARY_RAIL="codex"' "orchestrator fallback maps integration to Codex"
 require_text "$orchestrator" "implementedBy:" "orchestrator receipts record implementedBy"
@@ -545,7 +591,7 @@ require_text "$wrapper" 'IDLE_TIMEOUT="${OPENROUTER_IDLE_TIMEOUT:-600}"' "OpenRo
 require_text "$runner" 'TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-3600}"' "Pipeline OpenRouter execution inherits the one-hour completion budget"
 require_text "$cascade" 'openrouter-wrapper.sh' "pipeline cascade delegates request encoding to the canonical wrapper"
 require_text "$runner" 'openrouter-wrapper.sh' "OpenRouter exec delegates request encoding to the canonical wrapper"
-require_text "$dm_review" '| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `openai/gpt-5.6-terra` | 3600s |' "dm-review security analysis receives a one-hour completion budget"
+require_text "$dm_review" '| `security-auditor-openrouter` | `moonshotai/kimi-k3` | `x-ai/grok-4.6` | 3600s |' "dm-review security analysis receives a one-hour completion budget"
 require_text "$dm_review" '7200s at or above 10K diff lines' "dm-review bulk analysis scales to a two-hour completion budget"
 require_absent "$cascade" 'OPENROUTER_PAYLOAD_AUTHORIZATION' "pipeline cascade does not trust environment disclosure authority"
 require_text "$authorization_contract" 'without an approval question' "pipeline preserves non-interactive native fallback"

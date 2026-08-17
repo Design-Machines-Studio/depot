@@ -51,7 +51,7 @@ If no issues found, state "No issues found" explicitly.
 Focus on changed code only. Do not flag pre-existing issues in context lines.
 ```
 
-**Model:** `moonshotai/kimi-k3` (independent quality-first default), with `openai/gpt-5.6-terra` as the OpenAI-model-via-OpenRouter quality fallback. Both attempts retain `implementedBy: openrouter` provider provenance; neither is a native Codex execution. **Timeout:** 3600s (<10K lines) / 7200s (>=10K lines).
+**Model:** `qwen/qwen3.8-max`, with `deepseek/deepseek-v4-pro-0813` as the bulk-analysis fallback. Both attempts retain `implementedBy: openrouter` provider provenance; neither is a native Codex execution. Focused security uses the separate Kimi -> Grok policy. **Timeout:** 3600s (<10K lines) / 7200s (>=10K lines).
 
 ---
 
@@ -66,7 +66,7 @@ For the `/openrouter` command -- general-purpose delegation.
 Respond concisely and directly.
 ```
 
-**Model:** `openai/gpt-5.6-terra` unless the user passes `--model`; `moonshotai/kimi-k3` is the default quality fallback. **Timeout:** 3600s.
+**Model:** `qwen/qwen3.8-max` unless the user passes `--model`; `x-ai/grok-4.6` is the default fallback. **Timeout:** 3600s.
 
 ---
 
@@ -89,7 +89,7 @@ Requirements:
 Output only the file content.
 ```
 
-**Model:** `openai/gpt-5.6-luna`, with Terra as the quality fallback. **Timeout:** 1800s. The orchestrator writes the returned text to `{TARGET_FILE}` and commits it -- the wrapper never touches the filesystem.
+**Model:** `deepseek/deepseek-v4-flash-0731`, with `openai/gpt-5.6-luna` as the economical fallback. **Timeout:** 1800s. The orchestrator writes the returned text to `{TARGET_FILE}` and commits it -- the wrapper never touches the filesystem.
 
 ---
 

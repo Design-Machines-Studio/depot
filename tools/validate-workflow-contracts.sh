@@ -548,7 +548,7 @@ for loop_contract in "$review_loop" "$review_loop_skill"; do
 done
 require_text "$review_skill" '`review_lane_allowlist`' "review receiver names the selective lane allowlist"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.14.0"' "dm-review requires the simplified verification kernel release"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.63.0"' "pipeline requires zero-deferral dm-review release"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.64.0"' "pipeline requires zero-deferral dm-review release"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'family-independent second-opinion review' "dm-review manifest describes family-independent perspective resolution"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'Full mode only.' "migration-validator registry limits the lane to full mode"
@@ -1180,7 +1180,7 @@ require_absent "$REPO_ROOT/docs/cascade-migration.md" \
   "cascade guidance does not forbid the shipped independent Claude review role"
 for f in "$openrouter_agent_runner" "$openrouter_wrapper"; do
   rel="${f#$REPO_ROOT/}"
-  require_text "$f" "security review role requires Kimi K3 primary and GPT-5.6 Terra fallback" \
+  require_text "$f" "security review role requires Kimi K3 primary and Grok 4.6 fallback" \
     "$rel binds security review routing to the approved model pair"
 done
 

@@ -185,15 +185,17 @@ full dm-review is a run-postmortem miss.
 
 ### Why this matters for OpenRouter routing
 
-The four mechanical review lanes (pattern-recognition, code-simplicity,
-doc-sync, test-coverage) plus Kimi-led security analysis route through
+The four routine review lanes (pattern-recognition, code-simplicity,
+doc-sync, test-coverage) plus Kimi-led focused security analysis route through
 OpenRouter only when `dm-review:review` is invoked and `OPENROUTER_API_KEY` is
 set or a strictly validated `OPENROUTER_API_KEY_FILE` is configured. Kimi
 security analysis always pairs with independent non-implementing-family
-full-diff sign-off. Terra is the review fallback; the refreshed DeepSeek V4
-Flash 0731, Grok, MiniMax, and last-resort GLM seats remain models inside the
-OpenRouter rail, not separate plugins or credentials. If you skip the skill
-invocation, the routing never engages. You MUST invoke the skill.
+full-diff sign-off. DeepSeek Flash handles documentation and test coverage,
+DeepSeek Pro handles pattern review, Qwen3.8 Max handles simplicity and bulk
+review, and Grok 4.6 provides demanding or security escalation. GLM 5.2 has no
+active seat. These remain models inside the OpenRouter rail, not separate
+plugins or credentials. If you skip the skill invocation, the routing never
+engages. You MUST invoke the skill.
 
 ## Codex Native Adapter Parity
 
@@ -217,7 +219,7 @@ Do not stop merely because Codex lacks Claude's `Agent` or `Skill` tool names wh
 
 Not all chunks need the same evaluation depth. Classify each chunk before execution:
 
-**UI chunks** (touch `.templ`, `.twig`, `.html`, `.css`, or template files):
+**UI chunks** (touch served/product `.templ`, `.twig`, `.html`, `.css`, or template files; unserved non-rendered planning HTML under `plans/**` is excluded):
 
 - Run focused Codex review with at most one repair/recheck pass
 - When `renderedSurface: required`, ALSO run Playwright browser evaluation against the authoritative declared cases
@@ -863,9 +865,9 @@ Read the chunk's `kind` field from the manifest and map to the orchestrator's cl
 
 **Fallback (older manifests without `kind`):** If the `kind` field is absent, fall back to the runtime file-extension heuristic:
 
-- **UI:** Any file ends in `.templ`, `.twig`, `.html`, `.css`, or lives in a `pages/`, `templates/`, `views/` directory
+- **UI:** Any served/product file ends in `.templ`, `.twig`, `.html`, `.css`, or lives in a `pages/`, `templates/`, `views/` directory. Unserved non-rendered `plans/**.html` is planning/config evidence, not UI.
 - **Logic:** Files end in `.go`, `.py`, `.ts`, `.php` and are handlers, services, or migrations -- no templates
-- **Trivial:** Only `.md`, `.json`, `.yaml`, `.toml`, config, or documentation files
+- **Trivial:** Only `.md`, `.json`, `.yaml`, `.toml`, config, documentation, or unserved non-rendered `plans/**.html` planning artifacts
 - **Integration:** The chunk title or prompt contains "wire," "integrate," "connect," or it modifies route files, `main.go`, or navigation templates
 
 Read the independently validated `renderedSurface` and rationale from the

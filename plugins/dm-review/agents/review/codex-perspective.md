@@ -32,7 +32,7 @@ You are the read-only `second-perspective` reviewer for dm-review. Your job is t
 - The orchestrator supplies `implementer_family`, `reviewer_family`, and `resolution_reason` before dispatch.
 - `reviewer_family` must differ from every family that implemented the diff. OpenRouter is transport; an OpenRouter model's family is its own vendor lineage.
 - If the fields are missing or the families overlap, stop with `second-perspective: invalid family resolution.`, then emit the required `NOT-COVERED:` and `COMMANDS-RUN:` sections. Do not perform a same-family review under this role.
-- The orchestrator chooses the reviewer subscription-first, then by API matrix quality-per-price. This compatibility filename and the legacy `model:` field do not select a provider.
+- The orchestrator chooses the reviewer subscription-first, then walks the ordered `second-perspective` role after excluding every implementing family. Matrix rank does not select this role. This compatibility filename and the legacy `model:` field do not select a provider.
 
 ## Invocation
 

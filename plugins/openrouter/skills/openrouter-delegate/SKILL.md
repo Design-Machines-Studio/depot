@@ -1,6 +1,6 @@
 ---
 name: openrouter-delegate
-description: Use when the user explicitly asks to use, ask, send, delegate, or offload work to OpenRouter; requests GLM-5.2, Kimi K3, Terra, or Luna through OpenRouter; wants a cheap model for config/docs; needs a 1M-context or bulk/large-diff review; wants a second opinion via OpenRouter; or wants to reduce subscription usage. Routes security and bulk analysis to Kimi, quality backup to Terra, and economical mechanical work to Luna. Do not trigger for ordinary coding, review, pipeline, commit, or push requests that do not mention OpenRouter, a routed model, cost offload, or large-context analysis.
+description: Use when the user explicitly asks to delegate work to OpenRouter; requests a routed exact model; wants cheap bounded config/docs work, long-context or bulk review, an independent second opinion, or subscription relief. Routes focused security to Kimi K3, routine documentation/test review and bounded execution to DeepSeek, bulk/independent review to Qwen3.8 Max, demanding escalation to Grok 4.6, and economical fallback to Luna. Do not trigger for ordinary coding, review, pipeline, commit, or push requests that do not mention OpenRouter, a routed model, cost offload, or large-context analysis.
 ---
 
 # OpenRouter Delegation
@@ -10,7 +10,11 @@ developer workstation. A configured `OPENROUTER_API_KEY` or validated
 `OPENROUTER_API_KEY_FILE`, a coherent installed bundle, and an automatically
 screened eligible payload are sufficient; no second approval is required.
 
-OpenRouter exposes many models behind one OpenAI-compatible endpoint. This plugin uses **GPT-5.6 Terra** (`openai/gpt-5.6-terra`) for general quality work, **GPT-5.6 Luna** (`openai/gpt-5.6-luna`) for economical mechanical work, and **Kimi K3** (`moonshotai/kimi-k3`) as the security-analysis head. All three carry roughly 1M-token context.
+OpenRouter exposes many models behind one OpenAI-compatible endpoint. Ordered
+role lists select exact versioned slugs: DeepSeek handles cheap bounded work and
+routine review, Qwen3.8 Max handles bulk and independent judgment, Grok 4.6 is
+the demanding escalation, Luna is a mechanical fallback, and Kimi K3 is
+reserved for focused applicable security analysis.
 
 ## One-Shot vs Agentic (read first)
 
@@ -30,8 +34,8 @@ and defers correctness verification to native Codex.
 
 | Advantage | Use Case | Why OpenRouter |
 |-----------|----------|----------------|
-| **Quality-first analysis** | Security, big-diff review, pattern analysis, second opinions | Kimi K3 leads eligible OpenRouter analysis while an independent non-implementing family remains the consequential sign-off. |
-| **1M-token context** | Bulk read, docs, config, and full-diff synthesis at any diff size | No truncation needed. Kimi K3, Terra, Luna, and GLM-5.2 all hold roughly 1M context. |
+| **Role-specific analysis** | Security, big-diff review, pattern analysis, second opinions | Kimi leads only security; Qwen, DeepSeek, and Grok own the ordinary analysis roles. |
+| **Long context** | Bulk read, docs, config, and full-diff synthesis | The matrix records both model and top-provider limits; callers must respect the smaller current limit. |
 | **Provider routing** | Privacy / throughput control | Per-request provider preferences (`OPENROUTER_ZDR=1` for no-train/no-retain providers). |
 | **Capacity relief** | Eligible dm-review and bounded Pipeline lanes | Configured-key dispatch may preserve Codex subscription headroom without interrupting the run. |
 
@@ -75,7 +79,7 @@ receipts when requested.
 
 Load the decision table from `${CLAUDE_SKILL_DIR}/references/model-selection.md`. It maps task types to model slugs, timeouts, and the fallback chain.
 
-**Default model:** `openai/gpt-5.6-terra` (Terra, 1.05M context). **Immediate fallback:** `moonshotai/kimi-k3`.
+**Default model:** `qwen/qwen3.8-max`. **Immediate fallback:** `x-ai/grok-4.6`.
 
 **Provider-origin invariant:** OpenRouter primary and fallback slugs must never begin with `anthropic/`. OpenAI may run through native Codex or the receipted OpenRouter API rail; Anthropic runs only through native Claude capability.
 
@@ -107,7 +111,7 @@ Load templates from `${CLAUDE_SKILL_DIR}/references/prompt-templates.md`. Key pr
 | Agent | File | Purpose |
 |-------|------|---------|
 | **openrouter-agent-runner** | `plugins/openrouter/agents/workflow/openrouter-agent-runner.md` | Runs any eligible review-agent criteria through a policy-selected full OpenRouter model slug |
-| **openrouter-bulk-analyst** | `plugins/openrouter/agents/review/openrouter-bulk-analyst.md` | Eligible full-diff-section review using Kimi K3 with a Terra OpenRouter fallback |
+| **openrouter-bulk-analyst** | `plugins/openrouter/agents/review/openrouter-bulk-analyst.md` | Eligible full-diff-section review using Qwen3.8 Max with DeepSeek V4 Pro 0813 fallback |
 
 ## Prerequisites
 

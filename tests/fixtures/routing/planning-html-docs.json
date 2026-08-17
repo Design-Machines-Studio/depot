@@ -1,0 +1,13 @@
+{
+  "name": "planning-markdown-plus-unserved-html",
+  "filesToModify": [
+    "plans/model-routing/notes.md",
+    "plans/model-routing/work-paths.html"
+  ],
+  "kind": "config",
+  "executor": "openrouter",
+  "renderedSurface": "not_applicable",
+  "renderedSurfaceRationale": "plans/**/work-paths.html is an unserved planning artifact, not product UI",
+  "routingOverride": null,
+  "expectedPrimaryModel": "deepseek/deepseek-v4-flash-0731"
+}

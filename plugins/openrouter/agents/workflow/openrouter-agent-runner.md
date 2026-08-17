@@ -25,7 +25,7 @@ The caller passes you these inputs in the prompt body:
 
 - `target_agent_path` -- absolute path to the agent definition file inside the depot repo or an installed depot plugin cache
 - `target_agent_name` -- bare agent ID (must match `^[a-z0-9-]+$`)
-- `target_model` -- full OpenRouter model slug such as `deepseek/deepseek-v4-flash-0731` or `x-ai/grok-4.5`
+- `target_model` -- full OpenRouter model slug such as `deepseek/deepseek-v4-flash-0731` or `x-ai/grok-4.6`
 - `fallback_model` -- optional full OpenRouter model slug sent in the same
   ordered native fallback request
 - `target_timeout` -- positive integer seconds, below dm-review's orchestrator timeout
@@ -188,8 +188,8 @@ done
 case "$target_agent_name" in
   security-auditor*)
     [ "$target_model" = "moonshotai/kimi-k3" ] &&
-      [ "${fallback_model:-}" = "openai/gpt-5.6-terra" ] || {
-      echo "ERROR: security review role requires Kimi K3 primary and GPT-5.6 Terra fallback" >&2
+      [ "${fallback_model:-}" = "x-ai/grok-4.6" ] || {
+      echo "ERROR: security review role requires Kimi K3 primary and Grok 4.6 fallback" >&2
       exit 2
     }
     ;;

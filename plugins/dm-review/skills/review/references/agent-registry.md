@@ -27,7 +27,7 @@ kill switch.
 
 | Role | Default agent definition | Source | Family resolution | Trigger |
 |---|---|---|---|---|
-| second-perspective | `codex-perspective.md` | dm-review | Reviewer family differs from every implementing family; subscription headroom first, then API matrix quality-per-price | Full mode only; fails open unless `DM_REVIEW_SECOND_PERSPECTIVE` or legacy `DM_REVIEW_CODEX_PERSPECTIVE` is exactly `0` |
+| second-perspective | `codex-perspective.md` | dm-review | Reviewer family differs from every implementing family; subscription headroom first, then the filtered ordered `second-perspective` role | Full mode only; fails open unless `DM_REVIEW_SECOND_PERSPECTIVE` or legacy `DM_REVIEW_CODEX_PERSPECTIVE` is exactly `0` |
 
 `second-perspective` runs in parallel with the selected full-mode agents and reports in the same P1/P2/P3 shape. Quick mode does not add this lane. The compatibility-named `codex-perspective.md` file is its default prompt definition, not a provider lock. It is a second-opinion lane, not a replacement for either security lane or architecture-reviewer. Every second-perspective and security sign-off receipt records `implementer_family`, `reviewer_family`, and `resolution_reason`. Legacy `model:` frontmatter is Claude Code compatibility metadata, not a provider-routing instruction.
 

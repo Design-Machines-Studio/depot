@@ -117,7 +117,7 @@ Common questions mapped to the right skill:
 | ghostwriter | voice-editor | review | voice, editing, review, writing |
 | ghostwriter | social-publisher | workflow | social-media, content-creation, multi-platform |
 | live-wires | css-reviewer | review | css, review, compliance, live-wires |
-| openrouter | openrouter-bulk-analyst | review | diff, review, large-context, kimi-k3, openrouter |
+| openrouter | openrouter-bulk-analyst | review | diff, review, large-context, qwen3.8-max, deepseek-v4-pro-0813, openrouter |
 | openrouter | openrouter-agent-runner | workflow | workflow, review, delegation, openrouter, provider-routing |
 | pipeline | plan-adversary | workflow | review, adversarial, plan-review, convergence |
 | pipeline | execution-orchestrator | workflow | orchestration, worktrees, autonomous, execution, proportional-review, token-efficiency, review-loop |
