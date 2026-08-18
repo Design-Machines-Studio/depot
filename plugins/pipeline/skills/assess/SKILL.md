@@ -88,7 +88,9 @@ target-repository copy.
 
 **Agent 1: Code Assessment**
 
-Read the `references/code-assessment-protocol.md` for the full protocol. In summary:
+Use this summary. Load `references/code-assessment-protocol.md` only if the
+area is unfamiliar or the first pass cannot name architecture, dependents, and
+current debt:
 
 - Architecture: How is the code organized? What patterns are used?
 - Dependencies: What does this area depend on? What depends on it?

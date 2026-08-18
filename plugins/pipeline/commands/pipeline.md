@@ -19,21 +19,9 @@ Before starting, assess the feature scope and select the appropriate mode:
 - No dependency ordering needed (everything is sequential)
 - Can be implemented in one pass
 
-Lean mode skips Phase 4 (chunking, manifest generation, prompts) and iterative review loops. It keeps Phase 5 adversarial review (runs once, non-iteratively) and the final dm-review pass (runs once, not in a loop). This preserves the generator/evaluator separation while eliminating chunking overhead.
+Lean mode skips Phase 4 (chunking, manifest, prompts) and iterative review loops. It keeps one Phase 5 adversarial pass and one final dm-review. Sequence: combined discovery → plan → one adversary pass → final planning approval → one implementation pass → one dm-review → deliver.
 
-In lean mode:
-
-1. Assess and research, then obtain combined discovery approval
-2. Generate and self-review the plan
-3. Run the existing plan-adversary once against the lean planning package
-4. Obtain final planning approval of the reviewed plan and single-pass scope
-5. Execute the plan as one implementation pass (no manifest or prompt directory)
-6. Run dm-review once (non-iteratively, no loop)
-7. Deliver with the final requirements cross-check
-
-**Rationale:** Post-mortems documented that skipping adversarial review and dm-review compounds failures. "Structural criteria are necessary but not sufficient" (`docs/post-mortems/2026-04-07-pipeline-ui-refinement-postmortem.md`). "The pattern across all failures is: optimizing for speed over correctness" (`docs/post-mortems/2026-04-10-pipeline-visual-testing-postmortem.md`). Evidence-free assertions emerge when gates are skipped (`docs/post-mortems/2026-04-10-pipeline-visual-testing-postmortem.md`, lines 41-47).
-
-**Full mode** (default) -- Use for everything else. All phases execute in order.
+**Full mode** (default) -- everything else. All phases execute in order.
 
 **How to decide:** If the plan from Phase 3 has more than one logical step that could be parallelized or that touches separate file groups, use full mode. If it's a single coherent change that still benefits from quality checks, use lean mode. When in doubt, use full mode.
 
@@ -83,8 +71,6 @@ Choose lean versus full mode from dependency shape, risk, and verification needs
   and the final diff is not security-sensitive. Separating generator from
   evaluator is an architectural principle, not a model limitation.
 
-**Periodically question whether each pipeline component is still necessary.** Every component encodes an assumption about model limitations. Test whether scaffolding remains needed as models and effort levels improve.
-
 ## CRITICAL: No Shortcuts
 
 You MUST execute every phase in order. You MUST NOT skip phases, combine phases, or take shortcuts. Specifically:
@@ -104,16 +90,7 @@ If you are tempted to skip a phase, STOP and re-read this section.
 
 When the user says "/pipeline" or asks to "run the pipeline" or "use the full pipeline process," you MUST invoke this skill. You MUST NOT manually replicate pipeline phases by hand -- launching Explore agents, writing plans, implementing directly, and calling it "the pipeline."
 
-The pipeline enforces gates, bounded review, visual verification, and approved-scope contracts that manual execution silently skips, with optional memory enrichment when callable. "I already understand the code" is not a reason to bypass the pipeline -- the pipeline exists precisely because self-confidence is unreliable.
-
-**What happens when you bypass the pipeline:**
-
-- Visual verification gets skipped entirely (documented in `docs/post-mortems/2026-04-07-pipeline-ui-refinement-postmortem.md`)
-- Requirements get marked "done" without evidence (documented in `docs/post-mortems/2026-04-10-pipeline-visual-testing-postmortem.md`)
-- The adversarial review never runs, so hallucinated APIs and missing edge cases ship
-- the independent evaluation gate never runs, so evaluator/generator separation is lost
-
-If you catch yourself planning to "just do it quickly" without invoking the pipeline skill, you are about to repeat a documented failure. Stop and invoke the skill.
+The pipeline enforces gates, bounded review, visual verification, and approved-scope contracts that manual execution silently skips, with optional memory enrichment when callable. Do not bypass it because the code already looks familiar.
 
 ## Progress Ledger
 
@@ -187,43 +164,15 @@ if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrou
 
 The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file left there by an earlier run, writes a schema-bound `run-cost-summary.json` beside that run's own `authoritative-receipts.json`, and appends exactly one inventory line to the run receipt naming what actually happened -- the artifact path on success, or `run-cost-summary: skipped (<reason>)` on any internal failure. It exits 0 for every measurement outcome, because the artifact is observation-only: it never gates, blocks, waives, or alters a review, lane, or phase outcome, and its absence never fails one. It exits 6 in exactly one case -- the receipt path was accepted but the write failed -- because a receipt naming neither an artifact nor a skip is the silence the failure-modes checklist forbids, and reporting that it could not report is the command's last obligation. A *refused* receipt path is the deliberate exception and still exits 0: exiting non-zero would fire the caller's `||` fallback, which appends through the very symlink the command just rejected, so the refusal is reported on stderr alone. Exit 2 is the other non-zero outcome and means the invocation was wrong -- bad flags, or `--output` and `--receipt` pointing at one path -- so nothing ran and nothing is recorded. The `||` fallback beside it must be status-aware: exit 6 triggers one final append of `skipped (receipt-write-failed)`, exit 2 is explicitly propagated as an invalid invocation, and every other non-zero status appends `skipped (kernel-unresolvable)`. If the final append also fails, its non-zero status remains visible instead of being erased. Receipt paths are fixed for a given receipt directory, so two concurrent runs sharing one directory overwrite each other: serialize them, or give each run its own directory. The command refuses a symlinked artifact or receipt path, and when the *receipt* path is the one refused it records nothing rather than writing the refusal through the symlink it just rejected. The caller resolves a coherent installed-plugin bundle and passes its model-matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; the kernel validates both bundle containment and matrix structure without owning a provider dependency. An unreadable or invalid matrix emits one stderr line, skips imputation, and never fails this observation-only emission. It does not inspect the working tree: the caller passes `--dirty-state`, and that flag is the artifact's only source of that fact. Populate the events it reads through `record-attempt` as each lane settles; that one atomic call appends the lane outcome and exactly one `attempt_usage` row under the same lock. Pass the OpenRouter wrapper receipt when present, otherwise pass the exact Codex/Claude input files for deterministic byte measurement; when neither exists, the paired row explicitly records `attempt_unmeasured`. Do not also call a standalone translator with `--append-to` for that attempt, because doing both double-counts it. A `lanes: 0` artifact after a run that executed lanes means this boundary is not wired; a structurally valid artifact with zero measured lanes proves the command ran, never that lanes were measured. Full command reference, when the workflow-kernel plugin is installed alongside this one: `plugins/workflow-kernel/skills/workflow-kernel/references/cli-measurement-commands.md`; if that path is not readable from this cache, the flags named above are the complete required set.
 
-`bind-prediction` atomically seals the prediction source, translated events, event digest, and RunSpec context as `pipeline-shadow-prediction.json` and appends exact binding authority to the canonical lifecycle ledger before `run.started`. Observation and direct comparison both require that ordered binding and matching artifact; byte-identical predicted and authoritative receipts are valid only with this durable pre-start proof. `observe-pipeline` writes a separate `authoritative_observation` and never creates or changes the prediction. Keep both the source and bound artifact through comparison. Missing or mismatched independent prediction evidence fails closed. Exit `5` is a visible parity gap, not a pipeline failure; observation/runtime failures preserve the canonical result. `.workflow-kernel/repository-scope.json` is repository-lifetime durable and never auto-deleted. Parity `match` alone never deletes the terminal run directory; retain it or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches.
+`bind-prediction` seals the prediction before `run.started`. Observation cannot change the prediction. Exit `5` is a visible parity gap, not a pipeline failure. Never auto-delete `.workflow-kernel/repository-scope.json`.
 
 ## Airlift Checkpoint (every phase boundary)
 
-After each phase's artifacts are saved -- that is, immediately after marking the Progress Ledger item for that phase complete (items 2, 4, 6, 8, 10, 12, and 13, covering all 7 phase boundaries: Assess, Research, Plan, Generate prompts, Adversarial review, Execute, Deliver) -- fire a tier-1 airlift checkpoint if airlift is resolvable from cache. This snapshots the session into a portable `.airlift/` bundle so a usage cap, rate limit, or model switch becomes a non-event. See `plugins/pipeline/references/airlift-checkpoint.md` for the full contract.
-
-Airlift is an OPTIONAL dependency. The checkpoint is a guarded resolve-from-cache: if the engine resolves from the depot plugin cache directory AND is executable, run `airlift-engine.sh write --phase <phase>`; otherwise skip silently. Do NOT warn, block, or degrade any phase when airlift is absent.
-
-```bash
-ENGINE=""
-for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  ENGINE=$(ls -t "$CACHE"/airlift/*/skills/airlift/references/airlift-engine.sh 2>/dev/null | head -1)
-  [ -n "$ENGINE" ] && break
-done
-if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase "<phase>"; fi
-```
-
-Use the phase name for `<phase>`: `assess`, `research`, `plan`, `prompts`, `review`, `execute`, `deliver`.
-
-This checkpoint is tier-1 deterministic: it requires NO model budget, NO network, and NO AI API call -- pure local file + git work. Never introduce a model call, agent dispatch, or LLM request into the checkpoint path.
-
-**Early-warning trip:** If an early-warning signal trips mid-run (e.g. a ccusage budget threshold crossed), do not wait for the next phase boundary. Force an immediate checkpoint with the current `--phase` and surface the resume banner so the operator knows the bundle is ready. The forced checkpoint uses the same tier-1 deterministic path -- still no model budget -- so it is safe to fire even when the session is nearly out of budget.
+After each saved phase, if airlift resolves from cache, run the existing `plugins/pipeline/references/airlift-checkpoint.md` contract. Skip silently when absent. Do not warn or degrade.
 
 ## Artifact Format (planning phase)
 
-The four planning-phase artifacts -- **brainstorm, assessment, research, plan** -- are written as self-contained **HTML carrying a JSON data island**, not markdown. Each links the target project's compiled CSS so it renders in the project's own skin, and embeds a `<script type="application/json" id="pipeline-data">` island that later phases read instead of grepping prose.
-
-At every "Save the ..." step below, emit HTML this way:
-
-1. Detect host CSS from the project root:
-   ```bash
-   HOST_CSS_LINK=$(bash "${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/detect-host-css.sh" 2>/dev/null || echo "FALLBACK")
-   ```
-   On `FALLBACK`, inline `templates/baseline.css` into a `<style>` block instead of using a `<link>`.
-2. Assemble `templates/base.html` + `templates/sections/<kind>.html` + any widgets + the data island, per `templates/README.md`. Write the result to `plans/<feature-slug>/<kind>.html`.
-
-Agent-only handoffs (`original-prompt.md`, `prompts/*.md`, `manifest.json`, `final-requirements-crosscheck.md`) stay markdown/JSON. Terminal status reports (delivery report, receipt) stay inline/markdown -- they are NOT HTML. Read an artifact's structured data downstream with `templates/extract-json-island.sh <file.html>`.
+Write brainstorm, assessment, research, and plan as HTML with a `#pipeline-data` JSON island. At every save, follow `plugins/pipeline/skills/promptcraft/references/templates/README.md`. Agent-only handoffs stay markdown/JSON. Read islands with `templates/extract-json-island.sh`.
 
 ## Feature Input
 
@@ -326,8 +275,9 @@ Before assessing implementation details, establish the smallest relevant
 project context:
 
 1. Resolve repository identity and current source state.
-2. Read root `AGENTS.md`, `CLAUDE.md`, and only their directly referenced
-   instruction files that apply.
+2. Use already-loaded project instructions. Re-read root `AGENTS.md` or
+   `CLAUDE.md` only when that file is not already in context, then load only
+   their directly referenced instruction files that apply.
 3. Inspect relevant active planning/coordination documents, engineering
    principles, and `tasks/lessons.md` when present.
 4. Inspect the supplied or safely discoverable native Issue or PR. Consult a
@@ -727,25 +677,7 @@ operation makes an unavailable capability reportable.
 Present the execution summary from the orchestrator in full mode, or the
 bounded implementation and final-review summary in lean mode.
 
-### Orchestrator Blind Spots (read before starting Phase 7)
-
-The execution-orchestrator verifies per-chunk, but `curl` + `grep` + HTML regex CANNOT observe:
-
-- **JS runtime state** -- whether `window.assemblyPopup` actually attached, whether an event listener bound, whether a module imported.
-- **Visual cardinality** -- whether a button appears "exactly once" vs duplicated via a second code path that independently satisfies the same DOM assertion.
-- **Layout regressions** -- whether a neighboring card got pushed off-screen by your margin change.
-- **Duplicate elements** -- an AC saying "Post comment button is present" passes when there are two Post comment buttons as long as at least one is there.
-
-Any `renderedSurface: required` receipt without complete browser evidence is blocked, regardless of host execution mode. Required browser cases run the recovery ladder below and cannot be delivered until complete or `human_help_required` is resolved. A validated `not_applicable` receipt carries its rationale and requires no fabricated browser evidence.
-
-### Ambiguity Protocol Check (pipeline v1.10.0+)
-
-The three-layer ambiguity defence added in v1.10.0 leaves an audit trail. Inspect each chunk's commit and receipt:
-
-- **Commit trailers** -- each chunk commit may contain two trailers: `Chose: <interpretation>` and `Rejected: <alt-1>; <alt-2>`. Extract with `git log <featureBranch> --format=%B | git interpret-trailers --parse --only-trailers` or grep. Trailers are emitted only when a subagent had to pick between defensible interpretations in autonomous mode.
-- **Receipt flag** -- chunk receipts may include `ambiguity_resolved: true` with a one-line summary. Cross-check against the commit trailers.
-- **If trailers or the flag are present,** review the chosen path. If the chosen interpretation conflicts with what the user actually wanted, this is a Phase 7 gap -- fix inline on the feature branch, then re-run `/dm-review-quick` on the affected chunk.
-- **If neither signal is present,** either the chunks were unambiguous OR the subagents silently picked. The plan-adversary's scope review should have caught the latter at Phase 5; if you suspect it didn't, sample one or two chunks' rendered output against the approved Key Requirements before approving merge.
+If any executed chunk has `renderedSurface: required`, load `plugins/pipeline/references/phase7-caller-verification.md` before claiming delivery. Required browser failure follows the evidence-preserving ladder and ends `human_help_required`. Curl is diagnostic only.
 
 ### Caller Verification Checklist (mandatory when ANY `renderedSurface: required` chunk was executed)
 
@@ -759,53 +691,7 @@ Any required check that cannot initially run because the browser, dev server, au
 
 Use the complete verification profile selected from project configuration and `tests/ux/` declarations: persona, scenario, concrete route, browser engine, viewport, authentication state, and expected evaluation. `not_declared` is valid only when declarations are absent; a present but incomplete declaration is blocking. Required browser failure follows the evidence-preserving ladder: quit the browser process/session, launch a demonstrably fresh primary session and retry, try a genuinely different configured engine, then stop with `human_help_required` and the exact missing case IDs. Curl is diagnostic only and never produces `BROWSER_VERIFIED`.
 
-### Caller Visual Verification (mandatory for rendered-surface features)
-
-If any full-mode manifest chunk has `renderedSurface: required`, or the approved
-lean plan includes a rendered surface, you MUST visually verify the rendered
-output yourself. Do not trust an implementation worker's self-report for visual
-quality. Full mode verifies per chunk; the caller verifies the whole.
-
-If all full-mode chunks have `renderedSurface: not_applicable`, or the lean plan
-records rendered verification as not applicable, record the rationale and skip
-to the requirements cross-check.
-
-1. **Discover the design spec.** Check these locations in order:
-   - `plans/<feature-slug>/brainstorm.html` (read the `visualDecisions` island with `templates/extract-json-island.sh`)
-   - `docs/superpowers/specs/*.md` (most recently modified)
-   - `.superpowers/brainstorm/` (HTML mockups)
-   - If none exist, use the original prompt's visual requirements as the baseline.
-
-2. **Screenshot every affected page.** Navigate to each route that was touched by any chunk. Take a desktop (1440px) screenshot of each. If the design spec or original prompt mentions mobile, also take 375px screenshots.
-
-3. **Compare to design spec.** For each visual decision in the design spec (or each visual requirement in the original prompt), evaluate the rendered page. State explicitly what you see.
-
-4. **Present gaps to the user BEFORE claiming done.** Format:
-
-```text
-## Caller Visual Verification
-
-Screenshots taken: [N pages at N breakpoints]
-Design spec: [path or "none -- using original prompt requirements"]
-
-### Gaps Found
-- [page URL]: [description of gap] -- spec says [X], actual shows [Y]
-
-### Verified
-- [page URL]: [description of match]
-```
-
-If gaps are found, present them as part of the delivery. Do not present the branch as "ready" with undisclosed visual gaps.
-
-**Evidence Requirement:** Every "Verified" item in the visual verification report MUST include concrete evidence:
-
-- A screenshot path or inline screenshot reference
-- A specific visual observation ("heading is h4 with muted color at 0.875rem" not just "heading looks correct")
-- If a computed style matters (font-size, weight, color, background), the actual computed value from `getComputedStyle` via browser_evaluate
-
-Assertions without evidence are findings, not verifications. "Verified: sidebar looks good" is NOT acceptable. "Verified: sidebar headings use 0.875rem / 400 weight / var(--color-muted) per getComputedStyle" IS acceptable.
-
-If evidence is still unavailable after the required recovery ladder, emit blocked `human_help_required` with every attempt and exact missing case IDs, ask the user for help, and stop delivery. This is never a passing, skipped, or deferred verification.
+If any full-mode chunk or lean plan has `renderedSurface: required`, load `plugins/pipeline/references/phase7-visual-verification.md` and complete caller visual verification before claiming done.
 
 **Requirements cross-check (ledger item 11):** Use the approved Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html`. (At this phase, re-read original-prompt.md is justified ONLY if the user has layered feedback on during execution -- otherwise the cache is authoritative.) Verify every approved requirement and project outcome was addressed in the final branch without contradicting the compact project goal or expanding beyond its non-goals. Each entry requires an evidence type:
 
@@ -856,37 +742,4 @@ Inventory` block before proceeding.
 
 ## Self-Audit
 
-Before delivering to the user, verify your own compliance by answering these questions honestly:
-
-0. If the feature involved creative/UI work, did I run the brainstorming skill first (or the scoped brainstorm from Phase 0a)?
-1. Did I save the original prompt to disk?
-2. Did I run the full assessment (not just skim the code)?
-3. Did I run the full research phase (not skip it)?
-4. Did I use exactly the two routine pre-execution human gates: combined
-   discovery after assessment/research, then final planning approval after the
-   bounded adversarial review?
-5. In full mode, did I generate prompts and manifest to disk; in lean mode, did
-   I explicitly preserve their intentional absence?
-6. Did I check coverage of every approved requirement and project outcome?
-7. Did I run one complete adversarial pass and at most one targeted blocker recheck?
-8. Did execution begin only after explicit final planning approval, using the
-   execution-orchestrator for full mode or one bounded implementation pass for lean?
-9. In full mode, did the orchestrator run the risk-tiered evaluation gate after each chunk?
-10. Did the approved final dm-review mode run, and did any quick-mode
-    security-sensitive diff escalate to full?
-11. Did the full-mode orchestrator return one compact optional memory
-    observation, or did the lean caller form the equivalent from the bounded
-    result? When ai-memory was callable, did I apply it before presentation and
-    record `written`, `already-present`, or nonblocking `failed -- <safe
-    reason>` evidence; when it was not callable, did I omit it silently?
-12. **Browser authority audit:** Did every `renderedSurface: required` case produce browser evidence, or a blocked `human_help_required` receipt after primary quit, fresh-primary retry, and different-browser attempt? Did every `not_applicable` chunk carry a validated rationale? Curl and grep are not visual verification.
-13. **Runtime state audit:** For every new JS module added in this feature, did I verify it attached at runtime via `browser_evaluate` (typeof check, global presence, listener binding)? curl confirms the file exists; `browser_evaluate` confirms it runs.
-14. If the feature involved UI work, did I (the caller) visually verify the rendered output in the browser, rather than trusting the orchestrator's self-report?
-15. **Codify audit:** If the run had friction (findings, >1 review iteration, a resolved ambiguity, or a repeated guardrail trip), did the full-mode orchestrator run the codify loop (Step 5.2), or did the lean caller apply the same bounded compounding check? For any failure pattern not already in CLAUDE.md "Known Pipeline Failure Modes," did it surface a postmortem stub + candidate Known Failure Mode entry as a Codify Proposal, rather than silently swallowing a novel failure? A new failure that produces no codify proposal is a missed compounding opportunity.
-16. **Run economics audit:** Did the full-mode orchestrator, or lean caller,
-    write `plans/<feature-slug>/run-postmortem.md`, report measured
-    `providerSplit`, append `docs/pipeline-metrics/ledger.md`, and label
-    recommendations `AWAITING APPROVAL`? A run that skips the post-mortem FAILS
-    the self-audit.
-
-If the answer to any question is "no," go back and do it. Do not deliver with skipped steps.
+Before delivery, confirm: original prompt saved; assessment and research ran; only the two routine pre-execution gates were used; full mode wrote manifest/prompts and lean mode left them absent; coverage is complete; one adversary pass plus at most one recheck; execution started only after final planning approval; approved final review ran; optional memory was applied or omitted silently; every `renderedSurface: required` case has browser evidence or blocked `human_help_required`; new JS modules were runtime-checked; caller visual verification ran when required; friction produced a codify proposal when the failure is new; and the run wrote `plans/<feature-slug>/run-postmortem.md` with measured `providerSplit`. If any item failed, go back and do it.

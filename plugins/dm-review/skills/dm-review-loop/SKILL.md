@@ -46,16 +46,7 @@ Parse the argument string for flags and pass-through values:
 
 - `DM_REVIEW_LOOP_FULL_FANOUT=1` -- Disable selective lane re-run entirely. Every iteration runs a full fan-out in the selected mode, exactly as the loop behaved before selection existed. Default OFF, which means selection is active from iteration 2 onward. The switch fails OPEN: if the selection logic errors, or the prior iteration's lane attribution is unavailable, that iteration falls back to a full fan-out and records `fallback_reason` in its receipt. Narrowing is only ever done on evidence; uncertainty always widens the fan-out.
 
-## Evaluation Depth
-
-Out-of-the-box, Claude tends toward shallow testing that misses subtle bugs (per Anthropic's harness design research). The review-fix loop MUST push for depth:
-
-- **Do not accept surface-level "looks fine" reviews.** The dm-review agents must read the actual code, not just scan file names.
-- **Test edge cases, not just happy paths.** What happens with empty data? Missing permissions? Concurrent access?
-- **Verify behavior, not just structure.** "The function exists" is not the same as "the function handles errors correctly."
-- **Check integration points.** Does the new code actually connect to what it's supposed to connect to?
-
-When invoking dm-review within the loop, pass this context to the review: "This is an automated review-fix loop. Verify reachable failures and approved-scope regressions. Required fixes must be the smallest adequate repair; reject unrelated hardening and new product scope."
+When invoking dm-review within the loop, pass: "This is an automated review-fix loop. Verify reachable failures and approved-scope regressions. Required fixes must be the smallest adequate repair; reject unrelated hardening and new product scope."
 
 ## Process
 

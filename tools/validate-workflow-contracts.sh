@@ -1366,6 +1366,98 @@ require_text "$pipeline_cmd" 'State the approved project goal, smallest usable i
 require_absent "$pipeline_cmd" 'Then reproduce the inventory' \
   "Pipeline cleanup delivery does not dump the complete inventory"
 
+printf "\ncontext budget:\n"
+
+context_budget="$REPO_ROOT/tools/fixtures/workflow-context-budget.json"
+if [ ! -f "$context_budget" ]; then
+  printf "  FAIL  missing %s\n" "${context_budget#$REPO_ROOT/}"
+  failures=1
+else
+  context_report=$(python3 - "$REPO_ROOT" "$context_budget" <<'PY'
+import json, re, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+budget = json.loads(Path(sys.argv[2]).read_text())
+fail = 0
+
+def words(rel):
+    p = root / rel
+    if not p.is_file():
+        return None
+    return len(p.read_text().split())
+
+for rel, spec in budget["hot_entries"].items():
+    w = words(rel)
+    if w is None:
+        print(f"FAIL  missing hot entry {rel}")
+        fail = 1
+        continue
+    if w > spec["max_words"]:
+        print(f"FAIL  {rel} is {w} words (max {spec['max_words']})")
+        fail = 1
+    else:
+        print(f"OK    {rel} {w} words")
+
+agg = 0
+base_agg = 0
+for name, spec in budget["paths"].items():
+    total = 0
+    missing = False
+    for rel in spec["always"]:
+        w = words(rel)
+        if w is None:
+            print(f"FAIL  {name} missing {rel}")
+            fail = 1
+            missing = True
+            continue
+        total += w
+    if missing:
+        continue
+    agg += total
+    base_agg += spec["baseline_words"]
+    if total > spec["max_words"]:
+        print(f"FAIL  {name} path is {total} words (max {spec['max_words']})")
+        fail = 1
+    else:
+        print(f"OK    {name} path {total} words")
+
+# Named-branch references must not all be cited unconditionally in the entry.
+entries = {
+    "plugins/pipeline/commands/pipeline.md": root / "plugins/pipeline/references",
+    "plugins/pipeline/agents/workflow/execution-orchestrator.md": root / "plugins/pipeline/references",
+    "plugins/dm-review/skills/review/SKILL.md": root / "plugins/dm-review/skills/review/references",
+}
+for rel, refdir in entries.items():
+    text = (root / rel).read_text()
+    refs = sorted(p.name for p in refdir.glob("*.md"))
+    cited = [name for name in refs if name in text]
+    if refs and len(cited) == len(refs):
+        print(f"FAIL  {rel} unconditionally names every {refdir.relative_to(root)} file")
+        fail = 1
+    else:
+        print(f"OK    {rel} does not bulk-load {refdir.name} ({len(cited)}/{len(refs)} named)")
+
+# Forbid "read every file in references/"
+for rel in list(budget["hot_entries"]) + [
+    "plugins/pipeline/skills/promptcraft/SKILL.md",
+    "plugins/dm-review/commands/dm-review-loop.md",
+]:
+    text = (root / rel).read_text()
+    if re.search(r"every file in .*references|read all .*references/", text, re.I):
+        print(f"FAIL  {rel} bulk-loads references")
+        fail = 1
+
+print(f"AGGREGATE {agg} baseline {base_agg}")
+sys.exit(fail)
+PY
+)
+  context_rc=$?
+  printf "%s\n" "$context_report" | sed 's/^/  /'
+  if [ "$context_rc" -ne 0 ]; then
+    failures=1
+  fi
+fi
+
 printf "\n"
 if [ "$failures" -ne 0 ]; then
   printf "FIX  restore the missing workflow-contract anchors (see docs and plugin sources above)\n"

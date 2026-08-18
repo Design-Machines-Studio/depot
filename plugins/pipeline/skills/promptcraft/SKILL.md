@@ -145,7 +145,7 @@ Do not paste the whole roadmap, assessment, research brief, or Project snapshot
 into a prompt. Use the existing Context section and requirement identifiers;
 do not introduce a second project-goal identifier system.
 
-Read `references/prompt-template.md` for the exact prompt structure.
+Follow `references/prompt-template.md` only when assembling a chunk prompt. Do not preload it during decomposition.
 
 ### Phase 2.5: Visual Reference Extraction
 
@@ -172,7 +172,7 @@ Analyze file paths across all chunks to determine execution strategy:
 4. Group non-overlapping chunks into parallel groups
 5. Order sequential chunks by dependency (earlier chunks first)
 
-Read `references/dependency-ordering.md` for the full ordering algorithm.
+Load `references/dependency-ordering.md` only when two chunks share files or one consumes another's output.
 
 **Example:**
 ```
@@ -438,7 +438,7 @@ Write each prompt to `plans/<feature-slug>/prompts/<chunk-id>.md`, where `<chunk
 
 ### Phase 5: Manifest Generation
 
-Generate `plans/<feature-slug>/manifest.json` following the schema in `references/manifest-schema.md`. The manifest is a Tier 2 (run-scoped) artifact -- auto-deleted after successful execution.
+Generate `plans/<feature-slug>/manifest.json`. Load `references/manifest-schema.md` only to resolve a field not already specified in this skill. The manifest is a Tier 2 (run-scoped) artifact -- auto-deleted after successful execution.
 
 Read top-level `workflowClass`, the exact closed `decisionProfile`,
 `baseBranch`, `featureBranch`, `branchMode`, `expectedFeatureHead`,
