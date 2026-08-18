@@ -141,16 +141,18 @@ require_text "$assessment_protocol" \
 
 require_absent "$orchestrator" 'caller-side ai-memory unavailable' \
   "orchestrator does not degrade delivery for missing personal memory"
+caller_memory="$REPO_ROOT/plugins/pipeline/references/caller-memory-enrichment.md"
+run_memory="$REPO_ROOT/plugins/pipeline/references/run-memory-enrichment.md"
 require_text "$pipeline_command" \
-  'observation internal. Determine availability from the callable-tool inventory' \
+  'never by invoking a memory tool as a probe' \
   "Pipeline caller detects ai-memory without a warning-producing probe"
-require_text "$pipeline_command" \
+require_text "$caller_memory" \
   'If the tools are absent, omit the write and every receipt or summary mention.' \
   "Pipeline caller silently omits unavailable incidental memory"
-require_text "$pipeline_run_command" \
+require_text "$run_memory" \
   'If the tools are absent, omit the write and every receipt or summary mention.' \
   "pipeline-run silently omits unavailable incidental memory"
-for file in "$pipeline_command" "$pipeline_run_command" "$lifecycle" "$postmortem"; do
+for file in "$caller_memory" "$run_memory" "$lifecycle" "$postmortem"; do
   require_text "$file" 'Memory capture: failed -- <safe reason>' \
     "$(basename "$file") preserves nonblocking evidence for a callable-tool failure"
 done

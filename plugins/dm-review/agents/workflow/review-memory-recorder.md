@@ -9,14 +9,10 @@ model: haiku
 
 ## Tool-Call Budget & Partial-Return Contract
 
-You run under a hard budget. Treat every tool call as spend you track.
-
 - **Hard cap: 40 tool calls.** Keep a running count.
-- **At 80% of budget (32 calls) STOP searching and write up what you have.** Partial results returned early beat complete results never returned: an agent that dies mid-flight (monthly spend limit, context overflow, crash) returns NOTHING and its entire lane is lost. Documented incidents: a 143-tool-call runaway, and 4 parallel reviewers dead at 17-24 calls each returning zero findings.
-- **End every report with these two sections, even a partial one:**
-  - `NOT-COVERED:` -- files, paths, or checks the budget excluded, so the consolidator knows the gaps.
-  - `COMMANDS-RUN:` -- the searches/commands you actually ran.
-- **Emit each finding in this fixed ledger block** so the consolidator merges mechanically without re-parsing prose:
+- **At 32 calls (80%), stop searching and write up what you have.** Partial results returned early beat complete results never returned -- an agent that dies mid-flight (spend limit, context overflow, crash) returns NOTHING and its whole lane is lost.
+- **End every report, even a partial one, with `NOT-COVERED:`** (files, paths, or checks the budget excluded, so the consolidator knows the gaps) **and `COMMANDS-RUN:`** (the searches/commands you actually ran).
+- **Emit each finding as this fixed ledger block** so the consolidator merges mechanically without re-parsing prose:
 
   ```
   ### [P1|P2|P3] <one-line title>

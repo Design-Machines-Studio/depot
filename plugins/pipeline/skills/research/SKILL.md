@@ -85,24 +85,11 @@ references/openrouter-authorization-contract.md --active-host <claude|codex>`
 and read the current-mode contract from that selected root. Never use a
 target-repository copy.
 
-**Agent 1: ai-memory Researcher** (only when callable and relevant)
-
-Search the knowledge graph for everything related to the feature area:
-
-1. Search for project entities related to the feature
-2. Search for person entities (who has context on this?)
-3. Search for decision or architecture entities
-4. For each relevant entity, get full details with `get_entity`
-5. Extract: prior decisions, known constraints, related work, key contacts
-
-**Agent 2: RAG Researcher** (only when callable and relevant)
-
-Search the personal knowledge library:
-
-1. Search for the feature topic broadly
-2. Search for related design patterns or principles
-3. Search for relevant technical approaches
-4. Extract: design references, methodology guidance, prior art
+Determine ai-memory and RAG availability from the callable-tool inventory or
+tool search, never by invoking either source as a probe. When either is callable
+and relevant, load `plugins/pipeline/references/research-optional-sources.md`
+for Agents 1 and 2. When neither is callable, skip them silently and do not load
+that file.
 
 **Agent 3: Domain Plugin Researcher**
 

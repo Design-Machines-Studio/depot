@@ -185,6 +185,7 @@ assembly_nats_reviewer="$REPO_ROOT/plugins/assembly/agents/review/nats-reviewer.
 assembly_nats_skill="$REPO_ROOT/plugins/assembly/skills/nats-jetstream/SKILL.md"
 assembly_workflows="$REPO_ROOT/plugins/assembly/skills/development/workflows.md"
 promptcraft="$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
+promptcraft_contract="$REPO_ROOT/plugins/pipeline/references/promptcraft-behavioral-contract.md"
 assess_skill="$REPO_ROOT/plugins/pipeline/skills/assess/SKILL.md"
 research_skill="$REPO_ROOT/plugins/pipeline/skills/research/SKILL.md"
 prompt_template="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/prompt-template.md"
@@ -246,18 +247,29 @@ require_absent "$orchestrator" "| while IFS= read -r WT" "orchestrator sweep avo
 # separate invocations, so EACH must define `block` before using it. Two
 # definitions is the floor; one means a snippet dies with `command not found`
 # and its blocked refs never reach the inventory.
-block_defs="$(grep -c '^block() {' "$orchestrator" 2>/dev/null || echo 0)"
-if [ "${block_defs:-0}" -ge 2 ]; then
-  printf "  OK    orchestrator defines block() in each cleanup step (%s definitions)\n" "$block_defs"
+worktree_cleanup="$REPO_ROOT/plugins/pipeline/references/execution-worktree-cleanup.md"
+require_text "$worktree_cleanup" 'block() {' "worktree-cleanup reference owns the block helper"
+require_text "$worktree_cleanup" 'Define `block` at the top of **each shell invocation**' "worktree-cleanup reference states the per-shell rule"
+orchestrator_loads="$(grep -c 'references/execution-worktree-cleanup.md' "$orchestrator" 2>/dev/null || echo 0)"
+if [ "${orchestrator_loads:-0}" -ge 2 ]; then
+  printf "  OK    orchestrator loads the worktree-cleanup reference in each cleanup step (%s load sites)\n" "$orchestrator_loads"
 else
-  printf "  FAIL  orchestrator defines block() only %s time(s) -- Step 3j and Step 5b are separate shells\n" "${block_defs:-0}"
+  printf "  FAIL  orchestrator loads the worktree-cleanup reference only %s time(s) -- Step 3j and Step 5b are separate shells\n" "${orchestrator_loads:-0}"
   failures=1
 fi
 
 require_text "$pipeline_cmd" "repo-cleanup-contract.md" "pipeline command references the cleanup contract"
 require_text "$pipeline_cmd" "repository cleanup phase runs on all three answers" "pipeline gate runs cleanup on every answer"
-require_text "$pipeline_run" "repo-cleanup-contract.md" "pipeline-run references the cleanup contract"
-require_text "$pipeline_run" "Repository cleanup is host-independent" "Codex adapter gets the same cleanup gate"
+codex_native_adapter="$REPO_ROOT/plugins/pipeline/references/codex-native-execution-adapter.md"
+rail_exhaustion_gate="$REPO_ROOT/plugins/pipeline/references/rail-exhaustion-ask-gate.md"
+cascade_descent="$REPO_ROOT/plugins/pipeline/references/execution-cascade-descent.md"
+caller_memory="$REPO_ROOT/plugins/pipeline/references/caller-memory-enrichment.md"
+run_memory="$REPO_ROOT/plugins/pipeline/references/run-memory-enrichment.md"
+selective_rerun_ref="$REPO_ROOT/plugins/dm-review/skills/review/references/selective-lane-rerun.md"
+require_text "$pipeline_run" "codex-native-execution-adapter.md" "pipeline-run loads the Codex adapter on a Codex host"
+require_text "$pipeline_run" "rail-exhaustion-ask-gate.md" "pipeline-run loads the ask gate only on rail exhaustion"
+require_text "$codex_native_adapter" "repo-cleanup-contract.md" "Codex adapter references the cleanup contract"
+require_text "$codex_native_adapter" "Repository cleanup is host-independent" "Codex adapter gets the same cleanup gate"
 require_text "$pipeline_fix" "repo-cleanup-contract.md" "pipeline-fix references the cleanup contract"
 require_text "$lifecycle" "repo-cleanup-contract.md" "artifact lifecycle defers refs to the cleanup contract"
 require_text "$lifecycle" "## Branch & Worktree Inventory" "artifact lifecycle receipt carries the inventory"
@@ -375,14 +387,28 @@ sec="$REPO_ROOT/plugins/dm-review/agents/review/security-auditor.md"
 
 printf "\nBaseplate evidence gates:\n"
 
+assembly_arch_checks="$REPO_ROOT/plugins/dm-review/skills/review/references/assembly-architecture-checks.md"
+assembly_sec_checks="$REPO_ROOT/plugins/dm-review/skills/review/references/assembly-security-checks.md"
+plan_visual_readiness="$REPO_ROOT/plugins/pipeline/references/plan-visual-verification-readiness.md"
+plan_assembly_standards="$REPO_ROOT/plugins/pipeline/references/plan-assembly-standards.md"
+codex_native_parity="$REPO_ROOT/plugins/pipeline/references/execution-codex-native-parity.md"
+verification_planner="$REPO_ROOT/plugins/pipeline/references/execution-verification-planner.md"
+verification_profile="$REPO_ROOT/plugins/pipeline/references/execution-verification-profile.md"
+consolidator_gaps="$REPO_ROOT/plugins/dm-review/skills/review/references/consolidator-coverage-gaps.md"
+require_text "$arch" "assembly-architecture-checks.md" "architecture-reviewer loads the Assembly checks on an Assembly project"
+require_text "$sec" "assembly-security-checks.md" "security-auditor loads the Assembly federation/release checks on those surfaces"
+require_text "$plan_adversary" "plan-visual-verification-readiness.md" "plan adversary loads rendered-surface readiness when a surface renders"
+require_text "$plan_adversary" "plan-assembly-standards.md" "plan adversary loads Assembly standards on an Assembly project"
+require_text "$orchestrator" "execution-codex-native-parity.md" "orchestrator loads Codex native parity on a Codex host"
+require_text "$orchestrator" "execution-verification-planner.md" "orchestrator loads the verification planner on a profile-aware repository"
 require_text "$promptcraft" "Phase 3m: Fixture SDK Conformance Gate" "promptcraft gates fixture SDK conformance"
 require_text "$promptcraft" "Phase 3n: Production Readiness Preflight Gate" "promptcraft gates production preflight"
-require_text "$arch" "Fixture SDK Conformance Gap" "architecture-reviewer checks reachable fixture conformance gaps"
-require_text "$arch" "Its absence is a coverage note, not a product finding" "Auth Boundary Map absence is a coverage note without a reachable defect"
-require_absent "$arch" "Missing Auth Boundary Map Receipt (P2)" "Auth Boundary Map absence is not automatically blocking"
-require_text "$sec" "Public/Private URL Boundary" "security-auditor guards the public/private URL boundary"
-require_text "$sec" "Update / Release Preflight" "security-auditor checks update/release preflight"
-require_text "$sec" "Responder-side share transport" "security-auditor reviews the federation responder side"
+require_text "$assembly_arch_checks" "Fixture SDK Conformance Gap" "architecture-reviewer checks reachable fixture conformance gaps"
+require_text "$assembly_arch_checks" "Its absence is a coverage note, not a product finding" "Auth Boundary Map absence is a coverage note without a reachable defect"
+require_absent "$assembly_arch_checks" "Missing Auth Boundary Map Receipt (P2)" "Auth Boundary Map absence is not automatically blocking"
+require_text "$assembly_sec_checks" "Public/Private URL Boundary" "security-auditor guards the public/private URL boundary"
+require_text "$assembly_sec_checks" "Update / Release Preflight" "security-auditor checks update/release preflight"
+require_text "$assembly_sec_checks" "Responder-side share transport" "security-auditor reviews the federation responder side"
 
 printf "\nAssembly release invocation-authority contract:\n"
 for release_surface in "$assembly_release" "$assembly_release_skill"; do
@@ -423,9 +449,10 @@ require_text "$verification_contract" '`human_help_required`' "shared verificati
 require_text "$behavioral_schema" '"previous_contract_digest"' "behavioral schema binds revision ancestry"
 require_text "$behavioral_schema" '"proves_regression_ids"' "behavioral schema requires executable regression proof links"
 require_text "$verification_contract" 'Every prohibited regression has an' "shared verification contract requires regression coverage"
-require_before "$orchestrator" 'bind-verification-contract --state-dir' '### 3d: Dispatch Implementation Subagent' "orchestrator binds contract before dispatch"
-require_before "$pipeline_run" 'bind-verification-contract --state-dir' '**Implementation dispatch:**' "pipeline-run binds contract before dispatch"
-require_text "$orchestrator" 'bind-verification-contract --state-dir .workflow-kernel/runs/<run-id>' "orchestrator binds contracts in the canonical run directory"
+require_before "$orchestrator" 'execution-verification-profile.md' '### 3d: Dispatch Implementation Subagent' "orchestrator resolves the verification profile before dispatch"
+require_text "$verification_profile" 'bind-verification-contract --state-dir' "verification profile binds the contract"
+require_before "$pipeline_run" 'bind-verification-contract --state-dir' 'codex-native-execution-adapter.md' "pipeline-run binds contract before the adapter dispatches"
+require_text "$verification_profile" 'bind-verification-contract --state-dir .workflow-kernel/runs/<run-id>' "orchestrator binds contracts in the canonical run directory"
 require_absent "$orchestrator" 'revise-verification-contract' "orchestrator has no contract-revision protocol"
 require_text "$pipeline_run" 'bind-verification-contract --state-dir .workflow-kernel/runs/<run-id>' "pipeline-run binds contracts in the canonical run directory"
 require_absent "$orchestrator" 'bind-verification-contract --state-dir plans/' "orchestrator never binds contracts in the observation directory"
@@ -443,7 +470,7 @@ require_text "$kernel_promotion" "native_default_not_supported" "promotion keeps
 printf "\nPipeline performance contract:\n"
 
 require_text "$pipeline_cmd" "focused Codex review for ordinary chunks" "pipeline command uses focused ordinary-chunk review"
-require_text "$pipeline_run" "For ordinary non-sensitive chunks, run one focused read-only Codex review" "Codex adapter uses one focused ordinary-chunk reviewer"
+require_text "$codex_native_adapter" "For ordinary non-sensitive chunks, run one focused read-only Codex review" "Codex adapter uses one focused ordinary-chunk reviewer"
 require_text "$orchestrator" "Do not dispatch a multi-agent quick dm-review" "orchestrator avoids per-chunk review fanout"
 require_text "$orchestrator" '`all-chunks-complete` boundary' "orchestrator batches intermediate shadow observation"
 require_text "$orchestrator" "Empty-plan fast path" "orchestrator skips no-op cleanup commands"
@@ -477,8 +504,8 @@ require_text "$manifest_schema" 'a planning/report `.html` artifact that is neve
 require_text "$manifest_schema" 'a non-HTTP CLI `main.go`' "manifest schema covers non-rendering CLI entry points"
 require_text "$promptcraft" 'MUST carry `renderedSurface: required|not_applicable`' "promptcraft emits explicit applicability"
 require_text "$promptcraft" 'Mixed or uncertain chunks are `required`.' "promptcraft fails closed during generation"
-require_text "$promptcraft" 'contribute no persona or' "promptcraft keeps N/A browser cases empty"
-require_text "$plan_adversary" 'Apply the mode-specific rendered-surface audit' "plan adversary audits applicability independently"
+require_text "$promptcraft_contract" 'contribute no persona or' "promptcraft keeps N/A browser cases empty"
+require_text "$plan_visual_readiness" 'Apply the mode-specific rendered-surface audit' "plan adversary audits applicability independently"
 require_text "$plan_adversary" 'Mixed or uncertain scope is `required`.' "plan adversary rejects unsupported N/A"
 require_text "$orchestrator" 'Count rendered-surface chunks' "orchestrator browser preflight uses applicability"
 require_text "$orchestrator" 'Do not derive it' "orchestrator does not recompute applicability from kind"
@@ -489,7 +516,7 @@ require_text "$pipeline_run" 'Rendered-surface applicability is valid' "pipeline
 require_text "$verification_contract" '`rendered_surface=required` blocks' "kernel persona contract uses independent applicability"
 require_text "$persona_verification_runtime" 'rendered_surface=None' "kernel gate accepts independent applicability"
 require_text "$persona_verification_runtime" 'rendered_surface == "not_applicable"' "kernel gate honors validated N/A"
-require_text "$orchestrator" 'When every chunk is `not_applicable`, do not discover or materialize a browser' "orchestrator binds zero-surface runs without a profile"
+require_text "$verification_profile" 'When every chunk is `not_applicable`, do not discover or materialize a browser' "orchestrator binds zero-surface runs without a profile"
 require_absent "$orchestrator" '### 1. Count UI/Integration chunks' "orchestrator removes kind-only browser preflight"
 require_absent "$orchestrator" 'Visual Verification Protocol (UI and Integration chunks only)' "orchestrator removes kind-only visual gate"
 require_absent "$plan_adversary" 'For each chunk classified as UI or Integration' "plan adversary removes kind-only visual readiness"
@@ -503,8 +530,8 @@ require_text "$pipeline_prompts" 'exact closed `decisionProfile`' "pipeline-prom
 require_text "$pipeline_prompts" '`bind-verification-contract`' "pipeline-prompts publishes contract binding"
 require_text "$pipeline_prompts" '`decide-validation-retry`' "pipeline-prompts publishes bounded validation feedback"
 require_text "$pipeline_prompts" "primary process/session quit" "pipeline-prompts publishes primary browser recovery"
-require_text "$orchestrator" 'The ask is scheduling only.' "orchestrator keeps RC76 as a scheduling decision"
-require_text "$orchestrator" 'offer exactly `wait` or `park`' "orchestrator closes the current ask action vocabulary"
+require_text "$cascade_descent" 'The ask is scheduling only.' "orchestrator keeps RC76 as a scheduling decision"
+require_text "$cascade_descent" 'offer exactly `wait` or `park`' "orchestrator closes the current ask action vocabulary"
 if grep -Fq -- 'The answer must be an exact identifier from the derived list.' "$orchestrator"; then
   printf "  FAIL  orchestrator still requires a provider identifier for the wait/park ask\n"
   failures=1
@@ -534,11 +561,8 @@ for loop_contract in "$review_loop" "$review_loop_skill"; do
   done
   require_text "$loop_contract" '**Convergence requires no open P1/P2/P3 findings and complete required coverage for the verification pass.**' "$loop_contract_relative defines zero-deferral convergence"
   require_text "$loop_contract" 'Every retained finding triggers repair and affected-lane verification.' "$loop_contract_relative includes every retained severity in convergence"
-  require_text "$loop_contract" 'the touched-file set is the union of `git diff --name-only <prior-review-head>..HEAD` and the paths reported by `git status --porcelain`' "$loop_contract_relative unions committed and uncommitted changed paths"
-  require_text "$loop_contract" "An empty computed lane set is never dispatched." "$loop_contract_relative never dispatches an empty selection"
-  require_text "$loop_contract" 'selection fails open to a full fan-out with `fallback_reason: empty selection`' "$loop_contract_relative fails open on an empty selection"
+  require_text "$loop_contract" "selective-lane-rerun.md" "$loop_contract_relative loads the selective re-run contract from iteration 2"
   require_text "$loop_contract" "iteration-receipt.json" "$loop_contract_relative names the iteration receipt artifact"
-  require_text "$loop_contract" '`max-iterations-verification-receipt.json`' "$loop_contract_relative names the max-iterations receipt artifact"
   require_text "$loop_contract" 'Repeat the whole full fan-out only when the prior full review was incomplete or a repair changed a security-sensitive boundary.' "$loop_contract_relative limits repeated full fan-out"
   require_text "$loop_contract" 'prior_finding_owner_lanes = union of validated exact source_agents' "$loop_contract_relative preserves repaired finding ownership"
   require_text "$loop_contract" 'required_finding_files = todos/*-pending-p1-*.md plus todos/*-pending-p2-*.md plus todos/*-pending-p3-*.md' "$loop_contract_relative includes P3 artifacts in convergence"
@@ -547,6 +571,10 @@ for loop_contract in "$review_loop" "$review_loop_skill"; do
   require_line "$loop_contract" '          promoted_to_full = true' "$loop_contract_relative records ordinary full-review promotion"
 done
 require_text "$review_skill" '`review_lane_allowlist`' "review receiver names the selective lane allowlist"
+selective_allowlist="$REPO_ROOT/plugins/dm-review/skills/review/references/selective-lane-allowlist.md"
+require_text "$review_skill" "references/selective-lane-allowlist.md" "review receiver loads the allowlist contract only when the input is present"
+require_text "$selective_allowlist" "never relax this equality check to a subset check" "allowlist contract requires exact selected_full_set equality"
+require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.14.0"' "dm-review requires the simplified verification kernel release"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.64.0"' "pipeline requires zero-deferral dm-review release"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
@@ -561,13 +589,13 @@ for stale_migration_claim in 'Also dispatched in quick mode' 'dispatched in BOTH
     printf "  OK    migration-validator registry rejects stale quick-mode coverage\n"
   fi
 done
-require_text "$review_skill" "never relax this equality check to a subset check" "review receiver requires exact selected_full_set equality"
-require_text "$review_skill" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "review receiver fails open without partially honoring invalid input"
+require_text "$selective_allowlist" "never relax this equality check to a subset check" "review receiver requires exact selected_full_set equality"
+require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "review receiver fails open without partially honoring invalid input"
 require_text "$review_skill" 'It records the exact set of logical lanes actually `DISPATCHED` on this pass' "review receipt reports actually dispatched lanes"
-require_text "$review_skill" 'A selective affected-lane repair verification can support `CLEAN` only after an earlier complete full review' "selective repair verification can complete proportional convergence"
-require_text "$review_skill" 'mandatory for the initial full review, incomplete full-review recovery, and' "review retains security sign-off at required boundaries"
-require_text "$review_skill" '`prior_full_review_complete: true`' "review requires completed full baseline before security omission"
-require_text "$review_skill" '`security_boundary_changed: false`' "review requires non-security repair before security omission"
+require_text "$selective_allowlist" 'A selective affected-lane repair verification can support `CLEAN` only after an earlier complete full review' "selective repair verification can complete proportional convergence"
+require_text "$selective_allowlist" 'mandatory for the initial full review, incomplete full-review recovery, and' "allowlist contract retains security sign-off at required boundaries"
+require_text "$selective_allowlist" '`prior_full_review_complete: true`' "allowlist contract requires completed full baseline before security omission"
+require_text "$selective_allowlist" '`security_boundary_changed: false`' "allowlist contract requires non-security repair before security omission"
 require_text "$postmortem_schema" '`activeComputeSeconds`' "postmortem separates active compute from elapsed time"
 require_text "$postmortem_schema" '`waitSecondsByCategory`' "postmortem records typed waits"
 require_text "$orchestrator" "Measure the orchestrator-level non-overlapping interval" "orchestrator measures non-overlapping waits"
@@ -582,10 +610,10 @@ require_absent "$verification_execution" "shell=True" "kernel never delegates ve
 require_text "$repository_verification" "Selected local lanes always execute." "repository verification has no result reuse"
 require_text "$repository_verification" "does not persist command output, environment values," "repository verification results remain bounded"
 require_text "$assembly_build" 'Workflow Kernel `>=0.14.0`' "assembly resolves the exact-ref verification runtime floor"
-require_text "$pipeline_run" 'Workflow Kernel `>=0.15.0`' "pipeline resolves the exact-ref verification runtime floor"
-require_text "$orchestrator" 'Workflow Kernel `>=0.15.0`' "orchestrator resolves the exact-ref verification runtime floor"
+require_text "$codex_native_adapter" 'Workflow Kernel `>=0.15.0`' "pipeline resolves the exact-ref verification runtime floor"
+require_text "$verification_planner" 'Workflow Kernel `>=0.15.0`' "orchestrator resolves the exact-ref verification runtime floor"
 require_text "$assembly_test_runner" 'Workflow Kernel `>=0.14.0`' "assembly runner resolves the exact-ref verification runtime floor"
-require_text "$orchestrator" 'rather than importing it into the local result.' "pipeline keeps remote evidence outside the local kernel"
+require_text "$verification_planner" 'rather than importing it into the local result.' "pipeline keeps remote evidence outside the local kernel"
 require_text "$assembly_test_runner" 'independently collected any required native CI or' "assembly separates remote evidence from local results"
 require_absent "$orchestrator" 'validated and authenticated by the host integration' "pipeline removes authenticated provider completion"
 require_absent "$assembly_test_runner" 'reused authenticated' "assembly removes authenticated receipt reuse"
@@ -604,13 +632,13 @@ require_text "$assembly_nats_reviewer" "named current event obligation" "NATS re
 require_text "$assembly_nats_skill" "named current event obligation exists" "NATS skill requires a named current event obligation"
 require_absent "$assembly_nats_skill" "Every mutation that changes persisted state" "NATS skill rejects universal mutation events"
 require_text "$assembly_development" 'A one-use handler may call `ScopedDB` directly' "Assembly permits a narrow direct-handler boundary"
-require_text "$arch" 'not flag a one-use handler merely for one low-consequence `ScopedDB` statement' "architecture review follows the conditional service boundary"
-require_text "$sec" "internal maintenance must instead name and enforce an explicit trust boundary" "security review recognizes trusted maintenance boundaries"
+require_text "$assembly_arch_checks" 'not flag a one-use handler merely for one low-consequence `ScopedDB` statement' "architecture review follows the conditional service boundary"
+require_text "$assembly_sec_checks" "internal maintenance must instead name and enforce an explicit trust boundary" "security review recognizes trusted maintenance boundaries"
 require_text "$assembly_workflows" 's.auth.Authorize(ctx, actorID, "proposal.submit"' "workflow example authorizes the protected proposal transition"
 require_text "$orchestrator" "Raw passing stdout/stderr and repeated result copies must not enter" "passing verification output stays out of later model prompts"
 require_text "$orchestrator" '"reproduction_instruction": "<trusted profile-derived bounded instruction>"' "failed verification carries a trusted bounded reproduction instruction before review"
-require_text "$promptcraft" "A passing current-invocation result appears once as selected check IDs" "promptcraft bounds passing verification evidence"
-require_text "$promptcraft" "Never include raw logs, secrets, environment, arbitrary host paths, or unbounded output" "promptcraft rejects raw or unbounded failure evidence"
+require_text "$promptcraft_contract" "A passing current-invocation result appears once as selected check IDs" "promptcraft bounds passing verification evidence"
+require_text "$promptcraft_contract" "Never include raw logs, secrets, environment, arbitrary host paths, or unbounded output" "promptcraft rejects raw or unbounded failure evidence"
 require_text "$orchestrator" "Resolve and validate the referenced feedback receipt before every repair" "orchestrator validates feedback before repair"
 require_text "$orchestrator" 'mode (`resume` or `replacement`); require it before accepting either repair' "orchestrator proves feedback delivery to resumed and replacement builders"
 require_text "$orchestrator" "A replacement-dispatch receipt by itself is not proof of" "replacement dispatch alone cannot satisfy feedback delivery"
@@ -683,12 +711,12 @@ require_text "$plan_adversary" '## Mode Applicability (apply before every perspe
 require_text "$plan_adversary" 'Skip every `[Full only]` check' "lean adversary skips full-only artifact checks"
 require_text "$plan_adversary" 'their absence is expected and MUST' "lean artifact absence is not a blocker"
 require_text "$plan_adversary" 'In Lean mode, read the rendered single-pass scope; `chunks` may be absent.' "lean adversary reviews plan single-pass scope"
-require_text "$plan_adversary" '**[Full only]** Does the manifest carry `renderedSurface`' "manifest applicability check is full-only"
-require_text "$plan_adversary" '**[Lean only]** Does the plan' "lean visual readiness reads the plan"
+require_text "$plan_visual_readiness" '**[Full only]** Does the manifest carry `renderedSurface`' "manifest applicability check is full-only"
+require_text "$plan_visual_readiness" '**[Lean only]** Does the plan' "lean visual readiness reads the plan"
 require_absent "$plan_adversary" 'Read its structured `chunks`/`decisions`/`requirementsCoverage`' "plan adversary no longer requires chunks in every mode"
 require_absent "$plan_adversary" 'During prototyping, do prompts' "lean minimum-scope review does not require prompts"
 require_absent "$plan_adversary" 'Does the chunk have a `## Visual References`' "lean visual review does not require chunk sections"
-require_text "$plan_adversary" 'In full mode, inspect the planned `filesToModify`; in Lean mode, inspect the files named in the single-pass scope.' "visual parity review uses mode-appropriate source"
+require_text "$plan_visual_readiness" 'In full mode, inspect the planned `filesToModify`; in Lean mode, inspect the files named in the single-pass scope.' "visual parity review uses mode-appropriate source"
 require_text "$assessment_template" '<h2 id="project-alignment">Project Alignment</h2>' "assessment renders compact project alignment"
 require_text "$research_skill" "Does it advance the current project goal?" "research tests project-goal alignment"
 require_text "$research_skill" "Do not perform a generic organization-wide GitHub survey" "research keeps GitHub discovery proportional"
@@ -703,8 +731,8 @@ require_text "$orchestrator" "final-requirements-crosscheck.md" "final delivery 
 require_text "$orchestrator" "A branch that passes tests but fails an approved" "tests cannot override a missed project outcome"
 # FIX-01: trusted first-party Fixture code must not be reviewed as a hypothetical
 # hostile marketplace, while real reachable trust boundaries remain blocking.
-require_text "$plan_adversary" "Do not model trusted Fixture authors as hostile third parties" "plan adversary uses the approved current Fixture trust model"
-require_text "$plan_adversary" "Mere raw-DB use by trusted first-party code is not automatically a P1" "FIX-01 does not turn trusted Fixture database access into an automatic blocker"
+require_text "$plan_assembly_standards" "Do not model trusted Fixture authors as hostile third parties" "plan adversary uses the approved current Fixture trust model"
+require_text "$plan_assembly_standards" "Mere raw-DB use by trusted first-party code is not automatically a P1" "FIX-01 does not turn trusted Fixture database access into an automatic blocker"
 require_absent "$plan_adversary" "sprint contract addendum" "plan adversary does not require per-chunk addenda"
 require_absent "$plan_adversary" "priced in the extra round" "plan adversary does not presume extra review rounds"
 require_text "$plan_adversary" "Run one complete adversarial pass" "adversarial review is bounded to one pass"
@@ -716,40 +744,44 @@ require_text "$arch" "not findings by themselves" "architecture preferences are 
 require_absent "$arch" "Layer violations are P1 when they create circular dependencies, P2 otherwise" "architecture review rejects automatic layer-violation severity"
 require_text "$arch" "Report a layer violation only when it causes a concrete current failure" "architecture layer findings require current evidence"
 require_text "$arch" "Direct one-use handlers and concrete implementations are valid" "direct clear implementations remain valid"
-require_text "$arch" "Mere direct access in trusted first-party Fixture code is not automatically a finding" "architecture review requires a reachable Fixture boundary defect"
+require_text "$assembly_arch_checks" "Mere direct access in trusted first-party Fixture code is not automatically a finding" "architecture review requires a reachable Fixture boundary defect"
 require_text "$simplicity" "the number alone is not a finding" "numeric simplicity thresholds are not automatically blocking"
 require_text "$review_consolidator" "Discard unrelated hardening, new product scope" "review repairs cannot introduce unrelated hardening or product scope"
 require_text "$review_fix" "Do not add unrelated hardening, architecture layers, compatibility machinery, or product scope" "dm-review-fix keeps repairs inside evidenced approved scope"
 require_text "$security_mapping" "authentication or authorization bypass, credential disclosure, unsafe destructive operations, corruptible state or backups, public untrusted input, release/update integrity failures, and false verification claims remain blocking" "real sensitive boundaries and verification integrity remain blocking"
+require_text "$selective_rerun_ref" 'the touched-file set is the union of `git diff --name-only <prior-review-head>..HEAD` and the paths reported by `git status --porcelain`' "selective re-run contract unions committed and uncommitted changed paths"
+require_text "$selective_rerun_ref" "An empty computed lane set is never dispatched." "selective re-run contract never dispatches an empty selection"
+require_text "$selective_rerun_ref" 'selection fails open to a full fan-out with `fallback_reason: empty selection`' "selective re-run contract fails open on an empty selection"
+require_text "$selective_rerun_ref" '`max-iterations-verification-receipt.json`' "selective re-run contract names the max-iterations receipt artifact"
 require_text "$review_loop" "one repair batch followed by one" "default review convergence uses one repair batch"
 require_text "$review_loop" "affected-lane recheck" "default review convergence keeps the affected-lane recheck"
 require_absent "$promptcraft" "mechanical_path.py" "promptcraft adds no mechanical classifier"
 require_absent "$orchestrator" "mechanical_globs" "orchestrator adds no caller-supplied mechanical globs"
 require_absent "$orchestrator" 'eligibleProviderSplit:** `{claude:' "orchestrator excludes Claude from the eligible provider split"
-require_text "$orchestrator" '| `revision_batch` | All fixes from one review pass are applied |' "orchestrator batches review-fix verification"
-require_text "$orchestrator" '| `execution_level` | Every chunk in one dependency level is merged |' "orchestrator runs integrated full verification once per level"
-require_text "$orchestrator" '| `merge_candidate` | All levels are merged and before final review |' "orchestrator binds exact candidate evidence"
+require_text "$verification_planner" '| `revision_batch` | All fixes from one review pass are applied |' "orchestrator batches review-fix verification"
+require_text "$verification_planner" '| `execution_level` | Every chunk in one dependency level is merged |' "orchestrator runs integrated full verification once per level"
+require_text "$verification_planner" '| `merge_candidate` | All levels are merged and before final review |' "orchestrator binds exact candidate evidence"
 require_text "$orchestrator" "Do not test after every" "final review fixes are batched before re-verification"
 require_text "$orchestrator" "[FULL PROMPT CONTENT INLINED HERE]" "legacy Codex worker receives the complete chunk prompt"
 require_before "$orchestrator" "[INLINE ONLY THE APPROVED KEY REQUIREMENTS MAPPED TO THIS CHUNK HERE]" "[FULL PROMPT CONTENT INLINED HERE]" "legacy Codex worker places chunk-relevant approved requirements before the complete prompt"
 require_before "$orchestrator" "[FULL PROMPT CONTENT INLINED HERE]" "When done:" "legacy Codex worker places the complete chunk prompt before closeout instructions"
-require_text "$pipeline_run" "Do not execute a full or race suite after each chunk" "Codex adapter forbids repeated full-suite execution"
+require_text "$codex_native_adapter" "Do not execute a full or race suite after each chunk" "Codex adapter forbids repeated full-suite execution"
 require_text "$assembly_build" "Planner modes never fall back to the legacy" "assembly planner modes reject legacy hardcoded fallback"
 require_text "$assembly_go_tests" "Batch all fixes from one review pass" "assembly runner batches review revisions"
 require_text "$assembly_go_tests" "Preserve full race," "assembly runner keeps expensive remote lanes explicit"
 require_text "$assembly_verification_profile" '"argv": [' "assembly publishes argv-array profile examples"
 require_text "$assembly_verification_profile" '"id": "go-full-race"' "assembly profile retains candidate race coverage"
-require_text "$orchestrator" "Otherwise park resumably" "orchestrator parks rather than assuming yes on rail exhaustion"
-require_text "$orchestrator" "broadens configured-key OpenRouter eligibility" "orchestrator keeps configured-key boundaries non-overridable by the exhaustion ask"
-require_text "$orchestrator" "weakens sensitive-path" "orchestrator excludes sensitive-path chunks from fallback"
-require_text "$orchestrator" "waives the final independent review" "orchestrator never waives the final review for capacity"
+require_text "$cascade_descent" "Otherwise park resumably" "orchestrator parks rather than assuming yes on rail exhaustion"
+require_text "$cascade_descent" "broadens configured-key OpenRouter eligibility" "orchestrator keeps configured-key boundaries non-overridable by the exhaustion ask"
+require_text "$cascade_descent" "weakens sensitive-path" "orchestrator excludes sensitive-path chunks from fallback"
+require_text "$cascade_descent" "waives the final independent review" "orchestrator never waives the final review for capacity"
 require_absent "$orchestrator" "Future receipt design" "orchestrator has no dormant fallback receipt design"
 require_absent "$orchestrator" "ask_evidence_ref" "orchestrator has no authorization receipt exchange"
 require_text "$routing_policy" '"exhaustionFallback"' "routing policy declares the exhaustion fallback object"
 require_text "$routing_policy" '"headlessDefault": "park"' "routing policy defaults headless exhaustion to park"
 require_text "$routing_policy" '"neverOfferable"' "routing policy pins the never-offerable rails"
 require_text "$pipeline_run_skill" "Rail-Exhaustion Ask Gate" "generated pipeline-run alias carries the ask gate section"
-require_text "$pipeline_run" "There is no dormant or" "pipeline-run has no hidden fallback rail"
+require_text "$rail_exhaustion_gate" "There is no dormant or" "pipeline-run has no hidden fallback rail"
 require_text "$review_skill" "Ordinary in-policy OpenRouter/Codex routing remains unaffected" "dm-review keeps configured-key routing separate from exhaustion"
 require_text "$review_skill" "“record the gap and continue” and the headless gap-and-continue default are unavailable" "dm-review cannot gap-and-continue the pipeline final review"
 
@@ -1153,10 +1185,16 @@ require_absent "$REPO_ROOT/plugins/dm-review/skills/review/references/output-for
   "review output removes the retired Codex-only perspective example"
 for f in \
   "$REPO_ROOT/plugins/dm-review/commands/dm-review-loop.md" \
-  "$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md"; do
+  "$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md" \
+  "$selective_rerun_ref"; do
   rel="${f#$REPO_ROOT/}"
-  require_text "$f" "\`second-perspective\`" \
-    "$rel preserves the exact provider-neutral full-mode perspective lane"
+  require_absent "$f" "\`codex-perspective\`" \
+    "$rel rejects the retired perspective lane token while allowing its .md filename"
+done
+require_text "$selective_rerun_ref" "\`second-perspective\`" \
+  "selective re-run contract preserves the exact provider-neutral full-mode perspective lane"
+for f in "$selective_rerun_ref"; do
+  rel="${f#$REPO_ROOT/}"
   require_absent "$f" "\`codex-perspective\`" \
     "$rel rejects the retired perspective lane token while allowing its .md filename"
 done
@@ -1249,8 +1287,9 @@ require_text "$review_consolidator" 'provisional report body preserving' \
   "dm-review consolidator produces only a provisional report body"
 require_text "$review_consolidator" 'Do not write `.claude/ux-review/report.md` and do not deliver or project the' \
   "dm-review consolidator forbids delegated publication"
-require_before "$review_consolidator" '### Step 5.5: Coverage Gaps' 'Return the provisional report body only after this Coverage Gaps section is' \
+require_before "$review_consolidator" '### Step 5.5: Coverage Gaps' 'Return the provisional report body only after this Coverage Gaps section' \
   "dm-review consolidator completes coverage gaps before returning its provisional body"
+require_text "$consolidator_gaps" 'Coverage Gaps' "coverage-gap contract owns the gap section"
 require_absent "$review_consolidator" 'Write that report to `.claude/ux-review/report.md`' \
   "dm-review consolidator does not write the final report early"
 require_absent "$review_consolidator" 'then project its compact' \
@@ -1284,11 +1323,11 @@ require_text "$orchestrator" 'Memory observation handoff: <observation>' \
   "Pipeline orchestrator returns the compact caller handoff"
 require_text "$orchestrator" 'Keep the observation under 300 characters.' \
   "Pipeline orchestrator bounds the memory handoff"
-require_text "$orchestrator" 'Personal-memory enrichment is optional.' \
-  "Pipeline orchestrator treats personal memory as optional enrichment"
+require_text "$codex_native_parity" 'Personal-memory enrichment is optional.' \
+  "Codex native parity treats personal memory as optional enrichment"
 require_absent "$orchestrator" '`search_entities`' \
   "restricted Pipeline orchestrator does not call ai-memory"
-for f in "$pipeline_cmd" "$pipeline_run"; do
+for f in "$caller_memory" "$run_memory"; do
   rel="${f#$REPO_ROOT/}"
   require_text "$f" 'Read the entity and check its same-day observations for the exact handoff.' \
     "$rel deduplicates the caller memory handoff"
@@ -1305,10 +1344,14 @@ for f in "$pipeline_cmd" "$pipeline_run"; do
   require_text "$f" 'Do not show the raw handoff in ordinary human-facing' \
     "$rel keeps the internal memory handoff out of chat"
 done
-require_before "$pipeline_cmd" 'After a successful write or exact duplicate' '## Phase 7: Deliver' \
-  "Pipeline applies available memory enrichment before human delivery"
-require_before "$pipeline_run" 'After a successful write or exact duplicate' 'Present the compact summary from the orchestrator.' \
-  "pipeline-run applies available memory enrichment before human presentation"
+require_before "$pipeline_cmd" 'caller-memory-enrichment.md' '### Caller Verification Checklist' \
+  "Pipeline resolves available memory enrichment before human delivery"
+require_text "$caller_memory" 'retain that outcome in internal summary evidence before Phase 7' \
+  "caller memory enrichment lands before human delivery"
+require_before "$pipeline_run" 'run-memory-enrichment.md' 'Present the compact summary from the orchestrator.' \
+  "pipeline-run resolves available memory enrichment before human presentation"
+require_text "$run_memory" 'After a successful write or exact duplicate' \
+  "run memory enrichment lands before human presentation"
 require_before "$lifecycle" 'Step 5b writes the base' 'A capable caller that successfully consumes the handoff' \
   "artifact lifecycle orders the base receipt before optional caller memory status"
 require_count "$lifecycle" 'exactly one terminal `- Memory capture:' 1 \
@@ -1365,6 +1408,317 @@ require_text "$pipeline_cmd" 'State the approved project goal, smallest usable i
   "Pipeline final planning gate stays compact and decision-focused"
 require_absent "$pipeline_cmd" 'Then reproduce the inventory' \
   "Pipeline cleanup delivery does not dump the complete inventory"
+
+printf "\nCanonical deployment context and external reference resolution:\n"
+
+deployment_context="$REPO_ROOT/plugins/dm-review/skills/review/references/deployment-context.md"
+openrouter_runner="$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md"
+reviewer_prompt_template="$REPO_ROOT/plugins/dm-review/skills/review/references/reviewer-prompt-template.md"
+full_lane_dispatch="$REPO_ROOT/plugins/dm-review/skills/review/references/full-lane-dispatch.md"
+
+# One canonical owner, reached on every hot path and inlined into external prompts.
+require_text "$deployment_context" "two-person development team" "deployment context names the team scale"
+require_text "$deployment_context" "4--50 users" "deployment context names the install scale"
+require_text "$deployment_context" "not search-indexed" "deployment context names the non-indexed threat model"
+require_text "$deployment_context" "single owner" "deployment context declares itself the single owner"
+require_text "$pipeline_cmd" "deployment-context.md" "pipeline planning loads the canonical deployment context"
+require_text "$orchestrator" "deployment-context.md" "pipeline-run orchestrator loads the canonical deployment context"
+require_text "$review_skill" "deployment-context.md" "dm-review loads the canonical deployment context"
+require_text "$reviewer_prompt_template" "deployment-context.md" "reviewer prompt contract inlines the deployment context"
+require_text "$reviewer_prompt_template" "External dispatch: resolve every reference pointer" "reviewer prompt contract states the external-inline rule"
+
+# No unresolved ${CLAUDE_SKILL_DIR} pointer may reach an externally dispatched prompt.
+require_text "$openrouter_runner" "Resolve reference pointers first" "OpenRouter runner resolves reference pointers before dispatch"
+require_text "$openrouter_runner" "unresolved \${CLAUDE_SKILL_DIR} reference" "OpenRouter runner fails closed on a surviving pointer"
+require_text "$openrouter_runner" "deployment-context.md" "OpenRouter runner inlines the deployment context"
+require_text "$full_lane_dispatch" 'resolve every `${CLAUDE_SKILL_DIR}/references/<name>.md` pointer' "Codex Branch B resolves reference pointers host-side"
+require_text "$full_lane_dispatch" "No \`\${CLAUDE_SKILL_DIR}\` token may remain in the combined prompt" "Codex Branch B forbids an unresolved pointer"
+
+printf "\ncontext budget:\n"
+
+context_budget="$REPO_ROOT/tools/fixtures/workflow-context-budget.json"
+if [ ! -f "$context_budget" ]; then
+  printf "  FAIL  missing %s\n" "${context_budget#$REPO_ROOT/}"
+  failures=1
+else
+  context_report=$(python3 - "$REPO_ROOT" "$context_budget" <<'PY'
+import json, math, re, sys
+from pathlib import Path
+root = Path(sys.argv[1])
+budget = json.loads(Path(sys.argv[2]).read_text())
+fail = 0
+
+def words(rel):
+    p = root / rel
+    if not p.is_file():
+        return None
+    return len(p.read_text().split())
+
+# Hot entries: the ceiling can never authorize growth over the recorded
+# baseline, so the effective cap is the tighter of the two.
+for rel, spec in budget["hot_entries"].items():
+    w = words(rel)
+    if w is None:
+        print(f"FAIL  missing hot entry {rel}")
+        fail = 1
+        continue
+    cap = min(spec["max_words"], spec["baseline_words"])
+    if w > cap:
+        print(f"FAIL  {rel} is {w} words (cap {cap}; baseline {spec['baseline_words']}, ceiling {spec['max_words']})")
+        fail = 1
+    else:
+        print(f"OK    {rel} {w} words (cap {cap})")
+
+agg = 0
+base_agg = 0
+path_totals = {}
+for name, spec in budget["paths"].items():
+    total = 0
+    missing = False
+    for rel in spec["always"]:
+        w = words(rel)
+        if w is None:
+            print(f"FAIL  {name} missing {rel}")
+            fail = 1
+            missing = True
+            continue
+        total += w
+    if missing:
+        continue
+    path_totals[name] = total
+    agg += total
+    base_agg += spec["baseline_words"]
+    cap = min(spec["max_words"], spec["baseline_words"])
+    if total > cap:
+        print(f"FAIL  {name} path is {total} words (cap {cap}; baseline {spec['baseline_words']}, ceiling {spec['max_words']})")
+        fail = 1
+    else:
+        print(f"OK    {name} path {total} words (cap {cap})")
+
+# Aggregate: the fixture names the required reduction and the validator
+# computes the threshold from the recorded baseline. A missing reduction
+# field fails closed rather than silently accepting any aggregate.
+pct = budget.get("required_aggregate_reduction_pct")
+if pct is None:
+    print("FAIL  fixture omits required_aggregate_reduction_pct")
+    fail = 1
+else:
+    agg_cap = math.floor(base_agg * (100 - pct) / 100)
+    reduction = 100.0 * (base_agg - agg) / base_agg if base_agg else 0.0
+    if agg > agg_cap:
+        print(f"FAIL  aggregate {agg} exceeds {agg_cap} (baseline {base_agg}, required reduction {pct}%, actual {reduction:.1f}%)")
+        fail = 1
+    else:
+        print(f"OK    aggregate {agg} <= {agg_cap} (baseline {base_agg}, reduction {reduction:.1f}% >= {pct}%)")
+
+# Baseline-map reconciliation. Each path records a reproducible per-file baseline
+# map (file -> words at baseline_commit). baseline_words must equal its sum, and
+# every baseline_map file must still be in the current always-set unless a
+# `moved` entry names where its contract went. This closes the mutation hole:
+# silently dropping a measured file from a path used to lower its total and pass.
+def reconcile_ok(always_set, bmap, moved):
+    return all((f in always_set or f in moved) for f in bmap)
+
+for name, spec in budget["paths"].items():
+    bmap = spec.get("baseline_map")
+    if not isinstance(bmap, dict) or not bmap:
+        print(f"FAIL  {name} has no reproducible baseline_map")
+        fail = 1
+        continue
+    if sum(bmap.values()) != spec["baseline_words"]:
+        print(f"FAIL  {name} baseline_words {spec['baseline_words']} != sum(baseline_map) {sum(bmap.values())}")
+        fail = 1
+    moved = spec.get("moved", {})
+    current_set = set(spec["always"])
+    for f in sorted(bmap):
+        if f not in current_set and f not in moved:
+            print(f"FAIL  {name} baseline_map file left the always-set with no `moved` entry: {f}")
+            fail = 1
+    # Mutation proof, run every invocation: the recorded fixture reconciles, and
+    # dropping ANY single measured file from the current set is detected.
+    if not reconcile_ok(current_set, bmap, moved):
+        print(f"FAIL  {name} recorded fixture does not reconcile")
+        fail = 1
+    for f in sorted(bmap):
+        if reconcile_ok(current_set - {f}, bmap, moved):
+            print(f"FAIL  {name} mutation self-test: dropping measured file {f} is not detected")
+            fail = 1
+    print(f"OK    {name} baseline map reconciles ({len(bmap)} files) and mutation self-test holds")
+
+# Load-map audit: a reference omitted from the always-set may only be cited
+# with an explicit named condition at its load site, and every measured
+# always-file must actually be named by the entry that loads it.
+condition_re = re.compile(r"\b(only when|only if|when|if|unless)\b", re.I)
+entries = {
+    "plugins/pipeline/commands/pipeline.md": root / "plugins/pipeline/references",
+    "plugins/pipeline/agents/workflow/execution-orchestrator.md": root / "plugins/pipeline/references",
+    "plugins/dm-review/skills/review/SKILL.md": root / "plugins/dm-review/skills/review/references",
+    "plugins/dm-review/agents/review/security-auditor.md": root / "plugins/dm-review/skills/review/references",
+    "plugins/dm-review/agents/review/architecture-reviewer.md": root / "plugins/dm-review/skills/review/references",
+    "plugins/pipeline/agents/workflow/plan-adversary.md": root / "plugins/pipeline/references",
+    "plugins/pipeline/skills/promptcraft/SKILL.md": root / "plugins/pipeline/references",
+}
+# Every measured always-file under a references dir must be named by at least
+# one entry that loads from that dir; a conditional citation must carry an
+# explicit named condition in the paragraph that cites it.
+always_measured = set()
+for spec in budget["paths"].values():
+    always_measured.update(spec["always"])
+entry_text = {rel: (root / rel).read_text() for rel in entries}
+refdir_entries = {}
+for rel, refdir in entries.items():
+    refdir_entries.setdefault(refdir.relative_to(root).as_posix(), []).append(rel)
+for refdir_rel, owners in refdir_entries.items():
+    for measured in sorted(m for m in always_measured if m.startswith(refdir_rel + "/")):
+        name = measured.rsplit("/", 1)[-1]
+        if not any(name in entry_text[o] for o in owners):
+            print(f"FAIL  no entry loads measured always-file {measured}")
+            fail = 1
+for rel, refdir in entries.items():
+    text = entry_text[rel]
+    paras = re.split(r"\n\s*\n", text)
+    refs = sorted(p.name for p in refdir.glob("*.md"))
+    cited = [name for name in refs if name in text]
+    if refs and len(cited) == len(refs):
+        print(f"FAIL  {rel} unconditionally names every {refdir.relative_to(root)} file")
+        fail = 1
+    else:
+        print(f"OK    {rel} does not bulk-load {refdir.name} ({len(cited)}/{len(refs)} named)")
+    for name in cited:
+        ref_rel = f"{refdir.relative_to(root).as_posix()}/{name}"
+        if ref_rel in always_measured:
+            continue
+        # Sentence-level: the sentence that cites the reference must itself state
+        # its load condition. An incidental "when/if" elsewhere in the paragraph
+        # no longer satisfies the check.
+        naming_sentences = []
+        for b in (p for p in paras if name in p):
+            joined = re.sub(r"\s*\n\s*", " ", b)  # rejoin wrapped lines
+            for s in re.split(r"(?<=[.!?])\s+(?=[A-Z])", joined):
+                if name in s:
+                    naming_sentences.append(s)
+        if not naming_sentences or not any(condition_re.search(s) for s in naming_sentences):
+            print(f"FAIL  {rel} cites omitted reference {name} without a condition in the citing sentence")
+            fail = 1
+
+# Reachability: every reference must be named by a real load site (an entry
+# surface or another reachable reference), so an added conditional reference
+# cannot sit orphaned unnoticed.
+def closure(seeds, refdir):
+    seen = set()
+    frontier = [(root / s).read_text() for s in seeds]
+    names = {p.name: p for p in refdir.glob("*.md")}
+    while frontier:
+        text = frontier.pop()
+        for name, p in names.items():
+            if name not in seen and name in text:
+                seen.add(name)
+                frontier.append(p.read_text())
+    return seen
+
+review_refs = root / "plugins/dm-review/skills/review/references"
+review_reachable = closure(
+    ["plugins/dm-review/skills/review/SKILL.md",
+     "plugins/dm-review/skills/review/references/full-lane-dispatch.md"]
+    + [str(p.relative_to(root)) for p in sorted(
+        (root / "plugins/dm-review/agents").glob("*/*.md"))]
+    + [str(p.relative_to(root)) for p in sorted(
+        (root / "plugins/dm-review/commands").glob("*.md"))],
+    review_refs)
+for p in sorted(review_refs.glob("*.md")):
+    if p.name not in review_reachable:
+        print(f"FAIL  orphaned dm-review reference {p.name} (not reachable from the review skill)")
+        fail = 1
+
+pipeline_refs = root / "plugins/pipeline/references"
+pipeline_seeds = [str(p.relative_to(root)) for p in sorted(
+    (root / "plugins/pipeline").glob("commands/*.md")) + sorted(
+    (root / "plugins/pipeline").glob("skills/*/SKILL.md")) + sorted(
+    (root / "plugins/pipeline").glob("agents/workflow/*.md"))]
+pipeline_reachable = closure(pipeline_seeds, pipeline_refs)
+for p in sorted(pipeline_refs.glob("*.md")):
+    if p.name not in pipeline_reachable:
+        print(f"FAIL  orphaned pipeline reference {p.name} (not reachable from any pipeline surface)")
+        fail = 1
+
+# Reviewer prompt contract: one common contract reachable from both modes,
+# visual rules bound to rendered UI lanes, and no truncated fenced block.
+prompt_contract = root / "plugins/dm-review/skills/review/references/reviewer-prompt-template.md"
+full_dispatch = root / "plugins/dm-review/skills/review/references/full-lane-dispatch.md"
+review_skill_text = (root / "plugins/dm-review/skills/review/SKILL.md").read_text()
+if not prompt_contract.is_file():
+    print("FAIL  reviewer-prompt-template.md missing")
+    fail = 1
+else:
+    pc_text = prompt_contract.read_text()
+    # Scope this to the dispatch phase itself. A "both modes" mention in the
+    # Reference Files index is documentation, not a load site, and must not
+    # satisfy the contract when Phase 4 has narrowed the load to one mode.
+    dispatch_section = ""
+    m = re.search(r"^### Phase 4: Parallel Agent Launch$(.*?)^### ",
+                  review_skill_text, re.M | re.S)
+    if m:
+        dispatch_section = m.group(1)
+    load_sites = [l for l in dispatch_section.splitlines()
+                  if "reviewer-prompt-template.md" in l
+                  and re.search(r"\bload\b", l, re.I)]
+    if load_sites and any(re.search(r"both modes|quick and full", l, re.I)
+                          for l in load_sites):
+        print("OK    common prompt contract loads before dispatch in both modes")
+    else:
+        print("FAIL  review skill does not load the common prompt contract for both modes")
+        fail = 1
+    if "reviewer-prompt-template.md" in full_dispatch.read_text():
+        print("OK    full-mode dispatch builds prompts from the common contract")
+    else:
+        print("FAIL  full-mode dispatch does not name the common prompt contract")
+        fail = 1
+    # Judge the citation by its paragraph, not its wrapped line: the guard
+    # ("If a rendered UI lane is selected ...") sits above the path itself.
+    visual_paras = [b for b in re.split(r"\n\s*\n", pc_text)
+                    if "visual-finding-rules.md" in b]
+    ui_lane_re = re.compile(r"(if|only when|when)\b[^.]*rendered UI lane", re.I | re.S)
+    if visual_paras and all(ui_lane_re.search(b) for b in visual_paras) \
+            and re.search(r"Non-UI lanes never receive", pc_text):
+        print("OK    visual finding rules are conditional on a rendered UI lane")
+    else:
+        print("FAIL  visual finding rules are not conditional on a rendered UI lane")
+        fail = 1
+    for anchor in ["untrusted input", "## Project Context", "## Fix Philosophy",
+                   "## Caller-Provided Context",
+                   "When callable, preserve the existing RAG lookup and ai-memory write behavior."]:
+        if anchor in pc_text:
+            print(f"OK    common prompt contract preserves '{anchor}'")
+        else:
+            print(f"FAIL  common prompt contract lost '{anchor}'")
+            fail = 1
+    fence_lines = [l for l in pc_text.splitlines() if l.startswith("```")]
+    if len(fence_lines) % 2 == 0 and not pc_text.rstrip().endswith("```text") and pc_text.rstrip():
+        print("OK    common prompt contract has no truncated fenced block")
+    else:
+        print("FAIL  common prompt contract has an unbalanced or truncated fence")
+        fail = 1
+
+# Forbid "read every file in references/"
+for rel in list(budget["hot_entries"]) + [
+    "plugins/pipeline/skills/promptcraft/SKILL.md",
+    "plugins/dm-review/commands/dm-review-loop.md",
+]:
+    text = (root / rel).read_text()
+    if re.search(r"every file in .*references|read all .*references/", text, re.I):
+        print(f"FAIL  {rel} bulk-loads references")
+        fail = 1
+
+print(f"AGGREGATE {agg} baseline {base_agg}")
+sys.exit(fail)
+PY
+)
+  context_rc=$?
+  printf "%s\n" "$context_report" | sed 's/^/  /'
+  if [ "$context_rc" -ne 0 ]; then
+    failures=1
+  fi
+fi
 
 printf "\n"
 if [ "$failures" -ne 0 ]; then

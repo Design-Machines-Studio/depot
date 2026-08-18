@@ -141,109 +141,20 @@ terminal checkpoint. Each observation uses:
 
 ## Codex Native Execution Adapter
 
-When this command runs in Codex and the session exposes `multi_agent_v1.spawn_agent`, use this adapter instead of stopping on Claude-only `Agent` or nested `Skill(...)` availability. This is the supported Codex execution path, not a manual workaround.
-
-**Mode label:** Set `executionMode: codex_native` in the progress ledger, every chunk receipt, `plans/<feature>/receipt.md`, and the final summary.
-
-The adapter also preserves `workflowClass` and provider evidence across hosts. Every dispatch receipt names `requestedProvider`, `attemptedProvider`, `implementedBy`, boolean `fallback`, and `fallbackReason`. `fallback` is strictly `true|false`, never a transition string or null; the requested, attempted, and implemented provider fields carry the transition. An unavailable or misrouted lane is evidence, not permission to silently relabel an inline implementation.
-
-It also preserves `decisionProfile` and
-`decision_profile_defaulted`. Read `decisionLeverage` from the routing policy as
-depth-only: low/low optimized; high uncertainty one independent planning
-opinion plus bounded synthesis; high consequence the stronger existing
-independent verification seam; high/high both. Never use it to select a
-provider/model/executor, alter security or workflow class, override
-browser/persona cases, weaken cleanup, or change economics. High consequence
-does not add full review to every ordinary chunk.
-
-Measure orchestration pauses with authoritative `progress` receipts carrying a
-nonnegative `duration_seconds` and exactly one `wait_category` from
-`human_gate`, `external_dependency`, `capacity`, or `ci`. Emit one receipt for
-the non-overlapping orchestrator-level interval, not one per parallel worker.
-Never estimate an interval or classify active implementation/review as waiting.
-
-**Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: branch create/reuse semantics, worktree isolation or the documented `sequential-on-branch` isolation strategy (recorded as `isolationStrategy`, never as `executionMode`) for container-mounted test harnesses, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, the approved final review mode, cleanup, and summary. Personal-memory enrichment remains optional.
-
-**Implementation dispatch:** For each chunk, create the worktree first, inline the full prompt content, then call `multi_agent_v1.spawn_agent` with `agent_type: "worker"`. The worker prompt MUST include:
-
-- The worktree path as the only allowed write scope.
-- The complete chunk prompt content, not a path to the prompt.
-- The pipeline Fix Philosophy and ambiguity-trailer requirements.
-- A reminder that other workers may be active and the worker must not revert unrelated changes.
-- A requirement to commit its chunk changes before reporting completion.
-
-Wait for the worker result before validating that chunk. Do not dispatch overlapping chunks in parallel unless the manifest level grouping and file ownership are disjoint.
-
-On eligible deterministic validation failure, the adapter follows the
-orchestrator's canonical feedback receipt and invokes exactly:
-
-```text
-$WORKFLOW_KERNEL decide-validation-retry --state-dir .workflow-kernel/runs/<run-id> --reason deterministic_validation_failure --signature <stable-signature>
-```
-
-Reject non-zero or malformed output and consume exactly `allowed`,
-`reason_code`, `budget`, `attempt_count`, and `prior_signature`. Pipeline does
-not duplicate retry limits in prose. Resume the same builder only with durable
-host/session/repository/chunk/current-contract continuity; otherwise dispatch an
-explicitly receipted replacement. Project rich feedback into kernel
-`ValidationFeedback` using exactly `node_id`,
-`reason_code: deterministic_validation_failure`, and safe receipt evidence
-references.
-
-**Review adapter:** Codex sessions do not expose a generic nested `Skill(skill="dm-review:review", ...)` callable. Use this risk-tiered contract in the current orchestrator context:
-
-- For ordinary non-sensitive chunks, run one focused read-only Codex review against the chunk diff and allow at most one P1/P2/P3 repair/recheck pass. Preserve pending/done todo receipts.
-- For sensitive-path chunks, run the full inline `plugins/dm-review/skills/review/SKILL.md` protocol against the chunk worktree, with at most two passes.
-- For the final gate, read `finalReviewMode`. `full` runs the review skill's
-  full-mode protocol. `quick` loads and executes the installed
-  `dm-review-quick` protocol against the feature branch; if that protocol finds
-  a bounded security-sensitive path, escalate to full and receipt the effective
-  mode.
-- Use `multi_agent_v1.spawn_agent` for the focused Codex reviewer or for review agents selected by the chosen dm-review protocol when available.
-- Fix every retained P1/P2/P3 finding and verify repairs with affected lanes; repeat the full fan-out only if its coverage was incomplete or a repair changed a security-sensitive boundary. Reject unsupported preference-only suggestions during consolidation instead of deferring them.
-- Write/read the same `todos/*-pending-*.md` and `todos/*-done-*.md` receipts that dm-review uses.
-
-Do not report "Skill tool unavailable" in Codex when this adapter can run. That message is only valid if the session lacks both nested skill invocation and enough local access to execute the dm-review inline protocol.
-
-**Repository verification adapter:** Resolve Workflow Kernel `>=0.15.0` once
-and use its `plan-verification` and `run-verification` subcommands whenever the
-target repository supplies `.dm/verification.json`.
-
-- `chunk`: doctor, fast, and changed-package/dependent checks only.
-- `revision_batch`: apply the complete finding set from one review pass, then
-  perform one affected recheck.
-- `execution_level`: after all sibling chunks merge, run one integrated full
-  non-race pass.
-- `merge_candidate`: run once for the exact candidate tree; preserve remote
-  race/security/container/harness lanes explicitly.
-
-Do not execute a full or race suite after each chunk or each individual finding
-fix. For an
-Assembly target without `.dm/verification.json`, stop for project
-configuration rather than restoring hardcoded Go/Docker commands.
-
-**Repository cleanup is host-independent.** The Codex adapter runs the same cleanup contract as the Claude path, at the same points (Step 0e registry init, Step 3j per chunk, Step 5b sweep + inventory) -- see `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`. Cleanup is deterministic git executed by the orchestrator in-process. It is never delegated to a `multi_agent_v1.spawn_agent` worker and never routed through `openrouter-exec.sh` or `openrouter-wrapper.sh`. Deleting refs is not a judgment task, and a worker sandbox cannot be trusted to report honestly which refs survived.
-
-The Codex adapter does not get a weaker gate than the Claude path. If `codex_native` cannot execute the cleanup phase, that is a pipeline-blocking failure, not a degradation.
+When the run executes from a Codex host (no Claude `Agent` tool and no nested `Skill(...)` calls), load `plugins/pipeline/references/codex-native-execution-adapter.md` and follow it exactly, recording `executionMode: codex_native`. A Claude-hosted run does not load it and keeps `executionMode: full_cli`. (`claude_native` is a kernel mechanism, not a host execution mode; the closed vocabulary is `full_cli | codex_native | manual_walkthrough | generic | generic_host`.)
 
 ## Rail-Exhaustion Ask Gate
 
-When every configured rail for a chunk is exhausted or gated (cascade RC 76),
-the run pauses instead of terminating. Capacity is recoverable. The ask shows
-live rail status and offers “wait until reset” or “park this run.” Any context
-that cannot reach the operator parks resumable.
-There is no dormant or
-operator-authorized coding rail outside the configured Codex and OpenRouter
-paths.
-
-Ask-then-default-park is the only headless behavior: a non-interactive session, an ask that errors, an ask answered by a non-operator, or one that exceeds the caller's stated timeout parks resumable. `PIPELINE_EXHAUSTION_ASK=0` selects the same resumable park directly for headless CI. The ask cannot broaden configured-key OpenRouter workload, disclosure, path, or output boundaries; the approved final dm-review gate is never waived, required family independence remains, and sensitive-path chunks are never rerouted. The routing policy object is `exhaustionFallback` in `plugins/pipeline/references/routing-policy.json`.
+When the cascade reports every configured rail for a chunk exhausted or gated, load `plugins/pipeline/references/rail-exhaustion-ask-gate.md` and follow it. The ask is scheduling only -- it never selects a provider, authorizes another rail, weakens sensitive-path rules, or waives the final independent review. If rails have headroom, do not load it.
 
 ## Process
 
-1. Read the manifest
-2. If running in Codex with `multi_agent_v1.spawn_agent`, run the **Codex Native Execution Adapter** above
-3. Otherwise, launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/execution-orchestrator.md`
-4. Pass the manifest path, prompts directory, and feature branch name
+Once the pre-flight checks pass and the shadow-kernel preflight is initialized:
+
+1. Read the manifest.
+2. If running in Codex with `multi_agent_v1.spawn_agent`, run the **Codex Native Execution Adapter** above.
+3. Otherwise, launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/execution-orchestrator.md`.
+4. Pass the manifest path, prompts directory, and feature branch name.
 5. The orchestrator handles everything autonomously:
    - Branch creation or exact-head existing-branch reuse
    - Worktree creation per chunk
@@ -253,37 +164,20 @@ Ask-then-default-park is the only headless behavior: a non-interactive session, 
    - Approved final dm-review mode, with security escalation
    - preparation of one compact memory observation for the capable caller
    - cumulative shadow observation after all chunks and at terminal, when the trusted runtime is available
-6. Apply the caller-side memory handoff below
-7. Present the execution summary
+6. Apply the caller-side memory handoff below.
+7. Present the execution summary.
 
 ## After Execution
 
 Immediately after the execution-orchestrator returns and before presenting its
 human summary, consume the single optional `Memory observation handoff:` field
-from the agent result. Keep the raw observation internal. Determine availability
-from the callable-tool inventory or tool search without making a probe call.
-Capability availability is the complete rule; do not use identity, environment,
-or repository heuristics.
-
-If the required ai-memory tools are callable, validate that the observation is
-the dated Pipeline format for exact entity `DepotPlugin:pipeline` and is under
-300 characters, then:
-
-1. `search_entities` for `DepotPlugin:pipeline`; create it as type `Tool` with
-   `add_entity` only when missing.
-2. Read the entity and check its same-day observations for the exact handoff.
-3. If absent, call `add_observation`, then `save`.
-
-After a successful write or exact duplicate, append `Memory capture: written`
-or `Memory capture: already-present` to `plans/<feature>/receipt.md` and retain
-that outcome in internal summary evidence before presentation. If callable
-tools fail during lookup or write, append `Memory capture: failed -- <safe reason>`
-and retain the same nonblocking operational evidence without marking execution
-or delivery incomplete. If the tools are absent, omit the write and every receipt or summary mention.
-Do not show the raw handoff in ordinary human-facing chat, mark execution or
-delivery incomplete because optional memory is absent, or ask the user to
-install or configure the personal source. Only an explicit user request for an
-ai-memory operation makes an unavailable capability reportable.
+from the agent result and keep the raw observation internal. Determine ai-memory
+availability from the callable-tool inventory or tool search without making a
+probe call; capability availability is the complete rule, never identity,
+environment, or repository heuristics. When those tools are callable, load
+`plugins/pipeline/references/run-memory-enrichment.md` and follow it. When they
+are absent, omit the write and every receipt or summary mention silently, do not
+mark execution or delivery incomplete, and do not load that file.
 
 After the authoritative terminal receipt is appended to the cumulative receipt array, run exactly:
 
@@ -296,7 +190,7 @@ if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrou
   || { s=$?; if [ "$s" -eq 6 ]; then printf 'run-cost-summary: skipped (receipt-write-failed)\n' >> plans/<feature>/receipt.md; elif [ "$s" -eq 2 ]; then exit "$s"; else printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> plans/<feature>/receipt.md; fi; }
 ```
 
-The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file left there by an earlier run, writes a schema-bound `run-cost-summary.json` beside that run's own `authoritative-receipts.json`, and appends exactly one inventory line to the run receipt naming what actually happened -- the artifact path on success, or `run-cost-summary: skipped (<reason>)` on any internal failure. It exits 0 for every measurement outcome, because the artifact is observation-only: it never gates, blocks, waives, or alters a review, lane, or phase outcome, and its absence never fails one. It exits 6 in exactly one case -- the receipt path was accepted but the write failed -- because a receipt naming neither an artifact nor a skip is the silence the failure-modes checklist forbids, and reporting that it could not report is the command's last obligation. A *refused* receipt path is the deliberate exception and still exits 0: exiting non-zero would fire the caller's `||` fallback, which appends through the very symlink the command just rejected, so the refusal is reported on stderr alone. Exit 2 is the other non-zero outcome and means the invocation was wrong -- bad flags, or `--output` and `--receipt` pointing at one path -- so nothing ran and nothing is recorded. The `||` fallback beside it must be status-aware: exit 6 triggers one final append of `skipped (receipt-write-failed)`, exit 2 is explicitly propagated as an invalid invocation, and every other non-zero status appends `skipped (kernel-unresolvable)`. If the final append also fails, its non-zero status remains visible instead of being erased. Receipt paths are fixed for a given receipt directory, so two concurrent runs sharing one directory overwrite each other: serialize them, or give each run its own directory. The command refuses a symlinked artifact or receipt path, and when the *receipt* path is the one refused it records nothing rather than writing the refusal through the symlink it just rejected. The caller resolves a coherent installed-plugin bundle and passes its model-matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; the kernel validates both bundle containment and matrix structure without owning a provider dependency. An unreadable or invalid matrix emits one stderr line, skips imputation, and never fails this observation-only emission. It does not inspect the working tree: the caller passes `--dirty-state`, and that flag is the artifact's only source of that fact. Populate the events it reads through `record-attempt` as each lane settles; that one atomic call appends the lane outcome and exactly one `attempt_usage` row under the same lock. Pass the OpenRouter wrapper receipt when present, otherwise pass the exact Codex/Claude input files for deterministic byte measurement; when neither exists, the paired row explicitly records `attempt_unmeasured`. Do not also call a standalone translator with `--append-to` for that attempt, because doing both double-counts it. A `lanes: 0` artifact after a run that executed lanes means this boundary is not wired; a structurally valid artifact with zero measured lanes proves the command ran, never that lanes were measured. Full command reference, when the workflow-kernel plugin is installed alongside this one: `plugins/workflow-kernel/skills/workflow-kernel/references/cli-measurement-commands.md`; if that path is not readable from this cache, the flags named above are the complete required set.
+The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file, writes a schema-bound `run-cost-summary.json` beside that run's `authoritative-receipts.json`, and appends exactly one receipt line -- the artifact path, or `run-cost-summary: skipped (<reason>)` on any internal failure. It is observation-only: it exits 0 for every measurement outcome, never gates or alters a review, lane, or phase outcome, and its absence never fails one. Exit 6 (receipt write failed after acceptance) appends `skipped (receipt-write-failed)` through the status-aware `||` fallback; exit 2 is an invalid invocation and propagates; any other non-zero status appends `skipped (kernel-unresolvable)`, and a failing final append keeps its own status visible. A refused symlinked receipt path still exits 0 and reports on stderr alone -- a non-zero exit would append through the symlink just refused. Receipt paths are fixed per directory, so concurrent runs sharing one directory overwrite each other: serialize them or give each its own. Pass a coherent installed bundle's matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; an unreadable or invalid matrix emits one stderr line, skips imputation, and never fails the emission. Populate events with `record-attempt` as each lane settles -- a standalone `--append-to` translator double-counts the attempt, and `lanes: 0` after a run that executed lanes means this boundary is not wired. Full flags: `cli-measurement-commands.md`; otherwise the flags named here are the complete required set.
 
 `bind-prediction` runs before corresponding authoritative actions, atomically seals the source, translated events, event digest, and RunSpec context, and appends exact binding authority to the canonical lifecycle ledger before `run.started`. `observe-pipeline` runs only after authoritative receipts exist and requires that ordered authority plus bound `pipeline-shadow-prediction.json`; direct comparison rechecks the same authority, and byte-identical predicted and authoritative receipts are valid only with the pre-start binding. It writes a separate `authoritative_observation` and never creates or changes the prediction. Without matching independent prediction evidence, observation and comparison fail closed. Keep the source and bound artifact until comparison completes. Write the shadow report and reliability metrics without changing the merge recommendation, cleanup disposition, or provider result. Never auto-delete the repository-lifetime `.workflow-kernel/repository-scope.json`; retain the terminal run directory or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches, regardless of parity `match`.
 

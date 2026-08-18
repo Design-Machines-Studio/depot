@@ -1,7 +1,7 @@
 {
   "name": "pipeline",
   "description": "Autonomous feature development pipeline with approved-scope intake, minimum-adequate planning, bounded adversarial review, fresh tiered verification, browser recovery, and isolated execution",
-  "version": "1.54.0",
+  "version": "1.56.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"

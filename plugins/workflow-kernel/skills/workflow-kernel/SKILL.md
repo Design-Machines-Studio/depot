@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.16.0
+version: 0.16.1
 ---
 
 # Workflow Kernel

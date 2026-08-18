@@ -961,6 +961,7 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
             REPO / "plugins/openrouter/commands/openrouter.md",
             REPO / "plugins/openrouter/agents/workflow/openrouter-agent-runner.md",
             REPO / "plugins/dm-review/skills/review/SKILL.md",
+            REPO / "plugins/dm-review/skills/review/references/full-lane-dispatch.md",
             REPO / "plugins/pipeline/references/openrouter-exec.sh",
             REPO / "plugins/pipeline/references/cascade-dispatch.sh",
         ]
@@ -971,10 +972,14 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         self.assertNotIn("exact-digest", combined)
         self.assertFalse((OPENROUTER / "skills/openrouter-delegate/references/runner-batch-authorization.sh").exists())
         self.assertFalse((OPENROUTER / "skills/openrouter-delegate/references/payload-authorization.sh").exists())
+        # Availability resolution moved to the full-mode dispatch reference the
+        # review skill loads; assert it there, not in the skill entry point.
         review = active[2].read_text()
+        dispatch = active[3].read_text()
         self.assertIn('OPENROUTER_API_KEY_FILE', review)
-        self.assertIn('OPENROUTER_AVAILABLE=true', review)
-        self.assertIn('OPENROUTER_BOUNDARY_PATH', review)
+        self.assertIn('full-lane-dispatch.md', review)
+        self.assertIn('OPENROUTER_AVAILABLE=true', dispatch)
+        self.assertIn('OPENROUTER_BOUNDARY_PATH', dispatch)
         orchestrator = (REPO / "plugins/pipeline/agents/workflow/execution-orchestrator.md").read_text()
         self.assertIn('[ -n "${OPENROUTER_API_KEY_FILE:-}" ]', orchestrator)
         self.assertIn("export WORKFLOW_KERNEL", orchestrator)

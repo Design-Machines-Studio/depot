@@ -9,14 +9,10 @@ model: opus
 
 ## Tool-Call Budget & Partial-Return Contract
 
-You run under a hard budget. Treat every tool call as spend you track.
-
 - **Hard cap: 40 tool calls.** Keep a running count.
-- **At 80% of budget (32 calls) STOP searching and write up what you have.** Partial results returned early beat complete results never returned: an agent that dies mid-flight (monthly spend limit, context overflow, crash) returns NOTHING and its entire lane is lost. Documented incidents: a 143-tool-call runaway, and 4 parallel reviewers dead at 17-24 calls each returning zero findings.
-- **End every report with these two sections, even a partial one:**
-  - `NOT-COVERED:` -- files, paths, or checks the budget excluded, so the consolidator knows the gaps.
-  - `COMMANDS-RUN:` -- the searches/commands you actually ran.
-- **Emit each finding in this fixed ledger block** so the consolidator merges mechanically without re-parsing prose:
+- **At 32 calls (80%), stop searching and write up what you have.** Partial results returned early beat complete results never returned -- an agent that dies mid-flight (spend limit, context overflow, crash) returns NOTHING and its whole lane is lost.
+- **End every report, even a partial one, with `NOT-COVERED:`** (files, paths, or checks the budget excluded, so the consolidator knows the gaps) **and `COMMANDS-RUN:`** (the searches/commands you actually ran).
+- **Emit each finding as this fixed ledger block** so the consolidator merges mechanically without re-parsing prose:
 
   ```
   ### [P1|P2|P3] <one-line title>
@@ -55,12 +51,9 @@ Agents now run under a hard tool-call budget and emit a fixed ledger block plus 
 
 ## Dead / Missing Agent Handling
 
-An agent can die mid-flight -- monthly spend limit, context overflow, or crash -- and return nothing or a truncated report. When that happens:
-
-- **Do NOT relaunch it.** A relaunch doubles spend against the same failure mode and can stall the whole run. (The external-LLM Phase 4.5 fallback in the dm-review skill is the one sanctioned retry; it has already run before you see the output.)
-- **Write its lane from whatever returned.** Salvage any complete ledger blocks; a partial finding set still has value.
-- **Record the gap.** Add a Coverage Gaps entry naming the dead/absent agent and what it was responsible for (e.g. `security-auditor -- DIED at cap, auth-path review incomplete`). A silently missing lane is the failure that costs the most: it reads as "clean" when it was never checked.
-- **Continue.** Consolidate the surviving lanes and ship the report with the gap flagged, rather than blocking on the dead one.
+When a dispatched lane died, returned empty or truncated output, or never
+reported, load `${CLAUDE_SKILL_DIR}/references/dead-agent-handling.md` and
+follow it. When every dispatched lane returned usable output, do not load it.
 
 ## Consolidation Process
 
@@ -152,6 +145,12 @@ severity is mandatory work.
 Exact duplicates merge without count inflation. Findings at the same location
 with distinct root causes remain separate. Same-line and adjacent-line rules
 are candidate discovery only; they never override the normalized root cause.
+Apply these concrete distance heuristics only to surface merge candidates:
+findings on the **same file:line** are merge candidates; findings **within 3
+lines** in the same file are adjacency candidates; the **same pattern recurring
+across different files keeps both findings** (distinct locations are distinct
+defects, never one merged row). A candidate merges only when the normalized root
+cause also matches.
 Contradictions never disappear: preserve both source positions, severities,
 evidence, and raw refs in the decision trail. Unresolved disagreement uses
 `retained-disagreement`. When deterministic evidence resolves a position, it
@@ -206,15 +205,13 @@ mandatory cleanup.
 
 ### Step 5.5: Coverage Gaps
 
-Add a **Coverage Gaps** section (immediately below the agent summary table) that lists every lane that did NOT achieve full coverage:
+When at least one selected lane failed, declined, timed out, was unavailable, or
+returned incomplete required coverage, load
+`${CLAUDE_SKILL_DIR}/references/consolidator-coverage-gaps.md` and emit the
+`Coverage Gaps` section it specifies. When every required lane completed, record
+that and do not load it.
 
-- Each agent's `NOT-COVERED:` lines (budget-capped paths/checks), attributed to the agent.
-- Every dead/absent agent (see Dead / Missing Agent Handling), with what it was responsible for.
-
-If there are no gaps, state `Coverage Gaps: none -- all lanes completed within budget.` An empty or omitted section must never be used to imply full coverage; absence of the section is treated as an authoring error, not as "clean".
-
-Return the provisional report body only after this Coverage Gaps section is
-complete.
+Return the provisional report body only after this Coverage Gaps section is complete.
 
 ## Rules
 

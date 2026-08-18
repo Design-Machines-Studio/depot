@@ -165,52 +165,33 @@ Contradictions and discarded positions remain visible.
 If there are zero raw findings, emit `Synthesis Decisions: none -- no source
 findings required a decision.` The section is still required.
 
-The machine-readable synthesis companion is an exact JSON object with
-`schema_version: 1`, `artifact_role: "synthesis_decisions"`, the review
-`run_id`, integer `source_finding_count`, normalized UTC `occurred_at`, and
-`decisions`. There is
-exactly one decision per raw source finding. Each decision contains:
-`source_finding_id`, `finding_path`, `finding_anchor`, `finding_category`,
-`finding_root_cause`, `finding_disposition`, `agreement`,
-`decision_reason_code`, `reviewer`, `lane`, `requested_provider`,
-`attempted_provider`, `implemented_by`, `provider`, `model`,
-`implementer_family`, `reviewer_family`, `resolution_reason`, `source_severity`,
-`evidence_ref`, positive integer `attempt`, and `occurred_at`. Use literal provider/model values
-from the lane receipt; use `not_reported` when that receipt does not name one.
-Every decision records normalized family provenance. Ordinary lanes may record
-the same implementer and reviewer family with a resolution such as
-`ordinary-lane-same-family-review`; required independent lanes must use
-disjoint families, including disjoint members of `mixed(<sorted families>)`,
-and their `reviewer_family` must match the closed family derived from the
-recorded reviewer model.
-The kernel normalizes the four identity inputs, recomputes the exact
+The four machine-readable companions are exact JSON objects. Every one carries
+`schema_version: 1`, its `artifact_role`, and the same review `run_id`. The
+kernel normalizes the four identity inputs, recomputes the exact
 `finding-v1:sha256(<64 lowercase hex>)` identifier, checks cardinality, and
 appends the ordered contribution receipts.
 
-The raw companion is an exact object with `schema_version: 1`,
-`artifact_role: "raw_finding_inventory"`, the same `run_id`, and `findings`.
-Every finding has `source_finding_id`, `reviewer`, `lane`, `source_severity`,
-`evidence_ref`, and the four `finding_path`/`finding_anchor`/
-`finding_category`/`finding_root_cause` identity inputs. The lane companion is
-an exact object with `schema_version: 1`,
-`artifact_role: "review_lane_receipts"`, the same `run_id`, and one `lanes`
-entry for every required lane. Each entry has `reviewer`, `lane`,
-`requested_provider`, `attempted_provider`, `implemented_by`, `provider`,
-`model`, `implementer_family`, `reviewer_family`, `resolution_reason`, nonempty
-`evidence_refs`, nonnegative integer `finding_count`, and the
-content-addressed `raw_output_ref` and `raw_output_digest`. Lane names and
-reviewer/lane identities must be unique. Family values and resolution must
-exactly match every decision sourced from that lane. The raw-output companion is an exact
-object with `schema_version: 1`,
-`artifact_role: "review_lane_raw_outputs"`, the same `run_id`, and one
-`outputs` entry per requested lane. Each output contains only `reviewer`,
-`lane`, and `findings`; `findings` uses the raw inventory finding shape and may
-be empty. Every raw finding's `reviewer`/`lane` and `evidence_ref` must resolve
-to that literal lane entry, and the independently parsed union of all raw lane
-outputs must equal the raw inventory and decisions exactly. All four inputs
-must contain no credential-shaped value, URL userinfo, credential query,
-authorization string, or compound credential assignment; the exporter
-validates them before hashing or creating any sealed artifact.
+| Companion | `artifact_role` | Also carries | Per-entry fields |
+|---|---|---|---|
+| Synthesis decisions | `synthesis_decisions` | integer `source_finding_count`, normalized UTC `occurred_at`, `decisions` (exactly one per raw source finding) | `source_finding_id`, `finding_path`, `finding_anchor`, `finding_category`, `finding_root_cause`, `finding_disposition`, `agreement`, `decision_reason_code`, `reviewer`, `lane`, `requested_provider`, `attempted_provider`, `implemented_by`, `provider`, `model`, `implementer_family`, `reviewer_family`, `resolution_reason`, `source_severity`, `evidence_ref`, positive integer `attempt`, `occurred_at` |
+| Raw inventory | `raw_finding_inventory` | `findings` | `source_finding_id`, `reviewer`, `lane`, `source_severity`, `evidence_ref`, and the four identity inputs |
+| Lane receipts | `review_lane_receipts` | `lanes` (one entry per required lane) | `reviewer`, `lane`, `requested_provider`, `attempted_provider`, `implemented_by`, `provider`, `model`, `implementer_family`, `reviewer_family`, `resolution_reason`, nonempty `evidence_refs`, nonnegative integer `finding_count`, content-addressed `raw_output_ref` and `raw_output_digest` |
+| Raw lane outputs | `review_lane_raw_outputs` | `outputs` (one per requested lane) | only `reviewer`, `lane`, and `findings`; `findings` uses the raw inventory shape and may be empty |
+
+Use literal provider/model values from the lane receipt, or `not_reported` when
+it names none. Every decision records normalized family provenance: ordinary
+lanes may record the same implementer and reviewer family with a resolution such
+as `ordinary-lane-same-family-review`; required independent lanes must use
+disjoint families, including disjoint members of `mixed(<sorted families>)`, and
+their `reviewer_family` must match the closed family derived from the recorded
+reviewer model. Lane names and reviewer/lane identities are unique, and family
+values and resolution must exactly match every decision sourced from that lane.
+Every raw finding's `reviewer`/`lane` and `evidence_ref` must resolve to that
+literal lane entry, and the independently parsed union of all raw lane outputs
+must equal the raw inventory and decisions exactly. All four inputs must contain
+no credential-shaped value, URL userinfo, credential query, authorization
+string, or compound credential assignment; the exporter validates them before
+hashing or creating any sealed artifact.
 
 ---
 
