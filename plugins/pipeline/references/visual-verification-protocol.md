@@ -1,4 +1,7 @@
-# Extracted conditional reference
+# Visual verification protocol
+
+Loaded at orchestrator Step 3h only for a chunk with
+`renderedSurface: required`. A `not_applicable` chunk never loads this file.
 
 #### Step 1: Design Spec Discovery
 

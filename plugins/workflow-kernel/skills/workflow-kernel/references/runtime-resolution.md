@@ -9,12 +9,11 @@ inline.
 
 Invoke the kernel exclusively through `workflow-kernel-launcher.sh` (this
 directory). The Python package under `references/workflow_kernel/` is not
-importable from a project working directory; a bare `python3 -m
-workflow_kernel` fails with `ModuleNotFoundError` everywhere except a
-correctly prepared `PYTHONPATH`. The launcher owns runtime resolution,
-interpreter verification (Python 3.12+ on a fixed `PATH`), module-path setup,
-and then execs `python3 -m workflow_kernel "$@"`. Inline Python source is
-forbidden; use only the stable CLI subcommands.
+importable from a project working directory, so a bare `python3 -m
+workflow_kernel` fails with `ModuleNotFoundError`. The launcher owns runtime
+resolution, interpreter verification (Python 3.12+ on a fixed `PATH`),
+module-path setup, then execs `python3 -m workflow_kernel "$@"`. Inline Python
+source is forbidden; use only the stable CLI subcommands.
 
 Resolve one launcher copy per run from the exact trusted workflow-kernel plugin
 root supplied by the host's dependency loader, then reuse it. Never glob cache
@@ -26,25 +25,23 @@ WORKFLOW_KERNEL="<trusted workflow-kernel plugin root>/skills/workflow-kernel/re
 [ -x "$WORKFLOW_KERNEL" ] || exit 4
 ```
 
-The host dependency loader owns that trusted root. In a Depot checkout it is
-the repository's `plugins/workflow-kernel` root; in an installed environment
-it is the exact dependency instance selected and manifest-validated by the
-host. The launcher then uses the shared side-effect-free Python resolver to
-select the newest compatible runtime (repository sibling first, then
-semver-sorted caches under `~/.claude` and `~/.codex`). Installed launchers
-derive that account root from their own canonical cache path; repository
-launchers use the operating-system account database. Caller-supplied `HOME`
-never selects executable code.
+The host dependency loader owns that trusted root: in a Depot checkout the
+repository's `plugins/workflow-kernel`, in an installed environment the exact
+dependency instance the host selected and manifest-validated. The launcher then
+uses the shared side-effect-free Python resolver to select the newest compatible
+runtime (repository sibling first, then semver-sorted caches under `~/.claude`
+and `~/.codex`). Installed launchers derive that account root from their own
+canonical cache path; repository launchers use the OS account database.
+Caller-supplied `HOME` never selects executable code.
 
 The dependency-neutral `workflow_kernel/runtime_resolution.py` module is the
-single policy owner. The launcher runs its trusted copy with Python isolated
-mode, receives only fully canonical candidate paths, and probes them in order.
-It validates the manifest, references directory, package, every package
-symlink, bootstrap resolver, initializer, and entry point beneath the plugin
-root before any candidate code executes. The same resolver functions are
-imported by `cli.py` for validation. The launcher also
-starts Bash in privileged isolation, uses Python `-I`, unsets caller startup
-variables, and hop-bounds its own symlink path (a cycle exits `4`).
+single policy owner, and `cli.py` imports the same functions for validation.
+The launcher runs its trusted copy in Python isolated mode, receives only fully
+canonical candidate paths, probes them in order, and validates the manifest,
+references directory, package, every package symlink, bootstrap resolver,
+initializer, and entry point beneath the plugin root before any candidate code
+executes. It also starts Bash in privileged isolation, uses Python `-I`, unsets
+caller startup variables, and hop-bounds its own symlink path (a cycle exits `4`).
 
 ## Coherent installed-plugin bundles
 
@@ -60,16 +57,16 @@ callers that need a coherent set of runtime assets:
 ```
 
 At least one required asset or executable is mandatory. Every path must be a
-contained, non-symlink regular file. Ordinary assets must be readable;
-executable assets must be readable and have executable mode and access. The
-resolver evaluates completeness before ranking candidates, so a broken higher
-version is skipped and the next compatible complete version may win. It never
-combines assets across roots. Semantic version outranks mtime, and active host
-breaks only equal-version ties. The result exposes a home-relative ephemeral
-root plus durable cache class, version, and reason.
+contained, non-symlink regular file; ordinary assets must be readable,
+executable assets must additionally have executable mode and access. The
+resolver evaluates completeness before ranking, so a broken higher version is
+skipped and the next compatible complete version may win. It never combines
+assets across roots. Semantic version outranks mtime, and active host breaks
+only equal-version ties. The result exposes a home-relative ephemeral root plus
+durable cache class, version, and reason.
 
-For callers that need one asset rather than bundle metadata, use the same
-coherent selection boundary through `resolve-plugin-asset`:
+For one asset rather than bundle metadata, use the same coherent selection
+boundary through `resolve-plugin-asset`:
 
 ```sh
 "$WORKFLOW_KERNEL" resolve-plugin-asset \
@@ -77,12 +74,12 @@ coherent selection boundary through `resolve-plugin-asset`:
   [--minimum-version <semver>] [--active-host <claude|codex>]
 ```
 
-The command applies the bundle containment, completeness, semantic-version,
-manifest, and host-tie-break rules above, then prints the selected asset's
-canonical absolute path followed by one newline. It never combines roots or
-falls back to the project, `PATH`, or caller-selected cache directories. If no
-compatible coherent bundle contains the asset, it emits the kernel's
-structured `plugin_bundle_unavailable` error and exits nonzero.
+It applies the same containment, completeness, semantic-version, manifest, and
+host-tie-break rules, then prints the selected asset's canonical absolute path
+followed by one newline. It never combines roots or falls back to the project,
+`PATH`, or caller-selected cache directories. If no compatible coherent bundle
+contains the asset, it emits the kernel's structured
+`plugin_bundle_unavailable` error and exits nonzero.
 
 ## Trust boundaries (fail closed)
 

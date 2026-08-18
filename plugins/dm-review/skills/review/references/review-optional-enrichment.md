@@ -1,4 +1,8 @@
-# Extracted conditional reference
+# Optional memory enrichment (Phase 7)
+
+Loaded at Phase 7 only in full mode and only when the ai-memory tools are
+callable in this session. When they are absent, omit Phase 7 and 7b silently and
+never load this file.
 
 Official and third-party Claude Code plugins that complement this skill:
 

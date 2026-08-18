@@ -1,4 +1,7 @@
-# Extracted conditional reference
+# Design spec discovery
+
+Loaded at Phase 3.25 only when the change includes `.templ`, `.twig`, `.html`,
+or `.css`. A non-UI diff never loads this file.
 
 ### Phase 3.25: Design Spec Discovery
 

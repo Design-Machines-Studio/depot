@@ -9,15 +9,16 @@ model: sonnet
 
 ## Tool-Call Budget & Partial-Return Contract
 
-You run under a hard budget. Treat every tool call as spend you track.
-
 - **Hard cap: 40 tool calls.** Keep a running count.
-- **At 80% of budget (32 calls) STOP searching and write up what you have.** Partial results returned early beat complete results never returned: an agent that dies mid-flight (monthly spend limit, context overflow, crash) returns NOTHING and its entire lane is lost. Documented incidents: a 143-tool-call runaway, and 4 parallel reviewers dead at 17-24 calls each returning zero findings.
-- **End every report with these two sections, even a partial one:**
-  - `NOT-COVERED:` -- files, paths, or checks the budget excluded, so the consolidator knows the gaps.
-  - `COMMANDS-RUN:` -- the searches/commands you actually ran.
-- **Emit each finding in this fixed ledger block** so the consolidator merges mechanically without re-parsing prose:
+- **At 32 calls (80%), stop searching and write up what you have.** Partial results returned early beat complete results never returned -- an agent that dies mid-flight (spend limit, context overflow, crash) returns NOTHING and its whole lane is lost.
+- **End every report, even a partial one, with `NOT-COVERED:`** (files, paths, or checks the budget excluded, so the consolidator knows the gaps) **and `COMMANDS-RUN:`** (the searches/commands you actually ran).
+- **Emit each finding as this fixed ledger block** so the consolidator merges mechanically without re-parsing prose:
 
+  ```
+  ### [P1|P2|P3] <one-line title>
+  - where: <path>:<line-or-stable-anchor>
+  - evidence: <what you observed>
+  - fix: <concrete change>
   ```
   ### [P1|P2|P3] <one-line title>
   - where: <path>:<line-or-stable-anchor>
@@ -58,27 +59,9 @@ Only review changed files. Read each file fully before reporting. Also scan near
 
 ## Naming Convention Checks
 
-### Go
-- Exported names are PascalCase, unexported are camelCase
-- Interfaces named with -er suffix for single-method interfaces
-- Package names are lowercase, single-word, no underscores
-- Test files end in `_test.go`
-- Error variables prefixed with `Err`, error types suffixed with `Error`
-
-### Templ
-- Component names are PascalCase
-- Component files match their primary component name
-- CSS class references use kebab-case
-
-### Twig / Craft
-- Template names are kebab-case
-- Macro names are camelCase
-- Variable names are camelCase
-
-### CSS (Live Wires)
-- Custom properties use `--lw-` prefix for framework, `--` for project
-- Utility classes use functional naming (what they do, not what they look like)
-- Component classes match the component name
+When the changed files use Go, Templ, Twig/Craft, or Live Wires CSS, load
+`${CLAUDE_SKILL_DIR}/references/pattern-stack-conventions.md` and apply that
+stack's naming rules. A diff touching none of those stacks does not load it.
 
 ## Duplication Detection
 

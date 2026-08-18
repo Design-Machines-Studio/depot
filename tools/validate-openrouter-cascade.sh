@@ -1249,10 +1249,12 @@ if check_matrix_readable; then
   check_matrix_snapshot_date
 fi
 
-if grep -q -- '--exhausted-rail' "$orchestrator"; then
+cascade_descent_ref="$REPO_ROOT/plugins/pipeline/references/execution-cascade-descent.md"
+if grep -q -- '--exhausted-rail' "$cascade_descent_ref" &&
+   grep -q 'execution-cascade-descent.md' "$orchestrator"; then
   pass "pipeline orchestrator passes observed exhausted rail into cascade"
 else
-  fail "execution-orchestrator.md must pass --exhausted-rail after cap/unavailable events"
+  fail "execution-cascade-descent.md must pass --exhausted-rail after cap/unavailable events"
   any_failed=1
 fi
 

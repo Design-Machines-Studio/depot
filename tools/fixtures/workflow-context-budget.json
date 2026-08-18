@@ -1,18 +1,37 @@
 {
   "baseline_commit": "7bd4dc9bb8a7a530a1e27193fbc4590adafcaff7",
-  "notes": "Post-PR-#74 always-loaded path map. After-sets omit files the entry now loads only on a named branch.",
+  "required_aggregate_reduction_pct": 40,
+  "notes": "Post-PR-#74 always-loaded path map. Every file an entry loads unconditionally is measured; files loaded only on a named branch stay out of the always-set and must carry that condition at their load site (audited by tools/validate-workflow-contracts.sh). max_words is a ceiling and can never authorize growth over baseline_words.",
   "hot_entries": {
-    "plugins/pipeline/commands/pipeline.md": {"baseline_words": 8798, "max_words": 7800},
-    "plugins/pipeline/agents/workflow/execution-orchestrator.md": {"baseline_words": 20606, "max_words": 12000},
-    "plugins/dm-review/commands/dm-review.md": {"baseline_words": 1467, "max_words": 1600},
-    "plugins/dm-review/skills/review/SKILL.md": {"baseline_words": 12810, "max_words": 8500},
-    "plugins/pipeline/commands/pipeline-run.md": {"baseline_words": 3383, "max_words": 3500},
-    "plugins/dm-review/commands/dm-review-loop.md": {"baseline_words": 4468, "max_words": 4500}
+    "plugins/pipeline/commands/pipeline.md": {
+      "baseline_words": 8798,
+      "max_words": 8798
+    },
+    "plugins/pipeline/agents/workflow/execution-orchestrator.md": {
+      "baseline_words": 20606,
+      "max_words": 20606
+    },
+    "plugins/dm-review/commands/dm-review.md": {
+      "baseline_words": 1467,
+      "max_words": 1467
+    },
+    "plugins/dm-review/skills/review/SKILL.md": {
+      "baseline_words": 12810,
+      "max_words": 12810
+    },
+    "plugins/pipeline/commands/pipeline-run.md": {
+      "baseline_words": 3383,
+      "max_words": 3383
+    },
+    "plugins/dm-review/commands/dm-review-loop.md": {
+      "baseline_words": 4468,
+      "max_words": 4468
+    }
   },
   "paths": {
     "pipeline_planning": {
       "baseline_words": 35337,
-      "max_words": 26000,
+      "max_words": 35337,
       "always": [
         "plugins/pipeline/commands/pipeline.md",
         "plugins/pipeline/skills/assess/SKILL.md",
@@ -26,7 +45,7 @@
     },
     "pipeline_run": {
       "baseline_words": 42385,
-      "max_words": 31000,
+      "max_words": 42385,
       "always": [
         "plugins/pipeline/commands/pipeline-run.md",
         "plugins/pipeline/agents/workflow/execution-orchestrator.md",
@@ -34,21 +53,26 @@
         "plugins/pipeline/references/routing-policy.json",
         "plugins/dm-review/skills/review/references/repo-cleanup-contract.md",
         "plugins/dm-review/skills/review/SKILL.md",
+        "plugins/dm-review/skills/review/references/reviewer-prompt-template.md",
         "plugins/dm-review/skills/review/references/full-lane-dispatch.md",
+        "plugins/pipeline/references/execution-lint-scan.md",
+        "plugins/pipeline/references/execution-worktree-cleanup.md",
         "plugins/pipeline/references/run-postmortem-schema.md"
       ]
     },
     "dm_review": {
       "baseline_words": 33122,
-      "max_words": 31000,
+      "max_words": 33122,
       "always": [
         "plugins/dm-review/commands/dm-review.md",
         "plugins/dm-review/skills/review/SKILL.md",
+        "plugins/dm-review/skills/review/references/reviewer-prompt-template.md",
         "plugins/dm-review/skills/review/references/full-lane-dispatch.md",
         "plugins/workflow-kernel/skills/workflow-kernel/references/runtime-resolution.md",
         "plugins/dm-review/skills/review/references/severity-mapping.md",
         "plugins/dm-review/skills/review/references/output-format.md",
         "plugins/dm-review/skills/review/references/guardrails.md",
+        "plugins/dm-review/skills/review/references/repo-cleanup-contract.md",
         "plugins/dm-review/agents/workflow/review-consolidator.md",
         "plugins/pipeline/references/routing-policy.json",
         "plugins/dm-review/agents/review/security-auditor.md",
@@ -61,20 +85,21 @@
     },
     "dm_review_loop": {
       "baseline_words": 29863,
-      "max_words": 25000,
+      "max_words": 29863,
       "always": [
         "plugins/dm-review/commands/dm-review-loop.md",
         "plugins/dm-review/commands/dm-review-quick.md",
         "plugins/dm-review/skills/review/SKILL.md",
+        "plugins/dm-review/skills/review/references/reviewer-prompt-template.md",
         "plugins/workflow-kernel/skills/workflow-kernel/references/runtime-resolution.md",
         "plugins/dm-review/skills/review/references/severity-mapping.md",
         "plugins/dm-review/skills/review/references/output-format.md",
         "plugins/dm-review/skills/review/references/guardrails.md",
+        "plugins/dm-review/skills/review/references/repo-cleanup-contract.md",
         "plugins/dm-review/agents/workflow/review-consolidator.md",
         "plugins/dm-review/agents/review/pattern-recognition-specialist.md",
         "plugins/dm-review/agents/review/code-simplicity-reviewer.md",
-        "plugins/dm-review/commands/dm-review-fix.md",
-        "plugins/dm-review/skills/review/references/repo-cleanup-contract.md"
+        "plugins/dm-review/commands/dm-review-fix.md"
       ]
     }
   },

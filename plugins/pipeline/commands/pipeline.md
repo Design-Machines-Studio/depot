@@ -10,91 +10,58 @@ Full autonomous feature development pipeline. Takes an idea and delivers a clean
 
 ## Mode Selection
 
-Before starting, assess the feature scope and select the appropriate mode:
-
-**Lean mode** -- Use when the feature is small enough for single-pass execution but still needs quality gates:
+**Lean mode** -- small enough for single-pass execution but still needing quality gates:
 
 - Touches fewer than 10 files and remains one coherent coding concern
 - One logical concern (not multiple subsystems)
 - No dependency ordering needed (everything is sequential)
 - Can be implemented in one pass
 
-Lean mode skips Phase 4 (chunking, manifest, prompts) and iterative review loops. It keeps one Phase 5 adversarial pass and one final dm-review. Sequence: combined discovery → plan → one adversary pass → final planning approval → one implementation pass → one dm-review → deliver.
+Lean skips Phase 4 (chunking, manifest, prompts) and iterative review loops, keeping one Phase 5 adversarial pass and one final dm-review: combined discovery → plan → adversary pass → final planning approval → one implementation pass → dm-review → deliver.
 
-**Full mode** (default) -- everything else. All phases execute in order.
-
-**How to decide:** If the plan from Phase 3 has more than one logical step that could be parallelized or that touches separate file groups, use full mode. If it's a single coherent change that still benefits from quality checks, use lean mode. When in doubt, use full mode.
+**Full mode** (default) -- everything else; all phases execute in order. If the Phase 3 plan has more than one parallelizable logical step or touches separate file groups, use full mode. When in doubt, full.
 
 ## Human-Facing Output
 
-Keep phase gates, blocked-run messages, and delivery summaries compact. The
-durable artifacts carry process detail; visible chat helps the operator decide
-what to do.
+Keep phase gates, blocked-run messages, and delivery summaries compact; durable artifacts carry process detail.
 
-- At a human gate, state what package is ready, the decision or correction needed,
-  one recommended next action, and the artifact path. Do not paste the full
-  assessment, research, plan, requirements map, prompt inventory, or receipts.
-- A terminal summary starts with exactly `Done`, `Needs fixes`, or `Blocked`,
-  then states what changed or stopped, verification, branch or PR, one
-  recommended next action, and links or paths to the receipt, requirements
-  crosscheck, postmortem, and detailed review when present.
-- A blocked message names the exact blocker, the smallest operator action that
-  can clear it, and where resumable work is preserved. Required P1/P2/P3 findings,
-  coverage gaps, blocked browser evidence, cleanup truth, and provenance remain
-  in the linked durable evidence.
-- Put `Recommended next action` before any additional option. Show other options
-  only when they are genuinely live decisions; do not print a default
-  multiple-choice menu.
+- At a human gate, state the ready package, the decision needed, one recommended next action, and the artifact path. Do not paste the full assessment, research, plan, requirements map, prompt inventory, or receipts.
+- Terminal summaries start with exactly `Done`, `Needs fixes`, or `Blocked`, then what changed or stopped, verification, branch or PR, one recommended next action, and paths to receipt, requirements crosscheck, postmortem, and detailed review when present.
+- Blocked messages name the exact blocker, the smallest operator action to clear it, and where resumable work is preserved; P1/P2/P3 findings, coverage gaps, blocked browser evidence, cleanup truth, and provenance stay in linked durable evidence.
+- Put `Recommended next action` before any additional option; show other options only when genuinely live. No default multiple-choice menus.
 
-The visible summary should normally fit within roughly 250 words. Exceed that
-only to expose actionable P1/P2/P3 findings or a real blocker. Never hide required
-action to meet the budget. Do not print `Steps Completed`, provider accounting,
-cleanup inventories, every evaluation receipt, or raw review output in chat by
-default; keep them in `receipt.md`, `run-postmortem.md`, the requirements
-crosscheck, and the established detailed review artifact.
+Visible summaries normally fit ~250 words; exceed only for actionable P1/P2/P3 findings or a real blocker -- never hide required action to meet the budget. `Steps Completed`, provider accounting, cleanup inventories, evaluation receipts, and raw review output belong in `receipt.md`, `run-postmortem.md`, the requirements crosscheck, and the detailed review artifact -- not chat.
 
 ## Provider-Adaptive Complexity
 
-Choose lean versus full mode from dependency shape, risk, and verification needs--not from a Claude model. Coding execution and review use Codex or OpenRouter. Claude effort settings may deepen explicitly non-coding planning, strategy, research synthesis, voice/editorial work, or optional plan critique, but they never change coding routes or justify broader implementation chunks.
+Choose lean versus full from dependency shape, risk, and verification needs -- not from a Claude model. Coding execution and review use Codex or OpenRouter. Claude effort settings may deepen explicitly non-coding planning, strategy, research synthesis, voice/editorial work, or optional plan critique, but never change coding routes or justify broader implementation chunks.
 
 - Complex, security-sensitive, or multi-subsystem work uses full mode regardless of provider quality.
-- `plan-adversary` may use high Claude effort only when it is an explicitly non-coding plan critique; Codex and OpenRouter remain the coding evaluators.
-- Fable is non-coding-only. Never dispatch `execution-orchestrator`, implementation, security, architecture, or code review to Fable.
+- `plan-adversary` may use high Claude effort only as explicitly non-coding plan critique; Codex and OpenRouter remain the coding evaluators.
+- Fable is non-coding-only: never dispatch `execution-orchestrator`, implementation, security, architecture, or code review to Fable.
 - Mechanical OpenRouter runners remain bounded by the security policy and return to Codex when they cannot execute safely.
 
-**These stay mandatory regardless of provider:**
-
-- The adversarial review (Phase 5) -- self-evaluation is unreliable at any capability level.
-- A focused Codex review after ordinary chunks, full review for sensitive paths,
-  and the approved final dm-review mode. Full is the default; quick is allowed
-  only when the approved plan explicitly selects it, consequence is not high,
-  and the final diff is not security-sensitive. Separating generator from
-  evaluator is an architectural principle, not a model limitation.
+**Mandatory regardless of provider:** the Phase 5 adversarial review (self-evaluation is unreliable at any capability level); focused Codex review after ordinary chunks, full review for sensitive paths, and the approved final dm-review mode -- full by default, quick only when the approved plan explicitly selects it, consequence is not high, and the final diff is not security-sensitive. Generator/evaluator separation is architectural, not a model limitation.
 
 ## CRITICAL: No Shortcuts
 
-You MUST execute every phase in order. You MUST NOT skip phases, combine phases, or take shortcuts. Specifically:
+Execute every phase in order -- no skipping, combining, or shortcuts:
 
-- You MUST NOT skip research because you think you have enough context
-- In full mode, you MUST NOT execute chunks yourself -- you MUST launch the execution-orchestrator agent
-- In full mode, you MUST NOT skip the risk-tiered evaluation gate after each chunk
-- You MUST NOT skip the approved final dm-review gate or silently change its mode
-- You MUST pause for user input at the combined discovery and final planning
-  approval boundaries before execution
-- You MUST save all applicable artifacts to disk. Lean mode intentionally has no
-  manifest or prompt directory.
+- Do not skip research because you think you have enough context
+- Full mode: do not execute chunks yourself -- launch the execution-orchestrator agent; do not skip the risk-tiered evaluation gate after each chunk
+- Do not skip the approved final dm-review gate or silently change its mode
+- Pause for user input at the combined discovery and final planning approval boundaries before execution
+- Save all applicable artifacts to disk; lean mode intentionally has no manifest or prompt directory
 
-If you are tempted to skip a phase, STOP and re-read this section.
+If tempted to skip a phase, STOP and re-read this section.
 
 ## CRITICAL: Do Not Manually Replicate
 
-When the user says "/pipeline" or asks to "run the pipeline" or "use the full pipeline process," you MUST invoke this skill. You MUST NOT manually replicate pipeline phases by hand -- launching Explore agents, writing plans, implementing directly, and calling it "the pipeline."
-
-The pipeline enforces gates, bounded review, visual verification, and approved-scope contracts that manual execution silently skips, with optional memory enrichment when callable. Do not bypass it because the code already looks familiar.
+When the user says "/pipeline" or asks to run the pipeline, invoke this skill -- do not manually replicate phases by hand (Explore agents, hand-written plans, direct implementation) and call it the pipeline. It enforces gates, bounded review, visual verification, and approved-scope contracts that manual execution silently skips, with optional memory enrichment when callable. Do not bypass it because the code already looks familiar.
 
 ## Progress Ledger
 
-Create this ledger with TodoWrite at the start. Update it as you complete each phase. This is your proof of compliance.
+Create this ledger with TodoWrite at the start and update it as each phase completes; it is your proof of compliance.
 
 ```text
 1. Save original prompt to plans/<slug>/original-prompt.md
@@ -112,27 +79,17 @@ Create this ledger with TodoWrite at the start. Update it as you complete each p
 12. Phase 7 GATE: Present results and ask user for next step
 ```
 
-Mark each item as you complete it. Do not mark a GATE as complete until
-AskUserQuestion has returned a response from the user. Before execution, there
-are exactly two routine human gates: combined discovery and final planning.
-Creative brainstorming, capacity, and post-execution delivery decisions remain
-conditional boundaries and do not recreate assessment, research, or plan gates.
+Mark each item as completed; do not mark a GATE complete until AskUserQuestion has returned. Before execution there are exactly two routine human gates: combined discovery and final planning. Creative brainstorming, capacity, and post-execution delivery decisions remain conditional boundaries and do not recreate assessment, research, or plan gates.
 
 ### Wait Measurement
 
-Timestamp immediately before each actual user gate and immediately after the response.
-Append one authoritative `progress` receipt with `wait_category: human_gate` and
-the measured nonnegative `duration_seconds`. Record orchestration-level waits,
-not one receipt per parallel lane, so elapsed intervals never double-count.
-Use the same receipt shape for any later `external_dependency`, `capacity`, or
-`ci` wait. Do not estimate missing timestamps and do not label active review or
-implementation time as waiting.
+Timestamp immediately before each actual user gate and immediately after the response. Append one authoritative `progress` receipt with `wait_category: human_gate` and the measured nonnegative `duration_seconds`. Record orchestration-level waits, not one per parallel lane, so intervals never double-count; reuse the shape for later `external_dependency`, `capacity`, or `ci` waits. Never estimate missing timestamps or label active review/implementation time as waiting.
 
 ### Shadow Workflow Kernel Hooks
 
-The Progress Ledger, canonical Markdown phases, manifest, routing policy, execution-orchestrator, and authoritative receipts remain the source of truth. Kernel hooks run only after the matching authoritative artifact, receipt, or action exists. They may observe and compare; they may not select ready nodes, advance gates, block or approve a merge, alter provider fallback, invoke cleanup, or convert review outcomes.
+The Progress Ledger, canonical Markdown phases, manifest, routing policy, execution-orchestrator, and authoritative receipts remain the source of truth. Kernel hooks run only after the matching authoritative artifact, receipt, or action exists; they may observe and compare, never select ready nodes, advance gates, block or approve a merge, alter provider fallback, invoke cleanup, or convert review outcomes.
 
-Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the single fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md` (launcher discovery snippet, repo-vs-cache trust boundaries, semver compatibility, symlink and scope fail-closed rules, and stable exit codes all live there; do not restate them here). Use only the launcher's stable subcommands; inline Python source is forbidden. Store observation artifacts beneath `plans/<feature-slug>/` and initialize each run at `.workflow-kernel/runs/<run-id>`. If the launcher or runtime is unavailable or incompatible, continue the authoritative pipeline and record `shadow unavailable` with a safe reason.
+Resolve `$WORKFLOW_KERNEL` (the workflow-kernel launcher) once per run via the single fail-closed contract in the workflow-kernel plugin's `references/runtime-resolution.md` (launcher discovery, trust boundaries, semver, symlink/scope fail-closed rules, exit codes). Use only stable subcommands; inline Python source is forbidden. Store observation artifacts beneath `plans/<feature-slug>/`; initialize each run at `.workflow-kernel/runs/<run-id>`. If the launcher or runtime is unavailable or incompatible, continue the authoritative pipeline and record `shadow unavailable` with a safe reason.
 
 After producing `independent-prediction-receipts.json` and before any corresponding authoritative action, seal it exactly once:
 
@@ -141,11 +98,7 @@ After producing `independent-prediction-receipts.json` and before any correspond
 "$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest plans/<feature-slug>/manifest.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
 ```
 
-At each phase boundary, append the authoritative receipt to the cumulative
-ordered redacted ledger. Do not invoke the observer for every phase. After all
-implementation chunks are complete and before the approved final review, rewrite
-`plans/<feature-slug>/authoritative-receipts.json` through the
-`all-chunks-complete` boundary and invoke exactly:
+At each phase boundary, append the authoritative receipt to the cumulative ordered redacted ledger; do not invoke the observer per phase. After all implementation chunks complete and before the approved final review, rewrite `plans/<feature-slug>/authoritative-receipts.json` through the `all-chunks-complete` boundary and invoke exactly:
 
 ```text
 "$WORKFLOW_KERNEL" observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
@@ -162,9 +115,9 @@ if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrou
   || { s=$?; if [ "$s" -eq 6 ]; then printf 'run-cost-summary: skipped (receipt-write-failed)\n' >> plans/<feature-slug>/receipt.md; elif [ "$s" -eq 2 ]; then exit "$s"; else printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> plans/<feature-slug>/receipt.md; fi; }
 ```
 
-The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file left there by an earlier run, writes a schema-bound `run-cost-summary.json` beside that run's own `authoritative-receipts.json`, and appends exactly one inventory line to the run receipt naming what actually happened -- the artifact path on success, or `run-cost-summary: skipped (<reason>)` on any internal failure. It exits 0 for every measurement outcome, because the artifact is observation-only: it never gates, blocks, waives, or alters a review, lane, or phase outcome, and its absence never fails one. It exits 6 in exactly one case -- the receipt path was accepted but the write failed -- because a receipt naming neither an artifact nor a skip is the silence the failure-modes checklist forbids, and reporting that it could not report is the command's last obligation. A *refused* receipt path is the deliberate exception and still exits 0: exiting non-zero would fire the caller's `||` fallback, which appends through the very symlink the command just rejected, so the refusal is reported on stderr alone. Exit 2 is the other non-zero outcome and means the invocation was wrong -- bad flags, or `--output` and `--receipt` pointing at one path -- so nothing ran and nothing is recorded. The `||` fallback beside it must be status-aware: exit 6 triggers one final append of `skipped (receipt-write-failed)`, exit 2 is explicitly propagated as an invalid invocation, and every other non-zero status appends `skipped (kernel-unresolvable)`. If the final append also fails, its non-zero status remains visible instead of being erased. Receipt paths are fixed for a given receipt directory, so two concurrent runs sharing one directory overwrite each other: serialize them, or give each run its own directory. The command refuses a symlinked artifact or receipt path, and when the *receipt* path is the one refused it records nothing rather than writing the refusal through the symlink it just rejected. The caller resolves a coherent installed-plugin bundle and passes its model-matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; the kernel validates both bundle containment and matrix structure without owning a provider dependency. An unreadable or invalid matrix emits one stderr line, skips imputation, and never fails this observation-only emission. It does not inspect the working tree: the caller passes `--dirty-state`, and that flag is the artifact's only source of that fact. Populate the events it reads through `record-attempt` as each lane settles; that one atomic call appends the lane outcome and exactly one `attempt_usage` row under the same lock. Pass the OpenRouter wrapper receipt when present, otherwise pass the exact Codex/Claude input files for deterministic byte measurement; when neither exists, the paired row explicitly records `attempt_unmeasured`. Do not also call a standalone translator with `--append-to` for that attempt, because doing both double-counts it. A `lanes: 0` artifact after a run that executed lanes means this boundary is not wired; a structurally valid artifact with zero measured lanes proves the command ran, never that lanes were measured. Full command reference, when the workflow-kernel plugin is installed alongside this one: `plugins/workflow-kernel/skills/workflow-kernel/references/cli-measurement-commands.md`; if that path is not readable from this cache, the flags named above are the complete required set.
+The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file, writes a schema-bound `run-cost-summary.json` beside that run's `authoritative-receipts.json`, and appends exactly one receipt line -- the artifact path, or `run-cost-summary: skipped (<reason>)` on any internal failure. It is observation-only: it exits 0 for every measurement outcome, never gates or alters a review, lane, or phase outcome, and its absence never fails one. Exit 6 (receipt write failed after acceptance) appends `skipped (receipt-write-failed)` through the status-aware `||` fallback; exit 2 is an invalid invocation and propagates; any other non-zero status appends `skipped (kernel-unresolvable)`, and a failing final append keeps its own status visible. A refused symlinked receipt path still exits 0 and reports on stderr alone -- a non-zero exit would append through the symlink just refused. Receipt paths are fixed per directory, so concurrent runs sharing one directory overwrite each other: serialize them or give each its own. Pass a coherent installed bundle's matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; an unreadable or invalid matrix emits one stderr line, skips imputation, and never fails the emission. Populate events with `record-attempt` as each lane settles -- a standalone `--append-to` translator double-counts the attempt, and `lanes: 0` after a run that executed lanes means this boundary is not wired. Full flags: `cli-measurement-commands.md`; otherwise the flags named here are the complete required set.
 
-`bind-prediction` seals the prediction before `run.started`. Observation cannot change the prediction. Exit `5` is a visible parity gap, not a pipeline failure. Never auto-delete `.workflow-kernel/repository-scope.json`.
+`bind-prediction` seals the prediction before `run.started`; observation cannot change the prediction. Exit `5` is a visible parity gap, not a pipeline failure. Never auto-delete `.workflow-kernel/repository-scope.json`.
 
 ## Airlift Checkpoint (every phase boundary)
 
@@ -172,45 +125,25 @@ After each saved phase, if airlift resolves from cache, run the existing `plugin
 
 ## Artifact Format (planning phase)
 
-Write brainstorm, assessment, research, and plan as HTML with a `#pipeline-data` JSON island. At every save, follow `plugins/pipeline/skills/promptcraft/references/templates/README.md`. Agent-only handoffs stay markdown/JSON. Read islands with `templates/extract-json-island.sh`.
+Write brainstorm, assessment, research, and plan as HTML with a `#pipeline-data` JSON island, following `plugins/pipeline/skills/promptcraft/references/templates/README.md` at every save. Agent-only handoffs stay markdown/JSON. Read islands with `templates/extract-json-island.sh`.
 
 ## Feature Input
 
 <feature_input> #$ARGUMENTS </feature_input>
 
-If the feature input above is empty, ask: "What feature or change do you want to build? Describe the idea, feedback, or iteration."
-
-Do not proceed without a clear feature description.
+If the feature input above is empty, ask: "What feature or change do you want to build? Describe the idea, feedback, or iteration." Do not proceed without a clear feature description.
 
 ## Original Prompt Preservation
 
-**Immediately** save the user's original input verbatim to `plans/<feature-slug>/original-prompt.md`. Preserve every requested outcome, constraint, mechanism, and future idea exactly as written. This file is the request record, not an automatically approved implementation contract.
+**Immediately** save the user's original input verbatim to `plans/<feature-slug>/original-prompt.md`, preserving every requested outcome, constraint, mechanism, and future idea exactly as written. This file is the request record, not an automatically approved implementation contract.
 
-**Slug validation:** the `<feature-slug>` MUST match `^[a-z0-9][a-z0-9-]{0,63}$`. If the derived slug contains `..`, `/`, spaces, uppercase, or exceeds 64 chars, regenerate it. Slug violations escape the `plans/` directory and are rejected.
+**Slug validation:** `<feature-slug>` MUST match `^[a-z0-9][a-z0-9-]{0,63}$`; regenerate it if it contains `..`, `/`, spaces, uppercase, or exceeds 64 chars. Slug violations escape `plans/` and are rejected.
 
 ### Re-read discipline (token budget)
 
-`original-prompt.md` is read canonically in Phase 1 (Assessment) and passed as
-source context to research. Phase 1 separates desired outcomes, hard constraints
-and explicit approved decisions, proposed implementation mechanisms, and future
-or conditional ideas in the assessment prose. It must not promote a proposed
-mechanism into approved scope merely because the user named it. After the
-combined discovery response resolves scope, update the `keyRequirements` island
-of `plans/<feature-slug>/assessment.html` with only the approved outcomes,
-constraints, project goals, and decisions. Phases 3, 4, and 7 then reference
-that cached approved Key Requirements list (read it with
-`templates/extract-json-island.sh plans/<feature-slug>/assessment.html`), NOT
-the full original-prompt.md.
+`original-prompt.md` is read canonically in Phase 1 and passed as source context to research. Phase 1 separates desired outcomes, hard constraints and explicit approved decisions, proposed mechanisms, and future or conditional ideas; it must not promote a proposed mechanism into approved scope merely because the user named it. After the combined discovery response resolves scope, update the `keyRequirements` island of `assessment.html` with only approved outcomes, constraints, project goals, and decisions; Phases 3, 4, and 7 reference that cached list (via `templates/extract-json-island.sh plans/<feature-slug>/assessment.html`), NOT the full original-prompt.md. Re-read only when the user provided feedback between phases (append as `## Iteration N Feedback`, then re-read), the cached summary appears incomplete or ambiguous (re-read, then correct it), or you are the execution-orchestrator preparing subagent context (orchestrator inlines from cache). Prefer the cache; re-reading every phase burns tokens.
 
-**When to re-read original-prompt.md anyway:**
-
-- The user provided feedback between phases (append to original-prompt.md as `## Iteration N Feedback`, then re-read).
-- The cached Key Requirements summary appears incomplete or ambiguous (re-read to verify, then correct the summary).
-- You are the execution-orchestrator preparing subagent context (orchestrator inlines from cache).
-
-Defaulting to "re-read to refresh" in every phase burns tokens without adding information. Prefer the cache.
-
-The file format:
+File format:
 
 ```markdown
 # Original Prompt
@@ -223,312 +156,125 @@ The file format:
 
 ```
 
-Mark ledger item 1 as complete. Proceed to Phase 0.
+Mark ledger item 1 complete. Proceed to Phase 0.
 
 ## Phase 0: Creative Routing Check
 
-Before starting the pipeline phases, check whether the user's input involves creative or design work that would benefit from brainstorming.
-
 ### 0a. Structured Decision Scan (run FIRST)
-
-Before the trigger-word scan, look for structured decision markers in the original prompt. These are signals that the user has already done some of the creative work upstream:
 
 Grep the original prompt for lines matching (case-insensitive): `^(APPROVED|OPEN|BRAINSTORM):`
 
-- **`APPROVED:` lines** -- the user has locked these decisions. Do NOT brainstorm them. Treat them as requirements for Phase 1 onward.
-- **`OPEN:` or `BRAINSTORM:` lines** -- the user wants these specific items explored. Invoke `superpowers:brainstorming` scoped to ONLY these items. Pass the APPROVED list as context so the brainstorm does not re-open settled decisions.
-- **Linked upstream documents** -- if the original prompt links to a file (e.g. `review-findings.md`, `post-mortem.md`, an approved design doc) that contains APPROVED-marked decisions, honor those markers. Do NOT re-brainstorm an approved decision just because the link is present.
+- **`APPROVED:` lines** -- locked decisions; do NOT brainstorm them; treat as requirements from Phase 1 onward.
+- **`OPEN:` or `BRAINSTORM:` lines** -- invoke `superpowers:brainstorming` scoped to ONLY these items, passing the APPROVED list so settled decisions stay closed.
+- **Linked upstream documents** (e.g. `review-findings.md`, `post-mortem.md`, an approved design doc) containing APPROVED-marked decisions -- honor the markers; a link does not re-open an approved decision.
 
-If structured markers are present, log: `Phase 0: Scoped brainstorming -- N APPROVED decisions locked, M OPEN/BRAINSTORM items to explore.` Proceed with scoped brainstorming (only M items), then move to Phase 1.
-
-If NO structured markers are present, fall through to the trigger-word scan (0b).
+With markers, log `Phase 0: Scoped brainstorming -- N APPROVED decisions locked, M OPEN/BRAINSTORM items to explore.`, run scoped brainstorming (only M items), then Phase 1. Without markers, fall through to 0b.
 
 ### 0b. Trigger-Word Scan (fallback when 0a found no markers)
 
-**Scan the original prompt for explicit creative trigger words:** "brainstorm", "explore ideas", "superpowers", "concept", "rethink", "reimagine", "experiment", "try some things", "let's try"
-
-**Also check the Key Requirements:** If any requirement involves NEW visual layout decisions, NEW page designs, or significant UI redesigns (not just adding a field to an existing form or fixing a bug in existing UI), this counts as creative work.
-
-Routine template changes (adding a column, fixing a label, wiring an existing pattern) do NOT trigger brainstorming. The trigger is for work that requires design decisions about how something should look or behave -- not work that follows existing patterns.
-
-**If ANY explicit trigger word is present OR the feature involves new design decisions:**
-
-1. Invoke the `superpowers:brainstorming` skill BEFORE any pipeline phase
-2. Pass the original prompt as context for the brainstorming session
-3. Wait for the brainstorming process to complete (design doc written, user approved)
-4. Save the brainstorming output to `plans/<feature-slug>/brainstorm.html` (per **Artifact Format** above; `visualDecisions` island)
-5. Use both the original prompt AND the brainstorming spec as input to Phase 1
-
-This is NOT optional. The brainstorming skill's hard gate ("Do NOT invoke any implementation skill until you have presented a design and the user has approved it") applies to the pipeline. The pipeline IS an implementation skill. "Having a reference pattern to copy" is NOT a reason to skip brainstorming -- the brainstorm explores whether that pattern is the right choice.
-
-**If NO trigger words are present AND the feature is purely backend/logic:**
-
-Skip to Phase 1. Log: "Phase 0: Creative routing check -- no creative triggers detected, skipping brainstorming."
-
-Mark ledger item 1b as complete. Proceed to Phase 1.
+Only when Step 0a found no explicit markers, load `plugins/pipeline/references/trigger-word-scan.md` and apply its scan. When 0a found markers, use them and do not load that file.
 
 ## Phase 1: Assess Current State
 
-Load the assess skill from `plugins/pipeline/skills/assess/SKILL.md`.
+Load the assess skill from `plugins/pipeline/skills/assess/SKILL.md`. Its Phase 0 establishes the smallest relevant project context (repository identity and source state, project instructions, active planning/coordination documents, the supplied or safely discoverable native Issue or PR, relevant strategy skills, and the current project goal and ownership boundary) under its source-ownership boundaries. Then:
 
-Before assessing implementation details, establish the smallest relevant
-project context:
+1. Determine the affected codebase area and run the pre-plan assessment (code + UX in parallel).
+2. In the assessment prose, classify the request as desired outcomes; hard constraints and explicit approved decisions; proposed implementation mechanisms; and future or conditional ideas. Never silently discard an explicit request.
+3. Identify the smallest adequate solution. If it would omit or replace a requested mechanism, carry both the smaller alternative and the mechanism-preserving option to the combined discovery gate.
+4. Render a compact `Project Alignment` section in `assessment.html`: current project goal; evidence/source; how the request advances it; relevant constraints and decisions; explicit non-goals; dependencies or ownership conflicts; stale or unknown context.
+5. Save `plans/<feature-slug>/assessment.html`. Its `keyRequirements` island is explicitly provisional until the combined discovery response is persisted; assessment may surface questions and conflicts but does not pause or make requirements authoritative.
 
-1. Resolve repository identity and current source state.
-2. Use already-loaded project instructions. Re-read root `AGENTS.md` or
-   `CLAUDE.md` only when that file is not already in context, then load only
-   their directly referenced instruction files that apply.
-3. Inspect relevant active planning/coordination documents, engineering
-   principles, and `tasks/lessons.md` when present.
-4. Inspect the supplied or safely discoverable native Issue or PR. Consult a
-   coordination Project only when the repository or user declares it.
-5. Load only relevant installed company, product, or domain strategy skills.
-6. Identify the current project goal, ownership boundary, and immediate reason
-   this contribution is appropriate now.
-
-Respect source ownership: Issues and PRs own current status, ownership,
-dependencies, reviews, checks, and linkage; tracked repository instructions and
-documents own architecture, product scope, goals, implementation policy, and
-durable lessons; a declared Project owns only its current coordination
-projection. Old plans, receipts, comments, and remembered state are not proof
-of current GitHub status.
-
-Then:
-
-1. Determine the codebase area affected by the feature.
-2. Run the pre-plan assessment (code + UX in parallel).
-3. In the existing assessment prose, classify the request as desired outcomes,
-   hard constraints and explicit approved decisions, proposed implementation
-   mechanisms, and future or conditional ideas. Never silently discard an
-   explicit request.
-4. Identify the smallest adequate solution. If it would omit or replace a
-   requested mechanism, carry both the smaller alternative and the
-   mechanism-preserving option forward to the combined discovery gate.
-5. Render a compact `Project Alignment` section in `assessment.html` with:
-   Current project goal; Evidence/source; How the request advances it; Relevant
-   constraints and decisions; Explicit non-goals; Dependencies or ownership
-   conflicts; Stale or unknown context.
-6. Save `plans/<feature-slug>/assessment.html`. Its `keyRequirements` island is
-   explicitly provisional until the combined discovery response is persisted.
-   Assessment may surface questions and conflicts, but it does not pause or
-   make those requirements authoritative.
-
-Mark ledger item 2 as complete.
+Mark ledger item 2 complete.
 
 ## Phase 2: Research
 
-Load the research skill from `plugins/pipeline/skills/research/SKILL.md`.
+Load the research skill from `plugins/pipeline/skills/research/SKILL.md`. Run it even if you think you have enough context -- research finds what you don't know you're missing.
 
-You MUST run this phase even if you think you already have enough context. Research finds things you don't know you're missing.
+Research starts immediately after assessment with the original request, provisional assessment, its compact Project Alignment record, and current repository evidence. Do not describe provisional requirements as approved. Use only applicable sources: GitHub or a coordination Project only when the repository or request declares that authority -- never a generic organization-wide GitHub survey. Research must test the project-goal alignment, ownership, currency, mechanism-necessity, speculative-scale, and API/pattern-existence questions defined in the research skill.
 
-Research starts immediately after assessment. Pass the original request, the
-provisional assessment, its compact Project Alignment record, and current
-repository evidence. Do not describe provisional requirements as approved.
+For Assembly work preserve the current scale and trust model: two developers, trusted first-party repositories, small self-hosted Go applications, roughly 4--50 users per installation, YAGNI and pragmatic DRY, strong security at real credential, authorization, release-integrity, and data-loss boundaries. No enterprise architecture without a demonstrated current consumer.
 
-Use only applicable sources. GitHub or a coordination Project may be consulted
-when the repository or request declares that authority; do not perform a
-generic organization-wide GitHub survey. Research must test:
-
-- whether the proposed work advances the current project goal;
-- whether another repository or active branch already owns it;
-- whether the context is current or conflicting;
-- whether the requested mechanism is necessary or a direct solution is enough;
-- whether the proposal introduces speculative scale or ceremony; and
-- whether the named APIs and codebase patterns actually exist.
-
-For Assembly work, preserve the current scale and trust model: two developers,
-trusted first-party repositories, small self-hosted Go applications, roughly
-4--50 users per installation, YAGNI and pragmatic DRY, and strong security at
-real credential, authorization, release-integrity, and data-loss boundaries.
-Do not introduce enterprise architecture without a demonstrated current
-consumer.
-
-Save `plans/<feature-slug>/research.html` with material confirmations,
-corrections, ownership conflicts, and the smallest supported approach.
-
-**Verification:** The Research Brief file MUST exist on disk before proceeding. Run `ls plans/<feature-slug>/research.html` to confirm.
-
-Mark ledger item 3 as complete.
+Save `plans/<feature-slug>/research.html` with material confirmations, corrections, ownership conflicts, and the smallest supported approach. **Verification:** `ls plans/<feature-slug>/research.html` MUST exist before proceeding. Mark ledger item 3 complete.
 
 ## Combined Discovery Gate
 
-**GATE (ledger item 4):** After both artifacts exist, stop once and use
-AskUserQuestion. Present a compact combined outcome with:
+**GATE (ledger item 4):** After both artifacts exist, stop once and use AskUserQuestion. Present a compact combined outcome with the current project goal and how this work advances it; what assessment found and what research materially changed or confirmed; any ownership/dependency conflict or stale-context uncertainty; the smallest recommended scope and any real owner choice between it and a larger requested mechanism; links to `assessment.html` and `research.html`; and recommended `workflowClass`, `decisionProfile`, `baseBranch`,
+`featureBranch`, `branchMode`, `expectedFeatureHead`, `finalReviewMode`, and
+`finalReviewRationale`.
 
-- the current project goal and how this work advances it;
-- what assessment found and what research materially changed or confirmed;
-- any ownership/dependency conflict or stale-context uncertainty;
-- the smallest recommended scope and any real owner choice between it and a
-  larger requested mechanism;
-- recommended `workflowClass`, `decisionProfile`, `baseBranch`,
-  `featureBranch`, `branchMode`, `expectedFeatureHead`, `finalReviewMode`, and
-  `finalReviewRationale`; and
-- links to `assessment.html` and `research.html`.
-
-This one response resolves every user-owned planning decision formerly deferred
-by assessment, research, or plan gates. If an approved upstream source already
-determines a control, show and preserve it rather than asking again. Do not
-invent a later hidden planning gate for any of these controls.
+This one response resolves every user-owned planning decision formerly deferred by assessment, research, or plan gates. If an approved upstream source already determines a control, show and preserve it rather than asking again; do not invent a later hidden planning gate for any of these controls.
 
 After AskUserQuestion returns:
 
-1. Apply the response to the assessment Scope Intake and Project Alignment
-   prose.
-2. Rewrite the `keyRequirements` island with only approved outcomes,
-   constraints, project goals, and decisions. Retain rejected or deferred
-   mechanisms only as non-blocking prose context.
-3. Run `templates/extract-json-island.sh
-   plans/<feature-slug>/assessment.html` and verify the extracted requirements.
+1. Apply the response to the assessment Scope Intake and Project Alignment prose.
+2. Rewrite the `keyRequirements` island with only approved outcomes, constraints, project goals, and decisions; retain rejected or deferred mechanisms only as non-blocking prose context.
+3. Run `templates/extract-json-island.sh plans/<feature-slug>/assessment.html` and verify the extracted requirements.
 4. Update research only when the response requires a bounded correction.
 5. If an owner decision remains unresolved, remain at this same discovery gate.
 
-A material correction may require bounded supplemental research, but it does
-not create a second routine research gate. Only this combined discovery response makes the Key Requirements authoritative.
+A material correction may require bounded supplemental research but does not create a second routine research gate. Only this combined discovery response makes the Key Requirements authoritative.
 
 ## Phase 3: Plan
 
-Create the implementation plan. Two options:
-
-**Option A:** If compound-engineering `/workflows:plan` is available, invoke it with the feature description, Assessment Brief, and Research Brief as context.
-
-**Option B:** If not available, create the plan directly:
+Create the implementation plan. **Option A:** if compound-engineering `/workflows:plan` is available, invoke it with the feature description, Assessment Brief, and Research Brief. **Option B:** otherwise create it directly:
 
 1. Use the authoritative Key Requirements from the assessment island.
-2. State the current project goal, why this work is appropriate now, explicit
-   non-goals, and the **Smallest Usable Implementation** before decomposition.
-3. For every proposed new abstraction, service, policy layer, background
-   process, cache, transaction ledger, approval ceremony, receipt family,
-   compatibility layer, or generalized extension point, name its current
-   consumer, the concrete present failure or realistic reachable harm it
-   prevents, and what it replaces or why direct code is inadequate. Delete it
-   from current scope when any answer is missing.
-4. Break the approved smallest usable feature into logical steps. Map every
-   step/chunk to one or more approved requirements or project outcomes in the
-   existing `requirementsCoverage` map.
-5. Identify exact file paths, patterns, dependencies, non-goals, and ownership
-   boundaries relevant to each step.
-6. Write observable acceptance criteria for each step.
-7. Save `plans/<feature-slug>/plan.html` with the existing
-   `chunks`/`decisions`/`requirementsCoverage` island. Campaign splitting must
-   not hide an oversized design; any newly discovered owner choice returns to
-   the same combined discovery gate.
+2. State the current project goal, why this work is appropriate now, explicit non-goals, and the **Smallest Usable Implementation** before decomposition.
+3. For every proposed new abstraction, service, policy layer, background process, cache, transaction ledger, approval ceremony, receipt family, compatibility layer, or generalized extension point, name its current consumer, the concrete present failure or realistic reachable harm it prevents, and what it replaces or why direct code is inadequate; delete it when any answer is missing.
+4. Break the approved smallest usable feature into logical steps; map every step/chunk to approved requirements or project outcomes in the existing `requirementsCoverage` map, with exact file paths, patterns, dependencies, non-goals, ownership boundaries, and observable acceptance criteria per step.
+5. Save `plans/<feature-slug>/plan.html` with the existing `chunks`/`decisions`/`requirementsCoverage` island. Campaign splitting must not hide an oversized design; any newly discovered owner choice returns to the same combined discovery gate.
 
-**Verification:** The plan file MUST exist on disk before proceeding. Run `ls plans/<feature-slug>/plan.html` to confirm.
+**Verification:** `ls plans/<feature-slug>/plan.html` MUST exist before proceeding.
 
-**Authoritative workflow class:** The plan MUST carry the one
-`workflowClass` approved at combined discovery:
-`chore|bug|feature|hotfix|security|investigation|migration`. If it is absent or
-conflicts with approved upstream context, return to the same discovery gate;
-planning must not infer it from paths, chunk kinds, risk, or keywords.
+**Authoritative workflow class:** the plan MUST carry the one `workflowClass` approved at combined discovery: `chore|bug|feature|hotfix|security|investigation|migration`. If absent or conflicting with approved upstream context, return to the discovery gate; never infer it from paths, chunk kinds, risk, or keywords.
 
-**Authoritative decision profile:** The approved plan MUST also carry exactly one
-closed `decisionProfile` object:
+**Authoritative decision profile:** the plan MUST carry exactly one closed `decisionProfile` object:
 
 ```json
 {"uncertainty":"low|medium|high","consequence":"low|medium|high","rationale":"non-empty string"}
 ```
 
-Copy the discovery-approved profile unchanged. Reject extra keys, malformed
-levels, an empty rationale, multiple candidates, or conflict with approved
-upstream context; return to the combined discovery gate rather than choosing silently. Keep
-`decisionProfile` separate from `workflowClass`, `risk`, `overlapRisk`,
-`estimatedComplexity`, chunk `kind`/`executor`, and `routingOverride`.
+Copy the discovery-approved profile unchanged; reject extra keys, malformed levels, empty rationale, multiple candidates, or upstream conflict, returning to the discovery gate rather than choosing silently. Keep `decisionProfile` separate from `workflowClass`, `risk`, `overlapRisk`, `estimatedComplexity`, chunk `kind`/`executor`, and `routingOverride`.
 
-**Authoritative branch setup:** The plan MUST carry the complete
-discovery-approved branch controls: non-empty `baseBranch` and `featureBranch`,
-`branchMode: create|reuse`, and `expectedFeatureHead`. `create` is the ordinary
-new-branch path and requires a null/absent `expectedFeatureHead`. `reuse` is the
-existing-branch path and requires an exact lowercase 40- or 64-hex
-`expectedFeatureHead` for the fetched remote `featureBranch`. Reuse performs no
-initial push and blocks on a missing remote ref, exact-head mismatch, divergent
-local branch, or another worktree already holding the branch. This is branch
-selection only; it never authorizes force-push, merge, publication, or external
-closeout. Full and lean execution both consume these exact approved plan values;
-prompt generation may copy them but must never infer replacements.
+**Authoritative branch setup:** the plan MUST carry the complete discovery-approved branch controls: non-empty `baseBranch` and `featureBranch`, `branchMode: create|reuse`, and `expectedFeatureHead`. `create` (ordinary new-branch path) requires null/absent `expectedFeatureHead`. `reuse` (existing-branch path) requires an exact lowercase 40- or 64-hex `expectedFeatureHead` for the fetched remote `featureBranch`, performs no initial push, and blocks on a missing remote ref, exact-head mismatch, divergent local branch, or another worktree holding the branch. Branch selection only: never authorizes force-push, merge, publication, or external closeout. Full and lean execution both consume these exact values; prompt generation may copy but never infer replacements.
 
-**Authoritative final review mode:** The plan MUST carry the discovery-approved
-`finalReviewMode: full|quick` plus a non-empty `finalReviewRationale`. `full` is
-the default. `quick` requires explicit user/approved-plan intent and is invalid
-when `decisionProfile.consequence` is `high`. It preserves all per-chunk
-sensitive-path review, repository/browser verification, P1/P2/P3 resolution, and
-cleanup. If the final diff matches dm-review's bounded security-sensitive path
-set, the quick protocol escalates to full and records the escalation.
+**Authoritative final review mode:** the plan MUST carry discovery-approved `finalReviewMode: full|quick` plus non-empty `finalReviewRationale`. `full` is default; `quick` requires explicit user/approved-plan intent, is invalid when `decisionProfile.consequence` is `high`, and preserves all per-chunk sensitive-path review, repository/browser verification, P1/P2/P3 resolution, and cleanup. Security-sensitive final diffs (dm-review's bounded path set) escalate quick to full with a recorded escalation.
 
-Read `decisionLeverage` from `plugins/pipeline/references/routing-policy.json`
-and apply it to depth only:
+Read `decisionLeverage` from `plugins/pipeline/references/routing-policy.json`; apply to depth only:
 
-- low/low: optimized current path; this is not permission to infer a cheaper rail;
-- high uncertainty: obtain exactly one independent planning opinion, then do one bounded synthesis into the plan before presenting it;
-- high consequence: strengthen the existing independent verification seam;
-- high/high: apply both bounded additions;
-- all other profiles: current standard depth.
+- low/low: optimized current path; not permission to infer a cheaper rail
+- high uncertainty: exactly one independent planning opinion, then one bounded synthesis into the plan before presenting
+- high consequence: strengthen the existing independent verification seam
+- high/high: both bounded additions
+- all other profiles: current standard depth
 
-Do not turn high uncertainty into debate or a full review per chunk. Decision
-leverage never selects a provider/model/executor, creates a routing override,
-relaxes security, alters `workflowClass`, overrides browser/persona coverage,
-changes cleanup, or changes economics. The existing quick/focused review,
-sensitive-path, final-review, required P1/P2/P3 resolution, run-size, and exact-owned Docker
-rules remain unchanged.
+Never turn high uncertainty into debate or full review per chunk. Decision leverage never selects provider/model/executor, creates routing overrides, relaxes security, alters `workflowClass`, overrides browser/persona coverage, or changes cleanup or economics; quick/focused review, sensitive-path, final-review, P1/P2/P3 resolution, run-size, and exact-owned Docker rules remain unchanged.
 
-**Plan self-review (before presenting):** Re-read your own plan and check:
+**Plan self-review (before presenting):** re-read the plan for internal contradictions; API existence (grep the dependency source -- never present hallucinated APIs); terminology consistency; and build-tool accuracy (actual package.json / Makefile commands). Fix failures first.
 
-1. **Internal contradictions:** Do any two design decisions conflict? (e.g., "follow existing convention" in one section and "use a different approach" in another)
-2. **API existence:** Does the plan propose using specific framework functions? Grep the dependency source to verify they exist in the installed version. Do NOT present a plan built on hallucinated APIs.
-3. **Terminology consistency:** Does the plan use the same term for the same concept throughout?
-4. **Build tool accuracy:** Do verification steps reference the actual commands from package.json / Makefile, not assumed tools?
-
-If any check fails, fix the plan before presenting it.
-
-Mark ledger item 5 as complete. Continue directly to prompt generation in full
-mode. In lean mode, skip manifest and prompt generation by design and continue
-to the adversarial review with the reviewed plan and single-pass execution
-scope. Before that review, verify that every approved requirement and project
-outcome maps to the lean plan scope, mark ledger item 6 `not applicable -- lean
-mode`, and mark ledger item 7 complete only when that plan-level coverage is
-100%.
+Mark ledger item 5 complete. Full mode continues directly to prompt generation. Lean mode skips manifest and prompt generation by design and continues to the adversarial review with the reviewed plan and single-pass execution scope; first verify every approved requirement and project outcome maps to the lean plan scope, mark ledger item 6 `not applicable -- lean mode`, and mark item 7 complete only at 100% plan-level coverage.
 
 ## Phase 4: Generate Execution Prompts
 
 Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 
 1. Use the approved Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html`
-2. Decompose the plan into chunks (read the plan's `chunks` island with `templates/extract-json-island.sh plans/<feature-slug>/plan.html`)
+2. Decompose the plan into chunks (read the `chunks` island with `templates/extract-json-island.sh plans/<feature-slug>/plan.html`)
 3. Extract only the Project Alignment and research context relevant to each chunk
 4. Perform overlap analysis
 5. Generate self-contained execution prompts
 6. Generate the manifest
 7. Save to `plans/<feature-slug>/manifest.json` and `plans/<feature-slug>/prompts/`
 
-The manifest MUST copy the approved plan island's explicit `workflowClass:
-chore|bug|feature|hotfix|security|investigation|migration`, exact closed
-`decisionProfile`, `baseBranch`, `featureBranch`, `branchMode`,
-`expectedFeatureHead`, `finalReviewMode`, and `finalReviewRationale` unchanged.
-Never infer or independently reselect them from chunk kind, file paths, prompt
-prose, risk, or one another. If the approved plan lacks a required field,
-contains malformed/multiple candidates, or
-   conflicts with an upstream approval, return to the combined discovery gate. A legacy
-missing workflow class defaults only at consumption to `feature` with
-`workflow_class_defaulted=true`; legacy missing decision/branch/review controls
-follow their documented safe defaults with explicit default receipts. Pass all
-validated values and provenance unchanged through execution receipts and
-metrics. Security keeps all existing provider and approval overrides.
+The manifest MUST copy the approved plan island's explicit `workflowClass: chore|bug|feature|hotfix|security|investigation|migration`, exact closed `decisionProfile`, `baseBranch`, `featureBranch`, `branchMode`, `expectedFeatureHead`, `finalReviewMode`, and `finalReviewRationale` unchanged; never infer or reselect them from chunk kind, file paths, prompt prose, risk, or one another. Missing required fields, malformed/multiple candidates, or upstream conflict return to the combined discovery gate. A legacy missing workflow class defaults only at consumption to `feature` with `workflow_class_defaulted=true`; legacy missing decision/branch/review controls follow documented safe defaults with explicit default receipts. Pass validated values and provenance unchanged through execution receipts and metrics; security keeps all existing provider and approval overrides.
 
-Every new chunk also carries `renderedSurface: required|not_applicable` and a
-non-empty `renderedSurfaceRationale`, derived independently from `kind`.
-`required` covers served routes, rendered output, browser interaction, and
-visual/browser criteria. `not_applicable` must name and account for every
-syntactic UI/integration trigger; mixed or uncertain scope is `required`.
+Every new chunk also carries `renderedSurface: required|not_applicable` and non-empty `renderedSurfaceRationale`, derived independently from `kind`: `required` covers served routes, rendered output, browser interaction, and visual/browser criteria; `not_applicable` must name and account for every syntactic UI/integration trigger. Mixed or uncertain scope is `required`.
 
-**Bootstrap limitation:** This adaptive-fusion bootstrap may derive a profile
-from its approved plan for the current run's explanation, but MUST NOT retrofit
-unsupported `decisionProfile` into the current already-generated manifest. The
-legacy/default receipt above is authoritative until a new manifest is generated.
+**Bootstrap limitation:** this bootstrap may derive a profile from its approved plan for the current run's explanation, but MUST NOT retrofit unsupported `decisionProfile` into the current already-generated manifest; the legacy/default receipt is authoritative until a new manifest is generated.
 
-**Verification:** Run `ls plans/<feature-slug>/manifest.json plans/<feature-slug>/prompts/` to confirm all files exist on disk.
+**Verification:** `ls plans/<feature-slug>/manifest.json plans/<feature-slug>/prompts/` must confirm all files on disk. Mark ledger item 6 complete.
 
-Mark ledger item 6 as complete.
-
-**Requirements coverage check (ledger item 7):** Read the approved Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html`. For each approved requirement or project outcome, verify at least one chunk's acceptance criteria covers it and that the chunk prompt names the relevant goal, reason, non-goals, and ownership boundary. Keep the complete coverage map in the existing plan/manifest artifacts:
+**Requirements coverage check (ledger item 7):** For each approved requirement or project outcome (from the `keyRequirements` island), verify at least one chunk's acceptance criteria covers it and the chunk prompt names the relevant goal, reason, non-goals, and ownership boundary. Keep the complete coverage map in the existing plan/manifest artifacts:
 
 ```
 Requirements Coverage:
@@ -537,163 +283,79 @@ Requirements Coverage:
   3. [Requirement] -> NOT COVERED -- adding to chunk-ZZ
 ```
 
-If any requirement is uncovered, fix it before proceeding. Mark item 7 when coverage is 100%.
+Fix uncovered requirements before proceeding; mark item 7 at 100%.
 
 ## Phase 5: Adversarial Scope Review
 
-Run the existing `plan-adversary` exactly once as the independent bounded
-planning review. Codex is the required adversarial reviewer for this planning
-phase; use `plugins/pipeline/agents/workflow/plan-adversary.md` as its review protocol.
-Configured-key OpenRouter availability does not broaden this workload and no
-second plan-only reviewer is added.
+Run `plan-adversary` exactly once as the independent bounded planning review. Codex is the required adversarial reviewer for this planning phase; use `plugins/pipeline/agents/workflow/plan-adversary.md` as its protocol. Configured-key OpenRouter availability does not broaden this workload and no second plan-only reviewer is added.
 
-Resolve the coherent installed Pipeline bundle through workflow-kernel with
-`--plugin pipeline --minimum-version 1.36.1 --required-asset
-references/openrouter-authorization-contract.md --active-host <claude|codex>`
-and read that contract from the selected root. Never read a target-repository
-copy.
+Resolve the coherent installed Pipeline bundle through workflow-kernel with `--plugin pipeline --minimum-version 1.36.1 --required-asset references/openrouter-authorization-contract.md --active-host <claude|codex>` and read that contract from the selected root; never a target-repository copy.
 
-1. Pass the original request, approved assessment requirements, compact Project
-   Alignment record, relevant research findings, plan, and—for full mode—the
-   manifest and execution prompts. In lean mode, explicitly mark the manifest
-   and prompt directory absent by design.
-2. Run one complete adversarial pass for feasibility, requirements coverage,
-   internal consistency, project-goal alignment, current repository ownership,
-   stale-context assumptions, duplicated active work, scope creep, unnecessary
-   abstractions, and realistic reachable security/data defects.
-3. Apply supported blockers as one revision batch. Advisory improvements remain visible but do not expand scope, force criteria, or trigger another round.
-4. Run at most one targeted recheck of the revised blockers. Do not re-review unaffected prompts or criteria.
+1. Pass the original request, approved assessment requirements, compact Project Alignment record, relevant research findings, plan, and—for full mode—the manifest and execution prompts; in lean mode, explicitly mark the manifest and prompt directory absent by design.
+2. One complete adversarial pass: feasibility, requirements coverage, internal consistency, project-goal alignment, current repository ownership, stale-context assumptions, duplicated active work, scope creep, unnecessary abstractions, realistic reachable security/data defects.
+3. Apply supported blockers as one revision batch; advisory improvements stay visible but do not expand scope, force criteria, or trigger another round.
+4. At most one targeted recheck of revised blockers; do not re-review unaffected prompts or criteria.
 5. Proceed when no supported blocking finding remains, retaining the native-only planning coverage receipt. A blocker may not introduce a product requirement unless it maps to an approved outcome or proves a concrete regression/security defect.
 
-Mark ledger item 8 as complete.
+Mark ledger item 8 complete.
 
 ## Final Planning Gate
 
-**GATE (ledger item 9):** Stop and use AskUserQuestion after the reviewed
-planning package is ready. Lead with the single decision required: explicitly
-approve execution or return corrections.
+**GATE (ledger item 9):** Stop and use AskUserQuestion once the reviewed planning package is ready; lead with the single decision: explicitly approve execution or return corrections.
 
-For full mode, link:
+Full mode links `plans/<feature-slug>/plan.html`, `plans/<feature-slug>/manifest.json`, and `plans/<feature-slug>/prompts/`. State the approved project goal, smallest usable implementation, chunk count, complete requirements coverage, whether adversarial blockers were found and resolved, any remaining owner decision, and one recommended next action.
 
-- `plans/<feature-slug>/plan.html`
-- `plans/<feature-slug>/manifest.json`
-- `plans/<feature-slug>/prompts/`
+Lean mode links the reviewed `plan.html`, states the single-pass execution scope, and explicitly says that no manifest or prompt directory exists by design; never link or claim nonexistent artifacts.
 
-State the approved project goal, smallest usable implementation, chunk count,
-complete requirements coverage, whether adversarial blockers were found and
-resolved, any remaining owner decision, and one recommended next action.
-
-For lean mode, link the reviewed `plan.html` and state the single-pass execution
-scope. Explicitly say that no manifest or prompt directory exists by design;
-never link or claim nonexistent artifacts.
-
-Execution MUST NOT begin without explicit approval of this final package. If
-the operator returns corrections, append them to `original-prompt.md`, re-enter
-the earliest affected planning phase, update only affected artifacts and
-requirements, perform only the required affected review, and return to this
-same final planning gate. Do not create another routine plan gate.
+Execution MUST NOT begin without explicit approval of this final package. Corrections append to `original-prompt.md`, re-enter the earliest affected planning phase, update only affected artifacts and requirements, perform only the required affected review, and return to this same gate. Do not create another routine plan gate.
 
 ## Phase 6: Execute
 
-Enter this phase only after the final planning gate returned explicit execution
-approval. Approval of assessment, research, or a draft plan is insufficient.
+Enter only after the final planning gate returned explicit execution approval; approval of assessment, research, or a draft plan is insufficient.
 
-**Budget nudge (before pre-flight):** If the Progress Ledger shows more than 10 completed items AND the session has been running over 90 minutes of wall-clock time, pause and use AskUserQuestion: "Pipeline has been running a while. Continue with full scope, or break remaining work into a follow-up fix-pass run?" This is a soft nudge, not a hard gate -- the default answer is "continue."
+**Budget nudge (before pre-flight):** if the Progress Ledger shows more than 10 completed items AND the session has run over 90 minutes wall-clock, pause with AskUserQuestion: "Pipeline has been running a while. Continue with full scope, or break remaining work into a follow-up fix-pass run?" Soft nudge, not a hard gate; the default answer is "continue."
 
 **Pre-flight check:**
 
 1. Confirm bypass permissions mode is active
-2. Confirm git working tree has no blocking user-file changes (pipeline-owned artifacts may be committed/gitignored/force-added per the orchestrator)
+2. Confirm the git working tree has no blocking user-file changes (pipeline-owned artifacts may be committed/gitignored/force-added per the orchestrator)
 3. Resolve the complete branch controls from the mode's approved artifact:
    - **Full-mode branch preflight:** Read `baseBranch`, `featureBranch`,
      `branchMode`, and `expectedFeatureHead` from
      `plans/<feature-slug>/manifest.json`.
    - **Lean-mode branch preflight:** Extract the approved data island from
      `plans/<feature-slug>/plan.html` and read the same four controls from it.
-4. Validate those controls before checkout: for `create`, update the named
-   `baseBranch` and create the named `featureBranch`, requiring a null/absent
-   expected head; for `reuse`, fetch the named remote feature branch, require
-   its tip to equal `expectedFeatureHead`, and perform no initial push
+4. Validate before checkout: `create` updates the named `baseBranch` and creates the named `featureBranch` with null/absent expected head; `reuse` fetches the named remote feature branch, requires its tip to equal `expectedFeatureHead`, and performs no initial push
 
-**Full mode:** You MUST launch the execution-orchestrator agent. You MUST NOT execute
-chunks yourself with general-purpose agents. The execution-orchestrator handles
-branch create/reuse semantics, worktree isolation, input guardrails, Fix
-Philosophy injection, output validation, focused Codex review for ordinary chunks,
-full review for sensitive chunks, merging, the approved final dm-review
-mode, and memory-handoff preparation. If you skip it, all of those steps get
-skipped.
+**Full mode:** You MUST launch the execution-orchestrator agent; you MUST NOT execute chunks yourself with general-purpose agents. The execution-orchestrator handles branch create/reuse semantics, worktree isolation, input guardrails, Fix Philosophy injection, output validation, focused Codex review for ordinary chunks, full review for sensitive chunks, merging, the approved final dm-review mode, and memory-handoff preparation -- skipping it skips all of them.
 
-**Codex Native Execution Adapter:** If this command is running in Codex and the session exposes `multi_agent_v1.spawn_agent`, use the adapter documented in `/pipeline-run` (`plugins/pipeline/commands/pipeline-run.md`) for Phase 6. The current Codex agent acts as the orchestrator in-process while following `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the contract, dispatches chunk workers with `multi_agent_v1.spawn_agent`, and applies the risk-tiered focused/full review adapter. This is equivalent pipeline execution and MUST record `executionMode: codex_native` in every receipt.
+**Codex Native Execution Adapter:** If running in Codex with `multi_agent_v1.spawn_agent` exposed, use the adapter documented in `/pipeline-run` (`plugins/pipeline/commands/pipeline-run.md`) for Phase 6: the current Codex agent acts as orchestrator in-process under `plugins/pipeline/agents/workflow/execution-orchestrator.md`, dispatches chunk workers with `multi_agent_v1.spawn_agent`, and applies the risk-tiered focused/full review adapter. This is equivalent pipeline execution and MUST record `executionMode: codex_native` in every receipt.
 
-Pass `workflowClass` and the exact approved/defaulted `decisionProfile` provenance unchanged into Phase 6. Every provider receipt must name requested provider, attempted provider, actual implementer, fallback, and reason. Missing lanes and misroutes remain explicit evidence; provider substitution never changes the required validation, review, browser, requirements, or cleanup gates. For high consequence, the stronger existing independent verification seam must complete without degraded lane coverage or stop `human_help_required`; this does not add full review to every ordinary chunk. High uncertainty was already consumed by the single planning opinion and bounded synthesis and adds no execution debate.
+Pass `workflowClass` and the exact approved/defaulted `decisionProfile` provenance unchanged into Phase 6. Every provider receipt names requested provider, attempted provider, actual implementer, fallback, and reason; missing lanes and misroutes remain explicit evidence, and provider substitution never changes required validation, review, browser, requirements, or cleanup gates. For high consequence the stronger independent verification seam must complete without degraded lane coverage or stop `human_help_required` (no full review on every ordinary chunk); high uncertainty was consumed by the single planning opinion and bounded synthesis and adds no execution debate.
 
-Launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/execution-orchestrator.md` with:
+Launch the execution-orchestrator from `plugins/pipeline/agents/workflow/execution-orchestrator.md` with the manifest path (`plans/<feature-slug>/manifest.json`), prompts directory (`plans/<feature-slug>/prompts/`), and feature branch name from the manifest.
 
-- The manifest path: `plans/<feature-slug>/manifest.json`
-- The prompts directory: `plans/<feature-slug>/prompts/`
-- The feature branch name from the manifest
+**Lean mode:** execute the final-gate-approved plan as one bounded implementation pass: inline the approved Key Requirements, compact project goal, relevant non-goals, and ownership boundary into the worker context; run the plan's focused verification and exactly one final dm-review; do not invent a manifest, prompt directory, chunk receipts, or per-chunk ceremony.
 
-**Lean mode:** Execute the final-gate-approved plan as one bounded
-implementation pass. Inline the approved Key Requirements, compact project
-goal, relevant non-goals, and ownership boundary into the worker context. Run
-the plan's focused verification and exactly one final dm-review; do not invent a
-manifest, prompt directory, chunk receipts, or per-chunk ceremony.
-
-Wait for execution to complete. Mark ledger item 10 as complete.
+Wait for execution to complete. Mark ledger item 10 complete.
 
 ### Caller-side optional memory enrichment
 
-In full mode, immediately after the execution-orchestrator returns and before
-presenting its human summary, consume the single `Memory observation handoff:`
-field from the agent result. In lean mode, form the same single compact
-observation directly from the bounded implementation and final-review result;
-do not invent an orchestrator handoff or a second memory schema. Keep the raw
-observation internal. Determine availability from the callable-tool inventory
-or tool search without making a probe call. Capability availability is the
-complete rule; do not use identity, environment, or repository heuristics.
+Determine ai-memory availability from the callable-tool inventory or tool search, never by invoking a memory tool as a probe. When those tools are callable, load `plugins/pipeline/references/caller-memory-enrichment.md` and follow it. When they are absent, omit the enrichment silently -- no warning, skipped lane, coverage gap, receipt line, or install request -- and do not load that file. A callable-tool failure during lookup or write appends nonblocking `Memory capture: failed -- <safe reason>` and never becomes a finding or coverage gap.
 
-If the required ai-memory tools are callable, validate that the observation is
-the dated Pipeline format for exact entity `DepotPlugin:pipeline` and is under
-300 characters, then:
+### Caller Verification Checklist
 
-1. `search_entities` for `DepotPlugin:pipeline`; create it as type `Tool` with
-   `add_entity` only when missing.
-2. Read the entity and check its same-day observations for the exact handoff.
-3. If absent, call `add_observation`, then `save`.
-
-After a successful write or exact duplicate, append `Memory capture: written`
-or `Memory capture: already-present` to `plans/<feature-slug>/receipt.md` and
-retain that outcome in internal summary evidence before Phase 7. If callable
-tools fail during lookup or write, append `Memory capture: failed -- <safe reason>`
-and retain the same nonblocking operational evidence without marking delivery
-incomplete. If the tools are absent, omit the write and every receipt or summary mention.
-Do not show the raw handoff in ordinary human-facing chat, mark delivery
-incomplete because optional memory is absent, or ask the user to install or
-configure the personal source. Only an explicit user request for an ai-memory
-operation makes an unavailable capability reportable.
-
-## Phase 7: Deliver
-
-Present the execution summary from the orchestrator in full mode, or the
-bounded implementation and final-review summary in lean mode.
-
-If any executed chunk has `renderedSurface: required`, load `plugins/pipeline/references/phase7-caller-verification.md` before claiming delivery. Required browser failure follows the evidence-preserving ladder and ends `human_help_required`. Curl is diagnostic only.
-
-### Caller Verification Checklist (mandatory when ANY `renderedSurface: required` chunk was executed)
-
-Complete ALL THREE checks. Record evidence in the delivery report.
-
-- [ ] **(1) Screenshot at minimum one viewport.** Desktop 1440px is mandatory. Also capture mobile 375px if the original prompt mentions responsive behavior, mobile, narrow viewport, or touch interaction. Save to `plans/<feature-slug>/screenshots/phase7-*.png`.
-- [ ] **(2) One runtime state eval per new JS module.** For each chunk that added a JS module, run `browser_evaluate` with a snippet like `typeof window.<globalName>` or `typeof document.querySelector('<selector>').dataset.<attr>` to confirm the module attached at runtime. curl confirms the file responds; `browser_evaluate` confirms it actually ran. Record the snippet and its result.
-- [ ] **(3) Cardinality check per AC containing quantity language.** For every acceptance criterion containing "exactly N", "no duplicate", "only one", "should replace", or "instead of", run a `browser_evaluate` that counts matching elements: e.g. `document.querySelectorAll('button[type=submit]').length`. An AC that says "Post comment should REPLACE the old button" passes only when count is 1, not 2.
-
-Any required check that cannot initially run because the browser, dev server, authentication fixture, route binding, or verification profile is unavailable MUST preserve the failed attempt, quit the primary browser process/session, launch a fresh primary session and retry, try a different configured browser, then stop with blocked `human_help_required` and ask the user to restore the missing prerequisite. Do NOT deliver as "ready" and do not convert the case to skipped, deferred, degraded, or proceed-without-browser.
-
-Use the complete verification profile selected from project configuration and `tests/ux/` declarations: persona, scenario, concrete route, browser engine, viewport, authentication state, and expected evaluation. `not_declared` is valid only when declarations are absent; a present but incomplete declaration is blocking. Required browser failure follows the evidence-preserving ladder: quit the browser process/session, launch a demonstrably fresh primary session and retry, try a genuinely different configured engine, then stop with `human_help_required` and the exact missing case IDs. Curl is diagnostic only and never produces `BROWSER_VERIFIED`.
+When ANY `renderedSurface: required` chunk was executed, load
+`plugins/pipeline/references/phase7-caller-verification.md` and complete all
+three checks (viewport screenshot, per-module runtime eval, per-AC cardinality
+count) plus the verification profile and evidence-preserving recovery ladder it
+defines, recording evidence in the delivery report. When every chunk is
+`renderedSurface: not_applicable`, record that rationale and skip to the
+requirements cross-check.
 
 If any full-mode chunk or lean plan has `renderedSurface: required`, load `plugins/pipeline/references/phase7-visual-verification.md` and complete caller visual verification before claiming done.
 
-**Requirements cross-check (ledger item 11):** Use the approved Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html`. (At this phase, re-read original-prompt.md is justified ONLY if the user has layered feedback on during execution -- otherwise the cache is authoritative.) Verify every approved requirement and project outcome was addressed in the final branch without contradicting the compact project goal or expanding beyond its non-goals. Each entry requires an evidence type:
+**Requirements cross-check (ledger item 11):** Use the approved Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html` (re-read original-prompt.md ONLY if the user layered feedback during execution; otherwise the cache is authoritative). Verify every approved requirement and project outcome was addressed in the final branch without contradicting the compact project goal or expanding beyond its non-goals; each entry requires an evidence type:
 
 ```text
 Requirements Cross-Check:
@@ -702,31 +364,22 @@ Requirements Cross-Check:
   3. [Requirement] -> NOT ADDRESSED -- [reason]
 ```
 
-Entries marked "Addressed" without an evidence type are treated as NOT ADDRESSED. If any requirement was missed, report it explicitly: "The following requirements from your original prompt were not addressed: [list]."
+"Addressed" entries without an evidence type are NOT ADDRESSED. Report misses explicitly: "The following requirements from your original prompt were not addressed: [list]." Mark item 11 complete.
 
-Mark item 11 as complete.
+**GATE (ledger item 12):** AskUserQuestion with the compact terminal summary contract: lead with the outcome and one recommendation, e.g. "Done. Feature branch `<branch>` passed verification. Recommended next action: create the PR. Reply with feedback instead if another iteration is needed." Include evidence paths; no standing multiple-choice menu.
 
-**GATE (ledger item 12):** Use AskUserQuestion with the compact terminal summary
-contract above. Lead with the outcome and one recommendation, for example:
-"Done. Feature branch `<branch>` passed verification. Recommended next action:
-create the PR. Reply with feedback instead if another iteration is needed."
-Include the evidence paths. Do not print a standing multiple-choice menu.
+**The repository cleanup phase runs on all three answers.** Only *artifact* disposition varies. Orphan worktrees and temp chunk branches must never be left behind because the caller chose "Create PR" or "Give feedback" -- they collide with the next run's `git worktree add`. See `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`.
 
-**The repository cleanup phase runs on all three answers.** Only *artifact* disposition varies by answer. Orphan worktrees and temp chunk branches are never left behind because the caller chose "Create PR" or "Give feedback" -- they collide with the next run's `git worktree add`. See `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`.
+Before this gate, confirm the orchestrator's Step 5b ran repository cleanup (full mode) or run the same contract directly (lean mode; no chunk worktrees or receipts fabricated). Either way `plans/<feature-slug>/receipt.md` must carry a `## Branch & Worktree Inventory` block before proceeding.
 
-Before presenting this gate, confirm the orchestrator's Step 5b ran its
-repository cleanup in full mode. In lean mode, run the same repository cleanup
-contract directly; no chunk worktrees or receipts are fabricated. In either
-mode, require `plans/<feature-slug>/receipt.md` to carry a `## Branch & Worktree
-Inventory` block before proceeding.
+**If the user chooses PR:** create the PR. The feature branch is kept (no merge proof yet -- expected; the inventory says so). Tier 3 cleanup waits for the user's return.
 
-**If the user chooses PR:** Proceed to create PR. The feature branch is kept (no merge proof yet -- that is expected, and the inventory says so). Artifact Tier 3 cleanup deferred until the user returns.
+**If the user gives feedback:** append it to `original-prompt.md` (`## Iteration N Feedback`), extract new requirements, re-enter the earliest affected planning phase, and return to the same final planning gate before any new execution -- feedback accumulates rather than replacing context.
 
-**If the user gives feedback:** Append the new feedback to `original-prompt.md` as a new section (`## Iteration N Feedback`), extract new requirements, and re-enter the earliest affected planning phase. Return to the same final planning gate before any new execution. This ensures feedback accumulates rather than replacing context.
+**If the user says done:** run full cleanup per the artifact lifecycle policy:
 
-**If the user says done:** Run full cleanup per the artifact lifecycle policy:
-1. Ensure `plans/<feature-slug>/receipt.md` exists (written by orchestrator Step 5b in full mode or by the caller in lean mode). If missing, write it now.
-2. Delete Tier 1 + 2 artifacts (if not already cleaned by orchestrator).
+1. Ensure `plans/<feature-slug>/receipt.md` exists (orchestrator Step 5b in full mode, caller in lean); write it if missing.
+2. Delete Tier 1 + 2 artifacts (if not already cleaned).
 3. Delete Tier 3 artifacts:
    ```bash
    rm -f plans/<slug>/original-prompt.md \
@@ -735,10 +388,10 @@ Inventory` block before proceeding.
          plans/<slug>/plan.html \
          plans/<slug>/final-requirements-crosscheck.md
    ```
-   Every filename carries the `plans/<slug>/` prefix. Without it the `rm` silently matches nothing and the artifacts accumulate.
+   Every filename carries the `plans/<slug>/` prefix; without it `rm` silently matches nothing and artifacts accumulate.
 4. Only `receipt.md` remains in `plans/<feature-slug>/`.
-5. Re-verify the repository readiness checks (clean tree, no stale worktree registrations).
-6. Report: `Plan directory cleaned. Receipt retained at plans/<slug>/receipt.md.` Name only blocked refs that require operator action and point to the receipt for the complete inventory.
+5. Re-verify repository readiness (clean tree, no stale worktree registrations).
+6. Report: `Plan directory cleaned. Receipt retained at plans/<slug>/receipt.md.` Name only blocked refs requiring operator action; point to the receipt for the complete inventory.
 
 ## Self-Audit
 

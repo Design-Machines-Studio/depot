@@ -141,65 +141,24 @@ mark required browser proof skipped or replace it with curl reachability.
 
 #### Baseline Screenshot Persistence
 
-Save all screenshots taken during the UX assessment to disk for later comparison:
-
-1. Create directory: `plans/<feature-slug>/baselines/`
-2. Save each screenshot with a descriptive name: `baselines/<route-slug>-<viewport>.png`
-   - Example: `baselines/governance-proposals-desktop-1440.png`
-   - Example: `baselines/governance-proposals-mobile-375.png`
-3. Record the screenshot manifest in the Assessment Brief under a `## Baseline Screenshots` section listing every saved file and its route/viewport.
-
-These baselines serve as the "before" state for visual diff comparisons after implementation. The execution-orchestrator's visual verification protocol compares post-implementation screenshots against these baselines to detect regressions. Expected changes (the feature being built) are fine; unexpected visual differences are findings.
-
-Baseline screenshots are Tier 1 (ephemeral) artifacts per the artifact lifecycle policy (`${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/references/artifact-lifecycle.md`). They are auto-deleted by the execution-orchestrator's cleanup phase (Step 5b). Gitignore enforcement in Step 0d ensures they are never tracked by git.
+When the project has a rendered surface and a reachable dev server, load
+`plugins/pipeline/references/assess-baseline-screenshots.md` and follow it.
+With no rendered surface, do not load it.
 
 #### Fixture Discovery
 
-Many codebases ship with dev-time auth bypasses or persona-switching helpers. Discovering these up-front saves the prompt-writer from having to re-derive them from handler code.
-
-For projects with `tests/ux/`, emit a sanitized declared verification profile
-using `plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md`.
-Include every selected task/persona/route/browser/viewport case and provenance,
-not a representative sample. Task frontmatter overrides the generated coverage
-matrix. Record auth field names only; never copy cookie, bearer, password,
-username, or fixture-secret values into assessment HTML or its data islands.
-
-Protocol:
-
-1. **Auth middleware scan:** grep the project's auth middleware (common locations: `internal/handlers/middleware.go`, `backend/auth/*.go`, `app/Http/Middleware/*.php`, `config/authentication.*`) for keywords: `cookie`, `X-Test-User`, `Bearer`, `session`, `impersonate`. **Extract the header/cookie NAME only. Redact values.** If a matched line contains `=<literal>`, `: "<literal>"`, `Bearer <literal>`, or any hardcoded token, flag the file for manual review and record only the field name in the Assessment Brief. Never copy raw matched lines into `plans/<feature-slug>/assessment.html` (neither the rendered Test Personas section nor the `testPersonas` data island) -- dev-mode middleware sometimes hardcodes bearer tokens or session secrets that must not propagate downstream.
-2. **Seed data scan:** grep seed files (`seeds/`, `fixtures/`, `db/seed.*`, `internal/fixtures/*/seed.go`) for user/member IDs and role names. Collect 2-3 representative personas per role.
-3. **Test helper scan:** grep `tests/`, `_test.go`, `spec/` for patterns like `loginAs(`, `asUser(`, `setCurrentUser(` to find helper functions that scripts/tests use to switch identity.
-
-Report findings in the Assessment Brief under a `## Test Personas` heading:
-
-```markdown
-## Test Personas
-
-**Auth-switching mechanism:** `coop_member` cookie (fake auth middleware at internal/handlers/middleware.go:42)
-
-| Persona | ID | Role | Use for |
-|---------|-----|------|---------|
-| Aisha Williams | mem_005 | Member, no position | Verify empty-state and unprivileged views |
-| David Chen | mem_012 | Member with position | Verify authored-content views |
-| Maria Rodriguez | mem_001 | Director | Verify privileged actions and approvals |
-
-To switch identity: set `coop_member=<id>` cookie before navigating.
-```
-
-The prompt-writer reuses this instead of re-discovering the mechanism per chunk.
-
-If no auth-bypass mechanism is found, log `fixture discovery: no dev-mode auth bypass detected` and continue.
+When the project ships fixtures, dev-time auth bypasses or persona-switching
+helpers, or a `tests/ux/` verification declaration, load
+`plugins/pipeline/references/assess-fixture-discovery.md` and follow it.
+Record auth field names only; never copy cookie, bearer, password, username, or
+fixture-secret values into assessment HTML or its data islands. A project with
+none of those does not load that file.
 
 #### Prior Lessons Check
 
-If `tasks/lessons.md` exists in the project root (created by prior pipeline runs via `execution-orchestrator`), surface recent entries that may apply to this feature:
-
-1. Run `test -f tasks/lessons.md && grep -A 3 "^## " tasks/lessons.md | head -60` to list the most recent lesson headings plus their first three lines.
-2. Filter to entries modified in the last 60 days (use `git log --format=%ad --date=short tasks/lessons.md | head -5` to estimate recency if file-level mtime is unreliable).
-3. Keyword-match lesson headings against the original prompt's key nouns -- if the lesson mentions any of those nouns, it is potentially relevant.
-4. Record matches in the Assessment Brief under a `## Recent Lessons That May Apply` heading. Include the lesson heading and a one-line excerpt.
-
-If no `tasks/lessons.md` exists, log `prior lessons check: no lessons file -- skipping` and continue.
+When the repository carries prior run postmortems or codified lessons, load
+`plugins/pipeline/references/assess-prior-lessons.md` and apply it. With none
+present, record that and do not load it.
 
 ### Phase 3: Consolidation
 

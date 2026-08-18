@@ -1,4 +1,8 @@
-# Extracted conditional reference
+# Module-loader pre-flight
+
+Loaded at Step 0c only when a chunk's `filesToModify` includes `src/js/`,
+`assets/js/`, `static/js/`, or `public/js/`. Otherwise the run logs
+`module-loader pre-flight: not applicable` and never loads this file.
 
 ## Step 0c: Module-Loader Pre-Flight
 

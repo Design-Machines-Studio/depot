@@ -1,6 +1,17 @@
 # Worktree and chunk-branch cleanup
 
-Load at Step 3j and Step 5b repository cleanup. Apply `repo-cleanup-contract.md`. Never suppress git exit status. Define `block` in each step (separate shells).
+Load at Step 3j and Step 5b repository cleanup. Apply `repo-cleanup-contract.md` -- it owns the rules; this file owns the pipeline implementation. Never suppress git exit status.
+
+Define `block` at the top of **each shell invocation** that cleans refs, not once per run: 3j and 5b are separate shells, and an undefined `block` fails with `command not found` while the loop carries on. For the same reason `BLOCKED_REFS` does not accumulate across steps -- each step reports what it blocked and the final inventory is assembled from those reports.
+
+```bash
+BLOCKED_REFS=""
+block() {  # block <ref> <reason> <follow-up command>
+  BLOCKED_REFS="${BLOCKED_REFS}| $1 | $2 | \`$3\` |
+"
+  printf 'BLOCKED %s -- %s\n' "$1" "$2" >&2
+}
+```
 
 ## Per-chunk (3j)
 

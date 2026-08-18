@@ -4,22 +4,19 @@ Rules for mapping each agent's native severity terminology to the unified P1/P2/
 
 ## Zero-Deferral Finding Policy
 
-Every retained P1, P2, and P3 finding must be fixed and rechecked before
-`CLEAN`. Severity controls ordering and merge language, not whether work is
-owed. Reject unsupported preferences and speculative scope during consolidation
-instead of retaining optional findings. See
-`plugins/dm-review/commands/dm-review.md` for the full policy statement.
-
-Every retained finding must include an observable current defect, its location
-or reachable path, and the smallest adequate repair. Every P1/P2 must also
-include concrete current evidence for:
-
-1. the affected current user or operator;
-2. the reachable actor, input, or path;
-3. the realistic harm or regression; and
-4. the smallest adequate repair.
-
-Security P1/P2 findings must additionally name the actual trust boundary. For Design Machines work, assume two developers, primarily first-party private repositories, trusted Fixture authors, and self-hosted co-op applications of roughly 4--50 people unless approved scope says otherwise. There is no public Fixture marketplace or hostile third-party plugin channel by default. Hypothetical actors, future marketplaces, enterprise scale, generic OWASP possibilities, and “defence in depth would be better” are not findings by themselves; retain one only when direct evidence establishes an observable current defect.
+`plugins/dm-review/commands/dm-review.md` owns the full policy statement; this
+file owns the severity mapping it applies. In short: every retained P1, P2, and
+P3 finding must be fixed and rechecked before `CLEAN`, and severity controls
+ordering and merge language, not whether the work is owed. Every retained
+finding names an observable current defect, its location or reachable path, and
+the smallest adequate repair; every P1/P2 also names the affected current user
+or operator, the reachable actor/input/path, the realistic harm or regression,
+and a security P1/P2 the actual trust boundary. Default to the Design Machines
+context -- two developers, first-party private repositories, trusted Fixture
+authors, self-hosted co-op applications of roughly 4--50 people -- so
+hypothetical actors, future marketplaces, enterprise scale, generic OWASP
+possibilities, and "defence in depth would be better" are not findings by
+themselves.
 
 Real reachable authentication or authorization bypass, credential disclosure, unsafe destructive operations, corruptible state or backups, public untrusted input, release/update integrity failures, and false verification claims remain blocking at their supported severity.
 
@@ -70,16 +67,10 @@ This tree ensures that a missing error state on a critical form (user stranded =
 
 ### Depot-Native Agents (from other plugins)
 
-| Agent | Plugin | Critical/P1 | Serious/P2 | Moderate/P3 |
-|-------|--------|------------|------------|-------------|
-| **a11y-html-reviewer** | accessibility-compliance | Missing form labels, keyboard traps, no alt on functional images | Broken heading hierarchy, missing landmarks, generic link text | Missing aria-describedby, suboptimal ARIA |
-| **a11y-css-reviewer** | accessibility-compliance | `outline: none` without replacement, failing contrast on primary text | Animations without motion check, reflow broken at 320px | Low contrast on secondary text, missing forced-colors |
-| **a11y-dynamic-content-reviewer** | accessibility-compliance | Click handlers on non-interactive elements, no live regions for state changes | Focus lost after morph, loading states silent | ARIA states not synced, suboptimal focus target |
-| **css-reviewer** | live-wires | -- (errors) | Cascade layer violations, class invention, naming rule breaks | Observable token or responsive defect with a bounded repair; alternative patterns alone are discarded |
-| **voice-editor** | ghostwriter | -- | Spine failure (no point of view), AI pattern detected | Rhythm issues, minor register drift |
-| **governance-domain** | council | Legal compliance failure (wrong voting threshold) | Architecture violation (fixture boundaries) | Observable terminology or values mismatch against approved policy; recommendations alone are discarded |
-
----
+When the selected roster includes an agent from `accessibility-compliance`,
+`live-wires`, `ghostwriter`, or `council`, load
+`severity-depot-native-agents.md` for its mapping. A roster of dm-review agents
+alone does not load it.
 
 ### Browser Agent Phases
 

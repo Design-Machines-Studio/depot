@@ -1,4 +1,7 @@
-# Extracted conditional reference
+# GitHub Issues finding tracking
+
+Loaded at Phase 6 only when the user selects GitHub Issues tracking. A project
+with a `todos/` directory uses text-file tracking and never loads this file.
 
 For each retained P1, P2, and P3 finding, create a GitHub Issue using `gh issue create`:
 

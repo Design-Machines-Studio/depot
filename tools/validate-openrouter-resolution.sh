@@ -119,6 +119,7 @@ done
 
 validate_active_cache_consumers() {
   local dm_review_file="$1" pipeline_file="$2" consumer_failures=0
+  local dm_review_dispatch_file="$ROOT/plugins/dm-review/skills/review/references/full-lane-dispatch.md"
 
   grep -Fq 'resolve-plugin-bundle \' "$dm_review_file" &&
   grep -Fq -- '--plugin "$PLUGIN" --minimum-version "$PLUGIN_MINIMUM_VERSION"' "$dm_review_file" &&
@@ -135,8 +136,8 @@ validate_active_cache_consumers() {
   grep -Fq 'CONSOLIDATOR_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-consolidator.md"' "$dm_review_file" &&
   grep -Fq 'RECORDER_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-memory-recorder.md"' "$dm_review_file" &&
   grep -Fq 'ERROR: required plugin bundle unavailable: $PLUGIN' "$dm_review_file" &&
-  grep -Fq 'OPENROUTER_AVAILABLE=false' "$dm_review_file" &&
-  grep -Fq 'OPENROUTER_UNAVAILABLE_REASON=configured_key_or_bundle_unavailable' "$dm_review_file" &&
+  grep -Fq 'OPENROUTER_AVAILABLE=false' "$dm_review_dispatch_file" &&
+  grep -Fq 'OPENROUTER_UNAVAILABLE_REASON=configured_key_or_bundle_unavailable' "$dm_review_dispatch_file" &&
   grep -Fq 'retries the lane on Codex without asking the' "$dm_review_file" || consumer_failures=1
 
   if grep -Fq 'declare -A' "$dm_review_file" ||
@@ -371,7 +372,7 @@ grep -Fq '"--required-executable"' \
     failures=1
   }
 grep -Fq 'OPENROUTER_BUNDLE_REF' \
-  "$ROOT/plugins/dm-review/skills/review/SKILL.md" &&
+  "$ROOT/plugins/dm-review/skills/review/references/full-lane-dispatch.md" &&
 grep -Fq '[ "$BUNDLE_REF" = "$openrouter_bundle_ref" ]' \
   "$ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md" &&
 grep -Fq '[ "$RESOLVED_VERSION" = "$openrouter_bundle_version" ]' \

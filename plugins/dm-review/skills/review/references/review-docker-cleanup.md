@@ -1,4 +1,7 @@
-# Extracted conditional reference
+# Docker/Compose resource cleanup (review harness)
+
+Loaded at Phase 8 only when this review created a Docker or Compose resource. A
+review that created none never loads this file.
 
 ```text
 "$WORKFLOW_KERNEL" plan-cleanup --state-dir .claude/ux-review/workflow-kernel --run-id ID --node-id ID --node-statuses .claude/ux-review/workflow-kernel/docker/<node-id>-node-statuses.json --output .claude/ux-review/workflow-kernel/docker/<node-id>-cleanup-plan.json

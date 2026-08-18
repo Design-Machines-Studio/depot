@@ -1,5 +1,3 @@
-# Visual Finding Rules
-
 ## Visual Finding Rules
 
 When a `## Design Spec Context` section is present, it is your PRIMARY evaluation baseline. For each approved decision, locate the element on the rendered page, capture an element-level screenshot, and evaluate the match. Flag any mismatch as P1: "Implementation deviates from approved design: spec says [X], rendered shows [Y]." Spec deviations outrank general heuristic violations and are evaluated before them -- a page can be "good enough" by general standards and still wrong against the approved design.
@@ -11,5 +9,3 @@ Every finding, spec-derived or heuristic, MUST cite its rule source: a CLAUDE.md
 "[element] violates [rule-source]: [citation]. Rendered: [X]. Expected: [Y]."
 
 Findings without citations are INVALID and must be dropped. Never report "this could be better" without naming the rule that defines "better", and never invent a spec.
-```
-

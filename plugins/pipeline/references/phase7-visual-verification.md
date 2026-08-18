@@ -1,4 +1,8 @@
-# Extracted conditional reference
+# Caller visual verification (Phase 7)
+
+Loaded at `/pipeline` Phase 7 only when a full-mode chunk or the approved lean
+plan carries `renderedSurface: required`. When every chunk is
+`not_applicable`, record the rationale and never load this file.
 
 ### Caller Visual Verification (mandatory for rendered-surface features)
 

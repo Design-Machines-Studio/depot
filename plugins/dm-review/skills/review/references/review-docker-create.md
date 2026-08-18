@@ -1,4 +1,7 @@
-# Extracted conditional reference
+# Docker/Compose resource creation (review harness)
+
+Loaded only when review setup creates a Docker or Compose resource -- a dev
+server or review harness. A review that creates none never loads this file.
 
 ```text
 "$WORKFLOW_KERNEL" plan-create --state-dir .claude/ux-review/workflow-kernel --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json .claude/ux-review/workflow-kernel/docker/<node-id>-create-argv.json --dependent-node-ids-json .claude/ux-review/workflow-kernel/docker/<node-id>-dependent-node-ids.json --output .claude/ux-review/workflow-kernel/docker/<node-id>-creation-plan.json

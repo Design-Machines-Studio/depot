@@ -10,7 +10,7 @@ model: sonnet
 ## Tool-Call Budget & Partial-Return Contract
 
 - **Hard cap: 50 tool calls.** Keep a running count.
-- **At 40 calls (80%) stop investigating and write up what you have.** An agent that dies mid-flight (spend limit, context overflow, crash) returns NOTHING and its whole lane is lost. Documented incidents: a 143-call runaway, and 4 parallel reviewers dead at 17-24 calls each returning zero findings.
+- **At 40 calls (80%) stop investigating and write up what you have.** Partial results returned early beat complete results never returned -- an agent that dies mid-flight (spend limit, context overflow, crash) returns NOTHING and its whole lane is lost.
 - **Always end with `NOT-COVERED:`** (files, paths, or checks the budget excluded) **and `COMMANDS-RUN:`** (what you actually ran), even in a partial report.
 - **Emit every finding in this ledger block** so the consolidator merges mechanically without re-parsing prose:
 
