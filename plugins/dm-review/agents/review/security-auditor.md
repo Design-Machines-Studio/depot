@@ -17,11 +17,6 @@ model: opus
   ```
   ### [P1|P2|P3] <one-line title>
   - where: <path>:<line-or-stable-anchor>
-  - evidence: <what you observed>
-  - fix: <concrete change>
-  ```
-  ### [P1|P2|P3] <one-line title>
-  - where: <path>:<line-or-stable-anchor>
   - evidence: <affected current user/operator; reachable actor/input/path; realistic harm; actual trust boundary>
   - fix: <smallest adequate repair>
   ```

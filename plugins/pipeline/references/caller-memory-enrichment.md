@@ -14,8 +14,4 @@ If the required ai-memory tools are callable, validate that the observation is t
 
 After a successful write or exact duplicate, append `Memory capture: written` or `Memory capture: already-present` to `plans/<feature-slug>/receipt.md` and retain that outcome in internal summary evidence before Phase 7. If callable tools fail during lookup or write, append `Memory capture: failed -- <safe reason>` and retain the same nonblocking operational evidence without marking delivery incomplete. If the tools are absent, omit the write and every receipt or summary mention. Do not show the raw handoff in ordinary human-facing chat, mark delivery incomplete because optional memory is absent, or ask the user to install or configure the personal source. Only an explicit user request for an ai-memory operation makes an unavailable capability reportable.
 
-## Phase 7: Deliver
-
-Present the orchestrator's execution summary in full mode, or the bounded implementation and final-review summary in lean mode.
-
-If any executed chunk has `renderedSurface: required`, load `plugins/pipeline/references/phase7-caller-verification.md` before claiming delivery. Required browser failure follows the evidence-preserving ladder and ends `human_help_required`. Curl is diagnostic only.
+The unconditional Phase 7 Deliver step (present the execution summary; load `phase7-caller-verification.md` when a `renderedSurface: required` chunk ran) lives in the `/pipeline` command, not in this ai-memory-conditional file.

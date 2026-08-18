@@ -207,7 +207,7 @@ Load the research skill from `plugins/pipeline/skills/research/SKILL.md`. Run it
 
 Research starts immediately after assessment with the original request, provisional assessment, its compact Project Alignment record, and current repository evidence. Do not describe provisional requirements as approved. Use only applicable sources: GitHub or a coordination Project only when the repository or request declares that authority -- never a generic organization-wide GitHub survey. Research must test the project-goal alignment, ownership, currency, mechanism-necessity, speculative-scale, and API/pattern-existence questions defined in the research skill.
 
-For Assembly work preserve the current scale and trust model: two developers, trusted first-party repositories, small self-hosted Go applications, roughly 4--50 users per installation, YAGNI and pragmatic DRY, strong security at real credential, authorization, release-integrity, and data-loss boundaries. No enterprise architecture without a demonstrated current consumer.
+Load and apply the canonical Design Machines deployment context from `plugins/dm-review/skills/review/references/deployment-context.md` (two-person team and sole Baseplate/Fixture developers, roughly 4--50 users per install, non-indexed small-group threat model, proportional security with hard boundaries at credentials/authorization/data-loss/release-integrity, YAGNI and token economy). No enterprise architecture without a demonstrated current consumer.
 
 Save `plans/<feature-slug>/research.html` with material confirmations, corrections, ownership conflicts, and the smallest supported approach. **Verification:** `ls plans/<feature-slug>/research.html` MUST exist before proceeding. Mark ledger item 3 complete.
 
@@ -354,6 +354,8 @@ Launch the execution-orchestrator from `plugins/pipeline/agents/workflow/executi
 
 Wait for execution to complete. Mark ledger item 10 complete.
 
+**Present the execution summary (unconditional).** As the Phase 7 Deliver step, present the orchestrator's execution summary in full mode, or the bounded implementation and final-review summary in lean mode. This delivery runs on every run, independent of whether optional ai-memory enrichment is available.
+
 ### Caller-side optional memory enrichment
 
 Determine ai-memory availability from the callable-tool inventory or tool search, never by invoking a memory tool as a probe. When those tools are callable, load `plugins/pipeline/references/caller-memory-enrichment.md` and follow it. When they are absent, omit the enrichment silently -- no warning, skipped lane, coverage gap, receipt line, or install request -- and do not load that file. A callable-tool failure during lookup or write appends nonblocking `Memory capture: failed -- <safe reason>` and never becomes a finding or coverage gap.
@@ -367,6 +369,10 @@ count) plus the verification profile and evidence-preserving recovery ladder it
 defines, recording evidence in the delivery report. When every chunk is
 `renderedSurface: not_applicable`, record that rationale and skip to the
 requirements cross-check.
+
+### Ambiguity Protocol Check (every run)
+
+Trailer auditing is not rendered-surface-specific -- run it on every run, regardless of `renderedSurface`. Inspect each chunk's commit and receipt for the ambiguity audit trail: commit trailers `Chose: <interpretation>` / `Rejected: <alt-1>; <alt-2>` (extract with `git log <featureBranch> --format=%B | git interpret-trailers --parse --only-trailers`) and any receipt `ambiguity_resolved: true` summary. If either signal is present, review the chosen interpretation against the approved Key Requirements and fix inline (then re-run `/dm-review-quick` on the affected chunk) if it diverges. If neither is present, the chunks were unambiguous or a subagent picked silently; when you suspect the latter, sample one or two chunks against the approved requirements before approving merge. (When a `renderedSurface: required` chunk ran, `phase7-caller-verification.md` above carries the same check with its rendered-surface evidence ladder -- do not double-run it.)
 
 If any full-mode chunk or lean plan has `renderedSurface: required`, load `plugins/pipeline/references/phase7-visual-verification.md` and complete caller visual verification before claiming done.
 

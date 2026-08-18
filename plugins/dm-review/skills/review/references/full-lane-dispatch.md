@@ -103,7 +103,7 @@ authorization, invocation, fallback, and provenance implementation.
 
    Set `AGENT_PLUGIN` and `AGENT_ASSET` from the selected roster row. Never re-resolve a file independently or use depot-relative paths -- pipeline runs in worktrees.
 
-2. **Build the agent prompt** per the common prompt contract: the agent definition, changed files, diff, and project context.
+2. **Build the agent prompt** per the common prompt contract: the agent definition, changed files, diff, and project context. Codex runs the piped prompt as text with no `${CLAUDE_SKILL_DIR}` expansion, so before combining, resolve every `${CLAUDE_SKILL_DIR}/references/<name>.md` pointer in the agent definition by inlining the trusted referenced file, and inline `${CLAUDE_SKILL_DIR}/references/deployment-context.md` as `## Deployment Context`. No `${CLAUDE_SKILL_DIR}` token may remain in the combined prompt.
 3. On a Codex host, launch a native Codex subagent with the combined prompt. On another host, pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -`. Legacy Claude-model frontmatter is compatibility metadata and must not override the coding-provider policy. Clearly non-coding agents such as `voice-editor` may use their declared Claude model.
 
 Both A and B agents launch in parallel in the same message. The runner reads the target agent's definition file itself at runtime -- the orchestrator only passes the path. The consolidator dedupes findings tagged `[openrouter/{model}/{agent}]` against other agents' findings using the same file:line key.

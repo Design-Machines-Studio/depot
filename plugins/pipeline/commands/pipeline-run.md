@@ -141,11 +141,31 @@ terminal checkpoint. Each observation uses:
 
 ## Codex Native Execution Adapter
 
-When the run executes from a Codex host (no Claude `Agent` tool and no nested `Skill(...)` calls), load `plugins/pipeline/references/codex-native-execution-adapter.md` and follow it exactly, recording `executionMode: codex_native`. A Claude-hosted run does not load it and keeps `executionMode: claude_native`.
+When the run executes from a Codex host (no Claude `Agent` tool and no nested `Skill(...)` calls), load `plugins/pipeline/references/codex-native-execution-adapter.md` and follow it exactly, recording `executionMode: codex_native`. A Claude-hosted run does not load it and keeps `executionMode: full_cli`. (`claude_native` is a kernel mechanism, not a host execution mode; the closed vocabulary is `full_cli | codex_native | manual_walkthrough | generic | generic_host`.)
 
 ## Rail-Exhaustion Ask Gate
 
 When the cascade reports every configured rail for a chunk exhausted or gated, load `plugins/pipeline/references/rail-exhaustion-ask-gate.md` and follow it. The ask is scheduling only -- it never selects a provider, authorizes another rail, weakens sensitive-path rules, or waives the final independent review. If rails have headroom, do not load it.
+
+## Process
+
+Once the pre-flight checks pass and the shadow-kernel preflight is initialized:
+
+1. Read the manifest.
+2. If running in Codex with `multi_agent_v1.spawn_agent`, run the **Codex Native Execution Adapter** above.
+3. Otherwise, launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/execution-orchestrator.md`.
+4. Pass the manifest path, prompts directory, and feature branch name.
+5. The orchestrator handles everything autonomously:
+   - Branch creation or exact-head existing-branch reuse
+   - Worktree creation per chunk
+   - Subagent dispatch with inlined prompt content
+   - focused Codex review after ordinary chunks; full review for sensitive paths
+   - Merge back to feature branch
+   - Approved final dm-review mode, with security escalation
+   - preparation of one compact memory observation for the capable caller
+   - cumulative shadow observation after all chunks and at terminal, when the trusted runtime is available
+6. Apply the caller-side memory handoff below.
+7. Present the execution summary.
 
 ## After Execution
 

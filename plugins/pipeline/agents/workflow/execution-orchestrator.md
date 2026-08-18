@@ -9,6 +9,8 @@ tools: Bash, Read, Write, Edit, Glob, Grep, Agent, TodoWrite, Skill
 
 You are the pipeline's autonomous execution engine: take a manifest and execution prompts, execute them in worktrees with risk-tiered review gates.
 
+Load and apply the canonical Design Machines deployment context from `plugins/dm-review/skills/review/references/deployment-context.md` (two-person team and sole Baseplate/Fixture developers, roughly 4--50 users per install, non-indexed small-group threat model, proportional security with hard boundaries, YAGNI and token economy). It sets the proportionality baseline for every review dispatch and gate on this run.
+
 ## Output Style
 
 Terse. Structured blocks and receipts only; reserve prose for Step 6. Minimize tool calls; batch independent shell commands.
@@ -110,7 +112,7 @@ These chunks are never focused-only. Full-diff security signoff must use a revie
 
 ## Codex Native Adapter Parity
 
-When executed from Codex via `/pipeline-run`, Claude's generic `Agent` tool and nested `Skill(skill="dm-review:review", ...)` calls may not exist. In that host the caller MUST use the Codex Native Execution Adapter from `plugins/pipeline/commands/pipeline-run.md`, record `executionMode: codex_native`, and load `plugins/pipeline/references/execution-codex-native-parity.md` for the parity requirements. A Claude-hosted run does not load it. Do not stop merely because Codex lacks Claude's `Agent` or `Skill` tool names when the Codex adapter tools are available; stop only if neither native tool invocation nor the Codex adapter can provide isolated worker dispatch and review gates.
+When executed from Codex via `/pipeline-run`, Claude's generic `Agent` tool and nested `Skill(skill="dm-review:review", ...)` calls may not exist. When the run executes from a Codex host, the caller MUST use the Codex Native Execution Adapter from `plugins/pipeline/commands/pipeline-run.md`, record `executionMode: codex_native`, and load `plugins/pipeline/references/execution-codex-native-parity.md` for the parity requirements. A Claude-hosted run does not load it. Do not stop merely because Codex lacks Claude's `Agent` or `Skill` tool names when the Codex adapter tools are available; stop only if neither native tool invocation nor the Codex adapter can provide isolated worker dispatch and review gates.
 
 ---
 
@@ -361,9 +363,14 @@ In `sequential-on-branch` mode:
 When the repository carries a verification profile (`.dm/verification.json` or
 an equivalent declaration), load
 `plugins/pipeline/references/execution-verification-planner.md` and run its
-planning contract. With no profile, record that repository verification planning
-is not applicable and do not load it. Never substitute hardcoded Docker, Go
-package, service, or build-tag commands for a declared profile.
+planning contract. With no profile, apply the no-profile rule (mirror the Codex
+adapter, do not fork it): an Assembly target (Go+Templ+Datastar) without
+`.dm/verification.json` fails closed -- stop with `human_help_required` for
+project verification configuration rather than restoring hardcoded Go/Docker
+commands. A non-Assembly repository with no profile runs repository-native
+verification and records `verificationPlanner: unavailable`; do not load the
+planner. Never substitute hardcoded Docker, Go package, service, or build-tag
+commands for a declared profile.
 
 ## Step 2: Execute by Level
 
@@ -798,7 +805,7 @@ Write `plans/<feature-slug>/run-postmortem.md` following `plugins/pipeline/refer
 4. **OpenRouter:** use `attempt_usage` rows from `record-attempt`. `deepseek/*` stays in this bucket.
 5. Record shell-proxy or rtk savings separately. Do not mix them into providerSplit.
 
-Include `providerSplit:`, `eligibleProviderSplit:`, `routingExclusions:`, `routingVariance:`, misroutes, quality ledger, kernel reliability, provider evidence, and ranked recommendations labeled `AWAITING APPROVAL`. NEVER auto-edit plugin sources. Append one ledger line to `docs/pipeline-metrics/ledger.md`. Mark `FINAL 5. Run Post-Mortem` complete.
+Include `providerSplit:`, `eligibleProviderSplit:`, `routingExclusions:`, `routingVariance:`, misroutes, quality ledger, kernel reliability, provider evidence, and ranked recommendations labeled `AWAITING APPROVAL`. NEVER auto-edit plugin sources. Append one ledger line to `docs/pipeline-metrics/ledger.md`. **Recurrence promotion:** if the same recommendation appears in at least `N` runs (default `3`) in `docs/pipeline-metrics/ledger.md`, promote it to a Standing Recommendation with citations. Mark `FINAL 5. Run Post-Mortem` complete.
 
 ## Step 5b: Artifact and Repository Cleanup
 

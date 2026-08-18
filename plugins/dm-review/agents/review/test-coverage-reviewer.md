@@ -20,11 +20,6 @@ model: sonnet
   - evidence: <what you observed>
   - fix: <concrete change>
   ```
-  ### [P1|P2|P3] <one-line title>
-  - where: <path>:<line-or-stable-anchor>
-  - evidence: <what you observed>
-  - fix: <concrete change>
-  ```
 
 # Test Coverage Reviewer
 

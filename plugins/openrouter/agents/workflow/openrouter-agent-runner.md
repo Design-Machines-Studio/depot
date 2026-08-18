@@ -263,7 +263,70 @@ The historical `FILTERED_*` variable names are retained for compatibility. They 
 
 ### Step 2: Build the Prompts
 
-**System prompt** = the target agent body from `$TARGET_BODY`.
+**Resolve reference pointers first.** The body may cite review criteria as
+`${CLAUDE_SKILL_DIR}/references/<name>.md` pointers that only expand on a Claude
+host. The external model has no filesystem, so an unresolved pointer strands the
+criteria it names (Assembly security/architecture checks, stack conventions,
+doc targets, and the canonical deployment context). Inline the trusted
+referenced files into the body from the target agent's own skill references
+directory, and inline the deployment context unconditionally, before the body
+leaves the host. Any `${CLAUDE_SKILL_DIR}` token that survives resolution is a
+fail-closed runner error.
+
+```bash
+SKILL_REFS_DIR="${RESOLVED%/agents/*}/skills/review/references"
+TARGET_BODY=$(RESOLVED_REFS_DIR="$SKILL_REFS_DIR" TARGET_BODY="$TARGET_BODY" python3 - <<'PY'
+import os, re, sys
+body = os.environ.get("TARGET_BODY", "")
+refs = os.environ.get("RESOLVED_REFS_DIR", "")
+refs_real = os.path.realpath(refs) if refs else ""
+missing, inlined, seen = [], [], set()
+
+def load(name):
+    if not refs_real:
+        missing.append(name); return None
+    p = os.path.realpath(os.path.join(refs_real, name))
+    if not (p == refs_real or p.startswith(refs_real + os.sep)) or not os.path.isfile(p):
+        missing.append(name); return None
+    with open(p, encoding="utf-8") as f:
+        return f.read()
+
+def repl(m):
+    name = m.group(1)
+    if name not in seen:
+        content = load(name)
+        if content is None:
+            return m.group(0)
+        seen.add(name); inlined.append((name, content))
+    return "`%s` (inlined below)" % name
+
+resolved = re.sub(r"\$\{CLAUDE_SKILL_DIR\}/references/([A-Za-z0-9._-]+\.md)", repl, body)
+
+# The canonical deployment/trust model reaches every external reviewer prompt.
+# Best-effort: inline it when the target's references dir carries it; its absence
+# for a non-review plugin is not a stranded pointer and must not fail closed.
+if "deployment-context.md" not in seen and refs_real:
+    dcp = os.path.realpath(os.path.join(refs_real, "deployment-context.md"))
+    if (dcp == refs_real or dcp.startswith(refs_real + os.sep)) and os.path.isfile(dcp):
+        with open(dcp, encoding="utf-8") as f:
+            inlined.append(("deployment-context.md", f.read()))
+        seen.add("deployment-context.md")
+
+if inlined:
+    resolved += "\n\n---\n\n# Inlined references (external dispatch has no filesystem)\n"
+    for name, content in inlined:
+        resolved += "\n\n## %s\n\n%s\n" % (name, content.rstrip())
+
+if "${CLAUDE_SKILL_DIR}" in resolved or missing:
+    sys.stderr.write("ERROR: unresolved ${CLAUDE_SKILL_DIR} reference(s) cannot reach an external model: %s\n"
+                     % (", ".join(missing) if missing else "token survived resolution"))
+    raise SystemExit(2)
+sys.stdout.write(resolved)
+PY
+) || { echo "ERROR: reference resolution failed before external dispatch" >&2; exit 2; }
+```
+
+**System prompt** = the resolved target agent body from `$TARGET_BODY`.
 
 **User prompt** = a self-contained envelope:
 

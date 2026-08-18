@@ -28,18 +28,7 @@ EOF
 
 Use labels `review` + `p1`/`p2`/`p3` for severity. Create the labels first if they don't exist.
 
-**Airlift checkpoint (`dm-review-findings`):** After the pending todo files are written, fire a tier-1 airlift checkpoint so the `todos/*-pending-*.md` findings survive a usage cap, rate limit, or model switch. This is a guarded resolve-from-cache: it is tier-1 deterministic (pure local file + git work, NO model budget, no agent call, no network) and is skipped silently when airlift is absent (OPTIONAL dependency). On an early-warning trip (e.g. a budget threshold crossed mid-run), do not wait for the next phase boundary -- flush this checkpoint immediately so the pending findings are not lost.
-
-```bash
-ENGINE=""
-for CACHE in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-  ENGINE=$(ls -t "$CACHE"/airlift/*/skills/airlift/references/airlift-engine.sh 2>/dev/null | head -1)
-  [ -n "$ENGINE" ] && break
-done
-if [ -n "$ENGINE" ] && [ -x "$ENGINE" ]; then bash "$ENGINE" write --phase dm-review-findings; fi
-```
-
-The `[ -n "$ENGINE" ]` guard covers "airlift not installed"; the `[ -x "$ENGINE" ]` guard covers "resolved a path but not executable." Both guards sit within 3 lines of the `airlift-engine.sh` invocation.
+The airlift `dm-review-findings` checkpoint is not fired here: it protects the default `todos/*-pending-*.md` artifacts, so it lives on the text-file tracking path in the review skill's Phase 6, not on this GitHub-Issues route.
 
 ---
 

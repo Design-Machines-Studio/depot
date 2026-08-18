@@ -20,11 +20,6 @@ model: opus
   - evidence: <what you observed>
   - fix: <concrete change>
   ```
-  ### [P1|P2|P3] <one-line title>
-  - where: <path>:<line-or-stable-anchor>
-  - evidence: <what you observed>
-  - fix: <concrete change>
-  ```
 
 # Review Consolidator
 
@@ -150,6 +145,12 @@ severity is mandatory work.
 Exact duplicates merge without count inflation. Findings at the same location
 with distinct root causes remain separate. Same-line and adjacent-line rules
 are candidate discovery only; they never override the normalized root cause.
+Apply these concrete distance heuristics only to surface merge candidates:
+findings on the **same file:line** are merge candidates; findings **within 3
+lines** in the same file are adjacency candidates; the **same pattern recurring
+across different files keeps both findings** (distinct locations are distinct
+defects, never one merged row). A candidate merges only when the normalized root
+cause also matches.
 Contradictions never disappear: preserve both source positions, severities,
 evidence, and raw refs in the decision trail. Unresolved disagreement uses
 `retained-disagreement`. When deterministic evidence resolves a position, it

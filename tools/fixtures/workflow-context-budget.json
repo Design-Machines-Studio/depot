@@ -1,7 +1,7 @@
 {
   "baseline_commit": "7bd4dc9bb8a7a530a1e27193fbc4590adafcaff7",
-  "required_aggregate_reduction_pct": 40,
-  "notes": "Post-PR-#74 always-loaded path map. Every file an entry loads unconditionally is measured; files loaded only on a named branch stay out of the always-set and must carry that condition at their load site (audited by tools/validate-workflow-contracts.sh). max_words is a ceiling and can never authorize growth over baseline_words.",
+  "required_aggregate_reduction_pct": 35,
+  "notes": "Honest symmetric measurement. Every file the normal path loads unconditionally is in `always` and is measured on both sides. `baseline_map` records each persistently-always-loaded file's word count at baseline_commit; baseline_words is its exact sum, so the baseline is reproducible with `git show <baseline_commit>:<file> | wc -w`. `extracted_in` names files now always-loaded that did not exist at baseline (their content was inline in a baseline_map parent and is counted there on the baseline side and here on the current side -- relocation is not reduction). The validator reconciles `always` against `baseline_map`: a baseline_map file that leaves `always` fails unless a `moved` entry names where its contract went. required_aggregate_reduction_pct is the honest achieved reduction rounded DOWN; the gate prevents regression, it does not chase a milestone. max_words never authorizes growth over baseline_words.",
   "hot_entries": {
     "plugins/pipeline/commands/pipeline.md": {
       "baseline_words": 8798,
@@ -30,8 +30,8 @@
   },
   "paths": {
     "pipeline_planning": {
-      "baseline_words": 35337,
-      "max_words": 35337,
+      "baseline_words": 28689,
+      "max_words": 28689,
       "always": [
         "plugins/pipeline/commands/pipeline.md",
         "plugins/pipeline/skills/assess/SKILL.md",
@@ -40,8 +40,26 @@
         "plugins/pipeline/agents/workflow/plan-adversary.md",
         "plugins/pipeline/references/openrouter-authorization-contract.md",
         "plugins/workflow-kernel/skills/workflow-kernel/references/runtime-resolution.md",
-        "plugins/pipeline/skills/promptcraft/SKILL.md"
-      ]
+        "plugins/pipeline/skills/promptcraft/SKILL.md",
+        "plugins/pipeline/skills/promptcraft/references/prompt-template.md",
+        "plugins/pipeline/skills/promptcraft/references/templates/README.md",
+        "plugins/dm-review/skills/review/references/deployment-context.md"
+      ],
+      "baseline_map": {
+        "plugins/pipeline/commands/pipeline.md": 8798,
+        "plugins/pipeline/skills/assess/SKILL.md": 2272,
+        "plugins/pipeline/skills/research/SKILL.md": 2074,
+        "plugins/pipeline/references/routing-policy.json": 1992,
+        "plugins/pipeline/agents/workflow/plan-adversary.md": 4601,
+        "plugins/pipeline/references/openrouter-authorization-contract.md": 479,
+        "plugins/workflow-kernel/skills/workflow-kernel/references/runtime-resolution.md": 792,
+        "plugins/pipeline/skills/promptcraft/SKILL.md": 5379,
+        "plugins/pipeline/skills/promptcraft/references/prompt-template.md": 1457,
+        "plugins/pipeline/skills/promptcraft/references/templates/README.md": 845
+      },
+      "extracted_in": {
+        "plugins/dm-review/skills/review/references/deployment-context.md": "new canonical owner; replaces inline deployment text in pipeline.md, orchestrator, and review SKILL.md"
+      }
     },
     "pipeline_run": {
       "baseline_words": 42385,
@@ -57,12 +75,31 @@
         "plugins/dm-review/skills/review/references/full-lane-dispatch.md",
         "plugins/pipeline/references/execution-lint-scan.md",
         "plugins/pipeline/references/execution-worktree-cleanup.md",
-        "plugins/pipeline/references/run-postmortem-schema.md"
-      ]
+        "plugins/pipeline/references/run-postmortem-schema.md",
+        "plugins/pipeline/references/execution-docker-resources.md",
+        "plugins/dm-review/skills/review/references/deployment-context.md"
+      ],
+      "baseline_map": {
+        "plugins/pipeline/commands/pipeline-run.md": 3383,
+        "plugins/pipeline/agents/workflow/execution-orchestrator.md": 20606,
+        "plugins/workflow-kernel/skills/workflow-kernel/references/runtime-resolution.md": 792,
+        "plugins/pipeline/references/routing-policy.json": 1992,
+        "plugins/dm-review/skills/review/references/repo-cleanup-contract.md": 2334,
+        "plugins/dm-review/skills/review/SKILL.md": 12810,
+        "plugins/pipeline/references/run-postmortem-schema.md": 468
+      },
+      "extracted_in": {
+        "plugins/dm-review/skills/review/references/reviewer-prompt-template.md": "extracted from dm-review review SKILL.md + agent bodies",
+        "plugins/dm-review/skills/review/references/full-lane-dispatch.md": "extracted from dm-review review SKILL.md Phase 4",
+        "plugins/pipeline/references/execution-lint-scan.md": "extracted from execution-orchestrator.md",
+        "plugins/pipeline/references/execution-worktree-cleanup.md": "extracted from execution-orchestrator.md",
+        "plugins/pipeline/references/execution-docker-resources.md": "extracted from execution-orchestrator.md terminal cleanup",
+        "plugins/dm-review/skills/review/references/deployment-context.md": "new canonical owner; replaces inline deployment text in pipeline.md, orchestrator, and review SKILL.md"
+      }
     },
     "dm_review": {
-      "baseline_words": 33122,
-      "max_words": 33122,
+      "baseline_words": 35456,
+      "max_words": 35456,
       "always": [
         "plugins/dm-review/commands/dm-review.md",
         "plugins/dm-review/skills/review/SKILL.md",
@@ -80,8 +117,31 @@
         "plugins/dm-review/agents/review/pattern-recognition-specialist.md",
         "plugins/dm-review/agents/review/code-simplicity-reviewer.md",
         "plugins/dm-review/agents/review/doc-sync-reviewer.md",
-        "plugins/dm-review/agents/review/codex-perspective.md"
-      ]
+        "plugins/dm-review/agents/review/codex-perspective.md",
+        "plugins/dm-review/skills/review/references/deployment-context.md"
+      ],
+      "baseline_map": {
+        "plugins/dm-review/commands/dm-review.md": 1467,
+        "plugins/dm-review/skills/review/SKILL.md": 12810,
+        "plugins/workflow-kernel/skills/workflow-kernel/references/runtime-resolution.md": 792,
+        "plugins/dm-review/skills/review/references/severity-mapping.md": 1403,
+        "plugins/dm-review/skills/review/references/output-format.md": 1881,
+        "plugins/dm-review/skills/review/references/guardrails.md": 1528,
+        "plugins/dm-review/skills/review/references/repo-cleanup-contract.md": 2334,
+        "plugins/dm-review/agents/workflow/review-consolidator.md": 1979,
+        "plugins/pipeline/references/routing-policy.json": 1992,
+        "plugins/dm-review/agents/review/security-auditor.md": 3755,
+        "plugins/dm-review/agents/review/architecture-reviewer.md": 2344,
+        "plugins/dm-review/agents/review/pattern-recognition-specialist.md": 814,
+        "plugins/dm-review/agents/review/code-simplicity-reviewer.md": 824,
+        "plugins/dm-review/agents/review/doc-sync-reviewer.md": 1026,
+        "plugins/dm-review/agents/review/codex-perspective.md": 507
+      },
+      "extracted_in": {
+        "plugins/dm-review/skills/review/references/reviewer-prompt-template.md": "extracted from dm-review review SKILL.md + agent bodies",
+        "plugins/dm-review/skills/review/references/full-lane-dispatch.md": "extracted from dm-review review SKILL.md Phase 4",
+        "plugins/dm-review/skills/review/references/deployment-context.md": "new canonical owner; replaces inline deployment text in pipeline.md, orchestrator, and review SKILL.md"
+      }
     },
     "dm_review_loop": {
       "baseline_words": 29863,
@@ -99,12 +159,27 @@
         "plugins/dm-review/agents/workflow/review-consolidator.md",
         "plugins/dm-review/agents/review/pattern-recognition-specialist.md",
         "plugins/dm-review/agents/review/code-simplicity-reviewer.md",
-        "plugins/dm-review/commands/dm-review-fix.md"
-      ]
+        "plugins/dm-review/commands/dm-review-fix.md",
+        "plugins/dm-review/skills/review/references/deployment-context.md"
+      ],
+      "baseline_map": {
+        "plugins/dm-review/commands/dm-review-loop.md": 4468,
+        "plugins/dm-review/commands/dm-review-quick.md": 423,
+        "plugins/dm-review/skills/review/SKILL.md": 12810,
+        "plugins/workflow-kernel/skills/workflow-kernel/references/runtime-resolution.md": 792,
+        "plugins/dm-review/skills/review/references/severity-mapping.md": 1403,
+        "plugins/dm-review/skills/review/references/output-format.md": 1881,
+        "plugins/dm-review/skills/review/references/guardrails.md": 1528,
+        "plugins/dm-review/skills/review/references/repo-cleanup-contract.md": 2334,
+        "plugins/dm-review/agents/workflow/review-consolidator.md": 1979,
+        "plugins/dm-review/agents/review/pattern-recognition-specialist.md": 814,
+        "plugins/dm-review/agents/review/code-simplicity-reviewer.md": 824,
+        "plugins/dm-review/commands/dm-review-fix.md": 607
+      },
+      "extracted_in": {
+        "plugins/dm-review/skills/review/references/reviewer-prompt-template.md": "extracted from dm-review review SKILL.md + agent bodies",
+        "plugins/dm-review/skills/review/references/deployment-context.md": "new canonical owner; replaces inline deployment text in pipeline.md, orchestrator, and review SKILL.md"
+      }
     }
-  },
-  "bulk_load_forbidden_globs": [
-    "plugins/pipeline/references/*.md",
-    "plugins/dm-review/skills/review/references/*.md"
-  ]
+  }
 }

@@ -24,12 +24,13 @@ Every retained finding must identify an observable current defect, its location
 or reachable path, and the smallest adequate repair. Every P1/P2 must also name
 the affected current user or operator and realistic harm or regression; a
 security P1/P2 also names the actual trust boundary. For Design Machines work,
-default to the current context unless approved scope says otherwise: two
-developers, private first-party repositories, trusted Fixture authors,
-self-hosted co-op applications serving roughly 4--50 people. Hypothetical
-actors, future marketplaces, enterprise scale, generic OWASP possibilities,
-defence-in-depth preferences, and abstractions with no current consumer are not
-findings. Keep real reachable boundaries blocking: authentication or
+apply the canonical deployment context from
+`${CLAUDE_SKILL_DIR}/references/deployment-context.md` (loaded before dispatch
+and inlined into external reviewer prompts): default to that scale and trust
+model unless approved scope says otherwise. Hypothetical actors, future
+marketplaces, enterprise scale, generic OWASP possibilities, defence-in-depth
+preferences, and abstractions with no current consumer are not findings. Keep
+real reachable boundaries blocking: authentication or
 authorization bypass, credential disclosure, unsafe destructive operations,
 corruptible state or backups, public untrusted input, release/update integrity
 failures, and false verification claims.
@@ -388,7 +389,7 @@ resolves).
 
 In **both modes**, before dispatching any lane, load `${CLAUDE_SKILL_DIR}/references/reviewer-prompt-template.md` and build every reviewer prompt from that common contract. Launch every selected lane in one message.
 
-In **quick** mode, dispatch only the selected core/triggered lanes on Codex unless a named full-mode exception applies: read each selected agent definition from the bound bundle root, build the prompt per the common contract, and launch all lanes in one message -- a native Codex subagent on a Codex host, otherwise pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -`. Legacy Claude-model frontmatter is compatibility metadata and never overrides the coding-provider policy.
+In **quick** mode, dispatch only the selected core/triggered lanes on Codex unless a named full-mode exception applies: read each selected agent definition from the bound bundle root, build the prompt per the common contract, and launch all lanes in one message -- a native Codex subagent on a Codex host, otherwise pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -`. Legacy Claude-model frontmatter is compatibility metadata and never overrides the coding-provider policy. Give the two core judgment lanes the full diff and slice each triggered lane (`go-build-verifier`, `craft-reviewer`, `ui-standards-reviewer`) to its trigger files, following the **Diff scoping per lane** rules and the `record-attempt` receipt-flag template (`--diff-scope`, `--full-diff-override`, `--slice-status`) in `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md`. Quick mode reads only those two shared sections from that file; it does not adopt full-mode Branch A–D routing.
 
 In **full** mode, load `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md` and follow Branches A–D exactly. Bulk-analyst files are review criteria only; the generic runner is the single boundary, authorization, invocation, fallback, and provenance implementation. A Claude `Agent` call is not a valid Branch A launcher. Mixed diffs send only `--mode mechanical-review` remainders.
 
@@ -463,9 +464,9 @@ Before any stale, already-fixed, or close disposition is applied to an existing 
 
 **Airlift checkpoint (`dm-review-consolidation`):** When the optional `airlift`
 plugin is installed, load `${CLAUDE_SKILL_DIR}/references/airlift-checkpoint.md`
-and fire a tier-1 checkpoint once the consolidated report exists, so
-partially-complete findings survive a usage cap, rate limit, or model switch.
-When airlift is absent, skip it silently and do not load that file.
+and fire its `dm-review-consolidation` checkpoint once the consolidated report
+exists, so partially-complete findings survive a usage cap, rate limit, or model
+switch. When airlift is absent, skip it silently and do not load that file.
 
 
 ---
@@ -486,7 +487,7 @@ No todos/ directory found. How should I track these findings?
 
 Tracking may change location, but it never waives the finding or permits a clean recommendation. Do not offer a skip or defer option.
 
-**Text file tracking:** First clean stale completed files: `rm -- todos/*-done-*.md 2>/dev/null`. Create `todos/` if missing. For each retained finding, create `todos/{id}-pending-{priority}-{slug}.md` per the template in `${CLAUDE_SKILL_DIR}/references/issue-tracking.md` (e.g. `todos/001-pending-p1-sql-injection-in-search.md`), then summarize what was created and name `/dm-review-fix` as the resolver.
+**Text file tracking:** First clean stale completed files: `rm -- todos/*-done-*.md 2>/dev/null`. Create `todos/` if missing. For each retained finding, create `todos/{id}-pending-{priority}-{slug}.md` per the template in `${CLAUDE_SKILL_DIR}/references/issue-tracking.md` (e.g. `todos/001-pending-p1-sql-injection-in-search.md`), then summarize what was created and name `/dm-review-fix` as the resolver. After the pending todo files are written and the optional `airlift` plugin is installed, load `${CLAUDE_SKILL_DIR}/references/airlift-checkpoint.md` and fire its `dm-review-findings` checkpoint so the `todos/*-pending-*.md` findings survive a usage cap, rate limit, or model switch before `/dm-review-fix` runs; when airlift is absent, skip it silently.
 
 **GitHub Issues:** If tracking via GitHub Issues, load `${CLAUDE_SKILL_DIR}/references/review-github-tracking.md`.
 

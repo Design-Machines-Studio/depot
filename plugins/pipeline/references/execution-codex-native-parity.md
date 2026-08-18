@@ -3,7 +3,7 @@
 Loaded by the execution orchestrator only when the run executes from a Codex
 host (`executionMode: codex_native`). A Claude-hosted run never loads it.
 
-When executed from Codex via `/pipeline-run`, Claude's generic `Agent` tool and nested `Skill(skill="dm-review:review", ...)` calls may not exist. In that host the caller MUST use the Codex Native Execution Adapter from `plugins/pipeline/commands/pipeline-run.md` and record `executionMode: codex_native`.
+When executed from Codex via `/pipeline-run`, Claude's generic `Agent` tool and nested `Skill(skill="dm-review:review", ...)` calls may not exist. In that host the caller MUST use the Codex Native Execution Adapter from `plugins/pipeline/references/codex-native-execution-adapter.md` and record `executionMode: codex_native`.
 
 Parity requirements:
 

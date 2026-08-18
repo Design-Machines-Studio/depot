@@ -33,6 +33,14 @@ Parse the argument string for flags and pass-through values:
 
 When invoking dm-review within the loop, pass: "This is an automated review-fix loop. Verify reachable failures and approved-scope regressions. Required fixes must be the smallest adequate repair; reject unrelated hardening and new product scope."
 
+## Evaluation Depth
+
+The loop MUST push each review for depth, not surface confirmation:
+
+- **Verify behavior, not just structure.** "The function exists" is not "the function handles errors correctly."
+- **Test edge cases, not just happy paths.** Empty data, missing permissions, concurrent access.
+- **Check integration points.** Does the new code actually connect to what it is supposed to connect to?
+
 ## Process
 
 ### 1. Initialize

@@ -16,7 +16,7 @@ touches neither never loads it.
 
 When reviewing Go code in Assembly projects (detected by `internal/fixtures/` or `internal/baseplate/` directory structure):
 
-The severity labels below are candidates only after the current-evidence gate above is satisfied. Trusted first-party Fixture code is not an attacker by default; identify the reachable boundary and harm rather than escalating from a path name or API use alone.
+The severity labels below are candidates only after the security-auditor's current-evidence gate (retain a finding only when direct evidence establishes an observable current defect) is satisfied. Trusted first-party Fixture code is not an attacker by default; identify the reachable boundary and harm rather than escalating from a path name or API use alone.
 
 ### NATS Subject ACL Violations (P1)
 

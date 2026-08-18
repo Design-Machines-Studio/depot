@@ -1409,6 +1409,31 @@ require_text "$pipeline_cmd" 'State the approved project goal, smallest usable i
 require_absent "$pipeline_cmd" 'Then reproduce the inventory' \
   "Pipeline cleanup delivery does not dump the complete inventory"
 
+printf "\nCanonical deployment context and external reference resolution:\n"
+
+deployment_context="$REPO_ROOT/plugins/dm-review/skills/review/references/deployment-context.md"
+openrouter_runner="$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md"
+reviewer_prompt_template="$REPO_ROOT/plugins/dm-review/skills/review/references/reviewer-prompt-template.md"
+full_lane_dispatch="$REPO_ROOT/plugins/dm-review/skills/review/references/full-lane-dispatch.md"
+
+# One canonical owner, reached on every hot path and inlined into external prompts.
+require_text "$deployment_context" "two-person development team" "deployment context names the team scale"
+require_text "$deployment_context" "4--50 users" "deployment context names the install scale"
+require_text "$deployment_context" "not search-indexed" "deployment context names the non-indexed threat model"
+require_text "$deployment_context" "single owner" "deployment context declares itself the single owner"
+require_text "$pipeline_cmd" "deployment-context.md" "pipeline planning loads the canonical deployment context"
+require_text "$orchestrator" "deployment-context.md" "pipeline-run orchestrator loads the canonical deployment context"
+require_text "$review_skill" "deployment-context.md" "dm-review loads the canonical deployment context"
+require_text "$reviewer_prompt_template" "deployment-context.md" "reviewer prompt contract inlines the deployment context"
+require_text "$reviewer_prompt_template" "External dispatch: resolve every reference pointer" "reviewer prompt contract states the external-inline rule"
+
+# No unresolved ${CLAUDE_SKILL_DIR} pointer may reach an externally dispatched prompt.
+require_text "$openrouter_runner" "Resolve reference pointers first" "OpenRouter runner resolves reference pointers before dispatch"
+require_text "$openrouter_runner" "unresolved \${CLAUDE_SKILL_DIR} reference" "OpenRouter runner fails closed on a surviving pointer"
+require_text "$openrouter_runner" "deployment-context.md" "OpenRouter runner inlines the deployment context"
+require_text "$full_lane_dispatch" 'resolve every `${CLAUDE_SKILL_DIR}/references/<name>.md` pointer' "Codex Branch B resolves reference pointers host-side"
+require_text "$full_lane_dispatch" "No \`\${CLAUDE_SKILL_DIR}\` token may remain in the combined prompt" "Codex Branch B forbids an unresolved pointer"
+
 printf "\ncontext budget:\n"
 
 context_budget="$REPO_ROOT/tools/fixtures/workflow-context-budget.json"
@@ -1486,6 +1511,40 @@ else:
     else:
         print(f"OK    aggregate {agg} <= {agg_cap} (baseline {base_agg}, reduction {reduction:.1f}% >= {pct}%)")
 
+# Baseline-map reconciliation. Each path records a reproducible per-file baseline
+# map (file -> words at baseline_commit). baseline_words must equal its sum, and
+# every baseline_map file must still be in the current always-set unless a
+# `moved` entry names where its contract went. This closes the mutation hole:
+# silently dropping a measured file from a path used to lower its total and pass.
+def reconcile_ok(always_set, bmap, moved):
+    return all((f in always_set or f in moved) for f in bmap)
+
+for name, spec in budget["paths"].items():
+    bmap = spec.get("baseline_map")
+    if not isinstance(bmap, dict) or not bmap:
+        print(f"FAIL  {name} has no reproducible baseline_map")
+        fail = 1
+        continue
+    if sum(bmap.values()) != spec["baseline_words"]:
+        print(f"FAIL  {name} baseline_words {spec['baseline_words']} != sum(baseline_map) {sum(bmap.values())}")
+        fail = 1
+    moved = spec.get("moved", {})
+    current_set = set(spec["always"])
+    for f in sorted(bmap):
+        if f not in current_set and f not in moved:
+            print(f"FAIL  {name} baseline_map file left the always-set with no `moved` entry: {f}")
+            fail = 1
+    # Mutation proof, run every invocation: the recorded fixture reconciles, and
+    # dropping ANY single measured file from the current set is detected.
+    if not reconcile_ok(current_set, bmap, moved):
+        print(f"FAIL  {name} recorded fixture does not reconcile")
+        fail = 1
+    for f in sorted(bmap):
+        if reconcile_ok(current_set - {f}, bmap, moved):
+            print(f"FAIL  {name} mutation self-test: dropping measured file {f} is not detected")
+            fail = 1
+    print(f"OK    {name} baseline map reconciles ({len(bmap)} files) and mutation self-test holds")
+
 # Load-map audit: a reference omitted from the always-set may only be cited
 # with an explicit named condition at its load site, and every measured
 # always-file must actually be named by the entry that loads it.
@@ -1529,9 +1588,17 @@ for rel, refdir in entries.items():
         ref_rel = f"{refdir.relative_to(root).as_posix()}/{name}"
         if ref_rel in always_measured:
             continue
-        citing = [b for b in paras if name in b]
-        if not any(condition_re.search(b) for b in citing):
-            print(f"FAIL  {rel} cites omitted reference {name} without an explicit named condition")
+        # Sentence-level: the sentence that cites the reference must itself state
+        # its load condition. An incidental "when/if" elsewhere in the paragraph
+        # no longer satisfies the check.
+        naming_sentences = []
+        for b in (p for p in paras if name in p):
+            joined = re.sub(r"\s*\n\s*", " ", b)  # rejoin wrapped lines
+            for s in re.split(r"(?<=[.!?])\s+(?=[A-Z])", joined):
+                if name in s:
+                    naming_sentences.append(s)
+        if not naming_sentences or not any(condition_re.search(s) for s in naming_sentences):
+            print(f"FAIL  {rel} cites omitted reference {name} without a condition in the citing sentence")
             fail = 1
 
 # Reachability: every reference must be named by a real load site (an entry
