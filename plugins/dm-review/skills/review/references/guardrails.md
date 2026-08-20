@@ -60,7 +60,8 @@ Apply these checks after all agents complete and before the consolidator merges 
 
 Don't match exact header text -- agents use different formatting (`## Findings`, `### P0`, `### No Issues Found`, etc.). Look for the underlying signal.
 
-**If neither found:** Flag as "malformed output" in the Agent Summary table. Include the raw output in a collapsible detail section so nothing is lost.
+**If neither found:** Mark `Malformed`; report a fixed content-safe reason, raw
+evidence reference when available, incomplete coverage, and one next action.
 
 ### Max Findings Per Agent
 
@@ -96,18 +97,23 @@ N findings referencing files not in changeset (hallucinated references)."
 | Scenario | Policy |
 |----------|--------|
 | Agent timeout (>7500s) | Skip. Record "Timed out" in Agent Summary. No retry. The 7500s threshold provides a five-minute buffer above the largest 7200s routed-agent ceiling in dm-review Phase 3.75. If that ceiling changes, this guardrail must change in lockstep or it will silently preempt a valid long-running lane. |
-| Agent returns empty | Treat as "Clean (empty response)" in Agent Summary. |
-| Agent returns error | Record error message in Agent Summary. Don't retry. |
+| Agent returns empty | Mark `Partial` with fixed reason `empty response`; required coverage remains incomplete. |
+| Agent returns error | Mark `Failed` with a fixed, content-safe reason. Don't retry. |
 | Agent output contains `### RUNNER FAILURE` | External-LLM-routed runner failed. See Phase 4.5 for fallback procedure. If fallback also fails, apply core/conditional failure policies (REVIEW INCOMPLETE for core agents, degraded for conditional). Extract failure reasons from both runs for the Agent Summary. |
 | All conditional agents fail | Review proceeds with core agents only. Note "Degraded: conditional agents unavailable" in report header. |
 | Core agent fails | Flag: "REVIEW INCOMPLETE -- [agent-name] failed." Change merge recommendation accordingly. |
-| Consolidator fails | Output raw agent findings as unmerged list. Prefix: "Consolidation failed -- raw findings below." |
+| Consolidator fails | Report the exact total and a bounded list of actionable unmerged findings with evidence pointers; do not dump raw output. |
 
 ### Core vs Conditional Failure Impact
 
 **Core agent failure = review compromised.** The merge recommendation changes to "REVIEW INCOMPLETE" with the failed agent named. The review still produces findings from agents that succeeded, but the user must know coverage is incomplete.
 
 **Conditional agent failure = degraded but valid.** The review proceeds. The Agent Summary table shows which agents were skipped and why.
+
+For every malformed, failed, partial, timed-out, missing, or unavailable lane,
+report lane/reviewer, status, fixed content-safe reason, raw reference when one
+exists, incomplete coverage, and one next action. Another clean lane never
+makes required coverage clean.
 
 See `${CLAUDE_SKILL_DIR}/references/graceful-degradation.md` for the full decision table.
 

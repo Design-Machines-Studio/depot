@@ -17,7 +17,9 @@ model: opus
   ```
   ### [P1|P2|P3] <one-line title>
   - where: <path>:<line-or-stable-anchor>
+  - defect: <observable current defect>
   - evidence: <what you observed>
+  - impact: <realistic current harm or regression>
   - fix: <concrete change>
   ```
 
@@ -194,10 +196,11 @@ Apply the merge recommendation logic from `${CLAUDE_SKILL_DIR}/references/output
 
 Follow the complete-report template in `references/output-format.md`. Produce a
 provisional report body preserving the header, merge recommendation, P1/P2/P3
-findings, `Synthesis Decisions`, agent summary, and raw reports. Leave the
-repository-cleanup section pending for the top-level skill to fill from Phase 8
-authority. Every retained canonical finding keeps its stable ID and all
-contributing source IDs, agents, providers, models, evidence, and raw refs.
+findings, `Synthesis Decisions`, Raw Evidence Index, agent summary, and coverage
+gaps. Project the index from existing lane and coverage receipts; never paste
+reviewer output or create a transcript. Leave cleanup pending for Phase 8.
+Every retained finding keeps stable ID, source IDs, provenance, evidence, and
+raw refs.
 
 Do not write `.claude/ux-review/report.md` and do not deliver or project the
 compact human handoff. The top-level review skill owns both actions after
@@ -221,7 +224,8 @@ Return the provisional report body only after this Coverage Gaps section is comp
 2. Deduplication merges findings without count inflation; its decision trail
    preserves every source position and raw reference
 3. The merge recommendation is mechanical -- follow the logic exactly
-4. Full agent outputs go in collapsible `<details>` sections at the bottom
+4. Emit the compact Raw Evidence Index from existing lane receipts; never copy
+   full reviewer output into the report
 5. Sort P1 findings by impact: security first, then accessibility, then architecture, then others
 6. Include agents that found nothing in the summary table with "Clean" status
 7. Include skipped agents in the summary table with "Skipped" status and reason; include dead/capped agents with "Died" or "Partial" status and never relaunch them

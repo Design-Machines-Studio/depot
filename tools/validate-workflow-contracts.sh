@@ -1263,10 +1263,26 @@ require_text "$review_output" 'Chat keeps P3' \
   "dm-review keeps P3 compact while preserving its required fix path"
 require_text "$review_output" '### Synthesis Decisions' \
   "dm-review retains the complete synthesis ledger"
+require_text "$review_output" '### P1 -- Critical (Blocks Merge)' \
+  "dm-review retains canonical P1 detail"
+require_text "$review_output" '### P2 -- Important (Should Fix)' \
+  "dm-review retains canonical P2 detail"
+require_text "$review_output" '### P3 -- Required Fix' \
+  "dm-review retains canonical P3 detail"
 require_text "$review_output" '### Repository Cleanup' \
   "dm-review retains cleanup truth"
-require_text "$review_output" '### Detailed Agent Reports' \
-  "dm-review retains raw reviewer evidence"
+require_absent "$review_output" '### Detailed Agent Reports' \
+  "dm-review removes duplicated reviewer transcripts"
+require_absent "$review_output" '[Full agent output verbatim]' \
+  "dm-review does not require reviewer output verbatim"
+require_text "$review_output" '### Raw Evidence Index' \
+  "dm-review retains compact raw-evidence access"
+require_text "$review_output" 'Raw output reference' \
+  "dm-review evidence index includes raw output references"
+require_text "$review_output" 'Raw output digest' \
+  "dm-review evidence index includes raw output digests"
+require_text "$review_output" 'Incomplete required lanes stay visible' \
+  "dm-review evidence index keeps incomplete lanes actionable"
 require_text "$review_skill" 'Preserve the complete unified report and all' \
   "dm-review preserves complete report evidence"
 require_text "$review_skill" 'write the complete report to `.claude/ux-review/report.md`' \
@@ -1283,6 +1299,10 @@ require_text "$lifecycle" '| `.claude/ux-review/report.md` | 3 |' \
   "dm-review complete report uses the existing artifact lifecycle"
 require_text "$review_consolidator" 'Coverage Gaps' \
   "dm-review consolidator retains coverage gaps"
+require_text "$review_consolidator" 'Raw Evidence Index' \
+  "dm-review consolidator emits compact raw-evidence index"
+require_absent "$review_consolidator" 'Full agent outputs go in collapsible' \
+  "dm-review consolidator does not require copied transcripts"
 require_text "$review_consolidator" 'provisional report body preserving' \
   "dm-review consolidator produces only a provisional report body"
 require_text "$review_consolidator" 'Do not write `.claude/ux-review/report.md` and do not deliver or project the' \
@@ -1300,6 +1320,18 @@ require_absent "$review_skill" 'After outputting the report' \
   "dm-review removes the stale early-publication Phase 6 phrase"
 require_absent "$review_skill" 'Output the full report to the user.' \
   "dm-review rejects the old visible full-report dump"
+require_text "$review_skill" 'never copy full reviewer output' \
+  "dm-review preserves evidence without transcript duplication"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/guardrails.md" 'Mark `Malformed`' \
+  "dm-review keeps malformed lanes compact and incomplete"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/guardrails.md" 'bounded list of actionable unmerged findings' \
+  "dm-review bounds consolidation-failure output"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/reviewer-prompt-template.md" '## Required reviewer output' \
+  "dm-review reviewer prompt requires findings-only output"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/reviewer-prompt-template.md" 'suppress a supported finding for brevity' \
+  "dm-review reviewer prompt preserves findings under brevity pressure"
+require_text "$REPO_ROOT/docs/skill-authoring.md" '## Bounded evidence for high-cost orchestration' \
+  "skill authoring requires bounded evidence projections for high-cost skills"
 for f in "$review_command" "$review_alias"; do
   rel="${f#$REPO_ROOT/}"
   require_text "$f" '**P3 only:** `APPROVE WITH FIXES`. Must fix.' \
