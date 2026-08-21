@@ -57,6 +57,16 @@ Compliance testing is not automated in depot tooling -- it is a manual loop run 
 
 ---
 
+## Bounded evidence for high-cost orchestration
+
+For high-cost orchestration or discipline skills, state what evidence is
+retained, what the active model or human sees, when larger references load, how
+output stays bounded, and whether that projection is deterministic. Retain
+authoritative evidence once; project only what the current reader needs. This
+does not require measurement ceremony for ordinary knowledge/reference skills.
+
+---
+
 ## SDO -- Skill Description Optimization
 
 The two axes can pull in opposite directions, and SDO is how depot resolves it.
@@ -122,6 +132,7 @@ These compose with depot's stricter, stack-specific protocols; they do not repla
 - [ ] `name:` matches the skill folder exactly.
 - [ ] Trigger eval exists in `description-evals/` and clears 70% (`eval-descriptions.sh`).
 - [ ] If it is a discipline skill: pressure-tested for compliance via `superpowers:writing-skills`.
+- [ ] If it is high-cost orchestration: retained evidence and bounded deterministic projection are explicit.
 - [ ] Capabilities added to `plugin.json` (and `.codex-plugin/plugin.json` where mirrored).
 - [ ] Version bumped in `plugin.json` **and** `marketplace.json`.
 - [ ] Search index regenerated (`./tools/validate-composition.sh --generate-index`).

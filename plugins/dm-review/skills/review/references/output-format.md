@@ -43,40 +43,6 @@ artifact `.claude/ux-review/report.md` before delivery. Coverage gaps, blocked
 browser evidence, cleanup truth, finding IDs, and
 literal provider/model provenance remain in that complete evidence flow.
 
-### Representative handoffs
-
-Clean review:
-
-```markdown
-## CLEAN
-No P1/P2/P3 findings were found, and all required lanes completed.
-### Actionable findings
-None.
-### Coverage gap requiring action
-None.
-### Recommended next action
-Merge the reviewed head.
-### Complete evidence
-Full report: `.claude/ux-review/report.md` (open findings: 0).
-```
-
-Review with actionable findings:
-
-```markdown
-## APPROVE WITH FIXES
-Two P2 findings and one P3 finding must be fixed before merge.
-### Actionable findings
-- `internal/members/handler.go:Create` -- validation accepts an empty name -- reject an empty trimmed value.
-- `web/templates/member.templ:member-form` -- error text is not associated with the field -- add the existing error ID to `aria-describedby`.
-- `web/templates/member.templ:member-actions` -- spacing breaks the established rhythm -- use the existing compact stack token.
-### Coverage gap requiring action
-Safari browser evidence is blocked -- run the retained case on a Safari-capable host.
-### Recommended next action
-Fix all three findings, then rerun their affected lanes and the blocked browser case.
-### Complete evidence
-Full report: `.claude/ux-review/report.md` (open findings: 3).
-```
-
 ## Complete Report Template
 
 ```markdown
@@ -195,16 +161,34 @@ hashing or creating any sealed artifact.
 
 ---
 
+### Raw Evidence Index
+
+One compact row per selected lane, projected from existing lane and coverage
+receipts. Do not copy reviewer output into this report.
+
+| Reviewer | Lane | Status | Findings | Provider / model | Evidence references | Raw output reference | Raw output digest |
+|----------|------|--------|----------|------------------|---------------------|----------------------|-------------------|
+| code-simplicity-reviewer | codex | Done | 2 | Codex / gpt-5 | `raw/simplicity.md#finding-1` | `contribution-inputs/raw-lane-outputs/<digest>.json` | `sha256:<digest>` |
+| security-auditor | openrouter-fallback | Partial | 0 | requested=OpenRouter; implemented-by=Codex / gpt-5 | `raw/security.md` | `contribution-inputs/raw-lane-outputs/<digest>.json` | `sha256:<digest>` |
+
+Use literal receipt values, including provenance, references, `raw_output_ref`,
+and `raw_output_digest`. Incomplete required lanes stay visible here and in
+Coverage Gaps; they never support clean. This index creates no transcript.
+
+---
+
+### Coverage Gaps
+
+List incomplete required coverage, its evidence pointer, and one next action.
+If none, state `Coverage Gaps: none -- all required lanes completed.`
+
+---
+
 ### Agent Summary
 
 | Agent | Findings | P1 | P2 | P3 | Status |
 |-------|----------|----|----|----|----|
-| code-simplicity-reviewer | 2 | 0 | 1 | 1 | Done |
-| security-auditor | 0 | 0 | 0 | 0 | Clean |
-| a11y-html-reviewer | 3 | 1 | 2 | 0 | Done |
-| css-reviewer | 1 | 0 | 0 | 1 | Done |
-| voice-editor | -- | -- | -- | -- | Skipped (no .md files changed) |
-| ... | | | | | |
+| <one row per selected lane> | | | | | |
 
 **Total:** X findings (Y P1, Z P2, W P3)
 **Agents run:** M of N applicable
@@ -234,23 +218,6 @@ If the review created and left nothing, state `Repository cleanup: nothing creat
 
 ---
 
-### Detailed Agent Reports
-
-<details>
-<summary>code-simplicity-reviewer (2 findings)</summary>
-
-[Full agent output verbatim]
-
-</details>
-
-<details>
-<summary>a11y-html-reviewer (3 findings)</summary>
-
-[Full agent output verbatim]
-
-</details>
-
-[Collapsible section for each agent that produced findings]
 ```
 
 ---
@@ -281,14 +248,16 @@ The consolidator preserves the original citation format from each agent.
 4. **Clean agents are noted** in the summary table but don't get detail sections
 5. **Skipped agents are listed** with the reason (file type not changed, project type mismatch)
 6. **Deduplicated findings** show all source agents: `**Source:** a11y-css-reviewer, css-reviewer`
-7. **Full agent reports** are always included in collapsible sections in the complete evidence, not expanded in the compact handoff
+7. **Raw evidence is indexed once** -- use the existing raw findings, lane
+   outputs, receipts, references, and digests; never paste reviewer output or
+   create a transcript replacement
 8. **No sugar-coating** -- if the code has problems, say so directly
 9. **Stable identity is mandatory** -- every retained canonical finding uses
    `finding-v1:sha256(<normalized-key>)`, derived without reviewer, provider,
    model, severity, remediation, or discovery order
 10. **Synthesis decisions are complete** -- every source finding appears with
     provenance, evidence, raw ref, agreement, disposition, closed reason code,
-    and rationale; raw reviewer reports remain verbatim below
+    and rationale; the compact Raw Evidence Index preserves raw-output access
 11. **Human delivery is compact** -- the exact verdict, one-sentence explanation,
     actionable P1/P2/P3 findings, human-action coverage gaps, one recommended next
     action, and complete-evidence pointer appear before the report

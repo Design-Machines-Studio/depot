@@ -37,10 +37,9 @@ failures, and false verification claims.
 
 ## Reviewer Output Style (all review agents)
 
-- No preamble; start with the first finding. No summary paragraphs -- the consolidator composes the summary.
-- Findings are structured blocks (severity, file:line, description, fix); one block per finding, no prose between.
-- An agent that found nothing writes exactly one line: `<agent-name>: clean.`
-- Every sentence advances a finding or states a verified fact; delete process narration.
+- Follow `reviewer-prompt-template.md`: findings-only blocks, the exact clean
+  indicator when appropriate, `NOT-COVERED:`, and `COMMANDS-RUN:`. No narrative
+  padding or suppressed supported findings.
 
 ## Usage
 
@@ -430,7 +429,7 @@ Read from `$CONSOLIDATOR_PATH` and follow it exactly:
 3. **Classify and decide** using `agreement: unique|corroborated|disputed` independently from `finding_disposition: retained|merged|discarded`, each with a rationale and a closed reason code. Preserve contradictions, source severities, selected severity, and evidence rationale; exact duplicates do not inflate counts and distinct root causes stay separate but receive sorted reciprocal cross-ID dispute links when positions contradict. A linked root-cause position is disputed, never unique. Reproducible test/runtime evidence outranks direct HEAD evidence, diff/context evidence, standards-based reasoning, and reviewer consensus.
 4. **Map severity** per `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`.
 5. **Determine merge recommendation** per `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic: any P1 -> "BLOCKS MERGE"; any P2 -> "APPROVE WITH FIXES"; any P3 with no P1 -> "APPROVE WITH FIXES"; zero findings -> "CLEAN".
-6. **Generate the unified report** following `${CLAUDE_SKILL_DIR}/references/output-format.md`, including the required `Synthesis Decisions` section and full raw agent reports.
+6. **Generate the unified report** following `${CLAUDE_SKILL_DIR}/references/output-format.md`, including required P1/P2/P3 detail, `Synthesis Decisions`, and the compact Raw Evidence Index from existing receipts; never copy full reviewer output.
 
 Materialize the decisions, sealed raw-finding inventory, and literal lane receipts as `synthesis-decisions.json`, `raw-finding-inventory.json`, `review-lane-receipts.json`, and `raw-lane-outputs.json`. Then invoke the trusted launcher -- the sole producer of canonical contribution IDs, receipt sequences, and the durable coverage receipt:
 
