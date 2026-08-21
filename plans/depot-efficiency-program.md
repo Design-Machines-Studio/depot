@@ -11,12 +11,12 @@ external handoff only; it does not duplicate Baseplate's production roadmap.
 Depot trusted baseline is the current `main` branch; live PR and Issue status remains GitHub-authoritative.
 The current priority order is:
 
-1. **P1 -- close Issue #81.** Complete the tracked-ledger validation repair;
-   this is the sole active Depot closeout item. Do not start overlapping Depot
-   work on Pipeline, dm-review, or OpenRouter behavior.
-2. **P2 -- finish the external Fixture release handoff.** Baseplate and Jig own
+1. **P2 -- finish the external Fixture release handoff.** Baseplate and Jig own
    that product work. Depot supplies the already-landed proportional workflow,
    release command, routing, and review support without duplicating their plan.
+2. **Depot improvements are evidence-gated.** Use the updated plugins on real
+   Assembly work and open another Depot chunk only for a concrete recurring
+   failure, measurable cost regression, or missing current consumer need.
 3. **Housekeeping is pull-based.** Expand the Agent Plugins canary or add another
    workflow abstraction only after a live consumer or failed run proves the need.
 
@@ -29,15 +29,15 @@ Assembly runs.
 
 ### Single next Depot action
 
-**Complete the Issue #81 tracked-ledger validation repair and close this Depot
-efficiency-program closeout item.** No further Harness Lessons implementation
-is authorized without evidence from real Assembly runs.
+**No active Depot implementation. Return to the external Fixture handoff and
+use the current plugins on real Assembly work.** No further Harness Lessons
+implementation is authorized without evidence from those runs.
 
-This closeout is one bounded repository-tool repair, not a new program of
-planning phases. Preserve release integrity, semantic ledger validation, and
-honest verification; do not add workflow behavior, a context service, or a new
-approval ceremony. Treat absent personal `ai-memory` or RAG services as a
-silent optional skip unless the user explicitly invokes a personal workflow.
+Issue #81 / PR #82 completed the final repository-tool repair at `79c0d5b`.
+Trusted-main Workflow Kernel validation and release preflight pass with ignored
+local plan receipts present. Treat absent personal `ai-memory` or RAG services
+as a silent optional skip unless the user explicitly invokes a personal
+workflow.
 
 R2 is closed **DONE / NO CODE**. Current `plan-verification` and
 `run-verification` already put repository proof before model review, keep passing
@@ -88,7 +88,7 @@ proposal-only.
 | 26 | Codex-first Pipeline/dm-review context diet | **DONE / EVIDENCE-GATED** | four-path aggregate is 87,087 words against the 136,393 baseline, a 36.1% reduction; no further implementation without real Assembly-run evidence |
 | 27 | [#77](https://github.com/Design-Machines-Studio/depot/issues/77) / [PR #78](https://github.com/Design-Machines-Studio/depot/pull/78) HL-01 bounded review evidence | **DONE** | merged and released |
 | 28 | [#79](https://github.com/Design-Machines-Studio/depot/issues/79) / [PR #80](https://github.com/Design-Machines-Studio/depot/pull/80) HL-02 shared reviewer contract | **DONE** | merged and released |
-| 29 | [#81](https://github.com/Design-Machines-Studio/depot/issues/81) tracked-ledger validation repair | **IN PROGRESS** | sole active Depot closeout item |
+| 29 | [#81](https://github.com/Design-Machines-Studio/depot/issues/81) / [PR #82](https://github.com/Design-Machines-Studio/depot/pull/82) tracked-ledger validation repair | **DONE** | merged as `79c0d5b`; ignored local plan receipts no longer poison trusted validation |
 
 The Fixture-development handoff is now the active external P2 lane. No
 additional Depot harness code is authorized absent fresh evidence. DONE, HOLD,
@@ -103,8 +103,8 @@ EXTERNAL, LATER, FUTURE, PARK, and PREPARED are not execution prompts.
 | Private Fixture releases | [PR #680](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/680) merged as `1087c40`; PR #681 remains open at `c0e7d0d`, conflicts with main, and substantially overlaps the landed outcome | owner confirms whether #681 has unique work, then closes or rebases it | Baseplate owner decision first; high collision with #682 across composer docs, code, tests, and task files. |
 | Private Baseplate release assets | [PR #682](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/682) is draft and mergeable at `b4d172b`; all hosted checks are skipped | finish scope decisions, move out of draft, and obtain exact-head checks/review | Existing Baseplate session owns it; do not start a duplicate branch. |
 
-Depot's sole open coordination item is Issue #81, represented in Project 1 as
-P1 / Tooling / In progress. No free-form Project note is needed.
+Depot has no open Issue or PR. Issue #81 is represented in Project 1 as Done /
+P1 / Tooling. No free-form Project note is needed.
 
 ### Operating doctrine
 
