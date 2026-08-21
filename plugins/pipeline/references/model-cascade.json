@@ -7,7 +7,7 @@
     "logic": "codex", "config": "openrouter", "docs": "openrouter", "ui": "codex", "integration": "codex"
   },
 
-  "roles": ["openrouter_exec", "premium_sub", "frontier_api", "cheap_api", "bulk_api"],
+  "roles": ["openrouter_exec", "premium_sub", "frontier_api", "cheap_api"],
 
   "quality_rank": {
     "_comment": "Global model->compatibility score; enforces quality_floor regardless of which role surfaced the model. Ordered role lists remain the routing authority; this is not a ranking engine.",
