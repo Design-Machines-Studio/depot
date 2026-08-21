@@ -11,6 +11,11 @@ agent definition from the bound bundle root, never from a depot-relative path.
 
 ---
 
+[Inline the bound `reviewer-output-contract.md` exactly once; never leave a
+reference token for the reviewer.]
+
+---
+
 ## Files to Review
 
 Changed files:
@@ -34,7 +39,9 @@ Project root: <path to project>
 
 ## Fix Philosophy
 
-Follow the Fix Philosophy from the review skill: use the smallest adequate repair, apply relevant framework conventions, replace broken patterns rather than wrapping them, and reject unrelated hardening or product-scope expansion. During prototyping, recommend new migrations over patching existing ones, and never preserve example data at the expense of a clean schema.
+Use the smallest adequate repair; apply relevant conventions, replace broken
+patterns, reject unrelated hardening/scope expansion, and prefer new migrations
+to preserving example data during prototyping.
 
 ## Caller-Provided Context
 
@@ -43,57 +50,28 @@ Follow the Fix Philosophy from the review skill: use the smallest adequate repai
 
 ## Required reviewer output
 
-Return only fixed P1/P2/P3 finding blocks, one `<agent-name>: clean.` indicator
-when appropriate, `NOT-COVERED:`, and `COMMANDS-RUN:`. Each finding contains
-only location, current defect, concrete evidence, realistic impact, and smallest
-adequate fix.
-
-No recaps, praise, approval, methodology/role narration, generic best practices,
-speculative hardening, optional redesigns, or repeated conclusions. Never
-suppress a supported finding for brevity.
+The inlined canonical reviewer output contract is authoritative. It applies
+once to this prompt and does not replace the agent's domain criteria.
 
 ## External dispatch: resolve every reference pointer
 
-A Claude-host reviewer expands `${CLAUDE_SKILL_DIR}/references/<name>.md`
-pointers from its own filesystem. An externally dispatched reviewer (OpenRouter
-or Codex) has no filesystem, so when the host or runner assembles an external
-prompt it MUST inline the trusted referenced file in place of every such
-pointer -- including the conditional Assembly/stack criteria and the
-unconditional `deployment-context.md` -- before the prompt leaves the host. No
-`${CLAUDE_SKILL_DIR}` token may reach an external model.
+Before external Codex/OpenRouter dispatch, inline every trusted
+`${CLAUDE_SKILL_DIR}/references/<name>.md` pointer, including conditional stack
+criteria and `deployment-context.md`; no token may reach the model.
 
 ## Optional personal enrichment (RAG / ai-memory)
 
-RAG and ai-memory are optional personal enhancements. Determine RAG and
-ai-memory availability from the callable-tool inventory or tool search, never
-by invoking either source as a probe. Capability availability is the complete
-rule; do not infer identity from usernames, environment variables, repository
-ownership, or any other heuristic.
-
-When callable, preserve the existing RAG lookup and ai-memory write behavior.
-When absent, omit the lookup or write silently: create no warning, skipped
-lane, coverage gap, receipt, summary, or degraded-completion message, and never
-ask the user to install or configure the source. Only an explicit user request
-for an ai-memory or RAG operation makes an unavailable personal source
-reportable. Absence and operational failure are distinct: if discovered
-callable ai-memory tools fail during lookup, write, or save, retain nonblocking
-`Memory capture: failed -- <safe reason>` evidence. Do not turn that enrichment
-failure into a review finding, coverage gap, incomplete review, or install
-request, and never mislabel it as silent capability absence.
-
-When RAG is callable and relevant to uncertainty about design principles, CSS
-best practices, typography, layout, accessibility, or UX patterns, search it
-using `mcp__rag__rag_search` for reference material from books and guides.
+RAG and ai-memory are optional personal enhancements. Discover availability
+only from the callable-tool inventory/search, never probes or identity
+heuristics. When callable, preserve lookup/write behavior; when absent, silently
+omit it (no warning, gap, receipt, summary, install request, or degraded state)
+unless the user explicitly requested it. A callable-source failure is distinct:
+retain nonblocking `Memory capture: failed -- <safe reason>` evidence, never a
+finding or incomplete review. Use `mcp__rag__rag_search` only when callable and
+relevant to design/CSS/typography/layout/accessibility/UX uncertainty.
 
 ## Rendered UI lanes
 
-If a rendered UI lane is selected (`visual-browser-tester`,
-`ux-quality-reviewer`, or `ui-standards-reviewer`), append `## Visual Finding
-Rules` with the content of `${CLAUDE_SKILL_DIR}/references/visual-finding-rules.md`,
-with or without a design spec. It is the single canonical statement of spec
-precedence, the missing-spec process finding, and the citation format; the
-agent definitions carry only their own lens on top of it. When
-`design_spec_context` was discovered in Phase 3.25, also append it as
-`## Design Spec Context` after `## Caller-Provided Context`; when no design
-spec exists, omit that section and evaluate against general heuristics only.
-Non-UI lanes never receive either section.
+For selected rendered-UI lanes only, append `## Visual Finding Rules` from
+`visual-finding-rules.md`; append discovered `design_spec_context` after caller
+context, otherwise evaluate general heuristics. Non-UI lanes receive neither.

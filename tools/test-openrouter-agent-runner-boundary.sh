@@ -13,6 +13,14 @@ OPENROUTER_ROOT="$FIXTURE/openrouter"
 REFS="$OPENROUTER_ROOT/skills/openrouter-delegate/references"
 mkdir -p "$REFS"
 printf '{}\n' > "$REFS/delegation-security-policy.json"
+DM_REVIEW_ROOT="$FIXTURE/dm-review"
+CONTRACT="$DM_REVIEW_ROOT/skills/review/references/reviewer-output-contract.md"
+mkdir -p "$(dirname "$CONTRACT")"
+cat > "$CONTRACT" <<'EOF'
+# Canonical Reviewer Output Contract
+
+Bounded findings-only reporting: return `NOT-COVERED:` and `COMMANDS-RUN:`.
+EOF
 
 if command -v sha256sum >/dev/null 2>&1; then
   HASH_CMD="sha256sum"
@@ -48,6 +56,7 @@ cat > "$REFS/openrouter-wrapper.sh" <<'EOF'
 #!/usr/bin/env bash
 touch "$WRAPPER_SENTINEL"
 [ -f "$OPENROUTER_SYSTEM_FILE" ]
+cp "$OPENROUTER_SYSTEM_FILE" "$CAPTURED_SYSTEM"
 printf 'wrapper\n' >> "$EVENT_LOG"
 $HASH_CMD "$OPENROUTER_SYSTEM_FILE" | awk '{print $1}' > "$WRAPPER_DIGESTS"
 user_copy="${TMPDIR:-/tmp}/runner-boundary-user.$$"
@@ -66,9 +75,13 @@ chmod +x "$REFS/openrouter-wrapper.sh"
     'fallback_model="openai/gpt-5.6-terra"' \
     'target_timeout=10' \
     'review_run_id="runner-boundary-test"' \
-    'TARGET_BODY="Review documentation consistency."' \
+    'TARGET_BODY="## Domain Criteria\n\nReview documentation consistency."' \
     'USER_PROMPT="Review this harmless fixture."' \
     'SECURITY_POLICY_RESOLVED="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"'
+  printf 'REVIEWER_OUTPUT_CONTRACT=%q\n' "$CONTRACT"
+  sed -n '/^OUTPUT_CONTRACT=/,/^CONTRACT_HEADING=/p' "$SOURCE"
+  sed -n '/^case "\$TARGET_BODY" in/,/^esac$/p' "$SOURCE"
+  sed -n '/^TARGET_BODY="${TARGET_BODY%/,/^esac$/p' "$SOURCE"
   sed -n '/^WRAPPER_PATH=/,/^EXIT_CODE=\$?/p' "$SOURCE"
 } > "$FIXTURE/run"
 chmod +x "$FIXTURE/run"
@@ -77,7 +90,7 @@ HOME="$FIXTURE/home" OPENROUTER_ROOT="$OPENROUTER_ROOT" \
   BOUNDARY_HELPER="$FIXTURE/boundary" BOUNDARY_COUNT="$FIXTURE/count" \
   BOUNDARY_ARGS="$FIXTURE/args" WRAPPER_SENTINEL="$FIXTURE/wrapper-called" \
   EVENT_LOG="$FIXTURE/events" SCREENED_FILES="$FIXTURE/screened-files" \
-  SCREENED_DIGESTS="$FIXTURE/screened-digests" WRAPPER_DIGESTS="$FIXTURE/wrapper-digests" \
+  SCREENED_DIGESTS="$FIXTURE/screened-digests" WRAPPER_DIGESTS="$FIXTURE/wrapper-digests" CAPTURED_SYSTEM="$FIXTURE/captured-system" \
   "$FIXTURE/run" >/dev/null
 
 [ "$(cat "$FIXTURE/count")" = "1" ]
@@ -87,6 +100,13 @@ grep -Fq -- 'artifact-delegation' "$FIXTURE/args"
 [ "$(tr '\n' ' ' < "$FIXTURE/events")" = "boundary wrapper " ]
 [ "$(wc -l < "$FIXTURE/screened-digests" | tr -d ' ')" = "2" ]
 cmp "$FIXTURE/screened-digests" "$FIXTURE/wrapper-digests"
+captured_system="$FIXTURE/captured-system"
+grep -Fqx '# Canonical Reviewer Output Contract' "$captured_system"
+[ "$(grep -Fc '# Canonical Reviewer Output Contract' "$captured_system")" = 1 ]
+grep -Fq 'Review documentation consistency.' "$captured_system"
+! grep -Fq '### Approved' "$captured_system"
+! grep -Fq 'if a severity tier is empty, say so explicitly' "$captured_system"
+! grep -Fq '${CLAUDE_SKILL_DIR}' "$captured_system"
 
 {
   printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail'

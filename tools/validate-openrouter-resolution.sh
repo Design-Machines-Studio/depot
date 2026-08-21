@@ -60,8 +60,8 @@ for relative in "${consumers[@]}"; do
   openrouter_calls="$(grep -Fc 'resolve-plugin-bundle --plugin openrouter' "$file" || true)"
   if [ "$openrouter_calls" -gt 0 ]; then
     case "$relative" in
-      plugins/openrouter/agents/workflow/openrouter-agent-runner.md) openrouter_floor="1.14.0" ;;
-      plugins/dm-review/skills/review/SKILL.md) openrouter_floor="1.15.0" ;;
+      plugins/openrouter/agents/workflow/openrouter-agent-runner.md) openrouter_floor="1.17.0" ;;
+      plugins/dm-review/skills/review/SKILL.md) openrouter_floor="1.17.0" ;;
       plugins/openrouter/commands/openrouter.md|plugins/openrouter/skills/openrouter/SKILL.md|plugins/openrouter/skills/openrouter-delegate/SKILL.md|plugins/openrouter/skills/openrouter-delegate/references/invocation-protocol.md) openrouter_floor="1.14.0" ;;
       plugins/airlift/*) openrouter_floor="1.14.0" ;;
       plugins/pipeline/*) openrouter_floor="1.15.0" ;;

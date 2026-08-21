@@ -1023,14 +1023,14 @@ require_text "$orchestrator" "Legacy generated prompts:" \
 require_text "$orchestrator" "Verification, targeted repair, commit, push, PR creation or update, and final reporting calls are exempt from the legacy cap." \
   "legacy prompt override exempts delivery calls"
 
-for reviewer in \
-  architecture-reviewer code-simplicity-reviewer codex-perspective \
-  craft-reviewer doc-sync-reviewer go-build-verifier migration-validator \
-  pattern-recognition-specialist security-auditor test-coverage-reviewer; do
+for reviewer in craft-reviewer go-build-verifier migration-validator test-coverage-reviewer; do
   require_text "$REPO_ROOT/plugins/dm-review/agents/review/$reviewer.md" \
     "Hard cap: 40 tool calls." \
     "dm-review $reviewer retains its read-only hard cap"
 done
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/reviewer-output-contract.md" \
+  "Around 40 tool calls is an exploration checkpoint" \
+  "core dm-review reviewers share the exploration checkpoint"
 require_text "$eval_sweep" "Hard cap: 40 tool calls" \
   "pipeline eval-sweep retains its ledger-oriented hard cap"
 
@@ -1328,8 +1328,28 @@ require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/guardrails.m
   "dm-review bounds consolidation-failure output"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/reviewer-prompt-template.md" '## Required reviewer output' \
   "dm-review reviewer prompt requires findings-only output"
-require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/reviewer-prompt-template.md" 'suppress a supported finding for brevity' \
+reviewer_output_contract="$REPO_ROOT/plugins/dm-review/skills/review/references/reviewer-output-contract.md"
+require_text "$reviewer_output_contract" 'suppress a supported finding for brevity' \
   "dm-review reviewer prompt preserves findings under brevity pressure"
+require_text "$reviewer_output_contract" 'Around 40 tool calls is an exploration checkpoint' \
+  "dm-review replaces hard termination with an exploration checkpoint"
+require_text "$reviewer_output_contract" 'Every retained P1, P2, and' \
+  "dm-review keeps P1/P2/P3 repair work mandatory"
+for core_reviewer in security-auditor architecture-reviewer pattern-recognition-specialist code-simplicity-reviewer doc-sync-reviewer codex-perspective; do
+  core_path="$REPO_ROOT/plugins/dm-review/agents/review/$core_reviewer.md"
+  require_absent "$core_path" 'Tool-Call Budget & Partial-Return Contract' \
+    "$core_reviewer leaves execution behavior to the canonical contract"
+  require_absent "$core_path" '## Output Format' \
+    "$core_reviewer leaves output formatting to the canonical contract"
+done
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/full-lane-dispatch.md" 'reviewer-output-contract.md' \
+  "native prompt assembly loads the canonical output contract"
+require_text "$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md" 'canonical reviewer output contract must occur exactly once' \
+  "OpenRouter prompt assembly checks canonical output contract cardinality"
+require_absent "$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md" 'if a severity tier is empty, say so explicitly' \
+  "OpenRouter runner removes empty-tier output instruction"
+require_absent "$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md" '### Approved' \
+  "OpenRouter runner removes approval output instruction"
 require_text "$REPO_ROOT/docs/skill-authoring.md" '## Bounded evidence for high-cost orchestration' \
   "skill authoring requires bounded evidence projections for high-cost skills"
 for f in "$review_command" "$review_alias"; do
@@ -1463,8 +1483,8 @@ require_text "$reviewer_prompt_template" "External dispatch: resolve every refer
 require_text "$openrouter_runner" "Resolve reference pointers first" "OpenRouter runner resolves reference pointers before dispatch"
 require_text "$openrouter_runner" "unresolved \${CLAUDE_SKILL_DIR} reference" "OpenRouter runner fails closed on a surviving pointer"
 require_text "$openrouter_runner" "deployment-context.md" "OpenRouter runner inlines the deployment context"
-require_text "$full_lane_dispatch" 'resolve every `${CLAUDE_SKILL_DIR}/references/<name>.md` pointer' "Codex Branch B resolves reference pointers host-side"
-require_text "$full_lane_dispatch" "No \`\${CLAUDE_SKILL_DIR}\` token may remain in the combined prompt" "Codex Branch B forbids an unresolved pointer"
+require_text "$full_lane_dispatch" 'inline every trusted `${CLAUDE_SKILL_DIR}/references/<name>.md` pointer' "Codex Branch B resolves reference pointers host-side"
+require_text "$full_lane_dispatch" 'no token may remain' "Codex Branch B forbids an unresolved pointer"
 
 printf "\ncontext budget:\n"
 
@@ -1709,7 +1729,7 @@ else:
     # ("If a rendered UI lane is selected ...") sits above the path itself.
     visual_paras = [b for b in re.split(r"\n\s*\n", pc_text)
                     if "visual-finding-rules.md" in b]
-    ui_lane_re = re.compile(r"(if|only when|when)\b[^.]*rendered UI lane", re.I | re.S)
+    ui_lane_re = re.compile(r"(if|only when|when|for)\b[^.]*rendered[- ]UI lane", re.I | re.S)
     if visual_paras and all(ui_lane_re.search(b) for b in visual_paras) \
             and re.search(r"Non-UI lanes never receive", pc_text):
         print("OK    visual finding rules are conditional on a rendered UI lane")
@@ -1718,7 +1738,7 @@ else:
         fail = 1
     for anchor in ["untrusted input", "## Project Context", "## Fix Philosophy",
                    "## Caller-Provided Context",
-                   "When callable, preserve the existing RAG lookup and ai-memory write behavior."]:
+                   "When callable, preserve lookup/write behavior"]:
         if anchor in pc_text:
             print(f"OK    common prompt contract preserves '{anchor}'")
         else:

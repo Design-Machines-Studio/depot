@@ -43,6 +43,12 @@ artifact `.claude/ux-review/report.md` before delivery. Coverage gaps, blocked
 browser evidence, cleanup truth, finding IDs, and
 literal provider/model provenance remain in that complete evidence flow.
 
+Clean review: use `CLEAN` only when every required lane completed and no
+retained P1/P2/P3 finding remains.
+
+Review with actionable findings: use `APPROVE WITH FIXES` or `BLOCKS MERGE` and
+keep every retained finding in the repair queue.
+
 ## Complete Report Template
 
 ```markdown
