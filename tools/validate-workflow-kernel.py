@@ -201,6 +201,34 @@ def _resolve_pointer(document, pointer):
         current = current[key]
 
 
+def tracked_authoritative_receipt_ledgers(repository_root):
+    """Return authoritative receipt ledgers tracked by Git in the repository."""
+    try:
+        completed = subprocess.run(
+            [
+                "git", "ls-files", "-z", "--",
+                ":(glob)plans/**/authoritative-receipts.json",
+            ],
+            cwd=repository_root,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            check=False,
+        )
+    except OSError as error:
+        raise ValidationFailure(
+            "Git receipt-ledger discovery failed to execute"
+        ) from error
+    if completed.returncode != 0:
+        raise ValidationFailure(
+            f"Git receipt-ledger discovery failed (exit {completed.returncode})"
+        )
+    return tuple(
+        repository_root / os.fsdecode(raw_path)
+        for raw_path in completed.stdout.split(b"\0")
+        if raw_path
+    )
+
+
 def check_documents(context):
     from workflow_kernel.policies import load_policy
     from workflow_kernel.workflows import WorkflowTemplates
@@ -243,7 +271,7 @@ def check_documents(context):
     from workflow_kernel.pipeline_adapter import PIPELINE_STAGES, translate_pipeline_receipts
     from workflow_kernel.dm_review_adapter import REVIEW_STAGES, translate_review_receipts
     replayed_ledgers = []
-    for path in sorted(ROOT.glob("plans/**/authoritative-receipts.json")):
+    for path in sorted(tracked_authoritative_receipt_ledgers(ROOT)):
         receipts = json.loads(path.read_text(encoding="utf-8"))
         require(type(receipts) is list, f"{path} is not a receipt array")
         stages = {item.get("stage") for item in receipts if type(item) is dict}
