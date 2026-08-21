@@ -15,6 +15,7 @@ on Codex and this file is never loaded.
    - `target_timeout` -- the workload-scaled 1800s, 3600s, or 7200s value
    - `openrouter_bundle_ref` -- ephemeral home-relative selected root used only to bind runner execution to the loaded definition; never publish it
    - `openrouter_bundle_version`, `cache_class`, `resolution_reason` -- durable resolver evidence (never the selected root)
+   - `dm_review_bundle_ref`, `dm_review_bundle_version`, `dm_review_cache_class`, and `dm_review_resolution_reason` -- the already-bound coherent dm-review bundle identity; the runner uses it only to load `reviewer-output-contract.md`, never to select a random cache file
    - The unfiltered list of changed files (the runner filters it before disclosure)
    - The full diff content (the runner invokes `delegation-boundary.sh --mode mechanical-review` and sends only the emitted safe remainder)
    - Project context

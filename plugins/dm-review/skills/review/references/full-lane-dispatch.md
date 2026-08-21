@@ -23,7 +23,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
   OPENROUTER_ACTIVE_HOST_ARGS=()
   [ -n "$OPENROUTER_ACTIVE_HOST" ] && OPENROUTER_ACTIVE_HOST_ARGS=(--active-host "$OPENROUTER_ACTIVE_HOST")
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.15.0 "${OPENROUTER_ACTIVE_HOST_ARGS[@]}" \
+    --minimum-version 1.17.0 "${OPENROUTER_ACTIVE_HOST_ARGS[@]}" \
     --required-asset agents/workflow/openrouter-agent-runner.md \
     --required-asset agents/review/openrouter-bulk-analyst.md \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -103,7 +103,7 @@ authorization, invocation, fallback, and provenance implementation.
 
    Set `AGENT_PLUGIN` and `AGENT_ASSET` from the selected roster row. Never re-resolve a file independently or use depot-relative paths -- pipeline runs in worktrees.
 
-2. **Build the agent prompt** per the common prompt contract: the agent definition, changed files, diff, and project context. Codex runs the piped prompt as text with no `${CLAUDE_SKILL_DIR}` expansion, so before combining, resolve every `${CLAUDE_SKILL_DIR}/references/<name>.md` pointer in the agent definition by inlining the trusted referenced file, and inline `${CLAUDE_SKILL_DIR}/references/deployment-context.md` as `## Deployment Context`. No `${CLAUDE_SKILL_DIR}` token may remain in the combined prompt.
+2. **Build the agent prompt** from the definition, exact bytes of `$DM_REVIEW_BUNDLE_ROOT/skills/review/references/reviewer-output-contract.md` once, changed files, diff, and context. Fail closed for a missing, unreadable, duplicate, or unresolved contract/reference. Before Codex receives piped text, inline every trusted `${CLAUDE_SKILL_DIR}/references/<name>.md` pointer and `deployment-context.md`; no token may remain.
 3. On a Codex host, launch a native Codex subagent with the combined prompt. On another host, pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -`. Legacy Claude-model frontmatter is compatibility metadata and must not override the coding-provider policy. Clearly non-coding agents such as `voice-editor` may use their declared Claude model.
 
 Both A and B agents launch in parallel in the same message. The runner reads the target agent's definition file itself at runtime -- the orchestrator only passes the path. The consolidator dedupes findings tagged `[openrouter/{model}/{agent}]` against other agents' findings using the same file:line key.

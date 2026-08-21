@@ -72,6 +72,7 @@
         "plugins/dm-review/skills/review/references/repo-cleanup-contract.md",
         "plugins/dm-review/skills/review/SKILL.md",
         "plugins/dm-review/skills/review/references/reviewer-prompt-template.md",
+        "plugins/dm-review/skills/review/references/reviewer-output-contract.md",
         "plugins/dm-review/skills/review/references/full-lane-dispatch.md",
         "plugins/pipeline/references/execution-lint-scan.md",
         "plugins/pipeline/references/execution-worktree-cleanup.md",
@@ -90,6 +91,7 @@
       },
       "extracted_in": {
         "plugins/dm-review/skills/review/references/reviewer-prompt-template.md": "extracted from dm-review review SKILL.md + agent bodies",
+        "plugins/dm-review/skills/review/references/reviewer-output-contract.md": "new canonical owner; content extracted from repeated core-agent execution and output blocks",
         "plugins/dm-review/skills/review/references/full-lane-dispatch.md": "extracted from dm-review review SKILL.md Phase 4",
         "plugins/pipeline/references/execution-lint-scan.md": "extracted from execution-orchestrator.md",
         "plugins/pipeline/references/execution-worktree-cleanup.md": "extracted from execution-orchestrator.md",
@@ -104,6 +106,7 @@
         "plugins/dm-review/commands/dm-review.md",
         "plugins/dm-review/skills/review/SKILL.md",
         "plugins/dm-review/skills/review/references/reviewer-prompt-template.md",
+        "plugins/dm-review/skills/review/references/reviewer-output-contract.md",
         "plugins/dm-review/skills/review/references/full-lane-dispatch.md",
         "plugins/workflow-kernel/skills/workflow-kernel/references/runtime-resolution.md",
         "plugins/dm-review/skills/review/references/severity-mapping.md",
@@ -139,6 +142,7 @@
       },
       "extracted_in": {
         "plugins/dm-review/skills/review/references/reviewer-prompt-template.md": "extracted from dm-review review SKILL.md + agent bodies",
+        "plugins/dm-review/skills/review/references/reviewer-output-contract.md": "new canonical owner; content extracted from repeated core-agent execution and output blocks",
         "plugins/dm-review/skills/review/references/full-lane-dispatch.md": "extracted from dm-review review SKILL.md Phase 4",
         "plugins/dm-review/skills/review/references/deployment-context.md": "new canonical owner; replaces inline deployment text in pipeline.md, orchestrator, and review SKILL.md"
       }
@@ -151,6 +155,7 @@
         "plugins/dm-review/commands/dm-review-quick.md",
         "plugins/dm-review/skills/review/SKILL.md",
         "plugins/dm-review/skills/review/references/reviewer-prompt-template.md",
+        "plugins/dm-review/skills/review/references/reviewer-output-contract.md",
         "plugins/workflow-kernel/skills/workflow-kernel/references/runtime-resolution.md",
         "plugins/dm-review/skills/review/references/severity-mapping.md",
         "plugins/dm-review/skills/review/references/output-format.md",
@@ -178,6 +183,7 @@
       },
       "extracted_in": {
         "plugins/dm-review/skills/review/references/reviewer-prompt-template.md": "extracted from dm-review review SKILL.md + agent bodies",
+        "plugins/dm-review/skills/review/references/reviewer-output-contract.md": "new canonical owner; content extracted from repeated core-agent execution and output blocks",
         "plugins/dm-review/skills/review/references/deployment-context.md": "new canonical owner; replaces inline deployment text in pipeline.md, orchestrator, and review SKILL.md"
       }
     }

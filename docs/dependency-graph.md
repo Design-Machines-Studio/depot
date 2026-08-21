@@ -63,7 +63,7 @@ graph LR
 | dm-review | ned | optional | `>=1.4.0` |
 | dm-review | superpowers | optional | `>=1.0.0` |
 | dm-review | airlift | optional | `>=1.0.0` |
-| dm-review | openrouter | optional | `>=1.15.0` |
+| dm-review | openrouter | optional | `>=1.17.0` |
 | ghostwriter | design-machines | optional | `>=1.5.0` |
 | ned | superpowers | optional | `>=1.0.0` |
 | pipeline | dm-review | required | `>=1.64.0` |

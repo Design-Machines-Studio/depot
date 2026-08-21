@@ -35,12 +35,6 @@ authorization bypass, credential disclosure, unsafe destructive operations,
 corruptible state or backups, public untrusted input, release/update integrity
 failures, and false verification claims.
 
-## Reviewer Output Style (all review agents)
-
-- Follow `reviewer-prompt-template.md`: findings-only blocks, the exact clean
-  indicator when appropriate, `NOT-COVERED:`, and `COMMANDS-RUN:`. No narrative
-  padding or suppressed supported findings.
-
 ## Usage
 
 - `/dm-review` -- Full review: all applicable agents + optional memory enrichment when callable
@@ -233,6 +227,7 @@ CACHE_ACTIVE_HOST_ARGS=()
 DM_REVIEW_REQUIRED_ASSETS=(
   "agents/workflow/review-consolidator.md"
   "agents/workflow/review-memory-recorder.md"
+  "skills/review/references/reviewer-output-contract.md"
 )
 ACCESSIBILITY_REQUIRED_ASSETS=()
 LIVE_WIRES_REQUIRED_ASSETS=()
@@ -255,6 +250,10 @@ append_selected_asset() {
 append_selected_asset "$AGENT_PLUGIN" "$AGENT_ASSET"
 
 DM_REVIEW_BUNDLE_ROOT=""
+DM_REVIEW_BUNDLE_REF=""
+DM_REVIEW_BUNDLE_VERSION=""
+DM_REVIEW_CACHE_CLASS=""
+DM_REVIEW_RESOLUTION_REASON=""
 ACCESSIBILITY_BUNDLE_ROOT=""
 LIVE_WIRES_BUNDLE_ROOT=""
 GHOSTWRITER_BUNDLE_ROOT=""
@@ -262,7 +261,7 @@ COUNCIL_BUNDLE_ROOT=""
 for PLUGIN in dm-review accessibility-compliance live-wires ghostwriter council; do
   case "$PLUGIN" in
     dm-review)
-      PLUGIN_MINIMUM_VERSION="1.62.0"
+      PLUGIN_MINIMUM_VERSION="1.68.0"
       REQUIRED_ASSETS=("${DM_REVIEW_REQUIRED_ASSETS[@]}")
       ;;
     accessibility-compliance)
@@ -298,6 +297,12 @@ for PLUGIN in dm-review accessibility-compliance live-wires ghostwriter council;
     "~/"*) PLUGIN_BUNDLE_ROOT="$HOME/${PLUGIN_BUNDLE_REF#\~/}" ;;
     *) echo "ERROR: invalid plugin bundle root: $PLUGIN" >&2; exit 1 ;;
   esac
+  if [ "$PLUGIN" = dm-review ]; then
+    DM_REVIEW_BUNDLE_REF="$PLUGIN_BUNDLE_REF"
+    DM_REVIEW_BUNDLE_VERSION=$(printf '%s' "$PLUGIN_BUNDLE_JSON" | jq -r '.version // empty')
+    DM_REVIEW_CACHE_CLASS=$(printf '%s' "$PLUGIN_BUNDLE_JSON" | jq -r '.cache_class // empty')
+    DM_REVIEW_RESOLUTION_REASON=$(printf '%s' "$PLUGIN_BUNDLE_JSON" | jq -r '.reason // empty')
+  fi
   case "$PLUGIN" in
     dm-review) DM_REVIEW_BUNDLE_ROOT="$PLUGIN_BUNDLE_ROOT" ;;
     accessibility-compliance) ACCESSIBILITY_BUNDLE_ROOT="$PLUGIN_BUNDLE_ROOT" ;;
