@@ -1,6 +1,6 @@
 # Depot Efficiency Program -- Phase Index
 
-## Active coordination (refreshed 2026-08-17)
+## Active coordination (refreshed 2026-08-21)
 
 Shared cross-repository projection: [Assembly Coordination, Project
 1](https://github.com/orgs/Design-Machines-Studio/projects/1). GitHub Issues
@@ -11,40 +11,33 @@ external handoff only; it does not duplicate Baseplate's production roadmap.
 Depot trusted baseline is the current `main` branch; live PR and Issue status remains GitHub-authoritative.
 The current priority order is:
 
-1. **P1 -- finish Issue #73 / PR #74.** Complete the routing repair and make
-   private `ai-memory`/RAG enrichment a silent optional skip for teammates who
-   do not have Travis's personal services. Do not start another Depot worktree
-   against its overlapping Pipeline, dm-review, or OpenRouter files.
-2. **P1 -- Codex-first workflow context diet.** After PR #74 merges, reduce the
-   recurring context carried by Pipeline and dm-review while preserving project
-   alignment, proportional review, zero-deferral findings, model routing, and
-   real release/credential/destructive-operation boundaries. Codex GPT-5.6 is
-   the primary acceptance rail; Claude compatibility remains generated from the
-   same canonical content. Measure representative tasks before and after rather
-   than judging the rewrite by prose volume alone.
-3. **P2 -- finish the external Fixture release handoff.** Baseplate and Jig own
+1. **P1 -- close Issue #81.** Complete the tracked-ledger validation repair;
+   this is the sole active Depot closeout item. Do not start overlapping Depot
+   work on Pipeline, dm-review, or OpenRouter behavior.
+2. **P2 -- finish the external Fixture release handoff.** Baseplate and Jig own
    that product work. Depot supplies the already-landed proportional workflow,
    release command, routing, and review support without duplicating their plan.
-4. **Housekeeping is pull-based.** Expand the Agent Plugins canary or add another
+3. **Housekeeping is pull-based.** Expand the Agent Plugins canary or add another
    workflow abstraction only after a live consumer or failed run proves the need.
+
+Harness-lessons closeout is complete: PR #78 / Issue #77 delivered HL-01 and
+PR #80 / Issue #79 delivered HL-02. dm-review 1.68.0 and OpenRouter 1.17.0 are
+released and installed in both harnesses. The four-path context aggregate is
+87,087 words against the 136,393 baseline, a 36.1% reduction. No additional
+Harness Lessons implementation is authorized without evidence from real
+Assembly runs.
 
 ### Single next Depot action
 
-**Finish PR #74; then run one Codex-first workflow-context-diet chunk from its
-merge commit.** The successor must use a clean isolated worktree and must not be
-started from the currently dirty PR #74 worktree. It should thin the hot
-Pipeline and dm-review entry paths through progressive disclosure, remove
-duplicated instructions, and replace prose checks with existing deterministic
-validators where practical. It must not add a context service, prompt compiler,
-per-model workflow fork, or new approval ceremony.
+**Complete the Issue #81 tracked-ledger validation repair and close this Depot
+efficiency-program closeout item.** No further Harness Lessons implementation
+is authorized without evidence from real Assembly runs.
 
-The first successor is one bounded implementation PR, not a new program of
-ceremonial planning phases. Establish the exact current context baseline, make
-the smallest coherent simplification, and compare the same representative
-Codex tasks before and after. Preserve hard boundaries for credentials,
-destructive or external mutations, release integrity, data loss, and honest
-verification. Treat absent personal `ai-memory` or RAG services as a silent
-optional skip unless the user explicitly invokes a personal workflow.
+This closeout is one bounded repository-tool repair, not a new program of
+planning phases. Preserve release integrity, semantic ledger validation, and
+honest verification; do not add workflow behavior, a context service, or a new
+approval ceremony. Treat absent personal `ai-memory` or RAG services as a
+silent optional skip unless the user explicitly invokes a personal workflow.
 
 R2 is closed **DONE / NO CODE**. Current `plan-verification` and
 `run-verification` already put repository proof before model review, keep passing
@@ -91,8 +84,11 @@ proposal-only.
 | 22 | Harness authorization friction | **SOLVED / SUPERSEDED** | PRs #46 and #47 removed per-call approval and Workflow Authority |
 | 23 | Pipeline two-gate planning and project alignment | **DONE** | Issue #66 / PR #67 merged at `9a2d3cf` |
 | 24 | Content-safe OpenRouter HTTP failure reasons | **DONE** | Issue #68 / PR #69 merged at `40b6e00`; `openrouter-v1.14.5` and both installed harness caches are current |
-| 25 | OpenRouter matrix and active routing repair | **IN REVIEW** | Issue #73 / PR #74; merge exact reviewed head and sync the released plugin caches before its successor starts |
-| 26 | Codex-first Pipeline/dm-review context diet | **PREPARED / BLOCKED BY #74** | same-task Codex comparison shows materially lower input/context use without loss of requirements, defect detection, project alignment, or zero-deferral behavior |
+| 25 | [#73](https://github.com/Design-Machines-Studio/depot/issues/73) / [PR #74](https://github.com/Design-Machines-Studio/depot/pull/74) OpenRouter matrix and active routing repair | **DONE** | merged as `534dae3`; dm-review 1.68.0 and OpenRouter 1.17.0 released and installed in both harnesses |
+| 26 | Codex-first Pipeline/dm-review context diet | **DONE / EVIDENCE-GATED** | four-path aggregate is 87,087 words against the 136,393 baseline, a 36.1% reduction; no further implementation without real Assembly-run evidence |
+| 27 | [#77](https://github.com/Design-Machines-Studio/depot/issues/77) / [PR #78](https://github.com/Design-Machines-Studio/depot/pull/78) HL-01 bounded review evidence | **DONE** | merged and released |
+| 28 | [#79](https://github.com/Design-Machines-Studio/depot/issues/79) / [PR #80](https://github.com/Design-Machines-Studio/depot/pull/80) HL-02 shared reviewer contract | **DONE** | merged and released |
+| 29 | [#81](https://github.com/Design-Machines-Studio/depot/issues/81) tracked-ledger validation repair | **IN PROGRESS** | sole active Depot closeout item |
 
 The Fixture-development handoff is now the active external P2 lane. No
 additional Depot harness code is authorized absent fresh evidence. DONE, HOLD,
@@ -107,9 +103,8 @@ EXTERNAL, LATER, FUTURE, PARK, and PREPARED are not execution prompts.
 | Private Fixture releases | [PR #680](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/680) merged as `1087c40`; PR #681 remains open at `c0e7d0d`, conflicts with main, and substantially overlaps the landed outcome | owner confirms whether #681 has unique work, then closes or rebases it | Baseplate owner decision first; high collision with #682 across composer docs, code, tests, and task files. |
 | Private Baseplate release assets | [PR #682](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/682) is draft and mergeable at `b4d172b`; all hosted checks are skipped | finish scope decisions, move out of draft, and obtain exact-head checks/review | Existing Baseplate session owns it; do not start a duplicate branch. |
 
-Depot has one open Issue (#73) and one open PR (#74), already represented in
-Project 1 as P1 / Tooling / Review. No duplicate Issue or free-form Project note
-is needed for the prepared successor before #74 completes.
+Depot's sole open coordination item is Issue #81, represented in Project 1 as
+P1 / Tooling / In progress. No free-form Project note is needed.
 
 ### Operating doctrine
 

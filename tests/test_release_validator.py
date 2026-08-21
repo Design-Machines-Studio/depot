@@ -1,6 +1,9 @@
 import importlib.util
 import json
+import subprocess
+import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 
@@ -13,6 +16,95 @@ SPEC.loader.exec_module(VALIDATOR)
 
 
 class ReleaseValidatorTests(unittest.TestCase):
+    def test_real_tracked_authoritative_ledger_is_discoverable(self):
+        ledgers = VALIDATOR.tracked_authoritative_receipt_ledgers(VALIDATOR.ROOT)
+        self.assertIn(
+            VALIDATOR.ROOT / "plans/adaptive-fusion-verification/authoritative-receipts.json",
+            ledgers,
+        )
+
+    def test_untracked_invalid_receipts_are_excluded_from_discovery(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            tracked = repository / "plans/tracked/authoritative-receipts.json"
+            ignored = repository / "plans/ignored/authoritative-receipts.json"
+            untracked = repository / "plans/untracked/authoritative-receipts.json"
+            tracked.parent.mkdir(parents=True)
+            ignored.parent.mkdir(parents=True)
+            untracked.parent.mkdir(parents=True)
+            tracked.write_text("[]\n")
+            ignored.write_text("not-json\n")
+            untracked.write_text("not-json\n")
+            (repository / ".gitignore").write_text(
+                "plans/ignored/authoritative-receipts.json\n"
+            )
+            subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+            subprocess.run(
+                ["git", "add", ".gitignore", str(tracked)],
+                cwd=repository,
+                check=True,
+            )
+            subprocess.run(
+                [
+                    "git", "-c", "user.name=Test", "-c",
+                    "user.email=test@example.com", "commit", "-qm",
+                    "tracked ledger",
+                ],
+                cwd=repository,
+                check=True,
+            )
+
+            self.assertEqual(
+                VALIDATOR.tracked_authoritative_receipt_ledgers(repository),
+                (tracked,),
+            )
+
+    def test_discovered_tracked_ledgers_receive_semantic_validation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            ledger = repository / "plans/invalid/authoritative-receipts.json"
+            ledger.parent.mkdir(parents=True)
+            ledger.write_text('[{"stage": "progress"}]\n')
+            subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+            subprocess.run(["git", "add", str(ledger)], cwd=repository, check=True)
+            subprocess.run(
+                [
+                    "git", "-c", "user.name=Test", "-c",
+                    "user.email=test@example.com", "commit", "-qm",
+                    "invalid tracked ledger",
+                ],
+                cwd=repository,
+                check=True,
+            )
+
+            with self.assertRaises(ValueError):
+                with mock.patch.object(VALIDATOR, "ROOT", repository):
+                    VALIDATOR.check_documents({})
+
+    def test_missing_tracked_ledger_fails_explicitly(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository = Path(directory)
+            subprocess.run(["git", "init", "-q"], cwd=repository, check=True)
+
+            with self.assertRaisesRegex(
+                VALIDATOR.ValidationFailure,
+                "checked-in authoritative receipt ledger missing",
+            ):
+                with mock.patch.object(VALIDATOR, "ROOT", repository):
+                    VALIDATOR.check_documents({})
+
+    def test_git_discovery_failure_cannot_look_like_an_empty_success(self):
+        failed = subprocess.CompletedProcess(
+            args=["git", "ls-files"], returncode=1, stdout=b"", stderr=b"fatal"
+        )
+        with mock.patch.object(
+            VALIDATOR.subprocess, "run", return_value=failed
+        ):
+            with self.assertRaisesRegex(
+                VALIDATOR.ValidationFailure, "Git receipt-ledger discovery failed"
+            ):
+                VALIDATOR.tracked_authoritative_receipt_ledgers(VALIDATOR.ROOT)
+
     def test_failure_text_never_republishes_secret_or_raw_exception(self):
         secret = VALIDATOR.SECRET_SENTINEL
         rendered = VALIDATOR.safe_failure_text(RuntimeError(f"broken: {secret}"))
