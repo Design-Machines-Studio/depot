@@ -1,8 +1,8 @@
 {
   "_comment": "CANONICAL machine-readable OpenRouter model matrix. This file records current catalog evidence and compatibility quality floors; ordered role lists in routing-policy.json and harness-profile.json are the routing authority. Native Codex identities and native Claude aliases are absent from routing models. native_api_equivalent_cost is observation-only pricing evidence and never routing authority. anthropic/* routing slugs are rejected before provider contact.",
   "schema_version": 1,
-  "snapshot_date": "2026-08-17",
-  "catalog_observed_at": "2026-08-17T00:26:07Z",
+  "snapshot_date": "2026-08-21",
+  "catalog_observed_at": "2026-08-21T09:20:22+08:00",
   "catalog_source": "https://openrouter.ai/api/v1/models",
   "native_api_equivalent_cost": {
     "schema_version": 1,
@@ -21,7 +21,9 @@
         "cache_read_usd_per_m": 0.5,
         "snapshot_date": "2026-08-12",
         "pricing_basis": "API-equivalent planning estimate; never billed subscription spend",
-        "sources": ["https://developers.openai.com/api/docs/models/gpt-5.6-sol"]
+        "sources": [
+          "https://developers.openai.com/api/docs/models/gpt-5.6-sol"
+        ]
       },
       {
         "slug": "openai/gpt-5.6-terra-native-api-equivalent",
@@ -30,7 +32,9 @@
         "cache_read_usd_per_m": 0.2,
         "snapshot_date": "2026-08-12",
         "pricing_basis": "API-equivalent planning estimate; never billed subscription spend",
-        "sources": ["https://developers.openai.com/api/docs/models/gpt-5.6-terra"]
+        "sources": [
+          "https://developers.openai.com/api/docs/models/gpt-5.6-terra"
+        ]
       },
       {
         "slug": "openai/gpt-5.6-luna-native-api-equivalent",
@@ -39,7 +43,9 @@
         "cache_read_usd_per_m": 0.02,
         "snapshot_date": "2026-08-12",
         "pricing_basis": "API-equivalent planning estimate; never billed subscription spend",
-        "sources": ["https://developers.openai.com/api/docs/models/gpt-5.6-luna"]
+        "sources": [
+          "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
+        ]
       }
     ]
   },
@@ -48,8 +54,14 @@
   "refresh_protocol": {
     "cadence": "On demand, and before any paid or policy-changing run.",
     "routing": {
-      "owned_snapshot_paths": ["snapshot_date", "models[*].snapshot_date"],
-      "preserved_snapshot_paths": ["native_api_equivalent_cost.snapshot_date", "native_api_equivalent_cost.models[*].snapshot_date"],
+      "owned_snapshot_paths": [
+        "snapshot_date",
+        "models[*].snapshot_date"
+      ],
+      "preserved_snapshot_paths": [
+        "native_api_equivalent_cost.snapshot_date",
+        "native_api_equivalent_cost.models[*].snapshot_date"
+      ],
       "price_context_availability_source": "OpenRouter live API. Record a receipt whose observedAt and expiresAt are no more than freshness_rule_minutes apart, and use it only before expiry.",
       "quality_source": "A named external evaluation source with its dataset version recorded in benchmark_evidence. Missing comparable benchmark values remain null; quality_rank is only a compatibility floor.",
       "on_refresh": [
@@ -61,8 +73,14 @@
       "documented_in": "model-selection.md -- Refreshing the routing matrix"
     },
     "native_api_equivalent_cost": {
-      "owned_snapshot_paths": ["native_api_equivalent_cost.snapshot_date", "native_api_equivalent_cost.models[*].snapshot_date"],
-      "preserved_snapshot_paths": ["snapshot_date", "models[*].snapshot_date"],
+      "owned_snapshot_paths": [
+        "native_api_equivalent_cost.snapshot_date",
+        "native_api_equivalent_cost.models[*].snapshot_date"
+      ],
+      "preserved_snapshot_paths": [
+        "snapshot_date",
+        "models[*].snapshot_date"
+      ],
       "price_source": "Use only the cited source for each changed price or alias and record the observation date.",
       "on_refresh": [
         "Bump native_api_equivalent_cost.snapshot_date and each changed native-only model entry only when its evidence was independently refreshed.",
@@ -74,8 +92,16 @@
     }
   },
   "receipt_contract": {
-    "required_fields": ["matrix_snapshot_date", "rung_rationale"],
-    "rung_rationale_axes": ["cost", "context", "strength", "availability"],
+    "required_fields": [
+      "matrix_snapshot_date",
+      "rung_rationale"
+    ],
+    "rung_rationale_axes": [
+      "cost",
+      "context",
+      "strength",
+      "availability"
+    ],
     "statement": "Every routing decision recorded in a run receipt must carry matrix_snapshot_date and a one-line rung_rationale naming the deciding axis."
   },
   "models": [
@@ -88,21 +114,77 @@
       "input_usd_per_m": 0.14,
       "output_usd_per_m": 0.28,
       "cache_read_usd_per_m": 0.028,
-      "context_tokens": 1048576,
+      "context_tokens": 1310720,
       "top_provider_context_tokens": 1048576,
       "top_provider_max_completion_tokens": 393216,
       "per_request_limits": null,
-      "input_modalities": ["text"],
+      "input_modalities": [
+        "text"
+      ],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
       "supports_structured_outputs": true,
       "quality_rank": 90,
-      "benchmark_evidence": {"source": "artificial-analysis", "source_version": "v4.1.1", "exact_variant": "DeepSeek V4 Flash 0731 (reasoning, max effort)", "intelligence": 52.0, "observed_on": "2026-08-12", "status": "retained-prior-comparable-evidence"},
+      "benchmark_evidence": {
+        "source": "artificial-analysis",
+        "source_version": "v4.1.1",
+        "exact_variant": "DeepSeek V4 Flash 0731 (reasoning, max effort)",
+        "intelligence": 52.0,
+        "observed_on": "2026-08-12",
+        "status": "retained-prior-comparable-evidence"
+      },
       "local_evidence": "2026-08-17 canary reached OpenRouter once and failed with HTTP 429 before output; this does not disprove the executor contract.",
       "role": "Primary cheap bounded Pipeline executor and primary routine documentation/test review model. Codex remains the supervisor for scope, correctness, UI, integration, live tools, and sensitive work.",
-      "snapshot_date": "2026-08-17",
-      "sources": ["https://openrouter.ai/deepseek/deepseek-v4-flash-0731", "https://api-docs.deepseek.com/news/news260424/", "https://artificialanalysis.ai/models/deepseek-v4-flash"]
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/deepseek/deepseek-v4-flash-0731",
+        "https://api-docs.deepseek.com/news/news260424/",
+        "https://artificialanalysis.ai/models/deepseek-v4-flash"
+      ],
+      "canonical_slug": "deepseek/deepseek-v4-flash-20260731",
+      "cache_write_usd_per_m": null,
+      "web_search_usd_per_request": null,
+      "top_provider_is_moderated": false,
+      "pricing_overrides": null,
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "parallel_tool_calls",
+        "presence_penalty",
+        "reasoning",
+        "reasoning_effort",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_a",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ],
+      "reasoning": {
+        "mandatory": false,
+        "default_enabled": true,
+        "supported_efforts": [
+          "max",
+          "high",
+          "low"
+        ],
+        "default_effort": "high"
+      },
+      "default_parameters": {}
     },
     {
       "slug": "deepseek/deepseek-v4-pro-0813",
@@ -110,30 +192,77 @@
       "catalog_name": "DeepSeek: DeepSeek V4 Pro 0813",
       "catalog_status": "available",
       "recommendation_status": "provisional-long-context-pattern-analysis",
-      "input_usd_per_m": 0.66,
-      "output_usd_per_m": 1.98,
-      "cache_read_usd_per_m": 0.022,
+      "input_usd_per_m": 1.188,
+      "output_usd_per_m": 3.564,
+      "cache_read_usd_per_m": 0.0396,
       "context_tokens": 1048576,
-      "top_provider_context_tokens": 1048576,
-      "top_provider_max_completion_tokens": 384000,
+      "top_provider_context_tokens": 1048575,
+      "top_provider_max_completion_tokens": null,
       "per_request_limits": null,
-      "pricing_overrides": [
-        {"utc_start": 1000, "utc_end": 100, "input_usd_per_m": 0.66, "output_usd_per_m": 1.98, "cache_read_usd_per_m": 0.022},
-        {"utc_start": 100, "utc_end": 400, "input_usd_per_m": 1.32, "output_usd_per_m": 3.96, "cache_read_usd_per_m": 0.044},
-        {"utc_start": 400, "utc_end": 600, "input_usd_per_m": 0.66, "output_usd_per_m": 1.98, "cache_read_usd_per_m": 0.022},
-        {"utc_start": 600, "utc_end": 1000, "input_usd_per_m": 1.32, "output_usd_per_m": 3.96, "cache_read_usd_per_m": 0.044}
+      "pricing_overrides": null,
+      "input_modalities": [
+        "text"
       ],
-      "input_modalities": ["text"],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
       "supports_structured_outputs": true,
       "quality_rank": 92,
-      "benchmark_evidence": {"source": "DeepSeek V4 release notes", "source_version": "2026-04-24", "exact_variant": null, "status": "vendor-family-claims-only; no comparable exact-0813 score located"},
+      "benchmark_evidence": {
+        "source": "DeepSeek V4 release notes",
+        "source_version": "2026-04-24",
+        "exact_variant": null,
+        "status": "vendor-family-claims-only; no comparable exact-0813 score located"
+      },
       "local_evidence": "2026-08-17 canary produced a valid seven-line minimal unified diff in 7 seconds; 125 prompt, 709 completion, 661 reasoning tokens; $0.00297264.",
       "role": "Provisional long-context and pattern-analysis primary, plus bulk-analysis fallback after a different-family Qwen primary.",
-      "snapshot_date": "2026-08-17",
-      "sources": ["https://openrouter.ai/deepseek/deepseek-v4-pro-0813", "https://api-docs.deepseek.com/news/news260424/"]
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/deepseek/deepseek-v4-pro-0813",
+        "https://api-docs.deepseek.com/news/news260424/"
+      ],
+      "canonical_slug": "deepseek/deepseek-v4-pro-20260813",
+      "cache_write_usd_per_m": null,
+      "web_search_usd_per_request": null,
+      "top_provider_is_moderated": false,
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "reasoning",
+        "reasoning_effort",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ],
+      "reasoning": {
+        "mandatory": false,
+        "supported_efforts": [
+          "max",
+          "high",
+          "low"
+        ],
+        "default_effort": "high"
+      },
+      "default_parameters": {
+        "temperature": 1,
+        "top_p": 1
+      }
     },
     {
       "slug": "qwen/qwen3.8-max",
@@ -141,25 +270,76 @@
       "catalog_name": "Qwen: Qwen3.8 Max",
       "catalog_status": "available",
       "recommendation_status": "active-independent-bulk-and-complex-review",
-      "input_usd_per_m": 2.0,
-      "output_usd_per_m": 6.0,
+      "input_usd_per_m": 2,
+      "output_usd_per_m": 6,
       "cache_read_usd_per_m": 0.25,
       "cache_write_usd_per_m": 2.5,
       "context_tokens": 1000000,
       "top_provider_context_tokens": 1000000,
       "top_provider_max_completion_tokens": 131072,
       "per_request_limits": null,
-      "input_modalities": ["text", "image", "video"],
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
       "supports_structured_outputs": true,
       "quality_rank": 96,
-      "benchmark_evidence": {"source": "Qwen Code release notes", "source_version": "2026-07-23", "exact_variant": "qwen3.8-max-preview", "status": "availability/adapter evidence only; no comparable benchmark score located"},
+      "benchmark_evidence": {
+        "source": "Qwen Code release notes",
+        "source_version": "2026-07-23",
+        "exact_variant": "qwen3.8-max-preview",
+        "status": "availability/adapter evidence only; no comparable benchmark score located"
+      },
       "local_evidence": "2026-08-17 canary found the seeded arithmetic defect in the required one-line format in 5 seconds; 203 prompt, 174 completion, 138 reasoning tokens; $0.00145.",
       "role": "Primary independent bulk review, code-simplicity review, and OpenRouter second perspective for complex judgment when family independence permits.",
-      "snapshot_date": "2026-08-17",
-      "sources": ["https://openrouter.ai/qwen/qwen3.8-max", "https://qwenlm.github.io/qwen-code-docs/en/blog/updates/weekly-update-2026-07-23/"]
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/qwen/qwen3.8-max",
+        "https://qwenlm.github.io/qwen-code-docs/en/blog/updates/weekly-update-2026-07-23/"
+      ],
+      "canonical_slug": "qwen/qwen3.8-max-20260803",
+      "web_search_usd_per_request": null,
+      "top_provider_is_moderated": false,
+      "pricing_overrides": null,
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logprobs",
+        "max_tokens",
+        "presence_penalty",
+        "reasoning",
+        "reasoning_effort",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ],
+      "reasoning": {
+        "mandatory": true,
+        "default_enabled": true,
+        "supported_efforts": [
+          "xhigh",
+          "high",
+          "medium",
+          "low",
+          "minimal"
+        ],
+        "default_effort": "xhigh"
+      },
+      "default_parameters": {}
     },
     {
       "slug": "qwen/qwen3.8-2.4t-a95b",
@@ -167,14 +347,16 @@
       "catalog_name": "Qwen: Qwen3.8 2.4T A95B",
       "catalog_status": "available",
       "recommendation_status": "catalogued-not-routed",
-      "input_usd_per_m": 2.0,
-      "output_usd_per_m": 6.0,
+      "input_usd_per_m": 2,
+      "output_usd_per_m": 6,
       "cache_read_usd_per_m": 0.25,
       "context_tokens": 1048576,
       "top_provider_context_tokens": 1000000,
       "top_provider_max_completion_tokens": 262144,
       "per_request_limits": null,
-      "input_modalities": ["text", "image", "video"],
+      "input_modalities": [
+        "text"
+      ],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
@@ -183,8 +365,55 @@
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
       "role": "Catalogued candidate only; Qwen3.8 Max owns the active Qwen review seat.",
-      "snapshot_date": "2026-08-17",
-      "sources": ["https://openrouter.ai/qwen/qwen3.8-2.4t-a95b"]
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/qwen/qwen3.8-2.4t-a95b"
+      ],
+      "canonical_slug": "qwen/qwen3.8-2.4t-a95b-20260812",
+      "cache_write_usd_per_m": null,
+      "web_search_usd_per_request": null,
+      "top_provider_is_moderated": false,
+      "pricing_overrides": null,
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "reasoning",
+        "reasoning_effort",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ],
+      "reasoning": {
+        "mandatory": true,
+        "default_enabled": true,
+        "supported_efforts": [
+          "xhigh",
+          "medium",
+          "low"
+        ],
+        "default_effort": "xhigh"
+      },
+      "default_parameters": {
+        "temperature": 1,
+        "top_p": 0.95,
+        "top_k": 20
+      }
     },
     {
       "slug": "qwen/qwen3.8-27b",
@@ -195,11 +424,15 @@
       "input_usd_per_m": 0.45,
       "output_usd_per_m": 3.2,
       "cache_read_usd_per_m": 0.05,
-      "context_tokens": 262144,
+      "context_tokens": 1000000,
       "top_provider_context_tokens": 262144,
       "top_provider_max_completion_tokens": 131072,
       "per_request_limits": null,
-      "input_modalities": ["text", "image", "video"],
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
@@ -208,8 +441,54 @@
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
       "role": "Catalogued compact candidate only; its 262K context does not displace the active Qwen3.8 Max seat.",
-      "snapshot_date": "2026-08-17",
-      "sources": ["https://openrouter.ai/qwen/qwen3.8-27b"]
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/qwen/qwen3.8-27b"
+      ],
+      "canonical_slug": "qwen/qwen3.8-27b-20260814",
+      "cache_write_usd_per_m": null,
+      "web_search_usd_per_request": null,
+      "top_provider_is_moderated": false,
+      "pricing_overrides": null,
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "presence_penalty",
+        "reasoning",
+        "reasoning_effort",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ],
+      "reasoning": {
+        "mandatory": false,
+        "default_enabled": true,
+        "supported_efforts": [
+          "xhigh",
+          "medium",
+          "low"
+        ],
+        "default_effort": "xhigh"
+      },
+      "default_parameters": {
+        "temperature": 1,
+        "top_p": 0.95,
+        "top_k": 20
+      }
     },
     {
       "slug": "qwen/qwen3.7-flash",
@@ -226,10 +505,26 @@
       "top_provider_max_completion_tokens": 65536,
       "per_request_limits": null,
       "pricing_overrides": [
-        {"min_prompt_tokens": 32000, "input_usd_per_m": 0.1, "output_usd_per_m": 0.4, "cache_read_usd_per_m": 0.02, "cache_write_usd_per_m": 0.125},
-        {"min_prompt_tokens": 256000, "input_usd_per_m": 0.2, "output_usd_per_m": 0.8, "cache_read_usd_per_m": 0.04, "cache_write_usd_per_m": 0.25}
+        {
+          "min_prompt_tokens": 32000,
+          "prompt": 0.1,
+          "completion": 0.4,
+          "input_cache_read": 0.02,
+          "input_cache_write": 0.125
+        },
+        {
+          "min_prompt_tokens": 256000,
+          "prompt": 0.2,
+          "completion": 0.8,
+          "input_cache_read": 0.04,
+          "input_cache_write": 0.25
+        }
       ],
-      "input_modalities": ["text", "image", "video"],
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": false,
@@ -238,8 +533,43 @@
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
       "role": "Catalogued economical candidate only; it lacks the active routed models' complete parameter contract.",
-      "snapshot_date": "2026-08-17",
-      "sources": ["https://openrouter.ai/qwen/qwen3.7-flash"]
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/qwen/qwen3.7-flash"
+      ],
+      "canonical_slug": "qwen/qwen3.7-flash-20260727",
+      "web_search_usd_per_request": null,
+      "top_provider_is_moderated": false,
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "include_reasoning",
+        "logprobs",
+        "max_tokens",
+        "presence_penalty",
+        "reasoning",
+        "response_format",
+        "seed",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p"
+      ],
+      "reasoning": {
+        "mandatory": false,
+        "default_enabled": true,
+        "supports_max_tokens": true
+      },
+      "default_parameters": {
+        "temperature": null,
+        "top_p": null,
+        "top_k": null,
+        "frequency_penalty": null,
+        "presence_penalty": null,
+        "repetition_penalty": null
+      }
     },
     {
       "slug": "x-ai/grok-4.6",
@@ -247,8 +577,8 @@
       "catalog_name": "SpaceXAI: Grok 4.6",
       "catalog_status": "available",
       "recommendation_status": "active-demanding-bounded-escalation",
-      "input_usd_per_m": 2.0,
-      "output_usd_per_m": 6.0,
+      "input_usd_per_m": 2,
+      "output_usd_per_m": 6,
       "cache_read_usd_per_m": 0.5,
       "web_search_usd_per_request": 0.005,
       "context_tokens": 500000,
@@ -256,19 +586,68 @@
       "top_provider_max_completion_tokens": null,
       "per_request_limits": null,
       "pricing_overrides": [
-        {"min_prompt_tokens": 200000, "input_usd_per_m": 4.0, "output_usd_per_m": 12.0, "cache_read_usd_per_m": 1.0}
+        {
+          "min_prompt_tokens": 200000,
+          "prompt": 4,
+          "completion": 12,
+          "input_cache_read": 1
+        }
       ],
-      "input_modalities": ["text", "image", "file"],
+      "input_modalities": [
+        "text",
+        "image",
+        "file"
+      ],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
       "supports_structured_outputs": true,
       "quality_rank": 95,
-      "benchmark_evidence": {"source": "SpaceXAI release notes", "source_version": null, "exact_variant": null, "status": "no exact Grok 4.6 release note or comparable score located; catalog evidence only"},
+      "benchmark_evidence": {
+        "source": "SpaceXAI release notes",
+        "source_version": null,
+        "exact_variant": null,
+        "status": "no exact Grok 4.6 release note or comparable score located; catalog evidence only"
+      },
       "local_evidence": "2026-08-17 canary found the seeded arithmetic defect in the exact one-line format in 5 seconds; 352 prompt, 295 completion, 274 reasoning tokens; $0.002282.",
       "role": "Demanding bounded Pipeline execution/review escalation and different-family security fallback after Kimi K3 when family independence permits.",
-      "snapshot_date": "2026-08-17",
-      "sources": ["https://openrouter.ai/x-ai/grok-4.6"]
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/x-ai/grok-4.6"
+      ],
+      "canonical_slug": "x-ai/grok-4.6-20260810",
+      "cache_write_usd_per_m": null,
+      "top_provider_is_moderated": false,
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "include_reasoning",
+        "logprobs",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "response_format",
+        "seed",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_logprobs",
+        "top_p"
+      ],
+      "reasoning": {
+        "mandatory": true,
+        "default_enabled": true,
+        "supported_efforts": [
+          "xhigh",
+          "high",
+          "medium",
+          "low"
+        ],
+        "default_effort": "high"
+      },
+      "default_parameters": {}
     },
     {
       "slug": "google/gemini-3.7-flash",
@@ -279,12 +658,18 @@
       "input_usd_per_m": 0.375,
       "output_usd_per_m": 1.875,
       "cache_read_usd_per_m": 0.0375,
-      "cache_write_usd_per_m": 0.0208333333333333,
+      "cache_write_usd_per_m": 0.020833,
       "context_tokens": 1048576,
       "top_provider_context_tokens": 1048576,
       "top_provider_max_completion_tokens": 65536,
       "per_request_limits": null,
-      "input_modalities": ["text", "image", "file", "audio", "video"],
+      "input_modalities": [
+        "text",
+        "image",
+        "video",
+        "file",
+        "audio"
+      ],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
@@ -293,8 +678,42 @@
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
       "role": "Catalogued multimodal candidate only; the current wrapper remains text-only and no current consumer requires it.",
-      "snapshot_date": "2026-08-17",
-      "sources": ["https://openrouter.ai/google/gemini-3.7-flash"]
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/google/gemini-3.7-flash"
+      ],
+      "canonical_slug": "google/gemini-3.7-flash-20260813",
+      "web_search_usd_per_request": 0.014,
+      "top_provider_is_moderated": false,
+      "pricing_overrides": null,
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "include_reasoning",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_p"
+      ],
+      "reasoning": {
+        "mandatory": true,
+        "default_enabled": true,
+        "supported_efforts": [
+          "high",
+          "medium",
+          "low"
+        ],
+        "default_effort": "medium"
+      },
+      "default_parameters": {}
     },
     {
       "slug": "meta/muse-spark-1.2",
@@ -310,7 +729,13 @@
       "top_provider_context_tokens": 1048576,
       "top_provider_max_completion_tokens": null,
       "per_request_limits": null,
-      "input_modalities": ["text", "image", "file", "audio", "video"],
+      "input_modalities": [
+        "text",
+        "image",
+        "video",
+        "file",
+        "audio"
+      ],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
@@ -319,8 +744,43 @@
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
       "role": "Catalogued multimodal candidate only; the current wrapper remains text-only and no current consumer requires it.",
-      "snapshot_date": "2026-08-17",
-      "sources": ["https://openrouter.ai/meta/muse-spark-1.2"]
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/meta/muse-spark-1.2"
+      ],
+      "canonical_slug": "meta/muse-spark-1.2-20260805",
+      "cache_write_usd_per_m": null,
+      "top_provider_is_moderated": true,
+      "pricing_overrides": null,
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "include_reasoning",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "repetition_penalty",
+        "response_format",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ],
+      "reasoning": {
+        "mandatory": true,
+        "supported_efforts": [
+          "xhigh",
+          "high",
+          "medium",
+          "low",
+          "minimal"
+        ],
+        "default_effort": "medium"
+      },
+      "default_parameters": {}
     },
     {
       "slug": "z-ai/glm-5.2",
@@ -328,24 +788,82 @@
       "catalog_name": "Z.ai: GLM 5.2",
       "catalog_status": "available",
       "recommendation_status": "catalogued-not-routed",
-      "input_usd_per_m": 0.76,
-      "output_usd_per_m": 2.42,
-      "cache_read_usd_per_m": 0.14,
+      "input_usd_per_m": 0.966,
+      "output_usd_per_m": 3.036,
+      "cache_read_usd_per_m": 0.1932,
       "context_tokens": 1048576,
-      "top_provider_context_tokens": 262144,
-      "top_provider_max_completion_tokens": 262144,
+      "top_provider_context_tokens": 1048576,
+      "top_provider_max_completion_tokens": 131072,
       "per_request_limits": null,
-      "input_modalities": ["text"],
+      "input_modalities": [
+        "text"
+      ],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
       "supports_structured_outputs": true,
       "quality_rank": 80,
-      "benchmark_evidence": {"source": "Z.ai GLM-5.2 release notes", "source_version": "2026-06-16", "exact_variant": "GLM-5.2", "status": "vendor benchmark claims; not used as routing authority"},
+      "benchmark_evidence": {
+        "source": "Z.ai GLM-5.2 release notes",
+        "source_version": "2026-06-16",
+        "exact_variant": "GLM-5.2",
+        "status": "vendor benchmark claims; not used as routing authority"
+      },
       "local_evidence": "Prior Depot/Assembly operator evidence found repeated handholding; no call was authorized in this refresh.",
       "role": "Catalogued for evidence only and intentionally absent from every active Pipeline and dm-review ladder.",
-      "snapshot_date": "2026-08-17",
-      "sources": ["https://openrouter.ai/z-ai/glm-5.2", "https://z.ai/blog/glm-5.2"]
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/z-ai/glm-5.2",
+        "https://z.ai/blog/glm-5.2"
+      ],
+      "canonical_slug": "z-ai/glm-5.2-20260616",
+      "cache_write_usd_per_m": null,
+      "web_search_usd_per_request": null,
+      "top_provider_is_moderated": false,
+      "pricing_overrides": null,
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "parallel_tool_calls",
+        "presence_penalty",
+        "reasoning",
+        "reasoning_effort",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ],
+      "reasoning": {
+        "mandatory": false,
+        "default_enabled": true,
+        "supported_efforts": [
+          "xhigh",
+          "high"
+        ],
+        "default_effort": "high"
+      },
+      "default_parameters": {
+        "temperature": 1,
+        "top_p": 0.95,
+        "top_k": null,
+        "frequency_penalty": null,
+        "presence_penalty": null,
+        "repetition_penalty": null
+      }
     },
     {
       "slug": "moonshotai/kimi-k3",
@@ -353,24 +871,86 @@
       "catalog_name": "MoonshotAI: Kimi K3",
       "catalog_status": "available",
       "recommendation_status": "active-focused-security-only",
-      "input_usd_per_m": 3.0,
-      "output_usd_per_m": 15.0,
+      "input_usd_per_m": 3,
+      "output_usd_per_m": 15,
       "cache_read_usd_per_m": 0.3,
       "context_tokens": 1048576,
       "top_provider_context_tokens": 1048576,
       "top_provider_max_completion_tokens": null,
       "per_request_limits": null,
-      "input_modalities": ["text", "image", "video"],
+      "input_modalities": [
+        "text",
+        "image",
+        "video"
+      ],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
       "supports_structured_outputs": true,
       "quality_rank": 97,
-      "benchmark_evidence": {"source": "artificial-analysis", "source_version": "v4.1.1", "exact_variant": "Kimi K3 (max)", "intelligence": 60.0, "observed_on": "2026-08-12", "status": "retained-prior-comparable-evidence"},
+      "benchmark_evidence": {
+        "source": "artificial-analysis",
+        "source_version": "v4.1.1",
+        "exact_variant": "Kimi K3 (max)",
+        "intelligence": 60.0,
+        "observed_on": "2026-08-12",
+        "status": "retained-prior-comparable-evidence"
+      },
       "local_evidence": "Recent Baseplate review: 5 attempts, about $1.334, with useful security evidence but excessive cost for routine review.",
       "role": "Focused applicable security analysis only; never ordinary bulk, second-perspective, documentation, test, pattern, simplicity, or implementation routing.",
-      "snapshot_date": "2026-08-17",
-      "sources": ["https://openrouter.ai/moonshotai/kimi-k3", "https://artificialanalysis.ai/models/kimi-k3"]
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/moonshotai/kimi-k3",
+        "https://artificialanalysis.ai/models/kimi-k3"
+      ],
+      "canonical_slug": "moonshotai/kimi-k3-20260715",
+      "cache_write_usd_per_m": null,
+      "web_search_usd_per_request": null,
+      "top_provider_is_moderated": false,
+      "pricing_overrides": null,
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "frequency_penalty",
+        "include_reasoning",
+        "logit_bias",
+        "logprobs",
+        "max_tokens",
+        "min_p",
+        "presence_penalty",
+        "reasoning",
+        "reasoning_effort",
+        "repetition_penalty",
+        "response_format",
+        "seed",
+        "stop",
+        "structured_outputs",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_logprobs",
+        "top_p"
+      ],
+      "reasoning": {
+        "mandatory": false,
+        "default_enabled": true,
+        "supported_efforts": [
+          "max",
+          "high",
+          "low"
+        ],
+        "default_effort": "max"
+      },
+      "default_parameters": {
+        "temperature": null,
+        "top_p": 0.95,
+        "top_k": null,
+        "frequency_penalty": null,
+        "presence_penalty": null,
+        "repetition_penalty": null
+      }
     },
     {
       "slug": "openai/gpt-5.6-luna",
@@ -378,18 +958,28 @@
       "catalog_name": "OpenAI: GPT-5.6 Luna",
       "catalog_status": "available",
       "recommendation_status": "active-economical-mechanical-fallback",
-      "input_usd_per_m": 0.1,
-      "output_usd_per_m": 0.6,
-      "cache_read_usd_per_m": 0.01,
-      "cache_write_usd_per_m": 0.125,
+      "input_usd_per_m": 0.2,
+      "output_usd_per_m": 1.2,
+      "cache_read_usd_per_m": 0.02,
+      "cache_write_usd_per_m": 0.25,
       "context_tokens": 1050000,
       "top_provider_context_tokens": 1050000,
       "top_provider_max_completion_tokens": 128000,
       "per_request_limits": null,
       "pricing_overrides": [
-        {"min_prompt_tokens": 272000, "input_usd_per_m": 0.2, "output_usd_per_m": 0.9, "cache_read_usd_per_m": 0.02, "cache_write_usd_per_m": 0.25}
+        {
+          "min_prompt_tokens": 272000,
+          "prompt": 0.4,
+          "completion": 1.8,
+          "input_cache_read": 0.04,
+          "input_cache_write": 0.5
+        }
       ],
-      "input_modalities": ["text", "image", "file"],
+      "input_modalities": [
+        "file",
+        "image",
+        "text"
+      ],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
@@ -398,8 +988,50 @@
       "benchmark_evidence": null,
       "local_evidence": "Recent Baseplate review: 5 attempts, about $0.019; economical but no longer primary for all routine reviewers.",
       "role": "Economical mechanical fallback for routine documentation and test-coverage review after DeepSeek Flash.",
-      "snapshot_date": "2026-08-17",
-      "sources": ["https://openrouter.ai/openai/gpt-5.6-luna", "https://developers.openai.com/api/docs/models/gpt-5.6-luna"]
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/openai/gpt-5.6-luna",
+        "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
+      ],
+      "canonical_slug": "openai/gpt-5.6-luna-20260709",
+      "web_search_usd_per_request": 0.01,
+      "top_provider_is_moderated": true,
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "include_reasoning",
+        "max_completion_tokens",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "response_format",
+        "seed",
+        "structured_outputs",
+        "tool_choice",
+        "tools"
+      ],
+      "reasoning": {
+        "mandatory": false,
+        "default_enabled": true,
+        "supported_efforts": [
+          "max",
+          "xhigh",
+          "high",
+          "medium",
+          "low",
+          "none"
+        ],
+        "default_effort": "medium"
+      },
+      "default_parameters": {
+        "temperature": null,
+        "top_p": null,
+        "top_k": null,
+        "frequency_penalty": null,
+        "presence_penalty": null,
+        "repetition_penalty": null
+      }
     },
     {
       "slug": "openai/gpt-5.6-terra",
@@ -407,18 +1039,28 @@
       "catalog_name": "OpenAI: GPT-5.6 Terra",
       "catalog_status": "available",
       "recommendation_status": "catalogued-not-routed",
-      "input_usd_per_m": 1.0,
-      "output_usd_per_m": 6.0,
-      "cache_read_usd_per_m": 0.1,
-      "cache_write_usd_per_m": 1.25,
+      "input_usd_per_m": 2,
+      "output_usd_per_m": 12,
+      "cache_read_usd_per_m": 0.2,
+      "cache_write_usd_per_m": 2.5,
       "context_tokens": 1050000,
       "top_provider_context_tokens": 1050000,
       "top_provider_max_completion_tokens": 128000,
       "per_request_limits": null,
       "pricing_overrides": [
-        {"min_prompt_tokens": 272000, "input_usd_per_m": 2.0, "output_usd_per_m": 9.0, "cache_read_usd_per_m": 0.2, "cache_write_usd_per_m": 2.5}
+        {
+          "min_prompt_tokens": 272000,
+          "prompt": 4,
+          "completion": 18,
+          "input_cache_read": 0.4,
+          "input_cache_write": 5
+        }
       ],
-      "input_modalities": ["text", "image", "file"],
+      "input_modalities": [
+        "file",
+        "image",
+        "text"
+      ],
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
@@ -427,11 +1069,125 @@
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
       "role": "Catalogued explicit-choice model only; absent from default direct, Pipeline, and dm-review ladders.",
-      "snapshot_date": "2026-08-17",
-      "sources": ["https://openrouter.ai/openai/gpt-5.6-terra", "https://developers.openai.com/api/docs/models/gpt-5.6-terra"]
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/openai/gpt-5.6-terra",
+        "https://developers.openai.com/api/docs/models/gpt-5.6-terra"
+      ],
+      "canonical_slug": "openai/gpt-5.6-terra-20260709",
+      "web_search_usd_per_request": 0.01,
+      "top_provider_is_moderated": true,
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "include_reasoning",
+        "max_completion_tokens",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "response_format",
+        "seed",
+        "structured_outputs",
+        "tool_choice",
+        "tools"
+      ],
+      "reasoning": {
+        "mandatory": false,
+        "default_enabled": true,
+        "supported_efforts": [
+          "max",
+          "xhigh",
+          "high",
+          "medium",
+          "low",
+          "none"
+        ],
+        "default_effort": "medium"
+      },
+      "default_parameters": {
+        "temperature": null,
+        "top_p": null,
+        "top_k": null,
+        "frequency_penalty": null,
+        "presence_penalty": null,
+        "repetition_penalty": null
+      }
+    },
+    {
+      "slug": "z-ai/glm-5.3",
+      "canonical_slug": "z-ai/glm-5.3-20260816",
+      "name": "GLM 5.3",
+      "catalog_name": "Z.ai: GLM 5.3",
+      "catalog_status": "available",
+      "recommendation_status": "catalogued-not-routed",
+      "input_usd_per_m": 1.4,
+      "output_usd_per_m": 4.4,
+      "cache_read_usd_per_m": 0.26,
+      "cache_write_usd_per_m": null,
+      "web_search_usd_per_request": null,
+      "context_tokens": 1048576,
+      "top_provider_context_tokens": 1048576,
+      "top_provider_max_completion_tokens": 131072,
+      "top_provider_is_moderated": false,
+      "per_request_limits": null,
+      "pricing_overrides": null,
+      "input_modalities": [
+        "text"
+      ],
+      "output_modalities": [
+        "text"
+      ],
+      "supported_parameters": [
+        "include_reasoning",
+        "max_tokens",
+        "reasoning",
+        "reasoning_effort",
+        "response_format",
+        "temperature",
+        "tool_choice",
+        "tools",
+        "top_k",
+        "top_p"
+      ],
+      "reasoning": {
+        "mandatory": true,
+        "default_enabled": true,
+        "supported_efforts": [
+          "max",
+          "high",
+          "low"
+        ],
+        "default_effort": "max"
+      },
+      "default_parameters": {
+        "temperature": 1,
+        "top_p": 0.95
+      },
+      "supports_tools": true,
+      "supports_reasoning": true,
+      "supports_reasoning_effort": true,
+      "supports_structured_outputs": false,
+      "quality_rank": null,
+      "benchmark_evidence": {
+        "source": "OpenRouter catalog snapshot 2026-08-21T092022+0800",
+        "exact_variant": "z-ai/glm-5.3-20260816",
+        "catalog_reported_values": {
+          "artificial_analysis": {
+            "intelligence_index": 59.5,
+            "coding_index": 74.8,
+            "agentic_index": 59.1
+          }
+        },
+        "status": "catalog-reported benchmark values and vendor claims are uncorroborated; not routing authority"
+      },
+      "local_evidence": "No live canary request was sent because no configured OpenRouter credential was available in this worktree session.",
+      "role": "Catalogued candidate only; mandatory reasoning with default max is recorded, but GLM 5.3 has no default role and is intentionally absent from every active Pipeline and dm-review ladder.",
+      "snapshot_date": "2026-08-21",
+      "sources": [
+        "https://openrouter.ai/api/v1/models"
+      ]
     }
   ],
-  "excluded_catalog_candidates": {
-    "glm-5.3": "No matching OpenRouter catalog slug existed at 2026-08-17T00:26:07Z; no executable slug was added."
-  }
+  "catalog_snapshot": "/home/ned/.local/state/openrouter-model-pulse/catalog/models-2026-08-21T092022+0800.json"
 }

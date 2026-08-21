@@ -69,7 +69,7 @@ wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/ope
 boundary="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-boundary.sh"
 security_policy="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json"
 model_selection="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-selection.md"
-matrix_refresh_receipt="$REPO_ROOT/docs/openrouter-model-matrix-refreshes/2026-08-17.md"
+matrix_refresh_receipt="$REPO_ROOT/docs/openrouter-model-matrix-refreshes/2026-08-21.md"
 orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md"
 
 any_failed=0
@@ -1125,24 +1125,28 @@ check_routing_policy_slugs() {
 
 check_active_routing_semantics() {
   local harness="$REPO_ROOT/plugins/pipeline/references/harness-profile.json"
-  local required='["deepseek/deepseek-v4-flash-0731","deepseek/deepseek-v4-pro-0813","qwen/qwen3.8-max","qwen/qwen3.8-2.4t-a95b","qwen/qwen3.8-27b","qwen/qwen3.7-flash","x-ai/grok-4.6","google/gemini-3.7-flash","meta/muse-spark-1.2","z-ai/glm-5.2","moonshotai/kimi-k3","openai/gpt-5.6-luna","openai/gpt-5.6-terra"]'
+  local required='["deepseek/deepseek-v4-flash-0731","deepseek/deepseek-v4-pro-0813","qwen/qwen3.8-max","qwen/qwen3.8-2.4t-a95b","qwen/qwen3.8-27b","qwen/qwen3.7-flash","x-ai/grok-4.6","google/gemini-3.7-flash","meta/muse-spark-1.2","z-ai/glm-5.2","z-ai/glm-5.3","moonshotai/kimi-k3","openai/gpt-5.6-luna","openai/gpt-5.6-terra"]'
 
   if jq -e --argjson required "$required" '
     ([.models[].slug] | sort) == ($required | sort)
     and ([.models[].slug | select(test("^[^/]+/[^/]+$") | not)] | length == 0)
     and ([.models[].slug | select(test("(^|[-_/])latest($|[-_/])"; "i"))] | length == 0)
-    and ([.models[] | select(.slug == "deepseek/deepseek-v4-pro-0813" or .slug == "qwen/qwen3.7-flash" or .slug == "x-ai/grok-4.6" or .slug == "openai/gpt-5.6-luna" or .slug == "openai/gpt-5.6-terra")
-          | (.pricing_overrides | type == "array" and length > 0)] | all)
+    and ([.models[] | (.canonical_slug | type == "string" and test("^[^/]+/[^/]+$") and (test("(^|[-_/])latest($|[-_/])"; "i") | not))] | all)
+    and ([.models[] | (.supported_parameters | type == "array") and (.reasoning | type == "object" or .reasoning == null) and (.top_provider_is_moderated | type == "boolean")] | all)
+    and ([.models[] | select(.slug == "deepseek/deepseek-v4-pro-0813") | .canonical_slug == "deepseek/deepseek-v4-pro-20260813" and .input_usd_per_m == 1.188 and .output_usd_per_m == 3.564 and .cache_read_usd_per_m == 0.0396 and .top_provider_max_completion_tokens == null and .pricing_overrides == null] | all)
+    and ([.models[] | select(.slug == "openai/gpt-5.6-luna") | .input_usd_per_m == 0.2 and .output_usd_per_m == 1.2 and .cache_read_usd_per_m == 0.02 and .cache_write_usd_per_m == 0.25] | all)
+    and ([.models[] | select(.slug == "openai/gpt-5.6-terra") | .input_usd_per_m == 2 and .output_usd_per_m == 12 and .cache_read_usd_per_m == 0.2 and .cache_write_usd_per_m == 2.5] | all)
+    and ([.models[] | select(.slug == "z-ai/glm-5.3") | .canonical_slug == "z-ai/glm-5.3-20260816" and .recommendation_status == "catalogued-not-routed" and .reasoning == {"mandatory":true,"default_enabled":true,"supported_efforts":["max","high","low"],"default_effort":"max"} and .default_parameters == {"temperature":1,"top_p":0.95} and .top_provider_max_completion_tokens == 131072 and .top_provider_is_moderated == false and .cache_write_usd_per_m == null and .pricing_overrides == null] | all)
     and ([.models[].per_request_limits] | all(. == null))
   ' "$model_matrix" >/dev/null; then
-    pass "matrix contains the exact refreshed versioned candidate set and catalog price overrides"
+    pass "matrix contains the exact versioned catalog candidates, identities, limits, pricing, parameters, and explicit missing values"
   else
-    fail "matrix must contain the refreshed versioned candidates, overrides, and per-request limits"
+    fail "matrix must contain the refreshed versioned candidates, catalog fields, and explicit missing values"
     any_failed=1
   fi
 
-  if jq -e '[.models[] | select(.slug == "qwen/qwen3.8-2.4t-a95b") | .input_modalities] == [["text","image","video"]]' "$model_matrix" >/dev/null &&
-     grep -Fq '| `qwen/qwen3.8-2.4t-a95b` | $2 / $6 | $0.25 / — | 1,048,576 / 1,000,000 | 262,144 | text/image/video input; tools, reasoning, effort, structured output |' "$matrix_refresh_receipt"; then
+  if jq -e '[.models[] | select(.slug == "qwen/qwen3.8-2.4t-a95b") | .input_modalities] == [["text"]]' "$model_matrix" >/dev/null &&
+     grep -Fq '| `qwen/qwen3.8-2.4t-a95b` | `qwen/qwen3.8-2.4t-a95b-20260812` | $2 / $6 / $0.25 / $unavailable | 1048576 / 1000000 / 262144 | false |' "$matrix_refresh_receipt"; then
     pass "Qwen 3.8 2.4T matrix modalities match the catalog refresh receipt"
   else
     fail "Qwen 3.8 2.4T matrix modalities must match the catalog refresh receipt"
@@ -1189,10 +1193,11 @@ check_active_routing_semantics() {
   ' "$routing_policy" >/dev/null &&
      jq -e '
        ([.hosts[].roles[] | select(.kind == "wrapper" or .kind == "openrouter_exec") | .models[]]
-        | map(select(. == "z-ai/glm-5.2" or . == "moonshotai/kimi-k3")) | length == 0)
-       and (([.hosts[].roles | {openrouter_exec:.openrouter_exec.models, frontier_api:.frontier_api.models, cheap_api:.cheap_api.models, bulk_api:.bulk_api.models}] | unique) | length == 1)
+        | map(select(. == "z-ai/glm-5.2" or . == "z-ai/glm-5.3" or . == "moonshotai/kimi-k3")) | length == 0)
+       and ([.hosts[].roles | has("bulk_api")] | any | not)
+       and (([.hosts[].roles | {openrouter_exec:.openrouter_exec.models, frontier_api:.frontier_api.models, cheap_api:.cheap_api.models}] | unique) | length == 1)
      ' "$harness" >/dev/null; then
-    pass "dm-review roles and host ladders enforce DeepSeek/Qwen reachability and Kimi/GLM isolation"
+    pass "dm-review roles and reachable host ladders enforce DeepSeek/Qwen reachability and Kimi/GLM isolation"
   else
     fail "active routing violates role reachability, Kimi/GLM isolation, or host parity"
     any_failed=1
