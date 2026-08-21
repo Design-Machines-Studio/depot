@@ -662,11 +662,11 @@ require_text "$efficiency_plan" 'Depot trusted baseline is the current `main` br
 require_text "$efficiency_plan" 'Grok 4.6 handles independent review escalation, and GLM-5.2 remains outside active routing.' "efficiency plan retains the enforced Grok and GLM routing doctrine"
 require_absent "$efficiency_plan" 'Grok 4.5' "efficiency plan removes the retired Grok route"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md" 'model=`deepseek/deepseek-v4-pro-0813`, agent=`pattern-recognition-specialist`' "dm-review contribution example uses the current pattern-review primary"
-if [ "$(grep -Fc -- '--minimum-version 1.15.0' "$dm_review_dispatch")" -ge 1 ] &&
+if [ "$(grep -Fc -- '--minimum-version 1.17.0' "$dm_review_dispatch")" -ge 1 ] &&
    ! grep -Fq -- '--minimum-version 1.14.2' "$dm_review_dispatch"; then
-  printf "  OK    dm-review resolves only OpenRouter bundles compatible with the 1.15.0 route contract\n"
+  printf "  OK    dm-review resolves only OpenRouter bundles compatible with the 1.17.0 route contract\n"
 else
-  printf "  FAIL  dm-review resolves only OpenRouter bundles compatible with the 1.15.0 route contract\n"
+  printf "  FAIL  dm-review resolves only OpenRouter bundles compatible with the 1.17.0 route contract\n"
   failures=1
 fi
 require_absent "$cascade" 'OPENROUTER_PAYLOAD_AUTHORIZATION' "pipeline cascade does not trust environment disclosure authority"

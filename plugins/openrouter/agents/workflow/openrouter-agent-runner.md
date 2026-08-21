@@ -352,7 +352,12 @@ sys.stdout.write(resolved)
 PY
 ) || { echo "ERROR: reference resolution failed before external dispatch" >&2; exit 2; }
 
-OUTPUT_CONTRACT=$(cat "$REVIEWER_OUTPUT_CONTRACT")
+CONTRACT_SENTINEL='__DM_REVIEW_OUTPUT_CONTRACT_SENTINEL__'
+OUTPUT_CONTRACT=$(cat "$REVIEWER_OUTPUT_CONTRACT"; printf '%s' "$CONTRACT_SENTINEL")
+case "$OUTPUT_CONTRACT" in
+  *"$CONTRACT_SENTINEL") OUTPUT_CONTRACT="${OUTPUT_CONTRACT%"$CONTRACT_SENTINEL"}" ;;
+  *) echo "ERROR: canonical reviewer output contract read was incomplete" >&2; exit 2 ;;
+esac
 [ -n "$OUTPUT_CONTRACT" ] || { echo "ERROR: canonical reviewer output contract is empty" >&2; exit 2; }
 case "$OUTPUT_CONTRACT" in *'${CLAUDE_SKILL_DIR}'*)
   echo "ERROR: canonical reviewer output contract contains an unresolved reference" >&2; exit 2 ;;

@@ -79,7 +79,7 @@ chmod +x "$REFS/openrouter-wrapper.sh"
     'USER_PROMPT="Review this harmless fixture."' \
     'SECURITY_POLICY_RESOLVED="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"'
   printf 'REVIEWER_OUTPUT_CONTRACT=%q\n' "$CONTRACT"
-  sed -n '/^OUTPUT_CONTRACT=/,/^CONTRACT_HEADING=/p' "$SOURCE"
+  sed -n '/^CONTRACT_SENTINEL=/,/^CONTRACT_HEADING=/p' "$SOURCE"
   sed -n '/^case "\$TARGET_BODY" in/,/^esac$/p' "$SOURCE"
   sed -n '/^TARGET_BODY="${TARGET_BODY%/,/^esac$/p' "$SOURCE"
   sed -n '/^WRAPPER_PATH=/,/^EXIT_CODE=\$?/p' "$SOURCE"
@@ -103,6 +103,9 @@ cmp "$FIXTURE/screened-digests" "$FIXTURE/wrapper-digests"
 captured_system="$FIXTURE/captured-system"
 grep -Fqx '# Canonical Reviewer Output Contract' "$captured_system"
 [ "$(grep -Fc '# Canonical Reviewer Output Contract' "$captured_system")" = 1 ]
+contract_bytes="$(wc -c < "$CONTRACT" | tr -d ' ')"
+tail -c "$contract_bytes" "$captured_system" > "$FIXTURE/captured-contract"
+cmp "$CONTRACT" "$FIXTURE/captured-contract"
 grep -Fq 'Review documentation consistency.' "$captured_system"
 ! grep -Fq '### Approved' "$captured_system"
 ! grep -Fq 'if a severity tier is empty, say so explicitly' "$captured_system"
