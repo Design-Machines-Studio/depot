@@ -61,7 +61,10 @@ can be assigned an API-equivalent planning cost.
 ## Active role hierarchy
 
 - Complex product logic, served UI, integration, browser-dependent work,
-  sensitive work, and required live-tool work remain Codex-first.
+  secret-bearing mutation, live authority or credential operations, and work
+  requiring native repository tools remain Codex-first. Ordinary read-only
+  review of non-secret auth, security, deployment, `.env`, and
+  credential-handling code remains OpenRouter-eligible.
 - Bounded Pipeline execution starts with DeepSeek V4 Flash 0731 and escalates
   to Grok 4.6. Output still must pass the exact allowlist and unified-diff
   contract before native verification.

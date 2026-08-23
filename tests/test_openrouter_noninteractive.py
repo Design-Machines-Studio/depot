@@ -23,12 +23,32 @@ KERNEL = REPO / "plugins/workflow-kernel/skills/workflow-kernel/references/workf
 BOUNDARY = OPENROUTER / "skills/openrouter-delegate/references/delegation-boundary.sh"
 POLICY = OPENROUTER / "skills/openrouter-delegate/references/delegation-security-policy.json"
 WRAPPER = OPENROUTER / "skills/openrouter-delegate/references/openrouter-wrapper.sh"
+RUNNER = OPENROUTER / "agents/workflow/openrouter-agent-runner.md"
+
+
+def runner_shell_block(start: str, end: str) -> str:
+    """Extract one executable shell block from the canonical runner source."""
+    lines = RUNNER.read_text().splitlines()
+    start_index = next(index for index, line in enumerate(lines) if line == start)
+    end_index = next(
+        index for index in range(start_index, len(lines)) if lines[index] == end
+    )
+    return "\n".join(lines[start_index:end_index + 1])
 
 PR_677_SAFE_SHAPES = """\
 secret_access_key="${UPDATE_R2_SECRET_ACCESS_KEY:-}"
 UPDATE_R2_SECRET_ACCESS_KEY=proof-secret-not-for-proof
 AWS_SECRET_ACCESS_KEY=aws-secret-not-for-proof
 CI_SECRET="${{ secrets.UPDATE_R2_SECRET_ACCESS_KEY }}"
+"""
+
+PR_719_HISTORICAL_SENTINEL_DIFF = """\
+diff --git a/tests/integration/compose-release-command.sh b/tests/integration/compose-release-command.sh
+--- a/tests/integration/compose-release-command.sh
++++ b/tests/integration/compose-release-command.sh
+@@ -1 +1 @@
+-GITHUB_TOKEN=old-fixture
++GITHUB_TOKEN=ghp_test-secret-not-for-proof
 """
 
 
@@ -51,12 +71,17 @@ class DisclosureBoundaryTest(unittest.TestCase):
         artifact.write_text(content)
         return self.boundary("artifact-delegation", "--content-file", str(artifact))
 
-    def review_diff(self, content: str) -> tuple[subprocess.CompletedProcess[str], Path, Path]:
+    def review_diff(
+        self, content: str, changed_paths: tuple[str, ...] = (
+            "deploy/release.sh", "docs/notes.md",
+        ),
+    ) -> tuple[subprocess.CompletedProcess[str], Path, Path, Path]:
         changed = self.root / "changed.txt"
         source = self.root / "review.diff"
         output = self.root / "filtered.diff"
         declined = self.root / "declined.txt"
-        changed.write_text("deploy/release.sh\ndocs/notes.md\n")
+        decision = self.root / "decision.json"
+        changed.write_text("".join(f"{path}\n" for path in changed_paths))
         source.write_text(content)
         result = self.boundary(
             "mechanical-review",
@@ -64,8 +89,9 @@ class DisclosureBoundaryTest(unittest.TestCase):
             "--diff-file", str(source),
             "--output-diff", str(output),
             "--output-declined-paths", str(declined),
+            "--output-decision", str(decision),
         )
-        return result, output, declined
+        return result, output, declined, decision
 
     def test_pr_677_safe_shapes_pass_artifact_delegation(self) -> None:
         """Assembly Baseplate PR #677 at bf56524 must remain usable unchanged."""
@@ -82,10 +108,17 @@ class DisclosureBoundaryTest(unittest.TestCase):
             "--- a/docs/notes.md\n+++ b/docs/notes.md\n"
             "@@ -1 +1 @@\n-before\n+after\n"
         )
-        result, output, declined = self.review_diff(diff)
+        result, output, declined, decision = self.review_diff(diff)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(output.read_text(), diff)
         self.assertEqual(declined.read_bytes(), b"")
+        self.assertEqual(json.loads(decision.read_text()), {
+            "schemaVersion": 1,
+            "decision": "eligible",
+            "reason": "none",
+            "eligibleSectionCount": 2,
+            "declinedSectionCount": 0,
+        })
 
     def test_shell_parameter_and_ci_references_are_not_values(self) -> None:
         references = """\
@@ -106,15 +139,119 @@ AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
         accepted = self.artifact(
             "UPDATE_R2_SECRET_ACCESS_KEY=proof-secret-not-for-proof\n"
             "AWS_SECRET_ACCESS_KEY=aws-secret-not-for-proof\n"
+            "TOKEN=test-secret-not-for-proof\n"
+            "GITHUB_TOKEN=ghp_test-secret-not-for-proof\n"
+            "GITHUB_TOKEN=ghp_test-access-not-for-proof\n"
+            "OPENROUTER_API_KEY=sk-or-v1-test-secret-not-for-proof\n"
         )
         self.assertEqual(accepted.returncode, 0, accepted.stderr)
         for content in (
             "AWS_SECRET_ACCESS_KEY=proof-secret-for-production-1234567890\n",
             "OPENROUTER_API_KEY=sk-or-v1-abcdefghijklmnop-not-for-proof\n",
+            "GITHUB_TOKEN=ghp_test-anything-not-for-proof\n",
+            "TOKEN=test-A7b9C2d4E6f8G1h3J5k7\n",
         ):
             with self.subTest(content=content):
                 rejected = self.artifact(content)
                 self.assertEqual(rejected.returncode, 3)
+
+    def test_historical_pr_719_provider_prefixed_fixture_passes_unchanged(self) -> None:
+        result, output, declined, decision = self.review_diff(
+            PR_719_HISTORICAL_SENTINEL_DIFF,
+            ("tests/integration/compose-release-command.sh",),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output.read_text(), PR_719_HISTORICAL_SENTINEL_DIFF)
+        self.assertEqual(declined.read_bytes(), b"")
+        self.assertEqual(json.loads(decision.read_text())["decision"], "eligible")
+
+    def test_realistic_provider_credential_shapes_remain_refused(self) -> None:
+        cases = (
+            "GITHUB_TOKEN=ghp_0123456789abcdefABCDEF\n",
+            "OPENROUTER_API_KEY=sk-or-v1-0123456789abcdefABCDEF\n",
+            "ANTHROPIC_API_KEY=sk-ant-0123456789abcdefABCDEF\n",
+            "AWS_ACCESS_KEY_ID=AKIA0123456789ABCDEF\n",
+            "SLACK_TOKEN=xoxb-0123456789abcdefABCDEF\n",
+            "GOOGLE_API_KEY=AIza0123456789abcdefABCDEF\n",
+            "NPM_TOKEN=npm_0123456789abcdefABCDEF\n",
+            "GITLAB_TOKEN=glpat-0123456789abcdefABCDEF\n",
+            "PAYMENT_KEY=sk_live_0123456789abcdefABCDEF\n",
+        )
+        for content in cases:
+            with self.subTest(prefix=content.split("=", 1)[0]):
+                result = self.artifact(content)
+                self.assertEqual(result.returncode, 3)
+                self.assertIn("high-confidence-credential", result.stderr)
+
+    def test_security_looking_paths_with_harmless_code_remain_eligible(self) -> None:
+        paths = (
+            ".env.example",
+            "internal/auth/session.go",
+            "deploy/release.sh",
+            "internal/http/middleware/security.go",
+        )
+        diff = "".join(
+            f"diff --git a/{path} b/{path}\n"
+            f"--- a/{path}\n+++ b/{path}\n"
+            "@@ -1 +1 @@\n-before\n+after\n"
+            for path in paths
+        )
+        result, output, declined, decision = self.review_diff(diff, paths)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output.read_text(), diff)
+        self.assertEqual(declined.read_bytes(), b"")
+        self.assertEqual(json.loads(decision.read_text())["eligibleSectionCount"], 4)
+
+    def test_mixed_review_emits_safe_section_and_only_held_path(self) -> None:
+        safe_path = "internal/auth/session.go"
+        held_path = "tests/integration/compose-release-command.sh"
+        safe_section = (
+            f"diff --git a/{safe_path} b/{safe_path}\n"
+            f"--- a/{safe_path}\n+++ b/{safe_path}\n"
+            "@@ -1 +1 @@\n-before\n+after\n"
+        )
+        held_section = (
+            f"diff --git a/{held_path} b/{held_path}\n"
+            f"--- a/{held_path}\n+++ b/{held_path}\n"
+            "@@ -1 +1 @@\n-before\n"
+            "+GITHUB_TOKEN=ghp_0123456789abcdefABCDEF\n"
+        )
+        result, output, declined, decision = self.review_diff(
+            safe_section + held_section, (safe_path, held_path),
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output.read_text(), safe_section)
+        self.assertEqual(declined.read_bytes(), held_path.encode() + b"\0")
+        self.assertEqual(json.loads(decision.read_text()), {
+            "schemaVersion": 1,
+            "decision": "partial",
+            "reason": "high-confidence-credential",
+            "eligibleSectionCount": 1,
+            "declinedSectionCount": 1,
+        })
+
+    def test_all_refused_review_sections_fail_closed_with_reason(self) -> None:
+        held_path = "tests/integration/compose-release-command.sh"
+        diff = (
+            f"diff --git a/{held_path} b/{held_path}\n"
+            f"--- a/{held_path}\n+++ b/{held_path}\n"
+            "@@ -1 +1 @@\n-before\n"
+            "+GITHUB_TOKEN=ghp_0123456789abcdefABCDEF\n"
+        )
+        result, output, declined, decision = self.review_diff(diff, (held_path,))
+        self.assertEqual(result.returncode, 3)
+        self.assertFalse(output.exists())
+        self.assertFalse(declined.exists())
+        self.assertEqual(result.stderr.strip(), (
+            "delegation-boundary: disclosure-declined:high-confidence-credential"
+        ))
+        self.assertEqual(json.loads(decision.read_text()), {
+            "schemaVersion": 1,
+            "decision": "full-decline",
+            "reason": "high-confidence-credential",
+            "eligibleSectionCount": 0,
+            "declinedSectionCount": 1,
+        })
 
     def test_real_aws_secrets_remain_refused_in_assignment_shapes(self) -> None:
         secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
@@ -137,6 +274,10 @@ AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
                 "-----END PRIVATE KEY-----\n"
             ),
             "access-token": "Authorization: Bearer AbCdEfGhIjKlMnOpQrStUvWxYz012345\n",
+            "jwt": (
+                "TOKEN=eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJmaXh0dXJlIn0."
+                "c3ludGhldGljc2lnbmF0dXJl\n"
+            ),
             "authenticated-dsn": "DATABASE_URL=postgres://admin:correct-horse-battery@db.internal/app\n",
             "classified-private-data": "data_classification: regulated\n",
         }
@@ -144,7 +285,8 @@ AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
             with self.subTest(reason=reason):
                 result = self.artifact(content)
                 self.assertEqual(result.returncode, 3)
-                self.assertIn(reason, result.stderr)
+                expected_reason = "access-token" if reason == "jwt" else reason
+                self.assertIn(expected_reason, result.stderr)
 
 
 class FixtureHandler(http.server.BaseHTTPRequestHandler):
@@ -285,6 +427,68 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         result.receipt_path = receipt  # type: ignore[attr-defined]
         return result
 
+    def review_runner(
+        self, diff: str, changed_paths: tuple[str, ...],
+    ) -> tuple[subprocess.CompletedProcess[str], str, str]:
+        """Execute the runner's source blocks through the loopback provider."""
+        changed = self.root / "runner-changed.txt"
+        source = self.root / "runner.diff"
+        safe_copy = self.root / "runner-safe-copy.diff"
+        held_copy = self.root / "runner-held-copy"
+        script = self.root / "runner-harness.sh"
+        changed.write_text("".join(f"{path}\n" for path in changed_paths))
+        source.write_text(diff)
+        mechanical = runner_shell_block(
+            'BOUNDARY_HELPER="$(dirname "$SECURITY_POLICY_RESOLVED")/delegation-boundary.sh"',
+            'DECLINED_CHANGED_FILES=$(tr \'\\0\' \'\\n\' < "$BOUNDARY_DECLINED_PATHS")',
+        )
+        wrapper_dispatch = runner_shell_block(
+            'WRAPPER_PATH="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"',
+            'EXIT_CODE=$?',
+        )
+        script.write_text("\n".join((
+            "#!/usr/bin/env bash",
+            "set -euo pipefail",
+            'target_agent_name="doc-sync-reviewer"',
+            'target_model="z-ai/glm-5.2"',
+            'fallback_model=""',
+            'target_timeout="10"',
+            'review_run_id="runner-loopback-fixture"',
+            'diff_content="$(cat "$RUNNER_DIFF")"',
+            'changed_files="$(cat "$RUNNER_CHANGED")"',
+            'SECURITY_POLICY_RESOLVED="$RUNNER_POLICY"',
+            'OPENROUTER_ROOT="$RUNNER_OPENROUTER_ROOT"',
+            'TARGET_BODY="Review the eligible code sections."',
+            mechanical,
+            'cp "$BOUNDARY_FILTERED" "$RUNNER_SAFE_COPY"',
+            'cp "$BOUNDARY_DECLINED_PATHS" "$RUNNER_HELD_COPY"',
+            'USER_PROMPT="$(printf \'Review this diff:\\n%s\' "$FILTERED_DIFF")"',
+            wrapper_dispatch,
+            '[ "$EXIT_CODE" -eq 0 ]',
+            'if [ -n "$DECLINED_CHANGED_FILES" ]; then',
+            '  if [ "$DECLINED_SECTION_COUNT" = 1 ]; then section_label=section; else section_label=sections; fi',
+            '  printf \'OpenRouter reviewed %s eligible file sections; %s %s remained local.\\n\' "$ELIGIBLE_SECTION_COUNT" "$DECLINED_SECTION_COUNT" "$section_label"',
+            '  printf \'Closed reason: %s.\\n\' "$BOUNDARY_DECISION_REASON"',
+            '  printf \'Local coverage paths:\\n%s\\n\' "$DECLINED_CHANGED_FILES"',
+            'fi',
+            "",
+        )))
+        script.chmod(0o755)
+        result = subprocess.run(
+            [str(script)], cwd=REPO, text=True, capture_output=True,
+            env={
+                **self.env(),
+                "RUNNER_DIFF": str(source),
+                "RUNNER_CHANGED": str(changed),
+                "RUNNER_POLICY": str(POLICY),
+                "RUNNER_OPENROUTER_ROOT": str(OPENROUTER),
+                "RUNNER_SAFE_COPY": str(safe_copy),
+                "RUNNER_HELD_COPY": str(held_copy),
+            },
+        )
+        safe_diff = safe_copy.read_text() if safe_copy.exists() else ""
+        return result, result.stdout, safe_diff
+
     def transport(self, prompt: str) -> subprocess.CompletedProcess[str]:
         """Exercise only the generic wrapper's request/SSE transport boundary."""
         receipt = self.root / "transport-receipt.json"
@@ -310,6 +514,65 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         serialized = json.dumps(receipt).lower()
         for forbidden in ("review harmless", "fixture response", "api_key", "secret"):
             self.assertNotIn(forbidden, serialized)
+
+    def test_review_runner_contacts_loopback_once_for_safe_remainder(self) -> None:
+        safe_path = "internal/auth/session.go"
+        held_path = "tests/integration/compose-release-command.sh"
+        safe_section = (
+            f"diff --git a/{safe_path} b/{safe_path}\n"
+            f"--- a/{safe_path}\n+++ b/{safe_path}\n"
+            "@@ -1 +1 @@\n-before\n+SAFE_REMAINDER_MARKER\n"
+        )
+        held_section = (
+            f"diff --git a/{held_path} b/{held_path}\n"
+            f"--- a/{held_path}\n+++ b/{held_path}\n"
+            "@@ -1 +1 @@\n-before\n"
+            "+GITHUB_TOKEN=ghp_0123456789abcdefABCDEF\n"
+        )
+
+        boundary, operator, safe_diff = self.review_runner(
+            safe_section + held_section, (safe_path, held_path),
+        )
+
+        self.assertEqual(boundary.returncode, 0, boundary.stderr)
+        self.assertEqual(FixtureHandler.contacts, 1)
+        self.assertEqual(safe_diff, safe_section)
+        outbound = json.dumps(FixtureHandler.requests[0])
+        self.assertIn("SAFE_REMAINDER_MARKER", outbound)
+        self.assertNotIn("ghp_", outbound)
+        self.assertNotIn(held_path, outbound)
+        self.assertIn(
+            "OpenRouter reviewed 1 eligible file sections; 1 section remained local.",
+            operator,
+        )
+        self.assertIn(f"Local coverage paths:\n{held_path}", operator)
+        self.assertNotIn("No code was sent", operator)
+        self.assertNotIn("ghp_", operator)
+
+    def test_review_runner_full_decline_never_contacts_loopback(self) -> None:
+        held_path = "tests/integration/compose-release-command.sh"
+        held_section = (
+            f"diff --git a/{held_path} b/{held_path}\n"
+            f"--- a/{held_path}\n+++ b/{held_path}\n"
+            "@@ -1 +1 @@\n-before\n"
+            "+GITHUB_TOKEN=ghp_0123456789abcdefABCDEF\n"
+        )
+
+        boundary, operator, safe_diff = self.review_runner(
+            held_section, (held_path,),
+        )
+
+        self.assertEqual(boundary.returncode, 0, boundary.stderr)
+        self.assertEqual(FixtureHandler.contacts, 0)
+        self.assertEqual(safe_diff, "")
+        self.assertIn(
+            "OpenRouter dispatch declined (high-confidence-credential)", operator,
+        )
+        self.assertIn(
+            "Next action: run this lane locally on Codex.",
+            " ".join(operator.split()),
+        )
+        self.assertNotIn("ghp_", operator)
 
     def test_wrapper_transmits_complete_generated_payloads_at_historical_sizes(self) -> None:
         for prompt_bytes in (1024, 107 * 1024, 271 * 1024):

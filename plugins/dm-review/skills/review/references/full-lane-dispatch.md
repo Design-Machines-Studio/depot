@@ -23,7 +23,7 @@ if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; th
   OPENROUTER_ACTIVE_HOST_ARGS=()
   [ -n "$OPENROUTER_ACTIVE_HOST" ] && OPENROUTER_ACTIVE_HOST_ARGS=(--active-host "$OPENROUTER_ACTIVE_HOST")
   BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-    --minimum-version 1.17.0 "${OPENROUTER_ACTIVE_HOST_ARGS[@]}" \
+    --minimum-version 1.18.0 "${OPENROUTER_ACTIVE_HOST_ARGS[@]}" \
     --required-asset agents/workflow/openrouter-agent-runner.md \
     --required-asset agents/review/openrouter-bulk-analyst.md \
     --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -65,7 +65,7 @@ Launch ALL selected agents simultaneously using multiple Agent tool calls in a s
 ```
 Provider routing (OPENROUTER_AVAILABLE={true|false}, authorization={trusted-boundary|none}):
 - N analyses -> OpenRouter (Kimi security only; DeepSeek pattern/docs/tests; Qwen simplicity/bulk/ordinary second perspective)
-- N native coding agents -> Codex (architecture, visual/UI, unavailable-provider and sensitive-section coverage)
+- N native coding agents -> Codex (architecture, visual/UI, unavailable-provider and held-section coverage)
 - 1 required security sign-off -> resolved independent family (full diff)
 - 1 second perspective -> resolved independent family when enabled
 - N non-coding agents -> Claude when explicitly selected (for example voice/editorial)
@@ -118,9 +118,10 @@ than falling back to an implementer. With neither role selected, do not load it.
 
 **Authorization and failure handling:** Automated OpenRouter selection uses the
 configured-key `trusted-boundary` path from Phase 3. Missing or invalid
-credentials, unavailable provider/bundle, or an automatic disclosure decline
-applies Phase 4.5 lane-aware resolution without a prompt. Ordinary lanes may
-retry on Codex. The `security-auditor-codex-signoff` compatibility lane is the
+credentials, unavailable provider/bundle, or an automatic disclosure decision
+applies Phase 4.5 lane-aware resolution without a prompt. Ordinary lanes retry
+fully on Codex only after a full decline; a partial decision preserves the
+OpenRouter result and adds local coverage only for held paths. The `security-auditor-codex-signoff` compatibility lane is the
 exception: every retry and partial/full-decline completion must use a
 non-implementing family, and exhaustion is `REVIEW INCOMPLETE`. Do not mark the
 run clean until required independent work completes.
