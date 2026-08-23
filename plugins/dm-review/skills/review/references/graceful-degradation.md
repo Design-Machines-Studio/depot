@@ -30,14 +30,16 @@ Before classifying an agent failure as "Review Compromised" or "Safe to Skip," r
 | Lane | Failure signal | Resolution | Reported as |
 |---|---|---|---|
 | Independent-family security sign-off | Any provider failure, disclosure decline, or partial-coverage marker | Continue only through non-implementing families; otherwise REVIEW INCOMPLETE | Never same-family fallback completion |
-| OpenRouter ordinary lane | `### RUNNER FAILURE` or disclosure decline | Retry the same logical lane on Codex (Phase 4.5) | "Completed (fallback)" or classify below |
+| OpenRouter ordinary lane | `### RUNNER FAILURE` or full disclosure decline | Retry the same logical lane on Codex (Phase 4.5) | "Completed (fallback)" or classify below |
+| OpenRouter ordinary lane | Partial disclosure decision | Keep eligible-section completion; review only held paths locally | "Completed (partial local coverage)" or classify below |
 | Second perspective | `DM_REVIEW_SECOND_PERSPECTIVE=0`, legacy `DM_REVIEW_CODEX_PERSPECTIVE=0`, or no eligible non-implementing family completes | None -- lane is optional | Coverage Gaps: `second-perspective: skipped|unavailable` with family-resolution evidence |
 | Evidence (PR threads) | `gh pr view` returns no comments/reviews | Phase 1b source fallback | Header: `**Evidence source:** <source>` |
 | Codex-native coding agent | Errored or timed out | No Claude retry | Classify immediately below |
 
 Ordinary coding fallback moves between OpenRouter and Codex. The independent
-sign-off lane excludes the implementing family on every retry. Sensitive sections
-stay local; eligible sections may enter the distinct external security lane.
+sign-off lane excludes the implementing family on every retry. Exact sections
+with secret/private bytes stay local; every eligible section proceeds through
+the distinct external security lane even when another section is held.
 
 A skipped lane is a coverage gap, and a coverage gap is reported. Reporting "all agents completed" while the required independent sign-off lane never ran is a false clean.
 

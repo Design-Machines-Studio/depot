@@ -173,7 +173,7 @@ Resolve both family-independent roles subscription-first: an eligible non-implem
 
 Every `second-perspective` and independent-family security sign-off receipt records `implementer_family`, `reviewer_family`, and `resolution_reason`; mixed implementation records `mixed(<sorted families>)`. Equal implementing and reviewing families is invalid and leaves the lane incomplete.
 
-**External routing availability** is resolved in full mode by `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md` before Branch A dispatch: configured key (`OPENROUTER_API_KEY` or the strictly validated `OPENROUTER_API_KEY_FILE`) plus one coherent installed bundle. When available, eligible mechanical, bulk, and supplementary security lanes dispatch immediately; the runner materializes private outbound files, scans them once, and passes those same files to the wrapper. A missing/invalid key, unavailable bundle/provider, or automatic disclosure decline records the reason and retries the lane on Codex without asking the user. Broker state is not consulted.
+**External routing availability** is resolved in full mode by `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md` before Branch A dispatch: configured key (`OPENROUTER_API_KEY` or the strictly validated `OPENROUTER_API_KEY_FILE`) plus one coherent installed bundle. When available, eligible mechanical, bulk, and supplementary security lanes dispatch immediately; the runner materializes private outbound files, scans them once, and passes those same files to the wrapper. A missing/invalid key, unavailable bundle/provider, or full disclosure decline records the reason and retries the lane on Codex without asking the user. A partial decision keeps the OpenRouter result and runs local coverage only for held paths. Broker state is not consulted.
 
 #### Quick Mode
 
@@ -261,7 +261,7 @@ COUNCIL_BUNDLE_ROOT=""
 for PLUGIN in dm-review accessibility-compliance live-wires ghostwriter council; do
   case "$PLUGIN" in
     dm-review)
-      PLUGIN_MINIMUM_VERSION="1.68.0"
+      PLUGIN_MINIMUM_VERSION="1.69.0"
       REQUIRED_ASSETS=("${DM_REVIEW_REQUIRED_ASSETS[@]}")
       ;;
     accessibility-compliance)
@@ -362,7 +362,7 @@ If the change includes `.templ`, `.twig`, `.html`, or `.css`, load `${CLAUDE_SKI
 Before dispatching agents, apply `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
 1. **Diff size check:** >5000 lines -> truncate to file list + first 200 lines per file; note truncation in each agent's prompt. `openrouter-bulk-analyst` receives the full untruncated diff separately when active.
-2. **Content boundary:** Codex lanes receive the complete review diff. Each OpenRouter lane independently runs the shared mechanical content boundary and transmits only eligible file-diff sections. Path names alone never remove content from Codex review. A full disclosure decline returns the logical lane to Codex; a partial decline requires exact locally held-path completion before that lane is complete.
+2. **Content boundary:** Codex lanes receive the complete review diff. Each OpenRouter lane independently runs the shared mechanical content boundary and transmits every eligible file-diff section. Read-only review of non-secret auth, security, deployment, credential-handling, and `.env` code is eligible; paths and subject matter never decline disclosure. A full disclosure decline returns the logical lane to Codex; a partial decision keeps the completed OpenRouter review and requires local completion only for the held paths.
 3. **Per-agent token check:** Estimate ~2K system prompt + (diff lines × ~4 tokens) + ~4K output headroom. If >~80K tokens, drop the lowest-priority non-browser conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents and browser agents required by the verification profile are never dropped; if required browser input cannot fit safely, block with `human_help_required` and ask the user to narrow or restore the verification input.
 
 If any agents were dropped or input was modified, report before proceeding:
@@ -370,7 +370,8 @@ If any agents were dropped or input was modified, report before proceeding:
 ```
 Input guardrails applied:
 - Diff truncated from 8,200 to 5,000 lines (200 lines/file cap)
-- Stripped 2 sensitive files from non-security agents: .env, config/secrets.yml
+- OpenRouter reviewed 6 eligible file sections; 1 section remained local.
+- Local coverage path: tests/integration/compose-release-command.sh
 - Blocked required browser lane: human_help_required (token budget; user input needed)
 ```
 

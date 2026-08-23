@@ -129,7 +129,7 @@ ACTIVE_HOST=""
 resolve_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.17.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.18.0 --active-host "$ACTIVE_HOST" \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -140,7 +140,7 @@ resolve_bundle() {
       --required-asset skills/openrouter-delegate/references/prompt-templates.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.17.0 \
+      --minimum-version 1.18.0 \
       --required-asset agents/workflow/openrouter-agent-runner.md \
       --required-asset agents/review/openrouter-bulk-analyst.md \
       --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
@@ -174,11 +174,11 @@ esac
 resolve_dm_review_bundle() {
   if [ -n "$ACTIVE_HOST" ]; then
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin dm-review \
-      --minimum-version 1.68.0 --active-host "$ACTIVE_HOST" \
+      --minimum-version 1.69.0 --active-host "$ACTIVE_HOST" \
       --required-asset skills/review/references/reviewer-output-contract.md
   else
     "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin dm-review \
-      --minimum-version 1.68.0 \
+      --minimum-version 1.69.0 \
       --required-asset skills/review/references/reviewer-output-contract.md
   fi
 }
@@ -244,7 +244,7 @@ The body becomes the selected OpenRouter model's system prompt.
 
 **Third-party models may analyze security, but never replace the independent non-implementing-family security sign-off.** Run the installed `delegation-security-policy.json` in `mechanical-review` mode immediately before building the outgoing prompt. File names, security-looking directories, model nationality, and vendor jurisdiction do not classify content. The legacy `neverRouteToOpenRouter` path embargo and `set(canon) | set(configured)` hard-coded union MUST NOT be used.
 
-The executable helper is the authoritative gate shared with `openrouter-exec.sh`. It parses quoted Git headers, rejects headerless or mismatched diffs, verifies every path against the complete unfiltered `changed_files` list, checks physical containment, and scans each complete file-diff section—including additions, context, and removed lines—for actual credentials, private keys, authenticated DSNs, access/session tokens, and classified private values. Variable names, syntactically valid shell/CI source references, and unmistakable `not-for-proof` credential sentinels are safe; actual values remain refused. Safe sections remain eligible even when a different file section is declined. Exit 3 means no safe review remainder and routes the whole lane to Codex without reaching the wrapper. Do not manually shrink or rewrite an otherwise safe payload after a false positive; repair the shared boundary and preserve the original review input. Any other non-zero status is malformed or unverifiable input and is a fail-closed runner failure.
+The executable helper is the authoritative gate shared with `openrouter-exec.sh`. It parses quoted Git headers, rejects headerless or mismatched diffs, verifies every path against the complete unfiltered `changed_files` list, checks physical containment, and scans each complete file-diff section—including additions, context, and removed lines—for actual credentials, private keys, authenticated DSNs, access/session tokens, and classified private values. Variable names, syntactically valid shell/CI source references, and unmistakable `not-for-proof` credential sentinels—including explicit sentinels after a recognized provider prefix—are safe; actual values remain refused. Safe sections remain eligible even when a different file section is declined. Exit 3 means no safe review remainder and routes the whole lane to Codex without reaching the wrapper. Do not manually shrink or rewrite an otherwise safe payload after a false positive; repair the shared boundary and preserve the original review input. Any other non-zero status is malformed or unverifiable input and is a fail-closed runner failure.
 
 ```bash
 BOUNDARY_HELPER="$(dirname "$SECURITY_POLICY_RESOLVED")/delegation-boundary.sh"
@@ -254,7 +254,18 @@ BOUNDARY_CHANGED=$(mktemp)
 BOUNDARY_FILTERED=$(mktemp)
 BOUNDARY_PATHS=$(mktemp)
 BOUNDARY_DECLINED_PATHS=$(mktemp)
-trap 'rm -f "$BOUNDARY_DIFF" "$BOUNDARY_CHANGED" "$BOUNDARY_FILTERED" "$BOUNDARY_PATHS" "$BOUNDARY_DECLINED_PATHS" "${SYS_FILE:-/dev/null}" "${USER_FILE:-/dev/null}" "${REQUEST_ENVELOPE_FILE:-/dev/null}" "${WRAPPER_STDERR:-/dev/null}" "${WRAPPER_RECEIPT:-/dev/null}"' EXIT
+BOUNDARY_DECISION=$(mktemp)
+BOUNDARY_STDERR=$(mktemp)
+cleanup_runner_files() {
+  rm -f "$BOUNDARY_DIFF" "$BOUNDARY_CHANGED" "$BOUNDARY_FILTERED" \
+    "$BOUNDARY_PATHS" "$BOUNDARY_DECLINED_PATHS" "$BOUNDARY_DECISION" \
+    "$BOUNDARY_STDERR"
+  for optional_path in "${SYS_FILE:-}" "${USER_FILE:-}" \
+    "${WRAPPER_STDERR:-}" "${WRAPPER_RECEIPT:-}"; do
+    [ -z "$optional_path" ] || rm -f "$optional_path"
+  done
+}
+trap cleanup_runner_files EXIT
 printf '%s' "$diff_content" > "$BOUNDARY_DIFF"
 printf '%s\n' "$changed_files" > "$BOUNDARY_CHANGED"
 if "$BOUNDARY_HELPER" --mode mechanical-review \
@@ -263,30 +274,70 @@ if "$BOUNDARY_HELPER" --mode mechanical-review \
     --diff-file "$BOUNDARY_DIFF" \
     --output-diff "$BOUNDARY_FILTERED" \
     --output-paths "$BOUNDARY_PATHS" \
-    --output-declined-paths "$BOUNDARY_DECLINED_PATHS"; then
+    --output-declined-paths "$BOUNDARY_DECLINED_PATHS" \
+    --output-decision "$BOUNDARY_DECISION" 2>"$BOUNDARY_STDERR"; then
   :
 else
   BOUNDARY_RC=$?
   if [ "$BOUNDARY_RC" -eq 3 ]; then
+    BOUNDARY_DECLINE_REASON=$(jq -er '
+      select(
+        .schemaVersion == 1
+        and .decision == "full-decline"
+        and .eligibleSectionCount == 0
+        and (.declinedSectionCount | type == "number" and . > 0)
+        and (.reason == "high-confidence-credential"
+          or .reason == "private-key"
+          or .reason == "access-token"
+          or .reason == "authenticated-dsn"
+          or .reason == "classified-private-data"
+          or .reason == "multiple-disclosure-classes")
+      ) | .reason
+    ' "$BOUNDARY_DECISION") || {
+      echo "RUNNER FAILURE: invalid full-decline boundary decision" >&2
+      exit 2
+    }
     cat <<EOF
 ## ${target_agent_name} Review (via OpenRouter ${target_model})
 
 ### RUNNER DECLINED -- SENSITIVE CONTENT
-The shared boundary found actual disclosure risk in the mechanical-review
-payload. Route this chunk to the Codex-native reviewer instead; no diff
-content was sent to OpenRouter and the network wrapper was not reached.
+OpenRouter dispatch declined (${BOUNDARY_DECLINE_REASON}); no eligible file
+sections remained and the network wrapper was not reached. Next action: run
+this lane locally on Codex.
 EOF
     exit 0
   fi
   echo "RUNNER FAILURE: delegation boundary could not validate input" >&2
   exit 2
 fi
+BOUNDARY_DECISION_VALUES=$(jq -er '
+  select(
+    .schemaVersion == 1
+    and (.decision == "eligible" or .decision == "partial")
+    and (.eligibleSectionCount | type == "number" and . > 0)
+    and (.declinedSectionCount | type == "number" and . >= 0)
+    and (.reason == "none"
+      or .reason == "high-confidence-credential"
+      or .reason == "private-key"
+      or .reason == "access-token"
+      or .reason == "authenticated-dsn"
+      or .reason == "classified-private-data"
+      or .reason == "multiple-disclosure-classes")
+    and ((.decision == "eligible" and .declinedSectionCount == 0 and .reason == "none")
+      or (.decision == "partial" and .declinedSectionCount > 0 and .reason != "none"))
+  ) | [.decision, .reason, .eligibleSectionCount, .declinedSectionCount] | @tsv
+' "$BOUNDARY_DECISION") || {
+  echo "RUNNER FAILURE: invalid mechanical-review boundary decision" >&2
+  exit 2
+}
+IFS=$'\t' read -r BOUNDARY_DECISION_STATE BOUNDARY_DECISION_REASON \
+  ELIGIBLE_SECTION_COUNT DECLINED_SECTION_COUNT <<< "$BOUNDARY_DECISION_VALUES"
 FILTERED_DIFF=$(cat "$BOUNDARY_FILTERED")
 FILTERED_CHANGED_FILES=$(tr '\0' '\n' < "$BOUNDARY_PATHS")
 DECLINED_CHANGED_FILES=$(tr '\0' '\n' < "$BOUNDARY_DECLINED_PATHS")
 ```
 
-The historical `FILTERED_*` variable names are retained for compatibility. They contain only the exact eligible file-diff sections and their paths. `DECLINED_CHANGED_FILES` contains path names only; never read, print, or transmit the declined sections through OpenRouter.
+The historical `FILTERED_*` variable names are retained for compatibility. They contain only the exact eligible file-diff sections and their paths. `DECLINED_CHANGED_FILES` contains path names only; never read, print, or transmit the declined sections through OpenRouter. The content-free decision carries only the closed aggregate reason and eligible/declined section counts; it is not a disclosure receipt.
 
 ### Step 2: Build the Prompts
 
@@ -479,10 +530,11 @@ map_wrapper_failure_reason() {
   esac
 }
 
+: > "$BOUNDARY_STDERR"
 if "$BOUNDARY_HELPER" --mode artifact-delegation \
     --policy "$SECURITY_POLICY_RESOLVED" \
     --content-file "$SYS_FILE" \
-    --content-file "$USER_FILE"; then
+    --content-file "$USER_FILE" 2>"$BOUNDARY_STDERR"; then
   :
 else
   BOUNDARY_RC=$?
@@ -491,8 +543,8 @@ else
 ## ${target_agent_name} Review (via OpenRouter ${target_model})
 
 ### RUNNER DECLINED -- SENSITIVE CONTENT
-The exact outbound system/user payload failed the disclosure boundary. No
-payload bytes were sent to OpenRouter. Route this lane to Codex.
+OpenRouter dispatch declined (refused-outbound-bytes); no payload bytes were
+sent. Next action: run this lane locally on Codex.
 
 EOF
     exit 0
@@ -622,9 +674,12 @@ serving provider: `{SERVING_PROVIDER or not_reported_by_completion}`
 
 [If DECLINED_CHANGED_FILES is non-empty:]
 ### CODEX PARTIAL COVERAGE REQUIRED
-OpenRouter reviewed only the eligible file sections. Re-dispatch the same
-target agent on Codex for these locally held paths before treating the lane as
-complete:
+OpenRouter reviewed {ELIGIBLE_SECTION_COUNT} eligible file sections;
+{DECLINED_SECTION_COUNT} {section when the count is 1; sections otherwise}
+remained local.
+Closed reason: {BOUNDARY_DECISION_REASON}.
+Run the same target agent locally only for these held paths before treating the
+lane as complete:
 {declined_changed_files}
 ```
 
@@ -635,7 +690,7 @@ complete:
 3. **Preserve all findings verbatim.** Re-tag findings only; never summarize, normalize, or add an approval section.
 4. **Never bypass the security boundary.** A disclosure decline returns an ordinary lane to Codex. For `security-auditor-codex-signoff`, it continues only to a non-implementing family or `REVIEW INCOMPLETE`; neither case can produce a clean OpenRouter receipt.
 5. **Keep consequence-appropriate review independent.** High-consequence security completion requires a reviewer family different from the implementer even when non-secret implementation content was eligible for OpenRouter.
-6. **Partial coverage is not full coverage.** When `DECLINED_CHANGED_FILES` is non-empty, emit `### CODEX PARTIAL COVERAGE REQUIRED` with path names only. dm-review completes ordinary lanes locally on Codex; `security-auditor-codex-signoff` must use a non-implementing family for every held path or remain `REVIEW INCOMPLETE`.
+6. **Partial coverage preserves safe dispatch.** When `DECLINED_CHANGED_FILES` is non-empty, keep the one completed OpenRouter review over every eligible section, report the content-free counts and closed aggregate reason, and emit `### CODEX PARTIAL COVERAGE REQUIRED` with held path names only. dm-review completes ordinary lanes locally only for those paths; `security-auditor-codex-signoff` must use a non-implementing family for every held path or remain `REVIEW INCOMPLETE`.
 7. **Preserve the provider receipt.** Report the generation ID, canonical response model, and serving-provider provenance. A missing provider field is `not_reported_by_completion`, never evidence of a verified provider. Never include prompt or completion content in receipt metadata.
 8. **Screen the exact outbound bytes automatically.** Materialize private
    system/user files, scan those files, and pass the same files immediately to

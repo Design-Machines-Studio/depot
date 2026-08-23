@@ -20,9 +20,11 @@ A **lane** is a review path with its own provider and absence mode: Codex, OpenR
 
 Coding fallback moves only among policy-derived eligible families. Security
 analysis starts on the matrix security head when eligible and always has an
-independent-family full-diff sign-off. OpenRouter lanes remain content-gated: file sections containing actual
-secret/private content stay local, while safe sections remain eligible
-regardless of path.
+independent-family full-diff sign-off. OpenRouter lanes remain content-gated:
+exact file sections containing actual secret/private bytes stay local, while
+every safe section remains eligible regardless of path or security subject
+matter. One held section never cancels the completed OpenRouter review of the
+safe remainder.
 
 #### Phase 4.5 coding-lane exhaustion ask
 
@@ -32,7 +34,7 @@ The operator is the human at the top-level interactive session. An agent, subage
 
 Collect live rail status at ask time and display it only to inform timing. Offer exactly: wait until the named reset, or record the Coverage Gap and continue -- the review equivalent of park. A context that cannot reach the operator returns `human_help_required` through a reaching caller or records the gap under the headless rule. No provider identifier is an executable answer.
 
-Ask-then-default-gap is the only headless behavior for an ordinary standalone review: a non-interactive session or unanswered ask records the Coverage Gap and continues. Independent-family sign-off and sensitive-path rules remain non-overridable; configured-key OpenRouter lanes never enter this approval path.
+Ask-then-default-gap is the only headless behavior for an ordinary standalone review: a non-interactive session or unanswered ask records the Coverage Gap and continues. Independent-family sign-off and literal disclosure rules remain non-overridable; configured-key OpenRouter lanes never enter this approval path.
 
 **When this review is the pipeline's final full dm-review, “record the gap and continue” and the headless gap-and-continue default are unavailable for coding-lane exhaustion.** The only outcome is REVIEW INCOMPLETE and the branch waits. Ordinary in-policy OpenRouter/Codex routing remains unaffected; it is not exhaustion authorization.
 
@@ -81,7 +83,8 @@ For each agent whose output contains `### CODEX PARTIAL COVERAGE REQUIRED`:
    the declined bytes through OpenRouter.
 3. Re-dispatch the same agent definition on Codex with the full local diff
    sections for those paths and the same project context.
-4. Tag findings `[codex-sensitive-section/{agent-name}]` and record both the
+4. Do not rerun the safe remainder or the whole ordinary lane on Codex. Tag
+   findings `[codex-sensitive-section/{agent-name}]` and record both the
    OpenRouter eligible-content receipt and Codex held-content receipt.
 5. Treat failure of this local completion exactly like failure of the original
    agent lane.
@@ -110,4 +113,3 @@ Summarize: "pattern-recognition-specialist: OpenRouter failed -> Codex fallback 
 This fallback exists for resilience. If it triggers frequently, investigate OpenRouter health rather than changing the coding boundary.
 
 ---
-

@@ -13,6 +13,7 @@ DIFF_FILE=""
 OUTPUT_PATHS=""
 OUTPUT_DIFF=""
 OUTPUT_DECLINED_PATHS=""
+OUTPUT_DECISION=""
 MODE="execution"
 
 while [ $# -gt 0 ]; do
@@ -38,6 +39,9 @@ while [ $# -gt 0 ]; do
     --output-declined-paths)
       [ "$#" -ge 2 ] || { echo "delegation-boundary: input-invalid:missing-argument" >&2; exit 2; }
       OUTPUT_DECLINED_PATHS="$2"; shift 2;;
+    --output-decision)
+      [ "$#" -ge 2 ] || { echo "delegation-boundary: input-invalid:missing-argument" >&2; exit 2; }
+      OUTPUT_DECISION="$2"; shift 2;;
     --mode)
       [ "$#" -ge 2 ] || { echo "delegation-boundary: input-invalid:missing-argument" >&2; exit 2; }
       MODE="$2"; shift 2;;
@@ -72,7 +76,8 @@ if [ "$MODE" = "artifact-delegation" ]; then
     [ -z "$DIFF_FILE" ] &&
     [ -z "$OUTPUT_PATHS" ] &&
     [ -z "$OUTPUT_DIFF" ] &&
-    [ -z "$OUTPUT_DECLINED_PATHS" ] || {
+    [ -z "$OUTPUT_DECLINED_PATHS" ] &&
+    [ -z "$OUTPUT_DECISION" ] || {
       echo "delegation-boundary: input-invalid:artifact-delegation-authority" >&2
       exit 2
     }
@@ -84,7 +89,7 @@ else
 fi
 
 python3 - "$POLICY" "$CHANGED_FILES" "$DIFF_FILE" "$OUTPUT_PATHS" \
-  "$OUTPUT_DIFF" "$OUTPUT_DECLINED_PATHS" "$MODE" \
+  "$OUTPUT_DIFF" "$OUTPUT_DECLINED_PATHS" "$OUTPUT_DECISION" "$MODE" \
   ${CONTENT_FILES[@]+"${CONTENT_FILES[@]}"} <<'PY'
 import base64
 import collections
@@ -103,6 +108,7 @@ from pathlib import Path, PurePosixPath
     output_path,
     output_diff_path,
     output_declined_path,
+    output_decision_path,
     mode,
     *content_paths,
 ) = sys.argv[1:]
@@ -181,6 +187,25 @@ def high_confidence_literal(value):
     return classes >= 2 or entropy(value) >= 3.5
 
 
+def explicit_not_for_proof_sentinel(value):
+    return bool(re.fullmatch(
+        r"[a-z][a-z0-9]*-(?:secret|access)-not-for-proof",
+        value.lower(),
+    ))
+
+
+def provider_prefixed_remainder(value):
+    lowered = value.lower()
+    for prefix in (
+        "sk-or-v1-", "sk-ant-", "ghp_", "gho_", "ghu_", "ghs_", "ghr_",
+        "github_pat_", "akia", "glpat-", "npm_", "xoxb-", "xoxa-", "xoxp-",
+        "xoxr-", "xoxs-", "aiza", "sk_live_", "rk_live_",
+    ):
+        if lowered.startswith(prefix):
+            return lowered[len(prefix):]
+    return None
+
+
 def placeholder(value):
     value = value.strip().strip("'\"`").rstrip(".,;")
     lowered = value.lower()
@@ -209,11 +234,15 @@ def placeholder(value):
         return True
     if re.fullmatch(r"<[^>\r\n]*(?:token|secret|key|password|value|redacted|example)[^>\r\n]*>", lowered):
         return True
-    if re.fullmatch(
-        r"[a-z][a-z0-9]*-(?:secret|access)-not-for-proof", lowered
+    if explicit_not_for_proof_sentinel(lowered):
+        return True
+    provider_remainder = provider_prefixed_remainder(lowered)
+    if (
+        provider_remainder is not None
+        and explicit_not_for_proof_sentinel(provider_remainder)
     ):
         return True
-    return lowered.startswith(("example-", "test-", "dummy-", "placeholder-"))
+    return lowered.startswith(("example-", "dummy-", "placeholder-"))
 
 
 def entropy(value):
@@ -333,6 +362,33 @@ def scan_disclosure(text):
     reason = disclosure_reason(text)
     if reason:
         fail(3, reason)
+
+
+def aggregate_reason(reasons):
+    unique = sorted(set(reasons))
+    if not unique:
+        return "none"
+    if len(unique) == 1:
+        return unique[0]
+    return "multiple-disclosure-classes"
+
+
+def write_decision(decision, eligible_count, declined_count, reason):
+    if not output_decision_path:
+        return
+    try:
+        Path(output_decision_path).write_text(
+            json.dumps({
+                "schemaVersion": 1,
+                "decision": decision,
+                "reason": reason,
+                "eligibleSectionCount": eligible_count,
+                "declinedSectionCount": declined_count,
+            }, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+    except OSError:
+        fail(2, "output-decision")
 
 
 def parse_header_path(line, prefix):
@@ -463,6 +519,10 @@ for path in changed:
 parsed = set()
 sections = []
 declined_paths = set()
+eligible_section_count = 0
+declined_section_count = 0
+decision = "eligible"
+decision_reason = "none"
 diff_text = ""
 if diff_path:
     diff_text = read_text(diff_path, "diff-unreadable")
@@ -479,15 +539,26 @@ if diff_text:
         safe_sections = []
         safe_disclosure = []
         safe_paths = set()
+        declined_reasons = []
         for section_paths, section_text, disclosure_text in sections:
-            if disclosure_reason(disclosure_text):
+            reason = disclosure_reason(disclosure_text)
+            if reason:
                 declined_paths.update(section_paths)
+                declined_reasons.append(reason)
                 continue
             safe_sections.append(section_text)
             safe_disclosure.append(disclosure_text)
             safe_paths.update(section_paths)
+        eligible_section_count = len(safe_sections)
+        declined_section_count = len(declined_reasons)
+        decision_reason = aggregate_reason(declined_reasons)
         if not safe_sections:
-            fail(3, "no-safe-review-remainder")
+            write_decision(
+                "full-decline", 0, declined_section_count, decision_reason
+            )
+            fail(3, decision_reason)
+        if declined_reasons:
+            decision = "partial"
         diff_text = "".join(safe_sections)
         parsed = safe_paths
         # Defense in depth: the exact emitted remainder must independently pass.
@@ -520,4 +591,13 @@ if output_declined_path:
                 output.write(path.encode("utf-8") + b"\0")
     except OSError:
         fail(2, "output-declined-paths")
+if output_decision_path:
+    if mode != "mechanical-review":
+        fail(2, "decision-mode")
+    write_decision(
+        decision,
+        eligible_section_count,
+        declined_section_count,
+        decision_reason,
+    )
 PY

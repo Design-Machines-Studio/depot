@@ -77,6 +77,7 @@ chmod +x "$REFS/openrouter-wrapper.sh"
     'review_run_id="runner-boundary-test"' \
     'TARGET_BODY="## Domain Criteria\n\nReview documentation consistency."' \
     'USER_PROMPT="Review this harmless fixture."' \
+    'BOUNDARY_STDERR="$FIXTURE/artifact-boundary-stderr"' \
     'SECURITY_POLICY_RESOLVED="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"'
   printf 'REVIEWER_OUTPUT_CONTRACT=%q\n' "$CONTRACT"
   sed -n '/^CONTRACT_SENTINEL=/,/^CONTRACT_HEADING=/p' "$SOURCE"
@@ -86,7 +87,7 @@ chmod +x "$REFS/openrouter-wrapper.sh"
 } > "$FIXTURE/run"
 chmod +x "$FIXTURE/run"
 
-HOME="$FIXTURE/home" OPENROUTER_ROOT="$OPENROUTER_ROOT" \
+HOME="$FIXTURE/home" FIXTURE="$FIXTURE" OPENROUTER_ROOT="$OPENROUTER_ROOT" \
   BOUNDARY_HELPER="$FIXTURE/boundary" BOUNDARY_COUNT="$FIXTURE/count" \
   BOUNDARY_ARGS="$FIXTURE/args" WRAPPER_SENTINEL="$FIXTURE/wrapper-called" \
   EVENT_LOG="$FIXTURE/events" SCREENED_FILES="$FIXTURE/screened-files" \
@@ -181,6 +182,7 @@ chmod +x "$REFS/openrouter-wrapper.sh"
     'review_run_id="runner-http-failure-test"' \
     'TARGET_BODY="Review documentation consistency."' \
     'USER_PROMPT="Review this harmless fixture."' \
+    'BOUNDARY_STDERR="$FIXTURE/http-boundary-stderr"' \
     'SECURITY_POLICY_RESOLVED="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"'
   sed -n '/^WRAPPER_PATH=/,/^EXIT_CODE=\$?/p' "$SOURCE"
   sed -n '/^ACTUAL_MODEL=/,/^fi$/p' "$SOURCE"
@@ -188,7 +190,7 @@ chmod +x "$REFS/openrouter-wrapper.sh"
 } > "$FIXTURE/run-http-failure"
 chmod +x "$FIXTURE/run-http-failure"
 
-runner_failure_output=$(HOME="$FIXTURE/home" OPENROUTER_ROOT="$OPENROUTER_ROOT" \
+runner_failure_output=$(HOME="$FIXTURE/home" FIXTURE="$FIXTURE" OPENROUTER_ROOT="$OPENROUTER_ROOT" \
   BOUNDARY_HELPER="$FIXTURE/boundary" BOUNDARY_COUNT="$FIXTURE/http-count" \
   BOUNDARY_ARGS="$FIXTURE/http-args" WRAPPER_SENTINEL="$FIXTURE/http-wrapper-called" \
   EVENT_LOG="$FIXTURE/http-events" SCREENED_FILES="$FIXTURE/http-screened-files" \
@@ -207,4 +209,67 @@ case "$runner_failure_output" in
   *"PRIVATE_PROVIDER_BODY_MARKER"*|*"All models exhausted, key missing, or HTTP error"*) exit 1 ;;
 esac
 
-echo "  OK    OpenRouter agent runner scans once and propagates closed HTTP failure reasons"
+grep -Fq -- '--output-decision "$BOUNDARY_DECISION"' "$SOURCE"
+grep -Fq 'OpenRouter reviewed {ELIGIBLE_SECTION_COUNT} eligible file sections;' "$SOURCE"
+grep -Fq 'Closed reason: {BOUNDARY_DECISION_REASON}.' "$SOURCE"
+grep -Fq 'Run the same target agent locally only for these held paths' "$SOURCE"
+! grep -Fq 'OpenRouter reviewed only the eligible file sections.' "$SOURCE"
+
+cat > "$FIXTURE/runner-partial.diff" <<'EOF'
+diff --git a/internal/auth/session.go b/internal/auth/session.go
+--- a/internal/auth/session.go
++++ b/internal/auth/session.go
+@@ -1 +1 @@
+-before
++SAFE_REMAINDER_MARKER
+diff --git a/tests/integration/compose-release-command.sh b/tests/integration/compose-release-command.sh
+--- a/tests/integration/compose-release-command.sh
++++ b/tests/integration/compose-release-command.sh
+@@ -1 +1 @@
+-before
++GITHUB_TOKEN=ghp_0123456789abcdefABCDEF
+EOF
+printf '%s\n' internal/auth/session.go tests/integration/compose-release-command.sh \
+  > "$FIXTURE/runner-partial.changed"
+
+{
+  printf '%s\n' '#!/usr/bin/env bash' 'set -euo pipefail'
+  printf '%s\n' \
+    'target_agent_name="security-auditor-openrouter"' \
+    'target_model="moonshotai/kimi-k3"' \
+    'diff_content="$(cat "$RUNNER_DIFF")"' \
+    'changed_files="$(cat "$RUNNER_CHANGED")"' \
+    'SECURITY_POLICY_RESOLVED="$RUNNER_POLICY"'
+  sed -n '/^BOUNDARY_HELPER=/,/^DECLINED_CHANGED_FILES=/p' "$SOURCE"
+  printf '%s\n' \
+    'printf "%s\t%s\t%s\t%s\n" "$BOUNDARY_DECISION_REASON" "$ELIGIBLE_SECTION_COUNT" "$DECLINED_SECTION_COUNT" "$DECLINED_CHANGED_FILES"'
+} > "$FIXTURE/run-mechanical"
+chmod +x "$FIXTURE/run-mechanical"
+
+mechanical_output=$(RUNNER_DIFF="$FIXTURE/runner-partial.diff" \
+  RUNNER_CHANGED="$FIXTURE/runner-partial.changed" \
+  RUNNER_POLICY="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json" \
+  "$FIXTURE/run-mechanical")
+[ "$mechanical_output" = $'high-confidence-credential\t1\t1\ttests/integration/compose-release-command.sh' ]
+
+cat > "$FIXTURE/runner-decline.diff" <<'EOF'
+diff --git a/tests/integration/compose-release-command.sh b/tests/integration/compose-release-command.sh
+--- a/tests/integration/compose-release-command.sh
++++ b/tests/integration/compose-release-command.sh
+@@ -1 +1 @@
+-before
++GITHUB_TOKEN=ghp_0123456789abcdefABCDEF
+EOF
+printf '%s\n' tests/integration/compose-release-command.sh \
+  > "$FIXTURE/runner-decline.changed"
+decline_output=$(RUNNER_DIFF="$FIXTURE/runner-decline.diff" \
+  RUNNER_CHANGED="$FIXTURE/runner-decline.changed" \
+  RUNNER_POLICY="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json" \
+  "$FIXTURE/run-mechanical" 2>"$FIXTURE/runner-decline.stderr")
+[ ! -s "$FIXTURE/runner-decline.stderr" ]
+grep -Fq 'OpenRouter dispatch declined (high-confidence-credential)' \
+  <<< "$decline_output"
+grep -Fq 'Next action: run' <<< "$decline_output"
+! grep -Fq 'ghp_' <<< "$decline_output"
+
+echo "  OK    OpenRouter agent runner scans once and preserves partial/closed decisions"
