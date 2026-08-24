@@ -135,6 +135,6 @@ After the fix-pass completes and the user has reviewed the Findings Resolution T
 3. The Findings Resolution Table in the delivery report serves as durable evidence. Screenshots referenced in the table were consumed for comparison and are cleaned as Tier 1 artifacts.
 4. Run the repository cleanup phase per `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`.
 
-A fix pass runs on the current feature branch with `noMergeOnCompletion: true`, so it creates no worktrees and no chunk branches -- the cleanup phase deletes nothing. It still runs, because it still owes the next run two things: the readiness checks (clean tree, `git worktree prune`, no stale registrations) and the `## Branch & Worktree Inventory` block in the receipt. A fix pass that leaves a dirty tree is the next run's problem.
+A fix pass runs on the current feature branch with `noMergeOnCompletion: true`, so it creates no worktrees and no chunk branches -- the Git cleanup phase deletes nothing. It still runs, because it owes the next run a clean-tree check, an empty exact-resource registry, and the `## Branch & Worktree Inventory` block in the receipt. It never prunes Git metadata or adopts stale registrations. A fix pass that leaves a dirty tree is the next run's problem.
 
 The feature branch is reported as `kept` with its merge-proof status. Never delete it here.

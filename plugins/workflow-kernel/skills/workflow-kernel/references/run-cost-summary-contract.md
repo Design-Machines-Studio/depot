@@ -19,23 +19,16 @@ Edit it here and run the sync script; never edit a consumer copy by hand.
 <!-- CANONICAL-MATRIX-RESOLUTION: if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrouter --asset skills/openrouter-delegate/references/model-matrix.json --minimum-version 1.11.0); then :; else MODEL_MATRIX_ASSET=""; fi -->
 
 <!-- CANONICAL-PARAGRAPH-START -->
-The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file, writes a schema-bound `run-cost-summary.json` beside that run's `authoritative-receipts.json`, and appends exactly one receipt line -- the artifact path, or `run-cost-summary: skipped (<reason>)` on any internal failure. It is observation-only: it exits 0 for every measurement outcome, never gates or alters a review, lane, or phase outcome, and its absence never fails one. Exit 6 (receipt write failed after acceptance) appends `skipped (receipt-write-failed)` through the status-aware `||` fallback; exit 2 is an invalid invocation and propagates; any other non-zero status appends `skipped (kernel-unresolvable)`, and a failing final append keeps its own status visible. A refused symlinked receipt path still exits 0 and reports on stderr alone -- a non-zero exit would append through the symlink just refused. Receipt paths are fixed per directory, so concurrent runs sharing one directory overwrite each other: serialize them or give each its own. Pass a coherent installed bundle's matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; an unreadable or invalid matrix emits one stderr line, skips imputation, and never fails the emission. Populate events with `record-attempt` as each lane settles -- a standalone `--append-to` translator double-counts the attempt, and `lanes: 0` after a run that executed lanes means this boundary is not wired. Full flags: `cli-measurement-commands.md`; otherwise the flags named here are the complete required set.
+The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file, writes a schema-bound `run-cost-summary.json` beside that run's `authoritative-receipts.json`, and appends exactly one receipt line -- the artifact path, or `run-cost-summary: skipped (<reason>)` on any internal failure. It is observation-only: it exits 0 for every measurement outcome, never gates or alters a review, lane, or phase outcome, and its absence never fails one. Exit 6 (receipt write failed after acceptance) appends `skipped (receipt-write-failed)` through the status-aware `||` fallback; exit 2 is an invalid invocation and propagates; any other non-zero status appends `skipped (kernel-unresolvable)`, and a failing final append keeps its own status visible. A refused symlinked receipt path still exits 0 and reports on stderr alone -- a non-zero exit would append through the symlink just refused. Receipt paths are fixed per directory, so concurrent runs sharing one directory overwrite each other: use the invocation's exact-owned root or serialize callers that intentionally share a documented deliverable directory. Pass a coherent installed bundle's matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; an unreadable or invalid matrix emits one stderr line, skips imputation, and never fails the emission. Populate events with `record-attempt` as each lane settles -- a standalone `--append-to` translator double-counts the attempt, and `lanes: 0` after a run that executed lanes means this boundary is not wired. Full flags: `cli-measurement-commands.md`; otherwise the flags named here are the complete required set.
 <!-- CANONICAL-PARAGRAPH-END -->
 
 ## Why the concurrency wording is what it is
 
-An earlier draft claimed the artifact was "run-scoped ... so concurrent
-instances never collide." That was false for every consumer: dm-review writes to
-the fixed `.claude/ux-review/workflow-kernel/`, and pipeline writes to
-`plans/<feature>/`, which is per-feature rather than per-run. Neither carries a
-run identifier. The paragraph now states the real property and the real
-operational requirement.
-
-Making the paths genuinely run-scoped is a separate change: it moves
-`authoritative-receipts.json`, the prediction and observation artifacts, the
-contribution inputs, and the Docker node artifacts under a run directory, and it
-touches every command that names one of those paths. Until that lands, the
-contract must not promise isolation the layout does not provide.
+dm-review writes raw receipts beneath one unique exact-owned root, so those
+invocations do not collide. Standalone Pipeline planning artifacts remain a
+documented per-feature deliverable. Callers that intentionally target the same
+feature directory must serialize; the exact-owned convention does not adopt or
+delete that pre-existing deliverable directory.
 
 ## The consumers
 
@@ -43,13 +36,13 @@ Eleven files embed the paragraph. Seven are dm-review, four are pipeline:
 
 | File | Receipt directory |
 |------|-------------------|
-| `plugins/dm-review/skills/review/SKILL.md` | `.claude/ux-review/workflow-kernel/` |
-| `plugins/dm-review/commands/dm-review.md` | `.claude/ux-review/workflow-kernel/` |
-| `plugins/dm-review/skills/dm-review/SKILL.md` | `.claude/ux-review/workflow-kernel/` |
-| `plugins/dm-review/commands/dm-review-loop.md` | `.claude/ux-review/workflow-kernel/` |
-| `plugins/dm-review/skills/dm-review-loop/SKILL.md` | `.claude/ux-review/workflow-kernel/` |
-| `plugins/dm-review/commands/dm-review-visual.md` | `.claude/ux-review/workflow-kernel/` |
-| `plugins/dm-review/skills/dm-review-visual/SKILL.md` | `.claude/ux-review/workflow-kernel/` |
+| `plugins/dm-review/skills/review/SKILL.md` | `<exact-run-root>/review/` |
+| `plugins/dm-review/commands/dm-review.md` | `<exact-run-root>/review/` |
+| `plugins/dm-review/skills/dm-review/SKILL.md` | `<exact-run-root>/review/` |
+| `plugins/dm-review/commands/dm-review-loop.md` | `<exact-run-root>/review/` |
+| `plugins/dm-review/skills/dm-review-loop/SKILL.md` | `<exact-run-root>/review/` |
+| `plugins/dm-review/commands/dm-review-visual.md` | `<exact-run-root>/review/` |
+| `plugins/dm-review/skills/dm-review-visual/SKILL.md` | `<exact-run-root>/review/` |
 | `plugins/pipeline/commands/pipeline.md` | `plans/<feature-slug>/` |
 | `plugins/pipeline/skills/pipeline/SKILL.md` | `plans/<feature-slug>/` |
 | `plugins/pipeline/commands/pipeline-run.md` | `plans/<feature>/` |

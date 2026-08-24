@@ -3628,6 +3628,64 @@ def command_run_verification(args):
     return 0 if result["status"] == "complete" else EXIT_UNSAFE_PLAN
 
 
+def command_owned_run_start(args):
+    from .owned_run import ExactOwnedRun
+
+    run = ExactOwnedRun.start(
+        args.workflow, args.run_id,
+        base=None if args.base is None else Path(args.base),
+    )
+    _emit({
+        "schema_version": 1, "status": "started", "path": str(run.root),
+        "workflow": run.workflow, "run_id": run.run_id,
+    })
+    return 0
+
+
+def command_owned_run_create(args):
+    from .owned_run import ExactOwnedRun
+
+    run = ExactOwnedRun.open(Path(args.run_root))
+    path = run.create_path(args.kind, args.relative_path)
+    _emit({
+        "schema_version": 1, "status": "created", "path": str(path),
+        "kind": args.kind, "run_root": str(run.root),
+    })
+    return 0
+
+
+def command_owned_run_finish(args):
+    from .owned_run import ExactOwnedRun
+
+    root = Path(os.path.abspath(args.run_root))
+    if not os.path.lexists(root):
+        _emit({"schema_version": 1, "status": "missing", "path": str(root)})
+        return 0
+    report = ExactOwnedRun.open(root).finish(
+        args.outcome, retain_diagnostics=args.retain_diagnostics,
+        reason=args.reason, contains=args.contains,
+    )
+    _emit({"schema_version": 1, **report.to_dict()})
+    return 0
+
+
+def command_owned_run_exec(args):
+    from .owned_run import run_owned_command
+
+    command = tuple(args.argv)
+    if command[:1] == ("--",):
+        command = command[1:]
+    status, report = run_owned_command(
+        args.workflow, args.run_id, command,
+        base=None if args.base is None else Path(args.base),
+        resume_root=None if args.resume_root is None else Path(args.resume_root),
+        retain_on_failure=args.retain_on_failure,
+        diagnostic_contains=args.contains,
+    )
+    _emit({"schema_version": 1, **report.to_dict()})
+    return status
+
+
 def parser():
     from .verification_contract import BOUNDARY_CHOICES
     from .verification_repository import RISK_CHOICES
@@ -3920,6 +3978,59 @@ def parser():
     run_verification.add_argument("--profile", required=True)
     run_verification.add_argument("--plan", required=True)
     run_verification.set_defaults(handler=command_run_verification)
+
+    owned_start = commands.add_parser(
+        "owned-run-start",
+        help="create one unique exact-owned disposable run root",
+    )
+    owned_start.add_argument("--workflow", required=True)
+    owned_start.add_argument("--run-id", required=True)
+    owned_start.add_argument("--base")
+    owned_start.set_defaults(handler=command_owned_run_start)
+
+    owned_create = commands.add_parser(
+        "owned-run-create",
+        help="create and record one directory inside an exact-owned run root",
+    )
+    owned_create.add_argument("--run-root", required=True)
+    owned_create.add_argument(
+        "--kind", choices=(
+            "temporary-directory", "temporary-repository", "cache",
+            "raw-output", "diagnostic",
+        ), required=True,
+    )
+    owned_create.add_argument("--relative-path", required=True)
+    owned_create.set_defaults(handler=command_owned_run_create)
+
+    owned_finish = commands.add_parser(
+        "owned-run-finish",
+        help="remove one exact-owned root or retain one bounded diagnostic root",
+    )
+    owned_finish.add_argument("--run-root", required=True)
+    owned_finish.add_argument(
+        "--outcome", choices=(
+            "succeeded", "failed", "blocked", "cancelled", "interrupted",
+            "review-aborted",
+        ), required=True,
+    )
+    owned_finish.add_argument("--retain-diagnostics", action="store_true")
+    owned_finish.add_argument("--reason")
+    owned_finish.add_argument("--contains")
+    owned_finish.set_defaults(handler=command_owned_run_finish)
+
+    owned_exec = commands.add_parser(
+        "owned-run-exec",
+        help="supervise one argv command with exact INT/TERM cleanup",
+    )
+    owned_exec.add_argument("--workflow", required=True)
+    owned_exec.add_argument("--run-id", required=True)
+    owned_location = owned_exec.add_mutually_exclusive_group()
+    owned_location.add_argument("--base")
+    owned_location.add_argument("--resume-root")
+    owned_exec.add_argument("--retain-on-failure", action="store_true")
+    owned_exec.add_argument("--contains", default="compact command diagnostics")
+    owned_exec.add_argument("argv", nargs=argparse.REMAINDER)
+    owned_exec.set_defaults(handler=command_owned_run_exec)
 
     def creation_command(name, handler):
         command = commands.add_parser(name, help="plan one managed Docker creation")

@@ -112,10 +112,10 @@ only after canonical receipts exist, then compare:
 
 ```sh
 "$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest manifest.json --prediction-receipts predicted.json --state-dir plans/feature
-"$WORKFLOW_KERNEL" bind-prediction --type review --request request.json --prediction-receipts predicted.json --state-dir .claude/ux-review/workflow-kernel
+"$WORKFLOW_KERNEL" bind-prediction --type review --request request.json --prediction-receipts predicted.json --state-dir "$DEPOT_EXACT_RUN_ROOT/review"
 "$WORKFLOW_KERNEL" observe-pipeline --manifest manifest.json --receipts authoritative.json --state-dir plans/feature
-"$WORKFLOW_KERNEL" export-review-contributions --request request.json --decisions synthesis-decisions.json --raw-findings raw-finding-inventory.json --lane-receipts review-lane-receipts.json --raw-lane-outputs raw-lane-outputs.json --receipts authoritative.json --state-dir .claude/ux-review/workflow-kernel --output authoritative.json
-"$WORKFLOW_KERNEL" observe-review --request request.json --receipts authoritative.json --state-dir .claude/ux-review/workflow-kernel
+"$WORKFLOW_KERNEL" export-review-contributions --request request.json --decisions synthesis-decisions.json --raw-findings raw-finding-inventory.json --lane-receipts review-lane-receipts.json --raw-lane-outputs raw-lane-outputs.json --receipts authoritative.json --state-dir "$DEPOT_EXACT_RUN_ROOT/review" --output authoritative.json
+"$WORKFLOW_KERNEL" observe-review --request request.json --receipts authoritative.json --state-dir "$DEPOT_EXACT_RUN_ROOT/review"
 "$WORKFLOW_KERNEL" compare --state-dir plans/feature --authoritative-receipts authoritative.json --output shadow-report.json
 "$WORKFLOW_KERNEL" metrics --events authoritative.json --output metrics.json
 ```
@@ -227,6 +227,23 @@ The contract and retry commands return `0` or a fail-closed `2`/`6` result;
 they never use a nonzero status as a policy decision. In particular, a valid
 retry decision such as `stop` is successful JSON output with status `0`.
 
+### Exact-owned disposable run roots
+
+`owned-run-start`, `owned-run-create`, `owned-run-finish`, and
+`owned-run-exec` provide the small filesystem half of Depot's shared
+exact-ownership convention. The helper creates one unique private root beneath
+the OS account's XDG state location by default, records only paths it creates
+under that root, verifies root/parent identity on resume and cleanup, and never
+adopts a pre-existing path. `owned-run-exec` supervises one argv command,
+forwards `SIGINT`/`SIGTERM`, and returns `130`/`143` after terminal cleanup.
+
+Success and review abort remove the whole disposable root. Failure and
+interruption remove it too unless the caller supplies one genuinely useful,
+bounded `diagnostic` directory. Retention deletes raw siblings and emits the
+exact path, reason, contents, and shell-quoted removal command. Repeated cleanup
+accepts an already-absent root as clean. The full cross-adapter convention is
+`plugins/workflow-kernel/skills/workflow-kernel/references/exact-owned-cleanup.md`.
+
 ### Docker creation and cleanup
 
 Plan creation before invoking Docker and register the exact before/after
@@ -271,12 +288,14 @@ ownership, or shell-built cleanup commands.
 
 ### Git worktree and branch cleanup
 
-Git cleanup uses the pipeline ref registry, not Docker labels. Capture
-`git worktree list --porcelain` and `git branch --list` before the run, then
-register every created worktree, chunk branch, and feature branch at creation
-with its exact path/ref, kind, base, run namespace, and lifecycle. Never infer
-ownership afterward from a broad glob or delete a ref outside the registered
-`.worktrees/pipeline/<feature>/` and `pipeline/<feature>/*` namespace.
+Git cleanup uses the durable resource registry, not Docker labels or a namespace
+sweep. Register every created worktree, chunk branch, and newly created feature
+branch at creation with its exact path/ref, kind, base, unique run namespace,
+and lifecycle. A pre-existing feature branch or user worktree is never
+registered as owned. Paths and refs include the unique run ID:
+`.worktrees/pipeline/<run-id>/<chunk-id>` and
+`pipeline/<run-id>/<chunk-id>`. Never infer ownership afterward from a broad
+glob, feature slug, prefix, or age.
 
 After a chunk is integrated, remove its worktree only when `git status` is
 readable and clean. Remove the worktree before its branch. Delete a chunk branch
@@ -285,9 +304,10 @@ use `-D` only when the registry proves the branch's unique commits were merged
 to a different target. Dirty, unreadable, checked-out, unmerged, or ambiguously
 owned refs are retained and reported as blocked with the recovery command.
 
-At terminal reconciliation, parse `git worktree list --porcelain` field-wise,
-reconcile every registered ref and namespace-bounded interrupted orphan, then
-run `git worktree prune`. Record before/after inventories and every
+At terminal reconciliation, re-prove and reconcile every exact registered ref.
+Do not prune Git metadata or sweep an interrupted namespace; an interrupted
+invocation resumes from its durable exact records. Record before/after
+inventories and every
 `deleted|kept|blocked` disposition. The feature branch is always retained by
 the pipeline; even external merge proof changes its receipt to merged/kept and
 never authorizes automatic feature-branch deletion.

@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.16.1
+version: 0.17.0
 ---
 
 # Workflow Kernel
@@ -26,7 +26,8 @@ path, and execs `python3 -m workflow_kernel`. Compatibility is same-major at
 or above the declared capability floor. Repository-verification consumers use
 `>=0.14.0`. Pipeline consumers using independent rendered-surface
 applicability require `>=0.15.0`; exact-head branch reuse and approved
-final-review mode context require `>=0.16.0`. The complete consumer-facing
+final-review mode context require `>=0.16.0`; exact-owned disposable run roots
+require `>=0.17.0`. The complete consumer-facing
 resolution and fail-closed contract, including the launcher discovery
 snippet, is `references/runtime-resolution.md`; consuming plugins link there
 instead of restating it.
@@ -65,13 +66,23 @@ conflicting run IDs, illegal transitions, and non-JSON payload values. Preserve
 `interrupted` as its own terminal outcome. Permit terminal mutation only for
 evidence attachment and one cleanup reconciliation.
 
+For disposable run roots, temporary repositories, caches, raw output, Git
+worktrees/branches, and Docker resources, read
+`references/exact-owned-cleanup.md`. Filesystem paths use the small
+`owned-run-*` helper; Git and Docker retain their existing exact adapters. Every
+terminal path, including `SIGINT`, `SIGTERM`, review abort, and retry, cleans
+only creation-time records. A failed/interrupted run may retain one bounded
+diagnostic root and must emit its exact path, reason, contents, and removal
+command.
+
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
-0.16.0 surface includes state/replay and inspection commands, exact-ref
+0.17.0 surface includes state/replay and inspection commands, exact-ref
 repository verification planning/execution with deterministic fresh results,
 initial contract binding and retry
 decisions, prediction/observation/comparison, canonical review-contribution
-export, metrics, and guarded resource planning/execution/reconciliation.
+export, metrics, guarded resource planning/execution/reconciliation, and the
+exact-owned disposable run-root commands.
 Consume successful operational output and errors as stable JSON. Treat
 `--help` output as plain text.
 

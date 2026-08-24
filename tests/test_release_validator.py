@@ -127,6 +127,8 @@ class ReleaseValidatorTests(unittest.TestCase):
             "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
             "plan-reconcile",
             "plan-verification", "run-verification",
+            "owned-run-start", "owned-run-create", "owned-run-finish",
+            "owned-run-exec",
         }
         self.assertEqual(set(VALIDATOR.BEHAVIORAL_CLI_CASES), expected)
         self.assertEqual(set(VALIDATOR.SUCCESSFUL_CLI_COMMANDS), expected)

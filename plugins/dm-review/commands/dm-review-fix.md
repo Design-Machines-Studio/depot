@@ -93,7 +93,7 @@ All review findings resolved. Commit the fixes?
 
 Two parts, both unconditional -- do not gate either on whether fixes were committed.
 
-**5a. Repository cleanup.** Run the cleanup phase per `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`: `git worktree prune`, delete only branches this fix pass created and that are provably merged, leave foreign refs alone with a follow-up command, assert a clean tree, and report the inventory. Never delete the branch being fixed.
+**5a. Repository cleanup.** Run the cleanup phase per `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`: reconcile only exact refs this fix pass registered, delete only branches it created and that are provably merged, leave foreign refs alone with a follow-up command, assert a clean tree, and report the inventory. Never prune Git metadata or delete the branch being fixed.
 
 **5b. Completed todo files.** Stale done files accumulate across sessions when this step is skipped.
 

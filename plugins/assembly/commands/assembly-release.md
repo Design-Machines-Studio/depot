@@ -306,9 +306,12 @@ Projects, or other releases.
 ## Receipts
 
 Use a repository receipt location only when current repository instructions
-explicitly declare it and Git confirms it is ignored. Otherwise use a safe
-temporary directory and remove sensitive transient material after extracting
-bounded evidence.
+explicitly declare it and Git confirms it is ignored. Otherwise resolve
+Workflow Kernel `>=0.17.0`, read `exact-owned-cleanup.md`, and create one
+disposable root with `owned-run-start --workflow assembly-release --run-id
+<unique-run-id>`. Create temporary repositories, caches, raw provider output,
+and transient receipts only through `owned-run-create` beneath that root.
+Install terminal reconciliation for `EXIT`, `SIGINT`, and `SIGTERM`.
 
 Keep the receipt compact:
 
@@ -323,6 +326,14 @@ Keep the receipt compact:
 
 Never retain credential values, private endpoints, raw environments, provider
 bodies, sensitive workflow artifacts, or unbounded logs.
+
+Successful `status`, `plan`, `publish`, `resume`, and `promote` invocations
+remove the disposable root after the compact receipt is projected to its
+declared durable destination. Failure/interruption also removes it unless one
+bounded diagnostic root is genuinely useful. When retained, terminal output
+states the exact path, why it was retained, what compact evidence it contains,
+and the exact safe cleanup command. Resume/retry uses that exact recorded root;
+it never adopts an older prefix- or age-matched directory.
 
 ## Output contract
 

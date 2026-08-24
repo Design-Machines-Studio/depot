@@ -51,29 +51,27 @@ All design recommendations MUST use Live Wires vocabulary: `.stack` not "add mar
 
 A dev server must be running. `browser_navigate` these in order: `http://localhost:8080` (Go+Templ+Datastar), `http://localhost:3000` (Node/general), `https://[project-name].ddev.site` (Craft CMS DDEV), `http://localhost:5173` (Vite). If none respond, report: "No dev server detected. Start the application and re-run the review."
 
-## Screenshot Archive
+## Screenshot Evidence
 
 ### Phase 0: Setup
 
-Ignore the archive, rotate stale date directories (keep only today's, preventing accumulation), and create today's:
+The orchestrator creates a `raw-output` directory inside this invocation's
+exact-owned run root and exports `DEPOT_EXACT_RUN_ROOT`. Use only that directory;
+do not edit `.gitignore`, inspect older review directories, or rotate paths by
+date or glob:
 
 ```bash
-grep -qxF '.claude/ux-review/' .gitignore 2>/dev/null || echo '.claude/ux-review/' >> .gitignore
-REVIEW_DIR=".claude/ux-review/screenshots"; TODAY=$(date +%Y-%m-%d)
-if [ -d "$REVIEW_DIR" ]; then
-  for dir in "$REVIEW_DIR"/????-??-??; do
-    [ "$(basename "$dir")" != "$TODAY" ] && rm -rf "$dir"
-  done
-fi
-mkdir -p "$REVIEW_DIR/$TODAY"
+test -n "$DEPOT_EXACT_RUN_ROOT"
+REVIEW_DIR="$DEPOT_EXACT_RUN_ROOT/review/screenshots"
+test -d "$REVIEW_DIR"
 ```
 
-Save every reviewed page there as `{sanitized-slug}-{breakpoint}.png` (e.g. `proposals-list-1440.png`), replacing any character outside `[a-z0-9-]` with `-`. If earlier date directories hold shots of the same page, note visible changes in your output. After all reviews, write run metadata to `.claude/ux-review/manifest.json`:
+Save every reviewed page there as `{sanitized-slug}-{breakpoint}.png` (e.g. `proposals-list-1440.png`), replacing any character outside `[a-z0-9-]` with `-`. After all reviews, write run metadata to `$DEPOT_EXACT_RUN_ROOT/review/manifest.json`:
 
 ```json
 {"lastRun": "2026-03-26", "commit": "abc123f",
  "pages": [{"url": "/proposals", "breakpoint": 1440,
-            "screenshot": "screenshots/2026-03-26/proposals-list-1440.png"}]}
+            "screenshot": "screenshots/proposals-list-1440.png"}]}
 ```
 
 ---
@@ -311,8 +309,8 @@ Total: [score]/40 ([rating band])
 ### The Bottom Line
 [One paragraph: would a senior creative director be proud to ship this? What's the single most impactful improvement?]
 
-### Screenshot Archive
-- Screenshots saved to: `.claude/ux-review/screenshots/{date}/`
+### Screenshot Evidence
+- Screenshots saved to: `<exact-run-root>/review/screenshots/`
 ```
 
 ## Severity Guide
@@ -328,7 +326,9 @@ Same Playwright MCP tools as `visual-browser-tester`, prefixed `mcp__plugin_comp
 ## Rules
 
 1. Verify the dev server is running before testing.
-2. Save screenshots for every page reviewed, compare against previous ones when they exist, and update `manifest.json` after every run.
+2. Save screenshots for every page reviewed in this invocation's exact-owned
+   raw-output directory and update its `manifest.json`. Do not compare or delete
+   paths owned by another run.
 3. Check for MISSING states, not just existing ones -- your key differentiator.
 4. Cite specific design principles when flagging issues.
 5. Acknowledge what's working -- critique without recognition of strengths is incomplete.

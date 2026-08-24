@@ -99,6 +99,51 @@ class GitCleanupTests(unittest.TestCase):
             self.assertEqual((), plan.actions)
             self.assertTrue(all(item.disposition is CleanupDisposition.FOREIGN for item in plan.dispositions))
 
+    def test_preexisting_user_worktree_is_not_registered_or_removed(self):
+        user_worktree = "/repo/user-worktrees/hand-authored"
+        plan = self.adapter.cleanup_owned(
+            self.registry, self.scope,
+            proof(worktree_path=user_worktree, branch="user/hand-authored"),
+        )
+        self.assertEqual((), plan.actions)
+        self.assertNotIn(user_worktree, {item.resource_id for item in plan.actions})
+
+    def test_concurrent_run_namespaces_plan_only_their_registered_exact_refs(self):
+        other_root = "/repo/.worktrees/pipeline/run-2"
+        other_namespace = "pipeline/run-2"
+        other_worktree = other_root + "/node-1"
+        other_branch = other_namespace + "/node-1"
+        other_registry = ResourceRegistry(Path(self.directory.name) / "other.jsonl")
+        for kind, resource_id in (
+            (ResourceKind.WORKTREE, other_worktree),
+            (ResourceKind.BRANCH, other_branch),
+        ):
+            other_registry.register(ResourceRecord(
+                resource_id, kind, "run-2", "node-1", "chunk", "retain", NOW,
+                labels={
+                    "ownership-namespace": other_namespace,
+                    "base-ref": "feature/kernel",
+                    "merge-target": "feature/kernel",
+                    "ref-role": (
+                        "chunk-worktree" if kind is ResourceKind.WORKTREE
+                        else "chunk-branch"
+                    ),
+                },
+            ))
+        other_adapter = GitAdapter(other_namespace, other_root, now=lambda: NOW)
+        other_proof = proof(
+            worktree_path=other_worktree, branch=other_branch,
+            ownership_namespace=other_namespace,
+        )
+
+        first = self.adapter.cleanup_owned(self.registry, self.scope, proof())
+        second = other_adapter.cleanup_owned(
+            other_registry, CleanupScope("run-2", "node-1"), other_proof,
+        )
+
+        self.assertTrue(all(other_root not in part for action in first.actions for part in action.argv))
+        self.assertTrue(all(ROOT not in part for action in second.actions for part in action.argv))
+
     def test_stale_unreadable_or_dirty_proof_fails_closed(self):
         cases = (
             proof(captured_at=NOW - timedelta(seconds=6)),

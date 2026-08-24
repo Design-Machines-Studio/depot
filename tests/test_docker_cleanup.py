@@ -240,6 +240,7 @@ class DockerLifecycleTests(unittest.TestCase):
         value, _ = self.register()
         plan = self.adapter.plan_chunk_cleanup(self.registry, DockerInventory((value,)), "run-1", "node-1")
         self.assertEqual(("docker", "rm", "ctr-1"), plan.actions[0].argv)
+        self.assertFalse(any("prune" in part for action in plan.actions for part in action.argv))
 
         empty_registry = ResourceRegistry(Path(self.directory.name) / "empty.jsonl")
         empty_registry.register(ResourceRecord(

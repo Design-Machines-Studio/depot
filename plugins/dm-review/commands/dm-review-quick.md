@@ -56,3 +56,6 @@ as optional P3 debt.
    - File path: review that specific file or directory
 5. Dispatch the two core lanes plus applicable existing UI/build/domain verification lanes
 6. Output the unified review report with the standard merge recommendation
+
+Every pre-execution abort and terminal outcome uses the review skill's
+exact-owned cleanup sequence; quick mode does not get a weaker cleanup path.

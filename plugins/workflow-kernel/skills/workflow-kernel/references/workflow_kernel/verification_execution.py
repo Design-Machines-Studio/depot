@@ -8,7 +8,6 @@ import shutil
 import signal
 import subprocess
 import sys
-import tempfile
 import time
 from pathlib import Path
 
@@ -226,8 +225,12 @@ def run_bounded_capture(
 
 def run_local_command(repository, lane, environment):
     """Run one argv array with bounded streams, time, descendants, and home."""
+    from .owned_run import owned_temporary_directory
+
     argv = [resolve_executable(repository, lane["argv"][0]), *lane["argv"][1:]]
-    with tempfile.TemporaryDirectory(prefix="workflow-kernel-home-") as home:
+    with owned_temporary_directory(
+        "temporary-directory", "workflow-kernel-home-",
+    ) as home:
         result = run_bounded_capture(
             argv, repository, {**environment, "HOME": home},
             lane["timeout_seconds"],

@@ -185,7 +185,7 @@ terminal emission block.**
 
 ```bash
 "$WORKFLOW_KERNEL" record-attempt \
-  --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json \
+  --receipts <exact-run-root>/review/authoritative-receipts.json \
   --run-id <run-id> --occurred-at <ISO-8601> \
   --authoritative-receipt receipts/review/<lane>.json \
   --stage review_dispatch --status <completed|failed|declined|skipped> \
