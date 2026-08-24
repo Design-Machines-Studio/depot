@@ -7,7 +7,7 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | Tier | Lifecycle | Gitignored | Cleanup |
 |------|-----------|------------|---------|
 | **1 -- Ephemeral** | Auto-deleted on run completion (success or failure) | Yes | Orchestrator Step 5b |
-| **2 -- Run-scoped** | Deleted after successful run; preserved on failure for debugging | Yes | Orchestrator Step 5b |
+| **2 -- Run-scoped** | Deleted on every terminal path after compact evidence projection | Yes | Orchestrator Step 5b |
 | **3 -- Feature-scoped** | Persist until user disposes via delivery gate | No | User choice at Phase 7 GATE |
 | **4 -- Durable** | Permanent (ai-memory, committed code) | N/A | Never |
 
@@ -25,8 +25,8 @@ Governs all files that pipeline and dm-review plugins create in downstream repos
 | `manifest.json` | 2 | Chunk ordering and dependency metadata; retained through terminal observe/compare/metrics |
 | `authoritative-receipts.json` | 2 | Cumulative ordered redacted receipt array; canonical input to observe/compare/metrics |
 | `.workflow-kernel/repository-scope.json` | 4 | Repository-lifetime durable identity; never Tier 2 and never auto-deleted |
-| `.workflow-kernel/runs/<run-id>/run-state.json` | 2 | Canonical lifecycle and lease state; retain the terminal run directory or a durable tombstone until exact-scope Docker absence is proven |
-| `.workflow-kernel/runs/<run-id>/events.jsonl` | 2 | Canonical redacted lifecycle ledger paired with the lease state and retained under the same terminal-run rule |
+| `.workflow-kernel/runs/<run-id>/run-state.json` | 2 | Canonical lifecycle and lease state; remove after terminal projection and fresh exact-scope Docker absence, or retain only inside the one bounded diagnostic root |
+| `.workflow-kernel/runs/<run-id>/events.jsonl` | 2 | Canonical redacted lifecycle ledger; remove with the run root unless selected as bounded diagnostic evidence |
 | `pipeline-shadow-observation.json` | 2 | Explicit `authoritative_observation` RunSpec/event snapshot generated after authoritative receipts |
 | `pipeline-shadow-prediction.json` | 2 | Immutable, context/digest-bound `independent_prediction`; bound once and never overwritten by re-observation |
 | `independent-prediction-receipts.json` | 2 | Independently produced pre-action prediction source; retained with the bound prediction through comparison and deleted only after semantic match |
@@ -47,24 +47,24 @@ Refs are not artifacts -- they are not deleted by tier, but by the safe-to-delet
 
 | Ref | Removed when | Notes |
 |-----|--------------|-------|
-| `.worktrees/pipeline/<feature>/<chunk>/` | clean working tree | Per-chunk workspace, removed in Step 3j; swept in Step 5b |
-| `pipeline/<feature>/<chunk-id>` | merged, or zero unique commits | Chunk branch, deleted after its worktree |
+| `.worktrees/pipeline/<run-id>/<chunk>/` | clean working tree | Per-chunk workspace, removed in Step 3j or exact-record reconciliation in Step 5b |
+| `pipeline/<run-id>/<chunk-id>` | merged, or zero unique commits | Chunk branch, deleted after its worktree |
 | `<featureBranch>` | **never by the orchestrator** | Deleted only with merge proof into `main`/`origin/main`; `-D` forbidden |
 
 ### dm-review artifacts
 
 | Path | Tier | Notes |
 |------|------|-------|
-| `.claude/ux-review/screenshots/<date>/*.png` | 1 | Rotated: only today's date kept |
-| `.claude/ux-review/manifest.json` | 2 | Overwritten each run |
+| `<exact-run-root>/review/screenshots/*.png` | 1 | Raw screenshot evidence owned only by this invocation |
+| `<exact-run-root>/review/manifest.json` | 2 | Run-scoped screenshot index |
 | `.claude/ux-review/report.md` | 3 | Complete unified review, including findings, coverage, cleanup, provenance, and collapsed raw reports |
-| `.claude/ux-review/workflow-kernel/request.json` | 2 | Validated review request with unchanged/defaulted workflow class |
-| `.claude/ux-review/workflow-kernel/authoritative-receipts.json` | 2 | Cumulative ordered redacted review receipt array |
-| `.claude/ux-review/workflow-kernel/review-shadow-observation.json` | 2 | Explicit authoritative review observation snapshot |
-| `.claude/ux-review/workflow-kernel/review-shadow-prediction.json` | 2 | Immutable, context/digest-bound independent review prediction |
-| `.claude/ux-review/workflow-kernel/independent-prediction-receipts.json` | 2 | Pre-action review prediction source retained through comparison and deleted only after semantic match |
-| `.claude/ux-review/workflow-kernel/{shadow-report,metrics}.json` | 2 | Terminal parity and proposal-only reliability outputs |
-| `.claude/ux-review/workflow-kernel/docker/*.json` | 2 | Owned-resource plans, proof snapshots, outcomes, and receipts |
+| `<exact-run-root>/review/workflow-kernel/request.json` | 2 | Validated review request with unchanged/defaulted workflow class |
+| `<exact-run-root>/review/workflow-kernel/authoritative-receipts.json` | 2 | Cumulative ordered redacted review receipt array |
+| `<exact-run-root>/review/workflow-kernel/review-shadow-observation.json` | 2 | Explicit authoritative review observation snapshot |
+| `<exact-run-root>/review/workflow-kernel/review-shadow-prediction.json` | 2 | Immutable, context/digest-bound independent review prediction |
+| `<exact-run-root>/review/workflow-kernel/independent-prediction-receipts.json` | 2 | Pre-action review prediction source retained through comparison, then deleted |
+| `<exact-run-root>/review/workflow-kernel/{shadow-report,metrics}.json` | 2 | Terminal parity and proposal-only reliability inputs; compact conclusions project into the report |
+| `<exact-run-root>/review/workflow-kernel/docker/*.json` | 2 | Owned-resource plans, proof snapshots, outcomes, and receipts |
 | `todos/*-pending-*.md` | 3 | Active findings -- persist until resolved |
 | `todos/*-done-*.md` | 1 | Resolved findings -- auto-cleaned before next review |
 | `todos/*-deferred-*.md` | 3 | Tracked debt with justifications -- never auto-cleaned |
@@ -80,7 +80,7 @@ Protected builder restore blobs are not ordinary artifacts. Store them only in p
 
 ## Cleanup Rules
 
-Step 5b runs on every exit path -- success, failure, and every answer to the Phase 7 gate -- in one authoritative order: Docker reconciliation; artifact and Git cleanup while preserving terminal shadow inputs; final authoritative cleanup/terminal receipt; shadow observation/comparison/metrics; eligible shadow Tier 2 deletion only on semantic `match`; then manifest/receipt-input cleanup on that same match. Receipt fields never precede their Docker/Git/artifact outcomes, and `manifest.json` is never removed before terminal observation finishes. The repository scope file is not eligible Tier 2, and parity match alone never authorizes terminal run-state deletion.
+Step 5b runs on every exit path -- success, failure, and every answer to the Phase 7 gate -- in one authoritative order: Docker reconciliation; artifact and Git cleanup while preserving terminal shadow inputs; final authoritative cleanup/terminal receipt; shadow observation/comparison/metrics; compact evidence projection; then exact-owned run-root cleanup. Receipt fields never precede their Docker/Git/artifact outcomes, and `manifest.json` is never removed before terminal observation finishes. The repository scope file is not eligible Tier 2, and parity match alone never authorizes terminal run-state deletion.
 
 ### On successful pipeline completion (Step 5b)
 
@@ -88,7 +88,7 @@ Step 5b runs on every exit path -- success, failure, and every answer to the Pha
 2. Delete Tier 1 plus consumed prompts/brainstorm artifacts and complete Git cleanup/readiness checks. Preserve `manifest.json`, `authoritative-receipts.json`, and shadow/RunSpec artifacts.
 3. Write `plans/<feature-slug>/receipt.md` from those completed authoritative outcomes.
 4. Append the terminal receipt, run terminal observation, comparison, and metrics using the retained manifest and cumulative receipt array.
-5. On semantic `match`, delete eligible shadow Tier 2 such as the bound prediction, then delete the consumed manifest, authoritative receipt array, independent prediction source, and Docker plan/proof inputs. The source and bound prediction are never deleted before bind and comparison. Preserve `.workflow-kernel/repository-scope.json` unconditionally. Preserve the terminal run directory unless a fresh Docker inventory filtered by the exact `repository_scope_id` proves zero objects for that exact `(scope_id, run_id)` and contains no matching object whose inspect failed; only then may the directory be replaced by or reduced to a durable terminal tombstone. On any other parity result, preserve all terminal inputs and shadow artifacts for investigation.
+5. Delete consumed Tier 2 inputs after comparison regardless of parity. Project the compact parity result into `receipt.md`; raw predictions, manifests, receipts, and Docker proof inputs remain disposable. Preserve `.workflow-kernel/repository-scope.json` unconditionally. Remove the terminal run directory only after a fresh Docker inventory filtered by the exact `repository_scope_id` proves zero objects for that exact `(scope_id, run_id)` and contains no matching object whose inspect failed. Otherwise retain that directory as the one named bounded diagnostic root and report its exact safe cleanup command. Never retain a second raw-output root.
 6. Report: `Artifact cleanup: removed N files, retained M feature-scoped files`.
 
 Shadow artifacts never authorize cleanup, supply receipt fields, or substitute for an authoritative receipt.
@@ -108,19 +108,21 @@ run directory. Semantic parity `match` alone never authorizes its deletion.
 ### On failed pipeline run (Step 5b)
 
 1. Complete authoritative Docker reconciliation and Git cleanup/readiness checks.
-2. Delete Tier 1 only; preserve non-shadow Tier 2 for retry/debugging.
+2. Delete Tier 1 and Tier 2 after projecting compact failure evidence into the receipt. A genuinely useful bounded subset may remain only inside the one named diagnostic root.
 3. Write `plans/<feature-slug>/receipt.md` with completed failure and cleanup outcomes.
-4. Run shadow observation/comparison/metrics and preserve the manifest, cumulative receipts, Docker proof artifacts, and shadow Tier 2.
-5. Report: `Artifact cleanup (partial -- run failed): removed N ephemeral files, preserved prompts for debugging`.
+4. Run shadow observation/comparison/metrics, project compact conclusions, and remove raw inputs.
+5. Report either complete cleanup or the diagnostic root's exact path, reason, contents, and safe removal command.
 
 ### On user "Done" at Phase 7 GATE
 
 1. Run standard cleanup in the same ordered terminal sequence; do not delete the manifest or receipt inputs before observe/compare/metrics
 2. Also delete Tier 3 files, leaving only `receipt.md`
 
-### dm-review screenshot rotation
+### dm-review screenshot cleanup
 
-Before creating today's screenshot directory, delete all previous date directories. Only the current day's screenshots survive to the next review.
+Screenshots are created only beneath this invocation's exact-owned run root and
+removed on every terminal path after the durable report is written. Review code
+never rotates, scans, or deletes another run's screenshots.
 
 ### dm-review todo lifecycle
 
@@ -179,7 +181,7 @@ the authoritative Step 5b fields.
 ### Created this run
 | Ref | Kind | Disposition | Proof |
 |-----|------|-------------|-------|
-| pipeline/<feature>/03-handlers | chunk-branch | deleted | merged into <featureBranch> |
+| pipeline/<run-id>/03-handlers | chunk-branch | deleted | merged into <featureBranch> |
 | <featureBranch> | feature-branch | kept | no merge proof into main |
 
 ### Remaining after cleanup
@@ -187,7 +189,7 @@ the authoritative Step 5b fields.
 |-----|------|-------------|-------------------|
 | <featureBranch> | feature-branch | not merged -- awaiting PR | `git merge-base --is-ancestor <featureBranch> origin/main` |
 
-- Worktrees before: N   after: M   pruned: K
+- Worktrees created: N   removed: M   missing: K   blocked: J
 - Branches deleted: N   blocked: M
 - git status --porcelain: clean | <residue>
 ```

@@ -85,13 +85,21 @@ execution paths/environment, base commit, candidate commit, and worktree mode.
 ## Execution
 
 Resolve one compatible Workflow Kernel launcher using its
-`references/runtime-resolution.md` contract. Require Workflow Kernel `>=0.14.0`
+`references/runtime-resolution.md` contract. Require Workflow Kernel `>=0.17.0`
 and pin that launcher for the command.
 
-Use these run-owned artifacts:
+Resolve and read its `exact-owned-cleanup.md`, create one disposable root with
+`owned-run-start --workflow assembly-build --run-id <unique-run-id>`, and
+create a `raw-output` child named `verification`. Export the exact root as
+`DEPOT_EXACT_RUN_ROOT` so Workflow Kernel records its temporary execution home.
+Install the same terminal reconciliation for `EXIT`, `SIGINT`, and `SIGTERM`.
+Legacy modes use the repository's already-running Compose service and create no
+run-owned Docker object, so they do not adopt or clean that service.
+
+Use this run-owned disposable artifact:
 
 ```text
-.workflow-kernel/verification/plan.json
+<exact-run-root>/verification/plan.json
 ```
 
 Invoke `plan-verification` with:
@@ -106,6 +114,13 @@ Invoke `plan-verification` with:
 
 Then invoke `run-verification` with the same repository and profile, the fresh
 plan. It prints the bounded result for that invocation.
+
+On success, call `owned-run-finish --outcome succeeded`; no verification home,
+plan, temporary repository, or cache remains. On failure/interruption, remove
+the root unless one compact diagnostic is genuinely useful. A retained root is
+the only diagnostic root and the terminal report states its exact path, reason,
+contents, and exact cleanup command. A retry reuses only the exact recorded root
+with `--resume-root`; it never searches by prefix or age.
 
 The runner revalidates the exact Git range, execution closure, changed inputs,
 argv, and execution substrate

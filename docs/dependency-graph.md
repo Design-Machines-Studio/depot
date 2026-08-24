@@ -50,7 +50,7 @@ graph LR
 |---|---|---|---|
 | airlift | openrouter | optional | `>=1.14.0` |
 | airlift | workflow-kernel | optional | `>=0.5.0` |
-| assembly | workflow-kernel | required | `>=0.14.0` |
+| assembly | workflow-kernel | required | `>=0.17.0` |
 | assembly | council | optional | `>=1.5.0` |
 | assembly | design-machines | optional | `>=1.3.0` |
 | assembly | dm-review | optional | `>=1.35.0` |
@@ -59,15 +59,15 @@ graph LR
 | dm-review | live-wires | required | `>=1.8.0` |
 | dm-review | ghostwriter | required | `>=3.7.0` |
 | dm-review | council | required | `>=1.5.0` |
-| dm-review | workflow-kernel | required | `>=0.14.0` |
+| dm-review | workflow-kernel | required | `>=0.17.0` |
 | dm-review | ned | optional | `>=1.4.0` |
 | dm-review | superpowers | optional | `>=1.0.0` |
 | dm-review | airlift | optional | `>=1.0.0` |
 | dm-review | openrouter | optional | `>=1.18.0` |
 | ghostwriter | design-machines | optional | `>=1.5.0` |
 | ned | superpowers | optional | `>=1.0.0` |
-| pipeline | dm-review | required | `>=1.64.0` |
-| pipeline | workflow-kernel | required | `>=0.16.0` |
+| pipeline | dm-review | required | `>=1.70.0` |
+| pipeline | workflow-kernel | required | `>=0.17.0` |
 | pipeline | ned | optional | `>=1.4.0` |
 | pipeline | design-machines | optional | `>=1.3.0` |
 | pipeline | assembly | optional | `>=3.10.1` |

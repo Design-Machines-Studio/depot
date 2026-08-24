@@ -16,7 +16,6 @@ import pwd
 import re
 import stat
 import subprocess
-import tempfile
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -1285,12 +1284,16 @@ def _timestamp(clock):
 
 
 def _attempt(lane, adapter, root, clock, *, fallback_reason=None):
+    from .owned_run import owned_temporary_directory
+
     started = _timestamp(clock)
     reason = "completed"
     observations = []
     observation_ids = []
     evidence_digest = None
-    with tempfile.TemporaryDirectory(prefix="inspection-evidence-") as evidence_root:
+    with owned_temporary_directory(
+        "raw-output", "inspection-evidence-",
+    ) as evidence_root:
         try:
             completed = adapter.run(
                 tuple(_execution_argv(lane, root, evidence_root)),

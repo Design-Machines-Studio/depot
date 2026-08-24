@@ -18,8 +18,8 @@ block() {  # block <ref> <reason> <follow-up command>
 Remove the worktree before deleting the branch.
 
 ```bash
-WT=".worktrees/pipeline/<feature>/<chunk-id>"
-BR="pipeline/<feature>/<chunk-id>"
+WT=".worktrees/pipeline/<run-id>/<chunk-id>"
+BR="pipeline/<run-id>/<chunk-id>"
 
 WT_STATUS="$(git -C "$WT" status --porcelain)"; WT_RC=$?
 if [ "$WT_RC" -ne 0 ]; then
@@ -41,37 +41,14 @@ fi
 
 Row 1 also deletes an abandoned chunk with zero unique commits over its base via `-d`. Row 2 fires when the chunk branch base differs from the merge target. Carry every `block` into the Step 5b inventory as `blocked`.
 
-## Terminal sweep (5b)
+## Terminal exact-record reconciliation (5b)
 
-Parse `git worktree list --porcelain` field-wise. Do not `grep -o` porcelain for the feature slug. Use process substitution, not a piped `while`. Tab-separate awk output and read with `IFS=$'\t'`.
+Read only still-active worktree and chunk-branch records for this exact run ID
+from the durable registry. Re-run the per-chunk decision table for each record
+in creation order. A recorded path that has already disappeared is `missing`
+and needs no command; its branch still receives an independent exact proof.
 
-```bash
-PREFIX=".worktrees/pipeline/<feature>/"
-
-while IFS=$'\t' read -r WT PRUNABLE; do
-  case "$WT" in
-    */"$PREFIX"*|"$PREFIX"*) ;;
-    *) continue ;;
-  esac
-  if [ "$PRUNABLE" = "prunable" ]; then
-    printf 'PRUNABLE %s -- registration stale, path gone\n' "$WT"
-    continue
-  fi
-  WT_STATUS="$(git -C "$WT" status --porcelain)"; WT_RC=$?
-  if [ "$WT_RC" -ne 0 ]; then
-    block "$WT" "git status failed (rc=$WT_RC) -- worktree unreadable" "git -C $WT status"
-  elif [ -n "$WT_STATUS" ]; then
-    block "$WT" "uncommitted or untracked changes" "git -C $WT status; git worktree remove --force $WT"
-  else
-    git worktree remove "$WT" || block "$WT" "worktree remove failed" "git worktree remove --force $WT"
-  fi
-done < <(git worktree list --porcelain | awk '
-  /^worktree /{ if (p!="") printf "%s\t%s\n", p, f; p=substr($0,10); f="-" }
-  /^prunable/ { f="prunable" }
-  END        { if (p!="") printf "%s\t%s\n", p, f }
-')
-
-git worktree prune
-```
-
-Then apply the 3j decision table to every remaining chunk branch. Feature-branch protection stays in the orchestrator.
+Do not enumerate `.worktrees/pipeline/**`, match the feature slug, infer refs
+from a prefix, or run `git worktree prune`. Another concurrent run's clean
+worktree is foreign even when it targets the same feature branch. Feature-branch
+protection stays in the orchestrator.

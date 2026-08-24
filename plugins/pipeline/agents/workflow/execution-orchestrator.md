@@ -263,21 +263,31 @@ CLEANUP_ACTIVE_HOST_ARGS=()
 if ! CONTRACT=$("$WORKFLOW_KERNEL" resolve-plugin-asset \
   --plugin dm-review \
   --asset skills/review/references/repo-cleanup-contract.md \
-  --minimum-version 1.62.0 \
+  --minimum-version 1.70.0 \
   "${CLEANUP_ACTIVE_HOST_ARGS[@]}"); then
   echo "ERROR: required dm-review cleanup contract unavailable" >&2
   exit 1
 fi
 ```
 
-If unresolved, stop. Capture before-state:
+If unresolved, stop. Resolve and read Workflow Kernel's
+`skills/workflow-kernel/references/exact-owned-cleanup.md` from the pinned
+bundle. Create one disposable root with `owned-run-start --workflow pipeline
+--run-id <run-id>`, then create a `raw-output` child named `ref-inventory`.
+Write the before-state files there instead of `/tmp`; keep the exact returned
+root in the existing run state:
 
 ```bash
-git worktree list --porcelain > "${TMPDIR:-/tmp}/refs-before-<feature-slug>.txt"
-git branch --list > "${TMPDIR:-/tmp}/branches-before-<feature-slug>.txt"
+git worktree list --porcelain > "$RUN_ROOT/ref-inventory/worktrees-before.txt"
+git branch --list > "$RUN_ROOT/ref-inventory/branches-before.txt"
 ```
 
-Open an in-run **ref registry**: append every created worktree/branch with `kind` (`worktree`, `chunk-branch`, `feature-branch`, `feature-branch-local-tracking`) and its base. Register the feature branch when Step 1 creates it, including reuse-mode local tracking; do not register a pre-existing feature branch as cleanup-owned. Never delete the feature branch without merge proof.
+Open the run's durable **ref registry**: append every created worktree/branch
+with `kind` (`worktree`, `chunk-branch`, `feature-branch`,
+`feature-branch-local-tracking`) and its base. Register the feature branch when
+Step 1 creates it, including reuse-mode local tracking; do not register a
+pre-existing feature branch as cleanup-owned. Never delete the feature branch
+without merge proof.
 
 Mark `0e. Ref registry initialized` complete.
 
@@ -389,17 +399,20 @@ Mark `[chunk-id] 1. Classify chunk` complete.
 ### 3b: Create Worktree or Select Branch
 
 ```bash
-git worktree add .worktrees/pipeline/<feature>/<chunk-id> -b pipeline/<feature>/<chunk-id> <featureBranch>
+git worktree add .worktrees/pipeline/<run-id>/<chunk-id> -b pipeline/<run-id>/<chunk-id> <featureBranch>
 ```
 
 **Register both refs immediately** in the Step 0e ref registry, before dispatch:
 
 ```text
-| .worktrees/pipeline/<feature>/<chunk-id> | worktree     | 3b | <featureBranch> |
-| pipeline/<feature>/<chunk-id>            | chunk-branch | 3b | <featureBranch> |
+| .worktrees/pipeline/<run-id>/<chunk-id> | worktree     | 3b | <featureBranch> |
+| pipeline/<run-id>/<chunk-id>            | chunk-branch | 3b | <featureBranch> |
 ```
 
-Registration happens at creation, never reconstructed afterward from a glob.
+Registration is part of the creation action, never reconstructed afterward
+from a glob. If either exact record cannot be persisted, remove the just-created
+exact worktree/ref before returning the creation failure. Do not continue with
+an unregistered worktree.
 
 Under `sequential-on-branch`, replace the worktree command with:
 
@@ -650,7 +663,7 @@ Before merging, search for `EVAL_GATE_PASSED: [chunk-id] |`. If absent: STOP, ru
 
 ```bash
 git checkout <featureBranch>
-git merge pipeline/<feature>/<chunk-id> --no-ff -m "pipeline: merge <chunk-id> -- <chunk-title>"
+git merge pipeline/<run-id>/<chunk-id> --no-ff -m "pipeline: merge <chunk-id> -- <chunk-title>"
 ```
 
 Simple conflicts: attempt auto-resolve. Complex: flag and continue. Append the merge disposition; defer shadow observation until `all-chunks-complete`. Mark `[chunk-id] 9. Merge back` complete.
@@ -868,7 +881,7 @@ Use this schema after Docker reconciliation, artifact cleanup, Git cleanup, and 
 |-----|------|-------------|-------------------|
 [Every kept or blocked ref, with the exact command a human runs next.]
 
-- Worktrees before: N   after: M   pruned: K
+- Worktrees created: N   removed: M   missing: K   blocked: J
 - Branches deleted: N   blocked: M
 - git status --porcelain: clean | <residue>
 ```
@@ -877,24 +890,21 @@ Every registered ref appears exactly once under "Created this run". A blocked re
 
 ### 2. Artifact cleanup
 
-Always delete Tier 1:
-
-```bash
-rm -rf plans/<feature-slug>/baselines/ plans/<feature-slug>/baselines-pre-fix/ plans/<feature-slug>/baselines-post-fix/ plans/<feature-slug>/screenshots/
-```
-
-On success only (CLEAN or APPROVE WITH FIXES), delete Tier 2 inputs no longer needed by terminal shadow:
-
-```bash
-rm -rf plans/<feature-slug>/prompts/
-rm -f plans/<feature-slug>/brainstorm.html
-```
-
-On failure, preserve Tier 2. Do not delete `manifest.json`, `authoritative-receipts.json`, `pipeline-shadow-observation.json`, `run-state.json`, `events.jsonl`, `shadow-report.json`, or `metrics.json` here.
+Create Tier 1 and Tier 2 execution material beneath the invocation's exact-owned
+root wherever it is not a documented standalone `/pipeline-prompts` deliverable.
+At terminal cleanup, reconcile only exact artifact records from this run. Never
+delete `plans/<feature-slug>` children by a broad path list: those paths may
+predate this invocation or belong to a concurrent run. On failure, project the
+compact reason and cleanup outcomes, then remove raw Tier 1 and Tier 2 inputs;
+retain at most one bounded diagnostic root under `exact-owned-cleanup.md`.
 
 ### 3. Repository cleanup
 
-Sweep refs whose Step 3j was interrupted, apply feature-branch protection, then prune. Load `plugins/pipeline/references/execution-worktree-cleanup.md`, redefine `block` from it (this is a separate shell from 3j), and run the terminal sweep, then `git worktree prune`. Apply the 3j decision table to remaining chunk branches.
+Reconcile only still-active exact records whose Step 3j was interrupted, then
+apply feature-branch protection. Load
+`plugins/pipeline/references/execution-worktree-cleanup.md`, redefine `block`
+from it (this is a separate shell from 3j), and run its terminal exact-record
+reconciliation. Do not sweep a namespace or run `git worktree prune`.
 
 **Feature-branch protection.** Never delete the feature branch without merge proof. Merge proof is a zero exit from:
 
@@ -910,7 +920,7 @@ Absent that, the inventory says `kept -- no merge proof`. `git branch -D` on the
 Verify the repo is fit for the next run and record each result honestly, pass or fail. A failing check does not invalidate the run's result -- the work is already done -- but it must appear in the receipt so the next operator knows what they are inheriting.
 
 ```bash
-git worktree list --porcelain   # expect: no prunable entries, no .worktrees/pipeline/ paths
+git worktree list --porcelain   # inspect each exact registered path only
 git status --porcelain          # expect: empty
 ```
 
@@ -920,7 +930,7 @@ Now create `plans/<feature-slug>/receipt.md` using the schema above. Every Docke
 
 Log cleanup stats: `Artifact cleanup before shadow: removed N ephemeral + M run-scoped files, retained K feature-scoped files.` The authoritative receipt does not predict the later shadow/input disposition; Step 6 reports those post-receipt deletions separately after they occur.
 
-Log repository stats: `Repository cleanup: worktrees N->M (pruned K), branches deleted J, blocked L. Feature branch <featureBranch>: kept -- no merge proof.`
+Log repository stats: `Repository cleanup: registered worktrees N->M, branches deleted J, missing K, blocked L. Feature branch <featureBranch>: kept -- no merge proof.`
 
 **Airlift:** when cleanup completes, fire `--phase "deliver"` per `plugins/pipeline/references/airlift-checkpoint.md`.
 
@@ -934,7 +944,21 @@ Only after the complete final authoritative cleanup/terminal receipt exists, app
 "$WORKFLOW_KERNEL" metrics --events plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/metrics.json
 ```
 
-Observation-only. On semantic `match`, delete eligible shadow Tier 2 then consumed terminal inputs. Never auto-delete `.workflow-kernel/repository-scope.json`. Parity match alone never authorizes deletion of `.workflow-kernel/runs/<run-id>/`. Preserve terminal inputs for non-match categories. Record disposition in the final summary without rewriting the cleanup receipt.
+Observation-only. After compact projection, delete eligible shadow Tier 2 and
+consumed terminal inputs regardless of semantic category. Never auto-delete `.workflow-kernel/repository-scope.json`. Preserve the compact shadow category
+in the receipt rather than the raw terminal state tree. Record disposition in
+the final summary without rewriting the cleanup receipt.
+
+After comparison and fresh exact-scope Docker inventory prove zero resources,
+apply `exact-owned-cleanup.md`: on success, remove the exact
+`.workflow-kernel/runs/<run-id>/` state directory and finish the disposable root
+with `owned-run-finish --outcome succeeded`. On failure/interruption, remove the
+disposable root. Retain `.workflow-kernel/runs/<run-id>/` only when it is the one
+genuinely useful bounded diagnostic root; then report its exact path, reason,
+contents, and exact `rm -rf -- <quoted-path>` command. If a dirty worktree is
+the retained diagnostic root, remove both kernel/disposable roots and report
+that worktree instead. Install the same terminal action for `EXIT`, `SIGINT`,
+and `SIGTERM`.
 
 Mark `FINAL 5b. Artifact and repository cleanup` complete.
 
@@ -1011,7 +1035,7 @@ Mark `FINAL 6. Present summary report` complete.
 - Always run Step 5b artifact cleanup, even on failure (Tier 1 always, Tier 2 only on success)
 - Always run the repository cleanup phase, even after review failure or an explicit gate
 - Never delete the feature branch without merge proof into main or origin/main
-- Never delete a ref outside `.worktrees/pipeline/<feature>/` and `pipeline/<feature>/*`
+- Never delete a ref absent from this run's exact registry; run-ID namespaces are a second guard, not ownership proof
 - Never report a blocked ref as cleaned
 - Always report honestly what you did and didn't do
 - Always follow the Fix Philosophy

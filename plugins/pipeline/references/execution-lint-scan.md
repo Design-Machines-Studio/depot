@@ -30,27 +30,27 @@ Warning (receipt only):
 Datastar:
 
 ```bash
-grep -rn 'data-on:.*\.window\|data-on:.*\.debounce\|data-on:.*\.throttle' .worktrees/pipeline/<feature>/<chunk-id>/backend/ --include="*.templ" || echo "clean"
-grep -rn 'data-signals=' .worktrees/pipeline/<feature>/<chunk-id>/backend/ --include="*.templ"
+grep -rn 'data-on:.*\.window\|data-on:.*\.debounce\|data-on:.*\.throttle' .worktrees/pipeline/<run-id>/<chunk-id>/backend/ --include="*.templ" || echo "clean"
+grep -rn 'data-signals=' .worktrees/pipeline/<run-id>/<chunk-id>/backend/ --include="*.templ"
 ```
 
 Go:
 
 ```bash
-grep -rn 'err\s*=' .worktrees/pipeline/<feature>/<chunk-id>/backend/ --include="*.go" | grep -v 'if err' | grep -v '_ =' | head -10
-grep -rn 'fmt.Sprintf.*SELECT\|fmt.Sprintf.*INSERT\|fmt.Sprintf.*UPDATE' .worktrees/pipeline/<feature>/<chunk-id>/backend/ --include="*.go" || echo "clean"
+grep -rn 'err\s*=' .worktrees/pipeline/<run-id>/<chunk-id>/backend/ --include="*.go" | grep -v 'if err' | grep -v '_ =' | head -10
+grep -rn 'fmt.Sprintf.*SELECT\|fmt.Sprintf.*INSERT\|fmt.Sprintf.*UPDATE' .worktrees/pipeline/<run-id>/<chunk-id>/backend/ --include="*.go" || echo "clean"
 ```
 
 Assembly mutation handlers:
 
 - Classify each POST/PUT/PATCH/DELETE handler as a protected user/operator write or trusted internal maintenance. A protected write without concrete action/resource authorization before the write is P1. Trusted maintenance must name and enforce its trust boundary; an unproved maintenance claim is P1.
 - Grep `Publish(` inside transaction scope. Events must fire after commit. `Publish()` between `Begin()` and `Commit()` is P1.
-- Grep fixtures for raw `*sql.DB`: `grep -rn '\*sql\.DB' .worktrees/pipeline/<feature>/<chunk-id>/ --include="*_test.go" --include="*fixture*"`. Fixtures must use `ScopedDB`. P1.
+- Grep fixtures for raw `*sql.DB`: `grep -rn '\*sql\.DB' .worktrees/pipeline/<run-id>/<chunk-id>/ --include="*_test.go" --include="*fixture*"`. Fixtures must use `ScopedDB`. P1.
 
 All projects:
 
 ```bash
-grep -rn "LIKE '%.*%'" .worktrees/pipeline/<feature>/<chunk-id>/ --include="*.go" --include="*.py" --include="*.ts" || echo "clean"
+grep -rn "LIKE '%.*%'" .worktrees/pipeline/<run-id>/<chunk-id>/ --include="*.go" --include="*.py" --include="*.ts" || echo "clean"
 ```
 
 Fix anti-patterns before the review loop.

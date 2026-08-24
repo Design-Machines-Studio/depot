@@ -216,11 +216,11 @@ Emitted by Phase 8. Two tables, matching `repo-cleanup-contract.md` section 7 ve
 |-----|------|-------------|-------------------|
 | .worktrees/pipeline/auth-map/04-views | worktree | not ours -- created by an interrupted pipeline run | `git worktree remove --force .worktrees/pipeline/auth-map/04-views` |
 
-- Worktrees before: N   after: M   pruned: K
+- Worktrees created: N   removed: M   missing: K   blocked: J
 - Branches deleted: N   blocked: M   left (foreign): K
 - `git status --porcelain`: clean | <residue>
 
-If the review created and left nothing, state `Repository cleanup: nothing created, tree clean, N worktrees pruned.`
+If the review created and left nothing, state `Repository cleanup: nothing created, tree clean.`
 
 ---
 

@@ -74,10 +74,16 @@ boundaries, semver, symlink/scope fail-closed rules, and exit codes. Use only
 stable launcher subcommands; inline Python source is forbidden. Initialize each
 run at `.workflow-kernel/runs/<run-id>`; a missing or incompatible
 launcher/runtime records `shadow unavailable` and the review continues.
+Before creating any temporary repository/cache or raw lane output, resolve and
+read Workflow Kernel's `exact-owned-cleanup.md`, start one disposable root with
+`owned-run-start --workflow dm-review --run-id <run-id>`, and record every
+nested disposable path through `owned-run-create`. The final report and compact
+machine-readable evidence remain the requested review deliverable; raw lane
+transcripts are disposable.
 Translate an explicit `workflowClass` unchanged; when absent use `feature` and
 record `workflow_class_defaulted=true` -- never infer it from diff kind, path,
 finding, or severity. Materialize the request at
-`.claude/ux-review/workflow-kernel/request.json` and the cumulative ordered
+`<exact-run-root>/review/request.json` and the cumulative ordered
 redacted receipt array at `authoritative-receipts.json` beside it. Observe only
 after an authoritative lane/consolidation/cleanup receipt exists.
 
@@ -85,21 +91,21 @@ Produce independent prediction receipts before corresponding authoritative actio
 
 ```text
 "$WORKFLOW_KERNEL" init .workflow-kernel/runs/<run-id> --run-id <run-id> --mode shadow --occurred-at <timezone-aware-ISO-8601>
-"$WORKFLOW_KERNEL" bind-prediction --type review --request .claude/ux-review/workflow-kernel/request.json --prediction-receipts .claude/ux-review/workflow-kernel/independent-prediction-receipts.json --state-dir .claude/ux-review/workflow-kernel
+"$WORKFLOW_KERNEL" bind-prediction --type review --request <exact-run-root>/review/request.json --prediction-receipts <exact-run-root>/review/independent-prediction-receipts.json --state-dir <exact-run-root>/review
 ```
 
 Use these exact later observation interfaces:
 
 ```text
-"$WORKFLOW_KERNEL" observe-review --request .claude/ux-review/workflow-kernel/request.json --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --state-dir .claude/ux-review/workflow-kernel
-"$WORKFLOW_KERNEL" compare --state-dir .claude/ux-review/workflow-kernel --authoritative-receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/shadow-report.json
-"$WORKFLOW_KERNEL" metrics --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/metrics.json
+"$WORKFLOW_KERNEL" observe-review --request <exact-run-root>/review/request.json --receipts <exact-run-root>/review/authoritative-receipts.json --state-dir <exact-run-root>/review
+"$WORKFLOW_KERNEL" compare --state-dir <exact-run-root>/review --authoritative-receipts <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/shadow-report.json
+"$WORKFLOW_KERNEL" metrics --events <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/metrics.json
 if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrouter --asset skills/openrouter-delegate/references/model-matrix.json --minimum-version 1.11.0); then :; else MODEL_MATRIX_ASSET=""; fi
-"$WORKFLOW_KERNEL" emit-cost-summary --events .claude/ux-review/workflow-kernel/authoritative-receipts.json --output .claude/ux-review/workflow-kernel/run-cost-summary.json --receipt .claude/ux-review/workflow-kernel/run-receipt.md --matrix "$MODEL_MATRIX_ASSET" --repository-commit "$(git rev-parse HEAD)" $(test -n "$(git status --porcelain)" && echo --dirty-state) \
-  || { s=$?; if [ "$s" -eq 6 ]; then printf 'run-cost-summary: skipped (receipt-write-failed)\n' >> .claude/ux-review/workflow-kernel/run-receipt.md; elif [ "$s" -eq 2 ]; then exit "$s"; else printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> .claude/ux-review/workflow-kernel/run-receipt.md; fi; }
+"$WORKFLOW_KERNEL" emit-cost-summary --events <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/run-cost-summary.json --receipt <exact-run-root>/review/run-receipt.md --matrix "$MODEL_MATRIX_ASSET" --repository-commit "$(git rev-parse HEAD)" $(test -n "$(git status --porcelain)" && echo --dirty-state) \
+  || { s=$?; if [ "$s" -eq 6 ]; then printf 'run-cost-summary: skipped (receipt-write-failed)\n' >> <exact-run-root>/review/run-receipt.md; elif [ "$s" -eq 2 ]; then exit "$s"; else printf 'run-cost-summary: skipped (kernel-unresolvable)\n' >> <exact-run-root>/review/run-receipt.md; fi; }
 ```
 
-The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file, writes a schema-bound `run-cost-summary.json` beside that run's `authoritative-receipts.json`, and appends exactly one receipt line -- the artifact path, or `run-cost-summary: skipped (<reason>)` on any internal failure. It is observation-only: it exits 0 for every measurement outcome, never gates or alters a review, lane, or phase outcome, and its absence never fails one. Exit 6 (receipt write failed after acceptance) appends `skipped (receipt-write-failed)` through the status-aware `||` fallback; exit 2 is an invalid invocation and propagates; any other non-zero status appends `skipped (kernel-unresolvable)`, and a failing final append keeps its own status visible. A refused symlinked receipt path still exits 0 and reports on stderr alone -- a non-zero exit would append through the symlink just refused. Receipt paths are fixed per directory, so concurrent runs sharing one directory overwrite each other: serialize them or give each its own. Pass a coherent installed bundle's matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; an unreadable or invalid matrix emits one stderr line, skips imputation, and never fails the emission. Populate events with `record-attempt` as each lane settles -- a standalone `--append-to` translator double-counts the attempt, and `lanes: 0` after a run that executed lanes means this boundary is not wired. Full flags: `cli-measurement-commands.md`; otherwise the flags named here are the complete required set.
+The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file, writes a schema-bound `run-cost-summary.json` beside that run's `authoritative-receipts.json`, and appends exactly one receipt line -- the artifact path, or `run-cost-summary: skipped (<reason>)` on any internal failure. It is observation-only: it exits 0 for every measurement outcome, never gates or alters a review, lane, or phase outcome, and its absence never fails one. Exit 6 (receipt write failed after acceptance) appends `skipped (receipt-write-failed)` through the status-aware `||` fallback; exit 2 is an invalid invocation and propagates; any other non-zero status appends `skipped (kernel-unresolvable)`, and a failing final append keeps its own status visible. A refused symlinked receipt path still exits 0 and reports on stderr alone -- a non-zero exit would append through the symlink just refused. Receipt paths are fixed per directory, so concurrent runs sharing one directory overwrite each other: use the invocation's exact-owned root or serialize callers that intentionally share a documented deliverable directory. Pass a coherent installed bundle's matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; an unreadable or invalid matrix emits one stderr line, skips imputation, and never fails the emission. Populate events with `record-attempt` as each lane settles -- a standalone `--append-to` translator double-counts the attempt, and `lanes: 0` after a run that executed lanes means this boundary is not wired. Full flags: `cli-measurement-commands.md`; otherwise the flags named here are the complete required set.
 
 If this review creates any Docker/Compose resource, load `${CLAUDE_SKILL_DIR}/references/review-docker-create.md` and follow it exactly.
 
@@ -261,7 +267,7 @@ COUNCIL_BUNDLE_ROOT=""
 for PLUGIN in dm-review accessibility-compliance live-wires ghostwriter council; do
   case "$PLUGIN" in
     dm-review)
-      PLUGIN_MINIMUM_VERSION="1.69.0"
+      PLUGIN_MINIMUM_VERSION="1.70.0"
       REQUIRED_ASSETS=("${DM_REVIEW_REQUIRED_ASSETS[@]}")
       ;;
     accessibility-compliance)
@@ -441,14 +447,14 @@ Materialize the decisions, sealed raw-finding inventory, and literal lane receip
 
 ```bash
 "$WORKFLOW_KERNEL" export-review-contributions \
-  --request .claude/ux-review/workflow-kernel/request.json \
-  --decisions .claude/ux-review/workflow-kernel/synthesis-decisions.json \
-  --raw-findings .claude/ux-review/workflow-kernel/raw-finding-inventory.json \
-  --lane-receipts .claude/ux-review/workflow-kernel/review-lane-receipts.json \
-  --raw-lane-outputs .claude/ux-review/workflow-kernel/raw-lane-outputs.json \
-  --receipts .claude/ux-review/workflow-kernel/authoritative-receipts.json \
-  --state-dir .claude/ux-review/workflow-kernel \
-  --output .claude/ux-review/workflow-kernel/authoritative-receipts.json
+  --request <exact-run-root>/review/request.json \
+  --decisions <exact-run-root>/review/synthesis-decisions.json \
+  --raw-findings <exact-run-root>/review/raw-finding-inventory.json \
+  --lane-receipts <exact-run-root>/review/review-lane-receipts.json \
+  --raw-lane-outputs <exact-run-root>/review/raw-lane-outputs.json \
+  --receipts <exact-run-root>/review/authoritative-receipts.json \
+  --state-dir <exact-run-root>/review \
+  --output <exact-run-root>/review/authoritative-receipts.json
 ```
 
 The command rejects credential-shaped content and credential-bearing URIs before hashing or persistence, content-addresses all four canonical inputs and every raw lane output under `contribution-inputs/`, and fails closed unless raw inventory, synthesis decisions, literal lane provenance, finding counts, raw lane-output union, and lane evidence references agree exactly. Exactly one receipt and raw output is required per requested lane, including zero-finding lanes; never hand-author `canonical_finding_id`, `sequence`, `finding_contribution`, or coverage receipts. A zero-finding synthesis still runs the command with count zero and all required lane receipts so missing producer coverage is observable.
@@ -461,7 +467,7 @@ Emit an authoritative coverage receipt after consolidation with one row per sele
 
 The receipt also records whether `review_lane_allowlist` was received and its disposition (`APPLIED`, `DISCARDED`, or `ABSENT`; a discarded input records the exact closed-set reason). It records the exact set of logical lanes actually `DISPATCHED` on this pass and the exact set in the recomputed selected full set that were deliberately `NOT_DISPATCHED` because an applied allowlist omitted them. The caller verifies the restriction against this receipt rather than assuming it was honored. Deliberately not-dispatched lanes under an applied allowlist are distinct from missing or failed required rows and do not by themselves make the review `REVIEW INCOMPLETE`; a dispatched lane that does not complete still does.
 
-Only after this receipt exists, run `observe-review` when the trusted runtime is available. The earlier `bind-prediction` atomically seals the independent source, translated events, event digest, and RunSpec context as `review-shadow-prediction.json`, then appends binding evidence while the run is still `planned`; the next transition must be `run.started`, and observation/compare reject missing, post-start, reordered, or artifact-mismatched authority. Byte-identical prediction and authoritative sources are valid when this pre-start ordering proves independence. Observation requires the matching artifact and never creates it; source and bound artifact remain until an exact semantic match permits deletion. `.workflow-kernel/repository-scope.json` is repository-lifetime durable and never auto-deleted. Parity match alone never deletes terminal run state: retain the run directory or a durable tombstone until fresh exact-scope Docker inventory proves zero exact-run objects and no uninspectable matches. Adapter failure or semantic parity gap is appended to the report without changing consolidation. At the terminal boundary, `compare` and `metrics` report `match`, `explained_host_difference`, `explained_host_economics_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, or `unsafe_to_promote`; economics differences are explicit non-matches and internal diagnostics appear only in `differences`.
+Only after this receipt exists, run `observe-review` when the trusted runtime is available. The earlier `bind-prediction` atomically seals the independent source, translated events, event digest, and RunSpec context as `review-shadow-prediction.json`, then appends binding evidence while the run is still `planned`; the next transition must be `run.started`, and observation/compare reject missing, post-start, reordered, or artifact-mismatched authority. Byte-identical prediction and authoritative sources are valid when this pre-start ordering proves independence. Observation requires the matching artifact and never creates it; source and bound artifact remain through comparison. `.workflow-kernel/repository-scope.json` is repository-lifetime durable and never auto-deleted. After fresh exact-scope Docker inventory proves zero exact-run objects, success removes terminal run state and disposable roots; failure/interruption may retain only one bounded diagnostic root. Adapter failure or semantic parity gap is appended to the compact report without changing consolidation. At the terminal boundary, `compare` and `metrics` report `match`, `explained_host_difference`, `explained_host_economics_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, or `unsafe_to_promote`; economics differences are explicit non-matches and internal diagnostics appear only in `differences`.
 
 #### Verify-before-close gate
 
@@ -506,13 +512,21 @@ Runs in **every mode** (quick and full), on every exit path -- including `REVIEW
 
 dm-review creates no worktrees, so its obligations are narrower than pipeline's:
 
-1. **Prune stale registrations.** `git worktree prune`, then confirm `git worktree list --porcelain` reports no `prunable` entries.
+1. **Do not adopt or prune refs.** Query only exact refs this invocation registered. Pre-existing/user refs and interrupted Pipeline refs are foreign.
 2. **Delete only branches this review created** -- in practice the batch-cleanup branch from `references/issue-tracking.md`, and only once decision-table row 1 passes.
 3. **Leave foreign refs alone.** Orphan `.worktrees/pipeline/**` paths and `pipeline/**` branches from an interrupted pipeline run are not dm-review's to delete; report them under "Remaining after cleanup" with a follow-up command. Deleting a ref you did not create is how a review loses someone's work.
 4. **Assert a clean tree.** `git status --porcelain` empty, or the exact residue listed.
 5. **Emit the inventory.** The `### Repository Cleanup` block in the report (see `references/output-format.md`).
 
 If this review created Docker resources for a dev server or review harness, load `${CLAUDE_SKILL_DIR}/references/review-docker-cleanup.md` and follow it exactly: clean only resources registered by this review, after validation, consolidation, and browser evidence are authoritative, writing the complete fresh dependent-node status proof before planning and again before every guarded execute.
+
+After comparison and fresh exact-scope Docker inventory prove zero resources,
+remove the exact `.workflow-kernel/runs/<run-id>/` directory and finish the
+disposable root. Review abort before execution uses outcome `review-aborted`.
+On failure or `SIGINT`/`SIGTERM`, retain nothing unless one compact diagnostic
+root is genuinely useful. Its terminal report must state the exact path, reason,
+contents, and exact removal command; never retain both a kernel run root and a
+dirty worktree. Install this same Phase 8 sequence on every exit path.
 
 Never delete the feature branch under review. There is no condition under which a code review deletes the branch it was asked to review.
 
@@ -528,7 +542,7 @@ Deliver the compact human handoff after that write, following `references/output
 
 ## Reference Files
 
-Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
+Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (exact worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
 
 ## Agent Definition Paths
 

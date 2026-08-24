@@ -137,6 +137,21 @@ BEHAVIORAL_CLI_CASES = {
         "--repository-root", "<state>", "--profile", "<missing>",
         "--plan", "<missing>",
     ),
+    "owned-run-start": (
+        "--workflow", "validator", "--run-id", "probe",
+        "--base", "<state>",
+    ),
+    "owned-run-create": (
+        "--run-root", "<missing>", "--kind", "cache",
+        "--relative-path", "cache",
+    ),
+    "owned-run-finish": (
+        "--run-root", "<missing>", "--outcome", "succeeded",
+    ),
+    "owned-run-exec": (
+        "--workflow", "validator", "--run-id", "exec",
+        "--base", "<state>", "--", "/bin/true",
+    ),
     "plan-create": ("--state-dir", "<state>", "--run-id", "validator-cli", "--node-id", "node", "--lifecycle", "chunk", "--cleanup-policy", "stop-remove", "--argv-json", "<missing>", "--output", "<output>"),
     "plan-compose": ("--state-dir", "<state>", "--run-id", "validator-cli", "--node-id", "node", "--lifecycle", "chunk", "--cleanup-policy", "stop-remove", "--argv-json", "<missing>", "--output", "<output>"),
     "record-create": ("--state-dir", "<state>", "--plan", "<missing>", "--result", "<missing>", "--before-inventory", "<missing>", "--after-inventory", "<missing>"),
@@ -499,6 +514,8 @@ def check_cli(context):
         "openrouter-usage",
         "lane-input-bytes", "record-attempt",
         "plan-verification", "run-verification",
+        "owned-run-start", "owned-run-create", "owned-run-finish",
+        "owned-run-exec",
         "plan-create", "plan-compose", "record-create", "plan-cleanup",
         "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
         "plan-reconcile",
@@ -553,6 +570,7 @@ def check_cli(context):
             if command in {
                 "init", "validate", "append", "replay", "status",
                 "plan-cleanup",
+                "owned-run-start", "owned-run-finish", "owned-run-exec",
                 # emit-cost-summary is contractually always-zero: a measurement
                 # failure must never become a workflow failure, and the command
                 # records its own skip line rather than signalling by exit code.

@@ -1,7 +1,7 @@
 {
   "name": "workflow-kernel",
-  "description": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, replay, recovery, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
-  "version": "0.16.1",
+  "description": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, replay, recovery, exact-owned cleanup, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
+  "version": "0.17.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -20,14 +20,15 @@
       {
         "id": "workflow-kernel",
         "name": "Workflow Kernel",
-        "description": "Inspect, validate, replay, and recover deterministic workflow state; plan tiered repository verification; and validate behavioral contracts, contribution receipts, and attempt economics.",
+        "description": "Inspect, validate, replay, and recover deterministic workflow state; plan tiered repository verification; clean exact-owned run resources; and validate behavioral contracts, contribution receipts, and attempt economics.",
         "triggers": [
           "validate a workflow-kernel run",
           "replay workflow events",
           "inspect workflow-kernel state",
           "diagnose a corrupt run ledger",
           "recover workflow run state",
-          "plan tiered repository verification"
+          "plan tiered repository verification",
+          "clean exact-owned workflow resources"
         ],
         "tags": [
           "workflow",

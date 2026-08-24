@@ -120,6 +120,7 @@ class SyncRunCostSummaryContractTests(unittest.TestCase):
                 handlers = [
                     line.strip().replace("<feature-slug>", "fixture-feature")
                     .replace("<feature>", "fixture-feature")
+                    .replace("<exact-run-root>", "exact-run-root")
                     for line in text.splitlines()
                     if line.lstrip().startswith("|| { s=$?;")
                 ]
