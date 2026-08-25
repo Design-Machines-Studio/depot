@@ -58,3 +58,9 @@ preference schema is
 `${CLAUDE_SKILL_DIR}/references/operator-profile-schema.json`; an actual
 preference belongs in ignored `.dm/model-router.local.json` in the common
 checkout and must never contain operator identity.
+
+When a Pipeline, dm-review, or Assembly opinion invocation has reached a closed
+terminal state and no later model dispatch is possible, load
+`${CLAUDE_SKILL_DIR}/references/terminal-report-contract.md`. Its shared
+renderer is the sole operator-facing identity projection. Never load or run it
+during routing, implementation, review, repair, synthesis, or merge decisions.

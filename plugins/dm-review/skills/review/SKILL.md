@@ -40,6 +40,12 @@ failures, and false verification claims.
 - `/dm-review` -- Full review: all applicable agents + optional memory enrichment when callable
 - `/dm-review quick` -- Quick review: 2 core judgment lanes, plus applicable existing UI/build/domain verification lanes
 
+The caller supplies `terminalModelReportOwner` as `dm-review` for a standalone
+full or quick invocation, or as `pipeline|pipeline-run|dm-review-loop` when an
+enclosing workflow owns the terminal report. A nested invocation always uses
+the enclosing workflow's exact private router directory and ordered index and
+suppresses its own report.
+
 ## Review Tiers
 
 Default to the cheapest tier that fits.
@@ -515,6 +521,21 @@ Tracking may change location, but it never waives the finding or permits a clean
 
 Skip in Quick mode. Determine ai-memory availability from the callable-tool inventory or tool search, never by invoking a memory tool as a probe. When callable, preserve the existing RAG lookup and ai-memory write behavior. Load `${CLAUDE_SKILL_DIR}/references/review-optional-enrichment.md` only when those tools are callable. If absent, omit Phase 7 and 7b silently. Callable-tool failures append `Memory capture: failed -- <safe reason>` without blocking.
 
+### Phase 7c: Terminal Model Report Boundary
+
+All lane execution, consolidation, tracking, optional repair verification, and
+final disposition must be settled before this phase. When
+`terminalModelReportOwner` is `dm-review`, load model-router's
+`terminal-report-contract.md` and render exactly once from this invocation's
+ordered private index to `<exact-run-root>/review/model-cost-report.json` and
+`.md`. Do so before Phase 8 can remove private receipts. No model dispatch may
+follow generation.
+
+When the owner is `pipeline`, `pipeline-run`, or `dm-review-loop`, do not
+render. Preserve the exact private directory and index for that owner and keep
+all identity private. Reporting failure records only the contract's one closed
+unavailable line and never changes the review disposition or cleanup sequence.
+
 ### Phase 8: Repository Cleanup
 
 Runs in **every mode** (quick and full), on every exit path -- including `REVIEW INCOMPLETE`, `BLOCKS MERGE`, and a stalled convergence loop. Read `${CLAUDE_SKILL_DIR}/references/repo-cleanup-contract.md`; it is authoritative.
@@ -539,6 +560,11 @@ dirty worktree. Install this same Phase 8 sequence on every exit path.
 
 Never delete the feature branch under review. There is no condition under which a code review deletes the branch it was asked to review.
 
+For a standalone owner, preserve the already-generated JSON and Markdown beside
+`run-cost-summary.json` while cleaning its private receipts. For an enclosing
+owner, defer only that owner's exact private router directory and index; the
+enclosing workflow removes them after its one terminal render.
+
 ---
 
 ### Finalize Report and Deliver Handoff
@@ -546,6 +572,11 @@ Never delete the feature branch under review. There is no condition under which 
 Only after Phase 8 has completed, add its authoritative repository and Docker cleanup results to the provisional unified report. Then write the complete report to `.claude/ux-review/report.md` -- the existing dm-review artifact flow, not a new report subsystem.
 
 Deliver the compact human handoff after that write, following `references/output-format.md`. Preserve the complete unified report and all machine-readable companions in the established evidence flow. The compact handoff links `.claude/ux-review/report.md` and names any blocked cleanup requiring operator action. Do not dump the expanded report, provider tables, agent transcripts, synthesis ledger, cleanup inventory, or raw reports into visible chat by default.
+
+When `terminalModelReportOwner` is `dm-review`, append the already-generated
+compact model/cost Markdown, or its one closed unavailable line, after this
+handoff. An enclosing owner receives no identity-bearing report from this
+invocation.
 
 ---
 

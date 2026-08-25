@@ -1,0 +1,12 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "dispatch-000000000000000000000004",
+  "requested": {"role": "review-deep", "effort": "high"},
+  "attempts": [
+    {"model": "fictional/duplicate-must-not-replace-first", "provider": "openrouter", "transport": "openrouter", "billingMode": "api", "outcome": "served", "durationSeconds": 99}
+  ],
+  "served": {"model": "fictional/duplicate-must-not-replace-first", "provider": "openrouter", "transport": "openrouter", "billingMode": "api", "durationSeconds": 99, "tokens": null, "tokenProvenance": "unavailable", "billedCostUsd": 9.99, "costProvenance": "provider-receipt"},
+  "effectiveEffort": "high",
+  "fallback": false,
+  "matrixSnapshot": "openrouter:2026-08-25"
+}

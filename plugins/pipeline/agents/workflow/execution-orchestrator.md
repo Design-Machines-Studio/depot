@@ -137,7 +137,7 @@ Create with TodoWrite immediately. Every chunk carries `executionMode`: `full_cl
 
 - Before any chunk: `0e` ref registry; `0f` decision profile validated and contract bound after `run.started`.
 - Per chunk: classify, create worktree, input guardrails, dispatch, validate (completion+commit+build), anti-pattern scan, evaluation gate, Playwright when `renderedSurface: required`, merge, clean up. Record `review_tier`, `review_tier_why`, `forced_full_review`.
-- After all chunks: FINAL 1 approved final dm-review; FINAL 2 `final-requirements-crosscheck.md`; FINAL 3 merge policy; FINAL 4 optional session observation; FINAL 5 Run Post-Mortem; FINAL 5b cleanup; FINAL 5c campaign; FINAL 6 summary. Do not skip steps.
+- After all chunks: FINAL 1 approved final dm-review; FINAL 2 `final-requirements-crosscheck.md`; FINAL 3 merge policy; FINAL 4 optional session observation; FINAL 5 Run Post-Mortem; FINAL 5a.1 terminal report or owner handoff; FINAL 5b cleanup; FINAL 5c campaign; FINAL 6 summary. Do not skip steps.
 
 ### Wait Measurement
 
@@ -270,7 +270,7 @@ CLEANUP_ACTIVE_HOST_ARGS=()
 if ! CONTRACT=$("$WORKFLOW_KERNEL" resolve-plugin-asset \
   --plugin dm-review \
   --asset skills/review/references/repo-cleanup-contract.md \
-  --minimum-version 1.71.0 \
+  --minimum-version 1.72.0 \
   "${CLEANUP_ACTIVE_HOST_ARGS[@]}"); then
   echo "ERROR: required dm-review cleanup contract unavailable" >&2
   exit 1
@@ -475,8 +475,9 @@ model-router bundle:
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
 MODEL_ROUTER_BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle \
-  --plugin model-router --minimum-version 0.1.0 \
+  --plugin model-router --minimum-version 0.2.0 \
   --required-executable skills/model-router/references/role-dispatch.sh \
+  --required-executable skills/model-router/references/render-terminal-report.sh \
   --required-asset skills/model-router/references/role-request-schema.json \
   --required-asset skills/model-router/references/role-policy.json)
 MODEL_ROUTER_BUNDLE_REF=$(printf '%s' "$MODEL_ROUTER_BUNDLE_JSON" | jq -r '.selected_root // empty')
@@ -495,6 +496,14 @@ named by opaque receipt ID. Phase 6 passes this directory and every contributing
 implementation/repair receipt ID to independent review lanes. A model repair
 invalidates any earlier `--human-authored` origin claim; missing repair
 provenance keeps the independent lane unavailable.
+
+Create `terminal-receipt-index.json` in that directory using
+model-router's `terminal-report-contract.md`. Add every implementation, repair,
+and nested review receipt basename in deterministic dispatch-start order. For a
+parallel fan-out, join results and write basenames in selected-lane order, not
+completion order. The approved final dm-review receives this same private
+directory and index with terminal reporting suppressed; it must not create or
+display an internal report before Pipeline's merge decision.
 
 **Step 3d.1 -- Dispatch the role.** Materialize the worker prompt, a fresh output
 path, and a private receipt path within the run-private router registry. Build
@@ -838,6 +847,26 @@ kernel reliability, and ranked recommendations labeled `AWAITING APPROVAL`.
 NEVER auto-edit plugin sources. Append one ledger line to
 `docs/pipeline-metrics/ledger.md`. Mark `FINAL 5. Run Post-Mortem` complete.
 
+## Step 5a.1: Terminal Model Report Ownership
+
+The caller passes `terminalModelReportOwner: pipeline|pipeline-run`. Reject any
+other value before execution. Load model-router's
+`terminal-report-contract.md` only now, after the approved final review,
+requirements cross-check, repairs, and Step 4c merge policy are settled.
+
+- For owner `pipeline-run`, render once from this run's exact
+  `terminal-receipt-index.json` to
+  `plans/<feature-slug>/model-cost-report.json` and `.md` before Step 5b removes
+  private receipts. Preserve renderer success or its one closed failure line
+  for Step 6. No model dispatch may follow this point.
+- For owner `pipeline`, do not render. Return only the exact private index and
+  durable output paths as `Terminal model report handoff:` for the Pipeline
+  caller. Preserve the private directory through Step 5b so the caller can
+  render only after its final disposition gate. The handoff contains no
+  identity, cost, or expanded receipt data.
+
+Mark `FINAL 5a.1. Terminal model report or owner handoff` complete.
+
 ## Step 5b: Artifact and Repository Cleanup
 
 Reconcile authoritative Docker ownership first, then clean artifacts and Git refs, then write the final authoritative cleanup/terminal receipt, and only then run shadow observation/comparison/metrics. This order is mandatory.
@@ -916,6 +945,12 @@ delete `plans/<feature-slug>` children by a broad path list: those paths may
 predate this invocation or belong to a concurrent run. On failure, project the
 compact reason and cleanup outcomes, then remove raw Tier 1 and Tier 2 inputs;
 retain at most one bounded diagnostic root under `exact-owned-cleanup.md`.
+When `terminalModelReportOwner` is `pipeline`, the exact private router
+directory and its index are an explicitly deferred caller-owned cleanup record,
+not an abandoned diagnostic root. Retain only that bounded directory until the
+Pipeline caller renders or closes reporting unavailable, then remove it through
+the same exact-owned cleanup authority. For `pipeline-run`, reporting already
+settled in Step 5a.1 and no such deferral exists.
 
 ### 3. Repository cleanup
 
@@ -1012,6 +1047,11 @@ Present this compact report. Populate every evidence path that exists; omit a no
 After the compact report, return the optional internal line prepared in Step 5.1:
 
 `Memory observation handoff: <observation>`
+
+For `pipeline-run`, append the already-generated compact
+`model-cost-report.md`, or its one closed unavailable line, after the visible
+summary. For `pipeline`, return the identity-free `Terminal model report
+handoff:` line internally for the caller and do not display a model report yet.
 
 Omit `Attempt result` when no provider attempt failed. Keep the visible summary roughly 250 words unless there are P1/P2/P3 findings or a blocker.
 

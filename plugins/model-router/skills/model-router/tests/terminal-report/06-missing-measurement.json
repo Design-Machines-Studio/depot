@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "dispatch-000000000000000000000006",
+  "requested": {"role": "plan-critic", "effort": "max"},
+  "attempts": [
+    {"model": "fictional/critic", "provider": "openrouter", "transport": "openrouter", "billingMode": "api", "outcome": "served"}
+  ],
+  "served": {
+    "model": "fictional/critic",
+    "provider": "openrouter",
+    "transport": "openrouter",
+    "billingMode": "api",
+    "durationSeconds": null,
+    "tokens": {"prompt_tokens": null, "completion_tokens": null},
+    "tokenProvenance": "unavailable",
+    "billedCostUsd": null,
+    "costProvenance": "unavailable"
+  },
+  "effectiveEffort": "high",
+  "fallback": false,
+  "matrixSnapshot": "fictional:2026-08-26"
+}

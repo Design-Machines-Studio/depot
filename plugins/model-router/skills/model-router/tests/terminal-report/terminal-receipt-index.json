@@ -1,0 +1,16 @@
+{
+  "schemaVersion": 1,
+  "receiptFiles": [
+    "01-openrouter-measured.json",
+    "02-native-subscription.json",
+    "03-paid-credit.json",
+    "04-fallback.json",
+    "04-fallback.json",
+    "04-fallback-duplicate-id.json",
+    "05-terminal-unavailable.json",
+    "06-missing-measurement.json",
+    "07-untrusted-fields.json",
+    "malformed.json",
+    "unrelated.json"
+  ]
+}

@@ -170,7 +170,8 @@ Once the pre-flight checks pass and the shadow-kernel preflight is initialized:
 1. Read the manifest.
 2. If running in Codex with `multi_agent_v1.spawn_agent`, run the **Codex Native Execution Adapter** above.
 3. Otherwise, launch the execution-orchestrator agent from `plugins/pipeline/agents/workflow/execution-orchestrator.md`.
-4. Pass the manifest path, prompts directory, and feature branch name.
+4. Pass the manifest path, prompts directory, feature branch name, and
+   `terminalModelReportOwner: pipeline-run`.
 5. The orchestrator handles everything autonomously:
    - Branch creation or exact-head existing-branch reuse
    - Exact registered worktree creation per chunk under the unique run ID
@@ -214,6 +215,14 @@ Present the compact summary from the orchestrator. If an operator decision is
 still needed, ask for it after `Recommended next action`; mention additional
 choices only when they are genuinely live. Do not emit a standing five-option
 menu.
+
+The execution-orchestrator owns this invocation's terminal model report. It
+loads model-router's `terminal-report-contract.md` only after final review,
+repairs, requirements checks, and merge policy have settled; renders
+`model-cost-report.json` and `.md` beside `run-cost-summary.json` before private
+receipt cleanup; completes cleanup; and appends the compact Markdown or one
+closed unavailable line after the human summary. Do not render it again and do
+not dispatch any model after it is generated or displayed.
 
 Any retained diagnostic report must name the one exact root, why it was kept,
 what compact evidence it contains, and the exact safe cleanup command. Raw

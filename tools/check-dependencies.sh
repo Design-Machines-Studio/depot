@@ -275,8 +275,8 @@ for consumer, expected in consumer_floors.items():
 
 pipeline = manifests.get("pipeline")
 dm_review_floor = None if pipeline is None else pipeline.get("pluginDependencies", {}).get("dm-review")
-if dm_review_floor != ">=1.71.0":
-    errors.append("pipeline must require dm-review >=1.71.0")
+if dm_review_floor != ">=1.72.0":
+    errors.append("pipeline must require dm-review >=1.72.0")
 
 if errors:
     for error in errors:

@@ -123,6 +123,22 @@ require_before() {
   fi
 }
 
+require_absent_after() {
+  local file="$1"
+  local marker="$2"
+  local pattern="$3"
+  local label="$4"
+  local marker_line
+
+  marker_line="$(grep -nF -m1 -- "$marker" "$file" 2>/dev/null | cut -d: -f1 || true)"
+  if [ -n "$marker_line" ] && ! tail -n "+$marker_line" "$file" | grep -Fq -- "$pattern"; then
+    printf "  OK    %s\n" "$label"
+  else
+    printf "  FAIL  %s\n" "$label"
+    failures=1
+  fi
+}
+
 require_count() {
   local file="$1"
   local pattern="$2"
@@ -576,7 +592,7 @@ require_text "$review_skill" "references/selective-lane-allowlist.md" "review re
 require_text "$selective_allowlist" "never relax this equality check to a subset check" "allowlist contract requires exact selected_full_set equality"
 require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.17.0"' "dm-review requires the exact-owned cleanup kernel release"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.71.0"' "pipeline requires the exact-owned dm-review release"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.72.0"' "pipeline requires the exact-owned dm-review release"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'family-independent second-opinion review' "dm-review manifest describes family-independent perspective resolution"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'Full mode only.' "migration-validator registry limits the lane to full mode"
@@ -1053,6 +1069,54 @@ else
   printf "  FAIL  security sign-off route is implementer-aware and family-independent\n"
   failures=1
 fi
+
+# --------------------------------------------------------------------------
+# Group 8b: terminal operator model and cost reporting
+# --------------------------------------------------------------------------
+
+printf "\nterminal operator model and cost report:\n"
+
+terminal_report_contract="$REPO_ROOT/plugins/model-router/skills/model-router/references/terminal-report-contract.md"
+terminal_report_renderer="$REPO_ROOT/plugins/model-router/skills/model-router/references/render-terminal-report.sh"
+planning_opinions="$REPO_ROOT/plugins/project-manager/skills/assembly-coordinator/references/planning-opinions.md"
+coordinator_skill="$REPO_ROOT/plugins/project-manager/skills/assembly-coordinator/SKILL.md"
+
+require_text "$terminal_report_contract" 'no later model dispatch can occur' \
+  "shared renderer requires a closed no-further-dispatch boundary"
+require_text "$terminal_report_contract" 'Model & Cost Report unavailable: <closed reason>' \
+  "report failure has one closed nonblocking message"
+require_text "$terminal_report_renderer" 'complete|failed|blocked|stopped' \
+  "renderer accepts only closed terminal states"
+require_text "$terminal_report_renderer" 'costProvenance == "provider-receipt"' \
+  "renderer sums only provider-reported billed cost"
+require_before "$orchestrator" '## Step 4c: Merge Policy Check' '## Step 5a.1: Terminal Model Report Ownership' \
+  "Pipeline merge policy settles before terminal identity projection"
+require_before "$orchestrator" '## Step 5a.1: Terminal Model Report Ownership' '## Step 5b: Artifact and Repository Cleanup' \
+  "Pipeline report precedes private-receipt cleanup"
+require_text "$pipeline_cmd" 'terminalModelReportOwner: pipeline' \
+  "/pipeline retains terminal report ownership"
+require_text "$pipeline_run" 'terminalModelReportOwner: pipeline-run' \
+  "/pipeline-run assigns one terminal report owner"
+require_before "$review_skill" '### Phase 7c: Terminal Model Report Boundary' '### Phase 8: Repository Cleanup' \
+  "dm-review renders once before cleanup"
+require_text "$review_cmd" 'terminalModelReportOwner: dm-review' \
+  "/dm-review owns its standalone terminal report"
+require_text "$REPO_ROOT/plugins/dm-review/commands/dm-review-quick.md" 'terminalModelReportOwner: dm-review' \
+  "/dm-review-quick owns its standalone terminal report"
+require_before "$review_loop" '### 2.5 Terminal Model Report' '### 3. Repository Cleanup' \
+  "dm-review-loop renders once after its last iteration and before cleanup"
+require_text "$review_loop" 'Do not render per iteration.' \
+  "dm-review-loop suppresses per-iteration reports"
+require_before "$planning_opinions" '## One synthesis' '## Terminal operator report' \
+  "Assembly synthesis settles before identity projection"
+require_text "$coordinator_skill" 'routine sessions emit no empty report' \
+  "Assembly coordinator reports only when opinions dispatched"
+require_absent_after "$orchestrator" '## Step 5a.1: Terminal Model Report Ownership' 'ROLE_DISPATCH' \
+  "Pipeline schedules no role-dispatch invocation after reporting"
+require_absent_after "$review_skill" '### Phase 7c: Terminal Model Report Boundary' 'role-dispatch.sh' \
+  "dm-review schedules no role-dispatch invocation after reporting"
+require_absent_after "$review_loop" '### 2.5 Terminal Model Report' 'Run /dm-review' \
+  "dm-review-loop schedules no review dispatch after reporting"
 
 # ---------------------------------------------------------------------------
 # Group 9: configured-key OpenRouter contract

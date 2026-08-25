@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "dispatch-000000000000000000000003",
+  "requested": {"role": "research-fast", "effort": "medium"},
+  "attempts": [
+    {"model": "fictional-credit-researcher", "provider": "fictional-native", "transport": "claude-cli", "billingMode": "paid-credits", "outcome": "served", "durationSeconds": 8}
+  ],
+  "served": {
+    "model": "fictional-credit-researcher",
+    "provider": "fictional-native",
+    "transport": "claude-cli",
+    "billingMode": "paid-credits",
+    "durationSeconds": 8,
+    "tokens": {"input_tokens": 400, "output_tokens": 100, "total_tokens": 500},
+    "tokenProvenance": "provider-receipt",
+    "billedCostUsd": 0.011,
+    "costProvenance": "provider-receipt"
+  },
+  "effectiveEffort": "medium",
+  "fallback": false,
+  "matrixSnapshot": "openrouter:2026-08-25"
+}

@@ -155,7 +155,7 @@ validate_active_cache_consumers() {
   grep -Fq 'resolve-plugin-asset \' "$pipeline_file" &&
   grep -Fq -- '--plugin dm-review' "$pipeline_file" &&
   grep -Fq -- '--asset skills/review/references/repo-cleanup-contract.md' "$pipeline_file" &&
-  grep -Fq -- '--minimum-version 1.71.0' "$pipeline_file" &&
+  grep -Fq -- '--minimum-version 1.72.0' "$pipeline_file" &&
   grep -Fq 'CLEANUP_ACTIVE_HOST_ARGS=(--active-host "$CLEANUP_ACTIVE_HOST")' "$pipeline_file" || consumer_failures=1
 
   if grep -Fq 'CONTRACT=$(ls -t "$CACHE"/dm-review/*/skills/review/references/repo-cleanup-contract.md' "$pipeline_file" ||

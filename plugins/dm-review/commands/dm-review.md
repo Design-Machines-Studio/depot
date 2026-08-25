@@ -12,7 +12,14 @@ Every retained P1, P2, and P3 finding is mandatory work: `/dm-review` tracks it,
 
 ## Process
 
-Load `plugins/dm-review/skills/review/SKILL.md` and execute in **Full** mode on the argument: none -- uncommitted changes or current branch vs main; PR number or URL -- that pull request; branch name -- that branch vs main; file path -- that file or directory. Output the unified review report with that merge recommendation.
+Load `plugins/dm-review/skills/review/SKILL.md` and execute in **Full** mode with
+`terminalModelReportOwner: dm-review` unless an enclosing Pipeline or
+dm-review-loop invocation explicitly supplies its own owner. On the argument:
+none -- uncommitted
+changes or current branch vs main; PR number or URL -- that pull request; branch
+name -- that branch vs main; file path -- that file or directory. Output the
+unified review report with that merge recommendation, followed by the one
+terminal operator report owned by this invocation.
 
 ## Synthesis and Contribution Contract
 

@@ -46,7 +46,9 @@ as optional P3 debt.
 
 ## Process
 
-1. Load the review skill from `plugins/dm-review/skills/review/SKILL.md`
+1. Load the review skill from `plugins/dm-review/skills/review/SKILL.md` with
+   `terminalModelReportOwner: dm-review` unless an enclosing Pipeline or
+   dm-review-loop invocation explicitly supplies its own owner
 2. Check security-sensitive paths first; escalate to Full mode if any match
 3. Compute the file-type trigger set from the diff (Go, Twig/PHP, UI)
 4. Execute in **Quick** mode with the provided argument:
@@ -55,7 +57,8 @@ as optional P3 debt.
    - Branch name: review that branch vs main
    - File path: review that specific file or directory
 5. Dispatch the two core lanes plus applicable existing UI/build/domain verification lanes
-6. Output the unified review report with the standard merge recommendation
+6. Output the unified review report with the standard merge recommendation,
+   followed by this invocation's one terminal operator report
 
 Every pre-execution abort and terminal outcome uses the review skill's
 exact-owned cleanup sequence; quick mode does not get a weaker cleanup path.
