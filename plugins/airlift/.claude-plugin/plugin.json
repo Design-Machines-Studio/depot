@@ -1,7 +1,7 @@
 {
   "name": "airlift",
   "description": "Model- and harness-agnostic session handoff for usage caps, rate limits, checkpoints, and resume workflows across Claude Code, Codex, DeepSeek via OpenRouter, Kiro, and OpenCode.",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"

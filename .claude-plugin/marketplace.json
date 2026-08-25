@@ -432,7 +432,7 @@
     {
       "name": "airlift",
       "source": "./plugins/airlift",
-      "version": "1.4.0",
+      "version": "1.5.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
