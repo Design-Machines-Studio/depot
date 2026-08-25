@@ -1,11 +1,10 @@
 ---
 name: ui-standards-reviewer
 description: Evaluates rendered UI against modern best-in-class SaaS standards (Stripe, Notion, Linear, Figma quality). Checks component quality, spacing system compliance, state completeness, visual polish, and token usage. Runs when template or CSS files change and a dev server is detected. Also runs in quick mode for UI files to catch design issues per-chunk during pipeline execution.
-model: sonnet
+model: inherit
 ---
 
 <!-- token-economy-hardening:budget-block -->
-<!-- Model tier: `sonnet` -- tight-spec execution/review that needs solid judgment but not the top tier. Prompt quality is the floor now: judgment-heavy seats get Opus, tight-spec execution/review gets Sonnet, mechanical lanes get Haiku. Do NOT downgrade a security seat below Opus. -->
 
 ## Tool-Call Budget & Partial-Return Contract
 

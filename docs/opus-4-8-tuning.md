@@ -4,7 +4,11 @@ How depot plugins leverage Opus 4.8 and the effort levers. This is the canonical
 
 ## What Changed in Opus 4.8
 
-Claude remains supported for non-coding work and Claude Code compatibility, but it is outside Depot's executable coding graph. Implementation, code review, security, and architecture use Codex or OpenRouter. The model notes below apply only to strategy, writing/voice, research synthesis, planning, and compatibility metadata.
+Claude Code effort behavior remains relevant to the host session and direct
+operator work. Routed implementation, review, security, architecture,
+planning, and editorial work instead uses model-router's provider-neutral role
+and normalized effort contract. The model notes below document host
+compatibility, not orchestration selection.
 
 - **Effort levers replace version branches.** The model decides whether and how much to think per step (adaptive reasoning). You steer that with an effort level, not by detecting which model version is running. Hardcoded "if Opus 4.6 / if Sonnet" branches are stale -- tune by effort instead.
 - **Adaptive-reasoning only.** Fixed thinking budgets (`MAX_THINKING_TOKENS`, `CLAUDE_CODE_DISABLE_ADAPTIVE_THINKING`) do not apply to Opus 4.7+. Effort level is the primary control.
@@ -41,26 +45,36 @@ Precedence: `CLAUDE_CODE_EFFORT_LEVEL` env var > skill/subagent frontmatter (whi
 
 ## Depot Effort Policy
 
-Claude effort applies only to explicitly non-coding lanes. Coding-agent `model:` and `effort:` frontmatter remains parseable for Claude Code compatibility, but dm-review and pipeline provider routing override it with Codex/OpenRouter execution.
+Operational routed cards use `model: inherit` and contain no concrete effort
+branch. Pipeline, dm-review, and the Assembly coordinator pass normalized role
+effort; model-router maps it to the selected transport's supported setting and
+records any normalization privately.
 
 | Tier | Agents | Effort | Why |
 | :--- | :----- | :----- | :-- |
-| Non-coding decision-gate reasoning | optional `plan-adversary` (opus compatibility alias) | `xhigh` | Deep plan critique may use Claude when explicitly selected; it never implements or reviews code. |
-| Non-coding editorial/synthesis | `voice-editor`, strategy, research synthesis | session-controlled | Raise effort only when the writing or synthesis warrants it. |
-| Coding and review agents | `execution-orchestrator`, `architecture-reviewer`, `security-auditor`, OpenRouter runners, validators | n/a | Codex/OpenRouter routing is authoritative. Claude model/effort frontmatter is inert compatibility metadata for these lanes. |
+| Planning decision-gate reasoning | `architect` or independent `plan-critic` role | `high` or `max` | model-router resolves the participant; callers never pin an alias. |
+| Editorial/synthesis | `editorial` role | workload-controlled | Raise effort only when the writing or synthesis warrants it. |
+| Coding and review agents | `builder-fast`, `builder-deep`, `review-fast`, `review-deep`, or `security-review` role | `low` through `max` | Agent cards inherit; model-router normalizes effort for the resolved transport. |
 
-For non-coding planning and strategy, raise *session* effort (`/effort xhigh` or `ultracode`) when deeper synthesis is useful. Coding execution remains on Codex/OpenRouter regardless of the Claude session effort.
+Orchestrators use only the normalized role effort vocabulary
+`low|medium|high|max`. A host session's own effort setting is separate and does
+not choose a routed participant.
 
-## Fable (Mythos-Class) Escalation -- plan-conditional
+## Fable availability
 
-Claude Fable 5 (`claude-fable-5`, alias `fable`) sits ABOVE Opus in a Mythos-class tier. Availability is **plan-conditional**: it comes and goes with the user's subscription window, so it is an escalation option, never a baseline dependency. Rules:
+Fable is a normal router-owned `architect` and `editorial` candidate. Never pin
+it in agent frontmatter or orchestration prompts. Each dispatch checks current
+Claude CLI authentication, positively reported subscription type, observable
+interactive or Agent SDK headroom, bounded invocation results, and the ignored
+developer-local paid-credit preference. Missing initial rate-limit telemetry
+permits one bounded attempt only when subscription authentication and an
+included entitlement are positively established. An exhaustion response falls
+through without retrying the exhausted candidate.
 
-- **Never pin `model: fable` in agent frontmatter.** Pins must always resolve; a lapsed plan would break dispatch. Defaults stay `opus`.
-- **Use it via inheritance for non-coding agents:** strategy, voice/editorial, research-synthesis, and planning agents may inherit Fable from the session. Coding reviewers do not.
-- **Use it via dispatch-time override for non-coding decision gates:** the Agent tool's `model` parameter takes precedence over frontmatter. When the session runs Fable (or the user opts in), an explicitly non-coding `plan-adversary` may use `model: fable`. If unavailable, re-dispatch with its frontmatter default.
-- **Coding cascade:** `model-cascade.json` retains Fable's quality rank for research comparison only. `harness-profile.json` exposes Claude aliases solely for explicit non-coding compatibility; no coding cascade references that role.
-- **Fable vs GPT-5.6 Sol:** the quality scores remain useful research context, but they do not imply a shared executable ladder. Sol leads Codex coding; Fable is non-coding-only.
-- Effort levels on Fable: assume the full range (it is above Opus); confirm against the model-config docs when a new tier ships.
+Tracked policy never stores operator identity, plan, quota, allocation, or paid
+credit choice. Paid credits default off. API-key authentication cannot
+masquerade as subscription use, and Fable unavailability never blocks a caller
+whose role has another eligible candidate.
 
 ## Dynamic Workflows (opportunity, not yet adopted)
 
@@ -68,4 +82,7 @@ Claude Fable 5 (`claude-fable-5`, alias `fable`) sits ABOVE Opus in a Mythos-cla
 
 ## Maintenance
 
-When a new flagship ships: the aliases auto-upgrade, so check (1) the effort matrix above against the model-config docs, (2) whether any new effort level changes the per-agent policy, and (3) the quality-first model ordering in `plugins/openrouter/skills/openrouter-delegate/references/model-selection.md`.
+When a new flagship ships, refresh provider evidence, then change only
+model-router's private candidate policy and adapters. Recheck effort mapping and
+availability fixtures without changing Pipeline, dm-review, or coordinator
+contracts.

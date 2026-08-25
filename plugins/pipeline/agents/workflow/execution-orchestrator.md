@@ -1,7 +1,7 @@
 ---
 name: execution-orchestrator
 description: Autonomously executes sub-prompts with focused proportional review and an approved full-or-quick final dm-review gate
-model: opus
+model: inherit
 tools: Bash, Read, Write, Edit, Glob, Grep, Agent, TodoWrite, Skill
 ---
 
@@ -39,9 +39,11 @@ Exception: `sequential-on-branch` replaces per-chunk worktrees only when Step 1c
 
 Slash commands (`/dm-review-loop`, `/dm-review-quick`, `/dm-review`, `/dm-review-fix`) are not callable from a subagent. Use the `Skill` tool: `dm-review:review`. Never report "dm-review-loop slash command not callable".
 
-### Focused Codex review (ordinary chunks)
+### Focused role review (ordinary chunks)
 
-One read-only Codex reviewer. Read `todos/*-pending-*.md`. Zero findings: Clean. Else apply targeted Edit/Write fixes, rename `-pending-` to `-done-`, one recheck. Stop after two passes. Do NOT spawn a fix subagent for trivial findings.
+One read-only `review-fast` participant, or `review-deep` for logic and
+integration. Read `todos/*-pending-*.md`. Zero findings: Clean. Else apply
+targeted fixes and perform one affected-lane recheck. Stop after two passes.
 
 ### Full review (replaces `/dm-review` full mode)
 
@@ -87,18 +89,18 @@ for iteration in 1..max_iterations (default 2):
 
 ### Per-chunk review tier (focused by default; escalate sensitive paths)
 
-Default the per-chunk gate to one **focused Codex review** with at most one repair/recheck pass. Full dm-review runs once at the end against the feature branch, not per ordinary chunk. Do not dispatch a multi-agent quick dm-review suite for an ordinary chunk.
+Default the per-chunk gate to one **focused role review** with at most one repair/recheck pass. Full dm-review runs once at the end against the feature branch, not per ordinary chunk. Do not dispatch a multi-agent quick dm-review suite for an ordinary chunk.
 
 Every chunk receipt MUST record `review_tier:
-focused-codex | full (sensitive path) | full (final gate) | quick (final gate)` plus a `review_tier_why` line naming why -- the sensitive glob that matched, `ordinary chunk` when none did, or `final merge gate` for the end-of-run gate. Record the same value inside the chunk receipt JSON passed as the `record-attempt` `--authoritative-receipt`. Do not invent a kernel tier flag.
+focused-role | full (sensitive path) | full (final gate) | quick (final gate)` plus a `review_tier_why` line naming why -- the sensitive glob that matched, `ordinary chunk` when none did, or `final merge gate` for the end-of-run gate. Record the same value inside the chunk receipt JSON passed as the `record-attempt` `--authoritative-receipt`. Do not invent a kernel tier flag.
 
-Dispatching a multi-agent quick dm-review suite, or a full multi-agent dm-review, for an ordinary chunk is a policy violation the receipt MUST confess as `review_tier: focused-codex (VIOLATED -- multi-agent suite dispatched)`, with the reason in `review_tier_why`. That suffix is the only permitted extension of the three-value vocabulary.
+Dispatching a multi-agent quick dm-review suite, or a full multi-agent dm-review, for an ordinary chunk is a policy violation the receipt MUST confess as `review_tier: focused-role (VIOLATED -- multi-agent suite dispatched)`, with the reason in `review_tier_why`.
 
-If `filesToModify` is missing, the sensitive-path set cannot be read, or glob matching errors, do NOT fall back to `focused-codex`: run **full** review, record `review_tier: full (sensitive path)` with `review_tier_why: tier evidence unavailable -- <what failed>`. Never narrow a review tier on evidence you could not evaluate.
+If `filesToModify` is missing, the sensitive-path set cannot be read, or glob matching errors, do NOT fall back to `focused-role`: run **full** review, record `review_tier: full (sensitive path)` with `review_tier_why: tier evidence unavailable -- <what failed>`. Never narrow a review tier on evidence you could not evaluate.
 
 `PIPELINE_FULL_TIER_REVIEW=1` forces full dm-review on every chunk and can never downgrade a sensitive-path or final-gate full review. When set to exactly `1`, keep the policy-chosen `review_tier` and add `forced_full_review: yes`; otherwise record `forced_full_review: no`.
 
-Before the per-chunk review, test `filesToModify` against the sensitive-path set. Any match runs **full** review (`args="full <worktree-path>"`) so `security-auditor-codex-signoff` and all conditional agents engage, recorded as `review_tier: full (sensitive path)`:
+Before the per-chunk review, test `filesToModify` against the sensitive-path set. Any match runs **full** review (`args="full <worktree-path>"`) so the independent `security-review` lane and all conditional lanes engage, recorded as `review_tier: full (sensitive path)`:
 
 ```
 internal/auth/**            internal/federation/**
@@ -108,11 +110,15 @@ deploy/**                   *.env*
 migrations/** containing seed credentials
 ```
 
-These chunks are never focused-only. Full-diff security signoff must use a reviewer family different from the implementer. An eligible remainder may receive a supplementary Kimi security lens; that cannot replace independent signoff. A chunk that touches auth/federation/secrets without full dm-review is a run-postmortem miss.
+These chunks are never focused-only. Full-diff security signoff passes opaque
+implementer receipt IDs with `independent-family`; model-router excludes every
+implementing family. No concrete identity enters a review prompt or report.
 
-## Codex Native Adapter Parity
+## Host Adapter Parity
 
-When executed from Codex via `/pipeline-run`, Claude's generic `Agent` tool and nested `Skill(skill="dm-review:review", ...)` calls may not exist. When the run executes from a Codex host, the caller MUST use the Codex Native Execution Adapter from `plugins/pipeline/commands/pipeline-run.md`, record `executionMode: codex_native`, and load `plugins/pipeline/references/execution-codex-native-parity.md` for the parity requirements. A Claude-hosted run does not load it. Do not stop merely because Codex lacks Claude's `Agent` or `Skill` tool names when the Codex adapter tools are available; stop only if neither native tool invocation nor the Codex adapter can provide isolated worker dispatch and review gates.
+The active host may expose different tool names. Its adapter must preserve
+isolated worktrees, role dispatch, review gates, verification, receipts, and
+cleanup. Host identity never changes the role contract or selects a participant.
 
 ---
 
@@ -120,10 +126,10 @@ When executed from Codex via `/pipeline-run`, Claude's generic `Agent` tool and 
 
 `kind` controls review classification; `renderedSurface` controls browser/persona/visual/Datastar obligations. New manifests require `required|not_applicable` plus a non-empty rationale; mixed/uncertain scope is `required`. Sensitive-path overrides all of this and requires full dm-review (at most two passes).
 
-- **UI** (served `.templ`/`.twig`/`.html`/`.css`; unserved `plans/**` excluded): focused Codex review; Playwright only when `renderedSurface: required`.
-- **Logic** (`.go`/`.py`/`.ts`/`.php` handlers/services/migrations): focused Codex review; no Playwright.
-- **Trivial** (config/docs): one focused Codex review; fix and re-run once if findings.
-- **Integration** (routes/main/wiring): focused Codex review plus wiring check; Playwright only when `renderedSurface: required`.
+- **UI** (served `.templ`/`.twig`/`.html`/`.css`; unserved `plans/**` excluded): focused `review-deep`; browser evidence only when `renderedSurface: required`.
+- **Logic** (`.go`/`.py`/`.ts`/`.php` handlers/services/migrations): focused `review-deep`; no browser evidence.
+- **Trivial** (config/docs): one focused `review-fast`; fix and re-run once if findings.
+- **Integration** (routes/main/wiring): focused `review-deep` plus wiring check; browser evidence only when `renderedSurface: required`.
 
 ## Progress Ledger
 
@@ -139,7 +145,7 @@ When orchestration truly pauses, timestamp start and resume and append one autho
 
 ### Shadow Workflow Kernel Runtime
 
-The Markdown manifest, routing policy, this orchestrator, and emitted receipts remain authoritative. Kernel predictions are observation-only: they never select ready nodes, advance gates, block or approve merges, change provider fallback, execute cleanup, or convert review outcomes. Run hooks only after the corresponding authoritative action and receipt exist.
+The Markdown manifest, routing policy, this orchestrator, and emitted receipts remain authoritative. Kernel predictions are observation-only: they never select ready nodes, advance gates, block or approve merges, change role fallback, execute cleanup, or convert review outcomes. Run hooks only after the corresponding authoritative action and receipt exist.
 
 Resolve `$WORKFLOW_KERNEL` once per run via `references/runtime-resolution.md` and pin that launcher path and compatible version for the entire run; never re-resolve mid-run. If the pinned runtime disappears or becomes incompatible, record shadow unavailable and continue. Use only stable launcher subcommands; inline Python is forbidden. Keep observation/parity artifacts in `plans/<feature-slug>/`. Initialize the run at `.workflow-kernel/runs/<run-id>`; current execution and stale reconciliation share the same verified `run-state.json`.
 
@@ -162,19 +168,20 @@ Record each settled chunk attempt -- completed, failed, or fallen back -- with `
   --stage progress --status <completed|failed> \
   --lane <chunk-id> --chunk-id <chunk-id> --node-id <chunk-id> \
   --attempt <n> --host <claude|codex> --duration-seconds <measured> \
-  --requested-executor <policy executor> \
-  --attempted-executor <what was dispatched> \
-  --implemented-by <what produced the diff> \
-  --matrix-snapshot-date <model-matrix snapshot_date> \
-  --rung-rationale <cost|context|strength|availability> \
-  [--fallback-reason <cascade reason>] \
-  [--openrouter-receipt <wrapper receipt path> \
-   --request-envelope-sha256 <approved request envelope digest> \
-   --state-dir .workflow-kernel/runs/<run-id>] \
-  [--agent-definition <prompt path> --diff <diff path> --provider <p> --model <m>]
+  --requested-executor <requested role> \
+  --attempted-executor role-dispatch \
+  --implemented-by role-dispatch \
+  --matrix-snapshot-date <private router receipt snapshot date> \
+  --rung-rationale availability \
+  [--fallback-reason <role-level reason>]
 ```
 
-One call appends the chunk outcome and its `attempt_usage` row under one lock. Supply `--openrouter-receipt`, `--request-envelope-sha256`, and `--state-dir .workflow-kernel/runs/<run-id>` for OpenRouter; `--agent-definition`/`--diff` for Codex. If neither exists, omit both (`attempt_unmeasured`). Record failed and fallen-back attempts; a retry records the new receipt. Give `cascade-dispatch.sh` a fresh `--attempt-receipt-template` containing `{attempt}` and export `OPENROUTER_RUN_ID` and `OPENROUTER_LANE_ID`. Never estimate usage; do not also append standalone `openrouter-usage` after a successful receipt.
+The existing Workflow Kernel schema retains legacy executor field names, so
+populate them only with the role-level values shown above. Do not copy private
+router identity into this orchestration ledger. Record failed and fallen-back
+attempts; a retry records a new role attempt. Usage remains `attempt_unmeasured`
+here unless the measurement path can consume the private receipt without
+projecting identity. Never estimate usage.
 
 ### Verification profile and contract (0f)
 
@@ -209,7 +216,7 @@ Before any git operations, validate the manifest; on failure report the specific
 1. **Branch name safety:** `featureBranch` and all chunk `id` values must match `^[a-z0-9][a-z0-9\-\/]*$`; reject and stop on spaces, option-like strings (`--`), or special characters.
 2. **Prompt path containment:** each chunk's `prompt` must resolve canonically within the project's `plans/` directory; reject and stop if any path escapes.
 3. **Schema check:** `chunks` is an array; each chunk has `id`, `prompt`, `level`, `dependsOn`. Recompute level groups from `chunks` and compare to `executionPlan.levels`; if they disagree, `chunks` is authoritative.
-4. **Workflow class:** accept only `chore|bug|feature|hotfix|security|investigation|migration`. Absent on a legacy manifest, set `feature` and record `workflow_class_defaulted=true`; never infer from `kind`, files, or prose. Pass unchanged into RunSpec, events, receipts, and metrics. Existing security provider and approval overrides remain authoritative.
+4. **Workflow class:** accept only `chore|bug|feature|hotfix|security|investigation|migration`. Absent on a legacy manifest, set `feature` and record `workflow_class_defaulted=true`; never infer from `kind`, files, or prose. Pass unchanged into RunSpec, events, receipts, and metrics. Security classification remains a separate workflow input and never selects a provider or model.
 5. **Decision profile:** new manifests require exactly one closed object with exactly `uncertainty`, `consequence` (each `low|medium|high`), and a non-empty `rationale`. Reject extra keys, malformed/multiple values, or conflict with the approved plan. Project the approved profile once through the kernel's durable receipt policy: rationale text through 256 characters remains literal; longer or URI/secret-shaped text becomes its stable public digest. Keep it separate from `workflowClass`, risk, overlap risk, complexity, kind/executor, and routing overrides. A legacy manifest with no field follows the standard path and records `decision_profile_defaulted=true`.
 6. **Rendered-surface applicability:** new manifests require both `renderedSurface` and `renderedSurfaceRationale` on every chunk; accept only `required|not_applicable` with a non-empty rationale. For `not_applicable`, verify the rationale accounts for every UI/integration syntactic trigger and that no served route, rendered output, browser interaction, visual claim, or mixed surface scope contradicts it; uncertainty fails closed to `required`. Supplying only one field is invalid. A legacy manifest with neither field defaults UI/Integration chunks to `required`, Logic/Trivial to `not_applicable`, and records `rendered_surface_defaulted=true` plus the derived rationale. Never use this field to change `kind`, provider routing, or review depth.
 7. **Branch mode:** new manifests require `branchMode: create|reuse`. `create` requires `expectedFeatureHead` null/absent; `reuse` requires an exact lowercase 40- or 64-hex `expectedFeatureHead`. A legacy manifest defaults to `create` and records `branch_mode_defaulted=true`. Branch mode never authorizes a force-push, merge, publication, or closeout mutation.
@@ -263,7 +270,7 @@ CLEANUP_ACTIVE_HOST_ARGS=()
 if ! CONTRACT=$("$WORKFLOW_KERNEL" resolve-plugin-asset \
   --plugin dm-review \
   --asset skills/review/references/repo-cleanup-contract.md \
-  --minimum-version 1.70.0 \
+  --minimum-version 1.71.0 \
   "${CLEANUP_ACTIVE_HOST_ARGS[@]}"); then
   echo "ERROR: required dm-review cleanup contract unavailable" >&2
   exit 1
@@ -438,94 +445,74 @@ Mark `[chunk-id] 3. Apply input guardrails` complete.
 
 ### 3d: Dispatch Implementation Subagent
 
-Read `plugins/pipeline/references/routing-policy.json` before dispatch. Coding uses Codex and OpenRouter only. The cascade selects the task-fit primary, probes headroom, checkpoints on cap, and descends without a Claude coding rung.
+Read `plugins/pipeline/references/routing-policy.json` before dispatch. Validate a
+new manifest with `validate-role-manifest.sh`. If consuming an approved legacy
+manifest, run `translate-legacy-executor.sh` in memory and record the translation;
+never rewrite the historical file.
 
-Hard rule: for any chunk whose `executor` is `codex` or `openrouter`, the orchestrator MUST dispatch to that provider, an explicitly receipted target-pressure adjustment allowed by `targets.enforcement.flexibleBuckets`, or through the cascade, and MUST NOT implement it in-process. If dispatch is unavailable, fall back per the cascade and log the fallback provider in the chunk receipt. A silently inline-implemented `executor:{codex,openrouter}` chunk is a run-postmortem misroute.
+Hard rule: dispatch every chunk through model-router using only the chunk's
+`executorRole`, `executorCapabilities`, and `executorEffort`. The orchestrator
+must not select, rank, receive, or report a model, provider, transport, family,
+subscription, or billing source. A `routingOverride` may change only role,
+capabilities, effort, and its reason. It cannot contain concrete routing intent.
 
-**Manifest routing validation:** derive the task-fit default from `routing-policy.json`. If the manifest `executor` differs, require a complete `routingOverride` with `reasonCode`, `reason`, `splitAttempted`, and `splitBlockedBy`. A `config`/docs chunk with `executor: codex` and no override is invalid. For `reasonCode: required-live-tool`, require `splitAttempted: true` and why the split was impossible.
-
-**Run-level routing pressure:** read the active subscription profile; only `targets.enforcement.flexibleBuckets` enter the target denominator. Before every flexible eligible chunk, apply `deficit-round-robin`. Security and tool-capability rules always override the target.
-
-Every chunk receipt records `routingEligibility`, selected/actual provider, and exclusion or adjustment reason. The run summary records `providerSplit:` and `eligibleProviderSplit:` plus target variance.
+Every public chunk summary records role, requested/effective effort, anonymous
+participant, closed fallback state, verification, and next action. Exact
+identity and cost accounting remain solely in the router's private machine
+receipt.
 
 **Bound behavioral contract interlock:** before every builder dispatch, read the durable binding receipt and include its exact `contract_digest` and `revision` in the dispatch. A builder completion receipt MUST claim those exact values. Missing, stale, malformed, or mismatched claims fail deterministic validation; do not reinterpret them as review feedback or success. The contract is immutable for the run; if requirements or the verification profile change, stop and start a newly planned run with a fresh initial binding.
 
-Every initial or replacement dispatch receipt preserves provider provenance as `requestedProvider`, `attemptedProvider`, `implementedBy`, boolean `fallback`, and `fallbackReason`. `fallback` is strictly true or false, never a transition string or null. Never relabel the requested provider after fallback. A replacement additionally records the prior attempt reference and why same-session resume was unavailable.
+Every initial or replacement dispatch preserves the role request, anonymous
+participant ID, boolean fallback, fallback reason, requested/effective effort,
+and private router receipt reference. A replacement additionally records the
+prior attempt reference and why same-session resume was unavailable.
 
-**Step 3d.0 -- Cascade activation gate.** Resolve `$WORKFLOW_KERNEL` once through its runtime-resolution contract. Select one coherent installed Pipeline bundle and derive the decision engine, runner, profiles, and probe from that root:
+**Step 3d.0 -- Resolve the role dispatcher.** Resolve `$WORKFLOW_KERNEL` once
+through its runtime-resolution contract, then bind one coherent installed
+model-router bundle:
 
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
-ACTIVE_HOST=""
-[ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && ACTIVE_HOST="claude"
-[ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && ACTIVE_HOST="codex"
-resolve_pipeline_bundle() {
-  if [ -n "$ACTIVE_HOST" ]; then
-    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin pipeline \
-      --minimum-version 1.36.1 --active-host "$ACTIVE_HOST" \
-      --required-executable references/cascade-dispatch.sh \
-      --required-executable references/openrouter-exec.sh \
-      --required-executable references/usage-probe.sh \
-      --required-asset references/harness-profile.json \
-      --required-asset references/model-cascade.json \
-      --required-asset references/routing-policy.json
-  else
-    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin pipeline \
-      --minimum-version 1.36.1 \
-      --required-executable references/cascade-dispatch.sh \
-      --required-executable references/openrouter-exec.sh \
-      --required-executable references/usage-probe.sh \
-      --required-asset references/harness-profile.json \
-      --required-asset references/model-cascade.json \
-      --required-asset references/routing-policy.json
-  fi
-}
-PIPELINE_BUNDLE_JSON=$(resolve_pipeline_bundle) || PIPELINE_BUNDLE_JSON=""
-PIPELINE_BUNDLE_REF=$(printf '%s' "$PIPELINE_BUNDLE_JSON" | jq -r '.selected_root // empty')
-case "$PIPELINE_BUNDLE_REF" in
-  "~/"*) PIPELINE_BUNDLE_ROOT="$HOME/${PIPELINE_BUNDLE_REF#\~/}" ;;
-  *) PIPELINE_BUNDLE_ROOT="" ;;
+MODEL_ROUTER_BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle \
+  --plugin model-router --minimum-version 0.1.0 \
+  --required-executable skills/model-router/references/role-dispatch.sh \
+  --required-asset skills/model-router/references/role-request-schema.json \
+  --required-asset skills/model-router/references/role-policy.json)
+MODEL_ROUTER_BUNDLE_REF=$(printf '%s' "$MODEL_ROUTER_BUNDLE_JSON" | jq -r '.selected_root // empty')
+case "$MODEL_ROUTER_BUNDLE_REF" in
+  "~/"*) MODEL_ROUTER_ROOT="$HOME/${MODEL_ROUTER_BUNDLE_REF#\~/}" ;;
+  *) echo "ERROR: model-router bundle unavailable" >&2; exit 1 ;;
 esac
-CASCADE_DISPATCH="$PIPELINE_BUNDLE_ROOT/references/cascade-dispatch.sh"
-OPENROUTER_EXEC="$PIPELINE_BUNDLE_ROOT/references/openrouter-exec.sh"
-USAGE_PROBE="$PIPELINE_BUNDLE_ROOT/references/usage-probe.sh"
-CASCADE_ACTIVE=0
-if [ -n "$CASCADE_DISPATCH" ] && [ -x "$CASCADE_DISPATCH" ] \
-   && { [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ] \
-        || [ "${PIPELINE_CASCADE:-0}" = "1" ]; }; then
-  CASCADE_ACTIVE=1
-fi
-export WORKFLOW_KERNEL
+ROLE_DISPATCH="$MODEL_ROUTER_ROOT/skills/model-router/references/role-dispatch.sh"
 ```
 
-Persist only Pipeline bundle `version`, `cache_class`, and `reason` in durable receipts; never persist the absolute selected root. The cascade and OpenRouter runner must use the same selected Pipeline root; a caller-supplied path or independently resolved asset is invalid.
+Persist only bundle version/cache class/reason and the private receipt reference;
+never persist the absolute root.
 
-`OPENROUTER_API_KEY`, the strictly validated `OPENROUTER_API_KEY_FILE`, or `PIPELINE_CASCADE=1` activates the cascade. **If `CASCADE_ACTIVE=0`, normalize any legacy `executor: claude` value to `codex`; an unavailable OpenRouter executor falls back to Codex. If Codex is also unavailable, fail the chunk rather than dispatching coding work to Claude.**
+**Step 3d.1 -- Dispatch the role.** Materialize the worker prompt, a fresh output
+path, and a private receipt path. Build argv as an array:
 
-**Step 3d.1 -- Select task-fit primary (cascade active only).** From `routing-policy.json`, not kind alone:
+```bash
+ROLE_ARGS=(--role "$EXECUTOR_ROLE" --effort "$EXECUTOR_EFFORT"
+  --prompt-file "$WORKER_PROMPT" --output-file "$WORKER_OUTPUT"
+  --receipt-file "$PRIVATE_ROUTER_RECEIPT")
+for capability in "${EXECUTOR_CAPABILITIES[@]}"; do
+  ROLE_ARGS+=(--capability "$capability")
+done
+OPENROUTER_EXEC_ALLOWED_PATHS="$OWNED_PATHS" "$ROLE_DISPATCH" "${ROLE_ARGS[@]}"
+```
 
-- `config` / docs / pure prose -> `openrouter`
-- mechanical `logic` -> `openrouter` or `codex` according to policy
-- complex `logic` -> `codex`
-- `integration` -> `codex`
-- `ui` -> `codex`
-
-Optional: consult `usage-probe.sh` from the same bundle to skip a known-capped primary.
-
-**Step 3d.2 -- Primary rail has headroom.** Dispatch the policy-selected primary. OpenRouter uses bounded `openrouter-exec.sh` and `OPENROUTER_EXEC_ALLOWED_PATHS`; missing/invalid credentials, unsafe/dirty allowlist context, disclosure decline, over-limit prompt, or unavailability descends to Codex. The adapter builds the worker prompt from the task, allowlist, and clean `HEAD` contents of allowed text files only. Legacy `executor: claude` normalizes to Codex. On success proceed to 3e; on cap/unavailability consult the cascade; on a non-cap quality failure flag the chunk failed.
-
-**Step 3d.3 -- Cap/unavailable: consult the cascade.** Only when Step 3d.2 proved the primary rail capped or unavailable, load `plugins/pipeline/references/execution-cascade-descent.md` and follow it: it owns the cascade invocation, the `CASCADE_RC` routing table, Native Model Descent (RC 64), the one-shot validity rule (RC 0), and the rail-exhaustion ask gate (RC 76). Log `"Primary rail capped for chunk [id]; consulting cascade."` before loading it. Airlift on cap fires inside `cascade-dispatch.sh`; do not call Airlift here. A chunk whose primary rail had headroom never loads that file.
-
-#### 3d-LEGACY: Binary executor path
-
-When `CASCADE_ACTIVE=0`, load
-`plugins/pipeline/references/execution-legacy-executor-path.md` and follow its
-binary `executor` routing. With an active cascade, do not load it.
+The dispatcher owns live availability, billing eligibility, family exclusion,
+transport invocation, exact payload screening, and fallback. Do not ask for
+permission to use another configured eligible rail. RC 76 means the role is
+unavailable; fail this chunk, preserve the role-level disposition, and leave
+independent chunks eligible. Do not implement the chunk inline.
 
 #### 3d worker prompt (both paths)
 
-Dispatch the Codex worker with this prompt inlined. Normalize a legacy
-`executor: claude` value, or an absent field, to `executor: codex` first.
+Dispatch the role participant with this prompt inlined. Do not inject the
+participant's concrete identity or another participant's private receipt.
 
 ```text
 You are implementing a chunk of a larger feature. Work in the current directory.
@@ -599,7 +586,10 @@ Verify before proceeding:
 1. **Completion check:** the subagent reported completion (not an error or question).
 2. **Commit check:** `git log <featureBranch>..<chunk-branch> --oneline` MUST show at least one commit.
 3. **Focused verification:** on profile-aware repositories, invoke `plan-verification` for boundary `chunk` using the exact chunk diff, then `run-verification`; do not run a repository-wide or race suite here. On the compatibility path, run only the repository's narrow documented check and record that no executable planner/cache authority was available.
-4. **Provider receipt check:** the chunk receipt includes `implementedBy: codex` or `implementedBy: openrouter`. Any coding receipt with `implementedBy: claude` is a misroute.
+4. **Role receipt check:** the public result contains the requested role,
+   anonymous participant, closed disposition, requested/effective effort, and
+   fallback state. The private receipt exists and is content-free; do not copy
+   its concrete identity into this validation or a repair prompt.
 
 Represent a passing repository-verification result once with a bounded summary containing selected check IDs, status, and plan digest. Raw passing stdout/stderr and repeated result copies must not enter a builder repair prompt or any later reviewer prompt.
 
@@ -631,13 +621,13 @@ For `renderedSurface: required`, run Datastar/markup static checks and one brows
 
 ### 3g: Run Evaluation Gate (per classification)
 
-**Per-chunk review uses Codex, not Claude.** dm-review is reserved for Step 4. Every per-chunk review receives the approved requirements and compact alignment context. Flag as P1/P2/P3: work outside approved scope; conflict with project constraints; unnecessary architecture; changes owned by another repository; or correct work that misses the chunk's approved outcome. Reject adjacent useful work that does not repair an observable defect in the approved scope.
+**Per-chunk review uses role dispatch.** dm-review is reserved for Step 4. Every per-chunk review receives the approved requirements and compact alignment context, never concrete participant identity. Flag as P1/P2/P3: work outside approved scope; conflict with project constraints; unnecessary architecture; changes owned by another repository; or correct work that misses the chunk's approved outcome. Reject adjacent useful work that does not repair an observable defect in the approved scope.
 
-**UI and Logic:** Run `/codex:review`. If findings: collect the complete set; apply all accepted fixes as one revision batch; do not test after each individual edit; invoke planner once with `revision_batch`; re-run review. Max 2 iterations. If Codex is unavailable, fall back to the dm-review Skill pattern.
+**UI and Logic:** Request `review-deep` at high effort. If findings: collect the complete set; apply all accepted fixes as one revision batch; do not test after each individual edit; invoke planner once with `revision_batch`; re-run the affected role once. Max 2 iterations.
 
 **Integration:** Same, then verify cross-chunk wiring (routes, imports, connections).
 
-**Trivial:** One `/codex:review`. If findings, fix and re-run once.
+**Trivial:** Request `review-fast` at medium effort. If findings, fix and re-run once.
 
 **Zero-deferral:** every retained P1/P2/P3 must be fixed and verified; no deferral flag. P1 security/corruption/breaking; P2 performance/architecture/reliability; P3 observable minor defects. Every retained finding must identify an observable current defect, location, and smallest adequate repair; P1/P2 must identify the affected current user or operator and realistic harm. Reject unsupported preferences and speculative scope.
 
@@ -649,7 +639,12 @@ If P1/P2/P3 remain after max iterations: STOP, apply targeted line fixes, re-run
 EVAL_GATE_PASSED: [chunk-id] | classification: [type] | iterations: [N] | findings_remaining: [N] | p3_findings: [N]
 ```
 
-Append `requestedProvider`, `attemptedProvider`, `implementedBy`, `fallback: true|false`, and `fallbackReason`. Defer shadow observation until `all-chunks-complete`; never synthesize `EVAL_GATE_PASSED` from a kernel prediction. Without this receipt, merge is blocked. When `EVAL_GATE_PASSED` is emitted, fire a tier-1 airlift checkpoint per `plugins/pipeline/references/airlift-checkpoint.md` with `--phase "execute"`. Mark `[chunk-id] 7. Run evaluation gate` complete.
+Append `role`, `requestedEffort`, `effectiveEffort`, anonymous participant ID,
+`fallback: true|false`, and `fallbackReason`. Defer shadow observation until
+`all-chunks-complete`; never synthesize `EVAL_GATE_PASSED` from a kernel
+prediction. Without this receipt, merge is blocked. When it is emitted, fire a
+tier-1 airlift checkpoint per `plugins/pipeline/references/airlift-checkpoint.md`
+with `--phase "execute"`. Mark `[chunk-id] 7. Run evaluation gate` complete.
 
 ### 3h: Visual Verification Protocol (`renderedSurface: required` only)
 
@@ -696,7 +691,13 @@ Before dispatching the review, invoke the repository planner with boundary `merg
 
 First materialize the cumulative authoritative receipt array through the `all-chunks-complete` boundary and run the first `observe-pipeline` checkpoint. The observation remains shadow evidence and cannot approve the final review.
 
-Verification invariant: preserve provider independence required by the selected review protocol. Full mode runs on the provider family that did not implement the majority of code. Quick mode dispatches its two independent core judgment lanes and applicable build/UI/domain lanes; it may not collapse to the implementer's self-review. If a required lane is unavailable, report the gap and do not substitute Claude coding review.
+Verification invariant: preserve family independence required by the selected
+review protocol. Pass opaque implementing receipt IDs with
+`independent-family`; model-router performs the exclusion privately. Quick mode
+dispatches its two independent core judgment lanes and applicable
+build/UI/domain lanes; it may not collapse to the implementer's self-review. If
+a required lane is unavailable, report the closed role-level gap without
+selecting a substitute.
 
 For `decisionProfile.consequence: high`, this existing final independent seam is the stronger verification depth: require all applicable independent lanes and conditional reviewers to return valid evidence. A missing, declined, dead, or degraded required lane stops `human_help_required`; do not approve from the remaining lane. This escalation does not add a full review to each ordinary chunk and does not relax sensitive-path or browser requirements.
 
@@ -812,13 +813,16 @@ Codify remains proposal-only. Mark `FINAL 4. Prepare optional session observatio
 
 Write `plans/<feature-slug>/run-postmortem.md` following `plugins/pipeline/references/run-postmortem-schema.md` before artifact cleanup.
 
-1. **Claude JSONL delta:** Snapshot Claude tokens at Phase 6 start and here. Sum `message.usage.{input_tokens, output_tokens, cache_creation_input_tokens, cache_read_input_tokens}` by `model`. Report the DELTA.
-2. If `ccusage` is on PATH, run `ccusage blocks --json` as a cross-check.
-3. **Codex:** sum `tokens used` from chunk receipts.
-4. **OpenRouter:** use `attempt_usage` rows from `record-attempt`. `deepseek/*` stays in this bucket.
-5. Record shell-proxy or rtk savings separately. Do not mix them into providerSplit.
+1. Aggregate public attempts by role, requested/effective effort, fallback state,
+   duration, and measured/unavailable token and cost status.
+2. Reference the private model-router receipts for operator-only exact identity
+   and billing analysis; do not copy those fields into this post-mortem.
+3. Record shell-proxy or rtk savings separately.
 
-Include `providerSplit:`, `eligibleProviderSplit:`, `routingExclusions:`, `routingVariance:`, misroutes, quality ledger, kernel reliability, provider evidence, and ranked recommendations labeled `AWAITING APPROVAL`. NEVER auto-edit plugin sources. Append one ledger line to `docs/pipeline-metrics/ledger.md`. **Recurrence promotion:** if the same recommendation appears in at least `N` runs (default `3`) in `docs/pipeline-metrics/ledger.md`, promote it to a Standing Recommendation with citations. Mark `FINAL 5. Run Post-Mortem` complete.
+Include `roleSplit:`, fallback reasons, missing measurement, quality ledger,
+kernel reliability, and ranked recommendations labeled `AWAITING APPROVAL`.
+NEVER auto-edit plugin sources. Append one ledger line to
+`docs/pipeline-metrics/ledger.md`. Mark `FINAL 5. Run Post-Mortem` complete.
 
 ## Step 5b: Artifact and Repository Cleanup
 
@@ -853,8 +857,9 @@ Use this schema after Docker reconciliation, artifact cleanup, Git cleanup, and 
 - Isolation: <isolationStrategy: per-chunk-worktree | sequential-on-branch>
 - Workflow class: <workflowClass>
 - Workflow class defaulted: <true|false>
-- providerSplit: {claude: N, codex: N, openrouter: N}
-- eligibleProviderSplit: {codex: N, openrouter: N, targetProfile: <name>, routingVariance: <measured>}
+- roleSplit: {<role>: N}
+- fallbackSummary: {completed: N, fallback: N, unavailable: N}
+- privateRouterReceipts: <operator-only receipt directory; do not expand>
 
 ## Evidence
 | # | Requirement | Evidence |
@@ -968,7 +973,7 @@ If `campaignSlug` is present, write `.campaign/state.json` per `plugins/pipeline
 
 ## Step 6: Summary Report
 
-Before presenting the summary, use the terminal comparison and metrics result captured in Step 5b before any semantic-match cleanup. Report the semantic parity category and reasons without changing the authoritative merge, review, provider, browser, or cleanup result; if unavailable, report the attempted resolver source and safe reason. The stable comparison vocabulary is `match`, `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, and `unsafe_to_promote`; diagnostics such as `semantic_receipts_required` and `run_spec_receipt_context_mismatch` belong only in `differences`.
+Before presenting the summary, use the terminal comparison and metrics result captured in Step 5b before any semantic-match cleanup. Report the semantic parity category and reasons without changing the authoritative merge, review, role, browser, or cleanup result; if unavailable, report the attempted resolver source and safe reason. The stable comparison vocabulary is `match`, `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, and `unsafe_to_promote`; diagnostics such as `semantic_receipts_required` and `run_spec_receipt_context_mismatch` belong only in `differences`.
 
 Present this compact report. Populate every evidence path that exists; omit a nonexistent optional artifact rather than inventing one:
 
@@ -978,7 +983,7 @@ Present this compact report. Populate every evidence path that exists; omit a no
 <What changed, or the exact blocker and what stopped.>
 
 **Verification:** <passed checks and final review result, or exact failed/pending evidence>
-**Attempt result:** <for a failed provider attempt: stable failure reason; usage/cost reported or unmeasured>
+**Attempt result:** <for a failed role attempt: stable role-level reason; usage/cost measured or unavailable>
 **Branch or PR:** <branch and PR URL when present>
 **Recommended next action:** <one action; for blocked work, the smallest operator action>
 **Resumable work:** <preserved branch/worktree/artifact path; required when blocked>

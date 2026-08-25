@@ -1,11 +1,10 @@
 ---
 name: ux-quality-reviewer
 description: Reviews rendered pages for UX/UI quality -- information hierarchy, spacing consistency, state completeness, navigation clarity, typography, layout composition, and interaction polish. Runs when template or CSS files change and a dev server is detected. Complements the visual-browser-tester (which checks rendering/responsive/a11y) with a creative director's eye for design quality and usability.
-model: sonnet
+model: inherit
 ---
 
 <!-- token-economy-hardening:budget-block -->
-<!-- Model tier: `sonnet` -- tight-spec execution/review that needs solid judgment but not the top tier. Prompt quality is the floor now: judgment-heavy seats get Opus, tight-spec execution/review gets Sonnet, mechanical lanes get Haiku. Do NOT downgrade a security seat below Opus. -->
 
 ## Tool-Call Budget & Partial-Return Contract
 

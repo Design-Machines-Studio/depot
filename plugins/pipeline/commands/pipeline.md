@@ -34,14 +34,16 @@ Visible summaries normally fit ~250 words; exceed only for actionable P1/P2/P3 f
 
 ## Provider-Adaptive Complexity
 
-Choose lean versus full from dependency shape, risk, and verification needs -- not from a Claude model. Coding execution and review use Codex or OpenRouter. Claude effort settings may deepen explicitly non-coding planning, strategy, research synthesis, voice/editorial work, or optional plan critique, but never change coding routes or justify broader implementation chunks.
+Choose lean versus full from dependency shape, risk, and verification needs --
+never from a concrete participant. Execution and review request roles,
+capabilities, and normalized effort through model-router.
 
-- Complex, security-sensitive, or multi-subsystem work uses full mode regardless of provider quality.
-- `plan-adversary` may use high Claude effort only as explicitly non-coding plan critique; Codex and OpenRouter remain the coding evaluators.
-- Fable is non-coding-only: never dispatch `execution-orchestrator`, implementation, security, architecture, or code review to Fable.
-- Mechanical OpenRouter runners remain bounded by the security policy and return to Codex when they cannot execute safely.
+- Complex, security-sensitive, or multi-subsystem work uses full mode regardless of resolved participant.
+- `plan-adversary` requests `plan-critic`, `read-repository`, `long-context`, `structured-output`, and high effort.
+- Orchestration prompts and summaries carry anonymous participant labels only.
+- External runners remain bounded by the existing disclosure, owned-path, and validated-diff boundaries.
 
-**Mandatory regardless of provider:** the Phase 5 adversarial review (self-evaluation is unreliable at any capability level); focused Codex review after ordinary chunks, full review for sensitive paths, and the approved final dm-review mode -- full by default, quick only when the approved plan explicitly selects it, consequence is not high, and the final diff is not security-sensitive. Generator/evaluator separation is architectural, not a model limitation.
+**Mandatory regardless of resolved participant:** the Phase 5 adversarial review; focused role review after ordinary chunks, full review for sensitive paths, and the approved final dm-review mode -- full by default, quick only when the approved plan explicitly selects it, consequence is not high, and the final diff is not security-sensitive. Generator/evaluator separation is architectural, not a model limitation.
 
 ## CRITICAL: No Shortcuts
 
@@ -287,7 +289,11 @@ Fix uncovered requirements before proceeding; mark item 7 at 100%.
 
 ## Phase 5: Adversarial Scope Review
 
-Run `plan-adversary` exactly once as the independent bounded planning review. Codex is the required adversarial reviewer for this planning phase; use `plugins/pipeline/agents/workflow/plan-adversary.md` as its protocol. Configured-key OpenRouter availability does not broaden this workload and no second plan-only reviewer is added.
+Run `plan-adversary` exactly once as the independent bounded planning review.
+Request `plan-critic` at high effort with `read-repository`, `long-context`,
+`structured-output`, and `independent-family`, passing opaque planner receipt
+IDs. Use `plugins/pipeline/agents/workflow/plan-adversary.md` as its protocol.
+No second plan-only reviewer is added.
 
 Resolve the coherent installed Pipeline bundle through workflow-kernel with `--plugin pipeline --minimum-version 1.36.1 --required-asset references/openrouter-authorization-contract.md --active-host <claude|codex>` and read that contract from the selected root; never a target-repository copy.
 
@@ -295,7 +301,7 @@ Resolve the coherent installed Pipeline bundle through workflow-kernel with `--p
 2. One complete adversarial pass: feasibility, requirements coverage, internal consistency, project-goal alignment, current repository ownership, stale-context assumptions, duplicated active work, scope creep, unnecessary abstractions, realistic reachable security/data defects.
 3. Apply supported blockers as one revision batch; advisory improvements stay visible but do not expand scope, force criteria, or trigger another round.
 4. At most one targeted recheck of revised blockers; do not re-review unaffected prompts or criteria.
-5. Proceed when no supported blocking finding remains, retaining the native-only planning coverage receipt. A blocker may not introduce a product requirement unless it maps to an approved outcome or proves a concrete regression/security defect.
+5. Proceed when no supported blocking finding remains, retaining the role-level planning coverage receipt. A blocker may not introduce a product requirement unless it maps to an approved outcome or proves a concrete regression/security defect.
 
 Mark ledger item 8 complete.
 
@@ -327,11 +333,11 @@ Enter only after the final planning gate returned explicit execution approval; a
      `plans/<feature-slug>/plan.html` and read the same four controls from it.
 4. Validate before checkout: `create` updates the named `baseBranch` and creates the named `featureBranch` with null/absent expected head; `reuse` fetches the named remote feature branch, requires its tip to equal `expectedFeatureHead`, and performs no initial push
 
-**Full mode:** You MUST launch the execution-orchestrator agent; you MUST NOT execute chunks yourself with general-purpose agents. The execution-orchestrator handles branch create/reuse semantics, worktree isolation, input guardrails, Fix Philosophy injection, output validation, focused Codex review for ordinary chunks, full review for sensitive chunks, merging, the approved final dm-review mode, and memory-handoff preparation -- skipping it skips all of them.
+**Full mode:** You MUST launch the execution-orchestrator agent; you MUST NOT execute chunks yourself with general-purpose agents. The execution-orchestrator handles branch create/reuse semantics, worktree isolation, role dispatch, input guardrails, Fix Philosophy injection, output validation, focused role review for ordinary chunks, full review for sensitive chunks, merging, the approved final dm-review mode, and memory-handoff preparation -- skipping it skips all of them.
 
 **Codex Native Execution Adapter:** If running in Codex with `multi_agent_v1.spawn_agent` exposed, use the adapter documented in `/pipeline-run` (`plugins/pipeline/commands/pipeline-run.md`) for Phase 6: the current Codex agent acts as orchestrator in-process under `plugins/pipeline/agents/workflow/execution-orchestrator.md`, dispatches chunk workers with `multi_agent_v1.spawn_agent`, and applies the risk-tiered focused/full review adapter. This is equivalent pipeline execution and MUST record `executionMode: codex_native` in every receipt.
 
-Pass `workflowClass` and the exact approved/defaulted `decisionProfile` provenance unchanged into Phase 6. Every provider receipt names requested provider, attempted provider, actual implementer, fallback, and reason; missing lanes and misroutes remain explicit evidence, and provider substitution never changes required validation, review, browser, requirements, or cleanup gates. For high consequence the stronger independent verification seam must complete without degraded lane coverage or stop `human_help_required` (no full review on every ordinary chunk); high uncertainty was consumed by the single planning opinion and bounded synthesis and adds no execution debate.
+Pass `workflowClass` and the exact approved/defaulted `decisionProfile` provenance unchanged into Phase 6. Ordinary receipts name role, requested/effective effort, anonymous participant, fallback, and reason; exact identity stays in private router receipts. Missing lanes remain explicit evidence, and fallback never changes required validation, review, browser, requirements, or cleanup gates. For high consequence the stronger independent verification seam must complete without degraded lane coverage or stop `human_help_required` (no full review on every ordinary chunk); high uncertainty was consumed by the single planning opinion and bounded synthesis and adds no execution debate.
 
 Launch the execution-orchestrator from `plugins/pipeline/agents/workflow/execution-orchestrator.md` with the manifest path (`plans/<feature-slug>/manifest.json`), prompts directory (`plans/<feature-slug>/prompts/`), and feature branch name from the manifest.
 
@@ -406,4 +412,4 @@ Before this gate, confirm the orchestrator's Step 5b ran repository cleanup (ful
 
 ## Self-Audit
 
-Before delivery, confirm: original prompt saved; assessment and research ran; only the two routine pre-execution gates were used; full mode wrote manifest/prompts and lean mode left them absent; coverage is complete; one adversary pass plus at most one recheck; execution started only after final planning approval; approved final review ran; optional memory was applied or omitted silently; every `renderedSurface: required` case has browser evidence or blocked `human_help_required`; new JS modules were runtime-checked; caller visual verification ran when required; friction produced a codify proposal when the failure is new; and the run wrote `plans/<feature-slug>/run-postmortem.md` with measured `providerSplit`. If any item failed, go back and do it.
+Before delivery, confirm: original prompt saved; assessment and research ran; only the two routine pre-execution gates were used; full mode wrote manifest/prompts and lean mode left them absent; coverage is complete; one adversary pass plus at most one recheck; execution started only after final planning approval; approved final review ran; optional memory was applied or omitted silently; every `renderedSurface: required` case has browser evidence or blocked `human_help_required`; new JS modules were runtime-checked; caller visual verification ran when required; friction produced a codify proposal when the failure is new; and the run wrote `plans/<feature-slug>/run-postmortem.md` with measured `roleSplit`, effort, fallback, verification, private receipt references, and one next action. If any item failed, go back and do it.

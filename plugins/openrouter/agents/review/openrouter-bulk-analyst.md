@@ -1,7 +1,7 @@
 ---
 name: openrouter-bulk-analyst
 description: Review criteria for policy-selected large-context and full-diff analysis. The generic OpenRouter runner supplies the automatically screened eligible diff, model selection, fallback, and provider receipt.
-model: sonnet
+model: inherit
 effort: medium
 tools: Read, Grep
 ---

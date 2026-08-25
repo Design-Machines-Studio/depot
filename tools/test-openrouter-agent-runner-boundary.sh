@@ -202,7 +202,7 @@ case "$runner_failure_output" in
   *) exit 1 ;;
 esac
 case "$runner_failure_output" in
-  *"OpenRouter runner (doc-sync-reviewer): The OpenRouter organization monthly budget is exhausted; its administrator must raise or reset that limit. Review unavailable."*) ;;
+  *"Provider adapter (doc-sync-reviewer): unavailable. Review unavailable."*) ;;
   *) exit 1 ;;
 esac
 case "$runner_failure_output" in
@@ -210,9 +210,9 @@ case "$runner_failure_output" in
 esac
 
 grep -Fq -- '--output-decision "$BOUNDARY_DECISION"' "$SOURCE"
-grep -Fq 'OpenRouter reviewed {ELIGIBLE_SECTION_COUNT} eligible file sections;' "$SOURCE"
+grep -Fq 'The provider adapter reviewed {ELIGIBLE_SECTION_COUNT} eligible file sections;' "$SOURCE"
 grep -Fq 'Closed reason: {BOUNDARY_DECISION_REASON}.' "$SOURCE"
-grep -Fq 'Run the same target agent locally only for these held paths' "$SOURCE"
+grep -Fq 'Request the same role only for these held paths' "$SOURCE"
 ! grep -Fq 'OpenRouter reviewed only the eligible file sections.' "$SOURCE"
 
 cat > "$FIXTURE/runner-partial.diff" <<'EOF'
@@ -267,9 +267,9 @@ decline_output=$(RUNNER_DIFF="$FIXTURE/runner-decline.diff" \
   RUNNER_POLICY="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json" \
   "$FIXTURE/run-mechanical" 2>"$FIXTURE/runner-decline.stderr")
 [ ! -s "$FIXTURE/runner-decline.stderr" ]
-grep -Fq 'OpenRouter dispatch declined (high-confidence-credential)' \
+grep -Fq 'External dispatch declined (high-confidence-credential)' \
   <<< "$decline_output"
-grep -Fq 'Next action: run' <<< "$decline_output"
+grep -Fq 'state to the role fallback boundary.' <<< "$decline_output"
 ! grep -Fq 'ghp_' <<< "$decline_output"
 
 echo "  OK    OpenRouter agent runner scans once and preserves partial/closed decisions"

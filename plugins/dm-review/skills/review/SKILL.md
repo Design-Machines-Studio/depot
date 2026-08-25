@@ -48,7 +48,7 @@ Default to the cheapest tier that fits.
 |------|------|-----------|
 | Per chunk during pipeline execution | `dm-review-quick` | 2 core judgment lanes + applicable UI/build/domain lanes |
 | Pre-merge, once per PR | full `dm-review` | All applicable agents + consolidation + optional memory enrichment when callable |
-| Bulk second opinions / large-diff first pass | `routing-policy.json` selection | Family-independent security analysis plus style, duplication, pattern, and doc lanes; eligible diff sections only; mandatory full-diff independent-family sign-off |
+| Bulk second opinions / large-diff first pass | fixed lane-to-role mapping | Family-independent security analysis plus style, duplication, pattern, and doc lanes; eligible diff sections only; mandatory full-diff independent-family sign-off |
 | Bounded repair review | full + one repair | One repair batch and one affected-lane recheck; repeat broad review only when the original was incomplete or the repair changed a real sensitive boundary |
 
 **Escalation exception:** quick review is an early feedback gate, not the final
@@ -59,14 +59,14 @@ a chunk early only when a changed path matches this bounded set:
 `**/destructive_confirmation*`, `internal/baseplate/email/settings*`,
 `deploy/**`, `*.env*`, or the Depot credential-transport controls
 `openrouter-wrapper.sh` / `delegation-boundary.sh`. Do not widen this set to all handlers, shell scripts, dependency manifests, or configuration files. A
-matching chunk skips the quick tier and runs the matrix-selected
+matching chunk skips the quick tier and runs the role-selected
 `security-auditor` analysis (eligible file sections) plus the mandatory full-diff independent-family security sign-off. Sections containing actual
-secrets stay on an eligible native family; path names alone never decline
-disclosure.
+secrets are held from external dispatch and completed within the role fallback
+boundary; path names alone never decline disclosure.
 
 ## Shadow Workflow Kernel Contract
 
-The selected agents, provider routing, review outputs, todos, consolidation, merge recommendation, and cleanup receipts remain authoritative. Kernel prediction is observation-only and cannot select lanes, waive a lane, alter fallback, create a clean recommendation, execute cleanup, or convert any finding.
+The selected lanes, role requests, review outputs, todos, consolidation, merge recommendation, and cleanup receipts remain authoritative. Kernel prediction is observation-only and cannot select roles or participants, waive a lane, alter fallback, create a clean recommendation, execute cleanup, or convert any finding.
 
 Resolve `$WORKFLOW_KERNEL` once per review run per the workflow-kernel plugin's
 `references/runtime-resolution.md`, which owns launcher discovery, trust
@@ -164,22 +164,24 @@ A project can be multiple types. Reviewing the depot itself: "Plugin Marketplace
 
 Select agents by mode, changed file extensions, and project type; resolve each through the plugin cache (resolver below). Diff size may inform budgets but never widens the quick roster by itself.
 
-**Coding-provider boundary:** Claude is not a coding implementation rail. Core code review, security, architecture, UI, and test review use policy-derived families regardless of legacy agent frontmatter. A native Claude family may run the read-only `second-perspective` or independent-family security sign-off only when the implementing family differs, plus clearly non-coding lanes (voice/editorial, research synthesis, strategy).
+#### Provider-neutral role dispatch
 
-#### Routing Policy for Mechanical Agents
+dm-review selects the complete roster, review criteria, role, required
+capabilities, effort, and whether family independence is required. It never
+selects or receives a model, provider, transport, family, subscription, billing
+rail, availability judgment, or fallback order.
 
-For API candidates, "quality-per-price" means the explicit ordered role in
-`routing-policy.json` after family exclusions; `quality_rank` is only a
-compatibility floor. Ordinary second perspective starts Qwen3.8 Max then Grok
-4.6; security starts Kimi K3 then Grok 4.6.
+Load `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md` for the fixed
+lane-to-role mapping and one-shot dispatcher contract. For independent lanes,
+pass opaque implementing receipt IDs; model-router reads private family evidence
+and excludes every implementing family. Public lane companions and peer prompts
+use stable lane names and anonymous participants only. Exact identity stays in
+content-free private receipts.
 
-Read `plugins/pipeline/references/routing-policy.json` before selecting models **when it is present**; standalone dm-review uses the inline model table. Family means provider lineage: OpenAI/Codex, Anthropic/Claude, and each OpenRouter-served third party under its own vendor family; OpenRouter is a transport, not a family. The second-perspective reviewer model family MUST differ from the family that implemented the diff under review. For a mixed-family diff, treat every contributing family as implementing and select outside that set; the same exclusion applies to the mandatory full-diff security sign-off.
-
-Resolve both family-independent roles subscription-first: an eligible non-implementing family with live subscription headroom for both `five_hour` and `weekly` beats every API family, then the applicable ordered role after removing implementing families. Ordinary second perspective uses `second-perspective`; security sign-off uses its dedicated implementer-aware route. Unknown subscription headroom is treated as at-threshold, never as available. Do not start a planned multi-chunk review whose projected subscription spend would cross the threshold mid-run. Apply `.dm/operator-profile.local.json` only after policy derivation: it may rank and remove derived candidates, never add one or override `neverOfferable`, disclosure/security controls, or family independence (remove-only precedence per `operator-profile-schema.json` `properties.precedence`). No profile means policy defaults.
-
-Every `second-perspective` and independent-family security sign-off receipt records `implementer_family`, `reviewer_family`, and `resolution_reason`; mixed implementation records `mixed(<sorted families>)`. Equal implementing and reviewing families is invalid and leaves the lane incomplete.
-
-**External routing availability** is resolved in full mode by `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md` before Branch A dispatch: configured key (`OPENROUTER_API_KEY` or the strictly validated `OPENROUTER_API_KEY_FILE`) plus one coherent installed bundle. When available, eligible mechanical, bulk, and supplementary security lanes dispatch immediately; the runner materializes private outbound files, scans them once, and passes those same files to the wrapper. A missing/invalid key, unavailable bundle/provider, or full disclosure decline records the reason and retries the lane on Codex without asking the user. A partial decision keeps the OpenRouter result and runs local coverage only for held paths. Broker state is not consulted.
+The dispatcher applies external-content eligibility and payload screening
+automatically. A decline or unavailable rail falls through within the requested
+role without an approval prompt. A partial result is retained and only held
+sections receive local completion. Broker state is not consulted.
 
 #### Quick Mode
 
@@ -198,14 +200,13 @@ Do not add `second-perspective`, security, architecture, documentation, or full-
 
 #### Always-Run Agents (Full mode)
 
-These 5 review criteria run as 6 logical lanes when OpenRouter is available:
+These five review criteria always run as five logical lanes:
 
-1. **security-auditor-codex-signoff** -- `dm-review/*/agents/review/security-auditor.md` -- **independent family, full diff, always required**
-2. **security-auditor-openrouter** -- same criteria -- **Kimi K3, eligible sections only, only when OpenRouter is available**
-3. **architecture-reviewer** -- **Codex**
-4. **pattern-recognition-specialist** -- **OpenRouter when available** (`routing-policy.json` ladder)
-5. **code-simplicity-reviewer** -- **OpenRouter when available**
-6. **doc-sync-reviewer** -- **OpenRouter when available**
+1. **security-auditor** -- `security-review`, independent family, full diff, always required
+2. **architecture-reviewer** -- `review-deep`
+3. **pattern-recognition-specialist** -- `review-deep`
+4. **code-simplicity-reviewer** -- `review-deep`
+5. **doc-sync-reviewer** -- `review-fast`
 
 #### Configurable Second Perspective
 
@@ -215,7 +216,12 @@ disables it, and a disabled lane is receipted in Coverage Gaps. The legacy name
 `DM_REVIEW_CODEX_PERSPECTIVE` is still honoured -- exactly `0` in EITHER
 variable disables the lane.
 
-When enabled, add **second-perspective** as a parallel read-only reviewer in full mode only. Resolve it by the subscription-first family rules: when the implementer is OpenAI/Codex, select native Claude if both subscription windows have headroom; otherwise walk the ordered `second-perspective` role (`qwen/qwen3.8-max`, then `x-ai/grok-4.6`) after excluding every implementing family -- never back to OpenAI/Codex for that diff. When another family implemented, Codex is preferred with headroom, then the same filtered role. Use `dm-review/*/agents/review/codex-perspective.md` as the compatibility-named default definition; dispatch on the resolved family, normalize output to P1/P2/P3, and let the consolidator merge every finding as in-scope. The filename does not select the provider.
+When enabled, add **second-perspective** as a parallel read-only
+`plan-critic` at high effort in full mode only. Pass every opaque implementing
+receipt ID and require `independent-family`. Use
+`dm-review/*/agents/review/codex-perspective.md` as the compatibility-named
+criteria file; its filename does not select a participant. Normalize output to
+P1/P2/P3 and let the consolidator merge every in-scope finding.
 
 #### Conditional Agents (Full mode only)
 
@@ -248,7 +254,6 @@ append_selected_asset() {
     live-wires) LIVE_WIRES_REQUIRED_ASSETS+=("$agent_asset") ;;
     ghostwriter) GHOSTWRITER_REQUIRED_ASSETS+=("$agent_asset") ;;
     council) COUNCIL_REQUIRED_ASSETS+=("$agent_asset") ;;
-    openrouter) ;; # Its complete runner bundle was bound earlier in Phase 3.
     *) echo "SKIP: optional plugin has no declared resolution floor: $agent_plugin" ;;
   esac
 }
@@ -267,7 +272,7 @@ COUNCIL_BUNDLE_ROOT=""
 for PLUGIN in dm-review accessibility-compliance live-wires ghostwriter council; do
   case "$PLUGIN" in
     dm-review)
-      PLUGIN_MINIMUM_VERSION="1.70.0"
+      PLUGIN_MINIMUM_VERSION="1.71.0"
       REQUIRED_ASSETS=("${DM_REVIEW_REQUIRED_ASSETS[@]}")
       ;;
     accessibility-compliance)
@@ -321,7 +326,7 @@ done
 ```
 <!-- active-cache-resolution-shell:end -->
 
-The indexed arrays are the final roster's resolution projection, not a second selection mechanism. `AGENT_ASSET` is always a path such as `agents/review/<agent-id>.md`. The five bundles in this loop are required dm-review dependencies, so failure to resolve any non-empty selected group fails closed; never remove one of their selected lanes or fall back to a repository-relative path. Every path for a resolved plugin derives from its one root variable. OpenRouter keeps its separate optional availability check and Codex retry behavior in full-lane-dispatch.
+The indexed arrays are the final roster's resolution projection, not a second selection mechanism. `AGENT_ASSET` is always a path such as `agents/review/<agent-id>.md`. The five bundles in this loop are required dm-review dependencies, so failure to resolve any non-empty selected group fails closed; never remove one of their selected lanes or fall back to a repository-relative path. Every path for a resolved plugin derives from its one root variable. Participant resolution is entirely in `full-lane-dispatch.md`.
 
 | Condition | Agent | Cache-relative path components |
 |-----------|-------|--------------------------------|
@@ -330,7 +335,7 @@ The indexed arrays are the final roster's resolution projection, not a second se
 | `.css` changed | **css-reviewer** | `live-wires/*/agents/review/css-reviewer.md` |
 | `.templ`, `.js`, or `.ts` changed AND Go+Templ+Datastar | **a11y-dynamic-content-reviewer** | `accessibility-compliance/*/agents/review/a11y-dynamic-content-reviewer.md` |
 | `.md` or `.txt` changed, OR user-facing text in templates | **voice-editor** | `ghostwriter/*/agents/review/voice-editor.md` |
-| Any source file changed AND test infrastructure exists | **test-coverage-reviewer** -- **OpenRouter when available** (1800s) | `dm-review/*/agents/review/test-coverage-reviewer.md` |
+| Any source file changed AND test infrastructure exists | **test-coverage-reviewer** -- `review-fast` | `dm-review/*/agents/review/test-coverage-reviewer.md` |
 | Paths contain `governance`, `proposal`, `voting`, `member`, `resolution`, or `bylaw` | **governance-domain** | `council/*/agents/review/governance-domain.md` |
 | `.go` or `.templ` changed AND `go.mod` exists | **go-build-verifier** | `dm-review/*/agents/review/go-build-verifier.md` |
 | `.twig` or `.php` changed AND (`craft/` or `.ddev/` exists) | **craft-reviewer** | `dm-review/*/agents/review/craft-reviewer.md` |
@@ -338,7 +343,7 @@ The indexed arrays are the final roster's resolution projection, not a second se
 | `.templ`, `.twig`, `.html`, or `.css` changed | **visual-browser-tester** | `dm-review/*/agents/review/visual-browser-tester.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ux-quality-reviewer** | `dm-review/*/agents/review/ux-quality-reviewer.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ui-standards-reviewer** | `dm-review/*/agents/review/ui-standards-reviewer.md` |
-| `routing-policy.json` selects OpenRouter for bulk read, docs, mechanical checks, or large-context synthesis AND OpenRouter is available | **openrouter-bulk-analyst** | `openrouter/*/agents/review/openrouter-bulk-analyst.md` |
+| A large diff needs a bounded bulk first pass | **bulk-analyst** -- `review-fast` | `openrouter/*/agents/review/openrouter-bulk-analyst.md` |
 
 #### Selective Lane Allowlist (internal loop input)
 
@@ -367,8 +372,8 @@ If the change includes `.templ`, `.twig`, `.html`, or `.css`, load `${CLAUDE_SKI
 
 Before dispatching agents, apply `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
-1. **Diff size check:** >5000 lines -> truncate to file list + first 200 lines per file; note truncation in each agent's prompt. `openrouter-bulk-analyst` receives the full untruncated diff separately when active.
-2. **Content boundary:** Codex lanes receive the complete review diff. Each OpenRouter lane independently runs the shared mechanical content boundary and transmits every eligible file-diff section. Read-only review of non-secret auth, security, deployment, credential-handling, and `.env` code is eligible; paths and subject matter never decline disclosure. A full disclosure decline returns the logical lane to Codex; a partial decision keeps the completed OpenRouter review and requires local completion only for the held paths.
+1. **Diff size check:** >5000 lines -> truncate to file list + first 200 lines per file; note truncation in each agent's prompt. A selected bulk lane may receive the full untruncated diff separately.
+2. **Content boundary:** Materialize each lane's exact input. model-router applies the external disclosure boundary automatically when applicable. Read-only review of non-secret auth, security, deployment, credential-handling, and `.env` code is eligible; paths and subject matter never decline disclosure. A full decline falls through within the role; a partial decision keeps completed coverage and requires completion only for held paths.
 3. **Per-agent token check:** Estimate ~2K system prompt + (diff lines × ~4 tokens) + ~4K output headroom. If >~80K tokens, drop the lowest-priority non-browser conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents and browser agents required by the verification profile are never dropped; if required browser input cannot fit safely, block with `human_help_required` and ask the user to narrow or restore the verification input.
 
 If any agents were dropped or input was modified, report before proceeding:
@@ -376,23 +381,18 @@ If any agents were dropped or input was modified, report before proceeding:
 ```
 Input guardrails applied:
 - Diff truncated from 8,200 to 5,000 lines (200 lines/file cap)
-- OpenRouter reviewed 6 eligible file sections; 1 section remained local.
+- reviewer-a completed 6 eligible file sections; 1 section remained held.
 - Local coverage path: tests/integration/compose-release-command.sh
 - Blocked required browser lane: human_help_required (token budget; user input needed)
 ```
 
 ---
 
-### Phase 3.75: Provider Routing Reference
+### Phase 3.75: Role Dispatch Reference
 
-Routing decisions come from `plugins/pipeline/references/routing-policy.json`.
-When an OpenRouter lane is eligible for this review, load
-`${CLAUDE_SKILL_DIR}/references/openrouter-routing-reference.md` for the
-standalone model/timeout fallback table and the automatic disclosure boundary.
-With no eligible OpenRouter lane, do not load it. Print the routing report
-before Phase 4 (full mode prints it from
-`${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md` after availability
-resolves).
+Load `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md`. It owns the closed
+lane-to-role mapping and anonymous public receipt. Do not load a provider/model
+table or print concrete routing identity.
 
 ---
 
@@ -400,21 +400,28 @@ resolves).
 
 In **both modes**, before dispatching any lane, load `${CLAUDE_SKILL_DIR}/references/reviewer-prompt-template.md` and build every reviewer prompt from that common contract. Launch every selected lane in one message.
 
-In **quick** mode, dispatch only the selected core/triggered lanes on Codex unless a named full-mode exception applies: read each selected agent definition from the bound bundle root, build the prompt per the common contract, and launch all lanes in one message -- a native Codex subagent on a Codex host, otherwise pipe the prompt to `codex exec -s read-only -c service_tier=fast --skip-git-repo-check -`. Legacy Claude-model frontmatter is compatibility metadata and never overrides the coding-provider policy. Give the two core judgment lanes the full diff and slice each triggered lane (`go-build-verifier`, `craft-reviewer`, `ui-standards-reviewer`) to its trigger files, following the **Diff scoping per lane** rules and the `record-attempt` receipt-flag template (`--diff-scope`, `--full-diff-override`, `--slice-status`) in `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md`. Quick mode reads only those two shared sections from that file; it does not adopt full-mode Branch A–D routing.
+In **quick** mode, dispatch only the selected core/triggered lanes through their
+mapped roles. Give the two core judgment lanes the full diff and slice each
+triggered lane (`go-build-verifier`, `craft-reviewer`,
+`ui-standards-reviewer`) to its trigger files. Keep the established diff-scope
+and attempt receipts.
 
-In **full** mode, load `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md` and follow Branches A–D exactly. Bulk-analyst files are review criteria only; the generic runner is the single boundary, authorization, invocation, fallback, and provenance implementation. A Claude `Agent` call is not a valid Branch A launcher. Mixed diffs send only `--mode mechanical-review` remainders.
+In **full** mode, follow `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md`
+exactly. Agent files are review criteria only; model-router is the single
+resolution, availability, invocation, fallback, and private-provenance boundary.
 
-As each lane settles, record it with `record-attempt`. Supply `--openrouter-receipt` and `--request-envelope-sha256` for OpenRouter lanes, `--agent-definition` for Codex/Claude lanes, or omit both so the row records `attempt_unmeasured`.
+As each lane settles, record it with `record-attempt`, its anonymous lane
+companion, and the private router receipt reference. Never copy exact identity
+into another lane's prompt or the ordinary report.
 
 ### Phase 4.5: Lane Fallback
 
 A failed, declined, or unavailable lane must be named. Load `${CLAUDE_SKILL_DIR}/references/lane-fallback.md` only when that happens.
 
-There is no additional authorization or fallback rail. Ordinary in-policy OpenRouter/Codex routing remains unaffected. When this review is the pipeline's final full dm-review, “record the gap and continue” and the headless gap-and-continue default are unavailable.
-
-Resolve the lane before its provider. For `security-auditor-codex-signoff`, all three signals instead continue only to another non-implementing family; do not complete the held paths on the implementing family. Tag independent fallback `[independent-family-fallback/{reviewer-family}/{agent-name}]`. Independent sign-off may try each policy-derived non-implementing family at most once.
-
-Every machine-readable contribution decision and lane companion also records normalized `implementer_family`, `reviewer_family`, and `resolution_reason`.
+There is no additional authorization or caller-owned fallback rail. When this
+review is Pipeline's final full dm-review, “record the gap and continue” and the
+headless gap-and-continue default are unavailable. Independent lanes pass opaque
+receipt IDs; only private router receipts retain family evidence.
 
 ### Phase 5: Consolidation
 
@@ -436,8 +443,8 @@ RECORDER_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-memory-recorder.md"
 
 Read from `$CONSOLIDATOR_PATH` and follow it exactly:
 
-1. **Collect** all findings, including entries excluded from canonical counts by output guardrails, assigning each an addressable ID and recording its literal lane/provider/model/agent, evidence, and `raw_ref`. Raw reviewer artifacts remain untouched and are never replaced by the summary.
-2. **Assign stable identity** as `finding-v1:sha256(<normalized-key>)`: lowercase POSIX path + smallest stable structural anchor (normalized line span only if no anchor exists) + normalized issue category + whitespace-collapsed root-cause invariant, excluding reviewer/provider/model/severity/remediation/discovery order. Input reorder preserves IDs; severity disagreement changes the ledger, not identity.
+1. **Collect** all findings, including entries excluded from canonical counts by output guardrails, assigning each an addressable ID and recording its literal lane, role, anonymous participant, evidence, and `raw_ref`. Raw reviewer artifacts remain untouched and are never replaced by the summary.
+2. **Assign stable identity** as `finding-v1:sha256(<normalized-key>)`: lowercase POSIX path + smallest stable structural anchor (normalized line span only if no anchor exists) + normalized issue category + whitespace-collapsed root-cause invariant, excluding reviewer/participant/role/severity/remediation/discovery order. Input reorder preserves IDs; severity disagreement changes the ledger, not identity.
 3. **Classify and decide** using `agreement: unique|corroborated|disputed` independently from `finding_disposition: retained|merged|discarded`, each with a rationale and a closed reason code. Preserve contradictions, source severities, selected severity, and evidence rationale; exact duplicates do not inflate counts and distinct root causes stay separate but receive sorted reciprocal cross-ID dispute links when positions contradict. A linked root-cause position is disputed, never unique. Reproducible test/runtime evidence outranks direct HEAD evidence, diff/context evidence, standards-based reasoning, and reviewer consensus.
 4. **Map severity** per `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`.
 5. **Determine merge recommendation** per `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic: any P1 -> "BLOCKS MERGE"; any P2 -> "APPROVE WITH FIXES"; any P3 with no P1 -> "APPROVE WITH FIXES"; zero findings -> "CLEAN".
@@ -463,7 +470,7 @@ Keep the consolidated report body provisional through the remaining phases. Do n
 
 #### Coverage receipt and shadow observation
 
-Emit an authoritative coverage receipt after consolidation with one row per selected lane and per required verification case: requested/attempted/implemented-by provider, fallback/reason, completed/degraded/unavailable status, finding count, evidence reference. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report.
+Emit an authoritative coverage receipt after consolidation with one row per selected lane and per required verification case: role, requested/effective effort, anonymous participant, fallback/reason, completed/degraded/unavailable status, finding count, and evidence reference. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report.
 
 The receipt also records whether `review_lane_allowlist` was received and its disposition (`APPLIED`, `DISCARDED`, or `ABSENT`; a discarded input records the exact closed-set reason). It records the exact set of logical lanes actually `DISPATCHED` on this pass and the exact set in the recomputed selected full set that were deliberately `NOT_DISPATCHED` because an applied allowlist omitted them. The caller verifies the restriction against this receipt rather than assuming it was honored. Deliberately not-dispatched lanes under an applied allowlist are distinct from missing or failed required rows and do not by themselves make the review `REVIEW INCOMPLETE`; a dispatched lane that does not complete still does.
 
@@ -552,5 +559,5 @@ See `${CLAUDE_SKILL_DIR}/references/agent-registry.md` for the complete catalog.
 
 - Agent definitions are read at runtime from the depot; if the exact path is inaccessible (remote install), search by file name.
 - Maximum 16 parallel agents (full mode, all triggers). Ordinary quick mode has 2 core lanes plus triggered UI/build/domain lanes.
-- Agents default to `sonnet`; frontmatter `model:` overrides (go-build-verifier uses `haiku`).
+- Routed agent cards inherit participant selection from the caller's role request.
 - The consolidator and memory recorder run after all review agents complete, never in parallel.

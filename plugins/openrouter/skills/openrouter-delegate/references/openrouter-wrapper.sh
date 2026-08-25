@@ -32,6 +32,9 @@
 #                       model in the same native model-fallback request
 #   OPENROUTER_ALLOW_FALLBACKS
 #                       0|1 for provider fallback (default 1)
+#   OPENROUTER_WEB_SEARCH
+#                       0|1; enables the provider web plugin for a resolver
+#                       request carrying the browser capability (default 0)
 #   OPENROUTER_OVERALL_TIMEOUT
 #                       completion budget when timeout_s is omitted (default 3600)
 #   OPENROUTER_CONNECT_TIMEOUT
@@ -58,10 +61,15 @@ MODEL="${1:-}"
 PROMPT_ARG="${2:-}"
 TIMEOUT="${3:-${OPENROUTER_OVERALL_TIMEOUT:-3600}}"
 FALLBACK="${4:-}"
+WEB_SEARCH="${OPENROUTER_WEB_SEARCH:-0}"
 if [ -z "$MODEL" ] || [ -z "$PROMPT_ARG" ]; then
   echo "usage: $0 <model> <prompt|-> [timeout] [fallback]" >&2
   exit 2
 fi
+case "$WEB_SEARCH" in 0|1) ;; *)
+  echo "### RUNNER FAILURE: OPENROUTER_WEB_SEARCH must be 0 or 1" >&2
+  exit 2
+esac
 
 validate_model_slug() {
   local slug="$1"
@@ -345,6 +353,7 @@ write_failure_receipt() {
       --arg sort "$EFFECTIVE_SORT" \
       --arg runid "${CURRENT_RUN_ID:-}" \
       --arg lane "$RECEIPT_LANE_ID" \
+      --argjson web "$([ "$WEB_SEARCH" = "1" ] && echo true || echo false)" \
       --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" '
       {
         schemaVersion: 2,
@@ -367,7 +376,8 @@ write_failure_receipt() {
         usage: null,
         routing: {
           workload: $workload,
-          sort: (if $sort == "" then null else $sort end)
+          sort: (if $sort == "" then null else $sort end),
+          webSearch: $web
         },
         authorization: {
           runId: (if $runid == "" then null else $runid end),
@@ -401,6 +411,7 @@ write_success_receipt() {
       --arg sort "$EFFECTIVE_SORT" \
       --arg runid "${CURRENT_RUN_ID:-}" \
       --arg lane "$RECEIPT_LANE_ID" \
+      --argjson web "$([ "$WEB_SEARCH" = "1" ] && echo true || echo false)" \
       --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" '
       {
         schemaVersion: 2,
@@ -432,7 +443,8 @@ write_success_receipt() {
         usage: (.usage // null),
         routing: {
           workload: $workload,
-          sort: (if $sort == "" then null else $sort end)
+          sort: (if $sort == "" then null else $sort end),
+          webSearch: $web
         },
         authorization: {
           runId: (if $runid == "" then null else $runid end),
@@ -464,7 +476,8 @@ if [ -n "$FALLBACK" ]; then
     --arg fallback "$FALLBACK" \
     --rawfile system "$SYSTEM_SOURCE_FILE" \
     --rawfile prompt "$PROMPT_SOURCE_FILE" \
-    --argjson provider "$provider" '
+    --argjson provider "$provider" \
+    --argjson web "$([ "$WEB_SEARCH" = "1" ] && echo true || echo false)" '
     {
       models: [$primary, $fallback],
       provider: $provider,
@@ -474,13 +487,15 @@ if [ -n "$FALLBACK" ]; then
         {role: "system", content: $system},
         {role: "user", content: $prompt}
       ]
-    }' > "$request_file"
+    }
+    + (if $web then {plugins:[{id:"web"}]} else {} end)' > "$request_file"
 else
   jq -n \
     --arg model "$MODEL" \
     --rawfile system "$SYSTEM_SOURCE_FILE" \
     --rawfile prompt "$PROMPT_SOURCE_FILE" \
-    --argjson provider "$provider" '
+    --argjson provider "$provider" \
+    --argjson web "$([ "$WEB_SEARCH" = "1" ] && echo true || echo false)" '
     {
       model: $model,
       provider: $provider,
@@ -490,7 +505,8 @@ else
         {role: "system", content: $system},
         {role: "user", content: $prompt}
       ]
-    }' > "$request_file"
+    }
+    + (if $web then {plugins:[{id:"web"}]} else {} end)' > "$request_file"
 fi
 
 # The bytes curl posts, held in process memory. curl is fed these bytes on

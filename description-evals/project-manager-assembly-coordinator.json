@@ -44,6 +44,26 @@
     "should_trigger": true
   },
   {
+    "query": "Compare these Assembly plans before we choose the next chunk.",
+    "should_trigger": true
+  },
+  {
+    "query": "Get an independent planning opinion on this Fixture sequence.",
+    "should_trigger": true
+  },
+  {
+    "query": "Have an architect challenge this Assembly delivery sequence.",
+    "should_trigger": true
+  },
+  {
+    "query": "Assign execution roles to this Pipeline prompt for Assembly.",
+    "should_trigger": true
+  },
+  {
+    "query": "Compare two approaches before choosing the next Assembly chunk.",
+    "should_trigger": true
+  },
+  {
     "query": "Organize my personal Notion sprint capacity, todos, calendar, and meetings for the coming two weeks.",
     "should_trigger": false
   },
@@ -77,6 +97,14 @@
   },
   {
     "query": "Triage bugs and feature requests in an unrelated open-source GitHub library.",
+    "should_trigger": false
+  },
+  {
+    "query": "Brainstorm five possible names for a generic note-taking app.",
+    "should_trigger": false
+  },
+  {
+    "query": "Compare two vacation ideas and tell me which sounds more fun.",
     "should_trigger": false
   }
 ]

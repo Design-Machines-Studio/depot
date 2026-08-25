@@ -1,0 +1,55 @@
+{
+  "name": "model-router",
+  "version": "0.1.0",
+  "description": "Internal deterministic role resolver and one-shot dispatcher for provider-neutral model work",
+  "author": {
+    "name": "Design Machines",
+    "url": "https://designmachines.studio"
+  },
+  "keywords": [
+    "model-routing",
+    "role-routing",
+    "dispatcher",
+    "provider-neutral"
+  ],
+  "skills": "./skills/",
+  "capabilities": {
+    "skills": [
+      {
+        "id": "model-router",
+        "name": "Model Router",
+        "description": "Internal provider-neutral role request and deterministic one-shot dispatch contract for Pipeline, dm-review, and Assembly coordination",
+        "triggers": [
+          "dispatch a model role",
+          "resolve a provider-neutral role",
+          "route an independent reviewer"
+        ],
+        "tags": [
+          "internal",
+          "model-routing",
+          "role-routing",
+          "dispatcher"
+        ]
+      }
+    ],
+    "agents": [],
+    "commands": []
+  },
+  "optionalPluginDependencies": {
+    "openrouter": ">=1.19.0",
+    "workflow-kernel": ">=0.17.0"
+  },
+  "interface": {
+    "displayName": "Model Router",
+    "shortDescription": "Internal deterministic role resolver and one-shot dispatcher for provider-neutral model work",
+    "longDescription": "Internal deterministic role resolver and one-shot dispatcher for provider-neutral model work",
+    "developerName": "Design Machines",
+    "category": "Productivity",
+    "capabilities": [
+      "model-routing",
+      "role-routing",
+      "dispatcher",
+      "provider-neutral"
+    ]
+  }
+}

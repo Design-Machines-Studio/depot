@@ -1,11 +1,10 @@
 ---
 name: code-simplicity-reviewer
 description: Reviews code for unnecessary complexity, redundancy, dead code, and over-engineering. Always runs.
-model: sonnet
+model: inherit
 ---
 
 <!-- token-economy-hardening:budget-block -->
-<!-- Model tier: `sonnet` -- tight-spec execution/review that needs solid judgment but not the top tier. Prompt quality is the floor now: judgment-heavy seats get Opus, tight-spec execution/review gets Sonnet, mechanical lanes get Haiku. Do NOT downgrade a security seat below Opus. -->
 
 # Code Simplicity Reviewer
 

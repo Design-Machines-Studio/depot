@@ -1,11 +1,10 @@
 ---
 name: test-coverage-reviewer
 description: Verifies adequate test coverage for changed code. Runs when test infrastructure exists.
-model: sonnet
+model: inherit
 ---
 
 <!-- token-economy-hardening:budget-block -->
-<!-- Model tier: `sonnet` -- tight-spec execution/review that needs solid judgment but not the top tier. Prompt quality is the floor now: judgment-heavy seats get Opus, tight-spec execution/review gets Sonnet, mechanical lanes get Haiku. Do NOT downgrade a security seat below Opus. -->
 
 ## Tool-Call Budget & Partial-Return Contract
 

@@ -47,7 +47,7 @@ and `dm-review:dm-review-fix`.
 
 ## Plugins
 
-18 plugins | 42 domain-facing skills + 1 internal workflow-kernel skill = 43 total skills | 34 generated Codex command-skill aliases | 38 agents | 34 commands
+19 plugins | 42 domain-facing skills + 2 internal infrastructure skills = 44 total skills | 35 generated Codex command-skill aliases | 38 agents | 35 commands
 
 ### ned
 
@@ -217,6 +217,14 @@ Autonomous feature development pipeline. 4 skills, 2 agents, 5 commands.
 - `/pipeline-prompts` -- Generate execution prompts from an existing plan
 - `/pipeline-run` -- Execute prompts in worktrees with review-fix loops
 - `/pipeline-fix` -- Execute a bounded fix pass over numbered findings
+
+### model-router
+
+Internal deterministic participant routing. 1 internal skill.
+
+- **model-router** -- Closed provider-neutral roles, capability matching,
+  normalized effort, per-operator availability, family independence, one-shot
+  dispatch, anonymous public results, and exact private receipts
 
 ### workflow-kernel
 

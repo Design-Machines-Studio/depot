@@ -16,9 +16,7 @@ import unittest
 
 REPO = Path(__file__).resolve().parents[1]
 OPENROUTER = REPO / "plugins/openrouter"
-PIPELINE_EXEC = REPO / "plugins/pipeline/references/openrouter-exec.sh"
-CASCADE = REPO / "plugins/pipeline/references/cascade-dispatch.sh"
-PIPELINE_PROFILE = REPO / "plugins/pipeline/references/harness-profile.json"
+PIPELINE_EXEC = REPO / "plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh"
 KERNEL = REPO / "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"
 BOUNDARY = OPENROUTER / "skills/openrouter-delegate/references/delegation-boundary.sh"
 POLICY = OPENROUTER / "skills/openrouter-delegate/references/delegation-security-policy.json"
@@ -409,7 +407,9 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
         env.pop("OPENROUTER_API_KEY_FILE", None)
         return env
 
-    def direct(self, prompt: str, bundle: Path | None = None) -> subprocess.CompletedProcess[str]:
+    def direct(
+        self, prompt: str, bundle: Path | None = None, *, web_search: bool = False,
+    ) -> subprocess.CompletedProcess[str]:
         bundle = bundle or OPENROUTER
         boundary = bundle / "skills/openrouter-delegate/references/delegation-boundary.sh"
         policy = bundle / "skills/openrouter-delegate/references/delegation-security-policy.json"
@@ -421,11 +421,18 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
         user.write_text(prompt)
         script = f'''set -e
 "{boundary}" --mode artifact-delegation --policy "{policy}" --content-file "{system}" --content-file "{user}" >/dev/null
-env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=direct OPENROUTER_RECEIPT_FILE="{receipt}" bash "{wrapper}" openai/gpt-5.6-terra - 10 moonshotai/kimi-k3 < "{user}"
+env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=direct OPENROUTER_WEB_SEARCH="{1 if web_search else 0}" OPENROUTER_RECEIPT_FILE="{receipt}" bash "{wrapper}" openai/gpt-5.6-terra - 10 moonshotai/kimi-k3 < "{user}"
 '''
         result = subprocess.run(["bash", "-c", script], text=True, capture_output=True, env=self.env())
         result.receipt_path = receipt  # type: ignore[attr-defined]
         return result
+
+    def test_browser_capability_enables_provider_web_plugin(self) -> None:
+        result = self.direct("Use web evidence for this bounded research task.", web_search=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(FixtureHandler.requests[-1]["plugins"], [{"id": "web"}])
+        receipt = json.loads(result.receipt_path.read_text())  # type: ignore[attr-defined]
+        self.assertTrue(receipt["routing"]["webSearch"])
 
     def review_runner(
         self, diff: str, changed_paths: tuple[str, ...],
@@ -566,12 +573,14 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         self.assertEqual(FixtureHandler.contacts, 0)
         self.assertEqual(safe_diff, "")
         self.assertIn(
-            "OpenRouter dispatch declined (high-confidence-credential)", operator,
+            "External dispatch declined (high-confidence-credential)", operator,
         )
         self.assertIn(
-            "Next action: run this lane locally on Codex.",
+            "Return this closed state to the role fallback boundary.",
             " ".join(operator.split()),
         )
+        self.assertNotIn("OpenRouter", operator)
+        self.assertNotIn("Codex", operator)
         self.assertNotIn("ghp_", operator)
 
     def test_wrapper_transmits_complete_generated_payloads_at_historical_sizes(self) -> None:
@@ -802,25 +811,6 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         return next(message["content"] for message in messages
                     if message["role"] == "user")
 
-    def run_cascade(self, repo: Path, response: str, attempts: Path,
-                    prompt: str = "bounded fixture",
-                    env: dict[str, str] | None = None) -> subprocess.CompletedProcess[str]:
-        FixtureHandler.response_text = response
-        attempts.mkdir(parents=True)
-        probe = repo / "probe.json"
-        probe.write_text(json.dumps({
-            "codex": {"state": "ok", "remaining_pct": 100},
-            "openrouter": {"state": "ok", "balance_usd": 1.0},
-        }))
-        run_env = env or self.env()
-        run_env["OPENROUTER_EXEC_ALLOWED_PATHS"] = "allowed.txt"
-        template = attempts / "provider-{attempt}.json"
-        return subprocess.run([
-            str(CASCADE), "--class", "openrouter", "--prompt", prompt,
-            "--host", "codex", "--timeout", "10", "--probe-file", str(probe),
-            "--attempt-receipt-template", str(template.relative_to(repo)),
-        ], cwd=repo, text=True, capture_output=True, env=run_env)
-
     def test_pipeline_accepts_allowed_diff_and_emits_wrapper_evidence(self) -> None:
         repo = self.init_repo()
         (repo / "blocked.txt").write_text("UNRELATED_REPOSITORY_MARKER\n")
@@ -940,7 +930,7 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
                 self.assertEqual(FixtureHandler.contacts, contacts)
                 self.assertIn("repository context rejected", result.stderr)
 
-    def test_headerless_provider_result_retains_one_measured_failed_attempt(self) -> None:
+    def retired_cascade_headerless_provider_result(self) -> None:
         repo = self.init_repo()
         attempts = repo / "plans/r4/receipts/openrouter/chunk-a-cascade-1"
         attempt_receipt = attempts / "provider-1.json"
@@ -1051,47 +1041,7 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         ):
             self.assertNotIn(forbidden, durable_and_human)
 
-    def test_unapplicable_provider_diff_retries_with_distinct_receipts(self) -> None:
-        repo = self.init_repo()
-        attempts = repo / "attempts"
-        response = (
-            "diff --git a/allowed.txt b/allowed.txt\n"
-            "--- a/allowed.txt\n+++ b/allowed.txt\n"
-            "@@ -1 +1 @@\n-not-the-current-line\n+after"
-        )
-        before_head = subprocess.check_output(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
-        ).strip()
-
-        result = self.run_cascade(repo, response, attempts)
-
-        expected_models = json.loads(PIPELINE_PROFILE.read_text())[
-            "hosts"
-        ]["codex"]["roles"]["openrouter_exec"]["models"]
-        self.assertEqual(result.returncode, 64, result.stderr)
-        self.assertEqual(FixtureHandler.contacts, len(expected_models))
-        self.assertEqual(
-            result.stderr.count("patch-does-not-apply"), len(expected_models),
-        )
-        self.assertNotIn("ladder exhausted", result.stderr.lower())
-        self.assertEqual(json.loads(result.stdout)["dispatch"], "native")
-        receipts = [attempts / f"provider-{index}.json"
-                    for index in range(1, len(expected_models) + 1)]
-        self.assertEqual(sorted(attempts.iterdir()), receipts)
-        self.assertEqual(
-            [json.loads(path.read_text())["requestedModel"] for path in receipts],
-            expected_models,
-        )
-        self.assertTrue(all(
-            json.loads(path.read_text())["usage"]["cost"] == 0.0042
-            for path in receipts
-        ))
-        self.assertEqual((repo / "allowed.txt").read_text(), "before\n")
-        self.assertEqual(subprocess.check_output(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
-        ).strip(), before_head)
-
-    def test_blank_provider_diff_preserves_codex_fallback_and_receipt(self) -> None:
+    def retired_cascade_blank_provider_diff(self) -> None:
         repo = self.init_repo()
         attempts = repo / "attempts"
         before_head = subprocess.check_output(
@@ -1113,7 +1063,7 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
             ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
         ).strip(), before_head)
 
-    def test_incomplete_stream_falls_back_once_to_native_with_failed_receipt(self) -> None:
+    def retired_cascade_incomplete_stream_fallback(self) -> None:
         repo = self.init_repo()
         attempts = repo / "attempts"
         FixtureHandler.response_mode = "incomplete"
@@ -1225,8 +1175,8 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
             REPO / "plugins/openrouter/agents/workflow/openrouter-agent-runner.md",
             REPO / "plugins/dm-review/skills/review/SKILL.md",
             REPO / "plugins/dm-review/skills/review/references/full-lane-dispatch.md",
-            REPO / "plugins/pipeline/references/openrouter-exec.sh",
-            REPO / "plugins/pipeline/references/cascade-dispatch.sh",
+            REPO / "plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh",
+            REPO / "plugins/model-router/skills/model-router/references/role-dispatch.sh",
         ]
         combined = "\n".join(path.read_text() for path in active)
         self.assertNotIn("exit 78", combined)
@@ -1239,13 +1189,15 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         # review skill loads; assert it there, not in the skill entry point.
         review = active[2].read_text()
         dispatch = active[3].read_text()
-        self.assertIn('OPENROUTER_API_KEY_FILE', review)
+        self.assertNotIn('OPENROUTER_API_KEY_FILE', review)
         self.assertIn('full-lane-dispatch.md', review)
-        self.assertIn('OPENROUTER_AVAILABLE=true', dispatch)
-        self.assertIn('OPENROUTER_BOUNDARY_PATH', dispatch)
+        self.assertIn('model-router owns every concrete participant', dispatch)
+        self.assertIn('OPENROUTER_API_KEY_FILE', active[4].read_text())
         orchestrator = (REPO / "plugins/pipeline/agents/workflow/execution-orchestrator.md").read_text()
-        self.assertIn('[ -n "${OPENROUTER_API_KEY_FILE:-}" ]', orchestrator)
-        self.assertIn("export WORKFLOW_KERNEL", orchestrator)
+        self.assertNotIn('OPENROUTER_API_KEY_FILE', orchestrator)
+        self.assertIn('role-dispatch.sh', orchestrator)
+        self.assertIn('resolve-plugin-bundle', orchestrator)
+        self.assertIn('--plugin model-router', orchestrator)
 
         direct = self.direct("Review harmless public configuration.", self.installed)
         self.assertEqual(direct.returncode, 0, direct.stderr)

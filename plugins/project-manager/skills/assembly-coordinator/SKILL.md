@@ -1,6 +1,6 @@
 ---
 name: assembly-coordinator
-description: Assembly development planning context for fresh Assembly sessions, cross-repository Assembly coordination, Assembly Coordination Project triage, choosing the next development chunk, checking completed Assembly PRs before follow-up work, Baseplate-to-Jig Fixture verifier blockers, bounded Pipeline or dm-review prompt preparation, quick technical Assembly tooling or product scope-creep and strategic-alignment checks, and Travis or Jeremy establishing the same current context.
+description: Assembly development planning context for fresh sessions, cross-repository coordination, Project 1 triage, next-chunk selection, completed PR follow-up, Fixture dependency planning, bounded Pipeline or dm-review prompt preparation with provider-neutral execution roles, Assembly scope checks, and explicit compare-plans, independent planning opinion, or architect sequence-challenge requests.
 ---
 
 # Assembly Planning Coordinator
@@ -14,6 +14,29 @@ Recover the live Assembly development picture and choose the next safe chunk. Ac
 - Recommend exactly one next chunk first. Spare agents, time, or model capacity do not make later work safe.
 - Do not use Notion, personal sprint state, or ai-memory for this workflow.
 - Do not copy Baseplate roadmaps or work-path documents. Link to the owning source and retain only the evidence needed for the current decision.
+- Never assign a concrete model, provider, transport, family, subscription, or
+  billing source. Execution prompts assign only a role, required capabilities,
+  and normalized effort.
+
+## Use planning opinions only when triggered
+
+Routine status checks, PR inspection, Project updates, obvious next-chunk
+selection, narrow scope checks, and straightforward prompt preparation use no
+additional planning participant. Spare capacity never justifies an opinion.
+
+Load `references/planning-opinions.md` only when the user explicitly asks to
+compare plans, get an independent planning opinion, or have an architect
+challenge a sequence, or when the approved decision profile has high
+uncertainty. High consequence alone strengthens verification and does not
+trigger comparison.
+
+The bounded path requests exactly one `architect` and at most one independent
+`plan-critic`, gives both the same compact evidence packet, labels returned work
+`Plan A` and `Plan B`, and performs one synthesis that recommends exactly one
+next chunk. Neither participant receives the other's work or any concrete
+identity. If model-router is unavailable, routine planning proceeds normally.
+If comparison was explicit and the second opinion is unavailable, report the
+limitation and still return the strongest evidence-based recommendation.
 
 ## Route the request proportionally
 
@@ -106,6 +129,14 @@ Every prompt must state:
 - proportional verification;
 - required evidence levels;
 - terminal handoff, including what must remain unmerged or unchanged.
+- `executorRole`, `executorCapabilities`, and `executorEffort` for every
+  implementation or review lane. Use `builder-fast` for bounded docs,
+  configuration, and mechanical work; `builder-deep` for complex logic, UI,
+  and integration; and the matching review role for verification. Add browser,
+  tool-use, long-context, or structured-output capabilities only when required.
+
+The prompt must not call a direct provider command or contain a concrete
+routing override. Its role request is resolved later by model-router.
 
 ## Report the planning pass
 
@@ -119,6 +150,9 @@ Return a compact, outcome-first report containing:
 6. cross-repository blockers and owner decisions;
 7. stale coordination documents needing authorized repair, or `None`;
 8. planning commits or PRs created, or `None`;
-9. one complete copy-paste execution prompt when requested.
+9. when the opinion path ran, `Plan A`, `Plan B` or its unavailable state, and
+   one bounded synthesis;
+10. one complete copy-paste execution prompt when requested, with role,
+    capabilities, and effort.
 
 Do not bury the recommendation beneath process narration.

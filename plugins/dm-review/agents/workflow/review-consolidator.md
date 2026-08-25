@@ -1,12 +1,10 @@
 ---
 name: review-consolidator
 description: Synthesizes findings from all review agents into a unified report with deduplication and severity mapping.
-model: opus
+model: inherit
 ---
 
 <!-- token-economy-hardening:budget-block -->
-<!-- Model tier: `opus` -- gates or synthesizes -- the highest-judgment seat, kept on the strongest model. Prompt quality is the floor now: judgment-heavy seats get Opus, tight-spec execution/review gets Sonnet, mechanical lanes get Haiku. Do NOT downgrade a security seat below Opus. -->
-
 ## Tool-Call Budget & Partial-Return Contract
 
 - **Hard cap: 40 tool calls.** Keep a running count.
@@ -61,18 +59,20 @@ follow it. When every dispatched lane returned usable output, do not load it.
 
 ### Step 1: Collect All Findings
 Extract every finding from every agent. For each finding, record:
-- A source finding ID that keeps the raw finding addressable by lane, provider,
-  model, agent, raw artifact reference, and agent-local finding anchor
+- A source finding ID that keeps the raw finding addressable by lane, role,
+  anonymous participant, agent, raw artifact reference, and agent-local finding anchor
 - Source agent name
-- Requested and implemented provider and model (use `not_reported` when the
-  lane receipt does not name a model; never infer or relabel provenance)
+- Requested/effective effort, role-level fallback state, and anonymous
+  participant (never request or infer concrete identity)
 - Severity (P1/P2/P3)
 - File path and line number
 - Description
 - Reference (OWASP, WCAG, pattern name, etc.)
 - The evidence text and a `raw_ref` into the untouched reviewer artifact
 
-When Codex-native and OpenRouter reviewers both ran, merge findings from both before applying severity mapping; a finding from either coding provider is in-scope unless direct code evidence at HEAD disproves it. Optional Claude output is limited to non-coding voice/editorial lanes.
+Merge findings from every completed selected lane before applying severity
+mapping; a finding from any lane is in-scope unless direct code evidence at HEAD
+disproves it. Optional editorial output remains limited to its non-coding lane.
 
 Raw reviewer artifacts are immutable evidence. Consolidation MUST NOT rewrite,
 delete, or replace them with the unified report. Preserve each artifact and use
@@ -232,15 +232,18 @@ Return the provisional report body only after this Coverage Gaps section is comp
 8. Count deduplicated findings, not raw findings (don't double-count)
 9. **P3 findings get full detail blocks** -- same format as P1/P2 (file, issue, fix, reference), with source identity, raw reference, evidence, synthesis disposition, counts, and provenance. Every retained P3 enters the fix queue.
 10. **Reject scope-expanding repairs** -- every P1/P2/P3 repair must be the smallest adequate change for the evidenced defect and approved behavior. Discard unrelated hardening, new product scope, and larger preference-only alternatives instead of retaining optional debt.
-11. **Dual-perspective findings are additive** -- Codex-native and OpenRouter review lanes are peers. Dedup overlapping findings; never discard a unique finding merely because the other coding provider did not mention it. Optional Claude voice/editorial findings remain additive but are non-coding.
+11. **Independent perspectives are additive** -- all review lanes are peers.
+    Deduplicate overlapping findings; never discard a unique finding merely
+    because another participant did not mention it. Editorial findings remain
+    additive but non-coding.
 12. **Contradictions are reportable evidence** -- never flatten disagreement
     into one unattributed conclusion; preserve source severities, selected
     outcome, and evidence rationale.
-13. **Provenance is literal** -- if a requested provider falls back, retain the
-    requested, attempted, and implemented-by values. Never silently relabel a
-    Codex fallback as OpenRouter work.
+13. **Public provenance is role-level** -- retain lane, role, requested/effective
+    effort, anonymous participant, and fallback state. Exact transport provenance
+    stays in the private model-router receipt and is never injected here.
 14. **The handoff is bounded** -- list every retained P1/P2/P3 once when there
     are at most eight; otherwise show the highest-impact eight, the exact
-    remaining count, and the complete-report pointer. Never expand provider
+    remaining count, and the complete-report pointer. Never expand participant
     tables, transcripts, synthesis ledgers,
     cleanup tables, or raw reports in the visible handoff.

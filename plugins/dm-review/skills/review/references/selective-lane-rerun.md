@@ -10,7 +10,14 @@ Iteration 1 is always a full fan-out in the selected mode. From iteration 2 onwa
 - **(a) Finding-owning lanes** -- every lane named in the `source_agents` frontmatter of a P1/P2/P3 finding repaired by the prior fix step, plus every lane owning a P1/P2/P3 finding that remains pending. The loop snapshots repaired owners before `dm-review-fix` deletes completed todos.
 - **(b) File-trigger lanes** -- every lane whose file-trigger set matches any file the fixes touched since the prior review. `dm-review-fix` does not commit, so the touched-file set is the union of `git diff --name-only <prior-review-head>..HEAD` and the paths reported by `git status --porcelain`. A committed-range diff alone would report an empty change set for a perfectly normal uncommitted fix pass, and would then narrow on false evidence.
 
-Before either rule may narrow coverage, recompute a non-empty `selected_full_set` containing only unique exact logical lane IDs. Every owner in every pending finding's `source_agents` must resolve to exactly one member of that set. Unknown owners, aliases, and criterion-level IDs shared by more than one logical lane are not narrowing signals; each fails open to full coverage with an explicit `fallback_reason`. The naming trap is deliberate: `security-auditor-codex-signoff` and `security-auditor-openrouter` are two logical lanes sharing one criterion, so bare `security-auditor` is ambiguous and fails open. An empty computed lane set is never dispatched.
+Before either rule may narrow coverage, recompute a non-empty
+`selected_full_set` containing only unique exact logical lane IDs. Every owner
+in every pending finding's `source_agents` must resolve to exactly one member
+of that set. Unknown owners, aliases, role IDs, and criterion aliases are not
+narrowing signals; each fails open to full coverage with an explicit
+`fallback_reason`. `security-auditor` is the exact independent-family lane ID;
+`security-review` is its role and is invalid as an allowlist member.
+An empty computed lane set is never dispatched.
 
 The committed half of changed-file discovery is boundary-guarded. `prior_review_head` must be non-null. When `HEAD` advanced, `fix_head` must differ from `prior_review_head` and `git merge-base --is-ancestor <prior_review_head> <fix_head>` must succeed before the committed diff is trusted. A reset, rewritten history, null boundary, or advanced non-ancestor boundary fails open with an explicit `fallback_reason`; it must never be read as "no files changed." When `HEAD` did not advance but `git status --porcelain` reports fix paths, the committed half contributes no paths and the uncommitted half remains valid narrowing evidence. When neither half advances, selection fails open. This preserves ordinary uncommitted-only `dm-review-fix` passes while applying the ancestry guard only to the committed half.
 
@@ -20,16 +27,16 @@ The committed half of changed-file discovery is boundary-guarded. `prior_review_
 - **full mode**: the trigger sets are the Phase 3 conditional-agents table in `plugins/dm-review/skills/review/SKILL.md`, plus the quick-mode UI trigger above.
 
 Full-mode lanes follow the same affected-lane rule. A selective full-mode input
-may omit `security-auditor-codex-signoff` only when the loop records an earlier
+may omit `security-auditor` only when the loop records an earlier
 complete full review and the touched-file set does not match the bounded
 security escalation set. It passes those facts as
 `verification_basis: "affected_lane_repair"`,
 `prior_full_review_complete: true`, and
 `security_boundary_changed: false`; the receiver validates them. If the prior
 full review was incomplete or a repair changes a security-sensitive boundary,
-repeat the full fan-out so independent-family full-diff security sign-off, the
-authorized external security lens, `second-perspective`, and all applicable
-conditionals are complete on the new tested SHA.
+repeat the full fan-out so independent-family full-diff security sign-off,
+`second-perspective`, and all applicable conditionals are complete on the new
+tested SHA.
 
 When both (a) and (b) come back empty there is nothing the fixes could have affected, so selection fails open to a full fan-out with `fallback_reason: empty selection` rather than running a near-empty pass that would have to be promoted to full anyway.
 
@@ -63,5 +70,5 @@ Lanes re-run:
 - code-simplicity-reviewer -- a_prior_unresolved_finding
 - a11y-css-reviewer -- b_fix_file_trigger
 Lanes skipped (no_rule_a_or_b_match):
-- architecture-reviewer, second-perspective, doc-sync-reviewer, pattern-recognition-specialist, security-auditor-openrouter
+- architecture-reviewer, second-perspective, doc-sync-reviewer, pattern-recognition-specialist, security-auditor
 ```

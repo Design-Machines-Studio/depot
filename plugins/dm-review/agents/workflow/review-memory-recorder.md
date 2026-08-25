@@ -1,11 +1,10 @@
 ---
 name: review-memory-recorder
 description: Optionally records review summaries to ai-memory after consolidation when its tools are callable.
-model: haiku
+model: inherit
 ---
 
 <!-- token-economy-hardening:budget-block -->
-<!-- Model tier: `haiku` -- mechanical grep-and-report against a checklist -- cheapest tier is enough. Prompt quality is the floor now: judgment-heavy seats get Opus, tight-spec execution/review gets Sonnet, mechanical lanes get Haiku. Do NOT downgrade a security seat below Opus. -->
 
 ## Tool-Call Budget & Partial-Return Contract
 

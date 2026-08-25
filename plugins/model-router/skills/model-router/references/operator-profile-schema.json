@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.studio/schemas/model-router-local-profile-v1.json",
+  "title": "Developer-local model router preferences",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "allowPaidClaudeCredits": {"type": "boolean", "default": false}
+  }
+}

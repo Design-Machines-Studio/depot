@@ -16,10 +16,10 @@ Apply these checks after agent selection (Phase 3) and before agent launch (Phas
 
 ### Content-Based Disclosure Filter
 
-When an OpenRouter lane is dispatched, load
-`${CLAUDE_SKILL_DIR}/references/disclosure-filter.md` and apply it to that
-lane's outbound bytes. Codex lanes receive the complete review diff and do not
-load it; path names alone never remove content from Codex review.
+Materialize each lane's exact outbound bytes and dispatch its role through
+model-router. The router applies any external disclosure boundary and role
+fallback without revealing which transport was attempted. Path names alone
+never remove content from review.
 
 ### Per-Agent Token Budget
 
@@ -34,7 +34,7 @@ Each agent runs in its own context. They don't share a budget.
 1. visual-browser-tester (LOW -- has its own fallback chain, requires dev server)
 2. voice-editor (LOW -- style, not correctness)
 3. test-coverage-reviewer (LOW -- supplementary changed-path coverage)
-4. openrouter-bulk-analyst (MEDIUM -- supplementary full-diff analysis, requires the OpenRouter provider plugin)
+4. bulk-analyst (MEDIUM -- supplementary full-diff analysis)
 5. craft-reviewer (MEDIUM -- domain-specific)
 6. governance-domain (MEDIUM -- domain-specific)
 7. a11y-dynamic-content-reviewer (MEDIUM)
@@ -43,10 +43,9 @@ Each agent runs in its own context. They don't share a budget.
 10. a11y-html-reviewer (HIGH -- legal compliance)
 11. go-build-verifier (HIGH -- catches compilation failures)
 
-Core criteria are never dropped. Required logical lanes are
-security-auditor-codex-signoff; security-auditor-openrouter when selected;
-architecture-reviewer; code-simplicity-reviewer;
-pattern-recognition-specialist; and doc-sync-reviewer.
+Core criteria are never dropped. Required logical lanes are security-auditor,
+architecture-reviewer, code-simplicity-reviewer,
+pattern-recognition-specialist, and doc-sync-reviewer.
 
 ---
 

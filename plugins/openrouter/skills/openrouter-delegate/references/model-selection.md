@@ -1,8 +1,10 @@
 # Model Selection
 
 OpenRouter model evidence and executable routing are deliberately separate.
-`model-matrix.json` records current evidence; ordered role lists in Pipeline's
-`routing-policy.json` and `harness-profile.json` are the routing authority.
+`model-matrix.json` records provider-specific catalog, pricing, feature, and
+quality evidence. Cross-transport candidate ordering lives only in
+model-router's private `role-policy.json`; Pipeline, dm-review, and project
+coordination request roles without reading this matrix.
 `quality_rank` remains a compatibility and quality-floor field, not a scoring
 engine.
 
@@ -13,21 +15,21 @@ million input/output tokens. The compact refresh receipt is
 `docs/openrouter-model-matrix-refreshes/2026-08-21.md`; use a fresh catalog
 receipt before a later paid or policy-changing run.
 
-| Exact slug | Input / output | Context | Current role |
+| Exact slug | Input / output | Context | Catalog evidence |
 |---|---:|---:|---|
-| `deepseek/deepseek-v4-flash-0731` | $0.14 / $0.28 | 1,310,720 | Primary cheap bounded executor; documentation and test review |
-| `deepseek/deepseek-v4-pro-0813` | $1.188 / $3.564 | 1,048,576 | Provisional pattern and long-context analysis |
-| `qwen/qwen3.8-max` | $2 / $6 | 1,000,000 | Bulk/independent review and complexity judgment |
+| `deepseek/deepseek-v4-flash-0731` | $0.14 / $0.28 | 1,310,720 | Low-cost bounded reasoning/tools/structured output |
+| `deepseek/deepseek-v4-pro-0813` | $1.188 / $3.564 | 1,048,576 | Provisional long-context reasoning evidence |
+| `qwen/qwen3.8-max` | $2 / $6 | 1,000,000 | Long-context independent analysis evidence |
 | `qwen/qwen3.8-2.4t-a95b` | $2 / $6 | 1,048,576 | Catalogued; no active consumer |
 | `qwen/qwen3.8-27b` | $0.45 / $3.20 | 1,000,000 | Catalogued; no active consumer |
 | `qwen/qwen3.7-flash` | $0.03 / $0.13 | 1,000,000 | Catalogued; no active consumer |
-| `x-ai/grok-4.6` | $2 / $6 | 500,000 | Demanding bounded escalation; independent security fallback |
-| `google/gemini-3.7-flash` | $0.375 / $1.875 | 1,048,576 | Catalogued; no text-only active consumer |
+| `x-ai/grok-4.6` | $2 / $6 | 500,000 | Demanding bounded reasoning and distinct-family evidence |
+| `google/gemini-3.7-flash` | $0.375 / $1.875 | 1,048,576 | Fast multimodal/tools/web-search evidence |
 | `meta/muse-spark-1.2` | $1.25 / $4.25 | 1,048,576 | Catalogued; no text-only active consumer |
 | `z-ai/glm-5.2` | $0.966 / $3.036 | 1,048,576 | Evidence only; excluded from every active ladder |
 | `z-ai/glm-5.3` | $1.40 / $4.40 | 1,048,576 | Catalogued-not-routed; mandatory reasoning defaults to max |
-| `moonshotai/kimi-k3` | $3 / $15 | 1,048,576 | Focused applicable security analysis only |
-| `openai/gpt-5.6-luna` | $0.20 / $1.20 | 1,050,000 | Economical mechanical fallback |
+| `moonshotai/kimi-k3` | $3 / $15 | 1,048,576 | Focused security-analysis evidence at high cost |
+| `openai/gpt-5.6-luna` | $0.20 / $1.20 | 1,050,000 | Economical mechanical-analysis evidence |
 | `openai/gpt-5.6-terra` | $2 / $12 | 1,050,000 | Catalogued compatibility evidence; no default role |
 
 Every executable identity is an exact versioned slug. Moving aliases such as
@@ -48,8 +50,9 @@ dated receipt with `observedAt` and `expiresAt` no more than 15 minutes apart.
 Update the top-level routing `snapshot_date` and every `models[*].snapshot_date`
 together. Record unavailable facts as unavailable, retain older comparable
 benchmark values only with explicit provenance, and never infer a new model's
-quality from another version. A matrix refresh does not route a model until an
-ordered consumer list explicitly selects it.
+quality from another version. A matrix refresh does not route a model until
+model-router's policy explicitly selects its exact slug and the drift validator
+confirms that slug still exists here.
 
 ## Refreshing native API-equivalent cost evidence
 
@@ -58,27 +61,14 @@ only from the named official source, without restamping it during a routing
 refresh. Native aliases never become OpenRouter candidates merely because they
 can be assigned an API-equivalent planning cost.
 
-## Active role hierarchy
+## Catalog eligibility
 
-- Complex product logic, served UI, integration, browser-dependent work,
-  secret-bearing mutation, live authority or credential operations, and work
-  requiring native repository tools remain Codex-first. Ordinary read-only
-  review of non-secret auth, security, deployment, `.env`, and
-  credential-handling code remains OpenRouter-eligible.
-- Bounded Pipeline execution starts with DeepSeek V4 Flash 0731 and escalates
-  to Grok 4.6. Output still must pass the exact allowlist and unified-diff
-  contract before native verification.
-- Documentation and test-coverage review use DeepSeek Flash, then Luna.
-- Pattern review uses DeepSeek Pro, then Qwen3.8 Max.
-- Simplicity, ordinary independent review, and dm-review bulk analysis use Qwen3.8 Max,
-  with DeepSeek Pro or Grok 4.6 according to the role's ordered list.
-- Focused applicable security analysis alone uses Kimi K3, then Grok 4.6.
-  Consequential security completion still requires a full-input reviewer from
-  a family different from the implementer.
-
-This hierarchy creates no provider quota. Applicability, disclosure,
-availability, output validation, and family requirements still decide whether
-a lane may run or must fall back to native Codex.
+This file may explain evidence for an OpenRouter model's capabilities, price,
+context, and provider behavior, but it does not assign Pipeline or dm-review
+lanes. model-router owns role ordering, family exclusion, cross-transport
+fallback, and live availability. OpenRouter still owns exact outbound-content
+screening and rejects every unsafe or malformed payload before provider
+contact.
 
 ## Provider privacy
 
@@ -89,42 +79,14 @@ If ZDR leaves no eligible Kimi endpoint, the ordered security fallback may serve
 See `invocation-protocol.md` for the complete
 provider-routing controls and receipt behavior.
 
-## dm-review and direct delegation topology
+## Direct delegation topology
 
-| Workload | OpenRouter primary | OpenRouter fallback |
-|---|---|---|
-| Direct `/openrouter` | `qwen/qwen3.8-max` | `x-ai/grok-4.6` |
-| Pattern review | `deepseek/deepseek-v4-pro-0813` | `qwen/qwen3.8-max` |
-| Simplicity review | `qwen/qwen3.8-max` | `deepseek/deepseek-v4-pro-0813` |
-| Documentation review | `deepseek/deepseek-v4-flash-0731` | `openai/gpt-5.6-luna` |
-| Test-coverage review | `deepseek/deepseek-v4-flash-0731` | `openai/gpt-5.6-luna` |
-| Bulk analysis | `qwen/qwen3.8-max` | `deepseek/deepseek-v4-pro-0813` |
-| Ordinary second perspective | `qwen/qwen3.8-max` | `x-ai/grok-4.6` |
-| Focused security analysis | `moonshotai/kimi-k3` | `x-ai/grok-4.6` |
-
-The fallback is part of one OpenRouter request when the wrapper is allowed to
-use fallback. Native completion is a separate attempt with separate
-provenance. Routine pattern, simplicity, documentation, and test review lanes use 1800
-seconds. Focused security and ordinary bulk analysis use 3600 seconds. Bulk
-analysis uses 7200 seconds at or above 10,000 diff lines.
-
-## Pipeline execution cascade
-
-All supported hosts expose the same ordered OpenRouter models:
-
-| Role | Ordered models |
-|---|---|
-| `openrouter_exec` | DeepSeek V4 Flash 0731 -> Grok 4.6 |
-| `frontier_api` | Grok 4.6 -> Qwen3.8 Max -> DeepSeek V4 Pro 0813 |
-| `cheap_api` | DeepSeek V4 Flash 0731 -> Qwen3.8 Max |
-
-The `codex` class walks native Codex before these OpenRouter roles; the
-`openrouter` class may try the bounded executor first for eligible config,
-documentation, or mechanical work. The former Pipeline bulk role was
-unreachable from both class ladders and is deliberately removed; dm-review
-retains its separate Qwen-led `openrouter-bulk-analyst` route. Wrapper roles
-never autonomously implement complex logic, served UI, integration,
-browser-dependent, or live-tool work.
+The direct user-facing `/openrouter --model` override remains an explicit
+operator choice. Its default wrapper fallback may remain provider-specific and
+is not consumed by Pipeline, dm-review, or Assembly coordination. Routed
+workloads pass one exact resolver-selected candidate to the wrapper; a provider
+failure returns to model-router for the next role candidate with a separate
+attempt receipt.
 
 ## Evidence interpretation
 

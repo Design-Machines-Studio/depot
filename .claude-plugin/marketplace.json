@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Design Machines' AI plugin marketplace",
-    "version": "1.11.9"
+    "version": "1.12.0"
   },
   "plugins": [
     {
@@ -69,7 +69,7 @@
     {
       "name": "project-manager",
       "source": "./plugins/project-manager",
-      "version": "1.9.0",
+      "version": "1.10.0",
       "author": {
         "name": "Design Machines"
       },
@@ -139,7 +139,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "3.13.0",
+      "version": "3.14.0",
       "author": {
         "name": "Design Machines"
       },
@@ -283,7 +283,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.70.0",
+      "version": "1.71.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -361,7 +361,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.57.0",
+      "version": "1.58.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -382,6 +382,27 @@
           "proportional-review",
           "token-efficiency",
           "fix-pass"
+        ]
+      }
+    },
+    {
+      "name": "model-router",
+      "source": "./plugins/model-router",
+      "version": "0.1.0",
+      "author": {
+        "name": "Design Machines",
+        "url": "https://designmachines.studio"
+      },
+      "description": "Internal deterministic provider-neutral role resolver and one-shot dispatcher",
+      "capabilities_summary": {
+        "skills": 1,
+        "agents": 0,
+        "commands": 0,
+        "tags": [
+          "model-routing",
+          "role-routing",
+          "dispatcher",
+          "provider-neutral"
         ]
       }
     },
@@ -435,7 +456,7 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.18.0",
+      "version": "1.19.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

@@ -121,10 +121,9 @@ while iteration < max_iterations:
       #     repaired owners before dm-review-fix removes their todo files.
       For every repaired or pending P1/P2/P3 finding, require source_agents is a non-empty list and
         every named owner resolves to exactly one member of selected_full_set.
-        An unknown owner, alias, or criterion-level ID shared by multiple
-        logical lanes is a selection error. In particular, bare
-        security-auditor is ambiguous because security-auditor-codex-signoff
-        and security-auditor-openrouter are separate logical lanes.
+        An unknown owner, alias, role ID, or criterion alias is a selection
+        error. security-auditor is the exact independent-family lane ID;
+        security-review is its role and is not an allowlist member.
       lanes_a = prior_finding_owner_lanes union the validated exact source_agents
                 lane IDs from remaining pending P1/P2/P3 findings
       # (b) every lane whose file-trigger set matches a file the fixes touched.
