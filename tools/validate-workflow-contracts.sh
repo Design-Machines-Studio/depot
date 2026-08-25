@@ -1095,6 +1095,8 @@ require_before "$orchestrator" '## Step 5a.1: Terminal Model Report Ownership' '
   "Pipeline report precedes private-receipt cleanup"
 require_text "$pipeline_cmd" 'terminalModelReportOwner: pipeline' \
   "/pipeline retains terminal report ownership"
+require_text "$pipeline_cmd" 'Reuse and extend that same index across every' \
+  "/pipeline carries all feedback-iteration receipts to one terminal report"
 require_text "$pipeline_run" 'terminalModelReportOwner: pipeline-run' \
   "/pipeline-run assigns one terminal report owner"
 require_before "$review_skill" '### Phase 7c: Terminal Model Report Boundary' '### Phase 8: Repository Cleanup' \
@@ -1107,6 +1109,8 @@ require_before "$review_loop" '### 2.5 Terminal Model Report' '### 3. Repository
   "dm-review-loop renders once after its last iteration and before cleanup"
 require_text "$review_loop" 'Do not render per iteration.' \
   "dm-review-loop suppresses per-iteration reports"
+require_text "$review_loop" 'using the loop-private router directory/index and terminal reporting suppressed' \
+  "dm-review-loop routed repairs extend the owner index without early reporting"
 require_before "$planning_opinions" '## One synthesis' '## Terminal operator report' \
   "Assembly synthesis settles before identity projection"
 require_text "$coordinator_skill" 'routine sessions emit no empty report' \

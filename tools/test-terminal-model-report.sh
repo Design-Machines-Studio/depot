@@ -55,4 +55,34 @@ assert test ! -e "$TMP/in-progress.md"
 assert jq -e '.runStatus == "blocked" and (.calls | length) == 7' "$TMP/blocked.json"
 assert grep -Fxq 'Run: BLOCKED' "$TMP/blocked.md"
 
+"$RENDERER" --receipt-index "$FIXTURES/edge-receipt-index.json" \
+  --status complete --json-output "$TMP/edge.json" --markdown-output "$TMP/edge.md" >/dev/null
+assert jq -e '.calls[0].attempts[0].tokens.status == "unavailable"' "$TMP/edge.json"
+assert jq -e '.calls[1].attempts[0].tokens.status == "unavailable" and .calls[1].attempts[0].tokens.total == null' "$TMP/edge.json"
+assert jq -e '.calls[2].billingMode == "unavailable" and ([.calls[2].attempts[].served] | all(. == false)) and ([.calls[2].attempts[].result] | all(. == "unavailable"))' "$TMP/edge.json"
+assert jq -e '.summary.measuredPaidCostUsd == 0.005' "$TMP/edge.json"
+
+mkdir "$TMP/existing-json-directory"
+set +e
+"$RENDERER" --receipt-index "$FIXTURES/terminal-receipt-index.json" \
+  --status complete --json-output "$TMP/existing-json-directory" --markdown-output "$TMP/directory-failure.md" \
+  >"$TMP/directory-failure.stdout" 2>"$TMP/directory-failure.stderr"
+directory_failure_rc=$?
+set -e
+assert test "$directory_failure_rc" -ne 0
+assert grep -Fxq 'terminal-model-report: output-destination-unavailable' "$TMP/directory-failure.stderr"
+assert test ! -e "$TMP/directory-failure.md"
+
+set +e
+MODEL_ROUTER_TEST_MODE=1 MODEL_ROUTER_TEST_FAIL_MARKDOWN_PUBLICATION=1 \
+  "$RENDERER" --receipt-index "$FIXTURES/terminal-receipt-index.json" \
+  --status complete --json-output "$TMP/rollback.json" --markdown-output "$TMP/rollback.md" \
+  >"$TMP/rollback.stdout" 2>"$TMP/rollback.stderr"
+rollback_rc=$?
+set -e
+assert test "$rollback_rc" -ne 0
+assert grep -Fxq 'terminal-model-report: markdown-publication-failed' "$TMP/rollback.stderr"
+assert test ! -e "$TMP/rollback.json"
+assert test ! -e "$TMP/rollback.md"
+
 printf 'terminal-model-report: %d assertions passed\n' "$pass"

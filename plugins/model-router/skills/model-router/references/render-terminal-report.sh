@@ -39,6 +39,9 @@ done
 [ -n "$RECEIPT_INDEX" ] && [ -n "$STATUS" ] && [ -n "$JSON_OUTPUT" ] && [ -n "$MARKDOWN_OUTPUT" ] || usage
 case "$STATUS" in complete|failed|blocked|stopped) ;; *) fail "non-terminal-status" 2 ;; esac
 command -v jq >/dev/null 2>&1 || fail "jq-unavailable"
+if [ -n "${MODEL_ROUTER_TEST_FAIL_MARKDOWN_PUBLICATION:-}" ] && [ "${MODEL_ROUTER_TEST_MODE:-0}" != 1 ]; then
+  fail "test-hook-requires-test-mode" 2
+fi
 
 [ -f "$RECEIPT_INDEX" ] && [ ! -L "$RECEIPT_INDEX" ] || fail "receipt-index-unavailable"
 INDEX_PARENT="$(cd "$(dirname "$RECEIPT_INDEX")" 2>/dev/null && pwd -P)" || fail "receipt-index-unavailable"
@@ -63,8 +66,8 @@ validate_output() {
   [ -n "$name" ] && [ "$name" != . ] && [ "$name" != .. ] || fail "output-destination-invalid" 2
   [ -d "$parent" ] && [ ! -L "$parent" ] || fail "output-destination-unavailable"
   parent="$(cd "$parent" 2>/dev/null && pwd -P)" || fail "output-destination-unavailable"
-  if [ -e "$parent/$name" ] && [ -L "$parent/$name" ]; then
-    fail "output-destination-unavailable"
+  if [ -e "$parent/$name" ]; then
+    [ ! -L "$parent/$name" ] && [ -f "$parent/$name" ] || fail "output-destination-unavailable"
   fi
   printf '%s/%s\n' "$parent" "$name"
 }
@@ -147,13 +150,15 @@ if ! jq -S -s \
       else .seen[$receipt.receiptId] = true | .values += [$receipt]
       end) | .values;
   def tokens($served):
-    (($served.tokens.input_tokens // $served.tokens.prompt_tokens // null) | nonnegative_integer) as $input
-    | (($served.tokens.output_tokens // $served.tokens.completion_tokens // null) | nonnegative_integer) as $output
-    | (($served.tokens.total_tokens // null) | nonnegative_integer) as $total
-    | {input:$input, output:$output, total:$total,
-       status:(if $total == null then "unavailable" else "provider-reported" end),
-       provenance:(if $total == null then "unavailable" else
-         (if $served.tokenProvenance == "provider-receipt" then "provider-receipt" else "unavailable" end) end)};
+    (if ($served.tokens | type) == "object" then $served.tokens else {} end) as $usage
+    | (($usage.input_tokens // $usage.prompt_tokens // null) | nonnegative_integer) as $input
+    | (($usage.output_tokens // $usage.completion_tokens // null) | nonnegative_integer) as $output
+    | (($usage.total_tokens // null) | nonnegative_integer) as $total
+    | if $served.tokenProvenance == "provider-receipt" and $total != null then
+        {input:$input, output:$output, total:$total, status:"provider-reported", provenance:"provider-receipt"}
+      else
+        {input:null, output:null, total:null, status:"unavailable", provenance:"unavailable"}
+      end;
   def duration($value):
     ($value | nonnegative_integer) as $seconds
     | {seconds:$seconds, status:(if $seconds == null then "unavailable" else "measured" end)};
@@ -165,6 +170,12 @@ if ! jq -S -s \
   def normalize_receipt:
     . as $receipt
     | ($receipt.served // {}) as $served
+    | ($receipt.attempts | to_entries | map(select(.value.outcome == "served"))) as $served_entries
+    | (if ($receipt.served | type) == "object" and ($served_entries | length) == 1 and
+          $served_entries[0].value.model == $served.model and
+          $served_entries[0].value.provider == $served.provider and
+          $served_entries[0].value.transport == $served.transport
+       then $served_entries[0].key else null end) as $served_index
     | {
         receiptId:$receipt.receiptId,
         role:($receipt.requested.role | safe_role),
@@ -172,12 +183,13 @@ if ! jq -S -s \
         effectiveEffort:($receipt.effectiveEffort | safe_effort),
         matrixSnapshot:($receipt.matrixSnapshot | safe_slug),
         fallback:$receipt.fallback,
-        billingMode:($served.billingMode | safe_billing),
+        billingMode:((if $served_index == null then "unavailable" else $served.billingMode end) | safe_billing),
         attempts:[
           $receipt.attempts | to_entries[]
           | . as $entry
-          | ($entry.value.outcome | safe_outcome) as $outcome
-          | ($outcome == "served") as $was_served
+          | (($entry.value.outcome | safe_outcome)) as $raw_outcome
+          | ($served_index != null and $entry.key == $served_index) as $was_served
+          | (if $raw_outcome == "served" and ($was_served | not) then "unavailable" else $raw_outcome end) as $outcome
           | {
               sequence:($entry.key + 1),
               model:($entry.value.model | safe_slug),
@@ -269,6 +281,14 @@ if ! jq -r '
 fi
 
 mv "$JSON_TMP" "$JSON_OUTPUT" || { rm -f "$JSON_TMP" "$MARKDOWN_TMP"; fail "json-publication-failed"; }
-mv "$MARKDOWN_TMP" "$MARKDOWN_OUTPUT" || { rm -f "$MARKDOWN_TMP"; fail "markdown-publication-failed"; }
+if [ -n "${MODEL_ROUTER_TEST_FAIL_MARKDOWN_PUBLICATION:-}" ]; then
+  markdown_publication_rc=1
+else
+  mv "$MARKDOWN_TMP" "$MARKDOWN_OUTPUT" || markdown_publication_rc=$?
+fi
+if [ "${markdown_publication_rc:-0}" -ne 0 ]; then
+  rm -f "$MARKDOWN_TMP" "$JSON_OUTPUT" "$MARKDOWN_OUTPUT"
+  fail "markdown-publication-failed"
+fi
 
 printf '%s\n' "$MARKDOWN_OUTPUT"

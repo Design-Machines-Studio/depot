@@ -489,16 +489,19 @@ ROLE_DISPATCH="$MODEL_ROUTER_ROOT/skills/model-router/references/role-dispatch.s
 ```
 
 Persist only bundle version/cache class/reason and the private receipt reference;
-never persist the absolute root. Create
-`<exact-run-root>/receipts/private/router/` with mode `0700`; every successful
+never persist the absolute root. For `terminalModelReportOwner: pipeline-run`,
+create `<exact-run-root>/receipts/private/router/` with mode `0700` and a fresh
+ordered index. For owner `pipeline`, require the caller-supplied mode-`0700`
+private directory and existing ordered index, then extend rather than replace
+them so feedback iterations retain earlier attempts. Every successful
 live implementation or repair stores its content-free router receipt there,
 named by opaque receipt ID. Phase 6 passes this directory and every contributing
 implementation/repair receipt ID to independent review lanes. A model repair
 invalidates any earlier `--human-authored` origin claim; missing repair
 provenance keeps the independent lane unavailable.
 
-Create `terminal-receipt-index.json` in that directory using
-model-router's `terminal-report-contract.md`. Add every implementation, repair,
+Maintain `terminal-receipt-index.json` in that directory using model-router's
+`terminal-report-contract.md`. Add every implementation, repair,
 and nested review receipt basename in deterministic dispatch-start order. For a
 parallel fan-out, join results and write basenames in selected-lane order, not
 completion order. The approved final dm-review receives this same private
