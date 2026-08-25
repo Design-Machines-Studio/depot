@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "dispatch-000000000000000000000002",
+  "requested": {"role": "architect", "effort": "high"},
+  "attempts": [
+    {"model": "fictional-native-architect", "provider": "fictional-native", "transport": "claude-cli", "billingMode": "included-subscription", "outcome": "served", "durationSeconds": 31}
+  ],
+  "served": {
+    "model": "fictional-native-architect",
+    "provider": "fictional-native",
+    "transport": "claude-cli",
+    "billingMode": "included-subscription",
+    "durationSeconds": 31,
+    "tokens": null,
+    "tokenProvenance": "unavailable",
+    "billedCostUsd": null,
+    "costProvenance": "unavailable"
+  },
+  "effectiveEffort": "high",
+  "fallback": false,
+  "matrixSnapshot": "openrouter:2026-08-25"
+}

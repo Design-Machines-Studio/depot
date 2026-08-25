@@ -26,7 +26,9 @@ Quick mode keeps its existing smaller roster but uses the same role mapping.
 
 Resolve one coherent model-router bundle with Workflow Kernel and require
 `skills/model-router/references/role-dispatch.sh`, the request schema, and role
-policy. For each selected lane:
+policy at minimum version `0.2.0`. When this invocation owns terminal reporting,
+require `skills/model-router/references/render-terminal-report.sh` from that
+same bundle. For each selected lane:
 
 1. Build the common reviewer prompt from `reviewer-prompt-template.md`.
    Inline `reviewer-output-contract.md` exactly once. Resolve every trusted
@@ -50,6 +52,14 @@ policy. For each selected lane:
    repair provenance is unavailable, the independent lane remains unavailable.
    The two origin forms are mutually exclusive.
 6. Launch selected lanes in parallel when the host supports it.
+
+The terminal report owner supplies this exact private directory and its
+`terminal-receipt-index.json`. After a parallel fan-out joins, extend the index
+with settled receipt basenames in deterministic selected-lane order, never
+completion order. Standalone dm-review owns the index; Pipeline and
+dm-review-loop pass their enclosing index and suppress this invocation's report.
+Load model-router's `terminal-report-contract.md` only at the terminal boundary,
+never while constructing or dispatching lanes.
 
 Outside an explicit repository test harness, accept `disposition: completed`
 only when the companion also reports `evidenceSource: live` and

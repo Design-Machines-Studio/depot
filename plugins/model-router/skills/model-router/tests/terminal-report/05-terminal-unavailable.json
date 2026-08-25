@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "dispatch-000000000000000000000005",
+  "requested": {"role": "security-review", "effort": "high"},
+  "attempts": [
+    {"model": "fictional/security-one", "provider": "openrouter", "transport": "openrouter", "billingMode": "api", "outcome": "failed", "durationSeconds": 6},
+    {"model": "fictional-security-native", "provider": "fictional-native", "transport": "codex-cli", "outcome": "skipped"}
+  ],
+  "served": null,
+  "effectiveEffort": "high",
+  "fallback": true,
+  "fallbackReason": "transport-unavailable",
+  "matrixSnapshot": "openrouter:2026-08-25"
+}

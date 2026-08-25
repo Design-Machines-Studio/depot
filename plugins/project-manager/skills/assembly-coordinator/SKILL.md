@@ -154,5 +154,8 @@ Return a compact, outcome-first report containing:
    one bounded synthesis;
 10. one complete copy-paste execution prompt when requested, with role,
     capabilities, and effort.
+11. only when the opinion path actually dispatched a role, the already-
+    generated terminal model/cost Markdown after the recommendation and
+    execution prompt; routine sessions emit no empty report.
 
 Do not bury the recommendation beneath process narration.

@@ -61,6 +61,7 @@ full_review_baseline_complete = false
 full_fanout_override = true if DM_REVIEW_LOOP_FULL_FANOUT=1 in the environment, else false
 workflowClass = explicit request value, else "feature" with workflow_class_defaulted=true
 shadow_state = trusted runtime state directory, or "shadow unavailable"
+terminalModelReportOwner = "dm-review-loop"
 ```
 
 The canonical loop state and todo files remain authoritative. Pass the exact `workflowClass` and `workflow_class_defaulted` values into every nested `/dm-review-quick` or `/dm-review`, every `/dm-review-fix`, every final re-review, every iteration receipt, and the terminal receipt. Nested commands MUST NOT re-default, infer, or change the class. Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md`. Initialize this run under `.workflow-kernel/runs/<run-id>`; the kernel derives and verifies the immutable repository scope from the state directory, and no caller-selected lease root is accepted. Append lifecycle transitions there. Materialize the validated request at `<exact-run-root>/review/request.json`. Before corresponding authoritative actions, produce and seal the independent prediction exactly once:
@@ -76,6 +77,12 @@ Rewrite `<exact-run-root>/review/authoritative-receipts.json` as the complete or
 ```
 
 Shadow prediction never advances the loop, declares convergence, changes a finding, or converts the terminal result. Record every requested, attempted, implemented-by, fallback, and reason field; do not silently drop unavailable lanes.
+
+Create one mode-`0700` `<exact-run-root>/receipts/private/router/` directory and
+its ordered `terminal-receipt-index.json` for the entire loop. Every nested
+review, final verification pass, and routed repair receives that same directory
+and `terminalModelReportOwner: dm-review-loop`; nested invocations suppress
+their own reports. Extend the index in deterministic dispatch-start order.
 
 ### 2. Review-Fix Loop
 
@@ -190,10 +197,12 @@ while iteration < max_iterations:
   prior_review_head = git rev-parse HEAD
   if mode == "quick":
     Run /dm-review-quick {target} with review_lane_allowlist when non-null
-      with workflowClass and workflow_class_defaulted forwarded unchanged
+      with workflowClass and workflow_class_defaulted forwarded unchanged,
+      the loop-private router directory/index, and terminal reporting suppressed
   else:
     Run /dm-review {target} with review_lane_allowlist when non-null
-      with workflowClass and workflow_class_defaulted forwarded unchanged
+      with workflowClass and workflow_class_defaulted forwarded unchanged,
+      the loop-private router directory/index, and terminal reporting suppressed
 
   Consume and validate the nested review's authoritative coverage receipt: one
     row per selected lane with requested, attempted, implemented-by, status,
@@ -271,7 +280,8 @@ while iteration < max_iterations:
     STOP -- needs attention
 
   # Fix every retained finding (P1/P2/P3).
-  Run /dm-review-fix with workflowClass and workflow_class_defaulted forwarded unchanged
+  Run /dm-review-fix with workflowClass and workflow_class_defaulted forwarded unchanged,
+    using the loop-private router directory/index and terminal reporting suppressed
   # dm-review-fix resolves and cleans up todo files
 
   # If this was the last iteration, run one final review to verify.
@@ -313,6 +323,17 @@ rules, the mode-specific trigger sources, the `review_lane_allowlist` handoff,
 and the per-pass receipt fields.
 
 **Convergence requires no open P1/P2/P3 findings and complete required coverage for the verification pass.** Every retained finding triggers repair and affected-lane verification. A selective affected-lane pass may establish convergence when every required selected lane completes; missing required coverage reports `REVIEW INCOMPLETE`. Repeat the whole full fan-out only when the prior full review was incomplete or a repair changed a security-sensitive boundary.
+
+### 2.5 Terminal Model Report
+
+Every `STOP` in the loop exits model-dependent work into this terminal sequence;
+it does not bypass reporting or cleanup. After the final clean, findings-
+remaining, stalled, failed, blocked, or stopped disposition is settled, load
+model-router's `terminal-report-contract.md` and render exactly once from the
+loop-private ordered index to `<exact-run-root>/review/model-cost-report.json`
+and `.md`. Do not render per iteration. No model dispatch, review, repair, or
+convergence decision may follow generation. A renderer failure preserves the
+loop result and records only the one closed unavailable line.
 
 ### 3. Repository Cleanup
 
@@ -366,6 +387,10 @@ Repository cleanup: registered worktrees N->M, branches deleted J, missing K, bl
 Remaining: <ref> -- <reason> -- follow-up: <command>
 git status --porcelain: clean | <residue>
 ```
+
+After the inventory, append the already-generated terminal model/cost Markdown
+or its one closed unavailable line. The JSON and Markdown remain beside
+`run-cost-summary.json`; private receipts are removed during exact cleanup.
 
 ## Integration
 

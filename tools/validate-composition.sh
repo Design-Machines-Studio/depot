@@ -651,6 +651,11 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  printf "\n${BOLD}Terminal model and cost report:${RESET}\n"
+  if ! "$SCRIPT_DIR/test-terminal-model-report.sh"; then
+    any_failed=1
+  fi
+
   printf "\n${BOLD}OpenRouter coherent bundle resolution:${RESET}\n"
   if ! "$SCRIPT_DIR/validate-openrouter-resolution.sh" --all; then
     any_failed=1

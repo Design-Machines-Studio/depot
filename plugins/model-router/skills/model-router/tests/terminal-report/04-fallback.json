@@ -1,0 +1,24 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "dispatch-000000000000000000000004",
+  "requested": {"role": "review-deep", "effort": "high"},
+  "attempts": [
+    {"model": "fictional/first-reviewer", "provider": "openrouter", "transport": "openrouter", "billingMode": "api", "outcome": "failed", "reason": "ARBITRARY_PROVIDER_FAILURE_TEXT_MUST_NOT_RENDER", "durationSeconds": 4},
+    {"model": "fictional/second-reviewer", "provider": "openrouter", "transport": "openrouter", "billingMode": "api", "outcome": "served", "durationSeconds": 19}
+  ],
+  "served": {
+    "model": "fictional/second-reviewer",
+    "provider": "openrouter",
+    "transport": "openrouter",
+    "billingMode": "api",
+    "durationSeconds": 19,
+    "tokens": {"prompt_tokens": 15000, "completion_tokens": 3204, "total_tokens": 18204},
+    "tokenProvenance": "provider-receipt",
+    "billedCostUsd": 0.073,
+    "costProvenance": "provider-receipt"
+  },
+  "effectiveEffort": "high",
+  "fallback": true,
+  "fallbackReason": "transport-unavailable",
+  "matrixSnapshot": "openrouter:2026-08-25"
+}

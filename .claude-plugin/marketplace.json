@@ -69,7 +69,7 @@
     {
       "name": "project-manager",
       "source": "./plugins/project-manager",
-      "version": "1.10.0",
+      "version": "1.11.0",
       "author": {
         "name": "Design Machines"
       },
@@ -283,7 +283,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.71.0",
+      "version": "1.72.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -361,7 +361,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.58.0",
+      "version": "1.59.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -388,7 +388,7 @@
     {
       "name": "model-router",
       "source": "./plugins/model-router",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

@@ -1,0 +1,5 @@
+{
+  "schemaVersion": 1,
+  "event": "unrelated-workflow-receipt",
+  "prompt": "UNRELATED_TEXT_MUST_NOT_RENDER"
+}

@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "dispatch-000000000000000000000007",
+  "requested": {"role": "editorial", "effort": "low", "prompt": "REFLECTED_INPUT_MUST_NOT_RENDER"},
+  "attempts": [
+    {"model": "REFLECTED INPUT MUST NOT RENDER", "provider": "fictional-provider", "transport": "openrouter", "billingMode": "api", "outcome": "served", "durationSeconds": -7, "providerError": "ARBITRARY_PROVIDER_BODY_MUST_NOT_RENDER"}
+  ],
+  "served": {
+    "model": "REFLECTED INPUT MUST NOT RENDER",
+    "provider": "fictional-provider",
+    "transport": "openrouter",
+    "billingMode": "api",
+    "durationSeconds": -7,
+    "tokens": {"total_tokens": "not-a-number"},
+    "tokenProvenance": "provider-receipt",
+    "billedCostUsd": 999,
+    "costProvenance": "untrusted-text",
+    "providerResponseBody": "ARBITRARY_PROVIDER_BODY_MUST_NOT_RENDER"
+  },
+  "effectiveEffort": "low",
+  "fallback": false,
+  "matrixSnapshot": "REFLECTED MATRIX TEXT MUST NOT RENDER",
+  "output": "MODEL_OUTPUT_MUST_NOT_RENDER",
+  "credentials": "CREDENTIAL_MUST_NOT_RENDER"
+}

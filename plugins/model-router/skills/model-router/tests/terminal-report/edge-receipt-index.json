@@ -1,0 +1,8 @@
+{
+  "schemaVersion": 1,
+  "receiptFiles": [
+    "08-nonobject-tokens.json",
+    "09-untrusted-token-provenance.json",
+    "10-multiple-served-attempts.json"
+  ]
+}

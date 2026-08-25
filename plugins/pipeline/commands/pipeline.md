@@ -320,6 +320,14 @@ Execution MUST NOT begin without explicit approval of this final package. Correc
 
 Enter only after the final planning gate returned explicit execution approval; approval of assessment, research, or a draft plan is insufficient.
 
+Before the first implementation dispatch, create one mode-`0700`
+invocation-private router directory and ordered `terminal-receipt-index.json`
+owned by this Pipeline caller. Reuse and extend that same index across every
+approved feedback iteration in this invocation; never reset it between
+execution passes. It therefore contains all implementation, repair, planning-
+review, and final-review dispatches that can contribute cost to the eventual
+terminal result.
+
 **Budget nudge (before pre-flight):** if the Progress Ledger shows more than 10 completed items AND the session has run over 90 minutes wall-clock, pause with AskUserQuestion: "Pipeline has been running a while. Continue with full scope, or break remaining work into a follow-up fix-pass run?" Soft nudge, not a hard gate; the default answer is "continue."
 
 **Pre-flight check:**
@@ -341,8 +349,15 @@ Enter only after the final planning gate returned explicit execution approval; a
 Pass `workflowClass` and the exact approved/defaulted `decisionProfile` provenance unchanged into Phase 6. Ordinary receipts name role, requested/effective effort, anonymous participant, fallback, and reason; exact identity stays in private router receipts. Missing lanes remain explicit evidence, and fallback never changes required validation, review, browser, requirements, or cleanup gates. For high consequence the stronger independent verification seam must complete without degraded lane coverage or stop `human_help_required` (no full review on every ordinary chunk); high uncertainty was consumed by the single planning opinion and bounded synthesis and adds no execution debate.
 
 Launch the execution-orchestrator from `plugins/pipeline/agents/workflow/execution-orchestrator.md` with the manifest path (`plans/<feature-slug>/manifest.json`), prompts directory (`plans/<feature-slug>/prompts/`), and feature branch name from the manifest.
+Pass `terminalModelReportOwner: pipeline` plus the caller-owned exact private
+directory and index. The orchestrator and every nested dm-review suppress
+terminal identity reporting and return only the exact identity-free receipt-
+index handoff for this caller.
 
 **Lean mode:** execute the final-gate-approved plan as one bounded implementation pass: inline the approved Key Requirements, compact project goal, relevant non-goals, and ownership boundary into the worker context; run the plan's focused verification and exactly one final dm-review; do not invent a manifest, prompt directory, chunk receipts, or per-chunk ceremony.
+Use the same caller-owned directory and index for the implementation and final-
+review receipts; pass them to the nested review with terminal reporting
+suppressed.
 
 Wait for execution to complete. Mark ledger item 10 complete.
 
@@ -392,7 +407,19 @@ Before this gate, confirm the orchestrator's Step 5b ran repository cleanup (ful
 
 **If the user chooses PR:** create the PR. The feature branch is kept (no merge proof yet -- expected; the inventory says so). Tier 3 cleanup waits for the user's return.
 
-**If the user gives feedback:** append it to `original-prompt.md` (`## Iteration N Feedback`), extract new requirements, re-enter the earliest affected planning phase, and return to the same final planning gate before any new execution -- feedback accumulates rather than replacing context.
+**If the user gives feedback:** append it to `original-prompt.md` (`## Iteration N Feedback`), extract new requirements, re-enter the earliest affected planning phase, and return to the same final planning gate before any new execution -- feedback accumulates rather than replacing context. Keep the caller-owned private directory and index bounded and unexpanded, extend it with later dispatch receipts, and do not render or clean it while another iteration can still run.
+
+**Terminal model report:** A feedback answer is non-terminal and emits no
+report. For `Create PR`, `done`, or a closed failed/blocked/stopped invocation,
+first settle the requested PR/disposition and every model-dependent decision.
+Then load model-router's `terminal-report-contract.md`, consume the full-mode
+orchestrator's exact private index handoff or the lean caller's exact index, and render once to
+`plans/<feature-slug>/model-cost-report.json` and `.md` before cleaning that
+private directory. The index must include every retained feedback iteration in
+this invocation. Complete exact-owned cleanup and terminal receipts, then
+append the already-generated Markdown (or the one closed unavailable line) to
+the final human handoff. No model dispatch, review, repair, synthesis, or merge
+decision may follow report generation.
 
 **If the user says done:** run full cleanup per the artifact lifecycle policy:
 

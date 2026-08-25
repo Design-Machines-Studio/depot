@@ -26,10 +26,13 @@ output. Do not run debate, rebuttal, convergence, or a third opinion.
 ## Dispatch mechanics
 
 Resolve one coherent installed model-router bundle through Workflow Kernel and
-bind its `role-dispatch.sh`, request schema, and policy. Materialize Plan A and
-Plan B prompts separately, use the same immutable evidence packet as each
-request's `--repository-evidence-file`, and allocate fresh private output and
-receipt paths in one run-private directory.
+bind its `role-dispatch.sh`, request schema, policy, and terminal renderer at
+minimum model-router version `0.2.0`. Materialize Plan A and Plan B prompts
+separately, use the same immutable evidence packet as each request's
+`--repository-evidence-file`, and allocate fresh private output and receipt
+paths in one mode-`0700` run-private directory. Create
+`terminal-receipt-index.json` there and record Plan A then Plan B when each was
+actually requested.
 
 Dispatch Plan A with `--role architect`, the three capabilities above, and
 `--effort high`. Dispatch Plan B with `--role plan-critic`, the four
@@ -50,3 +53,17 @@ verification seam; it does not add another opinion.
 If the architect is unavailable, synthesize from current evidence and the
 remaining valid opinion. If an explicit comparison cannot obtain Plan B, state
 that limitation plainly. Routine planning never blocks on model-router.
+
+## Terminal operator report
+
+Finish Plan A, Plan B when requested, and the coordinator's own synthesis and
+recommendation before loading model-router's `terminal-report-contract.md`.
+Render once from this comparison's exact ordered index, then clean private
+receipts and append the compact Markdown after the recommendation and execution
+prompt. No model dispatch or synthesis revision may follow generation. A
+failed, blocked, or stopped comparison still reports incurred attempts after
+dispatch has ceased. Reporting failure contributes only the contract's one
+closed unavailable line and never changes the recommendation.
+
+When no routed planning opinion was requested, do not create an index and do
+not emit a model report.

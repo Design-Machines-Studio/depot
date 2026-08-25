@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "dispatch-000000000000000000000001",
+  "requested": {"role": "builder-fast", "effort": "high"},
+  "attempts": [
+    {"model": "fictional/lattice-flash", "provider": "openrouter", "transport": "openrouter", "billingMode": "api", "outcome": "served", "durationSeconds": 12}
+  ],
+  "served": {
+    "model": "fictional/lattice-flash",
+    "provider": "openrouter",
+    "transport": "openrouter",
+    "billingMode": "api",
+    "durationSeconds": 12,
+    "tokens": {"prompt_tokens": 40000, "completion_tokens": 2810, "total_tokens": 42810},
+    "tokenProvenance": "provider-receipt",
+    "billedCostUsd": 0.019,
+    "costProvenance": "provider-receipt"
+  },
+  "effectiveEffort": "high",
+  "fallback": false,
+  "matrixSnapshot": "openrouter:2026-08-25"
+}
