@@ -127,7 +127,7 @@ the internal model-router and kernel skills: 44 skills and 38 agents.
 | **pipeline** | Autonomous feature development pipeline with review-fix loops |
 | **model-router** | Internal provider-neutral role resolution, availability, dispatch, and private receipts |
 | **workflow-kernel** | Neutral deterministic workflow state plus trusted inspection profiles, contained lanes, redaction, canonical output, and compatible trends |
-| **openrouter** | Threat-classified OpenRouter provider for permitted non-secret work; OpenAI and Anthropic remain native-CLI-only |
+| **openrouter** | Receipted OpenRouter provider with provider-neutral input eligibility and bounded output controls; OpenAI and Anthropic remain native-CLI-only |
 | **airlift** | Deterministic cross-harness checkpoint and resume bundles with guarded OpenRouter continuation |
 
 ## Conventions

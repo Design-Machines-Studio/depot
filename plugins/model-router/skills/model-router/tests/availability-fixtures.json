@@ -24,6 +24,16 @@
     "claude": {"state": "unknown", "authMode": "subscription", "plan": "max", "rateLimitsObserved": false, "fable": "unknown"},
     "openrouter": {"state": "ok"}
   },
+  "claude-pro": {
+    "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
+    "claude": {"state": "unknown", "authMode": "subscription", "plan": "pro", "rateLimitsObserved": false, "fable": "unknown"},
+    "openrouter": {"state": "ok"}
+  },
+  "claude-unrecognized-subscription": {
+    "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
+    "claude": {"state": "unknown", "authMode": "subscription", "plan": "unknown", "rateLimitsObserved": false, "fable": "unknown"},
+    "openrouter": {"state": "ok"}
+  },
   "fable-agent-sdk-capacity": {
     "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
     "claude": {

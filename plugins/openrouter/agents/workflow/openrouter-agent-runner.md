@@ -1,6 +1,6 @@
 ---
 name: openrouter-agent-runner
-description: Provider-owned OpenRouter adapter that loads trusted review criteria, screens exact outbound content, invokes one resolver-selected candidate, and keeps concrete identity in a private receipt.
+description: Provider-owned OpenRouter adapter that loads trusted review criteria, validates exact outbound request structure, invokes one resolver-selected candidate, and keeps concrete identity in a private receipt.
 model: inherit
 tools: Bash, Read, Grep
 ---
@@ -8,8 +8,9 @@ tools: Bash, Read, Grep
 # OpenRouter Agent Runner
 
 > **Configured-key development path.** A coherent installed bundle plus either
-> supported key input authorizes eligible automated review dispatch. The runner
-> automatically screens the exact outbound bytes; it never asks for approval.
+> supported key input authorizes automated review dispatch under the same input
+> eligibility as native candidates. The runner validates request structure; it
+> never classifies payload content or asks for approval.
 
 You are a translation layer -- you do not perform review yourself; all judgment work happens inside the selected OpenRouter model. You read files, build prompts, invoke a shell command, validate text output, and format findings.
 
@@ -242,26 +243,20 @@ reason are durable.
 
 The body becomes the selected OpenRouter model's system prompt.
 
-### Step 1.4: Threat/Content Boundary -- Mechanical Review
+### Step 1.4: Structural Boundary -- Mechanical Review
 
-**Third-party models may analyze security, but never replace the independent non-implementing-family security sign-off.** Run the installed `delegation-security-policy.json` in `mechanical-review` mode immediately before building the outgoing prompt. File names, security-looking directories, model nationality, and vendor jurisdiction do not classify content. The legacy `neverRouteToOpenRouter` path embargo and `set(canon) | set(configured)` hard-coded union MUST NOT be used.
+**Third-party models may analyze security, but never replace the independent non-implementing-family security sign-off.** Run the installed boundary helper in `mechanical-review` mode immediately before building the outgoing prompt. It validates the request as a complete, structurally sound review artifact; it does not decide whether content is eligible for OpenRouter.
 
-The executable helper is the authoritative gate shared with model-router's
-bounded OpenRouter adapter. It parses quoted Git headers, rejects headerless or
-mismatched diffs, verifies every path against the complete unfiltered
-`changed_files` list, checks physical containment, and scans each complete
-file-diff section—including additions, context, and removed lines—for actual
-credentials, private keys, authenticated DSNs, access/session tokens, and
-classified private values. Variable names, syntactically valid shell/CI source
-references, and unmistakable `not-for-proof` credential sentinels—including
-explicit sentinels after a recognized provider prefix—are safe; actual values
-remain refused. Safe sections remain eligible even when a different file
-section is declined. Exit 3 means no safe review remainder and returns a closed
-decline to the role fallback boundary without reaching the wrapper. Do not
-manually shrink or rewrite an otherwise safe payload after a false positive;
-repair the shared boundary and preserve the original review input. Any other
-non-zero status is malformed or unverifiable input and is a fail-closed runner
-failure.
+The executable helper is the authoritative structural validator shared with
+model-router's bounded OpenRouter adapter. It parses quoted Git headers, rejects
+headerless or mismatched diffs, verifies every path against the complete
+unfiltered `changed_files` list, checks physical containment, and preserves
+every complete file-diff section—including additions, context, and removed
+lines—unchanged. Credentials, private keys, tokens, authenticated endpoints,
+classified material, security code, and deployment details remain eligible
+whenever the same evidence is eligible for a native candidate. Any non-zero
+status means malformed or unverifiable input, not a content decline, and is a
+fail-closed runner failure.
 
 ```bash
 BOUNDARY_HELPER="$(dirname "$SECURITY_POLICY_RESOLVED")/delegation-boundary.sh"
@@ -295,53 +290,16 @@ if "$BOUNDARY_HELPER" --mode mechanical-review \
     --output-decision "$BOUNDARY_DECISION" 2>"$BOUNDARY_STDERR"; then
   :
 else
-  BOUNDARY_RC=$?
-  if [ "$BOUNDARY_RC" -eq 3 ]; then
-    BOUNDARY_DECLINE_REASON=$(jq -er '
-      select(
-        .schemaVersion == 1
-        and .decision == "full-decline"
-        and .eligibleSectionCount == 0
-        and (.declinedSectionCount | type == "number" and . > 0)
-        and (.reason == "high-confidence-credential"
-          or .reason == "private-key"
-          or .reason == "access-token"
-          or .reason == "authenticated-dsn"
-          or .reason == "classified-private-data"
-          or .reason == "multiple-disclosure-classes")
-      ) | .reason
-    ' "$BOUNDARY_DECISION") || {
-      echo "RUNNER FAILURE: invalid full-decline boundary decision" >&2
-      exit 2
-    }
-    cat <<EOF
-## ${target_agent_name} Review
-
-### RUNNER DECLINED -- SENSITIVE CONTENT
-External dispatch declined (${BOUNDARY_DECLINE_REASON}); no eligible file
-sections remained and the network wrapper was not reached. Return this closed
-state to the role fallback boundary.
-EOF
-    exit 0
-  fi
   echo "RUNNER FAILURE: delegation boundary could not validate input" >&2
   exit 2
 fi
 BOUNDARY_DECISION_VALUES=$(jq -er '
   select(
     .schemaVersion == 1
-    and (.decision == "eligible" or .decision == "partial")
+    and .decision == "eligible"
     and (.eligibleSectionCount | type == "number" and . > 0)
-    and (.declinedSectionCount | type == "number" and . >= 0)
-    and (.reason == "none"
-      or .reason == "high-confidence-credential"
-      or .reason == "private-key"
-      or .reason == "access-token"
-      or .reason == "authenticated-dsn"
-      or .reason == "classified-private-data"
-      or .reason == "multiple-disclosure-classes")
-    and ((.decision == "eligible" and .declinedSectionCount == 0 and .reason == "none")
-      or (.decision == "partial" and .declinedSectionCount > 0 and .reason != "none"))
+    and .declinedSectionCount == 0
+    and .reason == "none"
   ) | [.decision, .reason, .eligibleSectionCount, .declinedSectionCount] | @tsv
 ' "$BOUNDARY_DECISION") || {
   echo "RUNNER FAILURE: invalid mechanical-review boundary decision" >&2
@@ -354,7 +312,11 @@ FILTERED_CHANGED_FILES=$(tr '\0' '\n' < "$BOUNDARY_PATHS")
 DECLINED_CHANGED_FILES=$(tr '\0' '\n' < "$BOUNDARY_DECLINED_PATHS")
 ```
 
-The historical `FILTERED_*` variable names are retained for compatibility. They contain only the exact eligible file-diff sections and their paths. `DECLINED_CHANGED_FILES` contains path names only; never read, print, or transmit the declined sections through OpenRouter. The content-free decision carries only the closed aggregate reason and eligible/declined section counts; it is not a disclosure receipt.
+The historical `FILTERED_*` and `DECLINED_*` variable names are retained for
+compatibility. Successful structural validation preserves the complete diff and
+complete path set; it never filters or holds sections because of content. The
+content-free decision is structural validation metadata, not a disclosure
+receipt.
 
 ### Step 2: Build the Prompts
 
@@ -554,18 +516,6 @@ if "$BOUNDARY_HELPER" --mode artifact-delegation \
     --content-file "$USER_FILE" 2>"$BOUNDARY_STDERR"; then
   :
 else
-  BOUNDARY_RC=$?
-  if [ "$BOUNDARY_RC" -eq 3 ]; then
-    cat <<EOF
-## ${target_agent_name} Review
-
-### RUNNER DECLINED -- SENSITIVE CONTENT
-External dispatch declined (refused-outbound-bytes); no payload bytes were
-sent. Return this closed state to the role fallback boundary.
-
-EOF
-    exit 0
-  fi
   echo "RUNNER FAILURE: exact outbound payload could not be validated" >&2
   exit 2
 fi
@@ -686,15 +636,6 @@ private provider receipt; do not add it to review output or peer prompts.
 [Model output only. The caller's anonymous lane companion records role-level
 fallback state; exact provider provenance remains private.]
 
-[If DECLINED_CHANGED_FILES is non-empty:]
-### HELD SECTION COMPLETION REQUIRED
-The provider adapter reviewed {ELIGIBLE_SECTION_COUNT} eligible file sections;
-{DECLINED_SECTION_COUNT} {section when the count is 1; sections otherwise}
-remained local.
-Closed reason: {BOUNDARY_DECISION_REASON}.
-Request the same role only for these held paths before treating the lane as
-complete:
-{declined_changed_files}
 ```
 
 ## Rules
@@ -706,22 +647,16 @@ complete:
    owns every subsequent role attempt.
 3. **Preserve all findings verbatim.** Never summarize, normalize, or add an
    approval section.
-4. **Never bypass the security boundary.** A disclosure decline returns to the
-   role fallback boundary. An independent security lane continues only with a non-implementing family or remains `REVIEW INCOMPLETE`.
-5. **Keep consequence-appropriate review independent.** High-consequence security completion requires a reviewer family different from the implementer even when non-secret implementation content was eligible for OpenRouter.
-6. **Partial coverage preserves safe dispatch.** When
-   `DECLINED_CHANGED_FILES` is non-empty, keep completed eligible-section
-   coverage, report content-free counts and the closed aggregate reason, and
-   emit `### HELD SECTION COMPLETION REQUIRED` with held path names only. The
-   same role completes only those paths; independent security stays on a
-   non-implementing family or remains `REVIEW INCOMPLETE`.
-7. **Preserve the private provider receipt.** Record generation ID, canonical
+4. **Keep input eligibility provider-neutral.** Never redact, split, hold, or
+   decline payload content solely because the selected transport is OpenRouter.
+5. **Keep consequence-appropriate review independent.** High-consequence security completion requires a reviewer family different from the implementer.
+6. **Preserve the private provider receipt.** Record generation ID, canonical
    response model, serving-provider provenance, usage, and cost there only. A
    missing provider field is `not_reported_by_completion`, never verified
    provenance. Never include prompt or completion content in receipt metadata.
-8. **Screen the exact outbound bytes automatically.** Materialize private
-   system/user files, scan those files, and pass the same files immediately to
-   the wrapper. Never ask the user to approve an OpenRouter call.
+7. **Validate and send the exact outbound bytes.** Materialize private
+   system/user files, validate their structure, and pass the same files
+   immediately to the wrapper. Never ask the user to approve an OpenRouter call.
 
 ## Why This Architecture
 

@@ -125,10 +125,6 @@ if "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
     --content-file "$RESUME_COPY" --content-file "$HANDOFF_COPY"; then
   :
 else
-  BOUNDARY_RC=$?
-  [ "$BOUNDARY_RC" -eq 3 ] && {
-    echo "airlift-openrouter: disclosure-declined" >&2; exit 3;
-  }
   echo "airlift-openrouter: boundary-invalid" >&2; exit 2
 fi
 RECEIPT_FILE="$BUNDLE_DIR/OPENROUTER_RECEIPT.json"
@@ -158,10 +154,10 @@ jq -e '
 The trusted workflow-kernel copy command opens each bundle file
 descriptor-relatively with no-follow semantics, accepts only a stable,
 single-link regular file owned by the current account, and creates each private
-copy with mode `0600`. This makes the screened bytes exactly the bytes
-passed to the wrapper without allowing a bundle symlink or concurrent pathname
-swap to redirect disclosure. The secret scan runs once over those private
-copies immediately before wrapper invocation. A boundary decline, malformed
-input, missing coherent bundle, copy failure, wrapper failure, or invalid
-content-free receipt stops distinctly. Successful delegation leaves the
-validated durable receipt at `.airlift/OPENROUTER_RECEIPT.json`.
+copy with mode `0600`. This makes the structurally validated bytes exactly the
+bytes passed to the wrapper without allowing a bundle symlink or concurrent
+pathname swap to redirect the request. Credential-shaped fixtures and all other
+native-eligible content remain eligible. Malformed input, a missing coherent
+bundle, copy failure, wrapper failure, or an invalid content-free receipt stops
+distinctly. Successful delegation leaves the validated durable receipt at
+`.airlift/OPENROUTER_RECEIPT.json`.

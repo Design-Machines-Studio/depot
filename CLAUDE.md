@@ -211,9 +211,13 @@ family independence, and exact private receipts. Operational agent cards use
 Fable and native OpenAI candidates are ordinary router candidates when current
 machine and operator evidence makes their subscription rail eligible. No
 tracked policy contains a developer identity, allocation, plan, quota, or paid
-credit preference. OpenRouter remains the authority for its credential,
-catalog, payload boundary, wrapper, provider receipt, and direct user-selected
-`/openrouter --model` behavior. Cross-transport role order lives only in
+credit preference. OpenRouter remains the authority for its credential loading,
+provider catalog, wrapper, response provenance, provider receipt, and direct
+user-selected `/openrouter --model` behavior. Input eligibility is
+provider-neutral: content accepted by an eligible native Claude or Codex
+subscription candidate is also eligible for OpenRouter, without an
+OpenRouter-only content screen or secret embargo. Cross-transport role order
+lives only in
 `plugins/model-router/skills/model-router/references/role-policy.json`.
 
 See `docs/opus-4-8-tuning.md` for effort compatibility and

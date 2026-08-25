@@ -20,8 +20,8 @@ retain every result, including failures, to avoid selection bias.
 ```
 
 `--run` validates the exact slug against the checked-in OpenRouter matrix,
-screens the exact outbound bytes through the normal disclosure boundary,
-disables model fallback, invokes the existing wrapper, and produces a private
+uses the same input eligibility as a native Claude/Codex candidate, disables
+model fallback, invokes the existing wrapper, and produces a private
 provider receipt plus a compact scored result. The explicit model is permitted
 here because this is an operator measurement command, not orchestration.
 

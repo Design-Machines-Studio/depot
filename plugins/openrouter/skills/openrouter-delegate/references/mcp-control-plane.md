@@ -21,7 +21,7 @@ Use the MCP read-only tools for:
 The direct API runner remains authoritative for:
 
 - the team `OPENROUTER_API_KEY` and its workspace policy;
-- exact disclosure filtering and payload hashing;
+- exact request materialization and request-envelope hashing;
 - large stdin payloads, timeouts, provider preferences, and model fallbacks;
 - bounded diff validation and independent non-implementing-family verification;
 - content-free generation receipts returned with the workflow.
@@ -80,6 +80,6 @@ pipeline and dm-review payloads continue through the direct runner.
 
 Automated workflows MUST NOT call `send-message`; validators enforce that
 dm-review and pipeline contain no such invocation. For a user-requested ad-hoc
-comparison, first apply the same artifact-delegation boundary and automatic
-byte screening, send only the eligible payload, record the generation ID,
+comparison, apply provider-neutral input eligibility, send the exact payload a
+native candidate would receive, record the generation ID,
 and retain independent non-implementing-family sign-off for consequential security work.

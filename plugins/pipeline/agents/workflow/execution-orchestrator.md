@@ -488,26 +488,40 @@ ROLE_DISPATCH="$MODEL_ROUTER_ROOT/skills/model-router/references/role-dispatch.s
 ```
 
 Persist only bundle version/cache class/reason and the private receipt reference;
-never persist the absolute root.
+never persist the absolute root. Create
+`<exact-run-root>/receipts/private/router/` with mode `0700`; every successful
+live implementation or repair stores its content-free router receipt there,
+named by opaque receipt ID. Phase 6 passes this directory and every contributing
+implementation/repair receipt ID to independent review lanes. A model repair
+invalidates any earlier `--human-authored` origin claim; missing repair
+provenance keeps the independent lane unavailable.
 
 **Step 3d.1 -- Dispatch the role.** Materialize the worker prompt, a fresh output
-path, and a private receipt path. Build argv as an array:
+path, and a private receipt path within the run-private router registry. Build
+argv as an array:
 
 ```bash
 ROLE_ARGS=(--role "$EXECUTOR_ROLE" --effort "$EXECUTOR_EFFORT"
   --prompt-file "$WORKER_PROMPT" --output-file "$WORKER_OUTPUT"
-  --receipt-file "$PRIVATE_ROUTER_RECEIPT")
-for capability in "${EXECUTOR_CAPABILITIES[@]}"; do
-  ROLE_ARGS+=(--capability "$capability")
-done
+  --receipt-file "$PRIVATE_ROUTER_RECEIPT"
+  --repository-evidence-file "$COMPLETE_REPOSITORY_EVIDENCE"
+  --contract-digest "$CONTRACT_DIGEST" --contract-revision "$CONTRACT_REVISION")
+if [ "${#EXECUTOR_CAPABILITIES[@]}" -gt 0 ]; then
+  for capability in "${EXECUTOR_CAPABILITIES[@]}"; do
+    ROLE_ARGS+=(--capability "$capability")
+  done
+fi
 OPENROUTER_EXEC_ALLOWED_PATHS="$OWNED_PATHS" "$ROLE_DISPATCH" "${ROLE_ARGS[@]}"
 ```
 
 The dispatcher owns live availability, billing eligibility, family exclusion,
-transport invocation, exact payload screening, and fallback. Do not ask for
+provider-neutral input eligibility, transport invocation, and fallback. Do not ask for
 permission to use another configured eligible rail. RC 76 means the role is
 unavailable; fail this chunk, preserve the role-level disposition, and leave
-independent chunks eligible. Do not implement the chunk inline.
+independent chunks eligible. Outside an explicit repository test harness, a
+completed result is valid only with `evidenceSource: live` and
+`transportStub: false`; simulated evidence never completes production work. Do
+not implement the chunk inline.
 
 #### 3d worker prompt (both paths)
 

@@ -16,11 +16,15 @@
       "objective": "Translate a legacy Pipeline manifest without leaking provider selection into the new contract.",
       "prompt": "Return JSON only. Translate this legacy Pipeline chunk: {\"id\":\"docs-1\",\"executor\":\"openrouter\",\"kind\":\"docs\"}. The result must have one chunks array entry with id, executorRole, executorCapabilities, executorEffort, and legacyExecutorTranslation. Remove executor. Use Depot's provider-neutral contract.",
       "expected": {
-        "id": "docs-1",
-        "executorRole": "builder-fast",
-        "executorCapabilities": ["read-repository", "write-repository", "structured-output"],
-        "executorEffort": "low",
-        "legacySource": "openrouter"
+        "chunks": [
+          {
+            "id": "docs-1",
+            "executorRole": "builder-fast",
+            "executorCapabilities": ["read-repository", "write-repository", "structured-output"],
+            "executorEffort": "medium",
+            "legacyExecutorTranslation": {"occurred": true, "sourceField": "executor"}
+          }
+        ]
       },
       "optima": {"taskType": "Q&A", "grader": "objective-rubric"}
     },
@@ -39,7 +43,7 @@
       "taskType": "bounded-planning",
       "objective": "Choose exactly one demonstrated next Assembly coordination chunk while respecting explicit exclusions.",
       "prompt": "Return JSON only with nextChunk, executorRole, executorCapabilities, rejectedComplexity. Evidence: Project 1 has an approved provider-neutral role-routing issue in Review; the next demonstrated consumer need is a versioned local role benchmark corpus and scorer. Issue #86 Floor observation schemas are not admitted. Choose exactly one next chunk. Do not choose Floor UI, a daemon, a broker, a database, an MCP server, or a generic workflow engine.",
-      "expected": {"nextChunk": "depot-role-benchmark", "executorRole": "builder-fast", "executorCapabilities": ["read-repository", "write-repository", "structured-output"]},
+      "expected": {"nextChunk": "depot-role-benchmark", "executorRole": "builder-fast", "executorCapabilities": ["read-repository", "write-repository", "structured-output"], "rejectedComplexity": ["Issue #86 Floor observation schemas", "daemon", "generic workflow engine"]},
       "optima": {"taskType": "Document", "grader": "objective-rubric"}
     },
     {

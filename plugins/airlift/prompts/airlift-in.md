@@ -94,10 +94,6 @@ if "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
     --content-file "$RESUME_COPY" --content-file "$HANDOFF_COPY"; then
   :
 else
-  BOUNDARY_RC=$?
-  [ "$BOUNDARY_RC" -eq 3 ] && {
-    echo "airlift-openrouter: disclosure-declined" >&2; exit 3;
-  }
   echo "airlift-openrouter: boundary-invalid" >&2; exit 2
 fi
 RECEIPT_FILE="$BUNDLE_DIR/OPENROUTER_RECEIPT.json"

@@ -7,6 +7,7 @@ PROBE="$ROOT/plugins/model-router/skills/model-router/references/availability-pr
 FIXTURES="$ROOT/plugins/model-router/skills/model-router/tests/availability-fixtures.json"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/model-router-tests.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
+export MODEL_ROUTER_TEST_MODE=1
 
 pass=0
 assert() { "$@" >/dev/null || { printf 'FAIL: %s\n' "$*" >&2; exit 1; }; pass=$((pass + 1)); }
@@ -18,24 +19,72 @@ fixture() {
 cat > "$TMP/transport-stub" <<'STUB'
 #!/usr/bin/env bash
 set -euo pipefail
-model=""; output=""
+model=""; output=""; provider_receipt=""
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --model) model="$2"; shift 2 ;;
     --output-file) output="$2"; shift 2 ;;
+    --provider-receipt-file) provider_receipt="$2"; shift 2 ;;
     *) shift 2 ;;
   esac
 done
+if [ -n "${MODEL_ROUTER_STUB_CALL_LOG:-}" ]; then
+  printf '%s\n' "$model" >> "$MODEL_ROUTER_STUB_CALL_LOG"
+fi
 outcome="$(jq -r --arg model "$model" '.candidateResults[$model].outcome // "success"' "$MODEL_ROUTER_AVAILABILITY_FILE")"
+if [ -n "${MODEL_ROUTER_EXPECT_PUBLICATION_DIR:-}" ]; then
+  set -- "$MODEL_ROUTER_EXPECT_PUBLICATION_DIR"/.model-router-output.*
+  [ -e "$1" ] || exit 78
+  set -- "$MODEL_ROUTER_EXPECT_PUBLICATION_DIR"/.model-router-receipt.*
+  [ -e "$1" ] || exit 78
+fi
 case "$outcome" in
   success) printf 'bounded role output\n' > "$output" ;;
   quota) printf 'quota exhausted\n' >&2; exit 77 ;;
-  disclosure-declined) printf 'disclosure declined\n' >&2; exit 77 ;;
+  content-refusal) printf 'model content refusal\n' >&2; exit 77 ;;
+  mutate-fail)
+    printf '%s\n' 'mutated by failed writer' > "$MODEL_ROUTER_STUB_MUTATE_PATH"
+    printf '%s\n' 'transport unavailable' >&2
+    exit 77
+    ;;
+  commit-success)
+    printf '%s\n' 'committed by successful writer' > "$MODEL_ROUTER_STUB_MUTATE_PATH"
+    git add -- "$MODEL_ROUTER_STUB_MUTATE_PATH"
+    git -c user.name=test -c user.email=test@example.invalid commit -qm 'fixture writer commit'
+    commit="$(git rev-parse HEAD)"
+    printf 'bounded role output\n' > "$output"
+    jq -n --arg commit "$commit" '{commit:$commit,filesChanged:"tracked.txt"}' > "$provider_receipt"
+    ;;
   *) printf 'transport unavailable\n' >&2; exit 77 ;;
 esac
+[ -z "${MODEL_ROUTER_STUB_PROVIDER_RECEIPT:-}" ] || cp "$MODEL_ROUTER_STUB_PROVIDER_RECEIPT" "$provider_receipt"
+if [ -n "${MODEL_ROUTER_REMOVE_PUBLICATION_DIR:-}" ]; then
+  rm -f "$MODEL_ROUTER_REMOVE_PUBLICATION_DIR"/.model-router-output.* \
+    "$MODEL_ROUTER_REMOVE_PUBLICATION_DIR"/.model-router-receipt.*
+  rmdir "$MODEL_ROUTER_REMOVE_PUBLICATION_DIR"
+fi
 STUB
 chmod +x "$TMP/transport-stub"
 printf 'review the supplied evidence\n' > "$TMP/prompt"
+printf 'complete repository evidence\n' > "$TMP/evidence"
+
+# Production dispatch rejects every fixture hook unless test mode is explicit.
+fixture healthy
+for fixture_hook in MODEL_ROUTER_AVAILABILITY_FILE MODEL_ROUTER_TRANSPORT_STUB MODEL_ROUTER_INVOKE_FIXTURE_TRANSPORTS; do
+  case "$fixture_hook" in
+    MODEL_ROUTER_AVAILABILITY_FILE) fixture_value="$TMP/availability.json" ;;
+    MODEL_ROUTER_TRANSPORT_STUB) fixture_value="$TMP/transport-stub" ;;
+    *) fixture_value=1 ;;
+  esac
+  set +e
+  env -u MODEL_ROUTER_TEST_MODE "$fixture_hook=$fixture_value" \
+    "$ROUTER" --role review-fast --effort low --capability structured-output \
+      --prompt-file "$TMP/prompt" --output-file "$TMP/no-test-mode.out" \
+      --receipt-file "$TMP/no-test-mode.receipt" >/dev/null 2>&1
+  no_test_mode_rc=$?
+  set -e
+  assert test "$no_test_mode_rc" -eq 2
+done
 
 # Probe subscription authentication and separately reported noninteractive
 # allowance windows using local CLI stubs. No model or paid API call occurs.
@@ -47,13 +96,30 @@ case "${1:-}:${2:-}" in
   app-server:--stdio)
     printf '%s\n' '{"id":7,"result":{"rateLimits":{"primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}}}}'
     ;;
+  exec:*)
+    output=""
+    while [ "$#" -gt 0 ]; do
+      case "$1" in --output-last-message) output="$2"; shift 2 ;; *) shift ;; esac
+    done
+    printf 'api=%s,file=%s\n' "${OPENROUTER_API_KEY-unset}" "${OPENROUTER_API_KEY_FILE-unset}" > "$MODEL_ROUTER_NATIVE_ENV_CAPTURE"
+    if [ -n "${MODEL_ROUTER_NATIVE_PROMPT_CAPTURE:-}" ]; then cat > "$MODEL_ROUTER_NATIVE_PROMPT_CAPTURE"; else cat >/dev/null; fi
+    printf 'native codex output\n' > "$output"
+    ;;
   *) exit 1 ;;
 esac
 STUB
 cat > "$TMP/bin/claude" <<'STUB'
 #!/usr/bin/env bash
+if [ "${1:-}" = -p ]; then
+  printf 'api=%s,file=%s\n' "${OPENROUTER_API_KEY-unset}" "${OPENROUTER_API_KEY_FILE-unset}" > "$MODEL_ROUTER_NATIVE_ENV_CAPTURE"
+  if [ -n "${MODEL_ROUTER_NATIVE_PROMPT_CAPTURE:-}" ]; then cat > "$MODEL_ROUTER_NATIVE_PROMPT_CAPTURE"; else cat >/dev/null; fi
+  printf '%s\n' '{"result":"native claude output"}'
+  exit 0
+fi
 case "${FAKE_CLAUDE_AUTH:-subscription}" in
   subscription) printf '%s\n' '{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"max"}' ;;
+  pro) printf '%s\n' '{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"pro"}' ;;
+  future) printf '%s\n' '{"loggedIn":true,"authMethod":"claude.ai","subscriptionType":"future-tier"}' ;;
   api) printf '%s\n' '{"loggedIn":true,"authMethod":"apiKey"}' ;;
   *) printf '%s\n' '{"loggedIn":false,"authMethod":"none"}' ;;
 esac
@@ -72,6 +138,12 @@ env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE \
   PATH="$TMP/bin:$PATH" FAKE_CLAUDE_AUTH=subscription "$PROBE" > "$TMP/probe-no-telemetry.json"
 assert jq -e '.claude.authMode == "subscription" and .claude.plan == "max" and .claude.state == "unknown" and .claude.rateLimitsObserved == false' "$TMP/probe-no-telemetry.json"
 env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE \
+  PATH="$TMP/bin:$PATH" FAKE_CLAUDE_AUTH=pro "$PROBE" > "$TMP/probe-pro.json"
+assert jq -e '.claude.authMode == "subscription" and .claude.plan == "pro" and .claude.state == "unknown"' "$TMP/probe-pro.json"
+env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE \
+  PATH="$TMP/bin:$PATH" FAKE_CLAUDE_AUTH=future "$PROBE" > "$TMP/probe-future.json"
+assert jq -e '.claude.authMode == "subscription" and .claude.plan == "unknown" and .claude.state == "unknown"' "$TMP/probe-future.json"
+env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE \
   PATH="$TMP/bin:$PATH" FAKE_CLAUDE_AUTH=api "$PROBE" > "$TMP/probe-api.json"
 assert jq -e '.claude.authMode == "api" and .claude.authMode != "subscription"' "$TMP/probe-api.json"
 env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE \
@@ -84,8 +156,10 @@ run_role() {
   MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
     MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
     "$ROUTER" --role "$role" --effort "$effort" \
-      --prompt-file "$TMP/prompt" --output-file "$TMP/$name.out" \
-      --receipt-file "$TMP/$name.receipt" "$@" > "$TMP/$name.public"
+      --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+      --output-file "$TMP/$name.out" --receipt-file "$TMP/$name.receipt" \
+      --contract-digest "sha256:$(printf 'a%.0s' {1..64})" --contract-revision 1 \
+      "$@" > "$TMP/$name.public"
 }
 
 # Fast work resolves externally while the public surface stays anonymous.
@@ -110,6 +184,15 @@ jq '.candidateResults["gpt-5.6-sol"].outcome="quota"' "$TMP/availability.json" >
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role quota-fallback builder-deep high --capability read-repository --capability long-context
 assert jq -e '.served.transport == "openrouter" and ([.attempts[].model] | index("gpt-5.6-terra") == null)' "$TMP/quota-fallback.receipt"
+
+# Failure reasons are attempt-local; an earlier quota cannot relabel a later transport failure.
+fixture healthy
+jq '.candidateResults["gpt-5.6-sol"].outcome="quota"
+  | .candidateResults["deepseek/deepseek-v4-pro-0813"].outcome="transport"
+  | .candidateResults["x-ai/grok-4.6"].outcome="success"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role local-failure builder-deep high --capability read-repository --capability long-context
+assert jq -e '.served.model == "x-ai/grok-4.6" and .fallbackReason == "transport-unavailable"' "$TMP/local-failure.receipt"
 
 # Two eligible operators receive identical Fable behavior from one policy.
 fixture healthy
@@ -136,6 +219,12 @@ assert jq -e '.served.model == "opus" and .served.transport == "claude-cli" and 
 fixture fable-initial-telemetry-absent
 run_role fable-bounded architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "fable" and .served.billingMode == "subscription-headroom-unknown"' "$TMP/fable-bounded.receipt"
+fixture claude-pro
+run_role pro-bounded architect high --capability read-repository --capability structured-output
+assert jq -e '.served.model == "fable" and .served.billingMode == "subscription-headroom-unknown"' "$TMP/pro-bounded.receipt"
+fixture claude-unrecognized-subscription
+run_role future-bounded architect high --capability read-repository --capability structured-output
+assert jq -e '.served.model == "fable" and .served.billingMode == "subscription-headroom-unknown"' "$TMP/future-bounded.receipt"
 fixture fable-agent-sdk-capacity
 run_role fable-sdk architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "fable" and .served.billingMode == "included-subscription" and .served.allowanceWindow == "agent-sdk"' "$TMP/fable-sdk.receipt"
@@ -160,23 +249,227 @@ run_role security security-review high --capability read-repository --capability
 assert jq -e '.served.model == "moonshotai/kimi-k3"' "$TMP/security.receipt"
 assert sh -c "! grep -Eq 'kimi|moonshot|openrouter|deepseek|gpt-5|fable|qwen|grok' '$TMP/security.public'"
 
+# Independent roles retain native subscription tails when OpenRouter is unavailable.
+jq '.openrouter.state="unknown"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role native-independent plan-critic high --capability read-repository --capability independent-family --human-authored
+assert jq -e '.served.model == "opus" and .served.transport == "claude-cli"' "$TMP/native-independent.receipt"
+run_role native-security security-review high --capability read-repository --capability independent-family --human-authored
+assert jq -e '.served.model == "opus" and .served.transport == "claude-cli"' "$TMP/native-security.receipt"
+
 # Opaque receipts exclude every implementing family.
+fixture healthy
 run_role implementer builder-deep high --capability read-repository
 implementer_id="$(jq -r '.receiptId' "$TMP/implementer.receipt")"
-run_role independent plan-critic high --capability read-repository --capability independent-family --independence-receipt-id "$implementer_id"
+mkdir "$TMP/implementation-registry"
+jq '.probeSource="live" | .transportStub=false' "$TMP/implementer.receipt" > "$TMP/implementation-registry/implementer.receipt"
+run_role independent plan-critic high --capability read-repository --capability independent-family --independence-receipt-dir "$TMP/implementation-registry" --independence-receipt-id "$implementer_id"
 assert jq -e '.familyIndependence.required == true and .familyIndependence.passed == true and (.served.family != "openai")' "$TMP/independent.receipt"
 assert jq -e '.participantId | test("^planner-[a-f0-9]{8}$")' "$TMP/independent.public"
 assert sh -c "! grep -Eq 'openai|qwen|deepseek|grok|anthropic|moonshot|openrouter|gpt-5|fable|kimi' '$TMP/independent.public'"
 
-# Disclosure decline follows the role ladder with no prompt.
+# Fixture/stub receipts cannot be laundered into family-independence evidence.
+mkdir "$TMP/simulated-registry"
+cp "$TMP/implementer.receipt" "$TMP/simulated-registry/implementer.receipt"
+set +e
+MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+  "$ROUTER" --role plan-critic --effort high --capability read-repository \
+    --capability independent-family --independence-receipt-dir "$TMP/simulated-registry" \
+    --independence-receipt-id "$implementer_id" --prompt-file "$TMP/prompt" \
+    --repository-evidence-file "$TMP/evidence" --output-file "$TMP/simulated.out" \
+    --receipt-file "$TMP/simulated.receipt" >/dev/null 2>&1
+simulated_rc=$?
+set -e
+assert test "$simulated_rc" -eq 2
+
+# Prompt-only repository readers are ineligible without complete evidence.
 fixture healthy
-jq '.candidateResults["qwen/qwen3.8-max"].outcome="disclosure-declined"' "$TMP/availability.json" > "$TMP/availability.next"
+MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+  "$ROUTER" --role review-fast --effort medium --capability read-repository \
+    --prompt-file "$TMP/prompt" --output-file "$TMP/evidence-gate.out" \
+    --receipt-file "$TMP/evidence-gate.receipt" >/dev/null
+assert jq -e '.served.transport == "codex-cli"' "$TMP/evidence-gate.receipt"
+
+# A prompt cannot masquerade as complete repository evidence, including via a hardlink.
+set +e
+MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  "$ROUTER" --role review-fast --effort medium --capability read-repository \
+    --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/prompt" \
+    --output-file "$TMP/same-evidence.out" --receipt-file "$TMP/same-evidence.receipt" >/dev/null 2>&1
+same_evidence_rc=$?
+set -e
+assert test "$same_evidence_rc" -eq 2
+ln "$TMP/prompt" "$TMP/evidence-hardlink"
+set +e
+MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  "$ROUTER" --role review-fast --effort medium --capability read-repository \
+    --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence-hardlink" \
+    --output-file "$TMP/hardlink-evidence.out" --receipt-file "$TMP/hardlink-evidence.receipt" >/dev/null 2>&1
+hardlink_evidence_rc=$?
+set -e
+assert test "$hardlink_evidence_rc" -eq 2
+
+# Human-authored diffs are explicitly independent without fabricating a model receipt.
+run_role human-independent security-review high --capability read-repository --capability independent-family --human-authored
+assert jq -e '.familyIndependence.required == true and .familyIndependence.humanAuthored == true and .familyIndependence.passed == true' "$TMP/human-independent.receipt"
+set +e
+MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+  "$ROUTER" --role review-fast --effort medium --capability structured-output \
+    --human-authored --prompt-file "$TMP/prompt" --output-file "$TMP/invalid-human.out" \
+    --receipt-file "$TMP/invalid-human.receipt" >/dev/null 2>&1
+invalid_human_rc=$?
+set -e
+assert test "$invalid_human_rc" -eq 2
+
+# Write-adapter usage cost survives normalization into the router receipt.
+fixture healthy
+printf '%s\n' '{"usage":{"prompt_tokens":8,"completion_tokens":3,"cost":0.0125}}' > "$TMP/provider-receipt.json"
+MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/provider-receipt.json" run_role write-cost builder-fast medium \
+  --capability read-repository --capability write-repository --capability structured-output
+assert jq -e '.served.billedCostUsd == 0.0125 and .served.costProvenance == "provider-receipt"' "$TMP/write-cost.receipt"
+
+# Real native transport branches receive no OpenRouter credential material.
+fixture healthy
+rm -f "$TMP/native-env"
+env PATH="$TMP/bin:$PATH" OPENROUTER_API_KEY=secret-marker \
+  OPENROUTER_API_KEY_FILE="$TMP/key-file" MODEL_ROUTER_NATIVE_ENV_CAPTURE="$TMP/native-env" \
+  MODEL_ROUTER_NATIVE_PROMPT_CAPTURE="$TMP/native-prompt" \
+  MODEL_ROUTER_INVOKE_FIXTURE_TRANSPORTS=1 \
+  MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  "$ROUTER" --role builder-deep --effort high --capability read-repository --capability write-repository \
+    --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+    --output-file "$TMP/native-codex.out" --receipt-file "$TMP/native-codex.receipt" \
+    --contract-digest "sha256:$(printf 'a%.0s' {1..64})" --contract-revision 1 >/dev/null
+assert grep -Fxq 'api=unset,file=unset' "$TMP/native-env"
+
+# A failed write that mutates repository state terminates the ladder.
+mkdir "$TMP/write-repo"
+git -C "$TMP/write-repo" init -q
+printf '%s\n' 'initial' > "$TMP/write-repo/tracked.txt"
+git -C "$TMP/write-repo" add tracked.txt
+git -C "$TMP/write-repo" -c user.name=test -c user.email=test@example.invalid commit -qm initial
+fixture healthy
+jq '.candidateResults["gpt-5.6-sol"].outcome="mutate-fail"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
-run_role disclosure plan-critic high --capability read-repository --capability structured-output
-assert jq -e '.fallback == true and .fallbackReason == "disclosure-declined" and .served.model == "deepseek/deepseek-v4-pro-0813"' "$TMP/disclosure.receipt"
+set +e
+(
+  cd "$TMP/write-repo"
+  MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+    MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+    MODEL_ROUTER_STUB_MUTATE_PATH="$TMP/write-repo/tracked.txt" \
+    MODEL_ROUTER_STUB_CALL_LOG="$TMP/write-calls" \
+    "$ROUTER" --role builder-deep --effort high --capability write-repository \
+      --capability structured-output --prompt-file "$TMP/prompt" \
+      --output-file "$TMP/mutating-write.out" --receipt-file "$TMP/mutating-write.receipt" \
+      --contract-digest "sha256:$(printf 'b%.0s' {1..64})" --contract-revision 2 >/dev/null
+)
+mutating_write_rc=$?
+set -e
+assert test "$mutating_write_rc" -eq 76
+assert test "$(wc -l < "$TMP/write-calls")" -eq 1
+assert jq -e '.fallbackReason == "repository-mutated-on-failed-attempt" and (.attempts | length) == 1' "$TMP/mutating-write.receipt"
+assert jq -e '.contract_digest == ("sha256:" + ("a" * 64)) and .revision == 1' "$TMP/native-codex.receipt"
+assert grep -Fq 'contract_digest: sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' "$TMP/native-prompt"
+assert grep -Fq 'contract_revision: 1' "$TMP/native-prompt"
+rm -f "$TMP/native-env"
+env PATH="$TMP/bin:$PATH" OPENROUTER_API_KEY=secret-marker \
+  OPENROUTER_API_KEY_FILE="$TMP/key-file" MODEL_ROUTER_NATIVE_ENV_CAPTURE="$TMP/native-env" \
+  MODEL_ROUTER_INVOKE_FIXTURE_TRANSPORTS=1 \
+  MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  "$ROUTER" --role architect --effort high --capability read-repository \
+    --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+    --output-file "$TMP/native-claude.out" --receipt-file "$TMP/native-claude.receipt" >/dev/null
+assert grep -Fxq 'api=unset,file=unset' "$TMP/native-env"
+
+# Publication failure cannot produce a completed public disposition or partial artifact.
+mkdir "$TMP/reservation"
+MODEL_ROUTER_EXPECT_PUBLICATION_DIR="$TMP/reservation" \
+  MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+  "$ROUTER" --role review-fast --effort medium --capability structured-output \
+    --prompt-file "$TMP/prompt" --output-file "$TMP/reservation/out" \
+    --receipt-file "$TMP/reservation/receipt" >/dev/null
+assert test -s "$TMP/reservation/out"
+assert test -s "$TMP/reservation/receipt"
+
+mkdir "$TMP/publication"
+set +e
+MODEL_ROUTER_REMOVE_PUBLICATION_DIR="$TMP/publication" \
+  MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+  "$ROUTER" --role review-fast --effort medium --capability structured-output \
+    --prompt-file "$TMP/prompt" --output-file "$TMP/publication/out" \
+    --receipt-file "$TMP/publication/receipt" > "$TMP/publication-public"
+publication_rc=$?
+set -e
+assert test "$publication_rc" -eq 76
+assert sh -c "! grep -q '\"disposition\":\"completed\"' '$TMP/publication-public'"
+assert jq -e '.disposition == "completed-publication-failed" and (.privateReceipt | length > 0)' "$TMP/publication-public"
+read_publication_receipt="$(jq -r '.privateReceipt' "$TMP/publication-public")"
+assert jq -e '.publication.output == "pending"' "$read_publication_receipt"
+rm -f "$read_publication_receipt"
+
+# A committed write keeps exact mutation provenance if output publication fails.
+mkdir "$TMP/publication-write-repo"
+git -C "$TMP/publication-write-repo" init -q
+printf '%s\n' 'initial' > "$TMP/publication-write-repo/tracked.txt"
+git -C "$TMP/publication-write-repo" add tracked.txt
+git -C "$TMP/publication-write-repo" -c user.name=test -c user.email=test@example.invalid commit -qm initial
+write_initial_head="$(git -C "$TMP/publication-write-repo" rev-parse HEAD)"
+fixture healthy
+jq '.candidateResults["gpt-5.6-sol"].outcome="commit-success"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+mkdir "$TMP/publication-write"
+set +e
+(
+  cd "$TMP/publication-write-repo"
+  MODEL_ROUTER_REMOVE_PUBLICATION_DIR="$TMP/publication-write" \
+    MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+    MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+    MODEL_ROUTER_STUB_MUTATE_PATH="$TMP/publication-write-repo/tracked.txt" \
+    "$ROUTER" --role builder-deep --effort high --capability write-repository \
+      --capability structured-output --prompt-file "$TMP/prompt" \
+      --output-file "$TMP/publication-write/out" \
+      --receipt-file "$TMP/publication-write/receipt" \
+      --contract-digest "sha256:$(printf 'c%.0s' {1..64})" \
+      --contract-revision 3 > "$TMP/publication-write-public"
+)
+publication_write_rc=$?
+set -e
+assert test "$publication_write_rc" -eq 76
+write_final_head="$(git -C "$TMP/publication-write-repo" rev-parse HEAD)"
+assert test "$write_final_head" != "$write_initial_head"
+assert jq -e --arg commit "$write_final_head" '.disposition == "completed-publication-failed" and .commit == $commit' "$TMP/publication-write-public"
+write_publication_receipt="$(jq -r '.privateReceipt' "$TMP/publication-write-public")"
+assert jq -e --arg commit "$write_final_head" '.served.commit == $commit and .publication.output == "pending"' "$write_publication_receipt"
+rm -f "$write_publication_receipt"
+
+# Model content refusal follows the role ladder with no prompt.
+fixture healthy
+jq '.candidateResults["qwen/qwen3.8-max"].outcome="content-refusal"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role refusal plan-critic high --capability read-repository --capability structured-output
+assert jq -e '.fallback == true and .fallbackReason == "content-refusal" and .served.model == "deepseek/deepseek-v4-pro-0813"' "$TMP/refusal.receipt"
+
+# Empty capability lists remain safe under nounset (including Bash 3.2).
+fixture healthy
+MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  "$ROUTER" --role review-fast --effort low --prompt-file "$TMP/prompt" \
+    --output-file "$TMP/no-capabilities.out" --receipt-file "$TMP/no-capabilities.receipt" >/dev/null
+assert jq -e '.requested.capabilities == []' "$TMP/no-capabilities.receipt"
 
 # Receipts are exact/content-free; public and peer surfaces remain identity-free.
-assert jq -e '.requested.role and .requested.candidate.model and .effectiveEffort and .participantId and .attempts and .served.model and .served.provider and .served.transport and .served.billingMode and (.served.durationSeconds|type=="number") and (.served.tokenProvenance=="unavailable") and (.served.costProvenance=="unavailable") and .matrixSnapshot and (.fallbackReason|type=="string")' "$TMP/disclosure.receipt"
-assert sh -c "! grep -Eq 'prompt|bounded role output' '$TMP/disclosure.receipt'"
+assert jq -e '.requested.role and .requested.candidate.model and .effectiveEffort and .participantId and .attempts and .served.model and .served.provider and .served.transport and .served.billingMode and (.served.durationSeconds|type=="number") and (.served.tokenProvenance=="unavailable") and (.served.costProvenance=="unavailable") and .matrixSnapshot and (.fallbackReason|type=="string")' "$TMP/refusal.receipt"
+assert sh -c "! grep -Eq 'prompt|bounded role output' '$TMP/refusal.receipt'"
+if grep -Fq 'Authorization: Bearer $OPENROUTER_API_KEY' "$PROBE"; then
+  printf 'FAIL: OpenRouter credential appears in curl argv\n' >&2
+  exit 1
+fi
+pass=$((pass + 1))
+assert grep -Fq -- '-H "@$header_file"' "$PROBE"
+assert grep -Fq 'unset OPENROUTER_API_KEY OPENROUTER_API_KEY_FILE' "$PROBE"
 
 printf 'model-router: %d assertions passed\n' "$pass"

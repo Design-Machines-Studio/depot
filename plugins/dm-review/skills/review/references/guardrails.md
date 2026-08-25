@@ -12,13 +12,19 @@ Apply these checks after agent selection (Phase 3) and before agent launch (Phas
 
 **Threshold:** >5000 lines
 
-**Action:** Truncate the diff. Pass each agent the file list plus the first 200 lines per file. Add a note to the agent prompt: "Diff truncated to 200 lines per file. Focus on the visible code; flag areas where truncation may hide issues."
+**Action:** Keep the complete diff for every core lane while its materialized
+prompt remains below the 80K-token ceiling. Conditional lanes may receive the
+file list plus the first 200 lines per file and must record that truncation.
+When a core lane exceeds the ceiling, use a repository-capable candidate or
+mark its coverage incomplete; a prompt-only candidate never settles required
+coverage from omitted bytes.
 
-### Content-Based Disclosure Filter
+### Provider-Neutral Structural Boundary
 
 Materialize each lane's exact outbound bytes and dispatch its role through
-model-router. The router applies any external disclosure boundary and role
-fallback without revealing which transport was attempted. Path names alone
+model-router. External candidates receive the same content eligibility as
+native candidates; the boundary validates UTF-8, path, and diff structure only.
+Credentials, classified material, security code, path names, and subject matter
 never remove content from review.
 
 ### Per-Agent Token Budget

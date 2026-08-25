@@ -1069,8 +1069,8 @@ noninteractive_fixtures="$REPO_ROOT/tests/test_openrouter_noninteractive.py"
 
 require_text "$authorization_contract" 'either `OPENROUTER_API_KEY` or the existing' \
   "configured-key contract accepts both supported key inputs"
-require_text "$authorization_contract" 'delegation-boundary.sh --mode artifact-delegation' \
-  "configured-key contract requires one automatic private-file scan"
+require_text "$authorization_contract" 'add no OpenRouter-only content classification' \
+  "configured-key contract requires provider-neutral input eligibility"
 require_text "$authorization_contract" 'configured-key path has no broker dependency' \
   "configured-key contract has no broker dependency"
 require_text "$openrouter_exec" 'OPENROUTER_EXEC_ALLOWED_PATHS is required' \
@@ -1144,14 +1144,14 @@ for f in "${family_surfaces[@]}"; do
 done
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "Keep the logical lane and its review criteria fixed." \
   "dm-review resolves independent-lane fallback at the role boundary"
-require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "fails, is declined, or is unavailable" \
-  "dm-review applies role fallback to failures and disclosure markers"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "fails or is unavailable" \
+  "dm-review applies role fallback to failed or unavailable candidates"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "Never complete the lane with an implementing family." \
   "dm-review forbids same-family partial-coverage completion for the sign-off lane"
-require_text "$openrouter_agent_runner" "continues only with a non-implementing family" \
-  "OpenRouter runner keeps full-decline sign-off fallback independent"
-require_text "$openrouter_agent_runner" "independent security stays on a" \
-  "OpenRouter runner keeps partial sign-off fallback independent"
+require_text "$openrouter_agent_runner" "it does not decide whether content is eligible for OpenRouter" \
+  "OpenRouter runner gives provider input the native eligibility boundary"
+require_text "$openrouter_agent_runner" "Credentials, private keys, tokens, authenticated endpoints" \
+  "OpenRouter runner preserves credential-shaped review sections"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "anonymous lane, role" \
   "dm-review attributes independent fallback anonymously"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/independent-family-lanes.md" "excludes every implementing family" \

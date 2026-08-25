@@ -53,6 +53,14 @@ fi
   echo "openrouter-exec: OPENROUTER_EXEC_ALLOWED_PATHS is required" >&2
   exit 2
 }
+[[ "${MODEL_ROUTER_CONTRACT_DIGEST:-}" =~ ^sha256:[0-9a-f]{64}$ ]] || {
+  echo "openrouter-exec: bound contract digest is required" >&2
+  exit 2
+}
+[[ "${MODEL_ROUTER_CONTRACT_REVISION:-}" =~ ^[1-9][0-9]*$ ]] || {
+  echo "openrouter-exec: positive bound contract revision is required" >&2
+  exit 2
+}
 REPOSITORY_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
   echo "openrouter-exec: repository context unavailable; return to Codex" >&2
   exit 77
@@ -312,6 +320,10 @@ done < "$ALLOWED_FILE"
 [ -n "$FIRST_ALLOWED_PATH" ] || reject_repository_context "unsupported-allowed-path"
 {
   printf '\n%s\n\n' '--- END UNTRUSTED REPOSITORY FILE DATA ---'
+  printf '%s\n%s\n%s\n\n' \
+    'BOUND BEHAVIORAL CONTRACT (mandatory):' \
+    "contract_digest: ${MODEL_ROUTER_CONTRACT_DIGEST}" \
+    "contract_revision: ${MODEL_ROUTER_CONTRACT_REVISION}"
   printf '%s\n' \
     'OUTPUT CONTRACT (mandatory):' \
     '- Return only a non-empty Git unified diff. No prose and no markdown fences.' \
@@ -350,12 +362,12 @@ while IFS= read -r allowed_path; do
     reject_repository_context "allowed-path-symlink"
 done < "$ALLOWED_FILE"
 
-# Scan the private outbound files immediately before the wrapper reads those
-# same files. This requires no human interaction.
+# Structurally validate the private outbound files immediately before the
+# wrapper reads those same files. This requires no human interaction.
 if ! "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" \
     --content-file "$SYSTEM_FILE" \
     --content-file "$PROMPT_FILE" >/dev/null; then
-  echo "openrouter-exec: host_disclosure_declined; return to Codex" >&2
+  echo "openrouter-exec: outbound-structure-invalid; return to router" >&2
   exit 77
 fi
 
@@ -516,12 +528,15 @@ jq -n --arg commit "$(git rev-parse --short HEAD)" --arg files "$FILES_CHANGED" 
   --arg bundle_version "$RESOLVED_BUNDLE_VERSION" \
   --arg bundle_cache_class "$RESOLVED_BUNDLE_CACHE_CLASS" \
   --arg bundle_reason "$RESOLVED_BUNDLE_REASON" \
+  --arg contract_digest "${MODEL_ROUTER_CONTRACT_DIGEST:-}" \
+  --argjson contract_revision "${MODEL_ROUTER_CONTRACT_REVISION:-0}" \
   --arg request_digest "$(jq -r '.authorization.requestEnvelopeSha256' "$RECEIPT_FILE")" \
   --argjson duration_seconds "$PROVIDER_DURATION_SECONDS" \
   --argjson usage "$(jq '.usage' "$RECEIPT_FILE")" \
   --argjson fallback "$(jq '.fallbackUsed' "$RECEIPT_FILE")" '
   {requestedProvider:"openrouter",attemptedProvider:"openrouter",actualImplementer:"openrouter",
    implementedBy:"openrouter",status:"committed",commit:$commit,filesChanged:$files,
+   contract_digest:$contract_digest,revision:$contract_revision,
    verification:$verification,requestedModel:$requested_model,actualModel:$actual_model,
    servingProvider:(if $provider == "" then null else $provider end),generationId:$generation_id,
    requestEnvelopeSha256:$request_digest,responseModelProvenance:"response",

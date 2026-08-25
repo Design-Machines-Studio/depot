@@ -23,8 +23,30 @@
       "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{7,127}$"},
       "default": []
     },
+    "independenceReceiptDir": {"type": "string", "minLength": 1},
+    "humanAuthored": {"type": "boolean", "default": false},
+    "repositoryEvidenceFile": {"type": "string", "minLength": 1},
+    "contractDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "contractRevision": {"type": "integer", "minimum": 1},
     "promptFile": {"type": "string", "minLength": 1},
     "outputFile": {"type": "string", "minLength": 1},
     "receiptFile": {"type": "string", "minLength": 1}
-  }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"capabilities": {"contains": {"const": "write-repository"}}}, "required": ["capabilities"]},
+      "then": {"required": ["contractDigest", "contractRevision"]}
+    },
+    {
+      "if": {"properties": {"capabilities": {"contains": {"const": "independent-family"}}}, "required": ["capabilities"]},
+      "then": {"oneOf": [
+        {"required": ["independenceReceiptDir", "independenceReceiptIds"], "properties": {"independenceReceiptIds": {"minItems": 1}, "humanAuthored": {"const": false}}},
+        {"required": ["humanAuthored"], "properties": {"humanAuthored": {"const": true}, "independenceReceiptIds": {"maxItems": 0}}}
+      ]}
+    },
+    {
+      "if": {"properties": {"humanAuthored": {"const": true}}, "required": ["humanAuthored"]},
+      "then": {"properties": {"capabilities": {"contains": {"const": "independent-family"}}}, "required": ["capabilities"]}
+    }
+  ]
 }

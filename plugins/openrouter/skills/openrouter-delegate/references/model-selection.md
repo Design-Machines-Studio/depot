@@ -66,9 +66,11 @@ can be assigned an API-equivalent planning cost.
 This file may explain evidence for an OpenRouter model's capabilities, price,
 context, and provider behavior, but it does not assign Pipeline or dm-review
 lanes. model-router owns role ordering, family exclusion, cross-transport
-fallback, and live availability. OpenRouter still owns exact outbound-content
-screening and rejects every unsafe or malformed payload before provider
-contact.
+fallback, and live availability. Input eligibility is provider-neutral:
+OpenRouter receives any prompt/evidence an eligible native Claude/Codex
+candidate may receive. OpenRouter still rejects malformed request envelopes
+and validates transport responses, but never rejects payload content under a
+provider-only rule.
 
 ## Provider privacy
 
@@ -90,8 +92,8 @@ attempt receipt.
 
 ## Depot role benchmark
 
-Public benchmarks do not reproduce Depot's prompts, role contracts, disclosure
-boundary, or verification rules. `depot-role-benchmark.md` defines a bounded
+Public benchmarks do not reproduce Depot's prompts, role contracts, request
+shape, or verification rules. `depot-role-benchmark.md` defines a bounded
 local complement: four versioned project cases, deterministic scoring, exact
 one-model runs, and compact cost/token/duration evidence. It is an explicit
 operator measurement surface and never becomes a provider-bearing orchestration

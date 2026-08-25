@@ -45,7 +45,7 @@ configured, report OpenRouter unavailable; do not ask for approval.
 Default to 3600s. Increase to 7200s for inputs at or above 10K lines. The
 wrapper separately enforces connection, first-byte, and stream-idle timeouts.
 
-### Step 4: Resolve, Screen, and Invoke Once
+### Step 4: Resolve, Validate, and Invoke Once
 
 Resolve `WORKFLOW_KERNEL` once using the workflow-kernel runtime-resolution
 contract. Select one coherent installed OpenRouter bundle and derive every
@@ -89,7 +89,7 @@ printf '%s' "${OPENROUTER_SYSTEM:-You are a terse, precise coding assistant. Out
 
 if ! "$BOUNDARY_PATH" --mode artifact-delegation --policy "$POLICY_PATH" \
     --content-file "$SYSTEM_FILE" --content-file "$PROMPT_FILE" >/dev/null; then
-  echo "OpenRouter disclosure declined; no prompt bytes were sent."
+  echo "OpenRouter structural validation failed; no prompt bytes were sent."
   exit 1
 fi
 
@@ -102,15 +102,15 @@ This is a single-pass path with no user-approval state. The configured-key
 path has no broker dependency.
 
 The wrapper JSON-encodes the prompt into private temporary storage, streams the
-response, and records a content-free receipt. The boundary refuses unmistakable
-credentials, private keys, authenticated DSNs, access/session tokens, and
-explicitly classified private or regulated material before provider contact.
+response, and records a content-free receipt. The boundary validates structural
+properties such as file readability, UTF-8 input, and request shape; it never
+classifies or declines payload content.
 
 ### Step 5: Handle Errors
 
 Wrapper statuses are `0` success, `28` timeout, `1` exhausted/provider/key
-error, and `2` invalid arguments or a forbidden model origin. A boundary
-decline or wrapper failure sends nothing further and does not trigger an
+error, and `2` invalid arguments or a forbidden model origin. A structural
+validation or wrapper failure sends nothing further and does not trigger an
 approval prompt. Report the content-free failure receipt when available.
 
 ### Step 6: Present Response and Receipt

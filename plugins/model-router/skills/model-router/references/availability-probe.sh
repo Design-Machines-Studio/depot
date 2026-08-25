@@ -35,7 +35,6 @@ fi
 
 THRESHOLD="$(jq -r '.availability.headroomThresholdPct // 8' "$SCRIPT_DIR/role-policy.json" 2>/dev/null)"
 case "$THRESHOLD" in ''|*[!0-9]*) THRESHOLD=8 ;; esac
-
 # Portable bash 3.2 watchdog. A wedged CLI must resolve to unknown, not hang
 # the caller forever. No `timeout(1)` on stock macOS, so background + poll.
 run_bounded() {
@@ -62,11 +61,6 @@ run_bounded() {
   cat "$tmp" 2>/dev/null
   rm -f "$tmp"
   return "$rc"
-}
-
-unknown_json() {
-  jq -cn --argjson threshold "$THRESHOLD" --arg window "${1:-unknown}" \
-    '{state:"unknown",remaining_pct:0,window:$window}'
 }
 
 aggregate_windows() {
@@ -96,6 +90,7 @@ normalize_claude_plan() {
   raw="$(printf '%s' "${1:-unknown}" | tr '[:upper:]_' '[:lower:]-')"
   case "$raw" in
     max|max-*|*-max) printf '%s\n' max ;;
+    pro|pro-*|*-pro) printf '%s\n' pro ;;
     premium-team|team-premium) printf '%s\n' team-premium ;;
     premium-enterprise|enterprise-premium) printf '%s\n' enterprise-premium ;;
     credits-only) printf '%s\n' credits-only ;;
@@ -204,7 +199,7 @@ codex_json() {
 }
 
 openrouter_json() {
-  local response="" rc=0 balance="" credential_loader="" active_host="" bundle_json="" bundle_ref=""
+  local response="" rc=0 balance="" credential_loader="" active_host="" bundle_json="" bundle_ref="" header_file="" probe_key=""
   if [ -n "${OPENROUTER_API_KEY_FILE:-}" ] && [ -z "${OPENROUTER_API_KEY:-}" ]; then
     case "${OPENROUTER_BUNDLE_RESOLVED:-0}:${OPENROUTER_BUNDLE_REF:-}" in
       "1:~/"*) credential_loader="$HOME/${OPENROUTER_BUNDLE_REF#\~/}/skills/openrouter-delegate/references/openrouter-credential.sh" ;;
@@ -241,8 +236,23 @@ openrouter_json() {
     fi
   fi
   if [ -n "${OPENROUTER_API_KEY:-}" ] && command -v curl >/dev/null 2>&1; then
+    header_file="$(mktemp "${TMPDIR:-/tmp}/openrouter-probe.header.XXXXXX")" || header_file=""
+    [ -z "$header_file" ] || chmod 600 "$header_file"
+    if [ -n "$header_file" ]; then
+      trap 'rm -f "$header_file"' EXIT
+      trap 'exit 130' HUP INT TERM
+    fi
+    probe_key="$OPENROUTER_API_KEY"
+    [ -z "$header_file" ] || printf 'Authorization: Bearer %s\n' "$probe_key" > "$header_file"
+    unset OPENROUTER_API_KEY OPENROUTER_API_KEY_FILE
+    if [ -z "$header_file" ]; then
+      rc=1
+    else
     response="$(curl -sS --max-time 10 https://openrouter.ai/api/v1/credits \
-      -H "Authorization: Bearer $OPENROUTER_API_KEY" 2>/dev/null)" || rc=$?
+      -H "@$header_file" 2>/dev/null)" || rc=$?
+    fi
+    [ -z "$header_file" ] || rm -f "$header_file"
+    trap - EXIT HUP INT TERM
     if [ "$rc" -eq 0 ] && [ -n "$response" ]; then
       balance="$(printf '%s' "$response" \
         | jq -r '.data as $data

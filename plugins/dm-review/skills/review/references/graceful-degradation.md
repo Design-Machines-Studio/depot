@@ -6,7 +6,7 @@ mapped role through model-router.
 | Failure | Action | Reported state |
 |---|---|---|
 | Role fallback succeeds | Keep output and role-level fallback reason | Completed (fallback) |
-| Partial disclosure coverage | Keep completed sections; dispatch held sections only | Completed (partial coverage) |
+| Structurally invalid external evidence | Retry the same role with another eligible candidate | Completed (fallback) or REVIEW INCOMPLETE |
 | Independent-family role exhausted | Do not use an implementing family | REVIEW INCOMPLETE |
 | Required build/browser lane unavailable | Preserve exact failed requirement | REVIEW INCOMPLETE or blocked |
 | Optional enrichment unavailable | Omit silently unless attempted and failed | Core review unaffected |

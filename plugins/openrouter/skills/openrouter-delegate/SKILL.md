@@ -7,8 +7,10 @@ description: Use when the user explicitly asks to delegate work to OpenRouter; r
 
 Use OpenRouter directly for explicitly requested analysis on a trusted
 developer workstation. A configured `OPENROUTER_API_KEY` or validated
-`OPENROUTER_API_KEY_FILE`, a coherent installed bundle, and an automatically
-screened eligible payload are sufficient; no second approval is required.
+`OPENROUTER_API_KEY_FILE` and a coherent installed bundle are sufficient; no
+second approval is required. Input eligibility is provider-neutral: any prompt
+or evidence an eligible native Claude/Codex subscription candidate may receive
+may also be sent to OpenRouter.
 
 OpenRouter exposes many models behind one OpenAI-compatible endpoint. Ordered
 role lists select exact versioned slugs: DeepSeek handles cheap bounded work and
@@ -21,13 +23,13 @@ reserved for focused applicable security analysis.
 The wrapper (`references/openrouter-wrapper.sh`) is a **single-turn completion call**. It returns text; it does not read/write files or run a tool loop.
 
 The bounded Pipeline executor uses the same configured-key wrapper path for its
-already-authorized non-sensitive config/docs/mechanical workload. It still
+already-authorized config/docs/mechanical workload. It still
 requires an exact owned-path allowlist, accepts only a validated unified diff,
 and defers correctness verification to native Codex.
 
 - **Valid current uses:** explicitly requested direct interactive big-diff
   analysis, code review, second-opinion analysis, and config/doc text generation
-  after the automatic disclosure boundary accepts the exact outbound bytes.
+  under the same input rules used for native candidates.
 - **Invalid use:** complex autonomous chunk implementation that needs exploratory tool use, visual review, or cross-chunk judgment. For that work, the pipeline cascade returns to Codex or an eligible agentic OpenRouter rung. Never pipe raw wrapper text in as a chunk implementation.
 
 ## When to Delegate
@@ -46,23 +48,16 @@ and defers correctness verification to native Codex.
 - Tasks requiring MCP server access
 - Sole-provider security completion (Kimi may lead analysis, but independent non-implementing-family sign-off remains mandatory)
 
-### Security Boundary (hard rule)
+### Provider Parity and Safety Boundaries
 
-**Kimi K3 may lead security analysis, but never replaces the independent non-implementing-family security reviewer.** Enforce the OpenRouter-owned `references/delegation-security-policy.json` immediately before every delegation. Pipeline carries a validated mirror for self-contained planning, but the installed OpenRouter policy is authoritative at runtime:
+**Kimi K3 may lead security analysis, but never replaces the independent non-implementing-family security reviewer.** OpenRouter changes transport, not input eligibility:
 
-- **Threat/content boundary.** Inspect the exact bytes becoming OpenRouter system or user content. Decline high-confidence credentials, private keys, authenticated DSNs, access/session tokens, and explicitly classified private or regulated values. Names, syntactically valid shell/CI source references, and unmistakable `*-secret-not-for-proof` / `*-access-not-for-proof` test sentinels—including those after recognized provider prefixes—are safe; actual values remain refused.
-- **No identity or path embargo.** Model nationality, vendor jurisdiction, security-looking directories, `.env` references, header names, and environment-variable names are not disclosure evidence. Non-secret auth, federation, deploy, and security code may pass.
+- **Provider-neutral input.** Never reject, redact, split, or hold OpenRouter input because it contains credentials, private keys, tokens, authenticated endpoints, classified material, security code, deployment details, or any other content a native Claude/Codex candidate would accept. Provider fallback may follow missing credentials, availability, transport, or request-shape failure, but never an OpenRouter-only payload-content decision.
+- **Credential handling.** Load the OpenRouter API credential only through the validated environment or key-file path and send it only in the authorization header. The provider credential is transport configuration, not delegated content.
 - **Execution mode -- bounded diffs only.** Accept only a non-empty validated unified diff whose normalized paths are all in the caller's exact owned-path list. The model has no command or verification authority. The runner performs only fixed structural Git checks; project build/test commands are deferred to the native Codex reviewer.
-- **Mechanical-review and artifact-review modes.** Mechanical review scans complete per-file diff sections (including removed lines), emits every eligible section unchanged, and returns only held path names for local Codex coverage. One held section never cancels safe dispatch or triggers a whole-lane Codex rerun. Artifact review scans exact bytes and remains all-or-nothing.
-- **Artifact-delegation mode.** Call `delegation-boundary.sh --mode artifact-delegation --policy POLICY --content-file FILE [--content-file FILE ...]` for arbitrary local text that will become OpenRouter content. Every explicit file is scanned byte-for-byte; the mode accepts no changed-file, diff, output-path, or execution authority.
-- **Independent sign-off.** High-consequence security work may use OpenRouter after these controls pass, but completion still requires a reviewer family different from the implementer.
+- **Response validation and receipts.** Keep timeouts, response-model provenance, content-free receipts, non-empty output checks, and caller-owned format validation active for every dispatch.
+- **Independent sign-off.** High-consequence security work still requires a reviewer family different from the implementer.
 - **Intended lanes.** Security analysis with independent non-implementing-family sign-off, style, duplication, pattern-recognition, large-diff triage, and doc consistency.
-
-A safe payload that is unexpectedly declined should be fixed at this shared
-boundary and retried unchanged after the repair; do not manually narrow or
-rewrite harmless review input. A genuine disclosure decline gets one clear
-refusal and falls back to the native harness without repeated OpenRouter
-attempts.
 
 ## Invocation Protocol
 
@@ -81,7 +76,7 @@ Load the decision table from `${CLAUDE_SKILL_DIR}/references/model-selection.md`
 
 When the user asks to compare models on Depot's own work, load
 `${CLAUDE_SKILL_DIR}/references/depot-role-benchmark.md`. The manual benchmark
-runs one exact candidate at a time through the existing screened wrapper and
+runs one exact candidate at a time through the existing receipted wrapper and
 uses deterministic local scoring; it never launches an automatic market sweep.
 
 **Default model:** `qwen/qwen3.8-max`. **Immediate fallback:** `x-ai/grok-4.6`.
@@ -96,8 +91,8 @@ refresh model identity, endpoints, provider slugs, benchmarks, credits, and
 documentation before changing the durable Matrix.
 
 The MCP is discovery/observability only for automated workflows. Do not replace
-the direct API runner with `send-message`: `/openrouter` retains its automatic
-disclosure boundary, timeouts, provider controls, fallback chain, and
+the direct API runner with `send-message`: `/openrouter` retains its credential
+handling, timeouts, provider controls, fallback chain, and
 content-free receipts. dm-review and bounded Pipeline use that same
 configured-key transport under their existing applicability rules.
 
@@ -107,7 +102,7 @@ Load templates from `${CLAUDE_SKILL_DIR}/references/prompt-templates.md`. Key pr
 
 1. **Self-contained prompts.** OpenRouter has no conversation context. Every prompt must include all necessary information.
 2. **Structured output requests.** For dm-review integration, request P1/P2/P3 findings in the format the consolidator consumes.
-3. **Exact prompt bytes.** Prefer `OPENROUTER_SYSTEM_FILE` for screened system
+3. **Exact prompt bytes.** Prefer `OPENROUTER_SYSTEM_FILE` for system
    prompt files and unset inherited `OPENROUTER_SYSTEM`; task content is the
    prompt argument or stdin and is materialized byte-for-byte by the wrapper.
 
@@ -115,13 +110,13 @@ Load templates from `${CLAUDE_SKILL_DIR}/references/prompt-templates.md`. Key pr
 
 | Agent | File | Purpose |
 |-------|------|---------|
-| **openrouter-agent-runner** | `plugins/openrouter/agents/workflow/openrouter-agent-runner.md` | Runs any eligible review-agent criteria through a policy-selected full OpenRouter model slug |
-| **openrouter-bulk-analyst** | `plugins/openrouter/agents/review/openrouter-bulk-analyst.md` | Eligible full-diff-section review using Qwen3.8 Max with DeepSeek V4 Pro 0813 fallback |
+| **openrouter-agent-runner** | `plugins/openrouter/agents/workflow/openrouter-agent-runner.md` | Direct compatibility runner for explicitly provider-routed mechanical criteria |
+| **openrouter-bulk-analyst** | `plugins/openrouter/agents/review/openrouter-bulk-analyst.md` | Large-context criteria for the provider-neutral review role; model-router owns automated candidate order |
 
 ## Prerequisites
 
-An OpenRouter API key or validated key file enables eligible direct, dm-review,
-and bounded Pipeline dispatch after automatic payload screening:
+An OpenRouter API key or validated key file enables direct, dm-review, and
+bounded Pipeline dispatch with provider-neutral input eligibility:
 
 ```bash
 export OPENROUTER_API_KEY="sk-or-..."

@@ -173,15 +173,17 @@ rail, availability judgment, or fallback order.
 
 Load `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md` for the fixed
 lane-to-role mapping and one-shot dispatcher contract. For independent lanes,
-pass opaque implementing receipt IDs; model-router reads private family evidence
-and excludes every implementing family. Public lane companions and peer prompts
-use stable lane names and anonymous participants only. Exact identity stays in
-content-free private receipts.
+pass the run-private receipt registry plus opaque implementing receipt IDs;
+model-router reads private family evidence and excludes every implementing
+family. A verified human-authored diff uses the explicit origin flag instead.
+Public lane companions and peer prompts use stable lane names and anonymous
+participants only. Exact identity stays in content-free private receipts.
 
-The dispatcher applies external-content eligibility and payload screening
-automatically. A decline or unavailable rail falls through within the requested
-role without an approval prompt. A partial result is retained and only held
-sections receive local completion. Broker state is not consulted.
+The dispatcher applies provider-neutral request-shape and workload eligibility
+automatically. Its external boundary validates UTF-8, paths, and diff structure
+without adding OpenRouter-only content screening. A structurally invalid or
+unavailable rail falls through within the requested role without an approval
+prompt. Broker state is not consulted.
 
 #### Quick Mode
 
@@ -218,7 +220,8 @@ variable disables the lane.
 
 When enabled, add **second-perspective** as a parallel read-only
 `plan-critic` at high effort in full mode only. Pass every opaque implementing
-receipt ID and require `independent-family`. Use
+receipt ID with the run-private registry, or pass the explicit verified
+human-authored origin, and require `independent-family`. Use
 `dm-review/*/agents/review/codex-perspective.md` as the compatibility-named
 criteria file; its filename does not select a participant. Normalize output to
 P1/P2/P3 and let the consolidator merge every in-scope finding.
@@ -343,7 +346,7 @@ The indexed arrays are the final roster's resolution projection, not a second se
 | `.templ`, `.twig`, `.html`, or `.css` changed | **visual-browser-tester** | `dm-review/*/agents/review/visual-browser-tester.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ux-quality-reviewer** | `dm-review/*/agents/review/ux-quality-reviewer.md` |
 | `.templ`, `.twig`, `.html`, or `.css` changed | **ui-standards-reviewer** | `dm-review/*/agents/review/ui-standards-reviewer.md` |
-| A large diff needs a bounded bulk first pass | **bulk-analyst** -- `review-fast` | `openrouter/*/agents/review/openrouter-bulk-analyst.md` |
+| A large diff needs a bounded bulk first pass | **bulk-analyst** -- `review-deep` + `long-context` | `openrouter/*/agents/review/openrouter-bulk-analyst.md` |
 
 #### Selective Lane Allowlist (internal loop input)
 
@@ -372,8 +375,8 @@ If the change includes `.templ`, `.twig`, `.html`, or `.css`, load `${CLAUDE_SKI
 
 Before dispatching agents, apply `${CLAUDE_SKILL_DIR}/references/guardrails.md`:
 
-1. **Diff size check:** >5000 lines -> truncate to file list + first 200 lines per file; note truncation in each agent's prompt. A selected bulk lane may receive the full untruncated diff separately.
-2. **Content boundary:** Materialize each lane's exact input. model-router applies the external disclosure boundary automatically when applicable. Read-only review of non-secret auth, security, deployment, credential-handling, and `.env` code is eligible; paths and subject matter never decline disclosure. A full decline falls through within the role; a partial decision keeps completed coverage and requires completion only for held paths.
+1. **Diff size check:** >5000 lines -> retain the complete diff for every core lane while its materialized input remains below ~80K tokens. Conditional lanes may receive the file list plus the first 200 lines per file and must record truncation. If a core lane exceeds the ceiling, use a repository-capable candidate or mark coverage incomplete; prompt-only review never settles omitted bytes. A selected bulk lane receives the full untruncated diff when it fits.
+2. **Structural boundary:** Materialize each lane's exact input. model-router applies provider-neutral request-shape and structural validation automatically. Credentials, private keys, classified material, auth/security/deployment code, and `.env` content remain eligible whenever a native candidate may receive them. Malformed or unverifiable evidence falls through within the role; content never creates OpenRouter-only held paths.
 3. **Per-agent token check:** Estimate ~2K system prompt + (diff lines × ~4 tokens) + ~4K output headroom. If >~80K tokens, drop the lowest-priority non-browser conditional agents per the degradation order in `${CLAUDE_SKILL_DIR}/references/guardrails.md`. Core agents and browser agents required by the verification profile are never dropped; if required browser input cannot fit safely, block with `human_help_required` and ask the user to narrow or restore the verification input.
 
 If any agents were dropped or input was modified, report before proceeding:
@@ -381,8 +384,7 @@ If any agents were dropped or input was modified, report before proceeding:
 ```
 Input guardrails applied:
 - Diff truncated from 8,200 to 5,000 lines (200 lines/file cap)
-- reviewer-a completed 6 eligible file sections; 1 section remained held.
-- Local coverage path: tests/integration/compose-release-command.sh
+- reviewer-a completed through a role-level fallback after structural validation failed.
 - Blocked required browser lane: human_help_required (token budget; user input needed)
 ```
 

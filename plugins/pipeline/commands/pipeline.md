@@ -41,7 +41,8 @@ capabilities, and normalized effort through model-router.
 - Complex, security-sensitive, or multi-subsystem work uses full mode regardless of resolved participant.
 - `plan-adversary` requests `plan-critic`, `read-repository`, `long-context`, `structured-output`, and high effort.
 - Orchestration prompts and summaries carry anonymous participant labels only.
-- External runners remain bounded by the existing disclosure, owned-path, and validated-diff boundaries.
+- External runners use provider-neutral input eligibility and remain bounded by
+  the existing owned-path and validated-diff output boundaries.
 
 **Mandatory regardless of resolved participant:** the Phase 5 adversarial review; focused role review after ordinary chunks, full review for sensitive paths, and the approved final dm-review mode -- full by default, quick only when the approved plan explicitly selects it, consequence is not high, and the final diff is not security-sensitive. Generator/evaluator separation is architectural, not a model limitation.
 
@@ -412,4 +413,17 @@ Before this gate, confirm the orchestrator's Step 5b ran repository cleanup (ful
 
 ## Self-Audit
 
-Before delivery, confirm: original prompt saved; assessment and research ran; only the two routine pre-execution gates were used; full mode wrote manifest/prompts and lean mode left them absent; coverage is complete; one adversary pass plus at most one recheck; execution started only after final planning approval; approved final review ran; optional memory was applied or omitted silently; every `renderedSurface: required` case has browser evidence or blocked `human_help_required`; new JS modules were runtime-checked; caller visual verification ran when required; friction produced a codify proposal when the failure is new; and the run wrote `plans/<feature-slug>/run-postmortem.md` with measured `roleSplit`, effort, fallback, verification, private receipt references, and one next action. If any item failed, go back and do it.
+Before delivery, confirm each item:
+
+- The original prompt was saved; assessment and research ran.
+- Only the two routine pre-execution gates were used.
+- Full mode wrote its manifest and prompts; lean mode left them absent.
+- Coverage is complete, with one adversary pass and at most one recheck.
+- Execution started only after final planning approval, and the approved final review ran.
+- Optional memory was applied or omitted silently.
+- Every `renderedSurface: required` case has browser evidence or a blocked `human_help_required` receipt.
+- New JavaScript modules were runtime-checked, and the caller ran visual verification when required.
+- New friction produced a codify proposal.
+- `plans/<feature-slug>/run-postmortem.md` records measured `roleSplit`, effort, fallback, verification, private receipt references, and one next action.
+
+If any item failed, go back and complete it before delivery.

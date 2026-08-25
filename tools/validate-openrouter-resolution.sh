@@ -266,7 +266,7 @@ done
 
 authorization_contract="$ROOT/plugins/pipeline/references/openrouter-authorization-contract.md"
 grep -Fq 'OPENROUTER_API_KEY_FILE' "$authorization_contract" &&
-grep -Fq 'delegation-boundary.sh --mode artifact-delegation' "$authorization_contract" &&
+grep -Fq 'add no OpenRouter-only content classification' "$authorization_contract" &&
 grep -Fq 'configured-key path has no broker dependency' "$authorization_contract" || {
   echo "  FAIL  configured-key OpenRouter authorization contract absent"
   failures=1
@@ -291,7 +291,7 @@ do
 done
 
 bulk_criteria="$ROOT/plugins/openrouter/agents/review/openrouter-bulk-analyst.md"
-grep -Fq 'generic `openrouter-agent-runner` is the only execution path' "$bulk_criteria" &&
+grep -Fq 'provider-neutral model-router is the execution path' "$bulk_criteria" &&
 ! grep -Fq 'resolve-plugin-bundle' "$bulk_criteria" &&
 ! grep -Fq 'openrouter-wrapper.sh' "$bulk_criteria" || {
   echo "  FAIL  OpenRouter bulk analyst must remain criteria-only"
@@ -304,8 +304,9 @@ for relative in \
 do
   file="$ROOT/$relative"
   grep -Fq 'delegation-boundary.sh' "$file" &&
-  grep -Fq -- '--mode artifact-delegation' "$file" || {
-    echo "  FAIL  wrapper consumer lacks automatic private-file screening: $relative"
+  grep -Fq -- '--mode artifact-delegation' "$file" &&
+  grep -Fq 'structural' "$file" || {
+    echo "  FAIL  wrapper consumer lacks structural private-file validation: $relative"
     failures=1
   }
 done
@@ -320,7 +321,7 @@ do
   ! grep -Fq 'dispatch-provider-request' "$file" &&
   ! grep -Fq 'OPENROUTER_PAYLOAD_AUTHORIZATION' "$file" &&
   ! grep -Fq 'OPENROUTER_PAYLOAD_APPROVAL_SHA256' "$file" || {
-    echo "  FAIL  configured-key consumer does not use the coherent screened wrapper path: $relative"
+    echo "  FAIL  configured-key consumer does not use the coherent structurally validated wrapper path: $relative"
     failures=1
   }
 done

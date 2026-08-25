@@ -10,8 +10,12 @@ This internal skill owns cross-transport role resolution. It is a local policy
 bundle and one-shot dispatcher, not a service.
 
 Callers provide only a role, required capabilities, normalized effort, prompt
-file, output destination, private receipt destination, and opaque prior receipt
-IDs when family independence is required. They must not select or receive a
+file, output destination, private receipt destination, an explicit complete
+repository-evidence file for prompt-only repository readers, and opaque prior
+receipt IDs plus their run-private registry when family independence is
+required. Human-authored work uses the explicit `--human-authored` origin flag
+instead of fabricating a model-family receipt. Write roles also carry the bound
+behavioral contract digest and revision. Callers must not select or receive a
 model, provider, family, billing rail, or transport.
 
 Use `${CLAUDE_SKILL_DIR}/references/role-dispatch.sh`. The closed request and
@@ -31,19 +35,23 @@ The dispatcher:
 8. writes exact, content-free identity and measurement evidence to the private
    receipt.
 
-OpenRouter remains the authority for its credentials, payload screening,
-provider catalog, response identity, usage, and cost receipt. External write
-work uses the bounded patch adapter and its existing owned-path and diff
-validation. Workflow Kernel may record attempts but never selects a role or
-candidate.
+OpenRouter remains the authority for its credentials, provider catalog,
+response identity, usage, and cost receipt. The router owns provider-neutral
+input eligibility: any prompt and evidence eligible for an available native
+Claude or Codex subscription candidate is also eligible for OpenRouter.
+External write work uses the bounded patch adapter and its existing owned-path
+and diff validation. Workflow Kernel may record attempts but never selects a
+role or candidate.
 
 OpenRouter is a first-class automatic rail for every role. Do not require user
 approval, impose a provider quota, or decline it because a task discusses
 security, authentication, deployment, or a credential-handling path. The
 role's deterministic candidate order and capability fit determine when it is
-attempted, without a separate native-first rule. Exact outbound bytes still
-pass the provider-owned scan; only actual secret material or explicitly
-classified data closes that attempt.
+attempted, without a separate native-first rule. Never reject, redact, split,
+or hold OpenRouter input because of payload content when a native candidate
+would accept the same material. Missing credentials, transport availability,
+and malformed request shape may close an attempt; payload subject matter or
+secret-bearing repository evidence may not.
 
 Developer-local paid Claude credits default to disabled. The only tracked
 preference schema is

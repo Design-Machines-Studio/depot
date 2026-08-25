@@ -145,17 +145,17 @@ the direct API key's workspace.
 ## Configured-Key Authorization
 
 On a trusted developer workstation, either supported key input authorizes an
-eligible payload. Direct `/openrouter`, dm-review, and the bounded Pipeline lane
+OpenRouter attempt. Direct `/openrouter`, dm-review, and the bounded Pipeline lane
 all use one pass:
 
 1. Resolve one coherent installed bundle and materialize the exact system/user
    files.
-2. Run `delegation-boundary.sh --mode artifact-delegation` with the installed
-   disclosure policy over those private files immediately before wrapper
-   invocation.
-3. On an automatic decline, contact no provider and fall back to Codex where a
-   native fallback exists. Otherwise invoke the wrapper with those same private
-   files.
+2. Apply the same input-eligibility rules as an eligible native Claude/Codex
+   candidate; do not classify, redact, split, hold, or reject content solely
+   because the selected transport is OpenRouter.
+3. Invoke the wrapper with those private files. Fallback may follow missing
+   credentials, malformed request shape, transport, or availability failure,
+   but not payload content.
 
 No OpenRouter caller asks for user approval. The configured-key path has no
 broker dependency. Provider-side per-key spending limits are the recommended
@@ -184,8 +184,8 @@ domains = { "openrouter.ai" = "allow" }
 ```
 
 This controls whether sandboxed commands can reach OpenRouter. It does not
-override the automatic disclosure boundary, workspace policy, or a declined
-boundary check.
+override workspace policy, request-shape validation, credential handling, or
+output validation.
 
 ## API Endpoint
 

@@ -10,22 +10,32 @@ transport, family, subscription, or billing source.
 {
   "feature": "member export",
   "workflowClass": "feature",
-  "decisionProfile": {"uncertainty": "medium", "consequence": "medium"},
-  "renderedSurface": "not-applicable",
+  "decisionProfile": {"uncertainty": "medium", "consequence": "medium", "rationale": "Bounded member export."},
+  "renderedSurface": "not_applicable",
+  "baseBranch": "main",
+  "featureBranch": "feat/member-export",
+  "branchMode": "create",
+  "expectedFeatureHead": null,
+  "finalReviewMode": "full",
+  "finalReviewRationale": "The export changes data handling.",
   "chunks": [
     {
       "id": "01-export-handler",
-      "file": "prompts/01-export-handler.md",
+      "level": 0,
+      "title": "Implement the export handler",
+      "prompt": "prompts/01-export-handler.md",
       "dependsOn": [],
       "estimatedComplexity": "medium",
       "risk": "medium",
       "overlapRisk": "low",
       "kind": "logic",
-      "renderedSurface": "not-applicable",
+      "renderedSurface": "not_applicable",
+      "renderedSurfaceRationale": "The export is a non-HTTP command.",
       "executorRole": "builder-deep",
       "executorCapabilities": ["read-repository", "write-repository", "tool-use", "long-context", "structured-output"],
       "executorEffort": "high",
-      "ownedPaths": ["internal/export/**"],
+      "filesToModify": ["internal/export/**"],
+      "companionSkills": [],
       "verificationProfile": {
         "cases": [{"id": "export-test", "command": ["go", "test", "./internal/export"]}]
       }

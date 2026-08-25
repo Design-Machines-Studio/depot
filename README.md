@@ -238,11 +238,11 @@ Neutral deterministic workflow and inspection mechanics. 1 internal skill.
 
 Unified external-model provider for quality-first agentic work and lower-cost mechanical review. 1 skill, 2 agents, 1 command.
 
-- **openrouter-delegate** -- Threat-classified delegation to permitted open
-  models for non-secret work, including security-related content when output
-  and execution controls remain active
-- **openrouter-bulk-analyst** (agent) -- Reviews eligible full diffs with quality-first Kimi K3 and a GPT-5.6 Terra fallback through the generic OpenRouter runner
-- **openrouter-agent-runner** (agent) -- Runs dm-review mechanical agents through OpenRouter model slugs
+- **openrouter-delegate** -- Receipted delegation to permitted open models with
+  the same input eligibility as native Claude/Codex candidates, while output
+  validation and bounded execution controls remain active
+- **openrouter-bulk-analyst** (agent) -- Supplies large-context review criteria to a provider-neutral review role; model-router owns concrete candidate order and fallback
+- **openrouter-agent-runner** (agent) -- Compatibility runner for explicitly provider-routed mechanical review criteria
 - `/openrouter` -- Delegate a task to any configured OpenRouter model
 
 OpenAI model slugs may run through OpenRouter; bare native OpenAI identities run

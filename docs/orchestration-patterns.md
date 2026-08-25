@@ -256,9 +256,11 @@ A task benefits from provider diversity, large context, or better quality-per-do
 ### How it works
 
 1. A lightweight runner is dispatched as part of a normal Multi-Agent Dispatch.
-2. It constructs a self-contained prompt in private files and runs the OpenRouter-owned content boundary over those files once.
-3. If the scan accepts the payload, model-router's OpenRouter adapter invokes
-   `openrouter-wrapper.sh` with those same files and a bounded timeout.
+2. It constructs a self-contained prompt in private files. Input eligibility is
+   provider-neutral: anything an eligible native Claude/Codex candidate may
+   receive may also be sent to OpenRouter without a provider-only content gate.
+3. Model-router's OpenRouter adapter invokes `openrouter-wrapper.sh` with those
+   files and a bounded timeout.
 4. The wrapper requires response model provenance, extracts `.choices[0].message.content`, and writes a content-free receipt; the runner validates and formats the text.
 5. On timeout, refusal, empty output, or API failure, the adapter returns a
    closed failure and model-router follows the requested role's fallback.
@@ -273,11 +275,12 @@ The external model is stateless -- each invocation is a fresh session with no me
 
 - **openrouter-bulk-analyst** -- supplies bounded large-context review criteria;
   its filename is a provider asset, not an orchestration identity.
-- **openrouter-agent-runner** -- remains the provider-owned exact-payload and
-  response-receipt boundary.
+- **openrouter-agent-runner** -- is the direct compatibility runner for
+  provider-specific mechanical agents; provider-neutral review goes through
+  model-router instead.
 - **model-router** -- owns cross-transport role ordering and invokes the
-  provider adapter only after capability, availability, billing, and family
-  checks pass.
+  OpenRouter response-receipt path only after
+  capability, availability, billing, and family checks pass.
 
 ### Failure modes
 
@@ -286,7 +289,7 @@ The external model is stateless -- each invocation is a fresh session with no me
 | API or wrapper timeout | Report a structured timeout and invoke the lane fallback |
 | Candidate HTTP 429/503 | Return a closed failure; model-router advances the role ladder |
 | Empty output or refusal | Report `RUNNER FAILURE`; never issue a clean review receipt |
-| Key, wrapper, runner, or content boundary unavailable | Mark the attempt unavailable and let model-router resolve the next eligible candidate |
+| Key, wrapper, or runner unavailable | Mark the attempt unavailable and let model-router resolve the next eligible candidate |
 
 ---
 

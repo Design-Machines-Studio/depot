@@ -54,10 +54,10 @@ score_case() {
     case "$CASE_ID" in
       pipeline-legacy-translation)
         jq -e '.chunks | type == "array" and length == 1' "$OUTPUT_FILE" >/dev/null && score=$((score+20))
-        jq -e '.chunks[0] | .id == "docs-1" and .executorRole == "builder-fast" and .executorEffort == "low"' "$OUTPUT_FILE" >/dev/null && score=$((score+25))
+        jq -e '.chunks[0] | .id == "docs-1" and .executorRole == "builder-fast" and .executorEffort == "medium"' "$OUTPUT_FILE" >/dev/null && score=$((score+25))
         jq -e '.chunks[0].executorCapabilities == ["read-repository","write-repository","structured-output"]' "$OUTPUT_FILE" >/dev/null && score=$((score+25))
         jq -e '.chunks[0] | has("executor") | not' "$OUTPUT_FILE" >/dev/null && score=$((score+15))
-        jq -e '.chunks[0].legacyExecutorTranslation | .occurred == true and .source == "openrouter"' "$OUTPUT_FILE" >/dev/null && score=$((score+15))
+        jq -e '.chunks[0].legacyExecutorTranslation | .occurred == true and .sourceField == "executor"' "$OUTPUT_FILE" >/dev/null && score=$((score+15))
         ;;
       review-zero-deferral)
         for pair in AUTH-1:P1 ROUTE-2:P2 DOC-3:P3; do
@@ -86,7 +86,8 @@ score_case() {
       {schemaVersion:1,suiteId:$suite,caseId:$caseId,parsed:$parsed,qualityScore:$score,
        durationSeconds:$duration,requestedModel:($receipt[0].requestedModel // null),
        servedModel:($receipt[0].responseModel // null),provider:($receipt[0].servingProvider // null),
-       usage:($receipt[0].usage // null),fallbackUsed:($receipt[0].fallbackUsed // null)}' > "$RESULT_FILE"
+       usage:($receipt[0].usage // null),
+       fallbackUsed:(if $receipt[0] | has("fallbackUsed") then $receipt[0].fallbackUsed else null end)}' > "$RESULT_FILE"
 }
 
 case "$COMMAND" in

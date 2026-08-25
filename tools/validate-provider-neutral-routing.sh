@@ -48,6 +48,9 @@ jq -e '.models[] | select(.slug == "google/gemini-3.7-flash")
 grep -Fq 'OPENROUTER_WEB_SEARCH="$web_search"' \
   "$ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh" ||
   fail 'browser capability is not wired to the provider adapter'
+grep -Fq 'test fixture hooks require MODEL_ROUTER_TEST_MODE=1' \
+  "$ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh" ||
+  fail 'production role dispatch does not reject unguarded fixture hooks'
 
 # Pipeline policy may express only role intent and legacy translation.
 jq -e '
@@ -117,11 +120,25 @@ while IFS= read -r card; do
 done < <(find "$ROOT/plugins/pipeline/agents" "$ROOT/plugins/dm-review/agents" "$ROOT/plugins/assembly/agents" -type f -name '*.md' | sort)
 
 # New Pipeline manifests accept roles and reject model/provider keys.
-jq -n '{chunks:[{executorRole:"builder-fast",executorCapabilities:["read-repository","write-repository","structured-output"],executorEffort:"medium"}]}' > "$TMP/valid.json"
+jq -n '{feature:"fixture",workflowClass:"feature",decisionProfile:{uncertainty:"medium",consequence:"medium",rationale:"Bounded fixture."},renderedSurface:"not_applicable",baseBranch:"main",featureBranch:"feat/fixture",branchMode:"create",expectedFeatureHead:null,finalReviewMode:"full",finalReviewRationale:"Full review for fixture.",chunks:[{id:"a",level:0,title:"Fixture",prompt:"prompts/a.md",kind:"docs",renderedSurface:"not_applicable",renderedSurfaceRationale:"Unserved documentation.",executorRole:"builder-fast",executorCapabilities:["read-repository","write-repository","structured-output"],executorEffort:"medium",filesToModify:["docs/a.md"],dependsOn:[],companionSkills:[],estimatedComplexity:"low"}]}' > "$TMP/valid.json"
 "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/valid.json" || fail 'valid role manifest rejected'
 jq '.chunks[0].provider="example"' "$TMP/valid.json" > "$TMP/invalid.json"
 if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'provider-bearing manifest accepted'; fi
-jq -n '{chunks:[{id:"a",executor:"openrouter"},{id:"b",executor:"codex"},{id:"c",executor:"claude"}]}' > "$TMP/legacy.json"
+for field in feature workflowClass decisionProfile renderedSurface baseBranch featureBranch branchMode expectedFeatureHead finalReviewMode finalReviewRationale; do
+  jq --arg field "$field" 'del(.[$field])' "$TMP/valid.json" > "$TMP/invalid.json"
+  if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail "manifest missing $field accepted"; fi
+done
+for field in id level title prompt kind renderedSurface renderedSurfaceRationale executorRole executorCapabilities executorEffort filesToModify dependsOn companionSkills estimatedComplexity; do
+  jq --arg field "$field" 'del(.chunks[0][$field])' "$TMP/valid.json" > "$TMP/invalid.json"
+  if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail "chunk missing $field accepted"; fi
+done
+jq '.chunks[0].executorCapabilities += ["read-repository"]' "$TMP/valid.json" > "$TMP/invalid.json"
+if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'duplicate capabilities accepted'; fi
+jq '.chunks[0].renderedSurface="not-applicable"' "$TMP/valid.json" > "$TMP/invalid.json"
+if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'open rendered-surface enum accepted'; fi
+jq '.chunks[0].routingOverride={executorEffort:"high"}' "$TMP/valid.json" > "$TMP/invalid.json"
+if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'routing override without reason accepted'; fi
+jq '.chunks = [(.chunks[0] + {executor:"openrouter"} | del(.executorRole,.executorCapabilities,.executorEffort)), (.chunks[0] + {id:"b",executor:"codex"} | del(.executorRole,.executorCapabilities,.executorEffort)), (.chunks[0] + {id:"c",executor:"claude"} | del(.executorRole,.executorCapabilities,.executorEffort))]' "$TMP/valid.json" > "$TMP/legacy.json"
 "$ROOT/plugins/pipeline/references/translate-legacy-executor.sh" "$TMP/legacy.json" > "$TMP/translated.json"
 jq -e '.chunks[0].executorRole=="builder-fast" and .chunks[1].executorRole=="builder-deep" and .chunks[2].executorRole=="builder-deep" and all(.chunks[];.legacyExecutorTranslation.occurred==true and has("executor")|not)' "$TMP/translated.json" >/dev/null || fail 'legacy executor translation failed'
 "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/translated.json" || fail 'translated legacy manifest does not satisfy role contract'
@@ -139,6 +156,30 @@ grep -q 'If an explicit comparison cannot obtain Plan B' "$OPINIONS" || fail 'ex
 for query in 'Compare these Assembly plans' 'Get an independent planning opinion' 'Have an architect challenge this Assembly delivery sequence' 'Assign execution roles to this Pipeline prompt' 'Compare two approaches before choosing the next Assembly chunk'; do
   jq -e --arg query "$query" 'any(.[]; (.query | startswith($query)) and .should_trigger == true)' "$ROOT/description-evals/project-manager-assembly-coordinator.json" >/dev/null || fail "coordinator eval missing: $query"
 done
+
+# The legacy cascade adapter preserves inline/stdin prompts, stdout output,
+# historical option parsing, and a provider-neutral dry-run surface.
+CASCADE="$ROOT/plugins/pipeline/references/cascade-dispatch.sh"
+jq -n '{codex:{state:"ok",authMode:"subscription",windows:{five_hour:{remaining_pct:80},weekly:{remaining_pct:80}}},claude:{state:"unavailable"},openrouter:{state:"ok"}}' > "$TMP/cascade-availability.json"
+printf '%s\n' '#!/usr/bin/env bash' 'while [ "$#" -gt 0 ]; do case "$1" in --output-file) output="$2"; shift 2 ;; *) shift 2 ;; esac; done' 'cat >/dev/null' '[ -z "${CASCADE_CONTACT_FILE:-}" ] || printf "contact\\n" >> "$CASCADE_CONTACT_FILE"' 'printf "compat-ok\\n" > "$output"' > "$TMP/cascade-transport"
+chmod +x "$TMP/cascade-transport"
+MODEL_ROUTER_TEST_MODE=1 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/cascade-availability.json" \
+  MODEL_ROUTER_TRANSPORT_STUB="$TMP/cascade-transport" \
+  "$CASCADE" --class openrouter --prompt 'inline prompt' --host codex --phase execute --timeout 5 > "$TMP/cascade-inline"
+grep -Fxq 'compat-ok' "$TMP/cascade-inline" || fail 'legacy inline prompt/stdout contract failed'
+printf 'stdin prompt' | MODEL_ROUTER_TEST_MODE=1 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/cascade-availability.json" \
+  MODEL_ROUTER_TRANSPORT_STUB="$TMP/cascade-transport" \
+  "$CASCADE" --kind logic --prompt - --probe-file "$TMP/cascade-availability.json" --exhausted-rail openrouter > "$TMP/cascade-stdin"
+grep -Fxq 'compat-ok' "$TMP/cascade-stdin" || fail 'legacy stdin prompt contract failed'
+"$CASCADE" --kind docs --prompt x --host codex --dry-run > "$TMP/cascade-dry-run"
+jq -e '.compatibilityAdapter == true and .role == "builder-fast" and .disposition == "dry-run"' "$TMP/cascade-dry-run" >/dev/null || fail 'legacy dry-run compatibility failed'
+touch "$TMP/cascade-contacts"
+if CASCADE_CONTACT_FILE="$TMP/cascade-contacts" MODEL_ROUTER_TEST_MODE=1 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/cascade-availability.json" \
+  MODEL_ROUTER_TRANSPORT_STUB="$TMP/cascade-transport" \
+  "$CASCADE" --class openrouter --prompt x --attempt-receipt-template invalid >/dev/null 2>&1; then
+  fail 'invalid legacy receipt template accepted'
+fi
+[ ! -s "$TMP/cascade-contacts" ] || fail 'invalid legacy receipt template contacted a transport'
 
 # Routing never weakens zero-deferral.
 grep -q 'Every retained P1, P2, and P3 finding is mandatory work' "$ROOT/plugins/dm-review/skills/review/SKILL.md" || fail 'dm-review zero-deferral missing'

@@ -1,12 +1,19 @@
-# Migration: OpenRouter Leaf Plugin + Usage-Aware Executor Cascade
+# Historical Migration: OpenRouter Leaf Plugin + Executor Cascade
 
-This note covers the `world-b-openrouter` changes: a shared `openrouter` provider plugin, a usage-aware model cascade wired into the pipeline executor handoff, and the removal of the Gemini and standalone DeepSeek plugins. Claude Code remains a compatible host, but Claude is outside the implementation graph.
+This note records the retired `world-b-openrouter` cascade. Current execution
+uses provider-neutral role requests through model-router;
+`cascade-dispatch.sh` remains only as a legacy CLI adapter. Claude Code remains
+a compatible host, but Claude is outside the implementation graph.
+
+The adapter preserves inline/stdin prompts and stdout output. It is read-only
+unless a caller supplies an authoritative `--contract-digest` and
+`--contract-revision`; it never fabricates behavioral-contract provenance.
 
 **Configured-key mode:** a coherent installed bundle plus either supported key
-input makes eligible direct, dm-review, and bounded Pipeline lanes available
-after automatic exact-byte screening. Missing/invalid credentials, provider
-unavailability, or a declined payload descends to native Codex without a
-prompt. The configured-key path has no broker dependency.
+input makes direct, dm-review, and bounded Pipeline lanes available with the
+same input eligibility as native Claude/Codex candidates. Missing/invalid
+credentials or provider unavailability descends to native Codex without a
+prompt; payload content does not. The configured-key path has no broker dependency.
 
 ## What changed
 
@@ -22,7 +29,6 @@ prompt. The configured-key path has no broker dependency.
 |----------|-------|--------|
 | `OPENROUTER_API_KEY` | env / settings (never committed) | Enables eligible configured-key direct, dm-review, and bounded Pipeline dispatch. |
 | `OPENROUTER_API_KEY_FILE` | env / settings (never committed) | Same authorization after the wrapper's ownership/mode/symlink validation. |
-| `PIPELINE_CASCADE=1` | env | Manual override that activates the cascade even without an API key (for testing the native-reroute and Airlift-on-cap paths). |
 | `OPENROUTER_ZDR=1` | env (wrapper) | Opt-in privacy pin: restrict to providers that do not train on / retain data (`data_collection: deny`). Demoted by default (Quality > Price > Speed > Provider privacy); set only for genuinely sensitive material. |
 | `OPENROUTER_SYSTEM` | env (wrapper) | System prompt. |
 | `OPENROUTER_BASE` | env (wrapper) | API base URL (default `https://openrouter.ai/api/v1`). |
@@ -33,22 +39,20 @@ prompt. The configured-key path has no broker dependency.
 
 The generic host exposes no native OpenAI or Anthropic substitution. It may use explicitly configured OpenAI or third-party OpenRouter roles, while Anthropic intent remains unavailable rather than translated.
 
-## Classes, kinds, and the ladder
+## Historical classes and kinds
 
-The cascade keys off the merged chunk vocabulary. `model-cascade.json` maps `kind -> class`:
+The retired cascade mapped chunk kinds to classes as follows. Current manifests
+carry `executorRole`, `executorCapabilities`, and `executorEffort`; concrete
+candidates live only in model-router's private policy.
 
 | kind | class | primary | on cap, descends to |
 |------|-------|---------|---------------------|
 | `logic`, `integration`, `ui` | `codex` | Codex subscription | eligible OpenRouter roles only after native capacity descent |
 | `config`, `docs`, mechanical logic | `openrouter` | DeepSeek V4 Flash 0731 OpenRouter exec | Grok 4.6 -> Codex subscription -> wrapper ladder |
 
-**Native Codex subscription capacity remains the first coding rail for logic,
-integration, and served UI. DeepSeek V4 Flash 0731 is the bounded Pipeline
-OpenRouter execution head, followed by Grok 4.6. Kimi K3 is reserved for
-focused applicable security analysis; Qwen3.8 Max leads bulk and ordinary
-independent review, while Luna is an economical routine-review fallback.** The
-coding quality floor is 70. `harness-profile.json` is the only host-specific
-file (it resolves abstract roles to concrete rails per host).
+These model assignments are historical context, not current routing
+instructions. Consult model-router's policy and content-free private receipts
+for current candidate order and the served attempt.
 
 ## One-shot vs agentic (important)
 
@@ -72,27 +76,22 @@ export OPENROUTER_API_KEY="sk-or-..."   # required for live configured-key calls
 ## dm-review big-diff selection (>5000 lines)
 
 ```
-configured key + eligible payload -> openrouter-bulk-analyst (Qwen3.8 Max primary, DeepSeek V4 Pro 0813 fallback)
-missing/invalid key or decline     -> native Codex
+configured key                     -> openrouter-bulk-analyst (Qwen3.8 Max primary, DeepSeek V4 Pro 0813 fallback)
+missing/invalid key                -> native Codex
 ```
 
-Either supported key input authorizes eligible live review after the automatic
-disclosure boundary. The active topology sends mechanical review criteria through
-`openrouter-agent-runner`; policy selects each lane's primary and fallback.
-Security retains separate `security-auditor-openrouter` eligible-content
-analysis and mandatory `security-auditor-codex-signoff` full-diff completion;
-the stable lane ID resolves to a family different from the implementer.
+Either supported key input authorizes live review under the same input rules as
+native candidates; OpenRouter adds no content, secret-value, or disclosure
+eligibility gate. The active topology sends provider-neutral role requests
+through model-router. The stable security lane requires an independent family
+and complete repository evidence; a supplementary bulk lane cannot replace it.
 
-## Dry-run / verify (no API key needed)
+## Verify the current router (no API key needed)
 
 ```bash
-D=plugins/pipeline/references/cascade-dispatch.sh
-# default selection per kind
-bash $D --dry-run --kind logic  --prompt x --host claude-code   # -> premium_sub codex
-bash $D --dry-run --kind ui     --prompt x --host claude-code   # -> premium_sub codex
-# mocked cap states drive the descent
-echo '{"codex":{"state":"limited"},"openrouter":{"state":"ok"}}' > /tmp/p.json
-bash $D --dry-run --kind logic --prompt x --host claude-code --probe-file /tmp/p.json  # -> openrouter_exec deepseek/deepseek-v4-flash-0731
+./tools/test-model-router.sh
+./tools/validate-provider-neutral-routing.sh
 ```
 
-The wrapper exits 1 cleanly with no key; `usage-probe.sh` always emits valid JSON (openrouter `state: unknown` without creds).
+`availability-probe.sh` emits the current subscription and configured-key
+availability shape. Missing credentials remain `unknown` and fail closed.

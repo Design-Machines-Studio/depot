@@ -15,23 +15,36 @@ EFFORT=""
 PROMPT_FILE=""
 OUTPUT_FILE=""
 RECEIPT_FILE=""
+REPOSITORY_EVIDENCE_FILE=""
+INDEPENDENCE_RECEIPT_DIR=""
+HUMAN_AUTHORED=0
+CONTRACT_DIGEST=""
+CONTRACT_REVISION=""
+CONTRACT_REVISION_JSON=null
 CAPABILITIES=()
 INDEPENDENCE_RECEIPT_IDS=()
+CAPABILITY_COUNT=0
+INDEPENDENCE_RECEIPT_COUNT=0
 
 usage() {
-  printf '%s\n' 'usage: role-dispatch --role ROLE --capability CAP [--capability CAP ...] --effort EFFORT --prompt-file PATH --output-file PATH --receipt-file PATH [--independence-receipt-id ID ...]' >&2
+  printf '%s\n' 'usage: role-dispatch --role ROLE --capability CAP [--capability CAP ...] --effort EFFORT --prompt-file PATH --output-file PATH --receipt-file PATH [--repository-evidence-file PATH] [--independence-receipt-dir DIR --independence-receipt-id ID ... | --human-authored] [--contract-digest SHA256 --contract-revision N]' >&2
   exit 2
 }
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
     --role) [ "$#" -ge 2 ] || usage; ROLE="$2"; shift 2 ;;
-    --capability) [ "$#" -ge 2 ] || usage; CAPABILITIES+=("$2"); shift 2 ;;
+    --capability) [ "$#" -ge 2 ] || usage; CAPABILITIES+=("$2"); CAPABILITY_COUNT=$((CAPABILITY_COUNT + 1)); shift 2 ;;
     --effort) [ "$#" -ge 2 ] || usage; EFFORT="$2"; shift 2 ;;
     --prompt-file) [ "$#" -ge 2 ] || usage; PROMPT_FILE="$2"; shift 2 ;;
     --output-file) [ "$#" -ge 2 ] || usage; OUTPUT_FILE="$2"; shift 2 ;;
     --receipt-file) [ "$#" -ge 2 ] || usage; RECEIPT_FILE="$2"; shift 2 ;;
-    --independence-receipt-id) [ "$#" -ge 2 ] || usage; INDEPENDENCE_RECEIPT_IDS+=("$2"); shift 2 ;;
+    --repository-evidence-file) [ "$#" -ge 2 ] || usage; REPOSITORY_EVIDENCE_FILE="$2"; shift 2 ;;
+    --independence-receipt-dir) [ "$#" -ge 2 ] || usage; INDEPENDENCE_RECEIPT_DIR="$2"; shift 2 ;;
+    --independence-receipt-id) [ "$#" -ge 2 ] || usage; INDEPENDENCE_RECEIPT_IDS+=("$2"); INDEPENDENCE_RECEIPT_COUNT=$((INDEPENDENCE_RECEIPT_COUNT + 1)); shift 2 ;;
+    --human-authored) HUMAN_AUTHORED=1; shift ;;
+    --contract-digest) [ "$#" -ge 2 ] || usage; CONTRACT_DIGEST="$2"; shift 2 ;;
+    --contract-revision) [ "$#" -ge 2 ] || usage; CONTRACT_REVISION="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -41,12 +54,24 @@ command -v jq >/dev/null 2>&1 || { printf '%s\n' 'role-dispatch: unavailable (mi
   printf '%s\n' 'role-dispatch: unavailable (invalid role policy)' >&2
   exit 76
 }
+MODEL_ROUTER_TEST_MODE="${MODEL_ROUTER_TEST_MODE:-0}"
+case "$MODEL_ROUTER_TEST_MODE" in 0|1) ;; *) usage ;; esac
+if [ "$MODEL_ROUTER_TEST_MODE" != 1 ] &&
+   [ -n "${MODEL_ROUTER_AVAILABILITY_FILE:-}${MODEL_ROUTER_TRANSPORT_STUB:-}${MODEL_ROUTER_INVOKE_FIXTURE_TRANSPORTS:-}" ]; then
+  printf '%s\n' 'role-dispatch: test fixture hooks require MODEL_ROUTER_TEST_MODE=1' >&2
+  exit 2
+fi
 case "$ROLE" in
   architect|plan-critic|builder-fast|builder-deep|review-fast|review-deep|security-review|research-fast|editorial) ;;
   *) usage ;;
 esac
 case "$EFFORT" in low|medium|high|max) ;; *) usage ;; esac
 [ -f "$PROMPT_FILE" ] && [ -r "$PROMPT_FILE" ] && [ ! -L "$PROMPT_FILE" ] || usage
+[ -z "$REPOSITORY_EVIDENCE_FILE" ] || {
+  [ -f "$REPOSITORY_EVIDENCE_FILE" ] && [ -r "$REPOSITORY_EVIDENCE_FILE" ] && [ ! -L "$REPOSITORY_EVIDENCE_FILE" ] || usage
+  [ "$REPOSITORY_EVIDENCE_FILE" != "$PROMPT_FILE" ] || usage
+  [ ! "$REPOSITORY_EVIDENCE_FILE" -ef "$PROMPT_FILE" ] || usage
+}
 [ -n "$OUTPUT_FILE" ] && [ -n "$RECEIPT_FILE" ] || usage
 [ "$OUTPUT_FILE" != "$RECEIPT_FILE" ] || usage
 [ -d "$(dirname "$OUTPUT_FILE")" ] && [ -d "$(dirname "$RECEIPT_FILE")" ] || usage
@@ -55,15 +80,31 @@ case "$EFFORT" in low|medium|high|max) ;; *) usage ;; esac
 
 VALID_CAPABILITIES='["read-repository","write-repository","tool-use","browser","long-context","structured-output","independent-family"]'
 CAPABILITIES_JSON='[]'
-for capability in "${CAPABILITIES[@]}"; do
-  printf '%s' "$VALID_CAPABILITIES" | jq -e --arg capability "$capability" 'index($capability) != null' >/dev/null || usage
-  CAPABILITIES_JSON="$(printf '%s' "$CAPABILITIES_JSON" | jq -c --arg capability "$capability" '. + [$capability] | unique | sort')"
-done
+if [ "$CAPABILITY_COUNT" -gt 0 ]; then
+  for capability in "${CAPABILITIES[@]}"; do
+    printf '%s' "$VALID_CAPABILITIES" | jq -e --arg capability "$capability" 'index($capability) != null' >/dev/null || usage
+    CAPABILITIES_JSON="$(printf '%s' "$CAPABILITIES_JSON" | jq -c --arg capability "$capability" '. + [$capability] | unique | sort')"
+  done
+fi
 if printf '%s' "$CAPABILITIES_JSON" | jq -e 'index("independent-family") != null' >/dev/null &&
-   [ "${#INDEPENDENCE_RECEIPT_IDS[@]}" -eq 0 ]; then
+   [ "$INDEPENDENCE_RECEIPT_COUNT" -eq 0 ] && [ "$HUMAN_AUTHORED" -ne 1 ]; then
   printf '%s\n' 'role-dispatch: invalid independent-family request' >&2
   exit 2
 fi
+[ "$HUMAN_AUTHORED" -eq 0 ] || [ "$INDEPENDENCE_RECEIPT_COUNT" -eq 0 ] || usage
+if ! printf '%s' "$CAPABILITIES_JSON" | jq -e 'index("independent-family") != null' >/dev/null; then
+  [ "$HUMAN_AUTHORED" -eq 0 ] && [ "$INDEPENDENCE_RECEIPT_COUNT" -eq 0 ] && [ -z "$INDEPENDENCE_RECEIPT_DIR" ] || usage
+fi
+if [ "$INDEPENDENCE_RECEIPT_COUNT" -gt 0 ]; then
+  [ -n "$INDEPENDENCE_RECEIPT_DIR" ] && [ -d "$INDEPENDENCE_RECEIPT_DIR" ] && [ ! -L "$INDEPENDENCE_RECEIPT_DIR" ] || usage
+fi
+WRITE_REQUEST=0
+if printf '%s' "$CAPABILITIES_JSON" | jq -e 'index("write-repository") != null' >/dev/null; then
+  WRITE_REQUEST=1
+  [[ "$CONTRACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]] || usage
+  [[ "$CONTRACT_REVISION" =~ ^[1-9][0-9]*$ ]] || usage
+fi
+[ -z "$CONTRACT_REVISION" ] || CONTRACT_REVISION_JSON="$CONTRACT_REVISION"
 
 case "$ROLE" in
   architect|plan-critic) PARTICIPANT_PREFIX="planner" ;;
@@ -92,21 +133,28 @@ THRESHOLD="$(jq -r '.availability.headroomThresholdPct' "$POLICY")"
 EXCLUDED_FAMILIES='[]'
 INDEPENDENCE_IDS_JSON='[]'
 
-for prior_id in "${INDEPENDENCE_RECEIPT_IDS[@]}"; do
-  case "$prior_id" in *[!a-z0-9-]*|'') usage ;; esac
-  match=""
-  for candidate_receipt in "$(dirname "$RECEIPT_FILE")"/*; do
-    [ -f "$candidate_receipt" ] && [ ! -L "$candidate_receipt" ] || continue
-    if jq -e --arg receipt_id "$prior_id" '.receiptId == $receipt_id and (.served.family | type == "string")' "$candidate_receipt" >/dev/null 2>&1; then
-      match="$candidate_receipt"
-      break
-    fi
+if [ "$INDEPENDENCE_RECEIPT_COUNT" -gt 0 ]; then
+  for prior_id in "${INDEPENDENCE_RECEIPT_IDS[@]}"; do
+    case "$prior_id" in *[!a-z0-9-]*|'') usage ;; esac
+    match=""
+    for candidate_receipt in "$INDEPENDENCE_RECEIPT_DIR"/*; do
+      [ -f "$candidate_receipt" ] && [ ! -L "$candidate_receipt" ] || continue
+      if jq -e --arg receipt_id "$prior_id" '
+        .receiptId == $receipt_id and
+        .probeSource == "live" and
+        .transportStub == false and
+        (.served.family | type == "string")
+      ' "$candidate_receipt" >/dev/null 2>&1; then
+        match="$candidate_receipt"
+        break
+      fi
+    done
+    [ -n "$match" ] || { printf '%s\n' 'role-dispatch: invalid independence evidence' >&2; exit 2; }
+    family="$(jq -r '.served.family' "$match")"
+    EXCLUDED_FAMILIES="$(printf '%s' "$EXCLUDED_FAMILIES" | jq -c --arg family "$family" '. + [$family] | unique | sort')"
+    INDEPENDENCE_IDS_JSON="$(printf '%s' "$INDEPENDENCE_IDS_JSON" | jq -c --arg receipt_id "$prior_id" '. + [$receipt_id] | unique | sort')"
   done
-  [ -n "$match" ] || { printf '%s\n' 'role-dispatch: invalid independence evidence' >&2; exit 2; }
-  family="$(jq -r '.served.family' "$match")"
-  EXCLUDED_FAMILIES="$(printf '%s' "$EXCLUDED_FAMILIES" | jq -c --arg family "$family" '. + [$family] | unique | sort')"
-  INDEPENDENCE_IDS_JSON="$(printf '%s' "$INDEPENDENCE_IDS_JSON" | jq -c --arg receipt_id "$prior_id" '. + [$receipt_id] | unique | sort')"
-done
+fi
 
 local_profile_path() {
   local common root candidate parent physical_root physical_parent
@@ -137,6 +185,9 @@ if [ -n "${MODEL_ROUTER_AVAILABILITY_FILE:-}" ]; then
 else
   AVAILABILITY="$("$DIR/availability-probe.sh" | jq -c '. + {probeSource:"live"}')" || AVAILABILITY='{"probeSource":"live"}'
 fi
+PROBE_SOURCE="$(printf '%s' "$AVAILABILITY" | jq -r '.probeSource')"
+TRANSPORT_STUB=false
+[ -z "${MODEL_ROUTER_TRANSPORT_STUB:-}" ] || TRANSPORT_STUB=true
 
 ATTEMPTS='[]'
 LAST_REASON="none"
@@ -146,14 +197,33 @@ EXHAUSTED_MODELS='[]'
 PRIVATE_LOG="$(mktemp "${TMPDIR:-/tmp}/model-router.log.XXXXXX")" || exit 76
 TRANSPORT_OUTPUT="$(mktemp "${TMPDIR:-/tmp}/model-router.output.XXXXXX")" || { rm -f "$PRIVATE_LOG"; exit 76; }
 PROVIDER_RECEIPT="$(mktemp "${TMPDIR:-/tmp}/model-router.provider.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT"; exit 76; }
-cleanup() { rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT"; }
+EMERGENCY_RECEIPT="$(mktemp "${TMPDIR:-/tmp}/model-router.mutation-receipt.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT"; exit 76; }
+PUBLIC_OUTPUT_TMP="$(mktemp "$(dirname "$OUTPUT_FILE")/.model-router-output.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT"; exit 76; }
+PUBLIC_RECEIPT_TMP="$(mktemp "$(dirname "$RECEIPT_FILE")/.model-router-receipt.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT" "$PUBLIC_OUTPUT_TMP"; exit 76; }
+PRESERVE_EMERGENCY_RECEIPT=0
+cleanup() {
+  rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$PUBLIC_OUTPUT_TMP" "$PUBLIC_RECEIPT_TMP"
+  [ "$PRESERVE_EMERGENCY_RECEIPT" -eq 1 ] || rm -f "$EMERGENCY_RECEIPT"
+}
 trap cleanup EXIT
+
+publication_failed() {
+  local reason="$1"
+  PRESERVE_EMERGENCY_RECEIPT=1
+  jq -n --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" \
+    --arg reason "$reason" --arg receipt "$EMERGENCY_RECEIPT" \
+    --argjson commit "${commit_json:-null}" \
+    '{role:$role,participantId:$participant,disposition:"completed-publication-failed",fallback:false,fallbackReason:$reason,commit:$commit,privateReceipt:$receipt,output:null}'
+  exit 76
+}
 
 candidate_has_capabilities() {
   local candidate="$1"
-  jq -en --argjson requested "$CAPABILITIES_JSON" --argjson candidate "$candidate" '
+  jq -en --arg evidence "$REPOSITORY_EVIDENCE_FILE" --argjson requested "$CAPABILITIES_JSON" --argjson candidate "$candidate" '
     ($requested - ["independent-family"]) as $needed
-    | all($needed[]; . as $cap | $candidate.capabilities | index($cap) != null)'
+    | all($needed[]; . as $cap | $candidate.capabilities | index($cap) != null)
+    and (($requested | index("read-repository") | not)
+      or $candidate.transport == "codex-cli" or $evidence != "")'
 }
 
 transport_eligibility() {
@@ -182,7 +252,7 @@ transport_eligibility() {
       [ "$state" != unavailable ] && [ "$auth_mode" = subscription ] || return 1
       if [ "$model" = fable ] && [ "$fable_state" = exhausted ]; then return 1; fi
       case "$plan" in
-        max|team-premium|enterprise-premium|included)
+        max|pro|team-premium|enterprise-premium|included|unknown)
           if [ "$sdk_observed" = true ] &&
              [ "$(printf '%s' "$AVAILABILITY" | jq -r '.claude.allowances.agent_sdk.state // "unknown"')" = ok ]; then
             five="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.allowances.agent_sdk.windows.five_hour.remaining_pct // 0')"
@@ -240,7 +310,7 @@ invoke_candidate() {
   : > "$TRANSPORT_OUTPUT"
   : > "$PROVIDER_RECEIPT"
   if [ -n "${MODEL_ROUTER_TRANSPORT_STUB:-}" ]; then
-    argv=("$MODEL_ROUTER_TRANSPORT_STUB" --transport "$transport" --model "$model" --effort "$effective" --prompt-file "$PROMPT_FILE" --output-file "$TRANSPORT_OUTPUT")
+    argv=("$MODEL_ROUTER_TRANSPORT_STUB" --transport "$transport" --model "$model" --effort "$effective" --prompt-file "$PROMPT_FILE" --output-file "$TRANSPORT_OUTPUT" --provider-receipt-file "$PROVIDER_RECEIPT")
     "${argv[@]}" 2>>"$PRIVATE_LOG"
     return $?
   fi
@@ -249,14 +319,34 @@ invoke_candidate() {
       [ -n "$ROUTER_CODEX_CLI" ] && [ -x "$ROUTER_CODEX_CLI" ] || return 77
       sandbox=read-only
       printf '%s' "$CAPABILITIES_JSON" | jq -e 'index("write-repository") != null' >/dev/null && sandbox=workspace-write
+      prompt_copy="$(mktemp "${TMPDIR:-/tmp}/model-router.prompt.XXXXXX")" || return 1
+      cp "$PROMPT_FILE" "$prompt_copy" || { rm -f "$prompt_copy"; return 1; }
+      if [ "$WRITE_REQUEST" -eq 1 ]; then
+        printf '\n\n--- bound behavioral contract ---\ncontract_digest: %s\ncontract_revision: %s\n' \
+          "$CONTRACT_DIGEST" "$CONTRACT_REVISION" >> "$prompt_copy"
+      fi
       argv=("$ROUTER_CODEX_CLI" exec --model "$model" --config "model_reasoning_effort=\"$effective\"" --sandbox "$sandbox" --ephemeral --output-last-message "$TRANSPORT_OUTPUT")
       git_root="$(git rev-parse --show-toplevel 2>/dev/null)" && argv+=(--cd "$git_root")
-      "${argv[@]}" < "$PROMPT_FILE" >>"$PRIVATE_LOG" 2>&1
+      invoke_native_sanitized "${argv[@]}" < "$prompt_copy" >>"$PRIVATE_LOG" 2>&1
+      rc=$?
+      rm -f "$prompt_copy"
+      return "$rc"
       ;;
     claude-cli)
       [ -n "$ROUTER_CLAUDE_CLI" ] && [ -x "$ROUTER_CLAUDE_CLI" ] || return 77
+      prompt_copy="$(mktemp "${TMPDIR:-/tmp}/model-router.prompt.XXXXXX")" || return 1
+      cp "$PROMPT_FILE" "$prompt_copy" || { rm -f "$prompt_copy"; return 1; }
+      if [ -n "$REPOSITORY_EVIDENCE_FILE" ] && [ "$REPOSITORY_EVIDENCE_FILE" != "$PROMPT_FILE" ]; then
+        printf '\n\n--- complete repository evidence ---\n' >> "$prompt_copy"
+        cat "$REPOSITORY_EVIDENCE_FILE" >> "$prompt_copy"
+      fi
+      if [ "$WRITE_REQUEST" -eq 1 ]; then
+        printf '\n\n--- bound behavioral contract ---\ncontract_digest: %s\ncontract_revision: %s\n' \
+          "$CONTRACT_DIGEST" "$CONTRACT_REVISION" >> "$prompt_copy"
+      fi
       argv=("$ROUTER_CLAUDE_CLI" -p --model "$model" --effort "$effective" --tools "" --no-session-persistence --output-format json)
-      result_json="$("${argv[@]}" < "$PROMPT_FILE" 2>>"$PRIVATE_LOG")" || return $?
+      result_json="$(invoke_native_sanitized "${argv[@]}" < "$prompt_copy" 2>>"$PRIVATE_LOG")" || { rc=$?; rm -f "$prompt_copy"; return "$rc"; }
+      rm -f "$prompt_copy"
       printf '%s' "$result_json" | jq -r '.result // empty' > "$TRANSPORT_OUTPUT" || return 1
       printf '%s' "$result_json" > "$PROVIDER_RECEIPT"
       ;;
@@ -264,14 +354,21 @@ invoke_candidate() {
       if printf '%s' "$CAPABILITIES_JSON" | jq -e 'index("write-repository") != null' >/dev/null; then
         [ -n "${OPENROUTER_EXEC_ALLOWED_PATHS:-}" ] || return 77
         argv=("$DIR/openrouter-write-adapter.sh" --model "$model")
-        "${argv[@]}" < "$PROMPT_FILE" > "$PROVIDER_RECEIPT" 2>>"$PRIVATE_LOG" || return $?
-        printf '%s\n' '{"status":"committed","verification":"required"}' > "$TRANSPORT_OUTPUT"
+        MODEL_ROUTER_CONTRACT_DIGEST="$CONTRACT_DIGEST" \
+          MODEL_ROUTER_CONTRACT_REVISION="$CONTRACT_REVISION" \
+          "${argv[@]}" < "$PROMPT_FILE" > "$PROVIDER_RECEIPT" 2>>"$PRIVATE_LOG" || return $?
+        jq -n --arg digest "$CONTRACT_DIGEST" --argjson revision "$CONTRACT_REVISION" \
+          '{status:"committed",verification:"required",contract_digest:$digest,revision:$revision}' > "$TRANSPORT_OUTPUT"
       else
         root="$(resolve_openrouter_root)" || return 77
         system_file="$(mktemp "${TMPDIR:-/tmp}/model-router.system.XXXXXX")" || return 1
         prompt_copy="$(mktemp "${TMPDIR:-/tmp}/model-router.prompt.XXXXXX")" || { rm -f "$system_file"; return 1; }
         printf '%s' 'Return only the requested analysis. You have no command authority.' > "$system_file"
         cp "$PROMPT_FILE" "$prompt_copy"
+        if [ -n "$REPOSITORY_EVIDENCE_FILE" ] && [ "$REPOSITORY_EVIDENCE_FILE" != "$PROMPT_FILE" ]; then
+          printf '\n\n--- complete repository evidence ---\n' >> "$prompt_copy"
+          cat "$REPOSITORY_EVIDENCE_FILE" >> "$prompt_copy"
+        fi
         argv=("$root/skills/openrouter-delegate/references/delegation-boundary.sh" --mode artifact-delegation --policy "$root/skills/openrouter-delegate/references/delegation-security-policy.json" --content-file "$system_file" --content-file "$prompt_copy")
         "${argv[@]}" >>"$PRIVATE_LOG" 2>&1 || { rm -f "$system_file" "$prompt_copy"; return 77; }
         argv=(bash "$root/skills/openrouter-delegate/references/openrouter-wrapper.sh" "$model" - 3600)
@@ -286,6 +383,13 @@ invoke_candidate() {
       fi
       ;;
   esac
+}
+
+invoke_native_sanitized() {
+  env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE \
+    -u OPENROUTER_BUNDLE_REF -u OPENROUTER_BUNDLE_VERSION \
+    -u OPENROUTER_BUNDLE_CACHE_CLASS -u OPENROUTER_BUNDLE_REASON \
+    -u OPENROUTER_BUNDLE_RESOLVED "$@"
 }
 
 CANDIDATES="$(jq -c --arg role "$ROLE" '.roles[$role][]' "$POLICY")"
@@ -312,10 +416,22 @@ while IFS= read -r candidate; do
     continue
   fi
   EFFECTIVE_EFFORT="$(jq -r --arg transport "$transport" --arg effort "$EFFORT" '.effort.transports[$transport][$effort]' "$POLICY")"
+  ATTEMPT_HEAD=""
+  ATTEMPT_STATUS=""
+  if [ "$WRITE_REQUEST" -eq 1 ]; then
+    ATTEMPT_HEAD="$(git rev-parse --verify HEAD 2>/dev/null)" || exit 76
+    ATTEMPT_STATUS="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" || exit 76
+  fi
   STARTED="$(date +%s)"
+  : > "$PRIVATE_LOG"
   fixture_outcome="$(printf '%s' "$AVAILABILITY" | jq -r --arg model "$model" '.candidateResults[$model].outcome // ""')"
-  if [ "$(printf '%s' "$AVAILABILITY" | jq -r '.probeSource')" = fixture ] &&
-     [ -z "${MODEL_ROUTER_TRANSPORT_STUB:-}" ]; then
+  if [ "$WRITE_REQUEST" -eq 1 ] && [ "$PROBE_SOURCE" = live ] &&
+     [ "$TRANSPORT_STUB" = false ] && [ -n "$ATTEMPT_STATUS" ]; then
+    printf '%s\n' 'repository-not-clean' > "$PRIVATE_LOG"
+    rc=79
+  elif [ "$PROBE_SOURCE" = fixture ] &&
+     [ -z "${MODEL_ROUTER_TRANSPORT_STUB:-}" ] &&
+     [ "${MODEL_ROUTER_INVOKE_FIXTURE_TRANSPORTS:-0}" != 1 ]; then
     [ -n "$fixture_outcome" ] || fixture_outcome=success
     if [ "$fixture_outcome" = success ]; then
       printf '%s' "$AVAILABILITY" | jq -r --arg model "$model" '.candidateResults[$model].output // "fixture output"' > "$TRANSPORT_OUTPUT"
@@ -328,32 +444,67 @@ while IFS= read -r candidate; do
     invoke_candidate "$transport" "$model" "$EFFECTIVE_EFFORT"
     rc=$?
   fi
+  if [ "$WRITE_REQUEST" -eq 1 ] && [ "$PROBE_SOURCE" = live ] &&
+     [ "$TRANSPORT_STUB" = false ] && [ "$rc" -eq 0 ] && [ -s "$TRANSPORT_OUTPUT" ]; then
+    CURRENT_HEAD="$(git rev-parse --verify HEAD 2>/dev/null)" || exit 76
+    CURRENT_STATUS="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" || exit 76
+    if [ "$CURRENT_HEAD" = "$ATTEMPT_HEAD" ]; then
+      printf '%s\n' 'write-completion-without-commit' > "$PRIVATE_LOG"
+      rc=79
+    elif [ "$CURRENT_STATUS" != "$ATTEMPT_STATUS" ]; then
+      printf '%s\n' 'write-completion-dirty' > "$PRIVATE_LOG"
+      rc=79
+    fi
+  fi
   DURATION_SECONDS=$(( $(date +%s) - STARTED ))
   if [ "$rc" -eq 0 ] && [ -s "$TRANSPORT_OUTPUT" ]; then
-    cp "$TRANSPORT_OUTPUT" "$OUTPUT_FILE"
     usage_json=null
     cost_json=null
+    commit_json=null
+    files_changed_json=null
     token_provenance=unavailable
     cost_provenance=unavailable
     if jq -e . "$PROVIDER_RECEIPT" >/dev/null 2>&1; then
       usage_json="$(jq -c '.usage // null' "$PROVIDER_RECEIPT")"
-      cost_json="$(jq -c '.costUsd // .cost_usd // null' "$PROVIDER_RECEIPT")"
+      cost_json="$(jq -c 'if has("costUsd") then .costUsd elif has("cost_usd") then .cost_usd elif (.usage | type) == "object" and (.usage | has("cost")) then .usage.cost else null end' "$PROVIDER_RECEIPT")"
       [ "$usage_json" = null ] || token_provenance=provider-receipt
       [ "$cost_json" = null ] || cost_provenance=provider-receipt
+      commit_json="$(jq -c 'if (.commit | type) == "string" and (.commit | length) > 0 then .commit else null end' "$PROVIDER_RECEIPT")"
+      files_changed_json="$(jq -c 'if (.filesChanged | type) == "string" then .filesChanged else null end' "$PROVIDER_RECEIPT")"
+    fi
+    if [ "$WRITE_REQUEST" -eq 1 ] && [ "$commit_json" = null ]; then
+      commit_json="$(jq -Rn --arg commit "${CURRENT_HEAD:-}" '$commit')"
     fi
     ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,provider:$provider,transport:$transport,billingMode:$billing,outcome:"served",durationSeconds:$duration}]')"
     fallback=false
     fallback_reason=none
     [ "$ATTEMPT_INDEX" -gt 1 ] && { fallback=true; fallback_reason="$LAST_REASON"; }
-    jq -n --arg receipt_id "$RECEIPT_ID" --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg requested_effort "$EFFORT" --arg effective_effort "$EFFECTIVE_EFFORT" --arg model "$model" --arg provider "$provider" --arg transport "$transport" --arg family "$family" --arg billing "$BILLING_MODE" --arg allowance_window "$ALLOWANCE_WINDOW" --arg matrix "$MATRIX_SNAPSHOT" --arg fallback_reason "$fallback_reason" --arg token_provenance "$token_provenance" --arg cost_provenance "$cost_provenance" --argjson requested_candidate "$REQUESTED_CANDIDATE" --argjson capabilities "$CAPABILITIES_JSON" --argjson attempts "$ATTEMPTS" --argjson independence_ids "$INDEPENDENCE_IDS_JSON" --argjson excluded_families "$EXCLUDED_FAMILIES" --argjson fallback "$fallback" --argjson duration "$DURATION_SECONDS" --argjson usage "$usage_json" --argjson cost "$cost_json" '{schemaVersion:1,receiptId:$receipt_id,requested:{role:$role,capabilities:$capabilities,effort:$requested_effort,independenceReceiptIds:$independence_ids,candidate:{model:$requested_candidate.model,provider:$requested_candidate.provider,transport:$requested_candidate.transport}},participantId:$participant,attempts:$attempts,served:{model:$model,provider:$provider,transport:$transport,family:$family,billingMode:$billing,allowanceWindow:$allowance_window,durationSeconds:$duration,tokens:$usage,tokenProvenance:$token_provenance,billedCostUsd:$cost,costProvenance:$cost_provenance},effectiveEffort:$effective_effort,effortNormalized:($requested_effort != $effective_effort),fallback:$fallback,fallbackReason:$fallback_reason,matrixSnapshot:$matrix,familyIndependence:{required:($independence_ids|length>0),excludedFamilies:$excluded_families,passed:true}}' > "$RECEIPT_FILE"
-    jq -n --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg requested_effort "$EFFORT" --arg effective_effort "$EFFECTIVE_EFFORT" --arg output "$OUTPUT_FILE" --argjson capabilities "$CAPABILITIES_JSON" --argjson fallback "$fallback" '{role:$role,capabilities:$capabilities,requestedEffort:$requested_effort,effectiveEffort:$effective_effort,participantId:$participant,disposition:"completed",fallback:$fallback,output:$output}'
+    jq -n --arg receipt_id "$RECEIPT_ID" --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg requested_effort "$EFFORT" --arg effective_effort "$EFFECTIVE_EFFORT" --arg model "$model" --arg provider "$provider" --arg transport "$transport" --arg family "$family" --arg billing "$BILLING_MODE" --arg allowance_window "$ALLOWANCE_WINDOW" --arg matrix "$MATRIX_SNAPSHOT" --arg fallback_reason "$fallback_reason" --arg token_provenance "$token_provenance" --arg cost_provenance "$cost_provenance" --arg contract_digest "$CONTRACT_DIGEST" --arg probe_source "$PROBE_SOURCE" --argjson transport_stub "$TRANSPORT_STUB" --argjson contract_revision "$CONTRACT_REVISION_JSON" --argjson requested_candidate "$REQUESTED_CANDIDATE" --argjson capabilities "$CAPABILITIES_JSON" --argjson attempts "$ATTEMPTS" --argjson independence_ids "$INDEPENDENCE_IDS_JSON" --argjson excluded_families "$EXCLUDED_FAMILIES" --argjson fallback "$fallback" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" --argjson duration "$DURATION_SECONDS" --argjson usage "$usage_json" --argjson cost "$cost_json" --argjson commit "$commit_json" --argjson files_changed "$files_changed_json" '{schemaVersion:1,receiptId:$receipt_id,probeSource:$probe_source,transportStub:$transport_stub,requested:{role:$role,capabilities:$capabilities,effort:$requested_effort,independenceReceiptIds:$independence_ids,humanAuthored:$human_authored,candidate:{model:$requested_candidate.model,provider:$requested_candidate.provider,transport:$requested_candidate.transport}},contract_digest:(if $contract_digest == "" then null else $contract_digest end),revision:$contract_revision,participantId:$participant,attempts:$attempts,served:{model:$model,provider:$provider,transport:$transport,family:$family,billingMode:$billing,allowanceWindow:$allowance_window,durationSeconds:$duration,tokens:$usage,tokenProvenance:$token_provenance,billedCostUsd:$cost,costProvenance:$cost_provenance,commit:$commit,filesChanged:$files_changed},effectiveEffort:$effective_effort,effortNormalized:($requested_effort != $effective_effort),fallback:$fallback,fallbackReason:$fallback_reason,matrixSnapshot:$matrix,publication:{output:"pending"},familyIndependence:{required:(($independence_ids|length>0) or $human_authored),humanAuthored:$human_authored,excludedFamilies:$excluded_families,passed:true}}' > "$EMERGENCY_RECEIPT" || exit 76
+    cp "$TRANSPORT_OUTPUT" "$PUBLIC_OUTPUT_TMP" 2>/dev/null || publication_failed output-preparation-failed
+    jq '.publication.output="published"' "$EMERGENCY_RECEIPT" > "$PUBLIC_RECEIPT_TMP" || publication_failed receipt-preparation-failed
+    mv "$PUBLIC_OUTPUT_TMP" "$OUTPUT_FILE" 2>/dev/null || publication_failed output-publication-failed
+    mv "$PUBLIC_RECEIPT_TMP" "$RECEIPT_FILE" 2>/dev/null || publication_failed receipt-publication-failed
+    jq -n --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg requested_effort "$EFFORT" --arg effective_effort "$EFFECTIVE_EFFORT" --arg output "$OUTPUT_FILE" --arg probe_source "$PROBE_SOURCE" --argjson transport_stub "$TRANSPORT_STUB" --argjson capabilities "$CAPABILITIES_JSON" --argjson fallback "$fallback" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" --argjson excluded_family_count "$(printf '%s' "$EXCLUDED_FAMILIES" | jq 'length')" '{role:$role,capabilities:$capabilities,requestedEffort:$requested_effort,effectiveEffort:$effective_effort,participantId:$participant,disposition:"completed",fallback:$fallback,evidenceSource:$probe_source,transportStub:$transport_stub,familyIndependence:{humanAuthored:$human_authored,excludedFamilyCount:$excluded_family_count},output:$output}'
     exit 0
   fi
-  if grep -qiE 'usage.?limit|rate.?limit|quota|exhausted' "$PRIVATE_LOG"; then reason=quota-exhausted
-  elif grep -qiE 'declin|disclosure' "$PRIVATE_LOG"; then reason=disclosure-declined
+  if grep -Fqi 'repository-not-clean' "$PRIVATE_LOG"; then reason=repository-not-clean
+  elif grep -Fqi 'write-completion-without-commit' "$PRIVATE_LOG"; then reason=write-completion-without-commit
+  elif grep -Fqi 'write-completion-dirty' "$PRIVATE_LOG"; then reason=write-completion-dirty
+  elif grep -qiE 'usage.?limit|rate.?limit|quota|exhausted' "$PRIVATE_LOG"; then reason=quota-exhausted
+  elif grep -qiE 'declin|refus' "$PRIVATE_LOG"; then reason=content-refusal
   else reason=transport-unavailable
   fi
   ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --arg reason "$reason" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,provider:$provider,transport:$transport,billingMode:$billing,outcome:"failed",reason:$reason,durationSeconds:$duration}]')"
+  if [ "$WRITE_REQUEST" -eq 1 ]; then
+    CURRENT_HEAD="$(git rev-parse --verify HEAD 2>/dev/null)" || exit 76
+    CURRENT_STATUS="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" || exit 76
+    if [ "$CURRENT_HEAD" != "$ATTEMPT_HEAD" ] || [ "$CURRENT_STATUS" != "$ATTEMPT_STATUS" ]; then
+      reason=repository-mutated-on-failed-attempt
+      ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg reason "$reason" '.[-1].reason=$reason')"
+      LAST_REASON="$reason"
+      break
+    fi
+  fi
   if [ "$reason" = quota-exhausted ]; then
     if [ "$transport" = codex-cli ]; then
       EXHAUSTED_TRANSPORTS="$(printf '%s' "$EXHAUSTED_TRANSPORTS" | jq -c --arg value "$transport" '. + [$value] | unique')"
@@ -364,6 +515,6 @@ while IFS= read -r candidate; do
   LAST_REASON="$reason"
 done <<< "$CANDIDATES"
 
-jq -n --arg receipt_id "$RECEIPT_ID" --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg effort "$EFFORT" --arg matrix "$MATRIX_SNAPSHOT" --arg reason "$LAST_REASON" --argjson requested_candidate "$REQUESTED_CANDIDATE" --argjson capabilities "$CAPABILITIES_JSON" --argjson attempts "$ATTEMPTS" --argjson independence_ids "$INDEPENDENCE_IDS_JSON" --argjson excluded_families "$EXCLUDED_FAMILIES" '{schemaVersion:1,receiptId:$receipt_id,requested:{role:$role,capabilities:$capabilities,effort:$effort,independenceReceiptIds:$independence_ids,candidate:{model:$requested_candidate.model,provider:$requested_candidate.provider,transport:$requested_candidate.transport}},participantId:$participant,attempts:$attempts,served:null,effectiveEffort:$effort,effortNormalized:false,fallback:true,fallbackReason:$reason,matrixSnapshot:$matrix,familyIndependence:{required:($independence_ids|length>0),excludedFamilies:$excluded_families,passed:false}}' > "$RECEIPT_FILE"
-jq -n --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg effort "$EFFORT" --argjson capabilities "$CAPABILITIES_JSON" '{role:$role,capabilities:$capabilities,requestedEffort:$effort,effectiveEffort:$effort,participantId:$participant,disposition:"unavailable",fallback:true,output:null}'
+jq -n --arg receipt_id "$RECEIPT_ID" --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg effort "$EFFORT" --arg matrix "$MATRIX_SNAPSHOT" --arg reason "$LAST_REASON" --arg probe_source "$PROBE_SOURCE" --argjson transport_stub "$TRANSPORT_STUB" --argjson requested_candidate "$REQUESTED_CANDIDATE" --argjson capabilities "$CAPABILITIES_JSON" --argjson attempts "$ATTEMPTS" --argjson independence_ids "$INDEPENDENCE_IDS_JSON" --argjson excluded_families "$EXCLUDED_FAMILIES" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" '{schemaVersion:1,receiptId:$receipt_id,probeSource:$probe_source,transportStub:$transport_stub,requested:{role:$role,capabilities:$capabilities,effort:$effort,independenceReceiptIds:$independence_ids,humanAuthored:$human_authored,candidate:{model:$requested_candidate.model,provider:$requested_candidate.provider,transport:$requested_candidate.transport}},participantId:$participant,attempts:$attempts,served:null,effectiveEffort:$effort,effortNormalized:false,fallback:true,fallbackReason:$reason,matrixSnapshot:$matrix,familyIndependence:{required:(($independence_ids|length>0) or $human_authored),humanAuthored:$human_authored,excludedFamilies:$excluded_families,passed:false}}' > "$RECEIPT_FILE"
+jq -n --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg effort "$EFFORT" --arg probe_source "$PROBE_SOURCE" --argjson transport_stub "$TRANSPORT_STUB" --argjson capabilities "$CAPABILITIES_JSON" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" --argjson excluded_family_count "$(printf '%s' "$EXCLUDED_FAMILIES" | jq 'length')" '{role:$role,capabilities:$capabilities,requestedEffort:$effort,effectiveEffort:$effort,participantId:$participant,disposition:"unavailable",fallback:true,evidenceSource:$probe_source,transportStub:$transport_stub,familyIndependence:{humanAuthored:$human_authored,excludedFamilyCount:$excluded_family_count},output:null}'
 exit 76

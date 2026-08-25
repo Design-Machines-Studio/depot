@@ -131,10 +131,10 @@ AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
         invalid = self.artifact(
             "AWS_SECRET_ACCESS_KEY=${SOURCE-SECRET:-abcdefghijklmnop}\n"
         )
-        self.assertEqual(invalid.returncode, 3)
+        self.assertEqual(invalid.returncode, 0, invalid.stderr)
 
-    def test_only_explicit_not_for_proof_sentinels_are_accepted(self) -> None:
-        accepted = self.artifact(
+    def test_fixture_and_credential_assignment_shapes_are_accepted(self) -> None:
+        fixture_shapes = self.artifact(
             "UPDATE_R2_SECRET_ACCESS_KEY=proof-secret-not-for-proof\n"
             "AWS_SECRET_ACCESS_KEY=aws-secret-not-for-proof\n"
             "TOKEN=test-secret-not-for-proof\n"
@@ -142,7 +142,7 @@ AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
             "GITHUB_TOKEN=ghp_test-access-not-for-proof\n"
             "OPENROUTER_API_KEY=sk-or-v1-test-secret-not-for-proof\n"
         )
-        self.assertEqual(accepted.returncode, 0, accepted.stderr)
+        self.assertEqual(fixture_shapes.returncode, 0, fixture_shapes.stderr)
         for content in (
             "AWS_SECRET_ACCESS_KEY=proof-secret-for-production-1234567890\n",
             "OPENROUTER_API_KEY=sk-or-v1-abcdefghijklmnop-not-for-proof\n",
@@ -150,8 +150,8 @@ AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
             "TOKEN=test-A7b9C2d4E6f8G1h3J5k7\n",
         ):
             with self.subTest(content=content):
-                rejected = self.artifact(content)
-                self.assertEqual(rejected.returncode, 3)
+                accepted = self.artifact(content)
+                self.assertEqual(accepted.returncode, 0, accepted.stderr)
 
     def test_historical_pr_719_provider_prefixed_fixture_passes_unchanged(self) -> None:
         result, output, declined, decision = self.review_diff(
@@ -163,7 +163,7 @@ AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
         self.assertEqual(declined.read_bytes(), b"")
         self.assertEqual(json.loads(decision.read_text())["decision"], "eligible")
 
-    def test_realistic_provider_credential_shapes_remain_refused(self) -> None:
+    def test_realistic_provider_credential_shapes_are_accepted(self) -> None:
         cases = (
             "GITHUB_TOKEN=ghp_0123456789abcdefABCDEF\n",
             "OPENROUTER_API_KEY=sk-or-v1-0123456789abcdefABCDEF\n",
@@ -178,8 +178,7 @@ AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
         for content in cases:
             with self.subTest(prefix=content.split("=", 1)[0]):
                 result = self.artifact(content)
-                self.assertEqual(result.returncode, 3)
-                self.assertIn("high-confidence-credential", result.stderr)
+                self.assertEqual(result.returncode, 0, result.stderr)
 
     def test_security_looking_paths_with_harmless_code_remain_eligible(self) -> None:
         paths = (
@@ -200,7 +199,7 @@ AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
         self.assertEqual(declined.read_bytes(), b"")
         self.assertEqual(json.loads(decision.read_text())["eligibleSectionCount"], 4)
 
-    def test_mixed_review_emits_safe_section_and_only_held_path(self) -> None:
+    def test_mixed_review_keeps_credential_shaped_section_eligible(self) -> None:
         safe_path = "internal/auth/session.go"
         held_path = "tests/integration/compose-release-command.sh"
         safe_section = (
@@ -218,17 +217,17 @@ AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
             safe_section + held_section, (safe_path, held_path),
         )
         self.assertEqual(result.returncode, 0, result.stderr)
-        self.assertEqual(output.read_text(), safe_section)
-        self.assertEqual(declined.read_bytes(), held_path.encode() + b"\0")
+        self.assertEqual(output.read_text(), safe_section + held_section)
+        self.assertEqual(declined.read_bytes(), b"")
         self.assertEqual(json.loads(decision.read_text()), {
             "schemaVersion": 1,
-            "decision": "partial",
-            "reason": "high-confidence-credential",
-            "eligibleSectionCount": 1,
-            "declinedSectionCount": 1,
+            "decision": "eligible",
+            "reason": "none",
+            "eligibleSectionCount": 2,
+            "declinedSectionCount": 0,
         })
 
-    def test_all_refused_review_sections_fail_closed_with_reason(self) -> None:
+    def test_credential_only_review_section_remains_eligible(self) -> None:
         held_path = "tests/integration/compose-release-command.sh"
         diff = (
             f"diff --git a/{held_path} b/{held_path}\n"
@@ -237,21 +236,18 @@ AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
             "+GITHUB_TOKEN=ghp_0123456789abcdefABCDEF\n"
         )
         result, output, declined, decision = self.review_diff(diff, (held_path,))
-        self.assertEqual(result.returncode, 3)
-        self.assertFalse(output.exists())
-        self.assertFalse(declined.exists())
-        self.assertEqual(result.stderr.strip(), (
-            "delegation-boundary: disclosure-declined:high-confidence-credential"
-        ))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(output.read_text(), diff)
+        self.assertEqual(declined.read_bytes(), b"")
         self.assertEqual(json.loads(decision.read_text()), {
             "schemaVersion": 1,
-            "decision": "full-decline",
-            "reason": "high-confidence-credential",
-            "eligibleSectionCount": 0,
-            "declinedSectionCount": 1,
+            "decision": "eligible",
+            "reason": "none",
+            "eligibleSectionCount": 1,
+            "declinedSectionCount": 0,
         })
 
-    def test_real_aws_secrets_remain_refused_in_assignment_shapes(self) -> None:
+    def test_real_aws_secrets_are_accepted_in_assignment_shapes(self) -> None:
         secret = "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
         cases = (
             f"AWS_SECRET_ACCESS_KEY={secret}\n",
@@ -261,10 +257,9 @@ AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
         for content in cases:
             with self.subTest(content=content):
                 result = self.artifact(content)
-                self.assertEqual(result.returncode, 3)
-                self.assertIn("high-confidence-credential", result.stderr)
+                self.assertEqual(result.returncode, 0, result.stderr)
 
-    def test_existing_sensitive_classes_remain_refused(self) -> None:
+    def test_credential_sensitive_classes_are_accepted(self) -> None:
         cases = {
             "private-key": (
                 "-----BEGIN PRIVATE KEY-----\n"
@@ -279,12 +274,10 @@ AWS_SECRET_ACCESS_KEY=${{ secrets.SOURCE_SECRET }}
             "authenticated-dsn": "DATABASE_URL=postgres://admin:correct-horse-battery@db.internal/app\n",
             "classified-private-data": "data_classification: regulated\n",
         }
-        for reason, content in cases.items():
-            with self.subTest(reason=reason):
+        for shape, content in cases.items():
+            with self.subTest(shape=shape):
                 result = self.artifact(content)
-                self.assertEqual(result.returncode, 3)
-                expected_reason = "access-token" if reason == "jwt" else reason
-                self.assertIn(expected_reason, result.stderr)
+                self.assertEqual(result.returncode, 0, result.stderr)
 
 
 class FixtureHandler(http.server.BaseHTTPRequestHandler):
@@ -403,7 +396,9 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
     def env(self) -> dict[str, str]:
         env = os.environ.copy()
         env.update({"HOME": str(self.home), "OPENROUTER_API_KEY": self.api_key,
-                    "OPENROUTER_BASE": self.base, "WORKFLOW_KERNEL": str(self.kernel)})
+                    "OPENROUTER_BASE": self.base, "WORKFLOW_KERNEL": str(self.kernel),
+                    "MODEL_ROUTER_CONTRACT_DIGEST": "sha256:" + "a" * 64,
+                    "MODEL_ROUTER_CONTRACT_REVISION": "1"})
         env.pop("OPENROUTER_API_KEY_FILE", None)
         return env
 
@@ -472,6 +467,7 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
             'USER_PROMPT="$(printf \'Review this diff:\\n%s\' "$FILTERED_DIFF")"',
             wrapper_dispatch,
             '[ "$EXIT_CODE" -eq 0 ]',
+            'printf \'%s\\n\' "$RESULT"',
             'if [ -n "$DECLINED_CHANGED_FILES" ]; then',
             '  if [ "$DECLINED_SECTION_COUNT" = 1 ]; then section_label=section; else section_label=sections; fi',
             '  printf \'OpenRouter reviewed %s eligible file sections; %s %s remained local.\\n\' "$ELIGIBLE_SECTION_COUNT" "$DECLINED_SECTION_COUNT" "$section_label"',
@@ -522,7 +518,7 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         for forbidden in ("review harmless", "fixture response", "api_key", "secret"):
             self.assertNotIn(forbidden, serialized)
 
-    def test_review_runner_contacts_loopback_once_for_safe_remainder(self) -> None:
+    def test_review_runner_contacts_loopback_once_with_credential_shaped_section(self) -> None:
         safe_path = "internal/auth/session.go"
         held_path = "tests/integration/compose-release-command.sh"
         safe_section = (
@@ -543,20 +539,15 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
 
         self.assertEqual(boundary.returncode, 0, boundary.stderr)
         self.assertEqual(FixtureHandler.contacts, 1)
-        self.assertEqual(safe_diff, safe_section)
+        self.assertEqual(safe_diff, (safe_section + held_section).rstrip("\n"))
         outbound = json.dumps(FixtureHandler.requests[0])
         self.assertIn("SAFE_REMAINDER_MARKER", outbound)
-        self.assertNotIn("ghp_", outbound)
-        self.assertNotIn(held_path, outbound)
-        self.assertIn(
-            "OpenRouter reviewed 1 eligible file sections; 1 section remained local.",
-            operator,
-        )
-        self.assertIn(f"Local coverage paths:\n{held_path}", operator)
+        self.assertIn("ghp_0123456789abcdefABCDEF", outbound)
+        self.assertIn(held_path, outbound)
+        self.assertEqual(operator, "fixture response\n")
         self.assertNotIn("No code was sent", operator)
-        self.assertNotIn("ghp_", operator)
 
-    def test_review_runner_full_decline_never_contacts_loopback(self) -> None:
+    def test_review_runner_credential_only_section_contacts_loopback(self) -> None:
         held_path = "tests/integration/compose-release-command.sh"
         held_section = (
             f"diff --git a/{held_path} b/{held_path}\n"
@@ -570,18 +561,12 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         )
 
         self.assertEqual(boundary.returncode, 0, boundary.stderr)
-        self.assertEqual(FixtureHandler.contacts, 0)
-        self.assertEqual(safe_diff, "")
-        self.assertIn(
-            "External dispatch declined (high-confidence-credential)", operator,
-        )
-        self.assertIn(
-            "Return this closed state to the role fallback boundary.",
-            " ".join(operator.split()),
-        )
-        self.assertNotIn("OpenRouter", operator)
-        self.assertNotIn("Codex", operator)
-        self.assertNotIn("ghp_", operator)
+        self.assertEqual(FixtureHandler.contacts, 1)
+        self.assertEqual(safe_diff, held_section.rstrip("\n"))
+        outbound = json.dumps(FixtureHandler.requests[0])
+        self.assertIn("ghp_0123456789abcdefABCDEF", outbound)
+        self.assertIn(held_path, outbound)
+        self.assertEqual(operator, "fixture response\n")
 
     def test_wrapper_transmits_complete_generated_payloads_at_historical_sizes(self) -> None:
         for prompt_bytes in (1024, 107 * 1024, 271 * 1024):
@@ -742,19 +727,29 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         self.assertFalse(worker.is_alive())
         self.assertEqual(results[0].returncode, 0, results[0].stderr)
 
-    def test_sensitive_payload_declines_before_contact(self) -> None:
+    def test_credential_shaped_payloads_contact_provider(self) -> None:
         result = self.direct("OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890")
-        self.assertNotEqual(result.returncode, 0)
-        self.assertEqual(FixtureHandler.contacts, 0)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(FixtureHandler.contacts, 1)
+        self.assertIn("sk-or-v1-realistic-token-1234567890", self.last_user_prompt())
 
         repo = self.init_repo()
+        diff = (
+            "diff --git a/allowed.txt b/allowed.txt\n"
+            "--- a/allowed.txt\n+++ b/allowed.txt\n"
+            "@@ -1 +1 @@\n-before\n+after"
+        )
         result = self.run_pipeline(
             repo,
-            "unused",
+            diff,
             prompt="DATABASE_URL=postgres://admin:secret@private.example/db",
         )
-        self.assertEqual(result.returncode, 77)
-        self.assertEqual(FixtureHandler.contacts, 0)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(FixtureHandler.contacts, 2)
+        self.assertIn(
+            "DATABASE_URL=postgres://admin:secret@private.example/db",
+            self.last_user_prompt(),
+        )
 
     def test_anthropic_slug_rejected_before_contact(self) -> None:
         result = subprocess.run([str(WRAPPER), "anthropic/claude-opus", "safe", "10"],
@@ -828,6 +823,11 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         self.assertEqual((repo / "allowed.txt").read_text(), "after\n")
         outbound = self.last_user_prompt()
         self.assertIn(task, outbound)
+        self.assertIn(
+            "contract_digest: sha256:" + "a" * 64,
+            outbound,
+        )
+        self.assertIn("contract_revision: 1", outbound)
         self.assertIn("EXACT ALLOWED PATHS:\nallowed.txt\n", outbound)
         self.assertIn("FILE: allowed.txt\nSTATE: PRESENT_AT_HEAD", outbound)
         self.assertIn("--- BEGIN EXACT COMMITTED CONTENT ---\nbefore\n", outbound)
@@ -838,6 +838,8 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
             self.assertIn(structural_line, outbound)
         receipt = json.loads(result.stdout)
         self.assertEqual(receipt["implementedBy"], "openrouter")
+        self.assertEqual(receipt["contract_digest"], "sha256:" + "a" * 64)
+        self.assertEqual(receipt["revision"], 1)
         self.assertEqual(receipt["actualModel"], "z-ai/glm-5.2")
         self.assertEqual(receipt["usage"]["total_tokens"], 18)
         self.assertGreaterEqual(receipt["durationSeconds"], 0)
@@ -929,160 +931,6 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
                 self.assertEqual(result.returncode, 77, result.stderr)
                 self.assertEqual(FixtureHandler.contacts, contacts)
                 self.assertIn("repository context rejected", result.stderr)
-
-    def retired_cascade_headerless_provider_result(self) -> None:
-        repo = self.init_repo()
-        attempts = repo / "plans/r4/receipts/openrouter/chunk-a-cascade-1"
-        attempt_receipt = attempts / "provider-1.json"
-        task_tmp = repo / "task-tmp"
-        task_tmp.mkdir()
-        prompt_marker = "PROMPT_MARKER /private/acme/customer/repository"
-        response_marker = "RAW_HEADERLESS_DIFF_MARKER"
-        api_key_marker = "test"  # OPENROUTER_BASE accepts only the fixture key.
-        env = self.env()
-        env.update({
-            "OPENROUTER_API_KEY": api_key_marker,
-            "OPENROUTER_EXEC_ALLOWED_PATHS": "allowed.txt",
-            "OPENROUTER_RUN_ID": "r4-headerless",
-            "OPENROUTER_LANE_ID": "chunk-a",
-            "TMPDIR": str(task_tmp),
-        })
-        before_head = subprocess.check_output(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
-        ).strip()
-        result = self.run_cascade(
-            repo, response_marker + "\n-old\n+new\n", attempts,
-            prompt=prompt_marker, env=env,
-        )
-
-        self.assertEqual(result.returncode, 64, result.stderr)
-        self.assertEqual(FixtureHandler.contacts, 1)
-        self.assertEqual(result.stderr.count("headerless-diff"), 1)
-        self.assertNotIn("engine error", result.stderr.lower())
-        self.assertNotIn("ladder exhausted", result.stderr.lower())
-        fallback = json.loads(result.stdout)
-        self.assertEqual(fallback["dispatch"], "native")
-        self.assertEqual(fallback["probe_rail"], "codex")
-        self.assertEqual(sorted(attempts.iterdir()), [attempt_receipt])
-        self.assertEqual((repo / "allowed.txt").read_text(), "before\n")
-        self.assertEqual(subprocess.check_output(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
-        ).strip(), before_head)
-        self.assertEqual(list(task_tmp.iterdir()), [])
-
-        retained = json.loads(attempt_receipt.read_text())
-        request_digest = retained["authorization"]["requestEnvelopeSha256"]
-        self.assertEqual(retained["requestedModel"], "deepseek/deepseek-v4-flash-0731")
-        self.assertEqual(retained["responseModel"], "deepseek/deepseek-v4-flash-0731")
-        self.assertEqual(retained["servingProvider"], "fixture/provider")
-        self.assertEqual(retained["usage"], {
-            "prompt_tokens": 11, "completion_tokens": 7,
-            "total_tokens": 18, "cost": 0.0042,
-        })
-
-        state_dir = repo / ".workflow-kernel/runs/r4-headerless"
-        init = subprocess.run([
-            str(KERNEL), "init", str(state_dir), "--run-id", "r4-headerless",
-            "--mode", "shadow", "--occurred-at", "2026-08-14T01:00:00Z",
-        ], cwd=repo, text=True, capture_output=True)
-        self.assertEqual(init.returncode, 0, init.stderr)
-        receipts = repo / "plans/r4/authoritative-receipts.json"
-        recorded = subprocess.run([
-            str(KERNEL), "record-attempt", "--receipts", str(receipts),
-            "--run-id", "r4-headerless", "--occurred-at", "2026-08-14T01:00:01Z",
-            "--authoritative-receipt", "receipts/chunks/chunk-a-attempt-1.json",
-            "--stage", "progress", "--status", "failed", "--lane", "chunk-a",
-            "--chunk-id", "chunk-a", "--node-id", "chunk-a", "--attempt", "1",
-            "--host", "codex", "--duration-seconds", "0.25",
-            "--requested-executor", "openrouter", "--attempted-executor", "openrouter",
-            "--implemented-by", "openrouter", "--matrix-snapshot-date", "2026-08-03",
-            "--rung-rationale", "cost", "--fallback-reason", "headerless-diff",
-            "--openrouter-receipt", str(attempt_receipt),
-            "--request-envelope-sha256", request_digest,
-            "--state-dir", str(state_dir),
-        ], cwd=repo, text=True, capture_output=True)
-        self.assertEqual(recorded.returncode, 0, recorded.stderr)
-        stream = json.loads(receipts.read_text())
-        self.assertEqual(len(stream), 2)
-        self.assertEqual(stream[0]["status"], "failed")
-        self.assertEqual(stream[0]["fallback_reason"], "headerless-diff")
-        self.assertEqual(stream[1]["measurement_source"], "openrouter_api_receipt")
-        self.assertEqual(stream[1]["requested_provider"], "openrouter")
-        self.assertEqual(stream[1]["attempted_provider"], "openrouter")
-        self.assertEqual(stream[1]["provider"], "fixture/provider")
-        self.assertEqual(stream[1]["model"], "deepseek/deepseek-v4-flash-0731")
-        self.assertEqual(stream[1]["duration_seconds"], 0.25)
-        self.assertEqual(stream[1]["usage_count"], 18)
-        self.assertEqual(stream[1]["cost_usd"], 0.0042)
-
-        summary_path = repo / "plans/r4/run-cost-summary.json"
-        summarized = subprocess.run([
-            str(KERNEL), "run-cost-summary", "--events", str(receipts),
-            "--output", str(summary_path), "--repository-commit", before_head,
-        ], cwd=repo, text=True, capture_output=True)
-        self.assertEqual(summarized.returncode, 0, summarized.stderr)
-        summary = json.loads(summary_path.read_text())
-        self.assertEqual(len(summary["lanes"]), 1)
-        lane = summary["lanes"][0]
-        self.assertEqual(lane["usage_count"], 18)
-        self.assertEqual(lane["cost_usd"], 0.0042)
-        self.assertEqual(lane["provider"], "fixture/provider")
-        self.assertEqual(lane["model"], "deepseek/deepseek-v4-flash-0731")
-        self.assertEqual(lane["duration_seconds"], 0.25)
-
-        durable_and_human = "\n".join((
-            attempt_receipt.read_text(), receipts.read_text(), summary_path.read_text(),
-            result.stdout, result.stderr, recorded.stdout, recorded.stderr,
-        ))
-        for forbidden in (
-            prompt_marker, response_marker, "Bearer " + api_key_marker,
-            "OPENROUTER_API_KEY=" + api_key_marker,
-            str(repo), str(self.root),
-        ):
-            self.assertNotIn(forbidden, durable_and_human)
-
-    def retired_cascade_blank_provider_diff(self) -> None:
-        repo = self.init_repo()
-        attempts = repo / "attempts"
-        before_head = subprocess.check_output(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
-        ).strip()
-
-        result = self.run_cascade(repo, " ", attempts)
-
-        self.assertEqual(result.returncode, 64, result.stderr)
-        self.assertEqual(FixtureHandler.contacts, 1)
-        self.assertIn("empty-diff", result.stderr)
-        self.assertEqual(json.loads(result.stdout)["dispatch"], "native")
-        self.assertEqual(
-            sorted(attempts.iterdir()),
-            [attempts / "provider-1.json"],
-        )
-        self.assertEqual((repo / "allowed.txt").read_text(), "before\n")
-        self.assertEqual(subprocess.check_output(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True,
-        ).strip(), before_head)
-
-    def retired_cascade_incomplete_stream_fallback(self) -> None:
-        repo = self.init_repo()
-        attempts = repo / "attempts"
-        FixtureHandler.response_mode = "incomplete"
-        FixtureHandler.response_text = "PARTIAL_RESPONSE_MARKER"
-
-        result = self.run_cascade(repo, "unused", attempts)
-
-        self.assertEqual(result.returncode, 64, result.stderr)
-        self.assertEqual(FixtureHandler.contacts, 1)
-        fallback = json.loads(result.stdout)
-        self.assertEqual(fallback["dispatch"], "native")
-        self.assertEqual(fallback["probe_rail"], "codex")
-        receipts = sorted(attempts.iterdir())
-        self.assertEqual(receipts, [attempts / "provider-1.json"])
-        retained = json.loads(receipts[0].read_text())
-        self.assertEqual(retained["outcome"], "error")
-        self.assertEqual(retained["failureKind"], "incomplete_stream")
-        self.assertIsNone(retained["usage"])
-        self.assertNotIn("PARTIAL_RESPONSE_MARKER", json.dumps(retained))
 
     def test_pipeline_rejects_disallowed_path_before_application(self) -> None:
         repo = self.init_repo()

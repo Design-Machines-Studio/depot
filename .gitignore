@@ -2,6 +2,7 @@
 .env
 *.local
 .dm/operator-profile.local.json
+.dm/model-router.local.json
 
 # Pipeline-generated feature artefacts (per-feature plans, briefs, manifests, prompts)
 plans/

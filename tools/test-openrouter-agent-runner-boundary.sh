@@ -210,9 +210,8 @@ case "$runner_failure_output" in
 esac
 
 grep -Fq -- '--output-decision "$BOUNDARY_DECISION"' "$SOURCE"
-grep -Fq 'The provider adapter reviewed {ELIGIBLE_SECTION_COUNT} eligible file sections;' "$SOURCE"
-grep -Fq 'Closed reason: {BOUNDARY_DECISION_REASON}.' "$SOURCE"
-grep -Fq 'Request the same role only for these held paths' "$SOURCE"
+grep -Fq 'it does not decide whether content is eligible for OpenRouter' "$SOURCE"
+! grep -Fq 'Request the same role only for these held paths' "$SOURCE"
 ! grep -Fq 'OpenRouter reviewed only the eligible file sections.' "$SOURCE"
 
 cat > "$FIXTURE/runner-partial.diff" <<'EOF'
@@ -250,9 +249,9 @@ mechanical_output=$(RUNNER_DIFF="$FIXTURE/runner-partial.diff" \
   RUNNER_CHANGED="$FIXTURE/runner-partial.changed" \
   RUNNER_POLICY="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json" \
   "$FIXTURE/run-mechanical")
-[ "$mechanical_output" = $'high-confidence-credential\t1\t1\ttests/integration/compose-release-command.sh' ]
+[ "$mechanical_output" = $'none\t2\t0\t' ]
 
-cat > "$FIXTURE/runner-decline.diff" <<'EOF'
+cat > "$FIXTURE/runner-credential.diff" <<'EOF'
 diff --git a/tests/integration/compose-release-command.sh b/tests/integration/compose-release-command.sh
 --- a/tests/integration/compose-release-command.sh
 +++ b/tests/integration/compose-release-command.sh
@@ -261,15 +260,12 @@ diff --git a/tests/integration/compose-release-command.sh b/tests/integration/co
 +GITHUB_TOKEN=ghp_0123456789abcdefABCDEF
 EOF
 printf '%s\n' tests/integration/compose-release-command.sh \
-  > "$FIXTURE/runner-decline.changed"
-decline_output=$(RUNNER_DIFF="$FIXTURE/runner-decline.diff" \
-  RUNNER_CHANGED="$FIXTURE/runner-decline.changed" \
+  > "$FIXTURE/runner-credential.changed"
+credential_output=$(RUNNER_DIFF="$FIXTURE/runner-credential.diff" \
+  RUNNER_CHANGED="$FIXTURE/runner-credential.changed" \
   RUNNER_POLICY="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/delegation-security-policy.json" \
-  "$FIXTURE/run-mechanical" 2>"$FIXTURE/runner-decline.stderr")
-[ ! -s "$FIXTURE/runner-decline.stderr" ]
-grep -Fq 'External dispatch declined (high-confidence-credential)' \
-  <<< "$decline_output"
-grep -Fq 'state to the role fallback boundary.' <<< "$decline_output"
-! grep -Fq 'ghp_' <<< "$decline_output"
+  "$FIXTURE/run-mechanical" 2>"$FIXTURE/runner-credential.stderr")
+[ ! -s "$FIXTURE/runner-credential.stderr" ]
+[ "$credential_output" = $'none\t1\t0\t' ]
 
-echo "  OK    OpenRouter agent runner scans once and preserves partial/closed decisions"
+echo "  OK    OpenRouter agent runner scans once and preserves credential parity/closed decisions"
