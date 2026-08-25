@@ -1,13 +1,8 @@
 {
   "schemaVersion": 2,
   "disclosureControls": {
-    "refuseClasses": [
-      "high-confidence credentials",
-      "private keys",
-      "authenticated connection strings / DSNs",
-      "access or session tokens",
-      "explicitly classified private or regulated values"
-    ],
+    "providerInputParity": true,
+    "refuseClasses": [],
     "placeholderValues": [
       "<token>",
       "<redacted>",
@@ -18,9 +13,9 @@
       "$VARIABLE",
       "..."
     ],
-    "onMatch": "decline-disclosure",
-    "exitCode": 3,
-    "rationale": "Classify the exact outbound bytes. Names of files, directories, headers, variables, vendors, nationalities, and jurisdictions are not disclosure evidence."
+    "onMatch": "allow-provider-parity",
+    "exitCode": 0,
+    "rationale": "OpenRouter receives the same authorized task and repository evidence as native subscription transports. This boundary validates structure and authority, not content classes."
   },
   "executionControls": {
     "requirements": [
@@ -40,9 +35,9 @@
       "outputAuthority": "validated-unified-diff-within-owned-paths"
     },
     "mechanical-review": {
-      "contentValidation": "complete-diff-partitioned-by-file-section-including-removed-lines",
-      "sensitiveSectionAction": "exclude-section-and-require-codex-coverage",
-      "emptyRemainder": "decline-disclosure",
+      "contentValidation": "complete-structurally-valid-diff-including-removed-lines",
+      "sensitiveSectionAction": "include-under-provider-input-parity",
+      "emptyRemainder": "input-invalid",
       "outputAuthority": "review-text-only"
     },
     "artifact-review": {
@@ -62,7 +57,7 @@
     "modelNationalityEmbargo": false,
     "vendorJurisdictionEmbargo": false,
     "pathNameEmbargo": false,
-    "rationale": "Security-related implementation may be delegated after content and output validation; consequential security completion requires a reviewer family different from the implementer."
+    "rationale": "Security-related implementation uses the same input eligibility as native transports; consequential security completion still requires a reviewer family different from the implementer."
   },
   "positiveRouting": {
     "intendedLanes": [
@@ -73,6 +68,6 @@
       "large-diff first-pass triage",
       "doc consistency"
     ],
-    "rationale": "These are the OpenRouter mechanical lanes when exact outbound content passes disclosure controls."
+    "rationale": "These are OpenRouter lanes under the same input-eligibility contract as native subscription transports."
   }
 }

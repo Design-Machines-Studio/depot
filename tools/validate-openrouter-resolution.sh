@@ -20,14 +20,13 @@ consumers=(
   plugins/dm-review/skills/review/SKILL.md
   plugins/airlift/commands/airlift-in.md
   plugins/airlift/prompts/airlift-in.md
-  plugins/pipeline/references/cascade-dispatch.sh
-  plugins/pipeline/references/openrouter-exec.sh
+  plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh
   plugins/pipeline/agents/workflow/execution-orchestrator.md
 )
 
 is_configured_key_script() {
   case "$1" in
-    plugins/pipeline/references/cascade-dispatch.sh|plugins/pipeline/references/openrouter-exec.sh) return 0 ;;
+    plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh) return 0 ;;
     *) return 1 ;;
   esac
 }
@@ -64,7 +63,8 @@ for relative in "${consumers[@]}"; do
       plugins/dm-review/skills/review/SKILL.md) openrouter_floor="1.18.0" ;;
       plugins/openrouter/commands/openrouter.md|plugins/openrouter/skills/openrouter/SKILL.md|plugins/openrouter/skills/openrouter-delegate/SKILL.md|plugins/openrouter/skills/openrouter-delegate/references/invocation-protocol.md) openrouter_floor="1.14.0" ;;
       plugins/airlift/*) openrouter_floor="1.14.0" ;;
-      plugins/pipeline/*) openrouter_floor="1.15.0" ;;
+      plugins/model-router/*) openrouter_floor="1.19.0" ;;
+      plugins/pipeline/*) openrouter_floor="1.19.0" ;;
       plugins/openrouter/*) openrouter_floor="1.8.0" ;;
       *) openrouter_floor="1.7.0" ;;
     esac
@@ -136,9 +136,9 @@ validate_active_cache_consumers() {
   grep -Fq 'CONSOLIDATOR_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-consolidator.md"' "$dm_review_file" &&
   grep -Fq 'RECORDER_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-memory-recorder.md"' "$dm_review_file" &&
   grep -Fq 'ERROR: required plugin bundle unavailable: $PLUGIN' "$dm_review_file" &&
-  grep -Fq 'OPENROUTER_AVAILABLE=false' "$dm_review_dispatch_file" &&
-  grep -Fq 'OPENROUTER_UNAVAILABLE_REASON=configured_key_or_bundle_unavailable' "$dm_review_dispatch_file" &&
-  grep -Fq 'retries the lane on Codex without asking the' "$dm_review_file" || consumer_failures=1
+  grep -Fq 'model-router is the single' "$dm_review_file" &&
+  grep -Fq 'There is no additional authorization or caller-owned fallback rail.' "$dm_review_file" &&
+  grep -Fq 'role-dispatch' "$dm_review_dispatch_file" || consumer_failures=1
 
   if grep -Fq 'declare -A' "$dm_review_file" ||
      grep -Fq 'SELECTED_ASSETS_BY_PLUGIN' "$dm_review_file" ||
@@ -155,7 +155,7 @@ validate_active_cache_consumers() {
   grep -Fq 'resolve-plugin-asset \' "$pipeline_file" &&
   grep -Fq -- '--plugin dm-review' "$pipeline_file" &&
   grep -Fq -- '--asset skills/review/references/repo-cleanup-contract.md' "$pipeline_file" &&
-  grep -Fq -- '--minimum-version 1.70.0' "$pipeline_file" &&
+  grep -Fq -- '--minimum-version 1.71.0' "$pipeline_file" &&
   grep -Fq 'CLEANUP_ACTIVE_HOST_ARGS=(--active-host "$CLEANUP_ACTIVE_HOST")' "$pipeline_file" || consumer_failures=1
 
   if grep -Fq 'CONTRACT=$(ls -t "$CACHE"/dm-review/*/skills/review/references/repo-cleanup-contract.md' "$pipeline_file" ||
@@ -252,12 +252,11 @@ if ! "$ROOT/tools/test-openrouter-agent-runner-boundary.sh"; then
 fi
 
 for relative in \
-  plugins/pipeline/references/cascade-dispatch.sh \
-  plugins/pipeline/references/openrouter-exec.sh
+  plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh
 do
   file="$ROOT/$relative"
   grep -Fq 'resolve-plugin-bundle --plugin openrouter' "$file" &&
-  grep -Fq -- '--minimum-version 1.15.0' "$file" &&
+  grep -Fq -- '--minimum-version 1.19.0' "$file" &&
   grep -Fq 'WORKFLOW_KERNEL' "$file" &&
   ! grep -Eq 'ls -t[d]? .*openrouter' "$file" || {
     echo "  FAIL  configured-key consumer bypasses coherent semver OpenRouter resolution: $relative"
@@ -267,7 +266,7 @@ done
 
 authorization_contract="$ROOT/plugins/pipeline/references/openrouter-authorization-contract.md"
 grep -Fq 'OPENROUTER_API_KEY_FILE' "$authorization_contract" &&
-grep -Fq 'delegation-boundary.sh --mode artifact-delegation' "$authorization_contract" &&
+grep -Fq 'add no OpenRouter-only content classification' "$authorization_contract" &&
 grep -Fq 'configured-key path has no broker dependency' "$authorization_contract" || {
   echo "  FAIL  configured-key OpenRouter authorization contract absent"
   failures=1
@@ -292,7 +291,7 @@ do
 done
 
 bulk_criteria="$ROOT/plugins/openrouter/agents/review/openrouter-bulk-analyst.md"
-grep -Fq 'generic `openrouter-agent-runner` is the only execution path' "$bulk_criteria" &&
+grep -Fq 'provider-neutral model-router is the execution path' "$bulk_criteria" &&
 ! grep -Fq 'resolve-plugin-bundle' "$bulk_criteria" &&
 ! grep -Fq 'openrouter-wrapper.sh' "$bulk_criteria" || {
   echo "  FAIL  OpenRouter bulk analyst must remain criteria-only"
@@ -305,15 +304,15 @@ for relative in \
 do
   file="$ROOT/$relative"
   grep -Fq 'delegation-boundary.sh' "$file" &&
-  grep -Fq -- '--mode artifact-delegation' "$file" || {
-    echo "  FAIL  wrapper consumer lacks automatic private-file screening: $relative"
+  grep -Fq -- '--mode artifact-delegation' "$file" &&
+  grep -Fq 'structural' "$file" || {
+    echo "  FAIL  wrapper consumer lacks structural private-file validation: $relative"
     failures=1
   }
 done
 
 for relative in \
-  plugins/pipeline/references/cascade-dispatch.sh \
-  plugins/pipeline/references/openrouter-exec.sh
+  plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh
 do
   file="$ROOT/$relative"
   grep -Fq 'OPENROUTER_API_KEY_FILE' "$file" &&
@@ -322,7 +321,7 @@ do
   ! grep -Fq 'dispatch-provider-request' "$file" &&
   ! grep -Fq 'OPENROUTER_PAYLOAD_AUTHORIZATION' "$file" &&
   ! grep -Fq 'OPENROUTER_PAYLOAD_APPROVAL_SHA256' "$file" || {
-    echo "  FAIL  configured-key consumer does not use the coherent screened wrapper path: $relative"
+    echo "  FAIL  configured-key consumer does not use the coherent structurally validated wrapper path: $relative"
     failures=1
   }
 done
@@ -347,8 +346,7 @@ grep -Fq 'anthropic/*' \
 for origin_guard in \
   "plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh:candidate_origin=" \
   "plugins/openrouter/agents/workflow/openrouter-agent-runner.md:target_model_origin=" \
-  "plugins/pipeline/references/openrouter-exec.sh:candidate_origin=" \
-  "plugins/pipeline/references/cascade-dispatch.sh:model_origin="
+  "plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh:candidate_origin="
 do
   origin_file="${origin_guard%%:*}"
   origin_marker="${origin_guard#*:}"
@@ -372,14 +370,14 @@ grep -Fq '"--required-executable"' \
     failures=1
   }
 grep -Fq 'OPENROUTER_BUNDLE_REF' \
-  "$ROOT/plugins/dm-review/skills/review/references/full-lane-dispatch.md" &&
-grep -Fq '[ "$BUNDLE_REF" = "$openrouter_bundle_ref" ]' \
-  "$ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md" &&
-grep -Fq '[ "$RESOLVED_VERSION" = "$openrouter_bundle_version" ]' \
-  "$ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md" &&
-grep -Fq '[ "$RESOLVED_CLASS" = "$cache_class" ]' \
-  "$ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md" || {
-    echo "  FAIL  dm-review runner selection is not identity-bound across re-resolution"
+  "$ROOT/plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh" &&
+grep -Fq '[ "$RESOLVED_BUNDLE_REF" != "$OPENROUTER_BUNDLE_REF" ]' \
+  "$ROOT/plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh" &&
+grep -Fq '[ "$RESOLVED_BUNDLE_VERSION" != "${OPENROUTER_BUNDLE_VERSION:-}" ]' \
+  "$ROOT/plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh" &&
+grep -Fq '[ "$RESOLVED_BUNDLE_CACHE_CLASS" != "${OPENROUTER_BUNDLE_CACHE_CLASS:-}" ]' \
+  "$ROOT/plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh" || {
+    echo "  FAIL  model-router OpenRouter adapter is not identity-bound across re-resolution"
     failures=1
   }
 grep -Fq 'if type == "boolean" then tostring else error("invalid fallbackUsed") end' \

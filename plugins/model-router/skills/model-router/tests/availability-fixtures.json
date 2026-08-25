@@ -1,0 +1,80 @@
+{
+  "healthy": {
+    "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
+    "claude": {"state": "ok", "authMode": "subscription", "plan": "max", "rateLimitsObserved": true, "fable": "available", "fiveHourRemainingPct": 75, "weeklyRemainingPct": 65},
+    "openrouter": {"state": "ok"}
+  },
+  "second-eligible-operator": {
+    "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
+    "claude": {"state": "ok", "authMode": "subscription", "plan": "max", "rateLimitsObserved": true, "fable": "available", "fiveHourRemainingPct": 75, "weeklyRemainingPct": 65},
+    "openrouter": {"state": "ok"}
+  },
+  "codex-exhausted": {
+    "codex": {"state": "limited", "authMode": "subscription", "fiveHourRemainingPct": 2, "weeklyRemainingPct": 70},
+    "claude": {"state": "unavailable", "authMode": "none", "plan": "unknown", "rateLimitsObserved": false, "fable": "unknown"},
+    "openrouter": {"state": "ok"}
+  },
+  "fable-exhausted": {
+    "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
+    "claude": {"state": "limited", "authMode": "subscription", "plan": "max", "rateLimitsObserved": true, "fable": "exhausted", "fiveHourRemainingPct": 2, "weeklyRemainingPct": 60},
+    "openrouter": {"state": "ok"}
+  },
+  "fable-initial-telemetry-absent": {
+    "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
+    "claude": {"state": "unknown", "authMode": "subscription", "plan": "max", "rateLimitsObserved": false, "fable": "unknown"},
+    "openrouter": {"state": "ok"}
+  },
+  "claude-pro": {
+    "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
+    "claude": {"state": "unknown", "authMode": "subscription", "plan": "pro", "rateLimitsObserved": false, "fable": "unknown"},
+    "openrouter": {"state": "ok"}
+  },
+  "claude-unrecognized-subscription": {
+    "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
+    "claude": {"state": "unknown", "authMode": "subscription", "plan": "unknown", "rateLimitsObserved": false, "fable": "unknown"},
+    "openrouter": {"state": "ok"}
+  },
+  "fable-agent-sdk-capacity": {
+    "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
+    "claude": {
+      "state": "ok",
+      "authMode": "subscription",
+      "plan": "max",
+      "rateLimitsObserved": true,
+      "agentSdkRateLimitsObserved": true,
+      "fable": "available",
+      "fiveHourRemainingPct": 2,
+      "weeklyRemainingPct": 2,
+      "allowances": {
+        "agent_sdk": {
+          "state": "ok",
+          "windows": {
+            "five_hour": {"remaining_pct": 80},
+            "weekly": {"remaining_pct": 70}
+          }
+        }
+      }
+    },
+    "openrouter": {"state": "ok"}
+  },
+  "credits-disabled": {
+    "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
+    "claude": {"state": "ok", "authMode": "subscription", "plan": "credits-only", "paidCreditsEnabled": false, "rateLimitsObserved": false, "fable": "available"},
+    "openrouter": {"state": "ok"}
+  },
+  "credits-enabled": {
+    "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
+    "claude": {"state": "ok", "authMode": "subscription", "plan": "credits-only", "paidCreditsEnabled": true, "rateLimitsObserved": false, "fable": "available"},
+    "openrouter": {"state": "ok"}
+  },
+  "claude-unauthenticated": {
+    "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
+    "claude": {"state": "unavailable", "authMode": "none", "plan": "unknown", "rateLimitsObserved": false, "fable": "unknown"},
+    "openrouter": {"state": "ok"}
+  },
+  "claude-api-key": {
+    "codex": {"state": "ok", "authMode": "subscription", "fiveHourRemainingPct": 80, "weeklyRemainingPct": 70},
+    "claude": {"state": "ok", "authMode": "api", "plan": "max", "rateLimitsObserved": true, "fable": "available", "fiveHourRemainingPct": 75, "weeklyRemainingPct": 65},
+    "openrouter": {"state": "ok"}
+  }
+}

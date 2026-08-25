@@ -1,11 +1,10 @@
 ---
 name: visual-browser-tester
 description: Tests rendered pages in a browser for visual regressions, responsive layout, interactive states, and runtime accessibility using Playwright MCP tools. Runs when template or CSS files change and a dev server is detected.
-model: sonnet
+model: inherit
 ---
 
 <!-- token-economy-hardening:budget-block -->
-<!-- Model tier: `sonnet` -- tight-spec execution/review that needs solid judgment but not the top tier. Prompt quality is the floor now: judgment-heavy seats get Opus, tight-spec execution/review gets Sonnet, mechanical lanes get Haiku. Do NOT downgrade a security seat below Opus. -->
 
 ## Tool-Call Budget & Partial-Return Contract
 

@@ -66,15 +66,9 @@ class WorkflowClassTests(unittest.TestCase):
         )
         self.assertIsNotNone(routing_policy, "canonical routing-policy.json not found")
         upstream = json.loads(routing_policy.read_text(encoding="utf-8"))
-        self.assertNotIn("neverRouteToOpenRouter", upstream["security"])
-        self.assertEqual(
-            upstream["security"]["disclosureControls"]["onMatch"],
-            "decline-disclosure",
-        )
-        self.assertFalse(
-            upstream["security"]["reviewControls"]["pathNameEmbargo"],
-            "routing policy must classify outbound content, not path names",
-        )
+        self.assertNotIn("security", upstream)
+        self.assertIn("provider", upstream["routingOverride"]["forbiddenKeys"])
+        self.assertIn("model", upstream["routingOverride"]["forbiddenKeys"])
 
     def test_sensitive_routing_policy_uses_shared_json_boundaries(self):
         canonical = json.dumps({

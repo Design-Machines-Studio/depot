@@ -262,7 +262,7 @@ require_text "$pipeline_cmd" "repo-cleanup-contract.md" "pipeline command refere
 require_text "$pipeline_cmd" "exact-owned cleanup phase runs on all three answers" "pipeline gate runs cleanup on every answer"
 codex_native_adapter="$REPO_ROOT/plugins/pipeline/references/codex-native-execution-adapter.md"
 rail_exhaustion_gate="$REPO_ROOT/plugins/pipeline/references/rail-exhaustion-ask-gate.md"
-cascade_descent="$REPO_ROOT/plugins/pipeline/references/execution-cascade-descent.md"
+role_dispatch="$REPO_ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh"
 caller_memory="$REPO_ROOT/plugins/pipeline/references/caller-memory-enrichment.md"
 run_memory="$REPO_ROOT/plugins/pipeline/references/run-memory-enrichment.md"
 selective_rerun_ref="$REPO_ROOT/plugins/dm-review/skills/review/references/selective-lane-rerun.md"
@@ -285,7 +285,7 @@ require_text "$review_loop" 'rerun_reasons = every lane in lanes_rerun -> ["sele
 require_text "$review_loop" '`.workflow-kernel/`' "dm-review-loop excludes self-authored review artifacts from trigger matching"
 require_text "$review_loop" '`full_fanout_override: true` and' "dm-review-loop keeps full-fanout skip sets empty"
 require_text "$review_loop" 'explicit booleans `selective_rerun`, `promoted_to_full`, and' "dm-review-loop emits all required iteration booleans"
-require_text "$review_skill" 'There is no additional authorization or fallback rail.' "dm-review has no hidden exhaustion rail"
+require_text "$review_skill" 'There is no additional authorization or caller-owned fallback rail.' "dm-review has no hidden exhaustion rail"
 require_absent "$review_skill" 'authorize one operator-selected fallback provider for THIS LANE' "dm-review removes executable exhaustion option b"
 require_absent "$review_loop" '`lanes_skipped` -- `selected_full_set` minus those ATTEMPTED rows.' "dm-review-loop removes the retired attempted-complement skip formula"
 require_absent "$review_loop_skill" '`lanes_skipped` -- `selected_full_set` minus those ATTEMPTED rows.' "generated dm-review-loop removes the retired attempted-complement skip formula"
@@ -391,7 +391,7 @@ assembly_arch_checks="$REPO_ROOT/plugins/dm-review/skills/review/references/asse
 assembly_sec_checks="$REPO_ROOT/plugins/dm-review/skills/review/references/assembly-security-checks.md"
 plan_visual_readiness="$REPO_ROOT/plugins/pipeline/references/plan-visual-verification-readiness.md"
 plan_assembly_standards="$REPO_ROOT/plugins/pipeline/references/plan-assembly-standards.md"
-codex_native_parity="$REPO_ROOT/plugins/pipeline/references/execution-codex-native-parity.md"
+codex_native_parity="$REPO_ROOT/plugins/pipeline/references/codex-native-execution-adapter.md"
 verification_planner="$REPO_ROOT/plugins/pipeline/references/execution-verification-planner.md"
 verification_profile="$REPO_ROOT/plugins/pipeline/references/execution-verification-profile.md"
 consolidator_gaps="$REPO_ROOT/plugins/dm-review/skills/review/references/consolidator-coverage-gaps.md"
@@ -399,7 +399,7 @@ require_text "$arch" "assembly-architecture-checks.md" "architecture-reviewer lo
 require_text "$sec" "assembly-security-checks.md" "security-auditor loads the Assembly federation/release checks on those surfaces"
 require_text "$plan_adversary" "plan-visual-verification-readiness.md" "plan adversary loads rendered-surface readiness when a surface renders"
 require_text "$plan_adversary" "plan-assembly-standards.md" "plan adversary loads Assembly standards on an Assembly project"
-require_text "$orchestrator" "execution-codex-native-parity.md" "orchestrator loads Codex native parity on a Codex host"
+require_text "$orchestrator" "## Host Adapter Parity" "orchestrator preserves host adapter parity without participant selection"
 require_text "$orchestrator" "execution-verification-planner.md" "orchestrator loads the verification planner on a profile-aware repository"
 require_text "$promptcraft" "Phase 3m: Fixture SDK Conformance Gate" "promptcraft gates fixture SDK conformance"
 require_text "$promptcraft" "Phase 3n: Production Readiness Preflight Gate" "promptcraft gates production preflight"
@@ -469,20 +469,20 @@ require_text "$kernel_promotion" "native_default_not_supported" "promotion keeps
 
 printf "\nPipeline performance contract:\n"
 
-require_text "$pipeline_cmd" "focused Codex review for ordinary chunks" "pipeline command uses focused ordinary-chunk review"
-require_text "$codex_native_adapter" "For ordinary non-sensitive chunks, run one focused read-only Codex review" "Codex adapter uses one focused ordinary-chunk reviewer"
+require_text "$pipeline_cmd" "focused role review after ordinary chunks" "pipeline command uses focused ordinary-chunk role review"
+require_text "$codex_native_adapter" 'request one focused read-only' "Codex adapter uses one focused role reviewer"
 require_text "$orchestrator" "Do not dispatch a multi-agent quick dm-review" "orchestrator avoids per-chunk review fanout"
 require_text "$orchestrator" '`all-chunks-complete` boundary' "orchestrator batches intermediate shadow observation"
 require_text "$orchestrator" "Empty-plan fast path" "orchestrator skips no-op cleanup commands"
 require_text "$promptcraft" "Do not create an orchestrator-owned closeout chunk" "promptcraft excludes closeout-only chunks"
 require_text "$promptcraft" "no more than 8 total chunks" "promptcraft enforces the default run-size budget"
-require_text "$manifest_schema" "scope: newly discovered desirable work" "manifest contract freezes approved scope"
+require_text "$manifest_schema" "Freeze approved scope: newly discovered desirable work" "manifest contract freezes approved scope"
 
 printf "\nExisting-branch and final-review-mode contract:\n"
-require_text "$manifest_schema" '`branchMode` | enum' "manifest schema defines branch setup mode"
-require_text "$manifest_schema" '`expectedFeatureHead` | string or null' "manifest schema binds the expected existing branch head"
-require_text "$manifest_schema" '`finalReviewMode` | enum' "manifest schema defines final review mode"
-require_text "$manifest_schema" '`finalReviewRationale` | string' "manifest schema requires final review rationale"
+require_text "$manifest_schema" '| `branchMode` | enum |' "manifest schema defines branch setup mode"
+require_text "$manifest_schema" '| `expectedFeatureHead` | string or null |' "manifest schema binds the expected existing branch head"
+require_text "$manifest_schema" '| `finalReviewMode` | enum |' "manifest schema defines final review mode"
+require_text "$manifest_schema" '| `finalReviewRationale` | string |' "manifest schema requires final review rationale"
 require_text "$pipeline_run" 'perform no initial push' "pipeline-run forbids an initial push in reuse mode"
 require_text "$orchestrator" 'REMOTE_REF="refs/remotes/origin/$FEATURE_BRANCH"' "orchestrator resolves the remote feature branch explicitly"
 require_text "$orchestrator" 'REMOTE_HEAD="$(git rev-parse --verify "$REMOTE_REF^{commit}")"' "orchestrator resolves the exact remote feature head"
@@ -497,8 +497,8 @@ require_text "$kernel_skill" '`final_review_effective_mode`' "kernel preserves e
 
 printf "\nRendered-surface applicability contract:\n"
 require_text "$manifest_schema" '## Rendered-Surface Applicability' "manifest schema separates rendered-surface applicability"
-require_text "$manifest_schema" '`renderedSurface` | enum' "manifest schema defines the closed applicability field"
-require_text "$manifest_schema" '`renderedSurfaceRationale` | string' "manifest schema requires an applicability rationale"
+require_text "$manifest_schema" '| `renderedSurface` | enum |' "manifest schema defines the closed applicability field"
+require_text "$manifest_schema" '| `renderedSurfaceRationale` | string |' "manifest schema requires an applicability rationale"
 require_text "$manifest_schema" 'Mixed or uncertain scope must use `required`.' "manifest schema fails closed on mixed or uncertain scope"
 require_text "$manifest_schema" 'a planning/report `.html` artifact that is never mounted by the product' "manifest schema covers unserved HTML artifacts"
 require_text "$manifest_schema" 'a non-HTTP CLI `main.go`' "manifest schema covers non-rendering CLI entry points"
@@ -522,7 +522,7 @@ require_absent "$orchestrator" 'Visual Verification Protocol (UI and Integration
 require_absent "$plan_adversary" 'For each chunk classified as UI or Integration' "plan adversary removes kind-only visual readiness"
 require_absent "$pipeline_cmd" 'mandatory when ANY UI/Integration chunk was executed' "pipeline removes kind-only caller browser gate"
 require_line_mutation_sensitive "$manifest_schema" \
-  '| `renderedSurface` | enum | Required on new manifests. Closed values: `"required"` or `"not_applicable"`. Controls visual references, rendered-impression criteria, browser/persona cases, Datastar gates, browser preflight, browser smoke, and final visual verification. It never changes `kind`, executor routing, or code-review depth. |' \
+  '| `renderedSurface` | enum | Required on new manifests. Closed values: `"required"` or `"not_applicable"`. Controls visual references, rendered-impression criteria, browser/persona cases, Datastar gates, browser preflight, browser smoke, and final visual verification. It never changes `kind`, role routing, or code-review depth. |' \
   '| `renderedSurface` | enum | Optional. |' \
   "rendered-surface enum anchor is mutation-sensitive"
 
@@ -530,8 +530,8 @@ require_text "$pipeline_prompts" 'exact closed `decisionProfile`' "pipeline-prom
 require_text "$pipeline_prompts" '`bind-verification-contract`' "pipeline-prompts publishes contract binding"
 require_text "$pipeline_prompts" '`decide-validation-retry`' "pipeline-prompts publishes bounded validation feedback"
 require_text "$pipeline_prompts" "primary process/session quit" "pipeline-prompts publishes primary browser recovery"
-require_text "$cascade_descent" 'The ask is scheduling only.' "orchestrator keeps RC76 as a scheduling decision"
-require_text "$cascade_descent" 'offer exactly `wait` or `park`' "orchestrator closes the current ask action vocabulary"
+require_text "$role_dispatch" 'while IFS= read -r candidate; do' "model-router owns automatic ordered fallback"
+require_absent "$role_dispatch" 'approval' "role fallback never prompts for provider approval"
 if grep -Fq -- 'The answer must be an exact identifier from the derived list.' "$orchestrator"; then
   printf "  FAIL  orchestrator still requires a provider identifier for the wait/park ask\n"
   failures=1
@@ -576,7 +576,7 @@ require_text "$review_skill" "references/selective-lane-allowlist.md" "review re
 require_text "$selective_allowlist" "never relax this equality check to a subset check" "allowlist contract requires exact selected_full_set equality"
 require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.17.0"' "dm-review requires the exact-owned cleanup kernel release"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.70.0"' "pipeline requires the exact-owned dm-review release"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.71.0"' "pipeline requires the exact-owned dm-review release"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'family-independent second-opinion review' "dm-review manifest describes family-independent perspective resolution"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'Full mode only.' "migration-validator registry limits the lane to full mode"
@@ -771,19 +771,19 @@ require_text "$assembly_go_tests" "Batch all fixes from one review pass" "assemb
 require_text "$assembly_go_tests" "Preserve full race," "assembly runner keeps expensive remote lanes explicit"
 require_text "$assembly_verification_profile" '"argv": [' "assembly publishes argv-array profile examples"
 require_text "$assembly_verification_profile" '"id": "go-full-race"' "assembly profile retains candidate race coverage"
-require_text "$cascade_descent" "Otherwise park resumably" "orchestrator parks rather than assuming yes on rail exhaustion"
-require_text "$cascade_descent" "broadens configured-key OpenRouter eligibility" "orchestrator keeps configured-key boundaries non-overridable by the exhaustion ask"
-require_text "$cascade_descent" "weakens sensitive-path" "orchestrator excludes sensitive-path chunks from fallback"
-require_text "$cascade_descent" "waives the final independent review" "orchestrator never waives the final review for capacity"
+require_text "$rail_exhaustion_gate" "parks resumably" "orchestrator parks rather than discarding role-unavailable work"
+require_text "$rail_exhaustion_gate" "never selects, approves, or reveals" "role-unavailable scheduling cannot override concrete routing"
+require_text "$rail_exhaustion_gate" "never weakens owned-path, disclosure, sensitive-path" "orchestrator keeps safety boundaries through fallback"
+require_text "$rail_exhaustion_gate" "final-review requirements" "orchestrator never waives the final review for capacity"
 require_absent "$orchestrator" "Future receipt design" "orchestrator has no dormant fallback receipt design"
 require_absent "$orchestrator" "ask_evidence_ref" "orchestrator has no authorization receipt exchange"
-require_text "$routing_policy" '"exhaustionFallback"' "routing policy declares the exhaustion fallback object"
-require_text "$routing_policy" '"headlessDefault": "park"' "routing policy defaults headless exhaustion to park"
-require_text "$routing_policy" '"neverOfferable"' "routing policy pins the never-offerable rails"
-require_text "$pipeline_run_skill" "Rail-Exhaustion Ask Gate" "generated pipeline-run alias carries the ask gate section"
-require_text "$rail_exhaustion_gate" "There is no dormant or" "pipeline-run has no hidden fallback rail"
-require_text "$review_skill" "Ordinary in-policy OpenRouter/Codex routing remains unaffected" "dm-review keeps configured-key routing separate from exhaustion"
-require_text "$review_skill" "“record the gap and continue” and the headless gap-and-continue default are unavailable" "dm-review cannot gap-and-continue the pipeline final review"
+require_absent "$routing_policy" '"exhaustionFallback"' "Pipeline role policy removes caller-owned provider exhaustion routing"
+require_absent "$routing_policy" '"headlessDefault": "park"' "Pipeline role policy does not add a per-call approval gate"
+require_absent "$routing_policy" '"neverOfferable"' "Pipeline role policy does not pin concrete rails"
+require_text "$pipeline_run_skill" "Role-Unavailable Scheduling Gate" "generated pipeline-run alias carries the scheduling gate"
+require_text "$rail_exhaustion_gate" "after automatic fallback has" "pipeline-run has no hidden caller-selected fallback rail"
+require_text "$review_skill" "There is no additional authorization or caller-owned fallback rail." "dm-review keeps configured routing behind model-router"
+require_text "$review_skill" "Pipeline's final full dm-review" "dm-review cannot gap-and-continue the pipeline final review"
 
 # --------------------------------------------------------------------------
 # Group 6: dm-review quality-pulse contract
@@ -965,11 +965,8 @@ orchestrator="$REPO_ROOT/plugins/pipeline/agents/workflow/execution-orchestrator
 for f in "$review_dispatch_skill" "$orchestrator"; do
   rel="${f#$REPO_ROOT/}"
   require_text "$f" "record-attempt" "$rel records each attempt through the kernel"
-  require_text "$f" "attempt_unmeasured" "$rel names the explicit unmeasured claim"
-  require_text "$f" "--openrouter-receipt" "$rel names the provider-receipt evidence path"
-  require_text "$f" "--request-envelope-sha256" \
-    "$rel binds provider receipts to the attempted request envelope"
-  require_text "$f" "--agent-definition" "$rel names the input-bytes evidence path"
+  require_text "$f" "private router receipt" "$rel preserves exact identity in private router evidence"
+  require_text "$f" "anonymous participant" "$rel keeps ordinary attempt evidence anonymous"
 done
 
 # The per-chunk review tier is a burn control, so it has to be receipt-evidenced
@@ -1041,25 +1038,16 @@ require_text "$eval_sweep" "Hard cap: 40 tool calls" \
 printf "\nrouting invariants:\n"
 
 require_text "$review_skill" \
-  "The second-perspective reviewer model family MUST differ from the family that implemented the diff under review." \
+  'Pass every opaque implementing' \
   "dm-review requires a family-independent second perspective"
-require_text "$review_skill" \
-  "Unknown subscription headroom is treated as at-threshold, never as available." \
+require_text "$REPO_ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh" \
+  "subscription-headroom-unknown" \
   "routing-policy consumers treat unknown subscription headroom conservatively"
 if jq -e '
-  .agentType["security-auditor-codex-signoff"] as $lane
-  | $lane.provider == "implementer-aware-independent-family"
-    and $lane.reviewerFamilyConstraint == "must-differ-from-every-implementer-family"
-    and $lane.preferredProviderWhenIndependent == "codex"
-    and $lane.codexImplementerProvider == "openrouter"
-    and ($lane.failureResolution | [
-      .runner_failure,
-      .full_disclosure_decline,
-      .partial_coverage
-    ] | all(. == "remaining-non-implementing-family-or-review-incomplete"))
-    and .security.reviewControls.highConsequenceSecuritySignoff
-      == "independent-non-implementing-family-required"
-' "$routing_policy" >/dev/null; then
+  .roles["security-review"] as $lane
+  | ($lane | length >= 2)
+    and all($lane[]; (.capabilities | index("independent-family")) != null)
+' "$REPO_ROOT/plugins/model-router/skills/model-router/references/role-policy.json" >/dev/null; then
   printf "  OK    security sign-off route is implementer-aware and family-independent\n"
 else
   printf "  FAIL  security sign-off route is implementer-aware and family-independent\n"
@@ -1075,24 +1063,24 @@ openrouter_wrapper="$REPO_ROOT/plugins/openrouter/skills/openrouter-delegate/ref
 openrouter_agent_runner="$REPO_ROOT/plugins/openrouter/agents/workflow/openrouter-agent-runner.md"
 review_alias="$REPO_ROOT/plugins/dm-review/skills/dm-review/SKILL.md"
 authorization_contract="$REPO_ROOT/plugins/pipeline/references/openrouter-authorization-contract.md"
-openrouter_exec="$REPO_ROOT/plugins/pipeline/references/openrouter-exec.sh"
+openrouter_exec="$REPO_ROOT/plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh"
 cascade_dispatch="$REPO_ROOT/plugins/pipeline/references/cascade-dispatch.sh"
 noninteractive_fixtures="$REPO_ROOT/tests/test_openrouter_noninteractive.py"
 
 require_text "$authorization_contract" 'either `OPENROUTER_API_KEY` or the existing' \
   "configured-key contract accepts both supported key inputs"
-require_text "$authorization_contract" 'delegation-boundary.sh --mode artifact-delegation' \
-  "configured-key contract requires one automatic private-file scan"
+require_text "$authorization_contract" 'add no OpenRouter-only content classification' \
+  "configured-key contract requires provider-neutral input eligibility"
 require_text "$authorization_contract" 'configured-key path has no broker dependency' \
   "configured-key contract has no broker dependency"
 require_text "$openrouter_exec" 'OPENROUTER_EXEC_ALLOWED_PATHS is required' \
   "bounded Pipeline adapter keeps the owned-path allowlist"
 require_text "$openrouter_exec" '--mode artifact-delegation' \
   "bounded Pipeline adapter uses configured-key wrapper transport"
-require_text "$review_skill" 'dispatch immediately' \
-  "dm-review resolves eligible configured-key lanes non-interactively"
-require_text "$review_skill" 'OPENROUTER_API_KEY_FILE' \
-  "dm-review accepts the validated key-file input"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/full-lane-dispatch.md" 'model-router owns every concrete participant' \
+  "dm-review resolves configured lanes non-interactively behind model-router"
+require_text "$openrouter_exec" 'OPENROUTER_API_KEY_FILE' \
+  "model-router adapter accepts the validated key-file input"
 require_absent "$review_skill" 'OPENROUTER_INTERIM_PROGRAM_SUNSET' \
   "dm-review active path has no artificial sunset"
 require_absent "$openrouter_wrapper" 'exact-digest' \
@@ -1125,8 +1113,8 @@ require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/output-forma
   '`implementer_family`, `reviewer_family`, `resolution_reason`' \
   "dm-review output contract requires family provenance on contribution decisions"
 require_text "$review_skill" \
-  'Every machine-readable contribution decision and lane companion also records normalized' \
-  "dm-review review contract requires family provenance on every contribution surface"
+  'only private router receipts retain family evidence' \
+  "dm-review keeps family provenance on the private contribution surface"
 family_surfaces=(
   "$REPO_ROOT/plugins/openrouter/commands/openrouter.md"
   "$REPO_ROOT/plugins/openrouter/skills/openrouter/SKILL.md"
@@ -1154,31 +1142,31 @@ for f in "${family_surfaces[@]}"; do
       "$rel does not hard-wire the implementing Codex family into security sign-off"
   done
 done
-require_text "$review_skill" "Resolve the lane before its provider." \
-  "dm-review resolves independent-lane fallback before generic provider fallback"
-require_text "$review_skill" "all three signals instead" \
-  "dm-review applies the sign-off exception to failures and disclosure markers"
-require_text "$review_skill" "do not complete the held" \
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "Keep the logical lane and its review criteria fixed." \
+  "dm-review resolves independent-lane fallback at the role boundary"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "fails or is unavailable" \
+  "dm-review applies role fallback to failed or unavailable candidates"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "Never complete the lane with an implementing family." \
   "dm-review forbids same-family partial-coverage completion for the sign-off lane"
-require_text "$openrouter_agent_runner" "continues only to a non-implementing family" \
-  "OpenRouter runner keeps full-decline sign-off fallback independent"
-require_text "$openrouter_agent_runner" "must use a non-implementing family for every held path" \
-  "OpenRouter runner keeps partial sign-off fallback independent"
-require_text "$review_skill" "[independent-family-fallback/{reviewer-family}/{agent-name}]" \
-  "dm-review attributes independent fallback to its actual reviewer family"
-require_text "$review_skill" "policy-derived non-implementing family at most once" \
+require_text "$openrouter_agent_runner" "it does not decide whether content is eligible for OpenRouter" \
+  "OpenRouter runner gives provider input the native eligibility boundary"
+require_text "$openrouter_agent_runner" "Credentials, private keys, tokens, authenticated endpoints" \
+  "OpenRouter runner preserves credential-shaped review sections"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "anonymous lane, role" \
+  "dm-review attributes independent fallback anonymously"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/independent-family-lanes.md" "excludes every implementing family" \
   "dm-review bounds independent-family fallback without a same-family retry"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
-  "Never same-family fallback completion" \
+  "REVIEW INCOMPLETE" \
   "graceful degradation keeps sign-off exhaustion review-incomplete"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
-  "| Second perspective |" \
+  "Independent-family role exhausted" \
   "graceful degradation uses the provider-neutral second-perspective lane"
 require_absent "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
   "| Codex perspective |" \
   "graceful degradation removes the retired Codex-only perspective lane"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md" \
-  "second-perspective: unavailable:no-independent-family" \
+  "second-perspective/plan-critic/reviewer-c: unavailable" \
   "review output attributes perspective gaps to family resolution"
 require_absent "$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md" \
   "codex-perspective: skipped:cli-absent" \
@@ -1375,7 +1363,7 @@ require_text "$orchestrator" 'Memory observation handoff: <observation>' \
   "Pipeline orchestrator returns the compact caller handoff"
 require_text "$orchestrator" 'Keep the observation under 300 characters.' \
   "Pipeline orchestrator bounds the memory handoff"
-require_text "$codex_native_parity" 'Personal-memory enrichment is optional.' \
+require_text "$codex_native_parity" 'Personal-memory enrichment remains optional.' \
   "Codex native parity treats personal memory as optional enrichment"
 require_absent "$orchestrator" '`search_entities`' \
   "restricted Pipeline orchestrator does not call ai-memory"
@@ -1442,8 +1430,10 @@ require_text "$orchestrator" 'state `noMergeOnCompletion=true` in **Branch or PR
   "Pipeline routes no-merge disposition into live compact-summary fields"
 require_absent "$orchestrator" 'Summary Report'"'"'s "Next Steps" section' \
   "Pipeline no longer points no-merge runs at the deleted Next Steps section"
-require_text "$orchestrator" 'providerSplit: {claude: N, codex: N, openrouter: N}' \
-  "Pipeline receipt retains provider provenance"
+require_text "$orchestrator" 'roleSplit: {<role>: N}' \
+  "Pipeline receipt retains provider-neutral role provenance"
+require_text "$orchestrator" 'privateRouterReceipts: <operator-only receipt directory; do not expand>' \
+  "Pipeline receipt keeps exact identity behind a private reference"
 require_text "$orchestrator" 'retained/blocked <J>' \
   "Pipeline receipt retains cleanup truth"
 require_text "$orchestrator" 'P1/P2/P3' \
@@ -1483,8 +1473,8 @@ require_text "$reviewer_prompt_template" "External dispatch: resolve every refer
 require_text "$openrouter_runner" "Resolve reference pointers first" "OpenRouter runner resolves reference pointers before dispatch"
 require_text "$openrouter_runner" "unresolved \${CLAUDE_SKILL_DIR} reference" "OpenRouter runner fails closed on a surviving pointer"
 require_text "$openrouter_runner" "deployment-context.md" "OpenRouter runner inlines the deployment context"
-require_text "$full_lane_dispatch" 'inline every trusted `${CLAUDE_SKILL_DIR}/references/<name>.md` pointer' "Codex Branch B resolves reference pointers host-side"
-require_text "$full_lane_dispatch" 'no token may remain' "Codex Branch B forbids an unresolved pointer"
+require_text "$full_lane_dispatch" '`${CLAUDE_SKILL_DIR}/references/<name>.md` pointer host-side' "role dispatch resolves reference pointers host-side"
+require_text "$full_lane_dispatch" 'remain unresolved in the materialized prompt' "role dispatch forbids an unresolved pointer"
 
 printf "\ncontext budget:\n"
 
@@ -1493,6 +1483,7 @@ if [ ! -f "$context_budget" ]; then
   printf "  FAIL  missing %s\n" "${context_budget#$REPO_ROOT/}"
   failures=1
 else
+  context_rc=0
   context_report=$(python3 - "$REPO_ROOT" "$context_budget" <<'PY'
 import json, math, re, sys
 from pathlib import Path
@@ -1764,8 +1755,7 @@ for rel in list(budget["hot_entries"]) + [
 print(f"AGGREGATE {agg} baseline {base_agg}")
 sys.exit(fail)
 PY
-)
-  context_rc=$?
+) || context_rc=$?
   printf "%s\n" "$context_report" | sed 's/^/  /'
   if [ "$context_rc" -ne 0 ]; then
     failures=1

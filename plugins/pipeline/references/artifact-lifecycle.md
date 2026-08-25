@@ -153,8 +153,10 @@ the authoritative Step 5b fields.
 - Chunks: N executed, M parallel
 - Mode: full_cli | codex_native | manual_walkthrough
 - Isolation: per-chunk-worktree | sequential-on-branch
-- providerSplit: `{claude: N, codex: N, openrouter: N}`
-- eligibleProviderSplit: `{codex: N, openrouter: N, targetProfile: <name>, routingVariance: <measured>}`
+- Role split: `{builder-fast: N, builder-deep: N, review-fast: N, review-deep: N, security-review: N}`
+- Effort/fallback: `<requested/effective effort and role-level fallback state>`
+- Private router receipts: `<operator-only content-free receipt refs>`
+- Next action: `<one action or none>`
 - Workflow class: chore | bug | feature | hotfix | security | investigation | migration
 - Workflow class defaulted: true | false
 

@@ -1,7 +1,7 @@
 ---
 name: nats-reviewer
 description: Reviews NATS usage patterns for embedded NATS safety, ScopedEventBus usage, subject naming, KV bucket naming, and event-after-commit ordering. Runs when .go files change and the project uses embeddednats.
-model: sonnet
+model: inherit
 effort: medium
 ---
 

@@ -1,7 +1,7 @@
 ---
 name: go-test-runner
 description: Plans and runs risk-tiered Assembly verification from repository configuration
-model: sonnet
+model: inherit
 effort: low
 ---
 

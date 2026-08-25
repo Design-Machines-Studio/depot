@@ -1,6 +1,6 @@
 {
   "name": "project-manager",
-  "version": "1.9.0",
+  "version": "1.10.0",
   "description": "Project management: LT10 methodology, Notion-integrated sprint planning, and GitHub-native cross-repository Assembly coordination",
   "author": {
     "name": "Design Machines"
@@ -62,7 +62,7 @@
       {
         "id": "assembly-coordinator",
         "name": "Assembly Planning Coordinator",
-        "description": "GitHub-native cross-repository Assembly planning pulse and scope guard",
+        "description": "GitHub-native cross-repository Assembly planning pulse, provider-neutral execution-role assignment, scope guard, and bounded independent plan comparison",
         "triggers": [
           "fresh Assembly planning session",
           "Assembly Coordination Project",
@@ -71,7 +71,10 @@
           "Fixture dependency planning",
           "bounded Pipeline prompt",
           "Assembly tooling scope creep",
-          "Jeremy planning context"
+          "compare Assembly plans",
+          "independent planning opinion",
+          "architect challenge sequence",
+          "assign execution roles"
         ],
         "tags": [
           "assembly",
@@ -79,7 +82,9 @@
           "github",
           "cross-repository",
           "scope-guard",
-          "fixture-planning"
+          "fixture-planning",
+          "role-routing",
+          "plan-comparison"
         ]
       }
     ],
@@ -98,6 +103,9 @@
     "design-machines": ">=1.3.0",
     "ghostwriter": ">=3.7.0",
     "council": ">=1.5.0"
+  },
+  "optionalPluginDependencies": {
+    "model-router": ">=0.1.0"
   },
   "interface": {
     "displayName": "Project Manager",

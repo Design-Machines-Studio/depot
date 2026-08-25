@@ -201,15 +201,29 @@ Use sparingly. The full validator (`bash tools/validate-composition.sh --all`) r
 
 ## Model & Effort Tuning
 
-Claude model aliases remain in agent frontmatter for Claude Code compatibility and non-coding work. They are not coding routes: implementation, code review, security, and architecture execute on Codex or OpenRouter. See `docs/opus-4-8-tuning.md` for the compatibility and non-coding effort policy.
+Pipeline, dm-review, and Assembly coordination request only a closed role,
+required capabilities, and normalized `low|medium|high|max` effort. The internal
+`model-router` plugin owns concrete candidates, provider/transport choice,
+per-operator subscription and billing eligibility, availability, fallback,
+family independence, and exact private receipts. Operational agent cards use
+`model: inherit`; their frontmatter never selects a routed participant.
 
-**Fable escalation (non-coding only):** Claude Fable 5 (`fable`) may be used for strategy, writing/voice, research synthesis, or optional plan critique when the current plan carries it. Never use Fable for implementation, code review, security, architecture, or the execution-orchestrator. Full rules are in `docs/opus-4-8-tuning.md`.
+Fable and native OpenAI candidates are ordinary router candidates when current
+machine and operator evidence makes their subscription rail eligible. No
+tracked policy contains a developer identity, allocation, plan, quota, or paid
+credit preference. OpenRouter remains the authority for its credential loading,
+provider catalog, wrapper, response provenance, provider receipt, and direct
+user-selected `/openrouter --model` behavior. Input eligibility is
+provider-neutral: content accepted by an eligible native Claude or Codex
+subscription candidate is also eligible for OpenRouter, without an
+OpenRouter-only content screen or secret embargo. Cross-transport role order
+lives only in
+`plugins/model-router/skills/model-router/references/role-policy.json`.
 
-**GPT-5.6 family (Jul 2026):** OpenAI's Sol/Terra/Luna tiers replace GPT-5.5 on the OpenAI rails. `gpt-5.6-sol` leads the Codex-native coding ladder. On OpenRouter, Luna is an economical mechanical fallback; Terra remains catalogued but is not a default route. `cascade-dispatch.sh` emits the first floor-clearing model; the orchestrator's **Native Model Descent** (RC 64) walks later Codex models when a CLI rejects one. The Sol rail requires `codex-cli >= 0.144.x`, and `gpt-5.1-codex-mini` is unusable on a ChatGPT-sub account.
-
-**OpenRouter roles (Aug 2026):** ordered role lists, not matrix ranks, select models. DeepSeek V4 Flash 0731 heads bounded execution plus documentation/test review; DeepSeek V4 Pro 0813 handles pattern and provisional long-context analysis; Qwen3.8 Max handles bulk, simplicity, and ordinary independent review; Grok 4.6 is the demanding bounded and security escalation; Luna remains a mechanical fallback. Kimi K3 is selected only for focused applicable security analysis, and GLM 5.2 appears in no active ladder. Complex logic, served UI, integration, sensitive, browser-dependent, and live-tool work remain Codex-first. Either configured key input enables eligible automatically screened direct, dm-review, and bounded Pipeline use without broker approval.
-
-**Coding subscription rails (Jul 2026):** Claude is moving from Max to Pro and is outside the coding graph. Codex Pro 20x is the active coding profile at a 65/0/35 Codex/Claude/OpenRouter target; the named Codex 5x profile shifts to 40/0/60. All implementation and code-review kinds, including UI, security, and architecture, route to Codex or OpenRouter. Claude remains available only for non-coding strategy, writing/voice, research synthesis, and optional plan critique.
+See `docs/opus-4-8-tuning.md` for effort compatibility and
+`plugins/openrouter/skills/openrouter-delegate/references/model-selection.md`
+for provider-catalog evidence. Workflow Kernel observes settled attempts but
+does not select roles or concrete participants.
 
 **Provider privacy (demoted, Jul 2026):** model selection priority is Quality > Price > Speed > Provider privacy. `OPENROUTER_ZDR=1` is opt-in only (genuinely sensitive material: client code under NDA, credentials-adjacent diffs) -- Chinese first-party hosting (Moonshot/DeepSeek/Z.AI) is acceptable by default and no rung pins ZDR anymore.
 

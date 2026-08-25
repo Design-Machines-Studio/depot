@@ -1,11 +1,10 @@
 ---
 name: security-auditor
 description: Reviews code for OWASP Top 10 vulnerabilities and stack-specific attack vectors. Always runs.
-model: opus
+model: inherit
 ---
 
 <!-- token-economy-hardening:budget-block -->
-<!-- Model tier: `opus` -- gates or synthesizes -- the highest-judgment seat, kept on the strongest model. Prompt quality is the floor now: judgment-heavy seats get Opus, tight-spec execution/review gets Sonnet, mechanical lanes get Haiku. Do NOT downgrade a security seat below Opus. -->
 
 # Security Auditor
 

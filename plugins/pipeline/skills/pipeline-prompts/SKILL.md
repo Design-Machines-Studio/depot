@@ -62,7 +62,7 @@ If no plans found, ask: "Provide a path to your plan file, or run `/pipeline` fo
 7. Preserve the required browser ladder in prompts with `renderedSurface: required`: safe failed evidence, primary process/session quit, demonstrably fresh primary retry, genuinely different configured engine, then blocked `human_help_required` with exact case IDs. Curl remains diagnostic only. For `not_applicable`, keep persona/browser arrays empty and do not invent a route or visual criterion.
 8. Save the manifest and prompts to `plans/<feature-slug>/`; execution materializes the behavioral verification contract only after `run.started`.
 
-The optimized ordinary path remains one focused Codex review with at most one
+The optimized ordinary path remains one focused role review with at most one
 repair/recheck pass. These contracts do not restore the old per-chunk review
 fanout or introduce a closeout-only chunk.
 

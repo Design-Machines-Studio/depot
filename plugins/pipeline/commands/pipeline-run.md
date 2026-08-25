@@ -6,7 +6,7 @@ argument-hint: "[path to manifest.json or prompts directory]"
 
 # Pipeline Run
 
-Execute a set of generated prompts autonomously in worktrees with focused Codex
+Execute a set of generated prompts autonomously in worktrees with focused role
 review for ordinary chunks, sensitive-path escalation, and the approved final
 review mode. This is the execution engine -- it creates or reuses branches, runs
 subagents, reviews, fixes, merges, and delivers a clean feature branch.
@@ -22,7 +22,7 @@ the exact blocker, the smallest operator action, and the preserved resumable
 location. Normally stay within roughly 250 words, except for required P1/P2/P3
 findings or a real blocker.
 
-Do not repeat `Steps Completed`, provider accounting, cleanup inventory, every
+Do not repeat `Steps Completed`, concrete routing accounting, cleanup inventory, every
 evaluation receipt, raw review output, or a default action menu in visible chat.
 Those facts remain in the established artifacts. Put one recommended action
 before any genuinely live alternatives.
@@ -57,7 +57,7 @@ Before executing, verify:
    uncertainty/consequence are `low|medium|high`, and rationale is a non-empty
    string. Reject extra keys, malformed/multiple values, or a conflict with the
    approved plan. Keep it separate from workflow class, risk, overlap,
-   complexity, kind/executor, and routing overrides. For a legacy manifest with
+   complexity, kind/role fields, and routing overrides. For a legacy manifest with
    no profile, retain the current standard path and record
    `decision_profile_defaulted=true`; absence is not low/low evidence.
 9. **Rendered-surface applicability is valid** -- New manifests require both
@@ -69,8 +69,14 @@ Before executing, verify:
    Legacy manifests missing both fields default UI/Integration to `required`
    and Logic/Trivial to `not_applicable`, recording
    `rendered_surface_defaulted=true` in every receipt. This field never changes
-   `kind`, provider routing, or review depth.
-10. **Final review mode is valid** -- New manifests require
+   `kind`, role routing, or review depth.
+10. **Role request is valid** -- New manifests pass
+    `plugins/pipeline/references/validate-role-manifest.sh`; they contain
+    `executorRole`, `executorCapabilities`, and `executorEffort`, and contain no
+    provider/model/transport selector. Approved legacy manifests are translated
+    in memory with `translate-legacy-executor.sh`, receipt the translation, and
+    remain byte-identical on disk.
+11. **Final review mode is valid** -- New manifests require
     `finalReviewMode: full|quick` and a non-empty `finalReviewRationale` copied
     from the approved plan. `quick` is invalid for
     `decisionProfile.consequence: high`; a security-sensitive final diff
@@ -149,9 +155,13 @@ terminal checkpoint. Each observation uses:
 
 When the run executes from a Codex host (no Claude `Agent` tool and no nested `Skill(...)` calls), load `plugins/pipeline/references/codex-native-execution-adapter.md` and follow it exactly, recording `executionMode: codex_native`. A Claude-hosted run does not load it and keeps `executionMode: full_cli`. (`claude_native` is a kernel mechanism, not a host execution mode; the closed vocabulary is `full_cli | codex_native | manual_walkthrough | generic | generic_host`.)
 
-## Rail-Exhaustion Ask Gate
+## Role-Unavailable Scheduling Gate
 
-When the cascade reports every configured rail for a chunk exhausted or gated, load `plugins/pipeline/references/rail-exhaustion-ask-gate.md` and follow it. The ask is scheduling only -- it never selects a provider, authorizes another rail, weakens sensitive-path rules, or waives the final independent review. If rails have headroom, do not load it.
+When model-router returns a closed `unavailable` disposition for a required
+role, load `plugins/pipeline/references/rail-exhaustion-ask-gate.md`. This gate
+schedules wait or park only after automatic role fallback is exhausted; it
+never selects, approves, or reveals concrete routing. Do not load it while an
+eligible candidate remains.
 
 ## Process
 

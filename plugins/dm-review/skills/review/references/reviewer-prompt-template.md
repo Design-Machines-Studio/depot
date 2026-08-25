@@ -35,7 +35,7 @@ Project root: <path to project>
 
 ## Deployment Context
 
-[Inline the full content of `${CLAUDE_SKILL_DIR}/references/deployment-context.md` here, unconditionally, for every lane in both modes. Host-assembled external prompts (OpenRouter, Codex) MUST inline this text -- the external model has no filesystem, so an unresolved pointer would strand the trust model.]
+[Inline the full content of `${CLAUDE_SKILL_DIR}/references/deployment-context.md` here, unconditionally, for every lane in both modes. Every materialized participant prompt MUST inline this text; an unresolved pointer would strand the trust model.]
 
 ## Fix Philosophy
 
@@ -55,9 +55,9 @@ once to this prompt and does not replace the agent's domain criteria.
 
 ## External dispatch: resolve every reference pointer
 
-Before external Codex/OpenRouter dispatch, inline every trusted
+Before role dispatch, inline every trusted
 `${CLAUDE_SKILL_DIR}/references/<name>.md` pointer, including conditional stack
-criteria and `deployment-context.md`; no token may reach the model.
+criteria and `deployment-context.md`; no unresolved token may reach the participant.
 
 ## Optional personal enrichment (RAG / ai-memory)
 

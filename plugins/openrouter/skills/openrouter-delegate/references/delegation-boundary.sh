@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Fail-closed OpenRouter disclosure and diff boundary shared by delegation callers.
-# Exit 0 = safe, 3 = actual disclosure decline, 2 = malformed/unverifiable input.
+# Fail-closed OpenRouter structural and diff boundary shared by delegation callers.
+# Exit 0 = structurally valid, 2 = malformed/unverifiable input. Content classes
+# never create an OpenRouter-only rejection relative to native transports.
 
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
@@ -91,10 +92,7 @@ fi
 python3 - "$POLICY" "$CHANGED_FILES" "$DIFF_FILE" "$OUTPUT_PATHS" \
   "$OUTPUT_DIFF" "$OUTPUT_DECLINED_PATHS" "$OUTPUT_DECISION" "$MODE" \
   ${CONTENT_FILES[@]+"${CONTENT_FILES[@]}"} <<'PY'
-import base64
-import collections
 import json
-import math
 import os
 import re
 import shlex
@@ -115,8 +113,7 @@ from pathlib import Path, PurePosixPath
 
 
 def fail(code, reason):
-    category = "disclosure-declined" if code == 3 else "input-invalid"
-    print(f"delegation-boundary: {category}:{reason}", file=sys.stderr)
+    print(f"delegation-boundary: input-invalid:{reason}", file=sys.stderr)
     raise SystemExit(code)
 
 
@@ -163,8 +160,9 @@ try:
     review = policy["reviewControls"]
     if (
         policy.get("schemaVersion") != 2
-        or disclosure.get("onMatch") != "decline-disclosure"
-        or disclosure.get("exitCode") != 3
+        or disclosure.get("providerInputParity") is not True
+        or disclosure.get("onMatch") != "allow-provider-parity"
+        or disclosure.get("exitCode") != 0
         or controls.get("modelCommandAuthority") != "none"
         or mode not in modes
         or review.get("pathNameEmbargo") is not False
@@ -172,205 +170,6 @@ try:
         fail(2, "policy-contract")
 except (KeyError, TypeError, json.JSONDecodeError):
     fail(2, "policy-contract")
-
-
-def high_confidence_literal(value):
-    value = value.strip().strip("'\"`").rstrip(".,;")
-    if len(value) < 16 or any(char.isspace() for char in value):
-        return False
-    classes = sum((
-        bool(re.search(r"[a-z]", value)),
-        bool(re.search(r"[A-Z]", value)),
-        bool(re.search(r"[0-9]", value)),
-        bool(re.search(r"[^A-Za-z0-9]", value)),
-    ))
-    return classes >= 2 or entropy(value) >= 3.5
-
-
-def explicit_not_for_proof_sentinel(value):
-    return bool(re.fullmatch(
-        r"[a-z][a-z0-9]*-(?:secret|access)-not-for-proof",
-        value.lower(),
-    ))
-
-
-def provider_prefixed_remainder(value):
-    lowered = value.lower()
-    for prefix in (
-        "sk-or-v1-", "sk-ant-", "ghp_", "gho_", "ghu_", "ghs_", "ghr_",
-        "github_pat_", "akia", "glpat-", "npm_", "xoxb-", "xoxa-", "xoxp-",
-        "xoxr-", "xoxs-", "aiza", "sk_live_", "rk_live_",
-    ):
-        if lowered.startswith(prefix):
-            return lowered[len(prefix):]
-    return None
-
-
-def placeholder(value):
-    value = value.strip().strip("'\"`").rstrip(".,;")
-    lowered = value.lower()
-    if not value:
-        return True
-    if lowered in {
-        "redacted", "<redacted>", "<token>", "<secret>", "<password>",
-        "<api-key>", "<value>", "example", "example-value", "changeme",
-        "placeholder", "...", "xxx", "xxxxx",
-    }:
-        return True
-    if re.fullmatch(r"\$\{?[A-Z][A-Z0-9_]*\}?", value):
-        return True
-    shell_reference = re.fullmatch(
-        r"\$\{[A-Za-z_][A-Za-z0-9_]*(?:(:-|:\?|-)([^}\r\n]*))?\}",
-        value,
-    )
-    if shell_reference:
-        fallback = shell_reference.group(2) or ""
-        return not high_confidence_literal(fallback)
-    if re.fullmatch(
-        r"\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*\s*\}\}", value
-    ):
-        return True
-    if re.fullmatch(r"[A-Z][A-Z0-9_]*(?:KEY|TOKEN|SECRET|PASSWORD|DSN)", value):
-        return True
-    if re.fullmatch(r"<[^>\r\n]*(?:token|secret|key|password|value|redacted|example)[^>\r\n]*>", lowered):
-        return True
-    if explicit_not_for_proof_sentinel(lowered):
-        return True
-    provider_remainder = provider_prefixed_remainder(lowered)
-    if (
-        provider_remainder is not None
-        and explicit_not_for_proof_sentinel(provider_remainder)
-    ):
-        return True
-    return lowered.startswith(("example-", "dummy-", "placeholder-"))
-
-
-def entropy(value):
-    counts = collections.Counter(value)
-    length = len(value)
-    return -sum((count / length) * math.log2(count / length) for count in counts.values())
-
-
-def high_confidence(value):
-    value = value.strip().strip("'\"`").rstrip(".,;")
-    if placeholder(value):
-        return False
-    return high_confidence_literal(value)
-
-
-def looks_like_jwt(value):
-    value = value.strip().strip("'\"`").rstrip(",;")
-    if placeholder(value) or not re.fullmatch(
-        r"[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]*", value
-    ):
-        return False
-    try:
-        header_raw, payload_raw, signature = value.split(".")
-        header = json.loads(base64.urlsafe_b64decode(
-            header_raw + "=" * (-len(header_raw) % 4)
-        ))
-        payload = json.loads(base64.urlsafe_b64decode(
-            payload_raw + "=" * (-len(payload_raw) % 4)
-        ))
-    except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
-        return False
-    algorithm = header.get("alg") if isinstance(header, dict) else None
-    return (
-        isinstance(header, dict)
-        and isinstance(algorithm, str)
-        and bool(algorithm)
-        and isinstance(payload, dict)
-        and (len(signature) >= 8 or (not signature and algorithm.lower() == "none"))
-    )
-
-
-def disclosure_reason(text):
-    key_block = re.compile(
-        r"(?m)^[ +\-]?-----BEGIN ((?:[A-Z0-9]+ )?PRIVATE KEY)-----\r?\n"
-        r"((?:[ +\-]?[A-Za-z0-9+/=]+\r?\n)+)"
-        r"[ +\-]?-----END \1-----$",
-    )
-    for match in key_block.finditer(text):
-        body = "".join(
-            line.lstrip(" +-") for line in match.group(2).splitlines()
-        )
-        if len(body) >= 32:
-            return "private-key"
-
-    for match in re.finditer(
-        r"(?<![A-Za-z0-9])"
-        r"(?:sk-or-v1-|sk-ant-|gh[pousr]_|github_pat_|AKIA|glpat-|npm_|"
-        r"xox[baprs]-|AIza|(?:sk|rk)_live_)"
-        r"([A-Za-z0-9_./+=:-]{16,})",
-        text,
-    ):
-        if not placeholder(match.group(0)):
-            return "high-confidence-credential"
-
-    for match in re.finditer(
-        r"(?<![A-Za-z0-9_-])"
-        r"([A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]{2,}\.[A-Za-z0-9_-]*)"
-        r"(?![A-Za-z0-9_-])",
-        text,
-    ):
-        if looks_like_jwt(match.group(1)):
-            return "access-token"
-
-    for match in re.finditer(r"\bAuthorization\s*:\s*Bearer\s+([^\s,;]+)", text, re.I):
-        if high_confidence(match.group(1)):
-            return "access-token"
-
-    assignment = re.compile(
-        r"""(?ix)
-        ["']?
-        (
-          [A-Z0-9_]*(?:API[_-]?KEY|ACCESS[_-]?(?:KEY|TOKEN)|
-          SESSION[_-]?(?:ID|TOKEN|SECRET)|TOKEN|SECRET|PASSWORD|PRIVATE[_-]?VALUE)
-          |api[_-]?key|access[_-]?(?:key|token)|session[_-]?(?:token|secret)|
-          session[_-]?id|client[_-]?secret|token|password
-        )
-        ["']?\s*[:=]\s*["']?(
-          \$\{[A-Za-z_][A-Za-z0-9_]*(?:(?::-|:\?|-)[^}\r\n]*)?\}
-          |\$\{\{\s*secrets\.[A-Za-z_][A-Za-z0-9_]*\s*\}\}
-          |[^\s"',;#}]+
-        )
-        """
-    )
-    for match in assignment.finditer(text):
-        if high_confidence(match.group(2)):
-            return "high-confidence-credential"
-
-    for match in re.finditer(
-        r"\b[a-z][a-z0-9+.-]*://([^/\s:@]+):([^/\s@]*)@([^/\s]+)",
-        text,
-        re.I,
-    ):
-        password = match.group(2)
-        if password and not placeholder(password):
-            return "authenticated-dsn"
-
-    if re.search(
-        r"(?im)^\s*(?:data[_ -]?classification|classification|privacy[_ -]?class)"
-        r"\s*[:=]\s*(?:private|regulated)\b",
-        text,
-    ):
-        return "classified-private-data"
-    return None
-
-
-def scan_disclosure(text):
-    reason = disclosure_reason(text)
-    if reason:
-        fail(3, reason)
-
-
-def aggregate_reason(reasons):
-    unique = sorted(set(reasons))
-    if not unique:
-        return "none"
-    if len(unique) == 1:
-        return unique[0]
-    return "multiple-disclosure-classes"
 
 
 def write_decision(decision, eligible_count, declined_count, reason):
@@ -465,7 +264,6 @@ def parse_diff(text):
             fail(2, "diff-header-mismatch")
 
         changed_lines = 0
-        disclosure_lines = []
         for hunk_position, hunk_start in enumerate(hunk_indexes):
             hunk_end = hunk_indexes[hunk_position + 1] if hunk_position + 1 < len(hunk_indexes) else len(section)
             header = section[hunk_start].rstrip("\r\n")
@@ -480,7 +278,6 @@ def parse_diff(text):
                     continue
                 if not line or line[0] not in " +-":
                     fail(2, "malformed-hunk")
-                disclosure_lines.append(line[1:])
                 if line[0] in " -":
                     old_seen += 1
                 if line[0] in " +":
@@ -493,13 +290,13 @@ def parse_diff(text):
             fail(2, "empty-diff")
         section_paths = {git_old, git_new}
         parsed.update(section_paths)
-        sections.append((section_paths, "".join(section), "".join(disclosure_lines)))
+        sections.append((section_paths, "".join(section)))
     return parsed, sections
 
 
 if mode == "artifact-delegation":
     for content_path in content_paths:
-        scan_disclosure(read_text(content_path, "content-unreadable"))
+        read_text(content_path, "content-unreadable")
     raise SystemExit(0)
 
 changed_text = read_text(changed_path, "changed-files-unreadable")
@@ -533,40 +330,13 @@ elif mode == "mechanical-review":
     fail(2, "diff-required")
 
 for content_path in content_paths:
-    scan_disclosure(read_text(content_path, "content-unreadable"))
+    read_text(content_path, "content-unreadable")
 if diff_text:
     if mode == "mechanical-review":
-        safe_sections = []
-        safe_disclosure = []
-        safe_paths = set()
-        declined_reasons = []
-        for section_paths, section_text, disclosure_text in sections:
-            reason = disclosure_reason(disclosure_text)
-            if reason:
-                declined_paths.update(section_paths)
-                declined_reasons.append(reason)
-                continue
-            safe_sections.append(section_text)
-            safe_disclosure.append(disclosure_text)
-            safe_paths.update(section_paths)
-        eligible_section_count = len(safe_sections)
-        declined_section_count = len(declined_reasons)
-        decision_reason = aggregate_reason(declined_reasons)
-        if not safe_sections:
-            write_decision(
-                "full-decline", 0, declined_section_count, decision_reason
-            )
-            fail(3, decision_reason)
-        if declined_reasons:
-            decision = "partial"
-        diff_text = "".join(safe_sections)
-        parsed = safe_paths
-        # Defense in depth: the exact emitted remainder must independently pass.
-        scan_disclosure("".join(safe_disclosure))
-    else:
-        # Scan all hunk payloads, including removed lines and context. Git path
-        # headers are structural metadata and are governed by path policy.
-        scan_disclosure("".join(section[2] for section in sections))
+        eligible_section_count = len(sections)
+        declined_section_count = 0
+        decision = "eligible"
+        decision_reason = "none"
 
 if output_path:
     try:

@@ -103,10 +103,10 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 
 ## The Plugins
 
-18 plugins | 42 domain-facing skills + 1 internal workflow-kernel skill = 43 total skills | 35 generated Codex command-skill aliases | 38 agent cards | 35 commands
+19 plugins | 42 domain-facing skills + 2 internal infrastructure skills = 44 total skills | 35 generated Codex command-skill aliases | 38 agent cards | 35 commands
 
 The generated search index counts every manifest-discovered surface, including
-the internal kernel skill: 43 skills and 38 agents.
+the internal model-router and kernel skills: 44 skills and 38 agents.
 
 | Plugin | Purpose |
 |---|---|
@@ -125,8 +125,9 @@ the internal kernel skill: 43 skills and 38 agents.
 | **the-local** | Self-hosted Matrix network -- Element Web branding, Synapse config |
 | **chef** | Science-driven cooking assistant with Mela integration |
 | **pipeline** | Autonomous feature development pipeline with review-fix loops |
+| **model-router** | Internal provider-neutral role resolution, availability, dispatch, and private receipts |
 | **workflow-kernel** | Neutral deterministic workflow state plus trusted inspection profiles, contained lanes, redaction, canonical output, and compatible trends |
-| **openrouter** | Threat-classified OpenRouter provider for permitted non-secret work; OpenAI and Anthropic remain native-CLI-only |
+| **openrouter** | Receipted OpenRouter provider with provider-neutral input eligibility and bounded output controls; OpenAI and Anthropic remain native-CLI-only |
 | **airlift** | Deterministic cross-harness checkpoint and resume bundles with guarded OpenRouter continuation |
 
 ## Conventions

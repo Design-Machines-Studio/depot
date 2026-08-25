@@ -37,11 +37,11 @@ state `N additional findings` with the exact remaining count, and point to the
 complete report. Never imply that omitted findings do not exist. Chat keeps P3
 compact, but it follows the same fix queue and convergence path as P1/P2.
 
-Do not repeat provider tables, agent transcripts, synthesis ledgers, cleanup
+Do not repeat private routing tables, agent transcripts, synthesis ledgers, cleanup
 tables, or raw reports in the handoff. Write them to the established durable
 artifact `.claude/ux-review/report.md` before delivery. Coverage gaps, blocked
 browser evidence, cleanup truth, finding IDs, and
-literal provider/model provenance remain in that complete evidence flow.
+exact participant identity remains only in content-free private router receipts.
 
 Clean review: use `CLEAN` only when every required lane completed and no
 retained P1/P2/P3 finding remains.
@@ -59,7 +59,7 @@ keep every retained finding in the repair queue.
 **Mode:** [Full / Quick]
 **Project Type:** [Go+Templ+Datastar / Craft CMS / CSS Framework / Mixed]
 **Agents Launched:** X of Y applicable
-**Lanes:** codex: ran | openrouter: fallback:codex | claude-noncoding: ran | second-perspective: unavailable:no-independent-family
+**Lanes:** architecture/review-deep/reviewer-a: ran | security/security-review/reviewer-b: fallback | second-perspective/plan-critic/reviewer-c: unavailable
 **Evidence source:** PR threads | receipts | merge bodies | closed issues | verification files | none found
 
 ---
@@ -77,7 +77,7 @@ keep every retained finding in the repair queue.
 #### [Finding Title]
 - **Finding ID:** `finding-v1:sha256(<normalized-key>)`
 - **Source:** [agent-name]
-- **Source findings:** [source-id -> lane/requested-provider/attempted-provider/implemented-by/model/agent; evidence; raw_ref]
+- **Source findings:** [source-id -> lane/role/anonymous-participant/agent; evidence; raw_ref]
 - **File:** path/to/file.ext:line
 - **Issue:** Clear description of the problem
 - **Fix:** Specific remediation steps
@@ -92,7 +92,7 @@ keep every retained finding in the repair queue.
 #### [Finding Title]
 - **Finding ID:** `finding-v1:sha256(<normalized-key>)`
 - **Source:** [agent-name]
-- **Source findings:** [source-id -> lane/requested-provider/attempted-provider/implemented-by/model/agent; evidence; raw_ref]
+- **Source findings:** [source-id -> lane/role/anonymous-participant/agent; evidence; raw_ref]
 - **File:** path/to/file.ext:line
 - **Issue:** Description
 - **Fix:** Remediation
@@ -106,7 +106,7 @@ keep every retained finding in the repair queue.
 #### [Finding Title]
 - **Finding ID:** `finding-v1:sha256(<normalized-key>)`
 - **Source:** [agent-name]
-- **Source findings:** [source-id -> lane/requested-provider/attempted-provider/implemented-by/model/agent; evidence; raw_ref]
+- **Source findings:** [source-id -> lane/role/anonymous-participant/agent; evidence; raw_ref]
 - **File:** path/to/file.ext:line
 - **Issue:** Description
 - **Fix:** Remediation
@@ -119,16 +119,16 @@ keep every retained finding in the repair queue.
 
 | Finding ID | Agreement | Disputed with | Selected outcome | Source decisions | Evidence rationale |
 |------------|-----------|---------------|------------------|------------------|--------------------|
-| `finding-v1:sha256(aaaa...)` | disputed | `finding-v1:sha256(bbbb...)` via reciprocal `cross_id_link` | retained as P1 | `source-id-a`: lane=`openrouter-fallback`, requested=`OpenRouter`, attempted=`OpenRouter`, implemented-by=`Codex`, model=`gpt-5`, agent=`security-auditor`, severity=`P1`, evidence=`runtime test reproduces unsafe write`, disposition/reason=`retained/retained-disagreement`, raw_ref=`raw/security.md#finding-1`, rationale=`runtime evidence establishes this root cause` | Reproducible runtime evidence supports source A and outranks the linked static hypothesis. |
-| `finding-v1:sha256(bbbb...)` | disputed | `finding-v1:sha256(aaaa...)` via reciprocal `cross_id_link` | discarded in favor of stronger evidence | `source-id-b`: lane=`openrouter`, requested=`OpenRouter`, attempted=`OpenRouter`, implemented-by=`OpenRouter`, model=`deepseek/deepseek-v4-pro-0813`, agent=`pattern-recognition-specialist`, severity=`P3`, evidence=`static inspection attributes the write to a different root cause`, disposition/reason=`discarded/superseded-by-stronger-evidence`, raw_ref=`raw/patterns.md#finding-2`, rationale=`runtime reproduction contradicts this root-cause position` | The contradictory source position and its evidence remain visible despite the discarded outcome. |
+| `finding-v1:sha256(aaaa...)` | disputed | `finding-v1:sha256(bbbb...)` via reciprocal `cross_id_link` | retained as P1 | `source-id-a`: lane=`security`, role=`security-review`, participant=`reviewer-a`, agent=`security-auditor`, severity=`P1`, evidence=`runtime test reproduces unsafe write`, disposition/reason=`retained/retained-disagreement`, raw_ref=`raw/security.md#finding-1`, rationale=`runtime evidence establishes this root cause` | Reproducible runtime evidence supports source A and outranks the linked static hypothesis. |
+| `finding-v1:sha256(bbbb...)` | disputed | `finding-v1:sha256(aaaa...)` via reciprocal `cross_id_link` | discarded in favor of stronger evidence | `source-id-b`: lane=`patterns`, role=`review-deep`, participant=`reviewer-b`, agent=`pattern-recognition-specialist`, severity=`P3`, evidence=`static inspection attributes the write to a different root cause`, disposition/reason=`discarded/superseded-by-stronger-evidence`, raw_ref=`raw/patterns.md#finding-2`, rationale=`runtime reproduction contradicts this root-cause position` | The contradictory source position and its evidence remain visible despite the discarded outcome. |
 
 One row per canonical finding, sorted by finding ID. Within a row, sort source
 decisions by source finding ID. Sort cross-ID links by ordered ID pair and emit
 them reciprocally on every linked row. Use
 `agreement: unique|corroborated|disputed`
 independently from `finding_disposition: retained|merged|discarded`. Each source
-decision names its literal lane, requested/attempted/implemented-by provider,
-model, agent, source evidence, source severity, disposition, closed
+decision names its literal lane, role, anonymous participant, agent, source
+evidence, source severity, disposition, closed
 `decision_reason_code`, raw artifact reference, and a compact rationale. For
 severity disagreement, show every source severity, the chosen severity, and why
 the selected evidence outranks the alternatives.
@@ -150,8 +150,9 @@ appends the ordered contribution receipts.
 | Lane receipts | `review_lane_receipts` | `lanes` (one entry per required lane) | `reviewer`, `lane`, `requested_provider`, `attempted_provider`, `implemented_by`, `provider`, `model`, `implementer_family`, `reviewer_family`, `resolution_reason`, nonempty `evidence_refs`, nonnegative integer `finding_count`, content-addressed `raw_output_ref` and `raw_output_digest` |
 | Raw lane outputs | `review_lane_raw_outputs` | `outputs` (one per requested lane) | only `reviewer`, `lane`, and `findings`; `findings` uses the raw inventory shape and may be empty |
 
-Use literal provider/model values from the lane receipt, or `not_reported` when
-it names none. Every decision records normalized family provenance: ordinary
+The four companions remain machine evidence for the current Workflow Kernel
+contract. Keep them outside prompts and ordinary reports; exact identity fields
+are populated from private router receipts, never exposed to peer agents. Every decision records normalized family provenance: ordinary
 lanes may record the same implementer and reviewer family with a resolution such
 as `ordinary-lane-same-family-review`; required independent lanes must use
 disjoint families, including disjoint members of `mixed(<sorted families>)`, and
@@ -172,13 +173,13 @@ hashing or creating any sealed artifact.
 One compact row per selected lane, projected from existing lane and coverage
 receipts. Do not copy reviewer output into this report.
 
-| Reviewer | Lane | Status | Findings | Provider / model | Evidence references | Raw output reference | Raw output digest |
-|----------|------|--------|----------|------------------|---------------------|----------------------|-------------------|
-| code-simplicity-reviewer | codex | Done | 2 | Codex / gpt-5 | `raw/simplicity.md#finding-1` | `contribution-inputs/raw-lane-outputs/<digest>.json` | `sha256:<digest>` |
-| security-auditor | openrouter-fallback | Partial | 0 | requested=OpenRouter; implemented-by=Codex / gpt-5 | `raw/security.md` | `contribution-inputs/raw-lane-outputs/<digest>.json` | `sha256:<digest>` |
+| Reviewer | Lane | Role / participant | Status | Findings | Evidence references | Raw output reference | Raw output digest |
+|----------|------|--------------------|--------|----------|---------------------|----------------------|-------------------|
+| code-simplicity-reviewer | simplicity | `review-deep` / reviewer-a | Done | 2 | `raw/simplicity.md#finding-1` | `contribution-inputs/raw-lane-outputs/<digest>.json` | `sha256:<digest>` |
+| security-auditor | security | `security-review` / reviewer-b | Partial | 0 | `raw/security.md` | `contribution-inputs/raw-lane-outputs/<digest>.json` | `sha256:<digest>` |
 
-Use literal receipt values, including provenance, references, `raw_output_ref`,
-and `raw_output_digest`. Incomplete required lanes stay visible here and in
+Use public lane receipt values, references, `raw_output_ref`, and
+`raw_output_digest`. Incomplete required lanes stay visible here and in
 Coverage Gaps; they never support clean. This index creates no transcript.
 
 ---

@@ -1,0 +1,10 @@
+[
+  {"query":"Dispatch a builder role without choosing a provider.","should_trigger":true},
+  {"query":"Resolve an independent reviewer from opaque implementation receipts.","should_trigger":true},
+  {"query":"Route an architect role with long context and high effort.","should_trigger":true},
+  {"query":"Choose a provider-neutral role for this bounded model task.","should_trigger":true},
+  {"query":"Run a code review on this pull request.","should_trigger":false},
+  {"query":"Prepare the next Assembly development chunk.","should_trigger":false},
+  {"query":"Call OpenRouter directly with a model override.","should_trigger":false},
+  {"query":"Explain how workflow replay works.","should_trigger":false}
+]

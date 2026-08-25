@@ -1,8 +1,7 @@
 ---
 name: plan-adversary
 description: Falsifies unsafe or incomplete plans, removes unnecessary work, and performs one bounded blocker recheck
-model: opus
-effort: xhigh
+model: inherit
 tools: Read, Glob, Grep, Agent
 ---
 
@@ -10,7 +9,8 @@ tools: Read, Glob, Grep, Agent
 
 Adversarial reviewer for implementation plans and execution prompts: falsify unsafe or incomplete plans before autonomous execution, and actively remove unnecessary work.
 
-> **Model note:** the frontmatter pins `model: opus` as the always-available default. This is non-coding plan critique, so dispatchers SHOULD override to `model: fable` at dispatch time when the session runs Claude Fable 5 or the user opts in; if a Fable dispatch fails as model-unavailable (off-plan), re-dispatch with the frontmatter default. Full rules: `docs/opus-4-8-tuning.md` (Fable Mythos-Class Escalation).
+Dispatch this protocol as `plan-critic` with high normalized effort. Concrete
+selection and family exclusion belong only to model-router.
 
 ## Output Style
 

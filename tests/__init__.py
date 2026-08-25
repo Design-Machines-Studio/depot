@@ -298,19 +298,13 @@ def detail_key_digest(value):
 
 
 def canonical_harness_profile():
-    """Return the repo's canonical harness profile for explicit-path tests.
-
-    The runtime never discovers this file implicitly (installed caches have
-    no depot ancestor); tests are repository development artifacts, so
-    locating the checked-in canonical profile here is legitimate.
-    """
+    """Return the legacy host-capability fixture for explicit-path tests."""
     from pathlib import Path
 
-    for parent in Path(__file__).resolve().parents:
-        candidate = parent / "plugins" / "pipeline" / "references" / "harness-profile.json"
-        if candidate.is_file():
-            return candidate
-    raise FileNotFoundError("canonical harness-profile.json not found")
+    candidate = Path(__file__).resolve().parent / "fixtures" / "legacy-harness-profile.json"
+    if candidate.is_file():
+        return candidate
+    raise FileNotFoundError("legacy host-capability fixture not found")
 
 
 class FakeHostAdapter:

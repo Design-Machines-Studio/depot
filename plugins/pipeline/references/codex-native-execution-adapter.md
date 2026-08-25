@@ -8,7 +8,12 @@ When this command runs in Codex and the session exposes `multi_agent_v1.spawn_ag
 
 **Mode label:** Set `executionMode: codex_native` in the progress ledger, every chunk receipt, `plans/<feature>/receipt.md`, and the final summary.
 
-The adapter also preserves `workflowClass` and provider evidence across hosts. Every dispatch receipt names `requestedProvider`, `attemptedProvider`, `implementedBy`, boolean `fallback`, and `fallbackReason`. `fallback` is strictly `true|false`, never a transition string or null; the requested, attempted, and implemented provider fields carry the transition. An unavailable or misrouted lane is evidence, not permission to silently relabel an inline implementation.
+The adapter preserves `workflowClass` and role evidence across hosts. Every
+public dispatch receipt names requested role/capabilities/effort, effective
+effort, anonymous participant, boolean `fallback`, and `fallbackReason`.
+Concrete identity and billing stay in the referenced private model-router
+receipt. An unavailable lane is evidence, not permission to relabel inline
+implementation.
 
 It also preserves `decisionProfile` and
 `decision_profile_defaulted`. Read `decisionLeverage` from the routing policy as
@@ -27,7 +32,13 @@ Never estimate an interval or classify active implementation/review as waiting.
 
 **Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: branch create/reuse semantics, worktree isolation or the documented `sequential-on-branch` isolation strategy (recorded as `isolationStrategy`, never as `executionMode`) for container-mounted test harnesses, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, the approved final review mode, cleanup, and summary. Personal-memory enrichment remains optional.
 
-**Implementation dispatch:** For each chunk, create the worktree first, inline the full prompt content, then call `multi_agent_v1.spawn_agent` with `agent_type: "worker"`. The worker prompt MUST include:
+**Implementation dispatch:** For each chunk, create the worktree first and
+materialize the complete prompt. Invoke model-router's `role-dispatch.sh` from
+that worktree with the manifest's `executorRole`, repeated
+`executorCapabilities`, and `executorEffort`, plus fresh output and private
+receipt destinations, the complete repository-evidence file, and the current
+behavioral contract digest/revision. Build argv as an array. Never call a host
+worker/model transport directly. The materialized prompt MUST include:
 
 - The worktree path as the only allowed write scope.
 - The complete chunk prompt content, not a path to the prompt.
@@ -35,7 +46,9 @@ Never estimate an interval or classify active implementation/review as waiting.
 - A reminder that other workers may be active and the worker must not revert unrelated changes.
 - A requirement to commit its chunk changes before reporting completion.
 
-Wait for the worker result before validating that chunk. Do not dispatch overlapping chunks in parallel unless the manifest level grouping and file ownership are disjoint.
+Wait for the role result before validating that chunk. Do not dispatch
+overlapping chunks in parallel unless the manifest level grouping and file
+ownership are disjoint.
 
 On eligible deterministic validation failure, the adapter follows the
 orchestrator's canonical feedback receipt and invokes exactly:
@@ -55,14 +68,18 @@ references.
 
 **Review adapter:** Codex sessions do not expose a generic nested `Skill(skill="dm-review:review", ...)` callable. Use this risk-tiered contract in the current orchestrator context:
 
-- For ordinary non-sensitive chunks, run one focused read-only Codex review against the chunk diff and allow at most one P1/P2/P3 repair/recheck pass. Preserve pending/done todo receipts.
+- For ordinary non-sensitive chunks, request one focused read-only
+  `review-fast` or `review-deep` role against the chunk diff and allow at most
+  one P1/P2/P3 repair/recheck pass. Preserve pending/done todo receipts.
 - For sensitive-path chunks, run the full inline `plugins/dm-review/skills/review/SKILL.md` protocol against the chunk worktree, with at most two passes.
 - For the final gate, read `finalReviewMode`. `full` runs the review skill's
   full-mode protocol. `quick` loads and executes the installed
   `dm-review-quick` protocol against the feature branch; if that protocol finds
   a bounded security-sensitive path, escalate to full and receipt the effective
   mode.
-- Use `multi_agent_v1.spawn_agent` for the focused Codex reviewer or for review agents selected by the chosen dm-review protocol when available.
+- Dispatch every selected review lane through model-router using dm-review's
+  role mapping and opaque implementing receipt IDs when independence is
+  required.
 - Fix every retained P1/P2/P3 finding and verify repairs with affected lanes; repeat the full fan-out only if its coverage was incomplete or a repair changed a security-sensitive boundary. Reject unsupported preference-only suggestions during consolidation instead of deferring them.
 - Write/read the same `todos/*-pending-*.md` and `todos/*-done-*.md` receipts that dm-review uses.
 
@@ -85,6 +102,13 @@ fix. For an
 Assembly target without `.dm/verification.json`, stop for project
 configuration rather than restoring hardcoded Go/Docker commands.
 
-**Repository cleanup is host-independent.** The Codex adapter runs the same cleanup contract as the Claude path, at the same points (Step 0e registry init, Step 3j per chunk, Step 5b exact-record reconciliation + inventory) -- see `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`. Cleanup is deterministic Git executed by the orchestrator in-process. It is never delegated to a `multi_agent_v1.spawn_agent` worker and never routed through `openrouter-exec.sh` or `openrouter-wrapper.sh`. Deleting refs is not a judgment task, and a worker sandbox cannot be trusted to report honestly which refs survived.
+**Repository cleanup is host-independent.** The adapter runs the same cleanup
+contract at the same points (Step 0e registry init, Step 3j per chunk, Step 5b
+exact-record reconciliation + inventory) -- see
+`plugins/dm-review/skills/review/references/repo-cleanup-contract.md`. Cleanup
+is deterministic Git executed by the orchestrator in-process. It is never
+delegated to model-router or any participant. Deleting refs is not a judgment
+task, and a worker sandbox cannot be trusted to report honestly which refs
+survived.
 
 The Codex adapter does not get a weaker gate than the Claude path. If `codex_native` cannot execute the cleanup phase, that is a pipeline-blocking failure, not a degradation.

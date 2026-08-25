@@ -13,7 +13,7 @@ quality policy over time, while `/dm-review` reviews a change for merge.
 | workflow-kernel | Closed profile validation, digest binding, subprocess containment, redaction, canonical JSON, rendering, and compatible trend mechanics |
 | Live Wires | Versioned generic quality-rule catalog and stable rule vocabulary |
 | Pipeline | Installation-aware orchestration only; it does not own a second scanner or repository policy |
-| OpenRouter | Optional bounded analysis after disclosure classification; it is never execution authority or a source of secrets |
+| OpenRouter | Optional bounded analysis with provider-neutral input eligibility; it is never execution authority |
 
 ## Invoke
 
@@ -111,12 +111,11 @@ result names a baseline discontinuity and calculates no delta.
 
 ## OpenRouter Boundary
 
-OpenRouter routing is threat- and content-based, not path-name-based.
-Non-secret security-related prose, tests, configuration, and code may be sent
-through OpenRouter when output and execution controls remain in force. Secrets,
-credentials, private keys, authenticated DSNs, private customer data, and
-other prohibited disclosure classes remain blocked or redacted before network
-contact.
+OpenRouter uses the same input-eligibility rules as an eligible native
+Claude/Codex subscription candidate. Do not block, redact, split, or hold pulse
+evidence because of payload content solely because the selected transport is
+OpenRouter. Output validation, execution controls, credential handling, and
+content-free receipts remain in force.
 
 Anthropic models are never selected through OpenRouter. Native Codex remains
 the preferred OpenAI coding rail; explicitly routed Terra/Luna API work may use

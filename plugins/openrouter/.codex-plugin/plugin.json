@@ -1,6 +1,6 @@
 {
   "name": "openrouter",
-  "version": "1.18.0",
+  "version": "1.19.0",
   "description": "OpenRouter provider with sensitive-payload refusal, routed DeepSeek/Qwen/Grok/Kimi/Luna workflows, and MCP controls.",
   "author": {
     "name": "Design Machines",

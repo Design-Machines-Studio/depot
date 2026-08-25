@@ -122,15 +122,16 @@ printf 'private text outside the handoff\n' > "$FIXTURE/private.txt"
 rm -f "$FIXTURE/bundle/HANDOFF.md"
 ln -s "$FIXTURE/private.txt" "$FIXTURE/bundle/HANDOFF.md"
 rm -f "$FIXTURE/sentinel"
-run_expect 2 "symlink handoff is rejected before disclosure screening" env
+run_expect 2 "symlink handoff is rejected before structural validation" env
 [ ! -e "$FIXTURE/sentinel" ]
 rm -f "$FIXTURE/bundle/HANDOFF.md"
 
 printf 'OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890\n' > "$FIXTURE/bundle/RESUME_PROMPT.md"
 printf 'Objective: validate the handoff.\n' > "$FIXTURE/bundle/HANDOFF.md"
 rm -f "$FIXTURE/sentinel"
-run_expect 3 "resume prompt disclosure declines distinctly" env
-[ ! -e "$FIXTURE/sentinel" ]
+run_expect 0 "credential-shaped resume prompt reaches wrapper" env
+[ -e "$FIXTURE/sentinel" ]
+grep -Fxq 'OPENROUTER_API_KEY=sk-or-v1-realistic-token-1234567890' "$FIXTURE/captured.resume"
 
 printf 'Continue safely.\n' > "$FIXTURE/bundle/RESUME_PROMPT.md"
 printf '%s\n' \
@@ -138,15 +139,16 @@ printf '%s\n' \
   'QUJDREVGR0hJSktMTU5PUFFSU1RVVldYWVo0123456789abcd' \
   '-----END PRIVATE KEY-----' > "$FIXTURE/bundle/HANDOFF.md"
 rm -f "$FIXTURE/sentinel"
-run_expect 3 "handoff disclosure declines distinctly" env
-[ ! -e "$FIXTURE/sentinel" ]
+run_expect 0 "private-key-shaped handoff reaches wrapper" env
+[ -e "$FIXTURE/sentinel" ]
+grep -Fxq -- '-----BEGIN PRIVATE KEY-----' "$FIXTURE/captured.handoff"
 
 printf 'Objective: safe.\n' > "$FIXTURE/bundle/HANDOFF.md"
 cp "$REFS/delegation-boundary.sh" "$FIXTURE/boundary-good"
 printf '%s\n' '#!/usr/bin/env bash' 'exit 2' > "$REFS/delegation-boundary.sh"
 chmod +x "$REFS/delegation-boundary.sh"
 rm -f "$FIXTURE/sentinel"
-run_expect 2 "malformed boundary is distinct from disclosure decline" env
+run_expect 2 "malformed boundary fails structural validation" env
 [ ! -e "$FIXTURE/sentinel" ]
 cp "$FIXTURE/boundary-good" "$REFS/delegation-boundary.sh"
 chmod +x "$REFS/delegation-boundary.sh"

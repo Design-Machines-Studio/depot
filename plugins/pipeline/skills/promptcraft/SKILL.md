@@ -44,14 +44,14 @@ A chunk is a logically complete unit (one feature aspect, one migration, one com
    - `integration`: prompt contains wiring verbs ("wire," "integrate," "connect") OR modifies route files / `main.go`
    - `config`: `.md`, `.json`, `.yaml`, `.toml`, docs, and unserved non-rendered planning HTML under `plans/**` (including `plans/**/work-paths.html`)
 
-   Then derive `executor` from the shared routing policy at `plugins/pipeline/references/routing-policy.json`, not from hardcoded local rules:
-   - `config` / docs / pure prose -> `openrouter`
-   - mechanical `logic` (rename follow-through, test tables, seed/migration edits) -> `openrouter` or `codex` per policy
-   - complex `logic` (new service methods, refactors, multi-file behavior) -> `codex`
-   - `ui` -> `codex`
-   - `integration` -> `codex`
+   Then derive `executorRole`, `executorCapabilities`, and `executorEffort` from
+   `plugins/pipeline/references/routing-policy.json`:
+   - bounded config, docs, and mechanical work -> `builder-fast`;
+   - complex logic, UI, and integration -> `builder-deep`;
+   - add `browser`, `tool-use`, `long-context`, or `structured-output` only
+     when the chunk actually requires that capability.
 
-   Planning HTML is an explicit narrow exception to the `.html` UI trigger: a chunk containing only planning Markdown/JSON/YAML plus unserved `plans/**.html` artifacts remains `config` and OpenRouter-eligible without a routing override. If splitting separates offline planning artifacts from served UI or live-tool work, split it; mixed or uncertain product surfaces classify up: `ui` > `integration` > `logic` > `config`.
+   Planning HTML is an explicit narrow exception to the `.html` UI trigger: a chunk containing only planning Markdown/JSON/YAML plus unserved `plans/**.html` artifacts remains `config` and `builder-fast`. If splitting separates offline planning artifacts from served UI or live-tool work, split it; mixed or uncertain product surfaces classify up: `ui` > `integration` > `logic` > `config`.
 
    Then classify rendered-output applicability independently. Every new chunk
    MUST carry `renderedSurface: required|not_applicable` and a non-empty
@@ -63,9 +63,9 @@ A chunk is a logically complete unit (one feature aspect, one migration, one com
    `main.go`; name the triggering files and absence of a product route/output
    in the rationale. Mixed or uncertain chunks are `required`. This field
    controls browser/persona/visual/Datastar evidence only; it never changes
-   `kind`, executor routing, or review depth.
+   `kind`, role routing, or review depth.
 
-   Before assigning Codex because a task needs a live connector, browser, GitHub/Notion operation, or another host-only tool, split the live-tool action from offline analysis/config/docs whenever file ownership and dependency order permit; the offline chunk keeps its policy-selected OpenRouter executor. If a chunk's `executor` differs from the routing-policy default, add a `routingOverride` object with `reasonCode`, a concrete `reason`, `splitAttempted`, and `splitBlockedBy`. A `config`/docs chunk with `executor: codex` and no complete `routingOverride` is invalid; tool mentions alone are never a silent override.
+   Split live-tool work from offline analysis/config/docs whenever ownership and dependency order permit. If a chunk's role, capabilities, or effort differs from the policy default, add a closed `routingOverride` with the replacement role fields, `reasonCode`, and concrete `reason`. The override may not select or encode a provider, model, transport, family, subscription, or billing source.
 
 **Run-size and scope budget:**
 
@@ -89,14 +89,15 @@ conflict with approved upstream data blocks prompt generation and returns to
 the combined discovery gate.
 
 Keep `decisionProfile` distinct from `workflowClass`, `risk`, `overlapRisk`,
-`estimatedComplexity`, `kind`, `renderedSurface`, `executor`, and
+`estimatedComplexity`, `kind`, `renderedSurface`, `executorRole`,
+`executorCapabilities`, `executorEffort`, and
 `routingOverride`. Apply the
 `decisionLeverage` section from `routing-policy.json` to workflow depth only:
 low/low uses the optimized current path; high uncertainty adds one independent
 planning opinion plus one bounded synthesis; high consequence strengthens the
 existing independent verification seam; high/high applies both; all other
 combinations keep standard depth. Never expand this into debate or full review
-per chunk. It cannot select providers/models/executors, relax security, alter
+per chunk. It cannot select roles, capabilities, effort, concrete routing, relax security, alter
 workflow class, reduce browser/persona evidence, weaken cleanup, or alter
 economics.
 
@@ -190,14 +191,14 @@ Sibling parallel prompts must not cross-reference each other: "after chunk-02 ad
 
 ### Phase 3l: Manifest Schema Conformance Gate
 
-Validate the generated manifest before handoff. Every chunk object in the authoritative `chunks[]` array must include: `id`, `title`, `prompt`, `kind`, `renderedSurface`, `renderedSurfaceRationale`, `executor`, `filesToModify`, `dependsOn`, `companionSkills`, `estimatedComplexity`; missing fields cause orchestrator dispatch failures. `renderedSurface` accepts only `required|not_applicable`; its rationale must be non-empty, and `not_applicable` must account for every UI/integration syntactic trigger. When the selected executor differs from the routing-policy default, `routingOverride` is also required and must include `splitAttempted`; omit the object when no override occurred.
+Validate the generated manifest before handoff with `plugins/pipeline/references/validate-role-manifest.sh`. Every chunk object in the authoritative `chunks[]` array must include: `id`, `level`, `title`, `prompt`, `kind`, `renderedSurface`, `renderedSurfaceRationale`, `executorRole`, `executorCapabilities`, `executorEffort`, `filesToModify`, `dependsOn`, `companionSkills`, `estimatedComplexity`; missing fields cause orchestrator dispatch failures. `level` is a nonnegative integer. `renderedSurface` accepts only `required|not_applicable`; its rationale must be non-empty, and `not_applicable` must account for every UI/integration syntactic trigger. Omit `routingOverride` when no override occurred.
 
 Every new manifest carries the explicit top-level `workflowClass` copied unchanged from the approved plan island (`chore|bug|feature|hotfix|security|investigation|migration`). If the plan does not contain exactly one approved value, return to the combined discovery gate; promptcraft never infers it from filenames, chunk kinds, prompt prose, risk, or keywords. The legacy absent-field default belongs only to manifest consumption and records `feature` plus `workflow_class_defaulted=true`.
 
 Every new manifest also carries the exact approved top-level
 `decisionProfile`. Validate the closed shape and exact plan/manifest equality;
 reject malformed, multiple, extra-key, or conflicting profiles. Never infer it
-from `workflowClass`, risk, complexity, kind, executor, or routing data.
+from `workflowClass`, risk, complexity, kind, role, or routing data.
 
 Every new manifest also carries the approved branch and final-review controls.
 Validate exact plan/manifest equality for `baseBranch`, `featureBranch`,
@@ -247,7 +248,7 @@ unchanged from the approved plan data island into every generated manifest.
 Missing, ambiguous, malformed, multiple, or conflicting plan data blocks
 generation and returns to the user gate.
 
-Each chunk object in the manifest MUST include `kind`, `renderedSurface`, `renderedSurfaceRationale`, and `executor` fields (classified independently in Phase 1, step 7); a chunk forced from its default rail for an inseparable live-tool requirement also carries the `routingOverride` object described in Phase 1. The manifest encodes chunk ordering and dependencies, parallel groups, overlap analysis results, feature branch naming, branch creation or exact-head reuse semantics, execution metadata, and the approved workflow-class, decision-profile, final-review-mode, and rendered-surface controls.
+Each chunk object in the manifest MUST include `kind`, `renderedSurface`, `renderedSurfaceRationale`, `executorRole`, `executorCapabilities`, and `executorEffort` fields (classified independently in Phase 1, step 7). An approved deviation carries the closed `routingOverride` object described in Phase 1. The manifest encodes chunk ordering and dependencies, parallel groups, overlap analysis results, feature branch naming, branch creation or exact-head reuse semantics, execution metadata, and the approved workflow-class, decision-profile, final-review-mode, and rendered-surface controls.
 
 ### Phase 6: Requirements Coverage Check
 

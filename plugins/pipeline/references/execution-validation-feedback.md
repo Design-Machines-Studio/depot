@@ -20,11 +20,14 @@ Persist a closed feedback receipt with exactly these fields (nullable fields sta
   "action": "replace",
   "human_intervention_id": null,
   "human_intervention_reason": null,
-  "requestedProvider": "openrouter",
-  "attemptedProvider": "codex",
-  "implementedBy": "codex",
+  "requestedRole": "builder-deep",
+  "attemptedRole": "builder-deep",
+  "participantId": "participant-a",
+  "requestedEffort": "high",
+  "effectiveEffort": "high",
   "fallback": true,
-  "fallbackReason": "provider-unavailable",
+  "fallbackReason": "role-attempt-unavailable",
+  "privateRouterReceiptRef": "receipts/private/<safe-ref>",
   "prior_attempt_ref": "receipts/<safe-prior-attempt-ref>",
   "resume_unavailable_reason": "session-continuity-unavailable",
   "receipt_ref": "receipts/<safe-ref>",
@@ -32,7 +35,13 @@ Persist a closed feedback receipt with exactly these fields (nullable fields sta
 }
 ```
 
-`failing_check_ids` is sorted by the behavioral contract's check order. Closed enums: `builder_session_continuity: proven|unavailable|invalid`, `action: resume|replace|human_help_required`, `implementedBy: codex|openrouter|null`. `fallback` is strictly boolean. Provider transition is only `requestedProvider` / `attemptedProvider` / `implementedBy`. Durable refs are `evidence_refs`, `prior_attempt_ref`, `receipt_ref`, and `repo_scope_ref`.
+`failing_check_ids` is sorted by the behavioral contract's check order. Closed
+enums: `builder_session_continuity: proven|unavailable|invalid`, `action:
+resume|replace|human_help_required`, routed role identifiers, and normalized
+effort. `fallback` is strictly boolean. Exact participant identity stays in
+`privateRouterReceiptRef`. Durable refs are `evidence_refs`,
+`prior_attempt_ref`, `privateRouterReceiptRef`, `receipt_ref`, and
+`repo_scope_ref`.
 
 Derive `reproduction_instruction` from the trusted repository verification profile. Never include raw output, prompts, tokens, credentials, environment, URLs, arbitrary host paths, or unbounded output.
 
@@ -56,6 +65,13 @@ Resolver stays inside repository scope and extracts only failing check IDs, safe
 
 Resume only when durable evidence proves dispatch identity, protected session token/handle, same host, same repository scope, same chunk/node, same rail context, and exact current contract digest/revision (`builder_session_continuity: proven`). Missing proof is `unavailable`; conflicting proof is `invalid`. Use `resume_or_replace` with the three-field `ValidationFeedback`.
 
-When continuity is unavailable/invalid but retry is allowed, dispatch a replacement and record requested/attempted/implementedBy, boolean fallback and reason, prior attempt reference, and why resume was unavailable. If replacement cannot be dispatched, use `human_help_required` with `human_intervention_reason`: `replacement_adapter_dispatch_failed`, `replacement_invalid_session_handle`, or `replacement_session_handle_unavailable`.
+When continuity is unavailable/invalid but retry is allowed, dispatch a
+replacement through the same role and record requested/attempted role,
+anonymous participant, requested/effective effort, boolean fallback and reason,
+private receipt reference, prior attempt reference, and why resume was
+unavailable. If replacement cannot be dispatched, use `human_help_required`
+with `human_intervention_reason`: `replacement_adapter_dispatch_failed`,
+`replacement_invalid_session_handle`, or
+`replacement_session_handle_unavailable`.
 
 When the kernel returns `identical_failure_convergence`, `retry_budget_exhausted`, or a replacement-dispatch failure, write the closed receipt with `action: human_help_required`, a deterministic `human_intervention_id`, and the exact terminal reason. Mark the chunk failed and every transitive dependency blocked.

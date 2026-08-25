@@ -1,11 +1,11 @@
 # openrouter
 
-OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to exact versioned OpenRouter model slugs over one endpoint. The evidence matrix catalogs current candidates; ordered role lists in Pipeline and dm-review decide which models actually run. Anthropic remains native Claude-only.
+OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to exact versioned OpenRouter model slugs over one endpoint. The evidence matrix catalogs current candidates; model-router owns concrete candidate order while Pipeline and dm-review request provider-neutral roles. Anthropic remains native Claude-only.
 
 > **Current release mode:** a configured key plus one coherent installed bundle
 > makes OpenRouter available for direct, eligible dm-review, and bounded
-> Pipeline use after automatic payload screening. No user-approval step or
-> broker probe is required.
+> Pipeline use under the same input-eligibility rules as native Claude/Codex
+> candidates. No user-approval step or broker probe is required.
 
 The direct API runner is the execution data plane. The optional official
 OpenRouter MCP is a read-only-first control plane for live model/provider
@@ -26,21 +26,23 @@ run.
 
 ## What it routes
 
-Task-to-model routing is governed by `plugins/pipeline/references/routing-policy.json`; the installed OpenRouter delegation policy owns the security boundary. The following matrix is available to configured-key dm-review and bounded Pipeline dispatch and remains observable through dry-run routing:
+Task-to-role intent is governed by each caller's provider-neutral policy;
+`plugins/model-router/skills/model-router/references/role-policy.json` alone owns
+concrete candidate order. OpenRouter owns its transport and response controls,
+not a separate payload-content eligibility gate. Current candidate evidence remains observable through the
+private router receipt and provider model matrix:
 
 - **Primary external provider** for `pattern-recognition-specialist`, `code-simplicity-reviewer`, `doc-sync-reviewer`, and `test-coverage-reviewer`; each lane uses the model and fallback model selected by policy.
 - **Kimi K3 only for focused applicable security analysis**, paired with mandatory independent non-implementing-family full-diff sign-off.
 - **Qwen3.8 Max for bulk and ordinary independent review**, with DeepSeek V4 Pro 0813 or Grok 4.6 as role-specific fallbacks.
 - **DeepSeek V4 Flash 0731 for routine documentation/test review and bounded `config` / `docs` / `mechanical-logic` execution**, with Luna as the routine-review fallback and Grok 4.6 as the bounded-execution escalation.
 
-## Security boundary (non-negotiable)
+## Provider parity and bounded output (non-negotiable)
 
-**Configured key and automatic disclosure classification are the active controls.** A configured supported key input authorizes eligible trusted-workstation development use; the exact outbound bytes must still pass the disclosure boundary before provider contact.
+**A configured supported key authorizes trusted-workstation use under provider-neutral input rules.** Any prompt or evidence eligible for an available native Claude/Codex subscription candidate is eligible for OpenRouter. Callers never reject, redact, split, hold, or fall back because OpenRouter input contains secrets, credentials, authenticated endpoints, classified material, security code, deployment details, or other payload content.
 
-The canonical policy is `skills/openrouter-delegate/references/delegation-security-policy.json`; Pipeline carries a validated mirror for planning. Every delegation path enforces it before invoking the wrapper:
-
-- **Threat/content classification.** High-confidence credentials, private keys, authenticated DSNs, access/session tokens, and explicitly classified private values keep only that file-diff section local. Eligible sections continue to OpenRouter unchanged; non-secret auth, security, deployment, `.env`, and credential-handling code is eligible, and paths, vendors, nationalities, jurisdictions, or subject matter never create an embargo. Explicit `*-secret-not-for-proof` / `*-access-not-for-proof` sentinels remain eligible after recognized provider prefixes.
-- **Partial review.** A held section never cancels safe dispatch. The runner contacts OpenRouter once with the eligible remainder, reports eligible/held section counts plus a closed aggregate reason, and requests local coverage only for held path names. A full decline is reserved for an empty safe remainder or refused bytes in the exact outbound prompt.
+- **Transport credentials.** Validate and load the OpenRouter API key from its supported environment or key-file source, keep it out of command arguments and receipts, and send it only in the authorization header.
+- **Response controls.** Keep timeouts, response-model provenance, content-free receipts, non-empty output checks, and caller-owned format validation active.
 - **Bounded execution.** Model output is accepted only as a validated unified diff restricted to the caller's exact owned-path allowlist. The runner performs fixed structural Git validation and allowlist-only staging; executable project verification is deferred to native Codex review.
 - **Intended lanes.** Security analysis with independent non-implementing-family sign-off, style, duplication, pattern-recognition, large-diff first-pass triage, and doc consistency.
 
@@ -54,9 +56,8 @@ Every live caller selects one coherent installed plugin root with workflow-kerne
 - `OPENROUTER_ZDR=1` opt-in to pin zero-data-retention providers for genuinely sensitive material (privacy demoted by default: Quality > Price > Speed > Provider privacy).
 - `OPENROUTER_WORKLOAD=quality|security|direct|bulk|mechanical` selects the
   default provider-routing strategy; explicit provider sort/order overrides it.
-- Canonical disclosure scanning rejects ineligible exact outbound bytes before
-  provider contact. Active callers scan private system/user files once and
-  immediately pass those same files to the wrapper.
+- Input eligibility is provider-neutral. OpenRouter adds no content classifier,
+  secret-value embargo, held-section split, or payload-content fallback.
 - Use provider-side per-key spending limits for runaway-cost control.
 - Optional OpenRouter MCP: `codex mcp add openrouter --url https://mcp.openrouter.ai/mcp`, then `codex mcp login openrouter`. Its expiring OAuth key does not replace the persistent team API key.
 

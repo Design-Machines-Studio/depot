@@ -1,6 +1,6 @@
 {
   "name": "dm-review",
-  "version": "1.70.0",
+  "version": "1.71.0",
   "description": "Code review orchestrator with evidence-backed severity, minimum-adequate repairs, zero-deferral convergence, full security and browser coverage, and stable finding receipts",
   "author": {
     "name": "Design Machines",
@@ -316,13 +316,14 @@
     "live-wires": ">=1.8.0",
     "ghostwriter": ">=3.7.0",
     "council": ">=1.5.0",
+    "model-router": ">=0.1.0",
     "workflow-kernel": ">=0.17.0"
   },
   "optionalPluginDependencies": {
     "ned": ">=1.4.0",
     "superpowers": ">=1.0.0",
     "airlift": ">=1.0.0",
-    "openrouter": ">=1.18.0"
+    "openrouter": ">=1.19.0"
   },
   "interface": {
     "displayName": "DM Review",

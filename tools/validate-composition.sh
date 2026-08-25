@@ -646,7 +646,7 @@ run_composition_checks() {
     any_failed=1
   fi
 
-  printf "\n${BOLD}OpenRouter model cascade:${RESET}\n"
+  printf "\n${BOLD}Provider-neutral model router:${RESET}\n"
   if ! "$SCRIPT_DIR/validate-openrouter-cascade.sh"; then
     any_failed=1
   fi

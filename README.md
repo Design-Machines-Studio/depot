@@ -47,7 +47,7 @@ and `dm-review:dm-review-fix`.
 
 ## Plugins
 
-18 plugins | 42 domain-facing skills + 1 internal workflow-kernel skill = 43 total skills | 34 generated Codex command-skill aliases | 38 agents | 34 commands
+19 plugins | 42 domain-facing skills + 2 internal infrastructure skills = 44 total skills | 35 generated Codex command-skill aliases | 38 agents | 35 commands
 
 ### ned
 
@@ -218,6 +218,14 @@ Autonomous feature development pipeline. 4 skills, 2 agents, 5 commands.
 - `/pipeline-run` -- Execute prompts in worktrees with review-fix loops
 - `/pipeline-fix` -- Execute a bounded fix pass over numbered findings
 
+### model-router
+
+Internal deterministic participant routing. 1 internal skill.
+
+- **model-router** -- Closed provider-neutral roles, capability matching,
+  normalized effort, per-operator availability, family independence, one-shot
+  dispatch, anonymous public results, and exact private receipts
+
 ### workflow-kernel
 
 Neutral deterministic workflow and inspection mechanics. 1 internal skill.
@@ -230,11 +238,11 @@ Neutral deterministic workflow and inspection mechanics. 1 internal skill.
 
 Unified external-model provider for quality-first agentic work and lower-cost mechanical review. 1 skill, 2 agents, 1 command.
 
-- **openrouter-delegate** -- Threat-classified delegation to permitted open
-  models for non-secret work, including security-related content when output
-  and execution controls remain active
-- **openrouter-bulk-analyst** (agent) -- Reviews eligible full diffs with quality-first Kimi K3 and a GPT-5.6 Terra fallback through the generic OpenRouter runner
-- **openrouter-agent-runner** (agent) -- Runs dm-review mechanical agents through OpenRouter model slugs
+- **openrouter-delegate** -- Receipted delegation to permitted open models with
+  the same input eligibility as native Claude/Codex candidates, while output
+  validation and bounded execution controls remain active
+- **openrouter-bulk-analyst** (agent) -- Supplies large-context review criteria to a provider-neutral review role; model-router owns concrete candidate order and fallback
+- **openrouter-agent-runner** (agent) -- Compatibility runner for explicitly provider-routed mechanical review criteria
 - `/openrouter` -- Delegate a task to any configured OpenRouter model
 
 OpenAI model slugs may run through OpenRouter; bare native OpenAI identities run

@@ -1,9 +1,10 @@
 {
-  "_comment": "CANONICAL machine-readable OpenRouter model matrix. This file records current catalog evidence and compatibility quality floors; ordered role lists in routing-policy.json and harness-profile.json are the routing authority. Native Codex identities and native Claude aliases are absent from routing models. native_api_equivalent_cost is observation-only pricing evidence and never routing authority. anthropic/* routing slugs are rejected before provider contact.",
+  "_comment": "CANONICAL machine-readable OpenRouter model matrix. This file records current provider catalog, pricing, feature, and compatibility evidence; model-router's private role-policy.json is the cross-transport routing authority. Native Codex identities and native Claude aliases are absent from OpenRouter catalog models. native_api_equivalent_cost is observation-only pricing evidence and never routing authority. anthropic/* routing slugs are rejected before provider contact.",
   "schema_version": 1,
-  "snapshot_date": "2026-08-21",
-  "catalog_observed_at": "2026-08-21T09:20:22+08:00",
+  "snapshot_date": "2026-08-25",
+  "catalog_observed_at": "2026-08-25T09:09:40+08:00",
   "catalog_source": "https://openrouter.ai/api/v1/models",
+  "catalog_snapshot_sha256": "73ee416b957d30dcefc08917b3452b619e2d7e317a262e2e508240c3f9bef4f5",
   "native_api_equivalent_cost": {
     "schema_version": 1,
     "snapshot_date": "2026-08-12",
@@ -50,7 +51,7 @@
     ]
   },
   "freshness_rule_minutes": 15,
-  "authority": "The matrix records evidence and compatibility quality floors; ordered role lists in routing-policy.json and harness-profile.json decide routes, and receipts record attempts.",
+  "authority": "The matrix records OpenRouter evidence and compatibility quality floors. model-router owns cross-transport role order and must reference only exact slugs present here; receipts record settled attempts.",
   "refresh_protocol": {
     "cadence": "On demand, and before any paid or policy-changing run.",
     "routing": {
@@ -68,7 +69,7 @@
         "Bump the top-level snapshot_date and every entry under top-level models to the routing refresh date.",
         "Do not restamp native_api_equivalent_cost snapshot evidence unless that evidence was independently refreshed.",
         "Where a routing source is unreachable, keep the prior value and mark it stale in the write-up -- never guess or interpolate.",
-        "Land the routing refresh as an ordinary reviewed commit so the drift validator re-fences every downstream consumer."
+        "Land the catalog refresh as an ordinary reviewed commit and run the model-router candidate drift validator before changing any resolver policy."
       ],
       "documented_in": "model-selection.md -- Refreshing the routing matrix"
     },
@@ -110,13 +111,13 @@
       "name": "DeepSeek V4 Flash 0731",
       "catalog_name": "DeepSeek: DeepSeek V4 Flash 0731",
       "catalog_status": "available",
-      "recommendation_status": "active-bounded-execution-and-routine-review",
+      "recommendation_status": "candidate-bounded-execution-evidence",
       "input_usd_per_m": 0.14,
       "output_usd_per_m": 0.28,
       "cache_read_usd_per_m": 0.028,
       "context_tokens": 1310720,
       "top_provider_context_tokens": 1048576,
-      "top_provider_max_completion_tokens": 393216,
+      "top_provider_max_completion_tokens": 131072,
       "per_request_limits": null,
       "input_modalities": [
         "text"
@@ -134,9 +135,25 @@
         "observed_on": "2026-08-12",
         "status": "retained-prior-comparable-evidence"
       },
+      "coding_agent_evidence": {
+        "source": "Artificial Analysis Coding Agent Index",
+        "source_version": "v1.4",
+        "exact_variant": "Codex / DeepSeek V4 Flash 0731 / max",
+        "index": 0.4975760032,
+        "cost_usd_per_task": 0.059499,
+        "time_seconds_per_task": 868.375,
+        "observed_on": "2026-08-25"
+      },
+      "market_usage_evidence": {
+        "source": "OpenRouter rankings",
+        "period_end": "2026-08-24",
+        "rank": 2,
+        "public_tokens_trillions": 11.6,
+        "status": "adoption-signal-not-quality-score"
+      },
       "local_evidence": "2026-08-17 canary reached OpenRouter once and failed with HTTP 429 before output; this does not disprove the executor contract.",
-      "role": "Primary cheap bounded Pipeline executor and primary routine documentation/test review model. Codex remains the supervisor for scope, correctness, UI, integration, live tools, and sensitive work.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalog evidence supports low-cost bounded text, tool, reasoning, and structured-output work; model-router decides consumers and order.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/deepseek/deepseek-v4-flash-0731",
         "https://api-docs.deepseek.com/news/news260424/",
@@ -191,10 +208,10 @@
       "name": "DeepSeek V4 Pro 0813",
       "catalog_name": "DeepSeek: DeepSeek V4 Pro 0813",
       "catalog_status": "available",
-      "recommendation_status": "provisional-long-context-pattern-analysis",
-      "input_usd_per_m": 1.188,
-      "output_usd_per_m": 3.564,
-      "cache_read_usd_per_m": 0.0396,
+      "recommendation_status": "candidate-long-context-analysis-evidence",
+      "input_usd_per_m": 1.122,
+      "output_usd_per_m": 3.366,
+      "cache_read_usd_per_m": 0.0374,
       "context_tokens": 1048576,
       "top_provider_context_tokens": 1048575,
       "top_provider_max_completion_tokens": null,
@@ -215,8 +232,8 @@
         "status": "vendor-family-claims-only; no comparable exact-0813 score located"
       },
       "local_evidence": "2026-08-17 canary produced a valid seven-line minimal unified diff in 7 seconds; 125 prompt, 709 completion, 661 reasoning tokens; $0.00297264.",
-      "role": "Provisional long-context and pattern-analysis primary, plus bulk-analysis fallback after a different-family Qwen primary.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalog evidence supports long-context reasoning, tools, and structured output; exact-variant benchmark evidence remains provisional.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/deepseek/deepseek-v4-pro-0813",
         "https://api-docs.deepseek.com/news/news260424/"
@@ -269,7 +286,7 @@
       "name": "Qwen3.8 Max",
       "catalog_name": "Qwen: Qwen3.8 Max",
       "catalog_status": "available",
-      "recommendation_status": "active-independent-bulk-and-complex-review",
+      "recommendation_status": "candidate-independent-complex-analysis-evidence",
       "input_usd_per_m": 2,
       "output_usd_per_m": 6,
       "cache_read_usd_per_m": 0.25,
@@ -295,8 +312,8 @@
         "status": "availability/adapter evidence only; no comparable benchmark score located"
       },
       "local_evidence": "2026-08-17 canary found the seeded arithmetic defect in the required one-line format in 5 seconds; 203 prompt, 174 completion, 138 reasoning tokens; $0.00145.",
-      "role": "Primary independent bulk review, code-simplicity review, and OpenRouter second perspective for complex judgment when family independence permits.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalog evidence supports long-context independent analysis, tools, and structured output when resolver family constraints permit.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/qwen/qwen3.8-max",
         "https://qwenlm.github.io/qwen-code-docs/en/blog/updates/weekly-update-2026-07-23/"
@@ -351,8 +368,8 @@
       "output_usd_per_m": 6,
       "cache_read_usd_per_m": 0.25,
       "context_tokens": 1048576,
-      "top_provider_context_tokens": 1000000,
-      "top_provider_max_completion_tokens": 262144,
+      "top_provider_context_tokens": 1048576,
+      "top_provider_max_completion_tokens": 131072,
       "per_request_limits": null,
       "input_modalities": [
         "text"
@@ -364,8 +381,8 @@
       "quality_rank": 95,
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
-      "role": "Catalogued candidate only; Qwen3.8 Max owns the active Qwen review seat.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalog evidence only; model-router policy owns any active use.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/qwen/qwen3.8-2.4t-a95b"
       ],
@@ -421,8 +438,8 @@
       "catalog_name": "Qwen: Qwen3.8 27B",
       "catalog_status": "available",
       "recommendation_status": "catalogued-not-routed",
-      "input_usd_per_m": 0.45,
-      "output_usd_per_m": 3.2,
+      "input_usd_per_m": 0.4,
+      "output_usd_per_m": 3,
       "cache_read_usd_per_m": 0.05,
       "context_tokens": 1000000,
       "top_provider_context_tokens": 262144,
@@ -440,8 +457,8 @@
       "quality_rank": 86,
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
-      "role": "Catalogued compact candidate only; its 262K context does not displace the active Qwen3.8 Max seat.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalogued compact evidence; context and feature fields do not imply an active resolver assignment.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/qwen/qwen3.8-27b"
       ],
@@ -459,6 +476,7 @@
         "logit_bias",
         "logprobs",
         "max_tokens",
+        "min_p",
         "presence_penalty",
         "reasoning",
         "reasoning_effort",
@@ -532,8 +550,8 @@
       "quality_rank": 85,
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
-      "role": "Catalogued economical candidate only; it lacks the active routed models' complete parameter contract.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalogued economical evidence; the incomplete parameter contract does not establish resolver eligibility.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/qwen/qwen3.7-flash"
       ],
@@ -576,7 +594,7 @@
       "name": "Grok 4.6",
       "catalog_name": "SpaceXAI: Grok 4.6",
       "catalog_status": "available",
-      "recommendation_status": "active-demanding-bounded-escalation",
+      "recommendation_status": "candidate-demanding-analysis-evidence",
       "input_usd_per_m": 2,
       "output_usd_per_m": 6,
       "cache_read_usd_per_m": 0.5,
@@ -607,11 +625,11 @@
         "source": "SpaceXAI release notes",
         "source_version": null,
         "exact_variant": null,
-        "status": "no exact Grok 4.6 release note or comparable score located; catalog evidence only"
+        "status": "no exact Grok 4.6 comparable score located; Coding Agent Index evidence is for Grok 4.5 and is not transferred"
       },
       "local_evidence": "2026-08-17 canary found the seeded arithmetic defect in the exact one-line format in 5 seconds; 352 prompt, 295 completion, 274 reasoning tokens; $0.002282.",
-      "role": "Demanding bounded Pipeline execution/review escalation and different-family security fallback after Kimi K3 when family independence permits.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalog evidence supports demanding bounded reasoning, tools, structured output, and a distinct model family.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/x-ai/grok-4.6"
       ],
@@ -676,9 +694,25 @@
       "supports_structured_outputs": true,
       "quality_rank": 91,
       "benchmark_evidence": null,
+      "coding_agent_evidence": {
+        "source": "Artificial Analysis Coding Agent Index",
+        "source_version": "v1.4",
+        "exact_variant": "OpenCode / Gemini 3.7 Flash / high",
+        "index": 0.596278453,
+        "cost_usd_per_task": 1.267933,
+        "time_seconds_per_task": 527.092,
+        "observed_on": "2026-08-25"
+      },
+      "market_usage_evidence": {
+        "source": "OpenRouter rankings",
+        "period_end": "2026-08-24",
+        "rank": 9,
+        "public_tokens_trillions": 2.02,
+        "status": "adoption-signal-not-quality-score"
+      },
       "local_evidence": "No local call authorized for this refresh.",
-      "role": "Catalogued multimodal candidate only; the current wrapper remains text-only and no current consumer requires it.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalog evidence includes multimodal, tool, structured-output, and priced web-search support; resolver policy owns active use.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/google/gemini-3.7-flash"
       ],
@@ -743,8 +777,8 @@
       "quality_rank": 90,
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
-      "role": "Catalogued multimodal candidate only; the current wrapper remains text-only and no current consumer requires it.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalogued multimodal evidence only; resolver policy owns active use.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/meta/muse-spark-1.2"
       ],
@@ -788,12 +822,12 @@
       "catalog_name": "Z.ai: GLM 5.2",
       "catalog_status": "available",
       "recommendation_status": "catalogued-not-routed",
-      "input_usd_per_m": 0.966,
-      "output_usd_per_m": 3.036,
-      "cache_read_usd_per_m": 0.1932,
+      "input_usd_per_m": 1.19,
+      "output_usd_per_m": 3.74,
+      "cache_read_usd_per_m": 0.221,
       "context_tokens": 1048576,
       "top_provider_context_tokens": 1048576,
-      "top_provider_max_completion_tokens": 131072,
+      "top_provider_max_completion_tokens": 262144,
       "per_request_limits": null,
       "input_modalities": [
         "text"
@@ -809,9 +843,25 @@
         "exact_variant": "GLM-5.2",
         "status": "vendor benchmark claims; not used as routing authority"
       },
+      "coding_agent_evidence": {
+        "source": "Artificial Analysis Coding Agent Index",
+        "source_version": "v1.4",
+        "exact_variant": "Claude Code / GLM-5.2",
+        "index": 0.4331015719,
+        "cost_usd_per_task": 6.657531,
+        "time_seconds_per_task": 1507.044,
+        "observed_on": "2026-08-25"
+      },
+      "market_usage_evidence": {
+        "source": "OpenRouter rankings",
+        "period_end": "2026-08-24",
+        "rank": 8,
+        "public_tokens_trillions": 3.26,
+        "status": "adoption-signal-not-quality-score"
+      },
       "local_evidence": "Prior Depot/Assembly operator evidence found repeated handholding; no call was authorized in this refresh.",
-      "role": "Catalogued for evidence only and intentionally absent from every active Pipeline and dm-review ladder.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalog evidence only; no active resolver assignment is established here.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/z-ai/glm-5.2",
         "https://z.ai/blog/glm-5.2"
@@ -870,13 +920,13 @@
       "name": "Kimi K3",
       "catalog_name": "MoonshotAI: Kimi K3",
       "catalog_status": "available",
-      "recommendation_status": "active-focused-security-only",
+      "recommendation_status": "candidate-focused-security-evidence",
       "input_usd_per_m": 3,
       "output_usd_per_m": 15,
       "cache_read_usd_per_m": 0.3,
       "context_tokens": 1048576,
       "top_provider_context_tokens": 1048576,
-      "top_provider_max_completion_tokens": null,
+      "top_provider_max_completion_tokens": 1048576,
       "per_request_limits": null,
       "input_modalities": [
         "text",
@@ -896,9 +946,18 @@
         "observed_on": "2026-08-12",
         "status": "retained-prior-comparable-evidence"
       },
+      "coding_agent_evidence": {
+        "source": "Artificial Analysis Coding Agent Index",
+        "source_version": "v1.4",
+        "exact_variant": "Kimi Code CLI / Kimi K3",
+        "index": 0.6263880113,
+        "cost_usd_per_task": 3.081636,
+        "time_seconds_per_task": 1447.373,
+        "observed_on": "2026-08-25"
+      },
       "local_evidence": "Recent Baseplate review: 5 attempts, about $1.334, with useful security evidence but excessive cost for routine review.",
-      "role": "Focused applicable security analysis only; never ordinary bulk, second-perspective, documentation, test, pattern, simplicity, or implementation routing.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalog and local evidence support focused security analysis at high cost; resolver policy owns every assignment and exclusion.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/moonshotai/kimi-k3",
         "https://artificialanalysis.ai/models/kimi-k3"
@@ -957,7 +1016,7 @@
       "name": "GPT-5.6 Luna",
       "catalog_name": "OpenAI: GPT-5.6 Luna",
       "catalog_status": "available",
-      "recommendation_status": "active-economical-mechanical-fallback",
+      "recommendation_status": "candidate-economical-mechanical-evidence",
       "input_usd_per_m": 0.2,
       "output_usd_per_m": 1.2,
       "cache_read_usd_per_m": 0.02,
@@ -986,9 +1045,16 @@
       "supports_structured_outputs": true,
       "quality_rank": 90,
       "benchmark_evidence": null,
+      "market_usage_evidence": {
+        "source": "OpenRouter rankings",
+        "period_end": "2026-08-24",
+        "rank": 7,
+        "public_tokens_trillions": 4.48,
+        "status": "adoption-signal-not-quality-score"
+      },
       "local_evidence": "Recent Baseplate review: 5 attempts, about $0.019; economical but no longer primary for all routine reviewers.",
-      "role": "Economical mechanical fallback for routine documentation and test-coverage review after DeepSeek Flash.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalog and local evidence support economical mechanical analysis; resolver policy owns candidate order.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/openai/gpt-5.6-luna",
         "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
@@ -1068,8 +1134,8 @@
       "quality_rank": 94,
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
-      "role": "Catalogued explicit-choice model only; absent from default direct, Pipeline, and dm-review ladders.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalogued explicit-choice evidence only; resolver policy owns active use.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/openai/gpt-5.6-terra",
         "https://developers.openai.com/api/docs/models/gpt-5.6-terra"
@@ -1182,8 +1248,8 @@
         "status": "catalog-reported benchmark values and vendor claims are uncorroborated; not routing authority"
       },
       "local_evidence": "No live canary request was sent because no configured OpenRouter credential was available in this worktree session.",
-      "role": "Catalogued candidate only; mandatory reasoning with default max is recorded, but GLM 5.3 has no default role and is intentionally absent from every active Pipeline and dm-review ladder.",
-      "snapshot_date": "2026-08-21",
+      "role": "Catalog evidence records mandatory reasoning and default max; it does not establish an active resolver assignment.",
+      "snapshot_date": "2026-08-25",
       "sources": [
         "https://openrouter.ai/api/v1/models"
       ]

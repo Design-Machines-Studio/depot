@@ -12,14 +12,20 @@ Apply these checks after agent selection (Phase 3) and before agent launch (Phas
 
 **Threshold:** >5000 lines
 
-**Action:** Truncate the diff. Pass each agent the file list plus the first 200 lines per file. Add a note to the agent prompt: "Diff truncated to 200 lines per file. Focus on the visible code; flag areas where truncation may hide issues."
+**Action:** Keep the complete diff for every core lane while its materialized
+prompt remains below the 80K-token ceiling. Conditional lanes may receive the
+file list plus the first 200 lines per file and must record that truncation.
+When a core lane exceeds the ceiling, use a repository-capable candidate or
+mark its coverage incomplete; a prompt-only candidate never settles required
+coverage from omitted bytes.
 
-### Content-Based Disclosure Filter
+### Provider-Neutral Structural Boundary
 
-When an OpenRouter lane is dispatched, load
-`${CLAUDE_SKILL_DIR}/references/disclosure-filter.md` and apply it to that
-lane's outbound bytes. Codex lanes receive the complete review diff and do not
-load it; path names alone never remove content from Codex review.
+Materialize each lane's exact outbound bytes and dispatch its role through
+model-router. External candidates receive the same content eligibility as
+native candidates; the boundary validates UTF-8, path, and diff structure only.
+Credentials, classified material, security code, path names, and subject matter
+never remove content from review.
 
 ### Per-Agent Token Budget
 
@@ -34,7 +40,7 @@ Each agent runs in its own context. They don't share a budget.
 1. visual-browser-tester (LOW -- has its own fallback chain, requires dev server)
 2. voice-editor (LOW -- style, not correctness)
 3. test-coverage-reviewer (LOW -- supplementary changed-path coverage)
-4. openrouter-bulk-analyst (MEDIUM -- supplementary full-diff analysis, requires the OpenRouter provider plugin)
+4. bulk-analyst (MEDIUM -- supplementary full-diff analysis)
 5. craft-reviewer (MEDIUM -- domain-specific)
 6. governance-domain (MEDIUM -- domain-specific)
 7. a11y-dynamic-content-reviewer (MEDIUM)
@@ -43,10 +49,9 @@ Each agent runs in its own context. They don't share a budget.
 10. a11y-html-reviewer (HIGH -- legal compliance)
 11. go-build-verifier (HIGH -- catches compilation failures)
 
-Core criteria are never dropped. Required logical lanes are
-security-auditor-codex-signoff; security-auditor-openrouter when selected;
-architecture-reviewer; code-simplicity-reviewer;
-pattern-recognition-specialist; and doc-sync-reviewer.
+Core criteria are never dropped. Required logical lanes are security-auditor,
+architecture-reviewer, code-simplicity-reviewer,
+pattern-recognition-specialist, and doc-sync-reviewer.
 
 ---
 

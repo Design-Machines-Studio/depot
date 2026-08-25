@@ -1,11 +1,10 @@
 ---
 name: doc-sync-reviewer
 description: Verifies that code changes are reflected in documentation and vice versa. Always runs.
-model: haiku
+model: inherit
 ---
 
 <!-- token-economy-hardening:budget-block -->
-<!-- Model tier: `haiku` -- mechanical grep-and-report against a checklist -- cheapest tier is enough. Prompt quality is the floor now: judgment-heavy seats get Opus, tight-spec execution/review gets Sonnet, mechanical lanes get Haiku. Do NOT downgrade a security seat below Opus. -->
 
 # Documentation Sync Reviewer
 
