@@ -123,6 +123,16 @@ assert jq -e '.served.model == "fable" and .served.billingMode == "included-subs
 fixture fable-exhausted
 run_role fable-fallback architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "gpt-5.6-sol" and .fallback == true' "$TMP/fable-fallback.receipt"
+# Fable-specific exhaustion does not suppress a distinct Claude model after
+# the intervening native Codex rail is unavailable.
+jq '.codex.state="exhausted"
+  | .codex.windows.five_hour.remaining_pct=0
+  | .codex.windows.weekly.remaining_pct=0
+  | .claude.fiveHourRemainingPct=80
+  | .claude.weeklyRemainingPct=70' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role opus-fallback architect high --capability read-repository --capability structured-output
+assert jq -e '.served.model == "opus" and .served.transport == "claude-cli" and .fallback == true' "$TMP/opus-fallback.receipt"
 fixture fable-initial-telemetry-absent
 run_role fable-bounded architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "fable" and .served.billingMode == "subscription-headroom-unknown"' "$TMP/fable-bounded.receipt"

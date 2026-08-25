@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "suiteId": "depot-role-v1",
+  "measurementPolicy": {
+    "execution": "one-exact-model-per-invocation",
+    "judge": "deterministic-local",
+    "attemptsPerRecordedComparison": 3,
+    "promotionMinimum": "three successful attempts on every applicable case",
+    "hostedEvaluation": "optional-optima-manual-import"
+  },
+  "cases": [
+    {
+      "id": "pipeline-legacy-translation",
+      "role": "builder-fast",
+      "taskType": "structured-transformation",
+      "objective": "Translate a legacy Pipeline manifest without leaking provider selection into the new contract.",
+      "prompt": "Return JSON only. Translate this legacy Pipeline chunk: {\"id\":\"docs-1\",\"executor\":\"openrouter\",\"kind\":\"docs\"}. The result must have one chunks array entry with id, executorRole, executorCapabilities, executorEffort, and legacyExecutorTranslation. Remove executor. Use Depot's provider-neutral contract.",
+      "expected": {
+        "id": "docs-1",
+        "executorRole": "builder-fast",
+        "executorCapabilities": ["read-repository", "write-repository", "structured-output"],
+        "executorEffort": "low",
+        "legacySource": "openrouter"
+      },
+      "optima": {"taskType": "Q&A", "grader": "objective-rubric"}
+    },
+    {
+      "id": "review-zero-deferral",
+      "role": "review-fast",
+      "taskType": "finding-classification",
+      "objective": "Retain and correctly classify a closed review set without deferring P1/P2/P3 work.",
+      "prompt": "Return JSON only with findings and deferred. Classify all three seeded findings and retain all of them: AUTH-1 permits an API-key Claude login to be labeled subscription use; expected P1. ROUTE-2 retries an exhausted model alias in the same family; expected P2. DOC-3 reports a skipped check as passed; expected P3. Each finding needs id and severity. deferred must be false.",
+      "expected": {"findings": [{"id": "AUTH-1", "severity": "P1"}, {"id": "ROUTE-2", "severity": "P2"}, {"id": "DOC-3", "severity": "P3"}], "deferred": false},
+      "optima": {"taskType": "Q&A", "grader": "objective-rubric"}
+    },
+    {
+      "id": "assembly-next-chunk",
+      "role": "architect",
+      "taskType": "bounded-planning",
+      "objective": "Choose exactly one demonstrated next Assembly coordination chunk while respecting explicit exclusions.",
+      "prompt": "Return JSON only with nextChunk, executorRole, executorCapabilities, rejectedComplexity. Evidence: Project 1 has an approved provider-neutral role-routing issue in Review; the next demonstrated consumer need is a versioned local role benchmark corpus and scorer. Issue #86 Floor observation schemas are not admitted. Choose exactly one next chunk. Do not choose Floor UI, a daemon, a broker, a database, an MCP server, or a generic workflow engine.",
+      "expected": {"nextChunk": "depot-role-benchmark", "executorRole": "builder-fast", "executorCapabilities": ["read-repository", "write-repository", "structured-output"]},
+      "optima": {"taskType": "Document", "grader": "objective-rubric"}
+    },
+    {
+      "id": "mechanical-owned-edit",
+      "role": "builder-fast",
+      "taskType": "bounded-edit",
+      "objective": "Produce the exact content for one owned mechanical edit and name its fixed verification.",
+      "prompt": "Return JSON only with targetPath, newContent, verification. You own config/fixture.json. Its current content is {\"schemaVersion\":1,\"enabled\":false}. Change only enabled to true, preserve schemaVersion, and set verification to exactly: jq -e '.schemaVersion == 1 and .enabled == true' config/fixture.json",
+      "expected": {"targetPath": "config/fixture.json", "newContent": {"schemaVersion": 1, "enabled": true}, "verification": "jq -e '.schemaVersion == 1 and .enabled == true' config/fixture.json"},
+      "optima": {"taskType": "Agentic", "grader": "objective-rubric"}
+    }
+  ]
+}

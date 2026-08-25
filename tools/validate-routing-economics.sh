@@ -43,7 +43,7 @@ check 'tracked policy carries no operator identity or billing preference' sh -c 
   "! grep -Eiq 'travis|jeremy|email|allowPaidClaudeCredits' '$POLICY'"
 
 check 'OpenRouter matrix retains usage and price evidence' jq -e '
-  .snapshot_date == "2026-08-21" and
+  .snapshot_date == "2026-08-25" and
   all(.models[]; (.slug|type)=="string" and (.input_usd_per_m|type)=="number" and (.output_usd_per_m|type)=="number")' "$MATRIX"
 
 check 'OpenRouter wrapper retains content-free receipt fields' sh -c \
@@ -54,6 +54,7 @@ check 'Pipeline postmortem reports roles and keeps exact identity private' sh -c
 
 check 'provider-neutral drift and leak validator passes' "$ROOT/tools/validate-provider-neutral-routing.sh"
 check 'resolver economics fixtures pass' "$ROOT/tools/test-model-router.sh"
+check 'Depot role benchmark fixtures pass' "$ROOT/tools/test-openrouter-role-benchmark.sh"
 
 if [ "$failures" -ne 0 ]; then
   printf 'routing economics validation failed\n' >&2

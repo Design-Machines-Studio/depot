@@ -10,23 +10,23 @@ engine.
 
 ## Available Models
 
-Prices below are a checked-in planning snapshot from 2026-08-21, in USD per
+Prices below are a checked-in planning snapshot from 2026-08-25, in USD per
 million input/output tokens. The compact refresh receipt is
-`docs/openrouter-model-matrix-refreshes/2026-08-21.md`; use a fresh catalog
+`docs/openrouter-model-matrix-refreshes/2026-08-25.md`; use a fresh catalog
 receipt before a later paid or policy-changing run.
 
 | Exact slug | Input / output | Context | Catalog evidence |
 |---|---:|---:|---|
 | `deepseek/deepseek-v4-flash-0731` | $0.14 / $0.28 | 1,310,720 | Low-cost bounded reasoning/tools/structured output |
-| `deepseek/deepseek-v4-pro-0813` | $1.188 / $3.564 | 1,048,576 | Provisional long-context reasoning evidence |
+| `deepseek/deepseek-v4-pro-0813` | $1.122 / $3.366 | 1,048,576 | Provisional long-context reasoning evidence |
 | `qwen/qwen3.8-max` | $2 / $6 | 1,000,000 | Long-context independent analysis evidence |
 | `qwen/qwen3.8-2.4t-a95b` | $2 / $6 | 1,048,576 | Catalogued; no active consumer |
-| `qwen/qwen3.8-27b` | $0.45 / $3.20 | 1,000,000 | Catalogued; no active consumer |
+| `qwen/qwen3.8-27b` | $0.40 / $3 | 1,000,000 | Catalogued; no active consumer |
 | `qwen/qwen3.7-flash` | $0.03 / $0.13 | 1,000,000 | Catalogued; no active consumer |
 | `x-ai/grok-4.6` | $2 / $6 | 500,000 | Demanding bounded reasoning and distinct-family evidence |
 | `google/gemini-3.7-flash` | $0.375 / $1.875 | 1,048,576 | Fast multimodal/tools/web-search evidence |
 | `meta/muse-spark-1.2` | $1.25 / $4.25 | 1,048,576 | Catalogued; no text-only active consumer |
-| `z-ai/glm-5.2` | $0.966 / $3.036 | 1,048,576 | Evidence only; excluded from every active ladder |
+| `z-ai/glm-5.2` | $1.19 / $3.74 | 1,048,576 | Evidence only; excluded from every active ladder |
 | `z-ai/glm-5.3` | $1.40 / $4.40 | 1,048,576 | Catalogued-not-routed; mandatory reasoning defaults to max |
 | `moonshotai/kimi-k3` | $3 / $15 | 1,048,576 | Focused security-analysis evidence at high cost |
 | `openai/gpt-5.6-luna` | $0.20 / $1.20 | 1,050,000 | Economical mechanical-analysis evidence |
@@ -88,12 +88,31 @@ workloads pass one exact resolver-selected candidate to the wrapper; a provider
 failure returns to model-router for the next role candidate with a separate
 attempt receipt.
 
+## Depot role benchmark
+
+Public benchmarks do not reproduce Depot's prompts, role contracts, disclosure
+boundary, or verification rules. `depot-role-benchmark.md` defines a bounded
+local complement: four versioned project cases, deterministic scoring, exact
+one-model runs, and compact cost/token/duration evidence. It is an explicit
+operator measurement surface and never becomes a provider-bearing orchestration
+prompt. Artificial Analysis Optima is documented as an optional manual hosted
+surface; Depot does not depend on it or automate its spend.
+
 ## Evidence interpretation
 
-The 2026-08-21 receipt has no live canary output because this worktree had no
-configured OpenRouter credential; it makes no new performance or routing claim.
-The prior dated evidence remains historical only. GLM 5.3's catalog-reported
-benchmark values and vendor claims are uncorroborated and do not earn a route.
+The 2026-08-25 refresh made no model inference call. Artificial Analysis Coding
+Agent Index v1.4 is a three-harness pass@1 composite, not a universal Depot
+ranking. OpenRouter rankings measure public token adoption, not quality, and
+exclude private and ZDR activity. DeepSeek V4 Flash 0731's very low measured
+cost and second-place OpenRouter usage reinforce its bounded-work candidacy,
+while its lower index and middling task time argue against treating it as a deep
+reasoning default. Gemini 3.7 Flash remains the fast research head. Kimi remains
+focused on security because its strong score came with high time and cost. GLM
+5.2's adoption does not outweigh its weaker coding result and local evidence.
+
+Ox Alpha, MiMo-V2.5, Hy3, Nemotron 3 Ultra, and DeepSeek V4 Pro 0423 are recorded
+as candidates for the local suite, not promoted without exact Depot evidence.
+The Coding Agent Index score for Grok 4.5 is not assigned to Grok 4.6.
 
 The recent Baseplate operator evidence also matters: Kimi was repeatedly used
 for ordinary review at substantial cost, Luna handled routine lanes cheaply,

@@ -79,6 +79,11 @@ receipts when requested.
 
 Load the decision table from `${CLAUDE_SKILL_DIR}/references/model-selection.md`. It maps task types to model slugs, timeouts, and the fallback chain.
 
+When the user asks to compare models on Depot's own work, load
+`${CLAUDE_SKILL_DIR}/references/depot-role-benchmark.md`. The manual benchmark
+runs one exact candidate at a time through the existing screened wrapper and
+uses deterministic local scoring; it never launches an automatic market sweep.
+
 **Default model:** `qwen/qwen3.8-max`. **Immediate fallback:** `x-ai/grok-4.6`.
 
 **Provider-origin invariant:** OpenRouter primary and fallback slugs must never begin with `anthropic/`. OpenAI may run through native Codex or the receipted OpenRouter API rail; Anthropic runs only through native Claude capability.
