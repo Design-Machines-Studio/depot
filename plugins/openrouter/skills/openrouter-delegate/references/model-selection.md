@@ -10,18 +10,18 @@ engine.
 
 ## Available Models
 
-Prices below are a checked-in planning snapshot from 2026-08-25, in USD per
+Prices below are a checked-in planning snapshot from 2026-08-26, in USD per
 million input/output tokens. The compact refresh receipt is
-`docs/openrouter-model-matrix-refreshes/2026-08-25.md`; use a fresh catalog
+`docs/openrouter-model-matrix-refreshes/2026-08-26.md`; use a fresh catalog
 receipt before a later paid or policy-changing run.
 
 | Exact slug | Input / output | Context | Catalog evidence |
 |---|---:|---:|---|
-| `deepseek/deepseek-v4-flash-0731` | $0.14 / $0.28 | 1,310,720 | Low-cost bounded reasoning/tools/structured output |
+| `deepseek/deepseek-v4-flash-0731` | $0.04 / $0.08 | 1,310,720 | Low-cost bounded reasoning/tools/structured output |
 | `deepseek/deepseek-v4-pro-0813` | $1.122 / $3.366 | 1,048,576 | Provisional long-context reasoning evidence |
 | `qwen/qwen3.8-max` | $2 / $6 | 1,000,000 | Long-context independent analysis evidence |
 | `qwen/qwen3.8-2.4t-a95b` | $2 / $6 | 1,048,576 | Catalogued; no active consumer |
-| `qwen/qwen3.8-27b` | $0.40 / $3 | 1,000,000 | Catalogued; no active consumer |
+| `qwen/qwen3.8-27b` | $0.425 / $2.55 | 1,000,000 | Catalogued; no active consumer |
 | `qwen/qwen3.7-flash` | $0.03 / $0.13 | 1,000,000 | Catalogued; no active consumer |
 | `x-ai/grok-4.6` | $2 / $6 | 500,000 | Demanding bounded reasoning and distinct-family evidence |
 | `google/gemini-3.7-flash` | $0.375 / $1.875 | 1,048,576 | Fast multimodal/tools/web-search evidence |
