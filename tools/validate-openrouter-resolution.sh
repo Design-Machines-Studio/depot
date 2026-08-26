@@ -89,7 +89,7 @@ for relative in "${consumers[@]}"; do
       failures=1
     }
   fi
-  if grep -Fq 'skills/openrouter-delegate/references/openrouter-wrapper.sh' "$file"; then
+  if ! is_configured_key_script "$relative" && grep -Fq 'skills/openrouter-delegate/references/openrouter-wrapper.sh' "$file"; then
     grep -Fq -- '--required-asset skills/openrouter-delegate/references/openrouter-credential.sh' "$file" || {
       echo "  FAIL  OpenRouter credential loader is not bound into the coherent bundle: $relative"
       failures=1
@@ -255,11 +255,13 @@ for relative in \
   plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh
 do
   file="$ROOT/$relative"
-  grep -Fq 'resolve-plugin-bundle --plugin openrouter' "$file" &&
-  grep -Fq -- '--minimum-version 1.19.0' "$file" &&
-  grep -Fq 'WORKFLOW_KERNEL' "$file" &&
+  grep -Fq 'OPENROUTER_BUNDLE_RESOLVED' "$file" &&
+  grep -Fq 'OPENROUTER_BUNDLE_REF' "$file" &&
+  grep -Fq 'OPENROUTER_BUNDLE_VERSION' "$file" &&
+  ! grep -Fq 'resolve-plugin-bundle --plugin openrouter' "$file" &&
+  ! grep -Fq 'WORKFLOW_KERNEL' "$file" &&
   ! grep -Eq 'ls -t[d]? .*openrouter' "$file" || {
-    echo "  FAIL  configured-key consumer bypasses coherent semver OpenRouter resolution: $relative"
+    echo "  FAIL  configured-key consumer does not consume the invocation-bound OpenRouter bundle: $relative"
     failures=1
   }
 done
@@ -371,13 +373,13 @@ grep -Fq '"--required-executable"' \
   }
 grep -Fq 'OPENROUTER_BUNDLE_REF' \
   "$ROOT/plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh" &&
-grep -Fq '[ "$RESOLVED_BUNDLE_REF" != "$OPENROUTER_BUNDLE_REF" ]' \
+grep -Fq '[ "${OPENROUTER_BUNDLE_RESOLVED:-0}" != 1 ]' \
   "$ROOT/plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh" &&
-grep -Fq '[ "$RESOLVED_BUNDLE_VERSION" != "${OPENROUTER_BUNDLE_VERSION:-}" ]' \
+grep -Fq '[ -n "${OPENROUTER_BUNDLE_VERSION:-}" ]' \
   "$ROOT/plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh" &&
-grep -Fq '[ "$RESOLVED_BUNDLE_CACHE_CLASS" != "${OPENROUTER_BUNDLE_CACHE_CLASS:-}" ]' \
+grep -Fq '[ -n "${OPENROUTER_BUNDLE_CACHE_CLASS:-}" ]' \
   "$ROOT/plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh" || {
-    echo "  FAIL  model-router OpenRouter adapter is not identity-bound across re-resolution"
+    echo "  FAIL  model-router OpenRouter adapter does not retain the invocation binding"
     failures=1
   }
 grep -Fq 'if type == "boolean" then tostring else error("invalid fallbackUsed") end' \

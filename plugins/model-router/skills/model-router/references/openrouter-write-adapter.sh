@@ -100,51 +100,27 @@ if [ -z "${OPENROUTER_API_KEY:-}" ] && [ -z "${OPENROUTER_API_KEY_FILE:-}" ]; th
   exit 77
 fi
 
-resolve_openrouter_bundle() {
-  local active_host=""
-  [ -n "${WORKFLOW_KERNEL:-}" ] && [ -x "$WORKFLOW_KERNEL" ] || return 1
-  [ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && active_host="claude"
-  [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && active_host="codex"
-  if [ -n "$active_host" ]; then
-    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.19.0 --active-host "$active_host" \
-      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
-      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
-      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
-  else
-    "$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-      --minimum-version 1.19.0 \
-      --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
-      --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
-      --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
-      --required-executable skills/openrouter-delegate/references/delegation-boundary.sh
-  fi
-}
-
-RESOLVED_BUNDLE_JSON="$(resolve_openrouter_bundle)" || {
+if [ "${OPENROUTER_BUNDLE_RESOLVED:-0}" != 1 ]; then
   echo "openrouter-exec: coherent OpenRouter bundle unavailable; return to Codex" >&2
   exit 77
-}
-RESOLVED_BUNDLE_REF="$(printf '%s' "$RESOLVED_BUNDLE_JSON" | jq -r '.selected_root // empty')"
-RESOLVED_BUNDLE_VERSION="$(printf '%s' "$RESOLVED_BUNDLE_JSON" | jq -r '.version // empty')"
-RESOLVED_BUNDLE_CACHE_CLASS="$(printf '%s' "$RESOLVED_BUNDLE_JSON" | jq -r '.cache_class // empty')"
-RESOLVED_BUNDLE_REASON="$(printf '%s' "$RESOLVED_BUNDLE_JSON" | jq -r '.reason // empty')"
-if [ -n "${OPENROUTER_BUNDLE_REF:-}" ] &&
-   { [ "$RESOLVED_BUNDLE_REF" != "$OPENROUTER_BUNDLE_REF" ] ||
-     [ "$RESOLVED_BUNDLE_VERSION" != "${OPENROUTER_BUNDLE_VERSION:-}" ] ||
-     [ "$RESOLVED_BUNDLE_CACHE_CLASS" != "${OPENROUTER_BUNDLE_CACHE_CLASS:-}" ] ||
-     [ "$RESOLVED_BUNDLE_REASON" != "${OPENROUTER_BUNDLE_REASON:-}" ]; }; then
-  echo "openrouter-exec: OpenRouter bundle binding changed before transport; return to Codex" >&2
-  exit 77
 fi
-case "$RESOLVED_BUNDLE_REF" in
-  "~/"*) OPENROUTER_ROOT="$HOME/${RESOLVED_BUNDLE_REF#\~/}" ;;
+[ -n "${OPENROUTER_BUNDLE_VERSION:-}" ] &&
+  [ -n "${OPENROUTER_BUNDLE_CACHE_CLASS:-}" ] &&
+  [ -n "${OPENROUTER_BUNDLE_REASON:-}" ] || {
+  echo "openrouter-exec: incomplete OpenRouter bundle binding; return to Codex" >&2
+  exit 77
+}
+case "${OPENROUTER_BUNDLE_REF:-}" in
+  "~/"*) OPENROUTER_ROOT="$HOME/${OPENROUTER_BUNDLE_REF#\~/}" ;;
   *) echo "openrouter-exec: invalid OpenRouter bundle binding; return to Codex" >&2; exit 77 ;;
 esac
 WRAPPER="$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 POLICY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json"
 BOUNDARY="$OPENROUTER_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh"
+[ -x "$WRAPPER" ] && [ -r "$POLICY" ] && [ -x "$BOUNDARY" ] || {
+  echo "openrouter-exec: bound OpenRouter assets unavailable; return to Codex" >&2
+  exit 77
+}
 
 TASK_TMP_ROOT="${TMPDIR:-/tmp}"
 SYSTEM="You are a bounded patch generator. You have no filesystem, shell, command, tool, or repository access beyond the task and untrusted file contents in the user prompt. Return only a Git unified diff. No prose. No markdown fences."
@@ -525,9 +501,9 @@ jq -n --arg commit "$(git rev-parse --short HEAD)" --arg files "$FILES_CHANGED" 
   --arg provider "$(jq -r '.servingProvider // ""' "$RECEIPT_FILE")" \
   --arg provider_provenance "$(jq -r '.servingProviderProvenance' "$RECEIPT_FILE")" \
   --arg generation_id "$(jq -r '.generationId' "$RECEIPT_FILE")" \
-  --arg bundle_version "$RESOLVED_BUNDLE_VERSION" \
-  --arg bundle_cache_class "$RESOLVED_BUNDLE_CACHE_CLASS" \
-  --arg bundle_reason "$RESOLVED_BUNDLE_REASON" \
+  --arg bundle_version "$OPENROUTER_BUNDLE_VERSION" \
+  --arg bundle_cache_class "$OPENROUTER_BUNDLE_CACHE_CLASS" \
+  --arg bundle_reason "$OPENROUTER_BUNDLE_REASON" \
   --arg contract_digest "${MODEL_ROUTER_CONTRACT_DIGEST:-}" \
   --argjson contract_revision "${MODEL_ROUTER_CONTRACT_REVISION:-0}" \
   --arg request_digest "$(jq -r '.authorization.requestEnvelopeSha256' "$RECEIPT_FILE")" \

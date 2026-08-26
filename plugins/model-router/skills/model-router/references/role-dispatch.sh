@@ -21,13 +21,14 @@ HUMAN_AUTHORED=0
 CONTRACT_DIGEST=""
 CONTRACT_REVISION=""
 CONTRACT_REVISION_JSON=null
+WORKFLOW_KERNEL_LAUNCHER=""
 CAPABILITIES=()
 INDEPENDENCE_RECEIPT_IDS=()
 CAPABILITY_COUNT=0
 INDEPENDENCE_RECEIPT_COUNT=0
 
 usage() {
-  printf '%s\n' 'usage: role-dispatch --role ROLE --capability CAP [--capability CAP ...] --effort EFFORT --prompt-file PATH --output-file PATH --receipt-file PATH [--repository-evidence-file PATH] [--independence-receipt-dir DIR --independence-receipt-id ID ... | --human-authored] [--contract-digest SHA256 --contract-revision N]' >&2
+  printf '%s\n' 'usage: role-dispatch --role ROLE --capability CAP [--capability CAP ...] --effort EFFORT --workflow-kernel PATH --prompt-file PATH --output-file PATH --receipt-file PATH [--repository-evidence-file PATH] [--independence-receipt-dir DIR --independence-receipt-id ID ... | --human-authored] [--contract-digest SHA256 --contract-revision N]' >&2
   exit 2
 }
 
@@ -45,6 +46,7 @@ while [ "$#" -gt 0 ]; do
     --human-authored) HUMAN_AUTHORED=1; shift ;;
     --contract-digest) [ "$#" -ge 2 ] || usage; CONTRACT_DIGEST="$2"; shift 2 ;;
     --contract-revision) [ "$#" -ge 2 ] || usage; CONTRACT_REVISION="$2"; shift 2 ;;
+    --workflow-kernel) [ "$#" -ge 2 ] || usage; WORKFLOW_KERNEL_LAUNCHER="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -179,11 +181,52 @@ if [ -n "$PROFILE" ]; then
   PAID_CLAUDE_CREDITS="$(jq -r '.allowPaidClaudeCredits // false' "$PROFILE")"
 fi
 
+OPENROUTER_BUNDLE_STATE="workflow_kernel_unavailable"
+OPENROUTER_BUNDLE_REF=""
+OPENROUTER_BUNDLE_ROOT=""
+OPENROUTER_BUNDLE_VERSION=""
+OPENROUTER_BUNDLE_CACHE_CLASS=""
+OPENROUTER_BUNDLE_REASON=""
+resolve_openrouter_bundle() {
+  local active_host="" bundle_json bundle_ref
+  case "$WORKFLOW_KERNEL_LAUNCHER" in /*/workflow-kernel-launcher.sh) ;; *) return 1 ;; esac
+  [ -f "$WORKFLOW_KERNEL_LAUNCHER" ] && [ -x "$WORKFLOW_KERNEL_LAUNCHER" ] &&
+    [ ! -L "$WORKFLOW_KERNEL_LAUNCHER" ] || return 1
+  OPENROUTER_BUNDLE_STATE="provider_bundle_unavailable"
+  [ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && active_host=claude
+  [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && active_host=codex
+  args=(resolve-plugin-bundle --plugin openrouter --minimum-version 1.19.0
+    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh
+    --required-asset skills/openrouter-delegate/references/openrouter-credential.sh
+    --required-asset skills/openrouter-delegate/references/delegation-security-policy.json
+    --required-executable skills/openrouter-delegate/references/delegation-boundary.sh)
+  [ -n "$active_host" ] && args+=(--active-host "$active_host")
+  bundle_json="$("$WORKFLOW_KERNEL_LAUNCHER" "${args[@]}" 2>/dev/null)" || return 1
+  bundle_ref="$(printf '%s' "$bundle_json" | jq -r '.selected_root // empty')"
+  case "$bundle_ref" in '~/'*) ;; *) return 1 ;; esac
+  OPENROUTER_BUNDLE_REF="$bundle_ref"
+  OPENROUTER_BUNDLE_ROOT="$HOME/${bundle_ref#\~/}"
+  OPENROUTER_BUNDLE_VERSION="$(printf '%s' "$bundle_json" | jq -r '.version // empty')"
+  OPENROUTER_BUNDLE_CACHE_CLASS="$(printf '%s' "$bundle_json" | jq -r '.cache_class // empty')"
+  OPENROUTER_BUNDLE_REASON="$(printf '%s' "$bundle_json" | jq -r '.reason // empty')"
+  [ -x "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/openrouter-wrapper.sh" ] &&
+    [ -r "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/openrouter-credential.sh" ] &&
+    [ -r "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-security-policy.json" ] &&
+    [ -x "$OPENROUTER_BUNDLE_ROOT/skills/openrouter-delegate/references/delegation-boundary.sh" ] || return 1
+  OPENROUTER_BUNDLE_STATE="resolved"
+}
+resolve_openrouter_bundle || true
+
 if [ -n "${MODEL_ROUTER_AVAILABILITY_FILE:-}" ]; then
   [ -r "$MODEL_ROUTER_AVAILABILITY_FILE" ] && [ ! -L "$MODEL_ROUTER_AVAILABILITY_FILE" ] || usage
   AVAILABILITY="$(jq -c '. + {probeSource:"fixture"}' "$MODEL_ROUTER_AVAILABILITY_FILE")" || usage
 else
-  AVAILABILITY="$("$DIR/availability-probe.sh" | jq -c '. + {probeSource:"live"}')" || AVAILABILITY='{"probeSource":"live"}'
+  AVAILABILITY="$(OPENROUTER_BUNDLE_RESOLVED="$([ "$OPENROUTER_BUNDLE_STATE" = resolved ] && printf 1 || printf 0)" \
+    OPENROUTER_BUNDLE_REF="$OPENROUTER_BUNDLE_REF" \
+    OPENROUTER_BUNDLE_VERSION="$OPENROUTER_BUNDLE_VERSION" \
+    OPENROUTER_BUNDLE_CACHE_CLASS="$OPENROUTER_BUNDLE_CACHE_CLASS" \
+    OPENROUTER_BUNDLE_REASON="$OPENROUTER_BUNDLE_REASON" \
+    "$DIR/availability-probe.sh" | jq -c '. + {probeSource:"live"}')" || AVAILABILITY='{"probeSource":"live"}'
 fi
 PROBE_SOURCE="$(printf '%s' "$AVAILABILITY" | jq -r '.probeSource')"
 TRANSPORT_STUB=false
@@ -232,7 +275,7 @@ candidate_has_capabilities() {
 }
 
 transport_eligibility() {
-  local transport="$1" model="$2" rate_limit_id="${3:-}" state auth_mode plan fable_state observed sdk_observed five weekly paid allowance_reason
+  local transport="$1" model="$2" rate_limit_id="${3:-}" state auth_mode plan fable_state observed sdk_observed five weekly paid allowance_reason healthy_count allowance_count
   BILLING_MODE="unavailable"
   ALLOWANCE_WINDOW="unavailable"
   ELIGIBILITY_REASON="model_participant_unavailable"
@@ -248,10 +291,30 @@ transport_eligibility() {
           rate_limit_id="codex"
         fi
       fi
-      [ -n "$rate_limit_id" ] || {
+      if [ -z "$rate_limit_id" ] &&
+         [ "$(printf '%s' "$AVAILABILITY" | jq -r '.codex.allowances? | type')" = object ]; then
+        allowance_count="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.allowances | length')"
+        healthy_count="$(printf '%s' "$AVAILABILITY" | jq -r '[.codex.allowances[] | select(.state == "ok")] | length')"
+        if [ "$allowance_count" -gt 0 ] && [ "$healthy_count" -gt 0 ]; then
+          auth_mode="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.authMode // .codex.auth_mode // "unknown"')"
+          [ "$auth_mode" = subscription ] || {
+            ELIGIBILITY_REASON="model_participant_unavailable"
+            return 1
+          }
+          BILLING_MODE="included-subscription"
+          ALLOWANCE_WINDOW="mapping-unknown"
+          ELIGIBILITY_REASON="attemptable"
+          return 0
+        fi
+        if [ "$allowance_count" -gt 0 ] &&
+           printf '%s' "$AVAILABILITY" | jq -e 'all(.codex.allowances[]; .state == "limited")' >/dev/null; then
+          ELIGIBILITY_REASON="rate_limit_exhausted"
+          return 1
+        fi
         ELIGIBILITY_REASON="rate_limit_mapping_unknown"
         return 1
-      }
+      fi
+      [ -n "$rate_limit_id" ] || { ELIGIBILITY_REASON="rate_limit_mapping_unknown"; return 1; }
       if [ "$(printf '%s' "$AVAILABILITY" | jq -r '.codex.allowances? | type')" = object ]; then
         if ! printf '%s' "$AVAILABILITY" | jq -e --arg limit_id "$rate_limit_id" \
           '.codex.allowances | has($limit_id)' >/dev/null 2>&1; then
@@ -323,8 +386,19 @@ transport_eligibility() {
       esac
       ;;
     openrouter)
+      if [ "$OPENROUTER_BUNDLE_STATE" != resolved ]; then
+        ELIGIBILITY_REASON="$OPENROUTER_BUNDLE_STATE"
+        return 1
+      fi
       state="$(printf '%s' "$AVAILABILITY" | jq -r '.openrouter.state // "unknown"')"
-      [ "$state" = ok ] || return 1
+      if [ "$state" != ok ]; then
+        allowance_reason="$(printf '%s' "$AVAILABILITY" | jq -r '.openrouter.reason // "provider_availability_unknown"')"
+        case "$allowance_reason" in
+          provider_credential_unavailable|provider_availability_unknown) ELIGIBILITY_REASON="$allowance_reason" ;;
+          *) ELIGIBILITY_REASON="provider_availability_unknown" ;;
+        esac
+        return 1
+      fi
       BILLING_MODE="api"
       ALLOWANCE_WINDOW="api"
       ;;
@@ -332,24 +406,9 @@ transport_eligibility() {
   esac
 }
 
-resolve_openrouter_root() {
-  local active_host="" bundle_json bundle_ref
-  [ -n "${WORKFLOW_KERNEL:-}" ] && [ -x "$WORKFLOW_KERNEL" ] || return 1
-  [ -n "${CLAUDE_CODE:-}${CLAUDECODE:-}" ] && active_host=claude
-  [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && active_host=codex
-  args=(resolve-plugin-bundle --plugin openrouter --minimum-version 1.19.0
-    --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh
-    --required-asset skills/openrouter-delegate/references/openrouter-credential.sh
-    --required-asset skills/openrouter-delegate/references/delegation-security-policy.json
-    --required-executable skills/openrouter-delegate/references/delegation-boundary.sh)
-  [ -n "$active_host" ] && args+=(--active-host "$active_host")
-  bundle_json="$("$WORKFLOW_KERNEL" "${args[@]}" 2>>"$PRIVATE_LOG")" || return 1
-  bundle_ref="$(printf '%s' "$bundle_json" | jq -r '.selected_root // empty')"
-  case "$bundle_ref" in '~/'*) printf '%s\n' "$HOME/${bundle_ref#\~/}" ;; *) return 1 ;; esac
-}
-
 invoke_candidate() {
   local transport="$1" model="$2" effective="$3" rc=0 root system_file prompt_copy result_json sandbox
+  INVOKE_REASON=""
   : > "$TRANSPORT_OUTPUT"
   : > "$PROVIDER_RECEIPT"
   if [ -n "${MODEL_ROUTER_TRANSPORT_STUB:-}" ]; then
@@ -394,16 +453,21 @@ invoke_candidate() {
       printf '%s' "$result_json" > "$PROVIDER_RECEIPT"
       ;;
     openrouter)
+      root="$OPENROUTER_BUNDLE_ROOT"
+      [ "$OPENROUTER_BUNDLE_STATE" = resolved ] || { INVOKE_REASON="$OPENROUTER_BUNDLE_STATE"; return 77; }
       if printf '%s' "$CAPABILITIES_JSON" | jq -e 'index("write-repository") != null' >/dev/null; then
         [ -n "${OPENROUTER_EXEC_ALLOWED_PATHS:-}" ] || return 77
         argv=("$DIR/openrouter-write-adapter.sh" --model "$model")
         MODEL_ROUTER_CONTRACT_DIGEST="$CONTRACT_DIGEST" \
           MODEL_ROUTER_CONTRACT_REVISION="$CONTRACT_REVISION" \
+          OPENROUTER_BUNDLE_RESOLVED=1 OPENROUTER_BUNDLE_REF="$OPENROUTER_BUNDLE_REF" \
+          OPENROUTER_BUNDLE_VERSION="$OPENROUTER_BUNDLE_VERSION" \
+          OPENROUTER_BUNDLE_CACHE_CLASS="$OPENROUTER_BUNDLE_CACHE_CLASS" \
+          OPENROUTER_BUNDLE_REASON="$OPENROUTER_BUNDLE_REASON" \
           "${argv[@]}" < "$PROMPT_FILE" > "$PROVIDER_RECEIPT" 2>>"$PRIVATE_LOG" || return $?
         jq -n --arg digest "$CONTRACT_DIGEST" --argjson revision "$CONTRACT_REVISION" \
           '{status:"committed",verification:"required",contract_digest:$digest,revision:$revision}' > "$TRANSPORT_OUTPUT"
       else
-        root="$(resolve_openrouter_root)" || return 77
         system_file="$(mktemp "${TMPDIR:-/tmp}/model-router.system.XXXXXX")" || return 1
         prompt_copy="$(mktemp "${TMPDIR:-/tmp}/model-router.prompt.XXXXXX")" || { rm -f "$system_file"; return 1; }
         printf '%s' 'Return only the requested analysis. You have no command authority.' > "$system_file"
@@ -413,13 +477,20 @@ invoke_candidate() {
           cat "$REPOSITORY_EVIDENCE_FILE" >> "$prompt_copy"
         fi
         argv=("$root/skills/openrouter-delegate/references/delegation-boundary.sh" --mode artifact-delegation --policy "$root/skills/openrouter-delegate/references/delegation-security-policy.json" --content-file "$system_file" --content-file "$prompt_copy")
-        "${argv[@]}" >>"$PRIVATE_LOG" 2>&1 || { rm -f "$system_file" "$prompt_copy"; return 77; }
+        "${argv[@]}" >>"$PRIVATE_LOG" 2>&1 || { INVOKE_REASON="provider_boundary_declined"; rm -f "$system_file" "$prompt_copy"; return 77; }
         argv=(bash "$root/skills/openrouter-delegate/references/openrouter-wrapper.sh" "$model" - 3600)
         env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$system_file" \
           OPENROUTER_WORKLOAD=mechanical OPENROUTER_WEB_SEARCH=0 \
           OPENROUTER_RECEIPT_FILE="$PROVIDER_RECEIPT" "${argv[@]}" \
           < "$prompt_copy" > "$TRANSPORT_OUTPUT" 2>>"$PRIVATE_LOG"
         rc=$?
+        if [ "$rc" -ne 0 ]; then
+          if jq -e '.httpStatus == 404 or .failureReason == "model_not_found" or .failureReason == "no_available_provider"' "$PROVIDER_RECEIPT" >/dev/null 2>&1; then
+            INVOKE_REASON="provider_model_unavailable"
+          else
+            INVOKE_REASON="provider_transport_failed"
+          fi
+        fi
         rm -f "$system_file" "$prompt_copy"
         return "$rc"
       fi
@@ -530,10 +601,12 @@ while IFS= read -r candidate; do
     jq -n --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg requested_effort "$EFFORT" --arg effective_effort "$EFFECTIVE_EFFORT" --arg output "$OUTPUT_FILE" --arg probe_source "$PROBE_SOURCE" --argjson transport_stub "$TRANSPORT_STUB" --argjson capabilities "$CAPABILITIES_JSON" --argjson fallback "$fallback" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" --argjson excluded_family_count "$(printf '%s' "$EXCLUDED_FAMILIES" | jq 'length')" '{role:$role,capabilities:$capabilities,requestedEffort:$requested_effort,effectiveEffort:$effective_effort,participantId:$participant,disposition:"completed",fallback:$fallback,evidenceSource:$probe_source,transportStub:$transport_stub,familyIndependence:{humanAuthored:$human_authored,excludedFamilyCount:$excluded_family_count},output:$output}'
     exit 0
   fi
-  if grep -Fqi 'repository-not-clean' "$PRIVATE_LOG"; then reason=repository-not-clean
+  if [ -n "${INVOKE_REASON:-}" ]; then reason="$INVOKE_REASON"
+  elif grep -Fqi 'repository-not-clean' "$PRIVATE_LOG"; then reason=repository-not-clean
   elif grep -Fqi 'write-completion-without-commit' "$PRIVATE_LOG"; then reason=write-completion-without-commit
   elif grep -Fqi 'write-completion-dirty' "$PRIVATE_LOG"; then reason=write-completion-dirty
-  elif grep -qiE 'usage.?limit|rate.?limit|quota|exhausted' "$PRIVATE_LOG"; then reason=quota-exhausted
+  elif grep -qiE 'usage.?limit|rate.?limit|quota|exhausted' "$PRIVATE_LOG"; then
+    if [ "$transport" = codex-cli ]; then reason=rate_limit_exhausted; else reason=quota-exhausted; fi
   elif grep -qiE 'declin|refus' "$PRIVATE_LOG"; then reason=content-refusal
   else reason=transport-unavailable
   fi
@@ -548,7 +621,7 @@ while IFS= read -r candidate; do
       break
     fi
   fi
-  if [ "$reason" = quota-exhausted ]; then
+  if [ "$reason" = quota-exhausted ] || [ "$reason" = rate_limit_exhausted ]; then
     if [ "$transport" = codex-cli ]; then
       EXHAUSTED_TRANSPORTS="$(printf '%s' "$EXHAUSTED_TRANSPORTS" | jq -c --arg value "$transport" '. + [$value] | unique')"
     else

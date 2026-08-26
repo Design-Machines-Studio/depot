@@ -15,10 +15,11 @@ OUTPUT=""
 ATTEMPT_RECEIPT_TEMPLATE=""
 CONTRACT_DIGEST=""
 CONTRACT_REVISION=""
+WORKFLOW_KERNEL_LAUNCHER=""
 DRY_RUN=0
 
 usage() {
-  printf '%s\n' 'usage: cascade-dispatch.sh --class <codex|openrouter|claude>|--kind <ui|logic|integration|config|docs|mechanical-logic> --prompt <text|-> [--receipt-file PATH] [--output-file PATH] [--contract-digest SHA256 --contract-revision N] [legacy options]' >&2
+  printf '%s\n' 'usage: cascade-dispatch.sh --class <codex|openrouter|claude>|--kind <ui|logic|integration|config|docs|mechanical-logic> --prompt <text|-> --workflow-kernel PATH [--receipt-file PATH] [--output-file PATH] [--contract-digest SHA256 --contract-revision N] [legacy options]' >&2
   exit 2
 }
 
@@ -32,6 +33,7 @@ while [ "$#" -gt 0 ]; do
     --attempt-receipt-template) [ "$#" -ge 2 ] || usage; ATTEMPT_RECEIPT_TEMPLATE="$2"; shift 2 ;;
     --contract-digest) [ "$#" -ge 2 ] || usage; CONTRACT_DIGEST="$2"; shift 2 ;;
     --contract-revision) [ "$#" -ge 2 ] || usage; CONTRACT_REVISION="$2"; shift 2 ;;
+    --workflow-kernel) [ "$#" -ge 2 ] || usage; WORKFLOW_KERNEL_LAUNCHER="$2"; shift 2 ;;
     --phase|--host|--timeout|--probe-file|--exhausted-rail) [ "$#" -ge 2 ] || usage; shift 2 ;;
     --dry-run) DRY_RUN=1; shift ;;
     *) usage ;;
@@ -64,6 +66,9 @@ if [ "$DRY_RUN" -eq 1 ]; then
     '{schemaVersion:1,compatibilityAdapter:true,class:$class,role:$role,disposition:"dry-run"}'
   exit 0
 fi
+case "$WORKFLOW_KERNEL_LAUNCHER" in /*/workflow-kernel-launcher.sh) ;; *) usage ;; esac
+[ -f "$WORKFLOW_KERNEL_LAUNCHER" ] && [ -x "$WORKFLOW_KERNEL_LAUNCHER" ] &&
+  [ ! -L "$WORKFLOW_KERNEL_LAUNCHER" ] || usage
 
 TMP_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/cascade-compat.XXXXXX")"
 cleanup() { rm -rf "$TMP_ROOT"; }
@@ -80,15 +85,21 @@ fi
 
 DISPATCHER="$DIR/../../model-router/skills/model-router/references/role-dispatch.sh"
 if [ ! -x "$DISPATCHER" ]; then
-  DISPATCHER=""
-  for cache_root in "$HOME/.claude/plugins/cache/depot" "$HOME/.codex/plugins/cache/depot"; do
-    candidate="$(ls -t "$cache_root"/model-router/*/skills/model-router/references/role-dispatch.sh 2>/dev/null | head -1)"
-    if [ -n "$candidate" ] && [ -x "$candidate" ]; then DISPATCHER="$candidate"; break; fi
-  done
+  BUNDLE_JSON="$("$WORKFLOW_KERNEL_LAUNCHER" resolve-plugin-bundle \
+    --plugin model-router --minimum-version 0.4.0 \
+    --required-executable skills/model-router/references/role-dispatch.sh \
+    --required-asset skills/model-router/references/role-request-schema.json \
+    --required-asset skills/model-router/references/role-policy.json 2>/dev/null)" || BUNDLE_JSON=""
+  BUNDLE_REF="$(printf '%s' "$BUNDLE_JSON" | jq -r '.selected_root // empty')"
+  case "$BUNDLE_REF" in
+    "~/"*) DISPATCHER="$HOME/${BUNDLE_REF#\~/}/skills/model-router/references/role-dispatch.sh" ;;
+    *) DISPATCHER="" ;;
+  esac
 fi
 [ -n "$DISPATCHER" ] || { printf '%s\n' 'cascade-dispatch: role router unavailable' >&2; exit 76; }
 
 ROLE_ARGS=(--role "$ROLE" --capability structured-output --effort medium
+  --workflow-kernel "$WORKFLOW_KERNEL_LAUNCHER"
   --prompt-file "$PROMPT_FILE"
   --output-file "$OUTPUT" --receipt-file "$RECEIPT")
 if [ -n "$CONTRACT_DIGEST" ]; then

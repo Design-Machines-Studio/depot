@@ -14,9 +14,10 @@ Recover the live Assembly development picture and choose the next safe chunk. Ac
 - Recommend exactly one next chunk first. Spare agents, time, or model capacity do not make later work safe.
 - Do not use Notion, personal sprint state, or ai-memory for this workflow.
 - Do not copy Baseplate roadmaps or work-path documents. Link to the owning source and retain only the evidence needed for the current decision.
-- Never assign a concrete model, provider, transport, family, subscription, or
-  billing source. Execution prompts assign only a role, required capabilities,
-  and normalized effort.
+- Execution prompts and participant packets assign only a role, required
+  capabilities, and normalized effort. Concrete routing identity appears only
+  in the human-facing `Recommended start` projection immediately before a
+  copy-paste execution prompt.
 
 ## Use planning opinions only when triggered
 
@@ -138,6 +139,51 @@ Every prompt must state:
 The prompt must not call a direct provider command or contain a concrete
 routing override. Its role request is resolved later by model-router.
 
+### Recommended start
+
+Whenever this coordinator produces an implementation or review copy-paste
+prompt, resolve one coherent model-router bundle through Workflow Kernel at
+minimum version `0.4.0`, requiring
+`skills/model-router/references/operator-recommendation.sh`, `role-policy.json`,
+and `availability-probe.sh`. Resolve the current OpenRouter
+`model-matrix.json` through Workflow Kernel without changing it. Invoke the
+read-only recommendation renderer with the prompt's `executorRole`, each
+`executorCapabilities` value, `executorEffort`, the exact matrix asset, and the
+current availability probe. Preparing this projection never invokes a model.
+
+Place its output immediately before the copy-paste prompt in exactly this
+shape:
+
+```text
+Recommended start
+
+- Model: concrete recommended model
+- Harness/rail: Codex, Claude Code, or OpenRouter
+- Effort: low, medium, high, or max
+- Why: one sentence tied to the requested role and task
+- Cost: included subscription, metered API price, or unavailable
+- Fallback: exactly one concrete fallback
+- Matrix evidence: snapshot date
+```
+
+Use the renderer's current role-policy order, capability fit, availability, and
+matrix prices. Never hardcode a favourite or prose price here. Preserve an
+explicit unknown availability label. Native marginal cost is `included
+subscription`; its separately labeled API-equivalent estimate remains planning
+evidence, never billed subscription spend. OpenRouter prices come from the
+fresh checked-in matrix. Return one primary and one fallback, not a menu.
+
+The block is for the human operator and primary executor only. Never copy it,
+concrete model identities, candidate order, availability comparison, or costs
+into participant prompts, Plan A/Plan B evidence, reviewer prompts,
+participant outputs, or synthesis inputs. Those surfaces remain anonymous and
+provider-neutral. Routine status-only coordination emits no empty block.
+
+This pre-run recommendation is an estimate. Preserve the existing terminal
+model/cost report exactly once after routed work settles; that report owns the
+actual provider, model, tokens, latency, and billed cost and is never replaced
+or relabeled by the recommendation.
+
 ## Report the planning pass
 
 Return a compact, outcome-first report containing:
@@ -152,9 +198,11 @@ Return a compact, outcome-first report containing:
 8. planning commits or PRs created, or `None`;
 9. when the opinion path ran, `Plan A`, `Plan B` or its unavailable state, and
    one bounded synthesis;
-10. one complete copy-paste execution prompt when requested, with role,
-    capabilities, and effort.
-11. only when the opinion path actually dispatched a role, the already-
+10. immediately before each requested copy-paste execution prompt, one
+    concrete `Recommended start` projection and exactly one fallback;
+11. one complete copy-paste execution prompt when requested, with
+    provider-neutral role, capabilities, and effort;
+12. only when the opinion path actually dispatched a role, the already-
     generated terminal model/cost Markdown after the recommendation and
     execution prompt; routine sessions emit no empty report.
 

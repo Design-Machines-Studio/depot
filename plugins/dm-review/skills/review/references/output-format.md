@@ -187,11 +187,14 @@ Coverage Gaps; they never support clean. This index creates no transcript.
 ### Coverage Gaps
 
 List incomplete required coverage, its evidence pointer, and one next action.
-For a required UI lane, emit exactly one of `dev_server_unavailable`,
+For explicitly required rendered coverage, emit exactly one of
+`visual_target_unavailable`, `dev_server_unavailable`,
 `browser_transport_unavailable`, `model_participant_unavailable`, or
 `resource_cleanup_failed`; never include raw tool/provider output, a private
 path, account data, or quota details. These readiness failures are not code
-findings.
+findings. In an ordinary review with no target, place one aggregated
+`visual_target_unavailable -- NOT RUN` note in the Agent Summary instead; it is
+not an incomplete required gap and is never repeated per UI analysis lane.
 If none, state `Coverage Gaps: none -- all required lanes completed.`
 
 ---

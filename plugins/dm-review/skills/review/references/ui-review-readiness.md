@@ -1,16 +1,29 @@
 # Required UI-lane readiness
 
-This contract is consumed only by dm-review's required rendered UI lanes. It
+This contract is consumed only by dm-review's selected rendered UI lanes. It
 prevents participant dispatch when no rendered application or real local
 interactive browser exists. It replaces reviewer-owned localhost scanning,
 generic `tool-use` guesses, and OpenRouter web-search substitution. It is not a
 browser broker, capability negotiation framework, or workflow engine.
 
-## Repository declaration
+## Target selection
 
-Discover only `<repository>/.dm/ui-review.json`; never scan generic localhost
-ports or infer a start command from incidental files. The closed version 1
-shape is:
+Select exactly one target in this order:
+
+1. an explicit URL supplied by the current invocation;
+2. an already attached, automation-capable T3 preview and its current URL;
+3. the optional tracked `<repository>/.dm/ui-review.json` declaration;
+4. otherwise no rendered target is available.
+
+Pass invocation and T3 targets to `prepare` with `--target-url` and
+`--target-source explicit|t3-preview`. Do not scan localhost ports, infer a URL
+from file extensions, or guess a start command. The helper validates the URL;
+successful host navigation remains the readiness proof.
+
+## Optional repository declaration
+
+When present, discover only `<repository>/.dm/ui-review.json`. Its closed
+version 1 shape is:
 
 ```json
 {
@@ -44,8 +57,9 @@ consumer is sufficient.
 
 ## Ordered gate
 
-1. Check declared application readiness independently with
-   `ui-review-readiness.sh prepare`.
+1. Select the target using the order above. For an explicit URL or attached T3
+   preview, run `ui-review-readiness.sh prepare` with that exact target. For a
+   declaration, check its application readiness independently with `prepare`.
 2. If a stopped `process` consumer has an exact start procedure, start it and
    register only that created resource. `prepare` returns `app_ready` with
    `dispatchAllowed: false` and leaves that registered process available for
@@ -75,9 +89,10 @@ consumer is sufficient.
    exact state file created by `prepare`. It rechecks the registered target and
    consumes the browser proof. Only `dispatchAllowed: true` permits a
    participant call.
-7. Keep browser interaction host-owned. Give each UI analysis role the bounded
-   screenshots, accessibility snapshots, console summary, route/viewport IDs,
-   interaction observations, and computed-style results it needs. Request
+7. Keep browser interaction host-owned. Collect screenshots, accessibility
+   snapshots, console summary, route/viewport IDs, interaction observations,
+   and computed-style results once. Give the same bounded evidence packet to
+   each applicable UI analysis role. Request
    `review-deep` with `read-repository`, `long-context`, and
    `structured-output`; do not request `browser` or generic `tool-use`.
 8. Settle the public participant result through `ui-review-readiness.sh
@@ -99,11 +114,20 @@ probe that proves local navigation.
 
 | Reason | Review state | One next action |
 |---|---|---|
+| `visual_target_unavailable` | `NOT RUN` ordinarily; `REVIEW INCOMPLETE` when required | Supply an explicit URL, attach T3 preview, or add the optional declaration when coverage is required. |
 | `dev_server_unavailable` | `REVIEW INCOMPLETE` | Declare or recover the exact repository-owned consumer and rerun. |
 | `browser_transport_unavailable` | `REVIEW INCOMPLETE` | Attach a local interactive browser, navigate the target, and rerun. |
 | `model_participant_unavailable` | `REVIEW INCOMPLETE` | Restore an eligible provider-neutral analysis participant and rerun the lane. |
 | `resource_cleanup_failed` | `REVIEW INCOMPLETE` | Run only the recorded repository-owned cleanup and inspect that resource. |
 
-These are prerequisite/coverage outcomes, never code-quality findings. Emit
-one exact cause and one next action. Do not dispatch a doomed participant,
-silently omit a required lane, or convert missing evidence into approval.
+These are prerequisite/coverage outcomes, never code-quality findings. When no
+target exists during an ordinary quick or full review, dispatch no UI analysis
+participant and emit one aggregated `visual_target_unavailable` coverage note
+with `NOT RUN`; the review remains otherwise complete. Do not repeat that note
+for visual-browser, UX-quality, and UI-standards lanes.
+
+Rendered evidence is required only for `/dm-review-visual`, explicit user or
+acceptance-criteria requirements, or a repository verification profile. Call
+`prepare --visual-required true` for those cases. If no target exists, emit one
+honest `REVIEW INCOMPLETE` coverage result and one next action. File extensions
+alone do not make visual infrastructure mandatory.

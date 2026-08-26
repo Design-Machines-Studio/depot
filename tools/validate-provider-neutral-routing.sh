@@ -5,6 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 POLICY="$ROOT/plugins/model-router/skills/model-router/references/role-policy.json"
 MATRIX="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-matrix.json"
 PIPELINE_POLICY="$ROOT/plugins/pipeline/references/routing-policy.json"
+KERNEL="$ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/provider-neutral-routing.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 
@@ -71,6 +72,10 @@ grep -Fq 'confirm-browser' "$ui_readiness" &&
   grep -Fq 'app_ready' "$ui_helper" &&
   grep -Fq 'cleanupArgv' "$ui_helper" ||
   fail 'dm-review lacks the two-phase browser gate or exact cleanup snapshot'
+grep -Fq 'optional tracked `<repository>/.dm/ui-review.json`' "$ui_readiness" ||
+  fail 'dm-review still treats UI configuration as mandatory'
+grep -Fq 'one aggregated `visual_target_unavailable` coverage note' "$ui_readiness" ||
+  fail 'dm-review duplicates missing visual readiness per lane'
 
 # Pipeline policy may express only role intent and legacy translation.
 jq -e '
@@ -185,18 +190,18 @@ printf '%s\n' '#!/usr/bin/env bash' 'while [ "$#" -gt 0 ]; do case "$1" in --out
 chmod +x "$TMP/cascade-transport"
 MODEL_ROUTER_TEST_MODE=1 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/cascade-availability.json" \
   MODEL_ROUTER_TRANSPORT_STUB="$TMP/cascade-transport" \
-  "$CASCADE" --class openrouter --prompt 'inline prompt' --host codex --phase execute --timeout 5 > "$TMP/cascade-inline"
+  "$CASCADE" --class openrouter --prompt 'inline prompt' --workflow-kernel "$KERNEL" --host codex --phase execute --timeout 5 > "$TMP/cascade-inline"
 grep -Fxq 'compat-ok' "$TMP/cascade-inline" || fail 'legacy inline prompt/stdout contract failed'
 printf 'stdin prompt' | MODEL_ROUTER_TEST_MODE=1 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/cascade-availability.json" \
   MODEL_ROUTER_TRANSPORT_STUB="$TMP/cascade-transport" \
-  "$CASCADE" --kind logic --prompt - --probe-file "$TMP/cascade-availability.json" --exhausted-rail openrouter > "$TMP/cascade-stdin"
+  "$CASCADE" --kind logic --prompt - --workflow-kernel "$KERNEL" --probe-file "$TMP/cascade-availability.json" --exhausted-rail openrouter > "$TMP/cascade-stdin"
 grep -Fxq 'compat-ok' "$TMP/cascade-stdin" || fail 'legacy stdin prompt contract failed'
 "$CASCADE" --kind docs --prompt x --host codex --dry-run > "$TMP/cascade-dry-run"
 jq -e '.compatibilityAdapter == true and .role == "builder-fast" and .disposition == "dry-run"' "$TMP/cascade-dry-run" >/dev/null || fail 'legacy dry-run compatibility failed'
 touch "$TMP/cascade-contacts"
 if CASCADE_CONTACT_FILE="$TMP/cascade-contacts" MODEL_ROUTER_TEST_MODE=1 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/cascade-availability.json" \
   MODEL_ROUTER_TRANSPORT_STUB="$TMP/cascade-transport" \
-  "$CASCADE" --class openrouter --prompt x --attempt-receipt-template invalid >/dev/null 2>&1; then
+  "$CASCADE" --class openrouter --prompt x --workflow-kernel "$KERNEL" --attempt-receipt-template invalid >/dev/null 2>&1; then
   fail 'invalid legacy receipt template accepted'
 fi
 [ ! -s "$TMP/cascade-contacts" ] || fail 'invalid legacy receipt template contacted a transport'

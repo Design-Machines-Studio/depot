@@ -19,11 +19,16 @@ the policy.
 
 1. Load the visual-test skill from `plugins/dm-review/skills/visual-test/SKILL.md`
 2. Execute with the provided argument:
-   - No argument: auto-detect dev server, test all pages
+   - No argument: use an attached automation-capable T3 preview or optional
+     tracked `.dm/ui-review.json`; never scan localhost ports
    - URL: test that specific URL
    - `--states`: focus on interactive state testing
    - `--a11y`: focus on runtime accessibility checks
 3. Output the visual testing report
+
+This command always requires rendered evidence. Run the shared readiness gate
+with `--visual-required true`; if no target can be selected, return one `REVIEW
+INCOMPLETE` coverage result and one next action.
 
 Materialize the validated standalone review request, including its explicit/defaulted `workflowClass`, at `<exact-run-root>/review/request.json`; maintain its cumulative ordered redacted receipts at `<exact-run-root>/review/authoritative-receipts.json`. Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md`. Initialize the run under `.workflow-kernel/runs/<run-id>`; the kernel derives and verifies the immutable repository scope from the state directory, and no caller-selected lease root is accepted. Before authoritative browser actions, seal the independent prediction:
 

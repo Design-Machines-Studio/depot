@@ -15,7 +15,7 @@ For every lane that requires separation from implementation, load
 | patterns | `review-deep` | `read-repository`, `structured-output` | `high` |
 | simplicity | `review-deep` | `read-repository`, `structured-output` | `high` |
 | documentation | `review-fast` | `read-repository`, `structured-output` | `medium` |
-| tests/build | `review-fast` | `read-repository`, `tool-use`, `structured-output` | `medium` |
+| tests/build analysis | `review-fast` | `read-repository`, `structured-output` | `medium` |
 | second perspective | `plan-critic` | `read-repository`, `long-context`, `structured-output`, `independent-family` | `high` |
 | triggered domain lane | `review-deep` | explicit required capabilities only | `high` |
 | triggered UI analysis lane | `review-deep` | `read-repository`, `long-context`, `structured-output` | `high` |
@@ -23,11 +23,18 @@ For every lane that requires separation from implementation, load
 Keep the complete selected roster. Role mapping does not drop a required lane.
 Quick mode keeps its existing smaller roster but uses the same role mapping.
 
+Before a tests/build analysis call, load `host-verification-evidence.md` and run
+the applicable existing repository verification on the host. A passing host
+result settles deterministic execution before model analysis. When judgment is
+useful, pass only its bounded evidence envelope and repository evidence to the
+prompt-only role. Do not add `tool-use`. A genuinely tool-dependent selected
+task still requests `tool-use` and therefore excludes prompt-only transports.
+
 ## Dispatch
 
 Resolve one coherent model-router bundle with Workflow Kernel and require
 `skills/model-router/references/role-dispatch.sh`, the request schema, and role
-policy at minimum version `0.3.0`. When this invocation owns terminal reporting,
+policy at minimum version `0.4.0`. When this invocation owns terminal reporting,
 require `skills/model-router/references/render-terminal-report.sh` from that
 same bundle. For each selected lane:
 
@@ -41,7 +48,9 @@ same bundle. For each selected lane:
    repository-evidence file. Pass the evidence path with
    `--repository-evidence-file`; a prompt-only candidate is ineligible without
    it.
-4. Build `role-dispatch` argv as an array from the table above.
+4. Build `role-dispatch` argv as an array from the table above and pass the
+   invocation's exact validated launcher as `--workflow-kernel
+   "$WORKFLOW_KERNEL"`.
 5. Store every live implementation and repair receipt under
    `<exact-run-root>/receipts/private/router/`, named by its opaque receipt ID.
    For independent lanes, pass that directory with
@@ -54,25 +63,28 @@ same bundle. For each selected lane:
    The two origin forms are mutually exclusive.
 6. Launch selected lanes in parallel when the host supports it.
 
-### Required UI prerequisite
+### Proportional UI prerequisite
 
 Before any selected UI lane is dispatched, load `ui-review-readiness.md` and
-run its ordered application/browser gate. The application target and start
-procedure come only from `.dm/ui-review.json`. A declared Compose consumer uses
+run its ordered application/browser gate once. Prefer an explicit invocation
+URL, then an attached automation-capable T3 preview, then optional tracked
+`.dm/ui-review.json`. A declared Compose consumer uses
 the existing review Docker creation/cleanup contracts; an exact declared
 process uses `ui-review-readiness.sh`. Verify reachability independently, then
 prove actual local browser navigation independently.
 
 Current routed transports do not receive the host's local interactive browser.
-Keep browser interaction host-owned and materialize bounded screenshots,
+Keep browser interaction host-owned and materialize one bounded set of screenshots,
 accessibility snapshots, console summaries, route/viewport case IDs,
-interaction observations, and computed-style evidence. Pass that evidence to
-the provider-neutral UI analysis role above. Never request `browser` or generic
+interaction observations, and computed-style evidence. Share that evidence
+with every applicable provider-neutral UI analysis role above. Never request `browser` or generic
 `tool-use`, and never treat OpenRouter web search as local navigation.
 
-If application or browser recovery fails, do not dispatch a participant. Keep
-the lane and review incomplete with exactly `dev_server_unavailable` or
-`browser_transport_unavailable` plus the contract's one next action. If both
+If an ordinary review has no rendered target, dispatch no UI participant and
+emit one aggregated nonblocking coverage note. Keep the review incomplete only
+when rendered evidence was explicitly required. In that case use exactly one
+`visual_target_unavailable`, `dev_server_unavailable`, or
+`browser_transport_unavailable` result plus one next action. If both
 are ready but role dispatch is unavailable, settle as
 `model_participant_unavailable`. Prerequisite failures are coverage gaps, not
 code findings. Settle and clean only resources registered by this review;

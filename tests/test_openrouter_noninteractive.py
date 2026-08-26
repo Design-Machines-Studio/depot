@@ -397,6 +397,11 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
         env = os.environ.copy()
         env.update({"HOME": str(self.home), "OPENROUTER_API_KEY": self.api_key,
                     "OPENROUTER_BASE": self.base, "WORKFLOW_KERNEL": str(self.kernel),
+                    "OPENROUTER_BUNDLE_RESOLVED": "1",
+                    "OPENROUTER_BUNDLE_REF": "~/.codex/plugins/cache/depot/openrouter/1.14.0",
+                    "OPENROUTER_BUNDLE_VERSION": "1.14.0",
+                    "OPENROUTER_BUNDLE_CACHE_CLASS": "codex",
+                    "OPENROUTER_BUNDLE_REASON": "available",
                     "MODEL_ROUTER_CONTRACT_DIGEST": "sha256:" + "a" * 64,
                     "MODEL_ROUTER_CONTRACT_REVISION": "1"})
         env.pop("OPENROUTER_API_KEY_FILE", None)
