@@ -1,0 +1,155 @@
+{
+  "benchmarks": {
+    "attempts": 0,
+    "groups": [],
+    "incomplete_attempts": [],
+    "measured_cost_usd": 0.0,
+    "result_root": "/home/ned/benchmark-results/depot-role-v1"
+  },
+  "generated_at": "2026-08-26T08:39:02+08:00",
+  "production": {
+    "artifact_paths": {
+      "metrics": [
+        "/home/ned/ai/depot/plans/r0-measurement-backbone/metrics.json",
+        "/home/ned/ai/depot/plans/r1-review-burn-cuts/metrics.json",
+        "/home/ned/ai/depot/plans/r1-review-burn-cuts/prior-blocked-run/metrics.json"
+      ],
+      "run_cost_summaries": [
+        "/home/ned/ai/depot/plans/r0-measurement-backbone/run-cost-summary.json",
+        "/home/ned/ai/depot/plans/r1-review-burn-cuts/prior-blocked-run/run-cost-summary.json",
+        "/home/ned/ai/depot/plans/r1-review-burn-cuts/run-cost-summary.json"
+      ]
+    },
+    "by_lane_model": [
+      {
+        "attempts": 1,
+        "duration_seconds": 431.0,
+        "estimated_attempts": 0,
+        "input_bytes": 0.0,
+        "input_tokens": 24410.0,
+        "lane": "01-openrouter-usage-translator",
+        "measured_cost_attempts": 1,
+        "measured_cost_usd": 0.6670722,
+        "model": "moonshotai/kimi-k3",
+        "output_tokens": 39601.0,
+        "reasoning_tokens": 34999.0
+      },
+      {
+        "attempts": 1,
+        "duration_seconds": 400.0,
+        "estimated_attempts": 0,
+        "input_bytes": 0.0,
+        "input_tokens": 16158.0,
+        "lane": "02-lane-input-bytes",
+        "measured_cost_attempts": 1,
+        "measured_cost_usd": 0.6608562,
+        "model": "moonshotai/kimi-k3",
+        "output_tokens": 40837.0,
+        "reasoning_tokens": 35155.0
+      },
+      {
+        "attempts": 1,
+        "duration_seconds": 300.0,
+        "estimated_attempts": 0,
+        "input_bytes": 0.0,
+        "input_tokens": 20394.0,
+        "lane": "03-emission-contract-and-baselines",
+        "measured_cost_attempts": 1,
+        "measured_cost_usd": 0.1614712,
+        "model": "z-ai/glm-5.2",
+        "output_tokens": 30209.0,
+        "reasoning_tokens": 24272.0
+      },
+      {
+        "attempts": 1,
+        "duration_seconds": 3600.0,
+        "estimated_attempts": 0,
+        "input_bytes": 0.0,
+        "input_tokens": 52660.0,
+        "lane": "adversary-r1",
+        "measured_cost_attempts": 1,
+        "measured_cost_usd": 0.6914922,
+        "model": "moonshotai/kimi-k3",
+        "output_tokens": 35579.0,
+        "reasoning_tokens": 32395.0
+      },
+      {
+        "attempts": 1,
+        "duration_seconds": 900.0,
+        "estimated_attempts": 0,
+        "input_bytes": 0.0,
+        "input_tokens": 63769.0,
+        "lane": "adversary-r2",
+        "measured_cost_attempts": 1,
+        "measured_cost_usd": 0.8151192,
+        "model": "moonshotai/kimi-k3",
+        "output_tokens": 41599.0,
+        "reasoning_tokens": 41182.0
+      }
+    ],
+    "by_model": [
+      {
+        "attempts": 4,
+        "duration_seconds": 5331.0,
+        "estimated_attempts": 0,
+        "finding_contributions": 0,
+        "input_bytes": 0.0,
+        "input_tokens": 156997.0,
+        "measured_cost_attempts": 4,
+        "measured_cost_usd": 2.8345398,
+        "measurement_sources": {
+          "openrouter_api_receipt": 4
+        },
+        "model": "moonshotai/kimi-k3",
+        "output_tokens": 157616.0,
+        "reasoning_tokens": 143731.0
+      },
+      {
+        "attempts": 1,
+        "duration_seconds": 300.0,
+        "estimated_attempts": 0,
+        "finding_contributions": 0,
+        "input_bytes": 0.0,
+        "input_tokens": 20394.0,
+        "measured_cost_attempts": 1,
+        "measured_cost_usd": 0.1614712,
+        "measurement_sources": {
+          "openrouter_api_receipt": 1
+        },
+        "model": "z-ai/glm-5.2",
+        "output_tokens": 30209.0,
+        "reasoning_tokens": 24272.0
+      }
+    ],
+    "cost_summary_artifacts": 3,
+    "empty_cost_summaries": 2,
+    "malformed_artifacts": [],
+    "metrics_artifacts": 3,
+    "quality": {
+      "canonical_findings": 0,
+      "finding_contributions_by_model": {},
+      "finding_contributions_by_provider": {},
+      "median_completion_rate": 1.0,
+      "median_fallback_rate": 0.1,
+      "median_validation_first_pass_rate": 0.0,
+      "model_attempt_counts_from_metrics": {
+        "moonshotai/kimi-k3": 4,
+        "z-ai/glm-5.2": 1
+      },
+      "provider_attempt_counts_from_metrics": {
+        "Friendli": 1,
+        "Modal": 4
+      },
+      "retry_reasons": {
+        "cascade_exhausted": 1,
+        "codex_usage_cap": 5
+      }
+    }
+  },
+  "repository": "/home/ned/ai/depot-daily-pulse-2026-08-26-0835",
+  "run_roots": [
+    "/home/ned/ai/depot/plans",
+    "/home/ned/ai/depot/.workflow-kernel/runs"
+  ],
+  "schema_version": 1
+}
