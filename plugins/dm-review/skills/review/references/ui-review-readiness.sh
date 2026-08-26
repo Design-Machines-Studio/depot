@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 # ui-review-readiness.sh -- dm-review UI-lane prerequisite and cleanup helper.
 #
-# Current consumer: dm-review required UI lanes. It prevents doomed model
+# Current consumer: dm-review selected UI lanes. It prevents doomed model
 # dispatch when the repository's rendered app or the host's local interactive
 # browser is unavailable. It replaces per-reviewer localhost scanning and
 # unowned start/stop guesses; it is not an orchestration layer or browser broker.
 #
 # Usage:
 #   ui-review-readiness.sh prepare --repository-root ROOT --state-file FILE
+#     [--target-url URL --target-source explicit|t3-preview]
+#     [--visual-required true|false]
 #   ui-review-readiness.sh confirm-browser --repository-root ROOT \
 #     --state-file FILE --browser-evidence-file FILE
 #   ui-review-readiness.sh settle --repository-root ROOT --state-file FILE \
@@ -25,6 +27,9 @@ REPOSITORY_ROOT=""
 STATE_FILE=""
 BROWSER_EVIDENCE_FILE=""
 PARTICIPANT_RESULT_FILE=""
+TARGET_URL_INPUT=""
+TARGET_SOURCE_INPUT=""
+VISUAL_REQUIRED=false
 
 usage() {
   printf '%s\n' 'ui-review-readiness: invalid invocation' >&2
@@ -37,6 +42,9 @@ while [ "$#" -gt 0 ]; do
     --state-file) [ "$#" -ge 2 ] || usage; STATE_FILE="$2"; shift 2 ;;
     --browser-evidence-file) [ "$#" -ge 2 ] || usage; BROWSER_EVIDENCE_FILE="$2"; shift 2 ;;
     --participant-result-file) [ "$#" -ge 2 ] || usage; PARTICIPANT_RESULT_FILE="$2"; shift 2 ;;
+    --target-url) [ "$#" -ge 2 ] || usage; TARGET_URL_INPUT="$2"; shift 2 ;;
+    --target-source) [ "$#" -ge 2 ] || usage; TARGET_SOURCE_INPUT="$2"; shift 2 ;;
+    --visual-required) [ "$#" -ge 2 ] || usage; VISUAL_REQUIRED="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
@@ -47,12 +55,19 @@ command -v jq >/dev/null 2>&1 || { printf '%s\n' 'ui-review-readiness: unavailab
 REPOSITORY_ROOT="$(cd "$REPOSITORY_ROOT" && pwd -P)" || usage
 git -C "$REPOSITORY_ROOT" rev-parse --show-toplevel >/dev/null 2>&1 || usage
 [ -n "$STATE_FILE" ] && [ -d "$(dirname "$STATE_FILE")" ] || usage
+case "$VISUAL_REQUIRED" in true|false) ;; *) usage ;; esac
+[ -z "$TARGET_URL_INPUT" ] || [ "$ACTION" = prepare ] || usage
+[ -z "$TARGET_SOURCE_INPUT" ] || [ "$ACTION" = prepare ] || usage
 
 emit_closed() {
   local reason="$1" next_action="$2"
   jq -cn --arg reason "$reason" --arg next_action "$next_action" \
     '{state:"closed",dispatchAllowed:false,reason:$reason,nextAction:$next_action,
       reviewDisposition:"REVIEW INCOMPLETE"}'
+}
+
+valid_target_url() {
+  printf '%s' "$1" | jq -eR 'test("^https?://(localhost|127\\.0\\.0\\.1|[a-z0-9.-]+\\.(test|site)|[a-z0-9.-]+\\.ddev\\.site)(:[0-9]{1,5})?(/[^[:space:]]*)?$")' >/dev/null 2>&1
 }
 
 load_argv() {
@@ -128,14 +143,16 @@ validate_declaration() {
 write_state() {
   local target_url="$1" stage="$2" dispatch_allowed="$3" created="$4" cleanup_pending="$5"
   local readiness_argv="$6" readiness_attempts="$7" readiness_timeout="$8"
-  local cleanup_argv="$9" cleanup_timeout="${10}" tmp
+  local cleanup_argv="$9" cleanup_timeout="${10}" target_source="${11:-declaration}" visual_required="${12:-false}" tmp
   tmp="$(mktemp "$(dirname "$STATE_FILE")/.ui-review-state.XXXXXX")" || return 1
   jq -cn --arg target_url "$target_url" --arg stage "$stage" \
     --argjson dispatch_allowed "$dispatch_allowed" --argjson created "$created" \
     --argjson cleanup_pending "$cleanup_pending" --argjson readiness_argv "$readiness_argv" \
     --argjson readiness_attempts "$readiness_attempts" --argjson readiness_timeout "$readiness_timeout" \
     --argjson cleanup_argv "$cleanup_argv" --argjson cleanup_timeout "$cleanup_timeout" \
+    --arg target_source "$target_source" --argjson visual_required "$visual_required" \
     '{schemaVersion:1,targetUrl:$target_url,stage:$stage,dispatchAllowed:$dispatch_allowed,
+      targetSource:$target_source,visualRequired:$visual_required,
       createdByReview:$created,cleanupPending:$cleanup_pending,
       readinessArgv:$readiness_argv,readinessAttempts:$readiness_attempts,
       readinessTimeoutSeconds:$readiness_timeout,cleanupArgv:$cleanup_argv,
@@ -147,12 +164,15 @@ validate_state() {
   [ -f "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ] || return 1
   jq -e '
     type == "object" and
-    (keys | sort) == (["cleanupArgv","cleanupPending","cleanupTimeoutSeconds","createdByReview","dispatchAllowed","readinessArgv","readinessAttempts","readinessTimeoutSeconds","schemaVersion","stage","targetUrl"] | sort) and
+    (keys | sort) == (["cleanupArgv","cleanupPending","cleanupTimeoutSeconds","createdByReview","dispatchAllowed","readinessArgv","readinessAttempts","readinessTimeoutSeconds","schemaVersion","stage","targetSource","targetUrl","visualRequired"] | sort) and
     .schemaVersion == 1 and (.targetUrl | type) == "string" and
+    (.targetSource == "explicit" or .targetSource == "t3-preview" or .targetSource == "declaration") and
+    (.visualRequired | type) == "boolean" and
     (.stage == "app_ready" or .stage == "ready" or .stage == "closed" or .stage == "settled") and
     (.dispatchAllowed | type) == "boolean" and (.createdByReview | type) == "boolean" and
     (.cleanupPending | type) == "boolean" and
-    (.readinessArgv | type) == "array" and (.readinessArgv | length) > 0 and
+    (.readinessArgv | type) == "array" and
+    (if .targetSource == "declaration" then (.readinessArgv | length) > 0 else (.readinessArgv | length) == 0 end) and
     all(.readinessArgv[]; type == "string" and length > 0 and length <= 4096) and
     (.readinessAttempts | type) == "number" and (.readinessAttempts | floor) == .readinessAttempts and .readinessAttempts >= 1 and .readinessAttempts <= 30 and
     (.readinessTimeoutSeconds | type) == "number" and (.readinessTimeoutSeconds | floor) == .readinessTimeoutSeconds and .readinessTimeoutSeconds >= 1 and .readinessTimeoutSeconds <= 60 and
@@ -263,9 +283,31 @@ cleanup_on_unexpected_exit() {
 }
 
 if [ "$ACTION" = prepare ]; then
+  if [ -n "$TARGET_URL_INPUT" ]; then
+    case "$TARGET_SOURCE_INPUT" in explicit|t3-preview) ;; *) usage ;; esac
+    valid_target_url "$TARGET_URL_INPUT" || usage
+    [ ! -e "$STATE_FILE" ] || usage
+    write_state "$TARGET_URL_INPUT" app_ready false false false '[]' 1 1 '[]' 0 \
+      "$TARGET_SOURCE_INPUT" "$VISUAL_REQUIRED" || exit 76
+    jq -cn --arg target_url "$TARGET_URL_INPUT" --arg source "$TARGET_SOURCE_INPUT" \
+      '{state:"app_ready",dispatchAllowed:false,reason:"browser_evidence_required",
+        targetUrl:$target_url,targetSource:$source,createdResources:0,
+        nextAction:"navigate the invocation-selected target with the host local browser, then run confirm-browser"}'
+    exit 0
+  fi
   if ! validate_declaration "$DECLARATION"; then
-    emit_closed dev_server_unavailable 'declare .dm/ui-review.json with exact repository-owned readiness/start/cleanup argv and rerun'
-    exit 76
+    if [ -e "$DECLARATION" ]; then
+      emit_closed dev_server_unavailable 'repair the optional tracked .dm/ui-review.json declaration or supply an explicit target'
+      exit 76
+    fi
+    if [ "$VISUAL_REQUIRED" = true ]; then
+      emit_closed visual_target_unavailable 'supply an explicit URL, attach an automation-capable T3 preview, or add the optional tracked declaration'
+      exit 76
+    fi
+    jq -cn '{state:"not_available",dispatchAllowed:false,reason:"visual_target_unavailable",
+      coverageDisposition:"NOT RUN",reviewDisposition:"completed",createdResources:0,
+      nextAction:"none; configure a visual target only when rendered coverage is needed"}'
+    exit 0
   fi
   TARGET_URL="$(jq -r '.targetUrl' "$DECLARATION")"
   load_argv "$DECLARATION" '.readiness.argv' || usage
@@ -288,7 +330,7 @@ if [ "$ACTION" = prepare ]; then
     CREATED="$(jq -r '.createdByReview' "$STATE_FILE")"
   elif run_bounded_argv "$READINESS_TIMEOUT" "${READINESS_ARGV[@]}"; then
     write_state "$TARGET_URL" app_ready false false false "$READINESS_ARGV_JSON" \
-      "$READINESS_ATTEMPTS" "$READINESS_TIMEOUT" '[]' 0 || exit 76
+      "$READINESS_ATTEMPTS" "$READINESS_TIMEOUT" '[]' 0 declaration "$VISUAL_REQUIRED" || exit 76
   else
     if [ "$(jq -r '.start == null' "$DECLARATION")" = true ]; then
       emit_closed dev_server_unavailable 'run the repository-declared application consumer and rerun'
@@ -312,7 +354,7 @@ if [ "$ACTION" = prepare ]; then
     }
     CREATED=true
     write_state "$TARGET_URL" app_ready false true true "$READINESS_ARGV_JSON" \
-      "$READINESS_ATTEMPTS" "$READINESS_TIMEOUT" "$CLEANUP_ARGV_JSON" "$START_TIMEOUT" || exit 76
+      "$READINESS_ATTEMPTS" "$READINESS_TIMEOUT" "$CLEANUP_ARGV_JSON" "$START_TIMEOUT" declaration "$VISUAL_REQUIRED" || exit 76
     trap cleanup_on_unexpected_exit EXIT
     trap 'exit 130' HUP INT TERM
     if ! run_bounded_argv "$START_TIMEOUT" "${UI_ARGV[@]}"; then
@@ -341,16 +383,18 @@ fi
 validate_state &&
   jq -e '.stage == "app_ready" and .dispatchAllowed == false' "$STATE_FILE" >/dev/null 2>&1 || usage
 TARGET_URL="$(jq -r '.targetUrl' "$STATE_FILE")"
-load_argv "$STATE_FILE" '.readinessArgv' || usage
-validate_repo_executable "${UI_ARGV[0]}" || close_registered_state dev_server_unavailable 'repair the registered readiness command and rerun'
-READINESS_ARGV=("${UI_ARGV[@]}")
 READINESS_TIMEOUT="$(jq -r '.readinessTimeoutSeconds' "$STATE_FILE")"
 if [ "$(jq -r '.createdByReview and .cleanupPending' "$STATE_FILE")" = true ]; then
   trap cleanup_on_unexpected_exit EXIT
   trap 'exit 130' HUP INT TERM
 fi
-if ! run_bounded_argv "$READINESS_TIMEOUT" "${READINESS_ARGV[@]}"; then
-  close_registered_state dev_server_unavailable 'inspect the registered application readiness command and rerun'
+if [ "$(jq -r '.targetSource' "$STATE_FILE")" = declaration ]; then
+  load_argv "$STATE_FILE" '.readinessArgv' || usage
+  validate_repo_executable "${UI_ARGV[0]}" || close_registered_state dev_server_unavailable 'repair the registered readiness command and rerun'
+  READINESS_ARGV=("${UI_ARGV[@]}")
+  if ! run_bounded_argv "$READINESS_TIMEOUT" "${READINESS_ARGV[@]}"; then
+    close_registered_state dev_server_unavailable 'inspect the registered application readiness command and rerun'
+  fi
 fi
 if [ ! -f "$BROWSER_EVIDENCE_FILE" ] || [ -L "$BROWSER_EVIDENCE_FILE" ] ||
    ! jq -e --arg target_url "$TARGET_URL" '
@@ -361,7 +405,7 @@ if [ ! -f "$BROWSER_EVIDENCE_FILE" ] || [ -L "$BROWSER_EVIDENCE_FILE" ] ||
      .targetUrl == $target_url and
      (.evidenceRef | type) == "string" and (.evidenceRef | test("^[a-z0-9][a-z0-9._/-]{0,255}$"))
    ' "$BROWSER_EVIDENCE_FILE" >/dev/null 2>&1; then
-  close_registered_state browser_transport_unavailable 'attach a local interactive browser, navigate the declared target, and rerun'
+  close_registered_state browser_transport_unavailable 'attach a local interactive browser, navigate the selected target, and rerun'
 fi
 update_state ready true || exit 76
 trap - EXIT HUP INT TERM

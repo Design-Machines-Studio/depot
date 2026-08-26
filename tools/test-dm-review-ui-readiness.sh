@@ -40,9 +40,10 @@ export TEST_RESOURCE_LOG="$TMP/resources.log"
 
 run_prepare() {
   local name="$1" rc=0
+  shift
   rm -f "$TMP/$name.state" "$TMP/$name.result"
   "$HELPER" prepare --repository-root "$REPO" --state-file "$TMP/$name.state" \
-    > "$TMP/$name.result" || rc=$?
+    "$@" > "$TMP/$name.result" || rc=$?
   printf '%s\n' "$rc"
 }
 
@@ -53,10 +54,33 @@ run_confirm() {
   printf '%s\n' "$rc"
 }
 
-# No declaration means no guessed localhost scan and no participant dispatch.
+# No declaration means no guessed localhost scan and one nonblocking coverage
+# note in an ordinary review.
 no_decl_rc="$(run_prepare no-declaration)"
-assert test "$no_decl_rc" -eq 76
-assert jq -e '.dispatchAllowed == false and .reason == "dev_server_unavailable" and .reviewDisposition == "REVIEW INCOMPLETE"' "$TMP/no-declaration.result"
+assert test "$no_decl_rc" -eq 0
+assert jq -e '.dispatchAllowed == false and .reason == "visual_target_unavailable" and .coverageDisposition == "NOT RUN" and .reviewDisposition == "completed"' "$TMP/no-declaration.result"
+assert test ! -e "$TMP/no-declaration.state"
+
+# Explicit visual review keeps one honest incomplete result when no target is
+# available.
+required_rc="$(run_prepare required-no-target --visual-required true)"
+assert test "$required_rc" -eq 76
+assert jq -e '.reason == "visual_target_unavailable" and .reviewDisposition == "REVIEW INCOMPLETE"' "$TMP/required-no-target.result"
+
+cat > "$TMP/browser-preview.json" <<'JSON'
+{"schemaVersion":1,"status":"ready","transportClass":"local-interactive","localNavigation":"confirmed","targetUrl":"http://localhost:9090/preview","evidenceRef":"review/browser/preview.json"}
+JSON
+
+# An attached automation-capable T3 preview precedes optional repository
+# configuration and proceeds without a declaration.
+preview_prepare_rc="$(run_prepare attached-preview --target-url http://localhost:9090/preview --target-source t3-preview)"
+assert test "$preview_prepare_rc" -eq 0
+assert jq -e '.targetSource == "t3-preview" and .createdResources == 0' "$TMP/attached-preview.result"
+preview_ready_rc="$(run_confirm attached-preview "$TMP/browser-preview.json")"
+assert test "$preview_ready_rc" -eq 0
+assert jq -e '.state == "ready" and .dispatchAllowed == true' "$TMP/attached-preview.confirmed"
+"$HELPER" cleanup --repository-root "$REPO" --state-file "$TMP/attached-preview.state" > "$TMP/attached-preview-cleanup.json"
+assert jq -e '.state == "already_clean" and .removedCount == 0' "$TMP/attached-preview-cleanup.json"
 
 cat > "$REPO/.dm/ui-review.json" <<'JSON'
 {
@@ -183,5 +207,10 @@ assert test ! -e "$TEST_SERVER_MARKER"
 "$HELPER" cleanup --repository-root "$REPO" --state-file "$TMP/completed-created.state" \
   > "$TMP/already-clean.json"
 assert jq -e '.state == "already_clean" and .removedCount == 0' "$TMP/already-clean.json"
+
+# Missing readiness is aggregated once even when three UI analysis lanes apply,
+# and remote web search never counts as local navigation.
+assert test "$(grep -c 'one aggregated `visual_target_unavailable` coverage note' "$ROOT/plugins/dm-review/skills/review/references/ui-review-readiness.md")" -eq 1
+assert grep -Fq 'OpenRouter web search is remote public-web retrieval.' "$ROOT/plugins/dm-review/skills/review/references/ui-review-readiness.md"
 
 printf 'dm-review-ui-readiness: %d assertions passed\n' "$pass"

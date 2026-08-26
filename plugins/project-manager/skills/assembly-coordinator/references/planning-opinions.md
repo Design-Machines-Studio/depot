@@ -27,14 +27,15 @@ output. Do not run debate, rebuttal, convergence, or a third opinion.
 
 Resolve one coherent installed model-router bundle through Workflow Kernel and
 bind its `role-dispatch.sh`, request schema, policy, and terminal renderer at
-minimum model-router version `0.2.0`. Materialize Plan A and Plan B prompts
+minimum model-router version `0.4.0`. Materialize Plan A and Plan B prompts
 separately, use the same immutable evidence packet as each request's
 `--repository-evidence-file`, and allocate fresh private output and receipt
 paths in one mode-`0700` run-private directory. Create
 `terminal-receipt-index.json` there and record Plan A then Plan B when each was
 actually requested.
 
-Dispatch Plan A with `--role architect`, the three capabilities above, and
+Pass the invocation's exact validated launcher to both calls with
+`--workflow-kernel "$WORKFLOW_KERNEL"`. Dispatch Plan A with `--role architect`, the three capabilities above, and
 `--effort high`. Dispatch Plan B with `--role plan-critic`, the four
 capabilities above, `--effort high`, `--independence-receipt-dir` set to that
 private directory, and Plan A's opaque `--independence-receipt-id`. Preserve

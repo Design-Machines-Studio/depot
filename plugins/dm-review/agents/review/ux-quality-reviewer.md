@@ -52,7 +52,7 @@ All design recommendations MUST use Live Wires vocabulary: `.stack` not "add mar
 ## Precondition
 
 The host must supply a `## Host Browser Evidence` section produced only after
-`ui-review-readiness.md` confirmed the declared application and real local
+`ui-review-readiness.md` confirmed the selected application target and real local
 interactive browser navigation. Analyze its bounded screenshots,
 accessibility snapshots, console summary, route/viewport IDs, interaction
 observations, and computed-style results. Do not call or search for browser

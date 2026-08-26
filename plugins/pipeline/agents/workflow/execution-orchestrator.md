@@ -475,7 +475,7 @@ model-router bundle:
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
 MODEL_ROUTER_BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle \
-  --plugin model-router --minimum-version 0.2.0 \
+  --plugin model-router --minimum-version 0.4.0 \
   --required-executable skills/model-router/references/role-dispatch.sh \
   --required-executable skills/model-router/references/render-terminal-report.sh \
   --required-asset skills/model-router/references/role-request-schema.json \
@@ -514,6 +514,7 @@ argv as an array:
 
 ```bash
 ROLE_ARGS=(--role "$EXECUTOR_ROLE" --effort "$EXECUTOR_EFFORT"
+  --workflow-kernel "$WORKFLOW_KERNEL"
   --prompt-file "$WORKER_PROMPT" --output-file "$WORKER_OUTPUT"
   --receipt-file "$PRIVATE_ROUTER_RECEIPT"
   --repository-evidence-file "$COMPLETE_REPOSITORY_EVIDENCE"

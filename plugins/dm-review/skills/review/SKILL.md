@@ -249,6 +249,7 @@ DM_REVIEW_REQUIRED_ASSETS=(
   "agents/workflow/review-consolidator.md"
   "agents/workflow/review-memory-recorder.md"
   "skills/review/references/reviewer-output-contract.md"
+  "skills/review/references/host-verification-evidence.md"
   "skills/review/references/ui-review-readiness.md"
   "skills/review/references/ui-review-readiness.sh"
 )
@@ -404,23 +405,36 @@ Load `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md`. It owns the closed
 lane-to-role mapping and anonymous public receipt. Do not load a provider/model
 table or print concrete routing identity.
 
-### Phase 3.9: Required UI readiness
+### Phase 3.8: Host verification
+
+Only when a deterministic tests/build lane is selected, load
+`${CLAUDE_SKILL_DIR}/references/host-verification-evidence.md`. Run the existing
+repository-owned verification profile or established command on the host before
+model analysis, capture its compact bounded evidence once, and share that
+evidence with any useful `review-fast` or `review-deep` judgment lane. The
+normal tests/build analysis requests `read-repository` and
+`structured-output`, not `tool-use`.
+
+### Phase 3.9: Proportional UI readiness
 
 When any browser/UI lane is selected, load
 `${CLAUDE_SKILL_DIR}/references/ui-review-readiness.md` and complete its
-application and local-browser gate before model dispatch. Use only the
-repository-declared target and exact start/readiness procedure. Start an exact
-declared process through its helper, or an exact declared Compose consumer
-through the existing review Docker contract. Track and clean only resources
-this invocation created.
+application and local-browser gate once before model dispatch. Select an
+explicit invocation URL first, then an already attached automation-capable T3
+preview, then optional tracked `.dm/ui-review.json`. Start only an exact
+declared process or Compose consumer and track only resources this invocation
+created. Never infer readiness from changed file extensions.
 
 Verify application reachability and actual local interactive browser
 navigation independently. OpenRouter web search and generic `tool-use` never
 satisfy local browser readiness. Current browser interaction is host-owned;
-pass bounded evidence to the mapped provider-neutral analysis role without a
-`browser` capability request. If app or browser recovery fails, dispatch no UI
-participant and keep `REVIEW INCOMPLETE` with one safe reason and one next
-action. If readiness succeeds but the role is unavailable, report
+collect bounded evidence once and pass the same packet to each mapped
+provider-neutral analysis role without a `browser` capability request. If no
+target exists in an ordinary review, dispatch no UI participant and emit one
+nonblocking visual coverage note; do not repeat it per lane. Keep `REVIEW
+INCOMPLETE` only when rendered evidence was explicitly required by
+`/dm-review-visual`, the user, acceptance criteria, or a verification profile.
+If readiness succeeds but the role is unavailable, report
 `model_participant_unavailable` distinctly.
 
 ---

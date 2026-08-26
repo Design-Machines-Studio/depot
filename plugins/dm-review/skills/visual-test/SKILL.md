@@ -25,7 +25,8 @@ Standalone visual testing that loads pages in a real browser, screenshots at mul
 
 ## Usage
 
-- `/dm-review-visual` -- auto-detect dev server, test all discoverable pages
+- `/dm-review-visual` -- use an attached T3 preview or optional tracked
+  `.dm/ui-review.json`, then test all discoverable pages
 - `/dm-review-visual <url>` -- test a specific URL
 - `/dm-review-visual --states` -- focus on interactive state testing only
 - `/dm-review-visual --a11y` -- focus on runtime accessibility checks only
@@ -36,17 +37,18 @@ Standalone visual testing that loads pages in a real browser, screenshots at mul
 
 **If a URL argument was provided:** use it directly.
 
-**If no URL provided:** detect the dev server by trying these URLs in order with `browser_navigate`:
+**If no URL provided:** first use an already attached, automation-capable T3
+preview and its exact current URL. Otherwise use optional tracked
+`.dm/ui-review.json` through the shared `ui-review-readiness.md` start/readiness
+contract. Do not scan localhost ports, infer a target from the project type, or
+guess a mutating start command.
 
-1. `http://localhost:8080` (Go+Templ+Datastar)
-2. `http://localhost:3000` (Node/general)
-3. `https://[project-name].ddev.site` (Craft CMS DDEV)
-4. `http://localhost:5173` (Vite)
-
-Use the first URL that loads successfully. If none respond, record `target unavailable`
-and emit a blocked `human_help_required` receipt naming the exact
-missing persona/scenario/route/engine/viewport cases, then ask the user for the
-authoritative URL. Never return a bare stop, skip, approval, or pass.
+This command explicitly requires rendered evidence. Run the shared helper with
+`--visual-required true`. If neither source exists or navigation cannot be
+proved, record `target unavailable` and emit one `REVIEW INCOMPLETE` coverage
+result with the exact missing
+persona/scenario/route/engine/viewport cases and one next action. Never return a
+bare stop, skip, approval, or pass.
 
 If Playwright tools fail, follow
 `plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md`
@@ -56,7 +58,8 @@ process/session quit plus fresh relaunch, then try a genuinely different engine.
 Exhaustion returns blocked `human_help_required` with exact missing cases. Never
 silently skip required browser testing, and never treat curl as browser proof.
 
-**Local domain preference:** For Assembly projects, prefer local `.site`/`.test` TLD domains (e.g., `http://assembly.coop.site`) over `localhost:PORT`. These are configured via Caddy/DDEV and match the visual-browser-tester's URL discovery order.
+**Local target:** Use the exact selected URL. Do not substitute a preferred
+domain or guessed port.
 
 **Page discovery:** After connecting to the dev server, discover testable pages:
 

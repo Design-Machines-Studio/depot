@@ -9,8 +9,9 @@ disable-model-invocation: true
 This internal skill owns cross-transport role resolution. It is a local policy
 bundle and one-shot dispatcher, not a service.
 
-Callers provide only a role, required capabilities, normalized effort, prompt
-file, output destination, private receipt destination, an explicit complete
+Callers provide only a role, required capabilities, normalized effort, the
+exact validated Workflow Kernel launcher for that invocation, prompt file,
+output destination, private receipt destination, an explicit complete
 repository-evidence file for prompt-only repository readers, and opaque prior
 receipt IDs plus their run-private registry when family independence is
 required. Human-authored work uses the explicit `--human-authored` origin flag
@@ -42,11 +43,21 @@ snapshot `limitId`, and evaluates only the mapped bucket's five-hour and weekly
 windows at the existing 8% threshold. It never selects the best bucket. The
 legacy 0.146 `rateLimits.primary`/`secondary` snapshot and a single 0.147 bucket
 are unambiguous defaults. Multiple 0.147 buckets without an authoritative
-candidate mapping close as `rate_limit_mapping_unknown`; the current Codex
-app-server schema does not expose that mapping, so the policy does not invent
-one for current candidates. Missing, malformed, unsupported, exhausted, or
-unmappable evidence fails closed with a content-safe reason; unknown never
-means exhausted.
+candidate mapping remain unattributed. If every normalized allowance is
+exhausted, Codex is skipped as `rate_limit_exhausted`. If at least one allowance
+is healthy, the requested candidate is attemptable once and its actual
+invocation is authoritative; no bucket is selected or claimed. Missing,
+malformed, unsupported, or window-incomplete evidence remains unavailable with
+a content-safe reason. `rate_limit_mapping_unknown` alone never means exhausted
+or blocks an authenticated candidate.
+
+Before availability probing, the dispatcher uses the supplied launcher to
+resolve one coherent OpenRouter bundle. That exact binding supplies credential
+loading, availability, the disclosure boundary, and wrapper invocation; it is
+never re-resolved during an attempt. Closed public diagnostics distinguish the
+Kernel launcher, provider bundle, credential, availability, boundary,
+transport, and model-unavailable causes without exposing stderr or private
+paths.
 
 The `browser` request capability means access to the caller's local interactive
 browser, not public web search. No current one-shot transport advertises that
@@ -76,6 +87,15 @@ preference schema is
 `${CLAUDE_SKILL_DIR}/references/operator-profile-schema.json`; an actual
 preference belongs in ignored `.dm/model-router.local.json` in the common
 checkout and must never contain operator identity.
+
+For a coordinator preparing a human copy-paste execution prompt, use
+`${CLAUDE_SKILL_DIR}/references/operator-recommendation.sh`. This read-only
+projection filters the current role policy by requested capabilities and
+availability, reads prices only from the caller-bound model matrix, and returns
+one concrete primary plus one fallback. It never invokes a model. Its identity
+and cost projection is human-only and must not enter any participant prompt,
+planning-opinion packet, reviewer prompt, participant output, or synthesis
+input.
 
 When a Pipeline, dm-review, or Assembly opinion invocation has reached a closed
 terminal state and no later model dispatch is possible, load

@@ -320,7 +320,16 @@ EOF
           state="$(printf '%s' "$allowances" | jq -r --arg key "$default_allowance_id" '.[$key].state')"
           reason="$(printf '%s' "$allowances" | jq -r --arg key "$default_allowance_id" '.[$key].reason')"
         else
-          reason="rate_limit_mapping_unknown"
+          if printf '%s' "$allowances" | jq -e 'all(.[]; .state == "limited")' >/dev/null; then
+            state="limited"
+            reason="rate_limit_exhausted"
+          else
+            # Bucket ownership remains unknown, but a healthy allowance makes
+            # an authenticated candidate attemptable at dispatch time. Do not
+            # select or attribute a bucket here.
+            state="unknown"
+            reason="rate_limit_mapping_unknown"
+          fi
         fi
       fi
     elif [ "$map_type" != absent ] && [ "$map_type" != null ]; then
@@ -344,7 +353,7 @@ EOF
 }
 
 openrouter_json() {
-  local response="" rc=0 balance="" credential_loader="" active_host="" bundle_json="" bundle_ref="" header_file="" probe_key=""
+  local response="" rc=0 balance="" credential_loader="" active_host="" bundle_json="" bundle_ref="" header_file="" probe_key="" credential_state="missing"
   if [ -n "${OPENROUTER_API_KEY_FILE:-}" ] && [ -z "${OPENROUTER_API_KEY:-}" ]; then
     case "${OPENROUTER_BUNDLE_RESOLVED:-0}:${OPENROUTER_BUNDLE_REF:-}" in
       "1:~/"*) credential_loader="$HOME/${OPENROUTER_BUNDLE_REF#\~/}/skills/openrouter-delegate/references/openrouter-credential.sh" ;;
@@ -380,7 +389,10 @@ openrouter_json() {
       load_openrouter_api_key || OPENROUTER_API_KEY=""
     fi
   fi
-  if [ -n "${OPENROUTER_API_KEY:-}" ] && command -v curl >/dev/null 2>&1; then
+  if [ -n "${OPENROUTER_API_KEY:-}" ]; then
+    credential_state="available"
+  fi
+  if [ "$credential_state" = available ] && command -v curl >/dev/null 2>&1; then
     header_file="$(mktemp "${TMPDIR:-/tmp}/openrouter-probe.header.XXXXXX")" || header_file=""
     [ -z "$header_file" ] || chmod 600 "$header_file"
     if [ -n "$header_file" ]; then
@@ -412,12 +424,13 @@ openrouter_json() {
   # availability boundary. A finite non-negative balance is positive evidence
   # that the API balance probe worked; missing, malformed, or negative values
   # remain unknown and fail closed at role dispatch.
-  local state="unknown"
+  local state="unknown" reason="provider_availability_unknown"
   if [ -n "$balance" ]; then
-    if awk -v b="$balance" 'BEGIN{exit !(b >= 0)}'; then state="ok"; fi
+    if awk -v b="$balance" 'BEGIN{exit !(b >= 0)}'; then state="ok"; reason="available"; fi
   fi
-  jq -cn --arg balance "$balance" --arg state "$state" \
-    '{state:$state,
+  [ "$credential_state" = available ] || reason="provider_credential_unavailable"
+  jq -cn --arg balance "$balance" --arg state "$state" --arg reason "$reason" \
+    '{state:$state,reason:$reason,
       balance_usd:(if $balance == "" then null else ($balance | tonumber) end)}'
 }
 

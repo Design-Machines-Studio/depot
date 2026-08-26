@@ -9,7 +9,11 @@ Availability/fallback reasons are limited to router-authored content-safe codes,
 including `rate_limit_probe_no_response`, `rate_limit_response_malformed`,
 `rate_limit_shape_unsupported`, `rate_limit_mapping_unknown`,
 `required_window_missing`, `rate_limit_exhausted`,
-`browser_transport_unavailable`, and `model_participant_unavailable`. They
+`workflow_kernel_unavailable`, `provider_bundle_unavailable`,
+`provider_credential_unavailable`, `provider_availability_unknown`,
+`provider_boundary_declined`, `provider_transport_failed`,
+`provider_model_unavailable`, `browser_transport_unavailable`, and
+`model_participant_unavailable`. They
 never contain raw CLI/provider output, account identity, quota balances,
 credentials, prompts, or private paths.
 

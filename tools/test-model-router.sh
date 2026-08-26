@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ROUTER="$ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh"
 PROBE="$ROOT/plugins/model-router/skills/model-router/references/availability-probe.sh"
+KERNEL="$ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"
 FIXTURES="$ROOT/plugins/model-router/skills/model-router/tests/availability-fixtures.json"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/model-router-tests.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
@@ -78,7 +79,7 @@ for fixture_hook in MODEL_ROUTER_AVAILABILITY_FILE MODEL_ROUTER_TRANSPORT_STUB M
   esac
   set +e
   env -u MODEL_ROUTER_TEST_MODE "$fixture_hook=$fixture_value" \
-    "$ROUTER" --role review-fast --effort low --capability structured-output \
+    "$ROUTER" --workflow-kernel "$KERNEL" --role review-fast --effort low --capability structured-output \
       --prompt-file "$TMP/prompt" --output-file "$TMP/no-test-mode.out" \
       --receipt-file "$TMP/no-test-mode.receipt" >/dev/null 2>&1
   no_test_mode_rc=$?
@@ -119,6 +120,9 @@ case "${1:-}:${2:-}" in
               ;;
             multiple-no-best)
               printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex","primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":95,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}},"codex_other":{"limitId":"codex_other","limitName":"Other","primary":{"usedPercent":1,"windowDurationMins":300},"secondary":{"usedPercent":1,"windowDurationMins":10080}}}}}'
+              ;;
+            all-exhausted)
+              printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex"},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":95,"windowDurationMins":300},"secondary":{"usedPercent":95,"windowDurationMins":10080}},"codex_other":{"limitId":"codex_other","primary":{"usedPercent":96,"windowDurationMins":300},"secondary":{"usedPercent":97,"windowDurationMins":10080}}}}}'
               ;;
             unknown-mapping)
               printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex","primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"rateLimitsByLimitId":{"codex_other":{"limitId":"codex_other","limitName":"Other","primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}},"codex_extra":{"limitId":"codex_extra","limitName":"Extra","primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}}}}}'
@@ -183,7 +187,7 @@ assert test "$(sed -n '3p' "$TMP/codex-rpc.log")" = account/rateLimits/read
 # Codex 0.147 normalizes every structurally valid bucket. The incomplete
 # backward-compatible default window is non-applicable, and multiple buckets
 # stay unmapped unless policy has authoritative candidate metadata.
-for codex_fixture in v147 exhausted multiple-no-best unknown-mapping malformed-map unsupported missing-window; do
+for codex_fixture in v147 exhausted multiple-no-best all-exhausted unknown-mapping malformed-map unsupported missing-window; do
   MODEL_ROUTER_CODEX_FIXTURE="$codex_fixture" MODEL_ROUTER_CODEX_RPC_TIMEOUT=2 \
     env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE PATH="$TMP/bin:$PATH" \
     FAKE_CLAUDE_AUTH=none "$PROBE" > "$TMP/probe-$codex_fixture.json"
@@ -195,6 +199,7 @@ fi
 assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_mapping_unknown" and .codex.allowances.codex.reason == "required_window_missing" and .codex.allowances.codex_named.state == "ok"' "$TMP/probe-v147.json"
 assert jq -e '.codex.state == "limited" and .codex.reason == "rate_limit_exhausted"' "$TMP/probe-exhausted.json"
 assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_mapping_unknown" and .codex.allowances.codex.state == "limited" and .codex.allowances.codex_other.state == "ok"' "$TMP/probe-multiple-no-best.json"
+assert jq -e '.codex.state == "limited" and .codex.reason == "rate_limit_exhausted" and all(.codex.allowances[]; .state == "limited")' "$TMP/probe-all-exhausted.json"
 assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_mapping_unknown" and (has("defaultAllowanceId") | not)' "$TMP/probe-unknown-mapping.json"
 assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_response_malformed"' "$TMP/probe-malformed-map.json"
 assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_shape_unsupported"' "$TMP/probe-unsupported.json"
@@ -235,12 +240,151 @@ run_role() {
   rm -f "$TMP/$name.out" "$TMP/$name.receipt" "$TMP/$name.public"
   MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
     MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
-    "$ROUTER" --role "$role" --effort "$effort" \
+    "$ROUTER" --workflow-kernel "$KERNEL" --role "$role" --effort "$effort" \
       --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
       --output-file "$TMP/$name.out" --receipt-file "$TMP/$name.receipt" \
       --contract-digest "sha256:$(printf 'a%.0s' {1..64})" --contract-revision 1 \
       "$@" > "$TMP/$name.public"
 }
+
+# The dispatcher owns one invocation-local Kernel and OpenRouter binding. A
+# fake coherent bundle proves the no-inherited-variable path and closed causes
+# without contacting a paid provider.
+FAKE_HOME="$TMP/fake-home"
+FAKE_BUNDLE="$FAKE_HOME/.codex/plugins/cache/depot/openrouter/1.19.1"
+FAKE_REFS="$FAKE_BUNDLE/skills/openrouter-delegate/references"
+mkdir -p "$FAKE_REFS" "$TMP/fake-kernel"
+cat > "$TMP/fake-kernel/workflow-kernel-launcher.sh" <<'STUB'
+#!/usr/bin/env bash
+if [ "${FAKE_KERNEL_OUTCOME:-ok}" = unavailable ]; then exit 4; fi
+printf '%s\n' '{"selected_root":"~/.codex/plugins/cache/depot/openrouter/1.19.1","version":"1.19.1","cache_class":"codex","reason":"active-host"}'
+STUB
+cat > "$FAKE_REFS/delegation-boundary.sh" <<'STUB'
+#!/usr/bin/env bash
+dirname "${BASH_SOURCE[0]}" >> "$FAKE_BUNDLE_LOG"
+[ "${FAKE_BOUNDARY_OUTCOME:-allow}" = allow ]
+STUB
+cat > "$FAKE_REFS/openrouter-credential.sh" <<'STUB'
+#!/usr/bin/env bash
+load_openrouter_api_key() {
+  dirname "${BASH_SOURCE[0]}" >> "$FAKE_BUNDLE_LOG"
+  OPENROUTER_API_KEY=test
+  export OPENROUTER_API_KEY
+}
+STUB
+cat > "$FAKE_REFS/openrouter-wrapper.sh" <<'STUB'
+#!/usr/bin/env bash
+set -u
+refs="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+printf '%s\n' "$refs" >> "$FAKE_BUNDLE_LOG"
+. "$refs/openrouter-credential.sh"
+load_openrouter_api_key
+cat >/dev/null
+case "${FAKE_PROVIDER_OUTCOME:-success}" in
+  success)
+    printf '%s\n' '{"outcome":"success","usage":{"prompt_tokens":1,"completion_tokens":1},"costUsd":0.000001}' > "$OPENROUTER_RECEIPT_FILE"
+    printf '%s\n' 'bounded provider output'
+    ;;
+  model)
+    printf '%s\n' '{"outcome":"error","failureKind":"http_error","failureReason":"model_not_found"}' > "$OPENROUTER_RECEIPT_FILE"
+    exit 1
+    ;;
+  *)
+    printf '%s\n' '{"outcome":"error","failureKind":"transport_error","failureReason":null}' > "$OPENROUTER_RECEIPT_FILE"
+    exit 1
+    ;;
+esac
+STUB
+printf '%s\n' '{"schemaVersion":2,"disclosureControls":{"providerInputParity":true},"executionControls":{},"delegationModes":{},"reviewControls":{}}' > "$FAKE_REFS/delegation-security-policy.json"
+chmod +x "$TMP/fake-kernel/workflow-kernel-launcher.sh" "$FAKE_REFS/delegation-boundary.sh" "$FAKE_REFS/openrouter-wrapper.sh"
+
+# A strict key-file load leaves OPENROUTER_API_KEY_FILE set. The successfully
+# loaded key is nevertheless available to the probe and must not be reported as
+# a missing credential.
+printf '%s\n' test > "$TMP/key-file"
+chmod 600 "$TMP/key-file"
+curl() { printf '%s\n' '{"data":{"total_credits":10,"total_usage":1}}'; }
+export -f curl
+key_file_probe="$(env PATH=/usr/bin:/bin HOME="$FAKE_HOME" \
+  OPENROUTER_API_KEY_FILE="$TMP/key-file" OPENROUTER_BUNDLE_RESOLVED=1 \
+  OPENROUTER_BUNDLE_REF='~/.codex/plugins/cache/depot/openrouter/1.19.1' \
+  "$PROBE")"
+unset -f curl
+assert test "$(printf '%s' "$key_file_probe" | jq -r '.openrouter.state')" = ok
+assert test "$(printf '%s' "$key_file_probe" | jq -r '.openrouter.reason')" = available
+
+fixture codex-exhausted
+rm -f "$TMP/fake-bundle.log"
+env -u WORKFLOW_KERNEL HOME="$FAKE_HOME" FAKE_BUNDLE_LOG="$TMP/fake-bundle.log" \
+  MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  MODEL_ROUTER_INVOKE_FIXTURE_TRANSPORTS=1 \
+  "$ROUTER" --workflow-kernel "$TMP/fake-kernel/workflow-kernel-launcher.sh" \
+    --role review-deep --effort high --capability read-repository \
+    --capability long-context --capability structured-output \
+    --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+    --output-file "$TMP/self-contained.out" --receipt-file "$TMP/self-contained.receipt" >/dev/null
+assert jq -e '.served.transport == "openrouter" and .served.tokens.prompt_tokens == 1' "$TMP/self-contained.receipt"
+assert test "$(sort -u "$TMP/fake-bundle.log" | wc -l | tr -d ' ')" -eq 1
+
+set +e
+HOME="$FAKE_HOME" MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  "$ROUTER" --workflow-kernel "$TMP/missing/workflow-kernel-launcher.sh" \
+    --role review-deep --effort high --capability read-repository --capability long-context \
+    --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+    --output-file "$TMP/missing-kernel.out" --receipt-file "$TMP/missing-kernel.receipt" >/dev/null
+missing_kernel_rc=$?
+HOME="$FAKE_HOME" FAKE_KERNEL_OUTCOME=unavailable \
+  MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  "$ROUTER" --workflow-kernel "$TMP/fake-kernel/workflow-kernel-launcher.sh" \
+    --role review-deep --effort high --capability read-repository --capability long-context \
+    --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+    --output-file "$TMP/missing-bundle.out" --receipt-file "$TMP/missing-bundle.receipt" >/dev/null
+missing_bundle_rc=$?
+set -e
+assert test "$missing_kernel_rc" -eq 76
+assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "workflow_kernel_unavailable")' "$TMP/missing-kernel.receipt"
+assert test "$missing_bundle_rc" -eq 76
+assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "provider_bundle_unavailable")' "$TMP/missing-bundle.receipt"
+
+for provider_case in credential availability; do
+  if [ "$provider_case" = credential ]; then provider_reason=provider_credential_unavailable
+  else provider_reason=provider_availability_unknown
+  fi
+  jq --arg reason "$provider_reason" '.openrouter={state:"unknown",reason:$reason}' \
+    "$TMP/availability.json" > "$TMP/provider-$provider_case.json"
+  set +e
+  HOME="$FAKE_HOME" MODEL_ROUTER_AVAILABILITY_FILE="$TMP/provider-$provider_case.json" \
+    "$ROUTER" --workflow-kernel "$TMP/fake-kernel/workflow-kernel-launcher.sh" \
+      --role review-deep --effort high --capability read-repository --capability long-context \
+      --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+      --output-file "$TMP/provider-$provider_case.out" --receipt-file "$TMP/provider-$provider_case.receipt" >/dev/null
+  provider_case_rc=$?
+  set -e
+  assert test "$provider_case_rc" -eq 76
+  assert jq -e --arg reason "$provider_reason" \
+    '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == $reason)' \
+    "$TMP/provider-$provider_case.receipt"
+done
+
+for failure_case in boundary transport model; do
+  rm -f "$TMP/failure-$failure_case.out" "$TMP/failure-$failure_case.receipt"
+  set +e
+  HOME="$FAKE_HOME" FAKE_BUNDLE_LOG="$TMP/fake-bundle.log" \
+    FAKE_BOUNDARY_OUTCOME="$([ "$failure_case" = boundary ] && printf decline || printf allow)" \
+    FAKE_PROVIDER_OUTCOME="$failure_case" MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+    MODEL_ROUTER_INVOKE_FIXTURE_TRANSPORTS=1 \
+    "$ROUTER" --workflow-kernel "$TMP/fake-kernel/workflow-kernel-launcher.sh" \
+      --role review-deep --effort high --capability read-repository --capability long-context \
+      --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+      --output-file "$TMP/failure-$failure_case.out" --receipt-file "$TMP/failure-$failure_case.receipt" >/dev/null
+  failure_case_rc=$?
+  set -e
+  assert test "$failure_case_rc" -eq 76
+done
+assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "provider_boundary_declined")' "$TMP/failure-boundary.receipt"
+assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "provider_transport_failed")' "$TMP/failure-transport.receipt"
+assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "provider_model_unavailable")' "$TMP/failure-model.receipt"
+assert sh -c "! grep -Eq 'fake-home|OPENROUTER_API_KEY|transport_error|model_not_found' '$TMP/failure-transport.receipt' '$TMP/failure-model.receipt'"
 
 # Fast work resolves externally while the public surface stays anonymous.
 fixture healthy
@@ -253,21 +397,46 @@ run_role deep builder-deep high --capability read-repository --capability tool-u
 assert jq -e '.served.transport == "codex-cli" and .served.billingMode == "included-subscription"' "$TMP/deep.receipt"
 
 # A multi-bucket 0.147 response without an authoritative model mapping does
-# not guess. Each native attempt closes explicitly before the external tail.
+# not guess ownership. Any healthy bucket makes the requested candidate
+# attemptable, and the invocation itself settles candidate availability.
 jq -s '.[0] as $base | .[1].codex as $codex | $base | .codex = $codex' "$TMP/availability.json" "$TMP/probe-v147.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role mapping-unknown builder-deep high --capability read-repository --capability long-context
-assert jq -e '.served.transport == "openrouter" and ([.attempts[] | select(.transport == "codex-cli" and .reason == "rate_limit_mapping_unknown")] | length) == 2' "$TMP/mapping-unknown.receipt"
+assert jq -e '.served.transport == "codex-cli" and .served.allowanceWindow == "mapping-unknown" and (.attempts | length) == 1' "$TMP/mapping-unknown.receipt"
+
+for attemptable_fixture in multiple-no-best unknown-mapping; do
+  fixture healthy
+  jq -s '.[0] as $base | .[1].codex as $codex | $base | .codex = $codex' \
+    "$TMP/availability.json" "$TMP/probe-$attemptable_fixture.json" > "$TMP/availability.next"
+  mv "$TMP/availability.next" "$TMP/availability.json"
+  run_role "attemptable-$attemptable_fixture" builder-deep high \
+    --capability read-repository --capability long-context
+  assert jq -e '.served.transport == "codex-cli" and .served.allowanceWindow == "mapping-unknown" and (.attempts | length) == 1' \
+    "$TMP/attemptable-$attemptable_fixture.receipt"
+done
+
+fixture healthy
+jq -s '.[0] as $base | .[1].codex as $codex | $base | .codex = $codex' \
+  "$TMP/availability.json" "$TMP/probe-all-exhausted.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role all-buckets-exhausted builder-deep high \
+  --capability read-repository --capability long-context
+assert jq -e '.served.transport == "openrouter" and ([.attempts[] | select(.transport == "codex-cli" and .reason == "rate_limit_exhausted")] | length) == 2' \
+  "$TMP/all-buckets-exhausted.receipt"
 
 # When authoritative policy metadata does name the applicable 0.147 bucket,
 # the same response becomes eligible without comparing it with other buckets.
+fixture healthy
+jq -s '.[0] as $base | .[1].codex as $codex | $base | .codex = $codex' \
+  "$TMP/availability.json" "$TMP/probe-v147.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
 cp -R "$(dirname "$ROUTER")" "$TMP/mapped-router"
 jq '(.roles["builder-deep"][] | select(.transport == "codex-cli")).rateLimitId = "codex_named"' \
   "$TMP/mapped-router/role-policy.json" > "$TMP/mapped-router/role-policy.next"
 mv "$TMP/mapped-router/role-policy.next" "$TMP/mapped-router/role-policy.json"
 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
   MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
-  "$TMP/mapped-router/role-dispatch.sh" --role builder-deep --effort high \
+  "$TMP/mapped-router/role-dispatch.sh" --workflow-kernel "$KERNEL" --role builder-deep --effort high \
     --capability read-repository --capability long-context \
     --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
     --output-file "$TMP/mapped.out" --receipt-file "$TMP/mapped.receipt" >/dev/null
@@ -278,7 +447,7 @@ jq '(.roles["builder-deep"][] | select(.transport == "codex-cli")).rateLimitId =
 mv "$TMP/mapped-router/role-policy.next" "$TMP/mapped-router/role-policy.json"
 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
   MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
-  "$TMP/mapped-router/role-dispatch.sh" --role builder-deep --effort high \
+  "$TMP/mapped-router/role-dispatch.sh" --workflow-kernel "$KERNEL" --role builder-deep --effort high \
     --capability read-repository --capability long-context \
     --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
     --output-file "$TMP/missing-map.out" --receipt-file "$TMP/missing-map.receipt" >/dev/null
@@ -316,7 +485,7 @@ fixture healthy
 jq '.candidateResults["gpt-5.6-sol"].outcome="quota"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role quota-fallback builder-deep high --capability read-repository --capability long-context
-assert jq -e '.served.transport == "openrouter" and ([.attempts[].model] | index("gpt-5.6-terra") == null)' "$TMP/quota-fallback.receipt"
+assert jq -e '.served.transport == "openrouter" and .attempts[0].reason == "rate_limit_exhausted" and ([.attempts[].model] | index("gpt-5.6-terra") == null)' "$TMP/quota-fallback.receipt"
 
 # Failure reasons are attempt-local; an earlier quota cannot relabel a later transport failure.
 fixture healthy
@@ -407,7 +576,7 @@ cp "$TMP/implementer.receipt" "$TMP/simulated-registry/implementer.receipt"
 set +e
 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
   MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
-  "$ROUTER" --role plan-critic --effort high --capability read-repository \
+  "$ROUTER" --workflow-kernel "$KERNEL" --role plan-critic --effort high --capability read-repository \
     --capability independent-family --independence-receipt-dir "$TMP/simulated-registry" \
     --independence-receipt-id "$implementer_id" --prompt-file "$TMP/prompt" \
     --repository-evidence-file "$TMP/evidence" --output-file "$TMP/simulated.out" \
@@ -420,7 +589,7 @@ assert test "$simulated_rc" -eq 2
 fixture healthy
 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
   MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
-  "$ROUTER" --role review-fast --effort medium --capability read-repository \
+  "$ROUTER" --workflow-kernel "$KERNEL" --role review-fast --effort medium --capability read-repository \
     --prompt-file "$TMP/prompt" --output-file "$TMP/evidence-gate.out" \
     --receipt-file "$TMP/evidence-gate.receipt" >/dev/null
 assert jq -e '.served.transport == "codex-cli"' "$TMP/evidence-gate.receipt"
@@ -428,7 +597,7 @@ assert jq -e '.served.transport == "codex-cli"' "$TMP/evidence-gate.receipt"
 # A prompt cannot masquerade as complete repository evidence, including via a hardlink.
 set +e
 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
-  "$ROUTER" --role review-fast --effort medium --capability read-repository \
+  "$ROUTER" --workflow-kernel "$KERNEL" --role review-fast --effort medium --capability read-repository \
     --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/prompt" \
     --output-file "$TMP/same-evidence.out" --receipt-file "$TMP/same-evidence.receipt" >/dev/null 2>&1
 same_evidence_rc=$?
@@ -437,7 +606,7 @@ assert test "$same_evidence_rc" -eq 2
 ln "$TMP/prompt" "$TMP/evidence-hardlink"
 set +e
 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
-  "$ROUTER" --role review-fast --effort medium --capability read-repository \
+  "$ROUTER" --workflow-kernel "$KERNEL" --role review-fast --effort medium --capability read-repository \
     --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence-hardlink" \
     --output-file "$TMP/hardlink-evidence.out" --receipt-file "$TMP/hardlink-evidence.receipt" >/dev/null 2>&1
 hardlink_evidence_rc=$?
@@ -450,7 +619,7 @@ assert jq -e '.familyIndependence.required == true and .familyIndependence.human
 set +e
 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
   MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
-  "$ROUTER" --role review-fast --effort medium --capability structured-output \
+  "$ROUTER" --workflow-kernel "$KERNEL" --role review-fast --effort medium --capability structured-output \
     --human-authored --prompt-file "$TMP/prompt" --output-file "$TMP/invalid-human.out" \
     --receipt-file "$TMP/invalid-human.receipt" >/dev/null 2>&1
 invalid_human_rc=$?
@@ -472,7 +641,7 @@ env PATH="$TMP/bin:$PATH" OPENROUTER_API_KEY=secret-marker \
   MODEL_ROUTER_NATIVE_PROMPT_CAPTURE="$TMP/native-prompt" \
   MODEL_ROUTER_INVOKE_FIXTURE_TRANSPORTS=1 \
   MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
-  "$ROUTER" --role builder-deep --effort high --capability read-repository --capability write-repository \
+  "$ROUTER" --workflow-kernel "$KERNEL" --role builder-deep --effort high --capability read-repository --capability write-repository \
     --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
     --output-file "$TMP/native-codex.out" --receipt-file "$TMP/native-codex.receipt" \
     --contract-digest "sha256:$(printf 'a%.0s' {1..64})" --contract-revision 1 >/dev/null
@@ -494,7 +663,7 @@ set +e
     MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
     MODEL_ROUTER_STUB_MUTATE_PATH="$TMP/write-repo/tracked.txt" \
     MODEL_ROUTER_STUB_CALL_LOG="$TMP/write-calls" \
-    "$ROUTER" --role builder-deep --effort high --capability write-repository \
+    "$ROUTER" --workflow-kernel "$KERNEL" --role builder-deep --effort high --capability write-repository \
       --capability structured-output --prompt-file "$TMP/prompt" \
       --output-file "$TMP/mutating-write.out" --receipt-file "$TMP/mutating-write.receipt" \
       --contract-digest "sha256:$(printf 'b%.0s' {1..64})" --contract-revision 2 >/dev/null
@@ -512,7 +681,7 @@ env PATH="$TMP/bin:$PATH" OPENROUTER_API_KEY=secret-marker \
   OPENROUTER_API_KEY_FILE="$TMP/key-file" MODEL_ROUTER_NATIVE_ENV_CAPTURE="$TMP/native-env" \
   MODEL_ROUTER_INVOKE_FIXTURE_TRANSPORTS=1 \
   MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
-  "$ROUTER" --role architect --effort high --capability read-repository \
+  "$ROUTER" --workflow-kernel "$KERNEL" --role architect --effort high --capability read-repository \
     --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
     --output-file "$TMP/native-claude.out" --receipt-file "$TMP/native-claude.receipt" >/dev/null
 assert grep -Fxq 'api=unset,file=unset' "$TMP/native-env"
@@ -522,7 +691,7 @@ mkdir "$TMP/reservation"
 MODEL_ROUTER_EXPECT_PUBLICATION_DIR="$TMP/reservation" \
   MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
   MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
-  "$ROUTER" --role review-fast --effort medium --capability structured-output \
+  "$ROUTER" --workflow-kernel "$KERNEL" --role review-fast --effort medium --capability structured-output \
     --prompt-file "$TMP/prompt" --output-file "$TMP/reservation/out" \
     --receipt-file "$TMP/reservation/receipt" >/dev/null
 assert test -s "$TMP/reservation/out"
@@ -533,7 +702,7 @@ set +e
 MODEL_ROUTER_REMOVE_PUBLICATION_DIR="$TMP/publication" \
   MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
   MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
-  "$ROUTER" --role review-fast --effort medium --capability structured-output \
+  "$ROUTER" --workflow-kernel "$KERNEL" --role review-fast --effort medium --capability structured-output \
     --prompt-file "$TMP/prompt" --output-file "$TMP/publication/out" \
     --receipt-file "$TMP/publication/receipt" > "$TMP/publication-public"
 publication_rc=$?
@@ -563,7 +732,7 @@ set +e
     MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
     MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
     MODEL_ROUTER_STUB_MUTATE_PATH="$TMP/publication-write-repo/tracked.txt" \
-    "$ROUTER" --role builder-deep --effort high --capability write-repository \
+    "$ROUTER" --workflow-kernel "$KERNEL" --role builder-deep --effort high --capability write-repository \
       --capability structured-output --prompt-file "$TMP/prompt" \
       --output-file "$TMP/publication-write/out" \
       --receipt-file "$TMP/publication-write/receipt" \
@@ -590,7 +759,7 @@ assert jq -e '.fallback == true and .fallbackReason == "content-refusal" and .se
 # Empty capability lists remain safe under nounset (including Bash 3.2).
 fixture healthy
 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
-  "$ROUTER" --role review-fast --effort low --prompt-file "$TMP/prompt" \
+  "$ROUTER" --workflow-kernel "$KERNEL" --role review-fast --effort low --prompt-file "$TMP/prompt" \
     --output-file "$TMP/no-capabilities.out" --receipt-file "$TMP/no-capabilities.receipt" >/dev/null
 assert jq -e '.requested.capabilities == []' "$TMP/no-capabilities.receipt"
 

@@ -28,7 +28,7 @@ accessibility. You complement static code analysis with what actually rendered.
 
 ## Precondition
 
-A `## Host Browser Evidence` section must bind the repository-declared target,
+A `## Host Browser Evidence` section must bind the invocation-selected target,
 real local interactive transport, screenshots, accessibility snapshots,
 console summary, route/viewport case IDs, interaction observations, and
 computed-style results. The host has already completed the app/browser

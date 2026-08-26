@@ -4,7 +4,7 @@
   "title": "Model router role request",
   "type": "object",
   "additionalProperties": false,
-  "required": ["role", "capabilities", "effort", "promptFile", "outputFile", "receiptFile"],
+  "required": ["role", "capabilities", "effort", "workflowKernel", "promptFile", "outputFile", "receiptFile"],
   "properties": {
     "role": {
       "enum": ["architect", "plan-critic", "builder-fast", "builder-deep", "review-fast", "review-deep", "security-review", "research-fast", "editorial"]
@@ -17,6 +17,7 @@
       }
     },
     "effort": {"enum": ["low", "medium", "high", "max"]},
+    "workflowKernel": {"type": "string", "minLength": 1},
     "independenceReceiptIds": {
       "type": "array",
       "uniqueItems": true,

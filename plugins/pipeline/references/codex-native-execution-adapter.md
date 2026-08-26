@@ -37,7 +37,8 @@ materialize the complete prompt. Invoke model-router's `role-dispatch.sh` from
 that worktree with the manifest's `executorRole`, repeated
 `executorCapabilities`, and `executorEffort`, plus fresh output and private
 receipt destinations, the complete repository-evidence file, and the current
-behavioral contract digest/revision. Build argv as an array. Never call a host
+behavioral contract digest/revision. Pass the exact invocation-local validated
+Kernel launcher as `--workflow-kernel "$WORKFLOW_KERNEL"`. Build argv as an array. Never call a host
 worker/model transport directly. The materialized prompt MUST include:
 
 - The worktree path as the only allowed write scope.

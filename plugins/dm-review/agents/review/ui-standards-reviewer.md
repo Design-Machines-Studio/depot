@@ -31,7 +31,7 @@ You complement the ux-quality-reviewer (which evaluates design philosophy and us
 ## Precondition
 
 The host must supply a `## Host Browser Evidence` section produced only after
-`ui-review-readiness.md` confirmed the repository-declared application and a
+`ui-review-readiness.md` confirmed the invocation-selected application and a
 real local interactive browser navigation. It contains bounded screenshots,
 accessibility snapshots, route/viewport IDs, console summaries, interaction
 observations, and computed-style results. Analyze that evidence; do not call or
