@@ -646,6 +646,11 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  printf "\n${BOLD}dm-review UI readiness:${RESET}\n"
+  if ! "$SCRIPT_DIR/test-dm-review-ui-readiness.sh"; then
+    any_failed=1
+  fi
+
   printf "\n${BOLD}Provider-neutral model router:${RESET}\n"
   if ! "$SCRIPT_DIR/validate-openrouter-cascade.sh"; then
     any_failed=1

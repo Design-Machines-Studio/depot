@@ -191,6 +191,11 @@ TRANSPORT_STUB=false
 
 ATTEMPTS='[]'
 LAST_REASON="none"
+if printf '%s' "$CAPABILITIES_JSON" | jq -e 'index("browser") != null' >/dev/null; then
+  # No current one-shot transport can prove access to the caller's local
+  # interactive browser. Browser interaction remains host-owned.
+  LAST_REASON="browser_transport_unavailable"
+fi
 ATTEMPT_INDEX=0
 EXHAUSTED_TRANSPORTS='[]'
 EXHAUSTED_MODELS='[]'
@@ -227,18 +232,56 @@ candidate_has_capabilities() {
 }
 
 transport_eligibility() {
-  local transport="$1" model="$2" state auth_mode plan fable_state observed sdk_observed five weekly paid
+  local transport="$1" model="$2" rate_limit_id="${3:-}" state auth_mode plan fable_state observed sdk_observed five weekly paid allowance_reason
   BILLING_MODE="unavailable"
   ALLOWANCE_WINDOW="unavailable"
+  ELIGIBILITY_REASON="model_participant_unavailable"
   case "$transport" in
     codex-cli)
-      state="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.state // "unknown"')"
+      if [ -z "$rate_limit_id" ]; then
+        rate_limit_id="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.defaultAllowanceId // empty')"
+        # Pre-0.3 fixture/observation files had one implicit legacy Codex
+        # bucket and no allowances object. Preserve that closed single-bucket
+        # interpretation without applying it to a 0.147 multi-bucket result.
+        if [ -z "$rate_limit_id" ] &&
+           [ "$(printf '%s' "$AVAILABILITY" | jq -r '.codex.allowances? | type')" != object ]; then
+          rate_limit_id="codex"
+        fi
+      fi
+      [ -n "$rate_limit_id" ] || {
+        ELIGIBILITY_REASON="rate_limit_mapping_unknown"
+        return 1
+      }
+      if [ "$(printf '%s' "$AVAILABILITY" | jq -r '.codex.allowances? | type')" = object ]; then
+        if ! printf '%s' "$AVAILABILITY" | jq -e --arg limit_id "$rate_limit_id" \
+          '.codex.allowances | has($limit_id)' >/dev/null 2>&1; then
+          ELIGIBILITY_REASON="rate_limit_mapping_unknown"
+          return 1
+        fi
+        state="$(printf '%s' "$AVAILABILITY" | jq -r --arg limit_id "$rate_limit_id" '.codex.allowances[$limit_id].state')"
+        allowance_reason="$(printf '%s' "$AVAILABILITY" | jq -r --arg limit_id "$rate_limit_id" '.codex.allowances[$limit_id].reason')"
+      else
+        [ "$rate_limit_id" = codex ] || {
+          ELIGIBILITY_REASON="rate_limit_mapping_unknown"
+          return 1
+        }
+        state="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.state // "unknown"')"
+        allowance_reason="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.reason // "rate_limit_mapping_unknown"')"
+      fi
       auth_mode="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.authMode // .codex.auth_mode // "unknown"')"
-      five="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.windows.five_hour.remaining_pct // .codex.fiveHourRemainingPct // 0')"
-      weekly="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.windows.weekly.remaining_pct // .codex.weeklyRemainingPct // 0')"
-      [ "$state" = ok ] && [ "$auth_mode" = subscription ] && awk -v a="$five" -v b="$weekly" -v t="$THRESHOLD" 'BEGIN{exit !(a>t && b>t)}' || return 1
+      if [ "$state" != ok ] || [ "$auth_mode" != subscription ]; then
+        [ "$state" != limited ] || allowance_reason="rate_limit_exhausted"
+        case "$allowance_reason" in
+          rate_limit_probe_no_response|rate_limit_response_malformed|rate_limit_shape_unsupported|rate_limit_mapping_unknown|required_window_missing|rate_limit_exhausted)
+            ELIGIBILITY_REASON="$allowance_reason"
+            ;;
+          *) ELIGIBILITY_REASON="model_participant_unavailable" ;;
+        esac
+        return 1
+      fi
       BILLING_MODE="included-subscription"
-      ALLOWANCE_WINDOW="subscription"
+      ALLOWANCE_WINDOW="$rate_limit_id"
+      ELIGIBILITY_REASON="available"
       ;;
     claude-cli)
       state="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.state // "unknown"')"
@@ -306,7 +349,7 @@ resolve_openrouter_root() {
 }
 
 invoke_candidate() {
-  local transport="$1" model="$2" effective="$3" rc=0 root system_file prompt_copy result_json sandbox web_search=0
+  local transport="$1" model="$2" effective="$3" rc=0 root system_file prompt_copy result_json sandbox
   : > "$TRANSPORT_OUTPUT"
   : > "$PROVIDER_RECEIPT"
   if [ -n "${MODEL_ROUTER_TRANSPORT_STUB:-}" ]; then
@@ -372,9 +415,8 @@ invoke_candidate() {
         argv=("$root/skills/openrouter-delegate/references/delegation-boundary.sh" --mode artifact-delegation --policy "$root/skills/openrouter-delegate/references/delegation-security-policy.json" --content-file "$system_file" --content-file "$prompt_copy")
         "${argv[@]}" >>"$PRIVATE_LOG" 2>&1 || { rm -f "$system_file" "$prompt_copy"; return 77; }
         argv=(bash "$root/skills/openrouter-delegate/references/openrouter-wrapper.sh" "$model" - 3600)
-        printf '%s' "$CAPABILITIES_JSON" | jq -e 'index("browser") != null' >/dev/null && web_search=1
         env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$system_file" \
-          OPENROUTER_WORKLOAD=mechanical OPENROUTER_WEB_SEARCH="$web_search" \
+          OPENROUTER_WORKLOAD=mechanical OPENROUTER_WEB_SEARCH=0 \
           OPENROUTER_RECEIPT_FILE="$PROVIDER_RECEIPT" "${argv[@]}" \
           < "$prompt_copy" > "$TRANSPORT_OUTPUT" 2>>"$PRIVATE_LOG"
         rc=$?
@@ -404,13 +446,14 @@ while IFS= read -r candidate; do
   transport="$(printf '%s' "$candidate" | jq -r '.transport')"
   model="$(printf '%s' "$candidate" | jq -r '.model')"
   provider="$(printf '%s' "$candidate" | jq -r '.provider')"
+  rate_limit_id="$(printf '%s' "$candidate" | jq -r '.rateLimitId // empty')"
   if printf '%s' "$EXHAUSTED_TRANSPORTS" | jq -e --arg value "$transport" 'index($value) != null' >/dev/null ||
      printf '%s' "$EXHAUSTED_MODELS" | jq -e --arg value "$model" 'index($value) != null' >/dev/null; then
     continue
   fi
   ATTEMPT_INDEX=$((ATTEMPT_INDEX + 1))
-  if ! transport_eligibility "$transport" "$model"; then
-    reason="unavailable"
+  if ! transport_eligibility "$transport" "$model" "$rate_limit_id"; then
+    reason="$ELIGIBILITY_REASON"
     ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg provider "$provider" --arg transport "$transport" --arg reason "$reason" '. + [{model:$model,provider:$provider,transport:$transport,outcome:"skipped",reason:$reason}]')"
     LAST_REASON="$reason"
     continue

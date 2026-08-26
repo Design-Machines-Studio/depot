@@ -1,6 +1,6 @@
 ---
 name: ui-standards-reviewer
-description: Evaluates rendered UI against modern best-in-class SaaS standards (Stripe, Notion, Linear, Figma quality). Checks component quality, spacing system compliance, state completeness, visual polish, and token usage. Runs when template or CSS files change and a dev server is detected. Also runs in quick mode for UI files to catch design issues per-chunk during pipeline execution.
+description: Evaluates host-captured rendered UI evidence against modern best-in-class SaaS standards (Stripe, Notion, Linear, Figma quality). Checks component quality, spacing system compliance, state completeness, visual polish, and token usage after the required app/browser readiness gate. Also runs in quick mode for UI files to catch design issues per-chunk during pipeline execution.
 model: inherit
 ---
 
@@ -30,7 +30,17 @@ You complement the ux-quality-reviewer (which evaluates design philosophy and us
 
 ## Precondition
 
-A dev server must be running. `browser_navigate` these in order: `http://localhost:8080` (Go+Templ+Datastar), `http://localhost:3000` (Node/general), `https://[project-name].ddev.site` (Craft CMS DDEV), `http://localhost:5173` (Vite). If none respond, report: "No dev server detected. Start the application and re-run the review."
+The host must supply a `## Host Browser Evidence` section produced only after
+`ui-review-readiness.md` confirmed the repository-declared application and a
+real local interactive browser navigation. It contains bounded screenshots,
+accessibility snapshots, route/viewport IDs, console summaries, interaction
+observations, and computed-style results. Analyze that evidence; do not call or
+search for browser tools. OpenRouter web search and generic `tool-use` are not
+local browser evidence. If the section is absent or incomplete, emit no product
+finding; return `NOT-COVERED: required host browser evidence unavailable`.
+
+Every later `browser_*` instruction names evidence the host must have captured,
+not a tool this participant may invoke.
 
 ## Phase 0: Token Discovery
 

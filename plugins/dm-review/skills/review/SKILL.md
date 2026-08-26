@@ -249,6 +249,8 @@ DM_REVIEW_REQUIRED_ASSETS=(
   "agents/workflow/review-consolidator.md"
   "agents/workflow/review-memory-recorder.md"
   "skills/review/references/reviewer-output-contract.md"
+  "skills/review/references/ui-review-readiness.md"
+  "skills/review/references/ui-review-readiness.sh"
 )
 ACCESSIBILITY_REQUIRED_ASSETS=()
 LIVE_WIRES_REQUIRED_ASSETS=()
@@ -401,6 +403,25 @@ Input guardrails applied:
 Load `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md`. It owns the closed
 lane-to-role mapping and anonymous public receipt. Do not load a provider/model
 table or print concrete routing identity.
+
+### Phase 3.9: Required UI readiness
+
+When any browser/UI lane is selected, load
+`${CLAUDE_SKILL_DIR}/references/ui-review-readiness.md` and complete its
+application and local-browser gate before model dispatch. Use only the
+repository-declared target and exact start/readiness procedure. Start an exact
+declared process through its helper, or an exact declared Compose consumer
+through the existing review Docker contract. Track and clean only resources
+this invocation created.
+
+Verify application reachability and actual local interactive browser
+navigation independently. OpenRouter web search and generic `tool-use` never
+satisfy local browser readiness. Current browser interaction is host-owned;
+pass bounded evidence to the mapped provider-neutral analysis role without a
+`browser` capability request. If app or browser recovery fails, dispatch no UI
+participant and keep `REVIEW INCOMPLETE` with one safe reason and one next
+action. If readiness succeeds but the role is unavailable, report
+`model_participant_unavailable` distinctly.
 
 ---
 
@@ -582,7 +603,7 @@ invocation.
 
 ## Reference Files
 
-Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (exact worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
+Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `ui-review-readiness.md` (required UI application/browser gate), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (exact worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
 
 ## Agent Definition Paths
 

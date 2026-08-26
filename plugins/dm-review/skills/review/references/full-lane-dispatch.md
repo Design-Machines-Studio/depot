@@ -17,7 +17,8 @@ For every lane that requires separation from implementation, load
 | documentation | `review-fast` | `read-repository`, `structured-output` | `medium` |
 | tests/build | `review-fast` | `read-repository`, `tool-use`, `structured-output` | `medium` |
 | second perspective | `plan-critic` | `read-repository`, `long-context`, `structured-output`, `independent-family` | `high` |
-| triggered domain/UI lane | `review-deep` | explicit required capabilities only | `high` |
+| triggered domain lane | `review-deep` | explicit required capabilities only | `high` |
+| triggered UI analysis lane | `review-deep` | `read-repository`, `long-context`, `structured-output` | `high` |
 
 Keep the complete selected roster. Role mapping does not drop a required lane.
 Quick mode keeps its existing smaller roster but uses the same role mapping.
@@ -26,7 +27,7 @@ Quick mode keeps its existing smaller roster but uses the same role mapping.
 
 Resolve one coherent model-router bundle with Workflow Kernel and require
 `skills/model-router/references/role-dispatch.sh`, the request schema, and role
-policy at minimum version `0.2.0`. When this invocation owns terminal reporting,
+policy at minimum version `0.3.0`. When this invocation owns terminal reporting,
 require `skills/model-router/references/render-terminal-report.sh` from that
 same bundle. For each selected lane:
 
@@ -52,6 +53,30 @@ same bundle. For each selected lane:
    repair provenance is unavailable, the independent lane remains unavailable.
    The two origin forms are mutually exclusive.
 6. Launch selected lanes in parallel when the host supports it.
+
+### Required UI prerequisite
+
+Before any selected UI lane is dispatched, load `ui-review-readiness.md` and
+run its ordered application/browser gate. The application target and start
+procedure come only from `.dm/ui-review.json`. A declared Compose consumer uses
+the existing review Docker creation/cleanup contracts; an exact declared
+process uses `ui-review-readiness.sh`. Verify reachability independently, then
+prove actual local browser navigation independently.
+
+Current routed transports do not receive the host's local interactive browser.
+Keep browser interaction host-owned and materialize bounded screenshots,
+accessibility snapshots, console summaries, route/viewport case IDs,
+interaction observations, and computed-style evidence. Pass that evidence to
+the provider-neutral UI analysis role above. Never request `browser` or generic
+`tool-use`, and never treat OpenRouter web search as local navigation.
+
+If application or browser recovery fails, do not dispatch a participant. Keep
+the lane and review incomplete with exactly `dev_server_unavailable` or
+`browser_transport_unavailable` plus the contract's one next action. If both
+are ready but role dispatch is unavailable, settle as
+`model_participant_unavailable`. Prerequisite failures are coverage gaps, not
+code findings. Settle and clean only resources registered by this review;
+pre-existing resources remain untouched.
 
 The terminal report owner supplies this exact private directory and its
 `terminal-receipt-index.json`. After a parallel fan-out joins, extend the index

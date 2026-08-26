@@ -187,6 +187,11 @@ Coverage Gaps; they never support clean. This index creates no transcript.
 ### Coverage Gaps
 
 List incomplete required coverage, its evidence pointer, and one next action.
+For a required UI lane, emit exactly one of `dev_server_unavailable`,
+`browser_transport_unavailable`, `model_participant_unavailable`, or
+`resource_cleanup_failed`; never include raw tool/provider output, a private
+path, account data, or quota details. These readiness failures are not code
+findings.
 If none, state `Coverage Gaps: none -- all required lanes completed.`
 
 ---
@@ -272,7 +277,10 @@ The consolidator preserves the original citation format from each agent.
 ## Merge Recommendation Logic
 
 ```text
-if any P1 findings:
+if any required lane is incomplete:
+  recommendation = "REVIEW INCOMPLETE"
+  summary = "<one exact safe reason code>; next: <one action>."
+elif any P1 findings:
   recommendation = "BLOCKS MERGE"
   summary = "X critical issues must be fixed before merging."
 elif any P2 or P3 findings:
