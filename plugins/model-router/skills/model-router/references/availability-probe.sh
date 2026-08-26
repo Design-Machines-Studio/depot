@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # availability-probe.sh -- private live availability evidence for model-router.
 #
-# Parser baselines probed 2026-08-08: Claude Code 2.1.220 statusLine
-# rate_limits; Codex CLI 0.146.0 app-server account/rateLimits/read; curl
-# 8.7.1 against OpenRouter /api/v1/credits. Claude subscription telemetry is
-# session-scoped and may be absent before the first response; absence remains
-# distinct from exhaustion.
+# Parser baselines: Claude Code 2.1.220 statusLine rate_limits; Codex CLI
+# 0.146.0 and 0.147.0 app-server account/rateLimits/read; curl 8.7.1 against
+# OpenRouter /api/v1/credits. Claude subscription telemetry is session-scoped
+# and may be absent before the first response; absence remains distinct from
+# exhaustion.
 #
 # Subscription rails emit one conservative limiting-window object:
 #   {"state":"ok|limited|unknown","remaining_pct":<number>,"window":"<name>"}
@@ -159,43 +159,188 @@ claude_json() {
       allowances:{interactive:.,agent_sdk:$sdk_windows}}'
 }
 
-codex_app_server_output() {
-  [ -n "$CODEX_CLI" ] && [ -x "$CODEX_CLI" ] || return 1
-  {
-    printf '%s\n' \
-      '{"method":"initialize","id":0,"params":{"clientInfo":{"name":"depot-usage-probe","title":"Depot usage probe","version":"1"},"capabilities":{"experimentalApi":true}}}' \
-      '{"method":"initialized","params":{}}' \
-      '{"method":"account/rateLimits/read","id":7,"params":{}}'
-  } | run_bounded 20 "$CODEX_CLI" app-server --stdio 2>/dev/null
+wait_for_rpc_response() {
+  local response_file="$1" response_id="$2" server_pid="$3" limit="$4" waited=0
+  while [ "$waited" -lt "$limit" ]; do
+    if jq -s -e --argjson response_id "$response_id" \
+      'any(.[]; .id? == $response_id)' "$response_file" >/dev/null 2>&1; then
+      return 0
+    fi
+    kill -0 "$server_pid" 2>/dev/null || return 1
+    sleep 1
+    waited=$((waited + 1))
+  done
+  return 1
+}
+
+# Current consumer: codex_json below. This bounded FIFO exchange prevents the
+# 0.147 app-server from receiving account requests before initialization has
+# completed, replacing the former fire-and-forget three-line pipe.
+codex_app_server_exchange() (
+  local rpc_dir request_fifo response_file error_file server_pid="" rpc_timeout response
+  [ -n "$CODEX_CLI" ] && [ -x "$CODEX_CLI" ] || {
+    jq -cn '{state:"closed",reason:"rate_limit_probe_no_response"}'
+    exit 0
+  }
+  rpc_timeout="${MODEL_ROUTER_CODEX_RPC_TIMEOUT:-15}"
+  case "$rpc_timeout" in ''|*[!0-9]*|0) rpc_timeout=15 ;; esac
+  [ "$rpc_timeout" -le 30 ] || rpc_timeout=30
+  rpc_dir="$(mktemp -d "${TMPDIR:-/tmp}/codex-rate-limit-rpc.XXXXXX")" || {
+    jq -cn '{state:"closed",reason:"rate_limit_probe_no_response"}'
+    exit 0
+  }
+  request_fifo="$rpc_dir/request"
+  response_file="$rpc_dir/response"
+  error_file="$rpc_dir/error"
+  : > "$response_file"
+  : > "$error_file"
+  mkfifo "$request_fifo" || {
+    rm -rf "$rpc_dir"
+    jq -cn '{state:"closed",reason:"rate_limit_probe_no_response"}'
+    exit 0
+  }
+  cleanup_codex_rpc() {
+    exec 3>&- 2>/dev/null || true
+    if [ -n "$server_pid" ] && kill -0 "$server_pid" 2>/dev/null; then
+      kill -TERM "$server_pid" 2>/dev/null || true
+      sleep 1
+      kill -KILL "$server_pid" 2>/dev/null || true
+    fi
+    [ -z "$server_pid" ] || wait "$server_pid" 2>/dev/null || true
+    rm -rf "$rpc_dir"
+  }
+  trap cleanup_codex_rpc EXIT
+  trap 'exit 130' HUP INT TERM
+
+  "$CODEX_CLI" app-server --stdio < "$request_fifo" > "$response_file" 2> "$error_file" &
+  server_pid=$!
+  exec 3> "$request_fifo" || {
+    jq -cn '{state:"closed",reason:"rate_limit_probe_no_response"}'
+    exit 0
+  }
+  printf '%s\n' '{"method":"initialize","id":0,"params":{"clientInfo":{"name":"depot-usage-probe","title":"Depot usage probe","version":"1"},"capabilities":{"experimentalApi":true}}}' >&3
+  if ! wait_for_rpc_response "$response_file" 0 "$server_pid" "$rpc_timeout"; then
+    jq -cn '{state:"closed",reason:"rate_limit_probe_no_response"}'
+    exit 0
+  fi
+  response="$(jq -sc 'map(select(.id? == 0)) | last' "$response_file" 2>/dev/null)" || response=""
+  if ! printf '%s' "$response" | jq -e \
+    'type == "object" and .id == 0 and (.result | type) == "object" and (.error? == null)' >/dev/null 2>&1; then
+    jq -cn '{state:"closed",reason:"rate_limit_response_malformed"}'
+    exit 0
+  fi
+
+  printf '%s\n' \
+    '{"method":"initialized","params":{}}' \
+    '{"method":"account/rateLimits/read","id":7,"params":{}}' >&3
+  if ! wait_for_rpc_response "$response_file" 7 "$server_pid" "$rpc_timeout"; then
+    jq -cn '{state:"closed",reason:"rate_limit_probe_no_response"}'
+    exit 0
+  fi
+  response="$(jq -sc 'map(select(.id? == 7)) | last' "$response_file" 2>/dev/null)" || response=""
+  if ! printf '%s' "$response" | jq -e \
+    'type == "object" and .id == 7 and (.result | type) == "object" and (.error? == null)' >/dev/null 2>&1; then
+    jq -cn '{state:"closed",reason:"rate_limit_response_malformed"}'
+    exit 0
+  fi
+  jq -cn --argjson response "$response" '{state:"response",response:$response}'
+)
+
+normalize_codex_snapshot() {
+  local snapshot="$1"
+  printf '%s' "$snapshot" | jq -c --argjson threshold "$THRESHOLD" '
+    def closed($reason): {state:"unknown",reason:$reason};
+    if type != "object" then closed("rate_limit_response_malformed")
+    else
+      [.primary?, .secondary?]
+      | map(select(. != null)) as $raw
+      | if any($raw[]; type != "object"
+          or (.usedPercent | type) != "number"
+          or .usedPercent < 0 or .usedPercent > 100
+          or (.windowDurationMins | type) != "number") then
+          closed("rate_limit_response_malformed")
+        else
+          [$raw[] | {
+            window:(if .windowDurationMins == 300 then "five_hour"
+                    elif .windowDurationMins == 10080 then "weekly"
+                    else "unsupported" end),
+            remaining:(100 - .usedPercent)
+          }] as $windows
+          | if any($windows[]; .window == "unsupported")
+              or ([$windows[] | select(.window == "five_hour")] | length) != 1
+              or ([$windows[] | select(.window == "weekly")] | length) != 1 then
+              closed("required_window_missing")
+            elif any($windows[]; .remaining <= $threshold) then
+              {state:"limited",reason:"rate_limit_exhausted"}
+            else
+              {state:"ok",reason:"available"}
+            end
+        end
+    end'
 }
 
 codex_json() {
-  local out="" observations='[]' auth_mode="unknown" state="unknown" windows
+  local exchange='{}' response='{}' result='{}' auth_mode="unknown" state="unknown"
+  local reason="rate_limit_probe_no_response" allowances='{}' map_type="" entry key normalized
+  local default_allowance_id=""
   if [ -n "$CODEX_CLI" ] && [ -x "$CODEX_CLI" ]; then
     login="$(run_bounded 10 "$CODEX_CLI" login status 2>/dev/null)" || login=""
     case "$login" in *'Logged in using ChatGPT'*) auth_mode="subscription" ;; *'API key'*) auth_mode="api" ;; esac
   fi
-  if out="$(codex_app_server_output)"; then
-    if [ -n "$out" ]; then
-      observations="$(printf '%s\n' "$out" | jq -sc '
-        (map(select(.id == 7 and .result.rateLimits != null)) | last
-          | .result.rateLimits // {}) as $limits
-        | [$limits.primary, $limits.secondary]
-        | map(select(type == "object"
-            and (.usedPercent | type) == "number"
-            and (.windowDurationMins | type) == "number")
-          | {window:(if .windowDurationMins == 300 then "five_hour"
-                     elif .windowDurationMins == 10080 then "weekly"
-                     else ("window_" + (.windowDurationMins | tostring) + "m") end),
-             remaining_pct:([0, (100 - .usedPercent), 100] | sort | .[1])})
-      ' 2>/dev/null)" || observations='[]'
+  exchange="$(codex_app_server_exchange)" || exchange='{"state":"closed","reason":"rate_limit_probe_no_response"}'
+  if [ "$(printf '%s' "$exchange" | jq -r '.state // "closed"')" != response ]; then
+    reason="$(printf '%s' "$exchange" | jq -r '.reason // "rate_limit_probe_no_response"')"
+  else
+    response="$(printf '%s' "$exchange" | jq -c '.response')"
+    result="$(printf '%s' "$response" | jq -c '.result')"
+    map_type="$(printf '%s' "$result" | jq -r 'if has("rateLimitsByLimitId") then (.rateLimitsByLimitId | type) else "absent" end')"
+    if [ "$map_type" = object ]; then
+      if [ "$(printf '%s' "$result" | jq '.rateLimitsByLimitId | length')" -eq 0 ] ||
+         ! printf '%s' "$result" | jq -e '
+           .rateLimitsByLimitId
+           | all(to_entries[]; (.value | type) == "object"
+               and (.value.limitId | type) == "string"
+               and .value.limitId == .key)' >/dev/null 2>&1; then
+        reason="rate_limit_response_malformed"
+      else
+        while IFS= read -r entry; do
+          key="$(printf '%s' "$entry" | jq -r '.key')"
+          normalized="$(normalize_codex_snapshot "$(printf '%s' "$entry" | jq -c '.value')")"
+          allowances="$(printf '%s' "$allowances" | jq -c --arg key "$key" --argjson value "$normalized" '. + {($key):$value}')"
+        done <<EOF
+$(printf '%s' "$result" | jq -c '.rateLimitsByLimitId | to_entries[]')
+EOF
+        if printf '%s' "$allowances" | jq -e 'any(to_entries[]; .value.reason == "rate_limit_response_malformed")' >/dev/null; then
+          reason="rate_limit_response_malformed"
+        elif [ "$(printf '%s' "$allowances" | jq 'length')" -eq 1 ]; then
+          # A single returned bucket is unambiguous. Multiple 0.147 buckets
+          # require an authoritative candidate mapping at dispatch time; the
+          # app-server does not currently expose that join.
+          default_allowance_id="$(printf '%s' "$allowances" | jq -r 'keys[0]')"
+          state="$(printf '%s' "$allowances" | jq -r --arg key "$default_allowance_id" '.[$key].state')"
+          reason="$(printf '%s' "$allowances" | jq -r --arg key "$default_allowance_id" '.[$key].reason')"
+        else
+          reason="rate_limit_mapping_unknown"
+        fi
+      fi
+    elif [ "$map_type" != absent ] && [ "$map_type" != null ]; then
+      reason="rate_limit_response_malformed"
+    elif printf '%s' "$result" | jq -e '(.rateLimits | type) == "object"' >/dev/null 2>&1; then
+      normalized="$(normalize_codex_snapshot "$(printf '%s' "$result" | jq -c '.rateLimits')")"
+      allowances="$(jq -cn --argjson normalized "$normalized" '{codex:$normalized}')"
+      default_allowance_id="codex"
+      state="$(printf '%s' "$normalized" | jq -r '.state')"
+      reason="$(printf '%s' "$normalized" | jq -r '.reason')"
+    else
+      reason="rate_limit_shape_unsupported"
     fi
   fi
-  [ -n "$observations" ] || observations='[]'
-  windows="$(aggregate_windows '["five_hour","weekly"]' "$observations")"
-  [ "$auth_mode" = subscription ] && [ "$(printf '%s' "$windows" | jq -r '.state')" = ok ] && state=ok
-  printf '%s' "$windows" | jq -c --arg state "$state" --arg auth_mode "$auth_mode" \
-    '. + {state:$state,authMode:$auth_mode}'
+  [ "$auth_mode" = subscription ] || state=unknown
+  jq -cn --arg state "$state" --arg auth_mode "$auth_mode" --arg reason "$reason" \
+    --arg default_allowance_id "$default_allowance_id" --argjson allowances "$allowances" \
+    '{state:$state,authMode:$auth_mode,reason:$reason,allowances:$allowances,
+      allowanceCount:($allowances | length)}
+      + if $default_allowance_id == "" then {} else {defaultAllowanceId:$default_allowance_id} end'
 }
 
 openrouter_json() {

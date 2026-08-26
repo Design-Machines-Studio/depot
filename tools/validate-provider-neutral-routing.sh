@@ -10,13 +10,15 @@ trap 'rm -rf "$TMP"' EXIT
 
 fail() { printf 'provider-neutral-routing: %s\n' "$1" >&2; exit 1; }
 
-# Closed roles, capabilities, effort, no inactive GLM, and focused Kimi use.
+# Closed roles, capabilities, effort, no inactive GLM, focused Kimi use, and
+# no invented Codex candidate-to-allowance mapping.
 jq -e '
   (.roles | keys | sort) == (["architect","builder-deep","builder-fast","editorial","plan-critic","research-fast","review-deep","review-fast","security-review"] | sort) and
   (.effort.vocabulary == ["low","medium","high","max"]) and
   all(.roles[]; any(.[]; .transport == "openrouter")) and
   ([.roles[][] | .capabilities[] | select(IN("read-repository","write-repository","tool-use","browser","long-context","structured-output","independent-family") | not)] | length == 0) and
   ([.roles[][] | .model | select(test("glm";"i"))] | length == 0) and
+  all(.roles[][] | select(.transport == "codex-cli"); has("rateLimitId") | not) and
   ([.roles | to_entries[] | select(.key != "security-review") | .value[] | .model | select(test("kimi";"i"))] | length == 0)
 ' "$POLICY" >/dev/null || fail 'role policy is not closed'
 
@@ -38,19 +40,37 @@ jq -r '.roles[][] | select(.transport == "openrouter") | .model' "$POLICY" | sor
 jq -r '.models[] | .slug' "$MATRIX" | sort -u > "$TMP/matrix-models"
 missing="$(comm -23 "$TMP/router-models" "$TMP/matrix-models")"
 [ -z "$missing" ] || fail "OpenRouter candidate missing from matrix: $missing"
-jq -e '
-  (.roles["research-fast"][] | select(.model == "google/gemini-3.7-flash")
-    | .capabilities | index("browser")) != null
-' "$POLICY" >/dev/null || fail 'research-fast lacks its matrix-backed browser candidate'
-jq -e '.models[] | select(.slug == "google/gemini-3.7-flash")
-  | (.web_search_usd_per_request | type) == "number"' "$MATRIX" >/dev/null ||
-  fail 'browser candidate lacks OpenRouter web-search evidence'
-grep -Fq 'OPENROUTER_WEB_SEARCH="$web_search"' \
+# Public web search is not local interactive browser authority. No current
+# transport advertises browser, and OpenRouter invocation pins web search off.
+jq -e '([.roles[][] | select(.capabilities | index("browser") != null)] | length) == 0' \
+  "$POLICY" >/dev/null || fail 'a transport falsely advertises local browser access'
+grep -Fq 'OPENROUTER_WEB_SEARCH=0' \
   "$ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh" ||
-  fail 'browser capability is not wired to the provider adapter'
+  fail 'OpenRouter web search is not pinned off for routed local-browser semantics'
+grep -Fq 'browser_transport_unavailable' \
+  "$ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh" ||
+  fail 'browser requests lack an actionable closed reason'
 grep -Fq 'test fixture hooks require MODEL_ROUTER_TEST_MODE=1' \
   "$ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh" ||
   fail 'production role dispatch does not reject unguarded fixture hooks'
+
+ui_readiness="$ROOT/plugins/dm-review/skills/review/references/ui-review-readiness.md"
+ui_helper="$ROOT/plugins/dm-review/skills/review/references/ui-review-readiness.sh"
+full_lane="$ROOT/plugins/dm-review/skills/review/references/full-lane-dispatch.md"
+grep -Fq 'Keep browser interaction host-owned' "$full_lane" ||
+  fail 'dm-review does not keep local browser interaction host-owned'
+grep -Fq 'OpenRouter web search is remote public-web retrieval.' "$ui_readiness" ||
+  fail 'dm-review does not distinguish web search from local browser access'
+grep -Fq '`dev_server_unavailable`' "$ui_readiness" ||
+  fail 'dm-review lacks the dev-server closed reason'
+grep -Fq '`browser_transport_unavailable`' "$ui_readiness" ||
+  fail 'dm-review lacks the browser-transport closed reason'
+grep -Fq '`model_participant_unavailable`' "$ui_readiness" ||
+  fail 'dm-review lacks the model-participant closed reason'
+grep -Fq 'confirm-browser' "$ui_readiness" &&
+  grep -Fq 'app_ready' "$ui_helper" &&
+  grep -Fq 'cleanupArgv' "$ui_helper" ||
+  fail 'dm-review lacks the two-phase browser gate or exact cleanup snapshot'
 
 # Pipeline policy may express only role intent and legacy translation.
 jq -e '

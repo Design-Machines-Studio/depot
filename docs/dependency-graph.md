@@ -64,7 +64,7 @@ graph LR
 | dm-review | live-wires | required | `>=1.8.0` |
 | dm-review | ghostwriter | required | `>=3.7.0` |
 | dm-review | council | required | `>=1.5.0` |
-| dm-review | model-router | required | `>=0.2.0` |
+| dm-review | model-router | required | `>=0.3.0` |
 | dm-review | workflow-kernel | required | `>=0.17.0` |
 | dm-review | ned | optional | `>=1.4.0` |
 | dm-review | superpowers | optional | `>=1.0.0` |

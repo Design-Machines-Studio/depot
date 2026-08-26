@@ -35,6 +35,24 @@ The dispatcher:
 8. writes exact, content-free identity and measurement evidence to the private
    receipt.
 
+For Codex subscription candidates, an optional policy `rateLimitId` is valid
+only when an authoritative model-to-allowance mapping exists. The probe parses
+response shapes structurally, validates that every 0.147 map key matches its
+snapshot `limitId`, and evaluates only the mapped bucket's five-hour and weekly
+windows at the existing 8% threshold. It never selects the best bucket. The
+legacy 0.146 `rateLimits.primary`/`secondary` snapshot and a single 0.147 bucket
+are unambiguous defaults. Multiple 0.147 buckets without an authoritative
+candidate mapping close as `rate_limit_mapping_unknown`; the current Codex
+app-server schema does not expose that mapping, so the policy does not invent
+one for current candidates. Missing, malformed, unsupported, exhausted, or
+unmappable evidence fails closed with a content-safe reason; unknown never
+means exhausted.
+
+The `browser` request capability means access to the caller's local interactive
+browser, not public web search. No current one-shot transport advertises that
+capability. dm-review keeps browser interaction host-owned and dispatches only
+bounded evidence analysis after its separate readiness gate.
+
 OpenRouter remains the authority for its credentials, provider catalog,
 response identity, usage, and cost receipt. The router owns provider-neutral
 input eligibility: any prompt and evidence eligible for an available native

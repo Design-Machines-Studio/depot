@@ -283,7 +283,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.72.0",
+      "version": "1.73.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -388,7 +388,7 @@
     {
       "name": "model-router",
       "source": "./plugins/model-router",
-      "version": "0.2.0",
+      "version": "0.3.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

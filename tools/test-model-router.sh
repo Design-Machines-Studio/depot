@@ -94,7 +94,48 @@ cat > "$TMP/bin/codex" <<'STUB'
 case "${1:-}:${2:-}" in
   login:status) printf '%s\n' 'Logged in using ChatGPT' ;;
   app-server:--stdio)
-    printf '%s\n' '{"id":7,"result":{"rateLimits":{"primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}}}}'
+    initialized=0
+    while IFS= read -r request; do
+      method="$(printf '%s' "$request" | jq -r '.method // empty')"
+      [ -z "${MODEL_ROUTER_CODEX_RPC_LOG:-}" ] || printf '%s\n' "$method" >> "$MODEL_ROUTER_CODEX_RPC_LOG"
+      case "$method" in
+        initialize)
+          [ "${MODEL_ROUTER_CODEX_FIXTURE:-legacy}" = init-no-response ] ||
+            printf '%s\n' '{"id":0,"result":{"serverInfo":{"name":"fixture"}}}'
+          ;;
+        initialized) initialized=1 ;;
+        account/rateLimits/read)
+          [ "$initialized" -eq 1 ] || exit 91
+          case "${MODEL_ROUTER_CODEX_FIXTURE:-legacy}" in
+            rate-no-response) : ;;
+            legacy)
+              printf '%s\n' '{"id":7,"result":{"rateLimits":{"primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}}}}'
+              ;;
+            v147)
+              printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex","primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"rateLimitsByLimitId":{"codex":{"limitId":"codex","limitName":null,"primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"codex_named":{"limitId":"codex_named","limitName":"Named","primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}},"codex_other":{"limitId":"codex_other","limitName":"Other","primary":{"usedPercent":95,"windowDurationMins":300},"secondary":{"usedPercent":95,"windowDurationMins":10080}}}}}'
+              ;;
+            exhausted)
+              printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex","primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":95,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}}}}}'
+              ;;
+            multiple-no-best)
+              printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex","primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":95,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}},"codex_other":{"limitId":"codex_other","limitName":"Other","primary":{"usedPercent":1,"windowDurationMins":300},"secondary":{"usedPercent":1,"windowDurationMins":10080}}}}}'
+              ;;
+            unknown-mapping)
+              printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex","primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"rateLimitsByLimitId":{"codex_other":{"limitId":"codex_other","limitName":"Other","primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}},"codex_extra":{"limitId":"codex_extra","limitName":"Extra","primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}}}}}'
+              ;;
+            malformed-map)
+              printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex"},"rateLimitsByLimitId":{"codex":{"limitId":"wrong","primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}}}}}'
+              ;;
+            unsupported)
+              printf '%s\n' '{"id":7,"result":{"futureLimits":{}}}'
+              ;;
+            missing-window)
+              printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex"},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}}}}}'
+              ;;
+          esac
+          ;;
+      esac
+    done
     ;;
   exec:*)
     output=""
@@ -130,10 +171,49 @@ cat > "$TMP/claude-telemetry.json" <<'JSON'
 JSON
 env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE \
   PATH="$TMP/bin:$PATH" FAKE_CLAUDE_AUTH=subscription \
+  MODEL_ROUTER_CODEX_FIXTURE=legacy MODEL_ROUTER_CODEX_RPC_LOG="$TMP/codex-rpc.log" \
   MODEL_ROUTER_CLAUDE_RATE_LIMITS_FILE="$TMP/claude-telemetry.json" \
   "$PROBE" > "$TMP/probe-subscription.json"
 if [ "${MODEL_ROUTER_TEST_DEBUG:-0}" = 1 ]; then jq . "$TMP/probe-subscription.json"; fi
 assert jq -e '.codex.authMode == "subscription" and .codex.state == "ok" and .claude.authMode == "subscription" and .claude.agentSdkRateLimitsObserved == true and .claude.allowances.agent_sdk.state == "ok"' "$TMP/probe-subscription.json"
+assert test "$(sed -n '1p' "$TMP/codex-rpc.log")" = initialize
+assert test "$(sed -n '2p' "$TMP/codex-rpc.log")" = initialized
+assert test "$(sed -n '3p' "$TMP/codex-rpc.log")" = account/rateLimits/read
+
+# Codex 0.147 normalizes every structurally valid bucket. The incomplete
+# backward-compatible default window is non-applicable, and multiple buckets
+# stay unmapped unless policy has authoritative candidate metadata.
+for codex_fixture in v147 exhausted multiple-no-best unknown-mapping malformed-map unsupported missing-window; do
+  MODEL_ROUTER_CODEX_FIXTURE="$codex_fixture" MODEL_ROUTER_CODEX_RPC_TIMEOUT=2 \
+    env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE PATH="$TMP/bin:$PATH" \
+    FAKE_CLAUDE_AUTH=none "$PROBE" > "$TMP/probe-$codex_fixture.json"
+done
+if [ "${MODEL_ROUTER_TEST_DEBUG:-0}" = 1 ]; then
+  jq . "$TMP"/probe-v147.json "$TMP"/probe-exhausted.json \
+    "$TMP"/probe-unknown-mapping.json "$TMP"/probe-malformed-map.json
+fi
+assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_mapping_unknown" and .codex.allowances.codex.reason == "required_window_missing" and .codex.allowances.codex_named.state == "ok"' "$TMP/probe-v147.json"
+assert jq -e '.codex.state == "limited" and .codex.reason == "rate_limit_exhausted"' "$TMP/probe-exhausted.json"
+assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_mapping_unknown" and .codex.allowances.codex.state == "limited" and .codex.allowances.codex_other.state == "ok"' "$TMP/probe-multiple-no-best.json"
+assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_mapping_unknown" and (has("defaultAllowanceId") | not)' "$TMP/probe-unknown-mapping.json"
+assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_response_malformed"' "$TMP/probe-malformed-map.json"
+assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_shape_unsupported"' "$TMP/probe-unsupported.json"
+assert jq -e '.codex.state == "unknown" and .codex.reason == "required_window_missing"' "$TMP/probe-missing-window.json"
+
+for codex_fixture in init-no-response rate-no-response; do
+  started_at="$(date +%s)"
+  MODEL_ROUTER_CODEX_FIXTURE="$codex_fixture" MODEL_ROUTER_CODEX_RPC_TIMEOUT=2 \
+    env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE PATH="$TMP/bin:$PATH" \
+    FAKE_CLAUDE_AUTH=none "$PROBE" > "$TMP/probe-$codex_fixture.json"
+  elapsed=$(( $(date +%s) - started_at ))
+  assert test "$elapsed" -lt 8
+  assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_probe_no_response"' "$TMP/probe-$codex_fixture.json"
+done
+
+# Probe output and downstream receipts expose only normalized state/reasons,
+# never raw account payloads or exact quota balances.
+jq -c '.codex' "$TMP/probe-v147.json" > "$TMP/probe-v147-codex.json"
+assert sh -c "! grep -Eq 'usedPercent|remaining_pct|resetsAt|limitName' '$TMP/probe-v147-codex.json'"
 env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE \
   PATH="$TMP/bin:$PATH" FAKE_CLAUDE_AUTH=subscription "$PROBE" > "$TMP/probe-no-telemetry.json"
 assert jq -e '.claude.authMode == "subscription" and .claude.plan == "max" and .claude.state == "unknown" and .claude.rateLimitsObserved == false' "$TMP/probe-no-telemetry.json"
@@ -171,6 +251,59 @@ assert sh -c "! grep -Eq 'deepseek|openrouter|gpt-5|fable|kimi|qwen|grok' '$TMP/
 # Deep work prefers healthy native subscription capacity.
 run_role deep builder-deep high --capability read-repository --capability tool-use
 assert jq -e '.served.transport == "codex-cli" and .served.billingMode == "included-subscription"' "$TMP/deep.receipt"
+
+# A multi-bucket 0.147 response without an authoritative model mapping does
+# not guess. Each native attempt closes explicitly before the external tail.
+jq -s '.[0] as $base | .[1].codex as $codex | $base | .codex = $codex' "$TMP/availability.json" "$TMP/probe-v147.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role mapping-unknown builder-deep high --capability read-repository --capability long-context
+assert jq -e '.served.transport == "openrouter" and ([.attempts[] | select(.transport == "codex-cli" and .reason == "rate_limit_mapping_unknown")] | length) == 2' "$TMP/mapping-unknown.receipt"
+
+# When authoritative policy metadata does name the applicable 0.147 bucket,
+# the same response becomes eligible without comparing it with other buckets.
+cp -R "$(dirname "$ROUTER")" "$TMP/mapped-router"
+jq '(.roles["builder-deep"][] | select(.transport == "codex-cli")).rateLimitId = "codex_named"' \
+  "$TMP/mapped-router/role-policy.json" > "$TMP/mapped-router/role-policy.next"
+mv "$TMP/mapped-router/role-policy.next" "$TMP/mapped-router/role-policy.json"
+MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+  "$TMP/mapped-router/role-dispatch.sh" --role builder-deep --effort high \
+    --capability read-repository --capability long-context \
+    --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+    --output-file "$TMP/mapped.out" --receipt-file "$TMP/mapped.receipt" >/dev/null
+assert jq -e '.served.transport == "codex-cli" and .served.allowanceWindow == "codex_named" and (.attempts | length) == 1' "$TMP/mapped.receipt"
+
+jq '(.roles["builder-deep"][] | select(.transport == "codex-cli")).rateLimitId = "does_not_exist"' \
+  "$TMP/mapped-router/role-policy.json" > "$TMP/mapped-router/role-policy.next"
+mv "$TMP/mapped-router/role-policy.next" "$TMP/mapped-router/role-policy.json"
+MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
+  MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+  "$TMP/mapped-router/role-dispatch.sh" --role builder-deep --effort high \
+    --capability read-repository --capability long-context \
+    --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+    --output-file "$TMP/missing-map.out" --receipt-file "$TMP/missing-map.receipt" >/dev/null
+assert jq -e '.served.transport == "openrouter" and ([.attempts[] | select(.transport == "codex-cli" and .reason == "rate_limit_mapping_unknown")] | length) == 2' "$TMP/missing-map.receipt"
+
+# Safe availability reasons survive candidate attempts and the operator receipt
+# without carrying raw response/account/quota data.
+cp "$TMP/probe-exhausted.json" "$TMP/availability.json"
+set +e
+run_role exhausted-reason builder-deep high --capability tool-use
+exhausted_reason_rc=$?
+set -e
+assert test "$exhausted_reason_rc" -eq 76
+assert jq -e '.fallbackReason == "rate_limit_exhausted" and all(.attempts[]; .reason == "rate_limit_exhausted")' "$TMP/exhausted-reason.receipt"
+assert sh -c "! grep -Eq 'usedPercent|remaining_pct|resetsAt|limitName|account' '$TMP/exhausted-reason.receipt'"
+
+# Browser means local interactive navigation. With no runtime-proven transport,
+# the request closes explicitly and never turns on OpenRouter web search.
+fixture healthy
+set +e
+run_role browser-closed research-fast high --capability browser --capability structured-output
+browser_closed_rc=$?
+set -e
+assert test "$browser_closed_rc" -eq 76
+assert jq -e '.fallbackReason == "browser_transport_unavailable" and (.attempts | length) == 0' "$TMP/browser-closed.receipt"
 
 # Exhausted Codex descends without an approval prompt.
 fixture codex-exhausted

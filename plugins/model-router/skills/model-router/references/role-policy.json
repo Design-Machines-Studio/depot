@@ -29,8 +29,8 @@
       {"model": "gpt-5.6-luna", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "write-repository", "tool-use", "structured-output"]}
     ],
     "builder-deep": [
-      {"model": "gpt-5.6-sol", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "write-repository", "tool-use", "browser", "long-context", "structured-output"]},
-      {"model": "gpt-5.6-terra", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "write-repository", "tool-use", "browser", "long-context", "structured-output"]},
+      {"model": "gpt-5.6-sol", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "write-repository", "tool-use", "long-context", "structured-output"]},
+      {"model": "gpt-5.6-terra", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "write-repository", "tool-use", "long-context", "structured-output"]},
       {"model": "deepseek/deepseek-v4-pro-0813", "provider": "openrouter", "transport": "openrouter", "family": "deepseek", "billing": "api", "capabilities": ["read-repository", "write-repository", "long-context", "structured-output"]},
       {"model": "x-ai/grok-4.6", "provider": "openrouter", "transport": "openrouter", "family": "x-ai", "billing": "api", "capabilities": ["read-repository", "write-repository", "long-context", "structured-output"]}
     ],
@@ -51,8 +51,8 @@
       {"model": "gpt-5.6-terra", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]}
     ],
     "research-fast": [
-      {"model": "google/gemini-3.7-flash", "provider": "openrouter", "transport": "openrouter", "family": "google", "billing": "api", "capabilities": ["read-repository", "browser", "long-context", "structured-output"]},
-      {"model": "gpt-5.6-luna", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "browser", "structured-output"]}
+      {"model": "google/gemini-3.7-flash", "provider": "openrouter", "transport": "openrouter", "family": "google", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output"]},
+      {"model": "gpt-5.6-luna", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "structured-output"]}
     ],
     "editorial": [
       {"model": "fable", "provider": "anthropic", "transport": "claude-cli", "family": "anthropic", "billing": "subscription-or-local-paid-credits", "capabilities": ["long-context", "structured-output"]},
