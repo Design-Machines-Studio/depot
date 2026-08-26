@@ -1,6 +1,6 @@
 ---
 name: assembly-release
-description: Codex skill alias for /assembly-release. Assembly Baseplate release operations for current release state, release planning, failed or stopped release resumption, R2 publication failures, existing assets and manifest recovery when pointers never moved, staging acceptance, and beta or stable promotion
+description: Codex skill alias for /assembly-release. Assembly Baseplate release operations for current release state, one-command alpha publication and staging update, failed or stopped release resumption, R2 publication recovery, mechanical staging verification, and beta or stable promotion
 argument-hint: "[status|plan|publish|resume|promote] [tag] [channel] [--minimum-version <tag>]"
 ---
 
@@ -72,6 +72,12 @@ Before deciding what a release needs:
    procedure. Do not reconstruct a missing runbook from this command, memory,
    an old receipt, or a previous chat.
 
+Resolve the official staging target from current repository policy before
+loading any host-operation skill. Do not infer that staging is a NED target
+because NED owns other Assembly operations. At authoring time, Baseplate names
+the DigitalOcean-hosted `assembly-staging.service`; invoke `ned:operate-ned`
+only if current repository policy explicitly names NED as the target.
+
 Repository code and live state are authority. This command describes the
 expected Baseplate concepts and safety boundaries, but it must never replace
 current repository policy with embedded procedure.
@@ -93,7 +99,7 @@ and public HTTPS reads; do not rely on remembered state.
   Record HTTP state, content hash, selected tag, `minimum_version`, and exact
   artifact identities. Read tag-scoped public files when needed and compare
   their bytes with the trusted GitHub Release assets.
-- Look for current staging or beta deployment acceptance evidence through the
+- Look for current staging or beta deployment verification evidence through the
   repository-declared source. A healthy `/healthz` response proves health only;
   it does not prove the running version, migrations, update history, backup
   posture, protected routes, or acceptance.
@@ -118,7 +124,7 @@ ledger, `.dm/release.json`, repository profile, or Workflow Kernel protocol.
 | Assets | absent, partial, exact, or conflicting |
 | Storage locks | not applicable, planned, applied, verified, or failed |
 | Staging manifest | previous, candidate, or conflicting |
-| Staging deployment | unverified, accepted, or rejected |
+| Staging deployment | unverified, mechanically verified, or failed |
 | Beta manifest | previous, candidate, or conflicting |
 | Stable manifest | absent, previous, candidate, or conflicting |
 | Final evidence | complete or named gaps |
@@ -157,21 +163,45 @@ are:
 Reject a tag/channel combination that current policy does not allow. If this
 table and the current repository disagree, stop and report the disagreement.
 
-For a tag's first publication, preserve the repository's distinction between
-the initial artifact rehearsal and the real orchestrator:
+For alpha first publication to staging, current Baseplate policy may mark the
+direct `Publish Release Artifacts` dry run optional. When it does, continue
+directly through the real orchestrated publication; keep the dry run available
+for explicit diagnosis, credential testing, or policy-classified higher risk.
+Do not recommend an orchestrated dry run for first publication because its
+manifest leg correctly requires tag-scoped objects that do not exist yet.
 
-1. Push the reviewed tag.
-2. Let the tag-triggered `Release` workflow build assets and create a draft.
-3. Author the release notes.
-4. Dry-run `Publish Release Artifacts` directly.
-5. Publish the GitHub Release.
-6. Run real orchestrated `Publish Release` for `staging`.
-7. Update and accept the actual staging deployment.
-8. Promote only after the required acceptance evidence.
+Beta, RC, and stable retain the repository-defined artifact rehearsal and
+promotion evidence. Before any execution, re-derive the exact workflow names,
+inputs, and class-specific rehearsal requirement from current code.
 
-Do not recommend an orchestrated dry run for first publication. Its manifest
-leg correctly requires tag-scoped objects that do not exist yet. Before any
-execution, re-derive the exact workflow names and inputs from current code.
+### Alpha staging fast path
+
+For an exact `publish <alpha-tag> staging --minimum-version <floor>` or matching
+`resume` invocation, treat that invocation as authorization for every valid
+transition in one unattended journey:
+
+1. mechanically validate the exact `main` candidate, annotated tag, alpha
+   class, staging channel, support floor, authored notes, and current workflow
+   head;
+2. push the exact annotated tag and wait for the tag-triggered release build;
+3. validate the complete asset inventory and publish the authored GitHub
+   prerelease;
+4. dispatch the real `Publish Release` orchestrator directly when the current
+   alpha policy makes the direct artifact rehearsal optional;
+5. verify GitHub and public R2 byte identity, the bound lock plan and applied
+   lock configuration, exact `staging.json` tag and floor, and unchanged beta
+   and stable manifests;
+6. run the repository-supported privileged backup and required off-host copy
+   for the official staging service;
+7. apply the candidate through the repository-supported CLI update path; and
+8. mechanically verify staging and return one final report.
+
+Continue through every valid alpha transition without asking whether to push
+the bound tag, publish the validated prerelease, dispatch the real workflow,
+apply the exact candidate, or accept a mechanically proven result. Stop only
+for an actual failure, conflicting live state, missing product decision,
+missing authority, unsupported bridge, required external wait, or another
+non-automatable repository gate.
 
 ## Mode behavior
 
@@ -221,9 +251,10 @@ Required distinctions include:
    failed, bounded direct manifest recovery may be the smallest transition only
    when current repository policy permits it. Record separately that direct
    recovery does not prove the ordinary orchestrator works.
-3. If `staging` points to the candidate but the actual deployment lacks named
-   acceptance, the next transition is deployment verification/acceptance, not
-   beta promotion.
+3. If `staging` points to an alpha candidate but the actual deployment lacks
+   mechanical verification, continue through supported backup, CLI update, and
+   verification in this invocation; do not request named acceptance and do not
+   promote alpha.
 4. If a beta dry run succeeded but live `beta` remains previous, do not call it
    promoted; the next transition is the authorized real manifest move after
    prerequisites remain valid.
@@ -306,6 +337,14 @@ checks. If the floor or another bound value cannot be determined mechanically,
 return `BLOCKED` with the exact missing decision and one corrected invocation.
 Do not turn machine-checkable facts into a human review checklist.
 
+For alpha, prove the real update from the version currently running on official
+staging to the candidate and validate the selected floor. Do not require a new
+disposable oldest-supported, below-floor, bridge, rollback, or restore
+rehearsal unless current policy says the selected floor creates a new
+compatibility boundary. An actual unsupported bridge still blocks. Retain the
+broader repository-defined support-range evidence for beta and stable
+promotion, reusing valid exact evidence where policy permits.
+
 A vague `continue` without an exact tag and channel cannot mutate. An exact
 invocation does not need a second approval. Continue to respect an actual live
 GitHub environment wait or other repository-owned approval that the workflow
@@ -317,6 +356,35 @@ changing the support floor beyond an explicit validated `--minimum-version`,
 creating credentials, changing the default update channel, altering DNS,
 firewall, backups, staging topology, Cloudflare configuration, unrelated GitHub
 Projects, or other releases.
+
+## Staging execution and mechanical result
+
+Use only the current repository-supported backup unit or command and CLI update
+path. Do not invent an ad-hoc privileged maintenance command. This automation
+does not weaken the ordinary self-hosted web UI: CSRF, authorization, HMAC
+confirmation tokens, separate Download and Install actions, checksum and
+signature checks, candidate preflight, migration snapshots, and rollback
+evidence remain intact.
+
+An alpha staging result is mechanically verified only when current evidence
+proves the exact tag and exact-head CI; published prerelease posture and
+validated notes; byte-exact GitHub and public R2 assets; verified lock plan and
+applied configuration; exact staging tag/floor with beta and stable unchanged;
+fresh backup and off-host copy; supported CLI update; exact running version;
+strict preflight; current migrations; active named systemd service without an
+unexpected restart loop; loopback and public health; correct HTTPS login-route
+response; and expected hashes for release-relevant static assets.
+
+Compute HTTP hashes from raw response bytes only. Never hash RTK's compact
+human-formatted curl output; use RTK's raw proxy path with an output file when
+exact bytes are required.
+
+For ordinary alpha staging, missing authenticated-browser capture and a missing
+restore rehearsal are named non-blocking coverage gaps after the mechanical
+core passes. Require focused repository-defined proof when the candidate
+changes authentication, update integrity, backups, restore, or another
+high-consequence behavior. Staging enables subsequent human product testing;
+it does not require a separate owner to accept a mechanically verified alpha.
 
 ## Receipts
 

@@ -32,6 +32,10 @@
     "should_trigger": true
   },
   {
+    "query": "/assembly-release publish v0.2.0-alpha.3 staging --minimum-version v0.1.0",
+    "should_trigger": true
+  },
+  {
     "query": "Build and test Assembly.",
     "should_trigger": false
   },
