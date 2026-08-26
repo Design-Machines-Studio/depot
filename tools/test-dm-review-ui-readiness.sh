@@ -82,6 +82,27 @@ assert jq -e '.state == "ready" and .dispatchAllowed == true' "$TMP/attached-pre
 "$HELPER" cleanup --repository-root "$REPO" --state-file "$TMP/attached-preview.state" > "$TMP/attached-preview-cleanup.json"
 assert jq -e '.state == "already_clean" and .removedCount == 0' "$TMP/attached-preview-cleanup.json"
 
+cat > "$TMP/browser-remote.json" <<'JSON'
+{"schemaVersion":1,"status":"ready","transportClass":"local-interactive","localNavigation":"confirmed","targetUrl":"https://preview.example.com/review","evidenceRef":"review/browser/remote.json"}
+JSON
+
+# Invocation-supplied URLs may point at staging or other remote HTTP(S) hosts;
+# only tracked repository declarations are restricted to local targets.
+remote_prepare_rc="$(run_prepare remote-explicit --target-url https://preview.example.com/review --target-source explicit)"
+assert test "$remote_prepare_rc" -eq 0
+assert jq -e '.targetSource == "explicit" and .targetUrl == "https://preview.example.com/review"' "$TMP/remote-explicit.result"
+remote_ready_rc="$(run_confirm remote-explicit "$TMP/browser-remote.json")"
+assert test "$remote_ready_rc" -eq 0
+assert jq -e '.state == "ready" and .dispatchAllowed == true' "$TMP/remote-explicit.confirmed"
+"$HELPER" cleanup --repository-root "$REPO" --state-file "$TMP/remote-explicit.state" > "$TMP/remote-explicit-cleanup.json"
+assert jq -e '.state == "already_clean" and .removedCount == 0' "$TMP/remote-explicit-cleanup.json"
+
+# Invocation targets still require a real authority/hostname.
+hostless_rc="$(run_prepare hostless-explicit --target-url 'https://?' --target-source explicit 2> "$TMP/hostless-explicit.stderr")"
+assert test "$hostless_rc" -eq 2
+assert test ! -e "$TMP/hostless-explicit.state"
+assert grep -Fq 'ui-review-readiness: invalid invocation' "$TMP/hostless-explicit.stderr"
+
 cat > "$REPO/.dm/ui-review.json" <<'JSON'
 {
   "schemaVersion": 1,

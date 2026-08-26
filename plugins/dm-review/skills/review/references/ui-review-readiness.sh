@@ -66,8 +66,10 @@ emit_closed() {
       reviewDisposition:"REVIEW INCOMPLETE"}'
 }
 
-valid_target_url() {
-  printf '%s' "$1" | jq -eR 'test("^https?://(localhost|127\\.0\\.0\\.1|[a-z0-9.-]+\\.(test|site)|[a-z0-9.-]+\\.ddev\\.site)(:[0-9]{1,5})?(/[^[:space:]]*)?$")' >/dev/null 2>&1
+valid_selected_target_url() {
+  printf '%s' "$1" | jq -eR '
+    test("^https?://[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?(?:\\.[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?)*(:[0-9]{1,5})?([/?#][^[:space:]]*)?$")
+  ' >/dev/null 2>&1
 }
 
 load_argv() {
@@ -285,7 +287,7 @@ cleanup_on_unexpected_exit() {
 if [ "$ACTION" = prepare ]; then
   if [ -n "$TARGET_URL_INPUT" ]; then
     case "$TARGET_SOURCE_INPUT" in explicit|t3-preview) ;; *) usage ;; esac
-    valid_target_url "$TARGET_URL_INPUT" || usage
+    valid_selected_target_url "$TARGET_URL_INPUT" || usage
     [ ! -e "$STATE_FILE" ] || usage
     write_state "$TARGET_URL_INPUT" app_ready false false false '[]' 1 1 '[]' 0 \
       "$TARGET_SOURCE_INPUT" "$VISUAL_REQUIRED" || exit 76
