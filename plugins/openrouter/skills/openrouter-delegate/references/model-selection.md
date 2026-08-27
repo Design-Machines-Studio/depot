@@ -10,14 +10,14 @@ engine.
 
 ## Available Models
 
-Prices below are a checked-in planning snapshot from 2026-08-26, in USD per
+Prices below are a checked-in planning snapshot from 2026-08-27, in USD per
 million input/output tokens. The compact refresh receipt is
-`docs/openrouter-model-matrix-refreshes/2026-08-26.md`; use a fresh catalog
+`docs/openrouter-model-matrix-refreshes/2026-08-27.md`; use a fresh catalog
 receipt before a later paid or policy-changing run.
 
 | Exact slug | Input / output | Context | Catalog evidence |
 |---|---:|---:|---|
-| `deepseek/deepseek-v4-flash-0731` | $0.04 / $0.08 | 1,310,720 | Low-cost bounded reasoning/tools/structured output |
+| `deepseek/deepseek-v4-flash-0731` | $0.06 / $0.12 | 1,310,720 | Low-cost bounded reasoning/tools/structured output |
 | `deepseek/deepseek-v4-pro-0813` | $1.122 / $3.366 | 1,048,576 | Provisional long-context reasoning evidence |
 | `qwen/qwen3.8-max` | $2 / $6 | 1,000,000 | Long-context independent analysis evidence |
 | `qwen/qwen3.8-2.4t-a95b` | $2 / $6 | 1,048,576 | Catalogued; no active consumer |
@@ -28,6 +28,7 @@ receipt before a later paid or policy-changing run.
 | `meta/muse-spark-1.2` | $1.25 / $4.25 | 1,048,576 | Catalogued; no text-only active consumer |
 | `z-ai/glm-5.2` | $1.19 / $3.74 | 1,048,576 | Evidence only; excluded from every active ladder |
 | `z-ai/glm-5.3` | $1.40 / $4.40 | 1,048,576 | Catalogued-not-routed; mandatory reasoning defaults to max |
+| `z-ai/glm-5.3-flash` | $0.075 / $0.25 | 1,310,720 | Formerly Ox Alpha; awaiting local benchmark and not routed |
 | `moonshotai/kimi-k3` | $3 / $15 | 1,048,576 | Focused security-analysis evidence at high cost |
 | `openai/gpt-5.6-luna` | $0.20 / $1.20 | 1,050,000 | Economical mechanical-analysis evidence |
 | `openai/gpt-5.6-terra` | $2 / $12 | 1,050,000 | Catalogued compatibility evidence; no default role |
@@ -112,9 +113,12 @@ reasoning default. Gemini 3.7 Flash remains the fast research head. Kimi remains
 focused on security because its strong score came with high time and cost. GLM
 5.2's adoption does not outweigh its weaker coding result and local evidence.
 
-Ox Alpha, MiMo-V2.5, Hy3, Nemotron 3 Ultra, and DeepSeek V4 Pro 0423 are recorded
-as candidates for the local suite, not promoted without exact Depot evidence.
-The Coding Agent Index score for Grok 4.5 is not assigned to Grok 4.6.
+Ox Alpha was revealed as the exact live identity `z-ai/glm-5.3-flash`; it is
+catalogued for the local suite but not routed. Its 2026-08-27 benchmark was
+blocked before inference because the provider-side weekly USD 10 key limit
+could not be verified. MiMo-V2.5, Hy3, Nemotron 3 Ultra, and DeepSeek V4 Pro
+0423 remain candidates without exact Depot evidence. The Coding Agent Index
+score for Grok 4.5 is not assigned to Grok 4.6.
 
 The recent Baseplate operator evidence also matters: Kimi was repeatedly used
 for ordinary review at substantial cost, Luna handled routine lanes cheaply,

@@ -1,67 +1,10 @@
 {
   "benchmarks": {
-    "attempts": 6,
-    "groups": [
-      {
-        "attempts": 1,
-        "case_id": "assembly-next-chunk",
-        "median_completion_tokens": 348.0,
-        "median_cost_usd": null,
-        "median_duration_seconds": 10.0,
-        "median_prompt_tokens": 2.0,
-        "median_quality_score": 15.0,
-        "median_reasoning_tokens": null,
-        "model": "claude-fable-5",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "claude-cli"
-      },
-      {
-        "attempts": 1,
-        "case_id": "mechanical-owned-edit",
-        "median_completion_tokens": 877.0,
-        "median_cost_usd": null,
-        "median_duration_seconds": 26.0,
-        "median_prompt_tokens": 65851.0,
-        "median_quality_score": 50.0,
-        "median_reasoning_tokens": null,
-        "model": "gpt-5.6-luna",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "codex-cli"
-      },
-      {
-        "attempts": 1,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 436.0,
-        "median_cost_usd": null,
-        "median_duration_seconds": 14.0,
-        "median_prompt_tokens": 25772.0,
-        "median_quality_score": 35.0,
-        "median_reasoning_tokens": null,
-        "model": "gpt-5.6-luna",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "codex-cli"
-      },
-      {
-        "attempts": 3,
-        "case_id": "review-zero-deferral",
-        "median_completion_tokens": 81.0,
-        "median_cost_usd": null,
-        "median_duration_seconds": 6.0,
-        "median_prompt_tokens": 12631.0,
-        "median_quality_score": 100.0,
-        "median_reasoning_tokens": null,
-        "model": "gpt-5.6-luna",
-        "parsed_successes": 3,
-        "success_rate": 1.0,
-        "transport": "codex-cli"
-      }
-    ],
+    "attempts": 0,
+    "groups": [],
     "incomplete_attempts": [],
     "measured_cost_usd": 0.0,
-    "result_root": "/home/ned/benchmark-results/depot-role-v1"
+    "result_root": "/home/ned/benchmark-results/depot-role-v1/2026-08-27"
   },
   "generated_at": "2026-08-27T08:12:31+08:00",
   "production": {
