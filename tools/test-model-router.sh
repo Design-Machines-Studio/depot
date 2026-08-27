@@ -32,7 +32,11 @@ done
 if [ -n "${MODEL_ROUTER_STUB_CALL_LOG:-}" ]; then
   printf '%s\n' "$model" >> "$MODEL_ROUTER_STUB_CALL_LOG"
 fi
-outcome="$(jq -r --arg model "$model" '.candidateResults[$model].outcome // "success"' "$MODEL_ROUTER_AVAILABILITY_FILE")"
+if [ -n "${MODEL_ROUTER_AVAILABILITY_FILE:-}" ]; then
+  outcome="$(jq -r --arg model "$model" '.candidateResults[$model].outcome // "success"' "$MODEL_ROUTER_AVAILABILITY_FILE")"
+else
+  outcome=success
+fi
 if [ -n "${MODEL_ROUTER_EXPECT_PUBLICATION_DIR:-}" ]; then
   set -- "$MODEL_ROUTER_EXPECT_PUBLICATION_DIR"/.model-router-output.*
   [ -e "$1" ] || exit 78
@@ -264,20 +268,16 @@ cat > "$FAKE_REFS/delegation-boundary.sh" <<'STUB'
 dirname "${BASH_SOURCE[0]}" >> "$FAKE_BUNDLE_LOG"
 [ "${FAKE_BOUNDARY_OUTCOME:-allow}" = allow ]
 STUB
-cat > "$FAKE_REFS/openrouter-credential.sh" <<'STUB'
-#!/usr/bin/env bash
-load_openrouter_api_key() {
-  dirname "${BASH_SOURCE[0]}" >> "$FAKE_BUNDLE_LOG"
-  OPENROUTER_API_KEY=test
-  export OPENROUTER_API_KEY
-}
-STUB
+cp "$ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-credential.sh" \
+  "$FAKE_REFS/openrouter-credential.sh"
 cat > "$FAKE_REFS/openrouter-wrapper.sh" <<'STUB'
 #!/usr/bin/env bash
 set -u
 refs="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 printf '%s\n' "$refs" >> "$FAKE_BUNDLE_LOG"
 . "$refs/openrouter-credential.sh"
+OPENROUTER_API_KEY=test
+export OPENROUTER_API_KEY
 load_openrouter_api_key
 cat >/dev/null
 case "${FAKE_PROVIDER_OUTCOME:-success}" in
@@ -286,13 +286,34 @@ case "${FAKE_PROVIDER_OUTCOME:-success}" in
     printf '%s\n' 'bounded provider output'
     ;;
   model)
-    printf '%s\n' '{"outcome":"error","failureKind":"http_error","failureReason":"model_not_found"}' > "$OPENROUTER_RECEIPT_FILE"
+    printf '%s\n' '{"outcome":"error","failureKind":"http_error","failureReason":"unknown_http_error","httpStatus":404}' > "$OPENROUTER_RECEIPT_FILE"
     exit 1
     ;;
-  *)
+  permission)
+    printf '%s\n' '{"outcome":"error","failureKind":"http_error","failureReason":"key_permission_denied","httpStatus":403}' > "$OPENROUTER_RECEIPT_FILE"
+    exit 1
+    ;;
+  budget)
+    printf '%s\n' '{"outcome":"error","failureKind":"http_error","failureReason":"organization_monthly_budget_exceeded","httpStatus":403}' > "$OPENROUTER_RECEIPT_FILE"
+    exit 1
+    ;;
+  credits)
+    printf '%s\n' '{"outcome":"error","failureKind":"http_error","failureReason":"insufficient_credits","httpStatus":402}' > "$OPENROUTER_RECEIPT_FILE"
+    exit 1
+    ;;
+  rate)
+    printf '%s\n' '{"outcome":"error","failureKind":"http_error","failureReason":"rate_limited","httpStatus":429}' > "$OPENROUTER_RECEIPT_FILE"
+    exit 1
+    ;;
+  unknown)
+    printf '%s\n' '{"outcome":"error","failureKind":"http_error","failureReason":"unknown_http_error","httpStatus":500}' > "$OPENROUTER_RECEIPT_FILE"
+    exit 1
+    ;;
+  transport)
     printf '%s\n' '{"outcome":"error","failureKind":"transport_error","failureReason":null}' > "$OPENROUTER_RECEIPT_FILE"
     exit 1
     ;;
+  *) exit 90 ;;
 esac
 STUB
 printf '%s\n' '{"schemaVersion":2,"disclosureControls":{"providerInputParity":true},"executionControls":{},"delegationModes":{},"reviewControls":{}}' > "$FAKE_REFS/delegation-security-policy.json"
@@ -312,6 +333,40 @@ key_file_probe="$(env PATH=/usr/bin:/bin HOME="$FAKE_HOME" \
 unset -f curl
 assert test "$(printf '%s' "$key_file_probe" | jq -r '.openrouter.state')" = ok
 assert test "$(printf '%s' "$key_file_probe" | jq -r '.openrouter.reason')" = available
+
+# The probe binds the same credential loader as the wrapper. A raw key wins
+# without reading a lower-precedence invalid file, and neither fixture value is
+# emitted in normalized availability evidence.
+curl() { printf '%s\n' '{"data":{"total_credits":10,"total_usage":1}}'; }
+export -f curl
+both_probe="$(env PATH=/usr/bin:/bin HOME="$FAKE_HOME" \
+  OPENROUTER_API_KEY=test OPENROUTER_API_KEY_FILE="$TMP/does-not-exist" \
+  OPENROUTER_BUNDLE_RESOLVED=1 \
+  OPENROUTER_BUNDLE_REF='~/.codex/plugins/cache/depot/openrouter/1.19.1' \
+  "$PROBE")"
+unset -f curl
+assert test "$(printf '%s' "$both_probe" | jq -r '.openrouter.state')" = ok
+assert sh -c "! printf '%s' '$both_probe' | grep -Eq 'OPENROUTER_API_KEY|does-not-exist|Bearer test'"
+
+# role-dispatch resolves native CLIs before fixing PATH. The child availability
+# probe must receive those exact paths or the healthy unattributed allowance is
+# misreported as mapping-unknown and the real Codex attempt is skipped.
+curl() { printf '%s\n' '{"data":{"total_credits":10,"total_usage":1}}'; }
+export -f curl
+rm -f "$TMP/live-path.calls"
+env PATH="$TMP/bin:$PATH" HOME="$FAKE_HOME" OPENROUTER_API_KEY=test \
+  FAKE_CLAUDE_AUTH=none FAKE_BUNDLE_LOG="$TMP/fake-bundle.log" \
+  MODEL_ROUTER_CODEX_FIXTURE=v147 MODEL_ROUTER_CODEX_RPC_TIMEOUT=2 \
+  MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+  MODEL_ROUTER_STUB_CALL_LOG="$TMP/live-path.calls" \
+  "$ROUTER" --workflow-kernel "$TMP/fake-kernel/workflow-kernel-launcher.sh" \
+    --role builder-deep --effort high --capability structured-output \
+    --prompt-file "$TMP/prompt" --output-file "$TMP/live-path.out" \
+    --receipt-file "$TMP/live-path.receipt" >/dev/null
+unset -f curl
+assert jq -e '.probeSource == "live" and .served.transport == "codex-cli" and .served.allowanceWindow == "mapping-unknown" and (.attempts | length) == 1' \
+  "$TMP/live-path.receipt"
+assert test "$(wc -l < "$TMP/live-path.calls" | tr -d ' ')" -eq 1
 
 fixture codex-exhausted
 rm -f "$TMP/fake-bundle.log"
@@ -366,7 +421,7 @@ for provider_case in credential availability; do
     "$TMP/provider-$provider_case.receipt"
 done
 
-for failure_case in boundary transport model; do
+for failure_case in boundary permission budget credits rate transport model unknown; do
   rm -f "$TMP/failure-$failure_case.out" "$TMP/failure-$failure_case.receipt"
   set +e
   HOME="$FAKE_HOME" FAKE_BUNDLE_LOG="$TMP/fake-bundle.log" \
@@ -382,8 +437,13 @@ for failure_case in boundary transport model; do
   assert test "$failure_case_rc" -eq 76
 done
 assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "provider_boundary_declined")' "$TMP/failure-boundary.receipt"
+assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "provider_credential_unavailable")' "$TMP/failure-permission.receipt"
+assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "organization_monthly_budget_exceeded")' "$TMP/failure-budget.receipt"
+assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "insufficient_credits")' "$TMP/failure-credits.receipt"
+assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "rate_limited")' "$TMP/failure-rate.receipt"
 assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "provider_transport_failed")' "$TMP/failure-transport.receipt"
 assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "provider_model_unavailable")' "$TMP/failure-model.receipt"
+assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "unknown_provider_failure")' "$TMP/failure-unknown.receipt"
 assert sh -c "! grep -Eq 'fake-home|OPENROUTER_API_KEY|transport_error|model_not_found' '$TMP/failure-transport.receipt' '$TMP/failure-model.receipt'"
 
 # Fast work resolves externally while the public surface stays anonymous.
@@ -401,8 +461,11 @@ assert jq -e '.served.transport == "codex-cli" and .served.billingMode == "inclu
 # attemptable, and the invocation itself settles candidate availability.
 jq -s '.[0] as $base | .[1].codex as $codex | $base | .codex = $codex' "$TMP/availability.json" "$TMP/probe-v147.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
-run_role mapping-unknown builder-deep high --capability read-repository --capability long-context
+rm -f "$TMP/mapping-unknown.calls"
+MODEL_ROUTER_STUB_CALL_LOG="$TMP/mapping-unknown.calls" \
+  run_role mapping-unknown builder-deep high --capability read-repository --capability long-context
 assert jq -e '.served.transport == "codex-cli" and .served.allowanceWindow == "mapping-unknown" and (.attempts | length) == 1' "$TMP/mapping-unknown.receipt"
+assert test "$(wc -l < "$TMP/mapping-unknown.calls" | tr -d ' ')" -eq 1
 
 for attemptable_fixture in multiple-no-best unknown-mapping; do
   fixture healthy

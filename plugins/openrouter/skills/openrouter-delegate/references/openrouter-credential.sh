@@ -2,9 +2,6 @@
 # Shared strict resolver for OPENROUTER_API_KEY / OPENROUTER_API_KEY_FILE.
 
 load_openrouter_api_key() {
-  if [ -n "${OPENROUTER_API_KEY:-}" ] && [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; then
-    return 2
-  fi
   if [ -n "${OPENROUTER_API_KEY:-}" ]; then
     export OPENROUTER_API_KEY
     return 0
