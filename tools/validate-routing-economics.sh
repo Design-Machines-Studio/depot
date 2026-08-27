@@ -43,7 +43,7 @@ check 'tracked policy carries no operator identity or billing preference' sh -c 
   "! grep -Eiq 'travis|jeremy|email|allowPaidClaudeCredits' '$POLICY'"
 
 check 'OpenRouter matrix retains usage and price evidence' jq -e '
-  .snapshot_date == "2026-08-26" and
+  .snapshot_date == "2026-08-27" and
   all(.models[]; (.slug|type)=="string" and (.input_usd_per_m|type)=="number" and (.output_usd_per_m|type)=="number")' "$MATRIX"
 
 check 'OpenRouter wrapper retains content-free receipt fields' sh -c \

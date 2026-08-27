@@ -21,6 +21,7 @@ KERNEL = REPO / "plugins/workflow-kernel/skills/workflow-kernel/references/workf
 BOUNDARY = OPENROUTER / "skills/openrouter-delegate/references/delegation-boundary.sh"
 POLICY = OPENROUTER / "skills/openrouter-delegate/references/delegation-security-policy.json"
 WRAPPER = OPENROUTER / "skills/openrouter-delegate/references/openrouter-wrapper.sh"
+BENCHMARK = OPENROUTER / "skills/openrouter-delegate/references/depot-role-benchmark.sh"
 RUNNER = OPENROUTER / "agents/workflow/openrouter-agent-runner.md"
 
 
@@ -433,6 +434,30 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         self.assertEqual(FixtureHandler.requests[-1]["plugins"], [{"id": "web"}])
         receipt = json.loads(result.receipt_path.read_text())  # type: ignore[attr-defined]
         self.assertTrue(receipt["routing"]["webSearch"])
+
+    def test_depot_benchmark_allows_same_model_provider_fallback(self) -> None:
+        result_dir = self.root / "benchmark-result"
+        result = subprocess.run(
+            [
+                str(BENCHMARK), "--run",
+                "--case", "pipeline-legacy-translation",
+                "--model", "z-ai/glm-5.3-flash",
+                "--result-dir", str(result_dir),
+            ],
+            text=True,
+            capture_output=True,
+            env=self.env(),
+        )
+
+        self.assertEqual(result.returncode, 0, result.stderr)
+        payload = FixtureHandler.requests[-1]
+        self.assertEqual(payload["model"], "z-ai/glm-5.3-flash")
+        self.assertNotIn("models", payload)
+        self.assertTrue(payload["provider"]["allow_fallbacks"])
+
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertFalse(receipt["fallbackUsed"])
+        self.assertTrue(receipt["routing"]["providerFallbackAllowed"])
 
     def review_runner(
         self, diff: str, changed_paths: tuple[str, ...],

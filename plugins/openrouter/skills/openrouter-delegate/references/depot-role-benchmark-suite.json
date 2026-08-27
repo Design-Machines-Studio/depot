@@ -14,7 +14,7 @@
       "role": "builder-fast",
       "taskType": "structured-transformation",
       "objective": "Translate a legacy Pipeline manifest without leaking provider selection into the new contract.",
-      "prompt": "Return JSON only. Translate this legacy Pipeline chunk: {\"id\":\"docs-1\",\"executor\":\"openrouter\",\"kind\":\"docs\"}. The result must have one chunks array entry with id, executorRole, executorCapabilities, executorEffort, and legacyExecutorTranslation. Remove executor. Use Depot's provider-neutral contract.",
+      "prompt": "Return one raw JSON object with no Markdown fences or prose. Translate this legacy Pipeline chunk: {\"id\":\"docs-1\",\"executor\":\"openrouter\",\"kind\":\"docs\"}. Use Depot's exact provider-neutral contract mapping: {\"executorRole\":\"builder-fast\",\"executorEffort\":\"medium\",\"executorCapabilities\":[\"read-repository\",\"write-repository\",\"structured-output\"],\"legacyExecutorTranslation\":{\"occurred\":true,\"sourceField\":\"executor\"}}. Return the translated chunk as the sole entry in a top-level \"chunks\" array; do not return the chunk object directly. Preserve id as docs-1, apply those exact values, and remove executor and kind.",
       "expected": {
         "chunks": [
           {

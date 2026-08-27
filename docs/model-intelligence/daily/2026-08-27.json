@@ -1,6 +1,6 @@
 {
   "benchmarks": {
-    "attempts": 17,
+    "attempts": 7,
     "groups": [
       {
         "attempts": 1,
@@ -15,48 +15,6 @@
         "parsed_successes": 1,
         "success_rate": 1.0,
         "transport": "claude-cli"
-      },
-      {
-        "attempts": 1,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 534.0,
-        "median_cost_usd": 0.00230076,
-        "median_duration_seconds": 7.0,
-        "median_prompt_tokens": 141.0,
-        "median_quality_score": 15.0,
-        "median_reasoning_tokens": null,
-        "model": "deepseek/deepseek-v4-pro-0813",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "BaseTen"
-      },
-      {
-        "attempts": 2,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 230.0,
-        "median_cost_usd": 0.00112596,
-        "median_duration_seconds": 5.0,
-        "median_prompt_tokens": 163.0,
-        "median_quality_score": 100.0,
-        "median_reasoning_tokens": null,
-        "model": "deepseek/deepseek-v4-pro-0813",
-        "parsed_successes": 2,
-        "success_rate": 1.0,
-        "transport": "Fireworks"
-      },
-      {
-        "attempts": 1,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 356.0,
-        "median_cost_usd": 0.00162492,
-        "median_duration_seconds": 6.0,
-        "median_prompt_tokens": 163.0,
-        "median_quality_score": 100.0,
-        "median_reasoning_tokens": null,
-        "model": "deepseek/deepseek-v4-pro-0813",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "Parasail"
       },
       {
         "attempts": 1,
@@ -99,72 +57,15 @@
         "parsed_successes": 3,
         "success_rate": 1.0,
         "transport": "codex-cli"
-      },
-      {
-        "attempts": 1,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": null,
-        "median_cost_usd": null,
-        "median_duration_seconds": null,
-        "median_prompt_tokens": null,
-        "median_quality_score": null,
-        "median_reasoning_tokens": null,
-        "model": "z-ai/glm-5.3-flash",
-        "parsed_successes": 0,
-        "success_rate": 0.0,
-        "transport": "BaseTen"
-      },
-      {
-        "attempts": 1,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 569.0,
-        "median_cost_usd": 0.000305319465,
-        "median_duration_seconds": 16.0,
-        "median_prompt_tokens": 139.0,
-        "median_quality_score": 15.0,
-        "median_reasoning_tokens": null,
-        "model": "z-ai/glm-5.3-flash",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "Modal"
-      },
-      {
-        "attempts": 2,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 176.5,
-        "median_cost_usd": 0.00011224999999999999,
-        "median_duration_seconds": 4.5,
-        "median_prompt_tokens": 160.0,
-        "median_quality_score": 100.0,
-        "median_reasoning_tokens": null,
-        "model": "z-ai/glm-5.3-flash",
-        "parsed_successes": 2,
-        "success_rate": 1.0,
-        "transport": "Parasail"
-      },
-      {
-        "attempts": 1,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 155.0,
-        "median_cost_usd": 5.075e-05,
-        "median_duration_seconds": 7.0,
-        "median_prompt_tokens": 160.0,
-        "median_quality_score": 100.0,
-        "median_reasoning_tokens": null,
-        "model": "z-ai/glm-5.3-flash",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "Reka"
       }
     ],
     "incomplete_attempts": [
-      "/home/ned/benchmark-results/depot-role-v1/2026-08-27/openrouter/z-ai/glm-5.3-flash/pipeline-legacy-translation/run-1",
-      "/home/ned/benchmark-results/depot-role-v1/2026-08-27/openrouter/z-ai/glm-5.3-flash/pipeline-legacy-translation/run-2"
+      "/home/ned/benchmark-results/depot-role-v1/2026-08-27/openrouter/z-ai/glm-5.3-flash/pipeline-legacy-translation/run-1"
     ],
-    "measured_cost_usd": 0.006882919465000001,
+    "measured_cost_usd": 0.0,
     "result_root": "/home/ned/benchmark-results/depot-role-v1"
   },
-  "generated_at": "2026-08-27T14:59:45+08:00",
+  "generated_at": "2026-08-27T10:13:42+08:00",
   "production": {
     "artifact_paths": {
       "metrics": [

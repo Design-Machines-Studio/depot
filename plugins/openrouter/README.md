@@ -46,7 +46,7 @@ private router receipt and provider model matrix:
 - **Bounded execution.** Model output is accepted only as a validated unified diff restricted to the caller's exact owned-path allowlist. The runner performs fixed structural Git validation and allowlist-only staging; executable project verification is deferred to native Codex review.
 - **Intended lanes.** Security analysis with independent non-implementing-family sign-off, style, duplication, pattern-recognition, large-diff first-pass triage, and doc consistency.
 
-High-consequence security completion still requires a reviewer family different from the implementer. OpenRouter is transport provenance, not a model family. GLM 5.2 is catalogued as evidence but appears in no active ladder.
+High-consequence security completion still requires a reviewer family different from the implementer. OpenRouter is transport provenance, not a model family. GLM 5.3 and GLM 5.3 Flash are catalogued as evidence but appear in no active ladder.
 
 Every live caller selects one coherent installed plugin root with workflow-kernel `resolve-plugin-bundle`, then derives its wrapper, policy, boundary, protocols, and templates from that root. Semantic version wins over mtime; the active host breaks only equal-version ties. Durable receipts keep the version, cache class, and reason, never the absolute home path.
 

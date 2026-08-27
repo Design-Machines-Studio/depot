@@ -354,6 +354,7 @@ write_failure_receipt() {
       --arg runid "${CURRENT_RUN_ID:-}" \
       --arg lane "$RECEIPT_LANE_ID" \
       --argjson web "$([ "$WEB_SEARCH" = "1" ] && echo true || echo false)" \
+      --argjson providerfallback "$([ "$ALLOW_FALLBACKS" = "1" ] && echo true || echo false)" \
       --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" '
       {
         schemaVersion: 2,
@@ -377,6 +378,7 @@ write_failure_receipt() {
         routing: {
           workload: $workload,
           sort: (if $sort == "" then null else $sort end),
+          providerFallbackAllowed: $providerfallback,
           webSearch: $web
         },
         authorization: {
@@ -412,6 +414,7 @@ write_success_receipt() {
       --arg runid "${CURRENT_RUN_ID:-}" \
       --arg lane "$RECEIPT_LANE_ID" \
       --argjson web "$([ "$WEB_SEARCH" = "1" ] && echo true || echo false)" \
+      --argjson providerfallback "$([ "$ALLOW_FALLBACKS" = "1" ] && echo true || echo false)" \
       --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" '
       {
         schemaVersion: 2,
@@ -444,6 +447,7 @@ write_success_receipt() {
         routing: {
           workload: $workload,
           sort: (if $sort == "" then null else $sort end),
+          providerFallbackAllowed: $providerfallback,
           webSearch: $web
         },
         authorization: {
