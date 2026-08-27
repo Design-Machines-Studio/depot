@@ -5,7 +5,7 @@
 - Run cost summaries: 3
 - Workflow metrics: 3
 - Empty cost summaries: 2
-- Benchmark attempts: 8
+- Benchmark attempts: 10
 - Incomplete benchmark attempts: 2
 
 ## Production economics by model
@@ -43,6 +43,8 @@ These are workflow signals, not direct causal model-quality scores. Missing mode
 | gpt-5.6-luna | codex-cli | mechanical-owned-edit | 1/1 | 50.0 | 26.0s | n/a |
 | gpt-5.6-luna | codex-cli | pipeline-legacy-translation | 1/1 | 35.0 | 14.0s | n/a |
 | gpt-5.6-luna | codex-cli | review-zero-deferral | 3/3 | 100.0 | 6.0s | n/a |
+| z-ai/glm-5.3-flash | BaseTen | pipeline-legacy-translation | 0/1 | None | Nones | n/a |
+| z-ai/glm-5.3-flash | Modal | pipeline-legacy-translation | 1/1 | 15.0 | 16.0s | $0.0003 |
 
 ## Interpretation limits
 
