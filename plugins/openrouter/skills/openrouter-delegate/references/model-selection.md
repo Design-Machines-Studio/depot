@@ -18,7 +18,7 @@ receipt before a later paid or policy-changing run.
 | Exact slug | Input / output | Context | Catalog evidence |
 |---|---:|---:|---|
 | `deepseek/deepseek-v4-flash-0731` | $0.06 / $0.12 | 1,310,720 | Low-cost bounded reasoning/tools/structured output |
-| `deepseek/deepseek-v4-pro-0813` | $1.122 / $3.366 | 1,048,576 | Provisional long-context reasoning evidence |
+| `deepseek/deepseek-v4-pro-0813` | $1.122 / $3.366 | 1,048,576 | Three corrected local pipeline attempts at 100/100; single-case evidence only |
 | `qwen/qwen3.8-max` | $2 / $6 | 1,000,000 | Long-context independent analysis evidence |
 | `qwen/qwen3.8-2.4t-a95b` | $2 / $6 | 1,048,576 | Catalogued; no active consumer |
 | `qwen/qwen3.8-27b` | $0.425 / $2.55 | 1,000,000 | Catalogued; no active consumer |
@@ -28,7 +28,7 @@ receipt before a later paid or policy-changing run.
 | `meta/muse-spark-1.2` | $1.25 / $4.25 | 1,048,576 | Catalogued; no text-only active consumer |
 | `z-ai/glm-5.2` | $1.19 / $3.74 | 1,048,576 | Evidence only; excluded from every active ladder |
 | `z-ai/glm-5.3` | $1.40 / $4.40 | 1,048,576 | Catalogued-not-routed; mandatory reasoning defaults to max |
-| `z-ai/glm-5.3-flash` | $0.075 / $0.25 | 1,310,720 | Formerly Ox Alpha; corrected screen scored 15/100 and is not routed |
+| `z-ai/glm-5.3-flash` | $0.075 / $0.25 | 1,310,720 | Formerly Ox Alpha; no attempt after all harness repairs and not routed |
 | `moonshotai/kimi-k3` | $3 / $15 | 1,048,576 | Focused security-analysis evidence at high cost |
 | `openai/gpt-5.6-luna` | $0.20 / $1.20 | 1,050,000 | Economical mechanical-analysis evidence |
 | `openai/gpt-5.6-terra` | $2 / $12 | 1,050,000 | Catalogued compatibility evidence; no default role |
@@ -116,12 +116,19 @@ focused on security because its strong score came with high time and cost. GLM
 Ox Alpha was revealed as the exact live identity `z-ai/glm-5.3-flash`; it is
 catalogued for the local suite but not routed. Two initial HTTP 429 attempts
 exposed benchmark tooling that conflated model fallback with same-model provider
-fallback. A third attempt exposed an under-specified prompt. After both repairs,
-the corrected `pipeline-legacy-translation` screen parsed but scored 15/100 with
-exact-model routing and provider-billed cost $0.000305319465. The remaining three
-cases were skipped after the corrected quality failure. MiMo-V2.5, Hy3, Nemotron
-3 Ultra, and DeepSeek V4 Pro 0423 remain candidates without exact Depot evidence.
-The Coding Agent Index score for Grok 4.5 is not assigned to Grok 4.6.
+fallback. A third attempt exposed an under-specified prompt. A fourth and a
+DeepSeek control both returned the requested chunk directly, proving that the
+prompt still failed to require the top-level `chunks` envelope. Those results
+are retained but not comparable.
+
+After OpenRouter 1.19.8 made that envelope explicit, three exact
+`deepseek/deepseek-v4-pro-0813` attempts scored 100/100 with no model fallback.
+Their comparable medians were 6 seconds, 163 prompt tokens, 258 completion
+tokens, 195 reasoning tokens, and $0.00123684 provider-billed cost. This
+single-case control validates the repaired harness but does not change routing.
+MiMo-V2.5, Hy3, Nemotron 3 Ultra, and DeepSeek V4 Pro 0423 remain candidates
+without exact Depot evidence. The Coding Agent Index score for Grok 4.5 is not
+assigned to Grok 4.6.
 
 The recent Baseplate operator evidence also matters: Kimi was repeatedly used
 for ordinary review at substantial cost, Luna handled routine lanes cheaply,

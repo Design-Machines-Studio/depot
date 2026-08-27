@@ -5,7 +5,7 @@
 - Run cost summaries: 3
 - Workflow metrics: 3
 - Empty cost summaries: 2
-- Benchmark attempts: 10
+- Benchmark attempts: 8
 - Incomplete benchmark attempts: 2
 
 ## Production economics by model
@@ -37,12 +37,19 @@ These are workflow signals, not direct causal model-quality scores. Missing mode
 
 ## Controlled benchmarks
 
+The BaseTen DeepSeek row is a retained pre-1.19.8 control and is not comparable:
+its prompt did not explicitly require the top-level `chunks` envelope. The
+comparable DeepSeek set is the two Fireworks attempts plus the Parasail attempt;
+all three scored 100/100, with medians of 6 seconds, 163 prompt tokens, 258
+completion tokens, 195 reasoning tokens, and $0.00123684 provider-billed cost.
+The generic report does not yet lift nested reasoning-token details or encode
+harness-version comparability, so those fields remain private-plan evidence.
+
 | Model | Transport | Case | Success | Median quality | Median duration | Median cost |
 |---|---|---|---:|---:|---:|---:|
-| claude-fable-5 | claude-cli | assembly-next-chunk | 1/1 | 15.0 | 10.0s | n/a |
-| gpt-5.6-luna | codex-cli | mechanical-owned-edit | 1/1 | 50.0 | 26.0s | n/a |
-| gpt-5.6-luna | codex-cli | pipeline-legacy-translation | 1/1 | 35.0 | 14.0s | n/a |
-| gpt-5.6-luna | codex-cli | review-zero-deferral | 3/3 | 100.0 | 6.0s | n/a |
+| deepseek/deepseek-v4-pro-0813 | BaseTen | pipeline-legacy-translation | 1/1 | 15.0 | 7.0s | $0.0023 |
+| deepseek/deepseek-v4-pro-0813 | Fireworks | pipeline-legacy-translation | 2/2 | 100.0 | 5.0s | $0.0011 |
+| deepseek/deepseek-v4-pro-0813 | Parasail | pipeline-legacy-translation | 1/1 | 100.0 | 6.0s | $0.0016 |
 | z-ai/glm-5.3-flash | BaseTen | pipeline-legacy-translation | 0/1 | None | Nones | n/a |
 | z-ai/glm-5.3-flash | Modal | pipeline-legacy-translation | 1/1 | 15.0 | 16.0s | $0.0003 |
 
@@ -52,3 +59,4 @@ These are workflow signals, not direct causal model-quality scores. Missing mode
 - Subscription API-equivalent cost is opportunity-cost evidence, not billed spend.
 - A model-role change requires three successful attempts on every applicable local case plus production evidence; incomplete coverage cannot promote a model.
 - Exact identity remains in private receipts; this report publishes aggregates only.
+- Retained pre-fix attempts are not comparable with results from the repaired harness.

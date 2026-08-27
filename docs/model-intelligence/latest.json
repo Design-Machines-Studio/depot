@@ -1,62 +1,48 @@
 {
   "benchmarks": {
-    "attempts": 10,
+    "attempts": 8,
     "groups": [
       {
         "attempts": 1,
-        "case_id": "assembly-next-chunk",
-        "median_completion_tokens": 348.0,
-        "median_cost_usd": null,
-        "median_duration_seconds": 10.0,
-        "median_prompt_tokens": 2.0,
+        "case_id": "pipeline-legacy-translation",
+        "median_completion_tokens": 534.0,
+        "median_cost_usd": 0.00230076,
+        "median_duration_seconds": 7.0,
+        "median_prompt_tokens": 141.0,
         "median_quality_score": 15.0,
         "median_reasoning_tokens": null,
-        "model": "claude-fable-5",
+        "model": "deepseek/deepseek-v4-pro-0813",
         "parsed_successes": 1,
         "success_rate": 1.0,
-        "transport": "claude-cli"
+        "transport": "BaseTen"
       },
       {
-        "attempts": 1,
-        "case_id": "mechanical-owned-edit",
-        "median_completion_tokens": 877.0,
-        "median_cost_usd": null,
-        "median_duration_seconds": 26.0,
-        "median_prompt_tokens": 65851.0,
-        "median_quality_score": 50.0,
+        "attempts": 2,
+        "case_id": "pipeline-legacy-translation",
+        "median_completion_tokens": 230.0,
+        "median_cost_usd": 0.00112596,
+        "median_duration_seconds": 5.0,
+        "median_prompt_tokens": 163.0,
+        "median_quality_score": 100.0,
         "median_reasoning_tokens": null,
-        "model": "gpt-5.6-luna",
-        "parsed_successes": 1,
+        "model": "deepseek/deepseek-v4-pro-0813",
+        "parsed_successes": 2,
         "success_rate": 1.0,
-        "transport": "codex-cli"
+        "transport": "Fireworks"
       },
       {
         "attempts": 1,
         "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 436.0,
-        "median_cost_usd": null,
-        "median_duration_seconds": 14.0,
-        "median_prompt_tokens": 25772.0,
-        "median_quality_score": 35.0,
-        "median_reasoning_tokens": null,
-        "model": "gpt-5.6-luna",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "codex-cli"
-      },
-      {
-        "attempts": 3,
-        "case_id": "review-zero-deferral",
-        "median_completion_tokens": 81.0,
-        "median_cost_usd": null,
+        "median_completion_tokens": 356.0,
+        "median_cost_usd": 0.00162492,
         "median_duration_seconds": 6.0,
-        "median_prompt_tokens": 12631.0,
+        "median_prompt_tokens": 163.0,
         "median_quality_score": 100.0,
         "median_reasoning_tokens": null,
-        "model": "gpt-5.6-luna",
-        "parsed_successes": 3,
+        "model": "deepseek/deepseek-v4-pro-0813",
+        "parsed_successes": 1,
         "success_rate": 1.0,
-        "transport": "codex-cli"
+        "transport": "Parasail"
       },
       {
         "attempts": 1,
@@ -91,10 +77,10 @@
       "/home/ned/benchmark-results/depot-role-v1/2026-08-27/openrouter/z-ai/glm-5.3-flash/pipeline-legacy-translation/run-1",
       "/home/ned/benchmark-results/depot-role-v1/2026-08-27/openrouter/z-ai/glm-5.3-flash/pipeline-legacy-translation/run-2"
     ],
-    "measured_cost_usd": 0.00043006946500000003,
-    "result_root": "/home/ned/benchmark-results/depot-role-v1"
+    "measured_cost_usd": 0.006607669465,
+    "result_root": "/home/ned/benchmark-results/depot-role-v1/2026-08-27"
   },
-  "generated_at": "2026-08-27T13:01:29+08:00",
+  "generated_at": "2026-08-27T13:59:54+08:00",
   "production": {
     "artifact_paths": {
       "metrics": [
