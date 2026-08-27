@@ -28,7 +28,7 @@ receipt before a later paid or policy-changing run.
 | `meta/muse-spark-1.2` | $1.25 / $4.25 | 1,048,576 | Catalogued; no text-only active consumer |
 | `z-ai/glm-5.2` | $1.19 / $3.74 | 1,048,576 | Evidence only; excluded from every active ladder |
 | `z-ai/glm-5.3` | $1.40 / $4.40 | 1,048,576 | Catalogued-not-routed; mandatory reasoning defaults to max |
-| `z-ai/glm-5.3-flash` | $0.075 / $0.25 | 1,310,720 | Formerly Ox Alpha; awaiting local benchmark and not routed |
+| `z-ai/glm-5.3-flash` | $0.075 / $0.25 | 1,310,720 | Formerly Ox Alpha; first screen rate-limited and not routed |
 | `moonshotai/kimi-k3` | $3 / $15 | 1,048,576 | Focused security-analysis evidence at high cost |
 | `openai/gpt-5.6-luna` | $0.20 / $1.20 | 1,050,000 | Economical mechanical-analysis evidence |
 | `openai/gpt-5.6-terra` | $2 / $12 | 1,050,000 | Catalogued compatibility evidence; no default role |
@@ -114,11 +114,12 @@ focused on security because its strong score came with high time and cost. GLM
 5.2's adoption does not outweigh its weaker coding result and local evidence.
 
 Ox Alpha was revealed as the exact live identity `z-ai/glm-5.3-flash`; it is
-catalogued for the local suite but not routed. Its 2026-08-27 benchmark was
-blocked before inference because the provider-side weekly USD 10 key limit
-could not be verified. MiMo-V2.5, Hy3, Nemotron 3 Ultra, and DeepSeek V4 Pro
-0423 remain candidates without exact Depot evidence. The Coding Agent Index
-score for Grok 4.5 is not assigned to Grok 4.6.
+catalogued for the local suite but not routed. After an explicit operator spend
+override, its first `pipeline-legacy-translation` screen was retained as an
+incomplete HTTP 429 `rate_limited` failure with no output or billed cost. The
+remaining three cases were skipped after provider refusal. MiMo-V2.5, Hy3,
+Nemotron 3 Ultra, and DeepSeek V4 Pro 0423 remain candidates without exact Depot
+evidence. The Coding Agent Index score for Grok 4.5 is not assigned to Grok 4.6.
 
 The recent Baseplate operator evidence also matters: Kimi was repeatedly used
 for ordinary review at substantial cost, Luna handled routine lanes cheaply,

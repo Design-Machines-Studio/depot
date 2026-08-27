@@ -2,9 +2,9 @@
   "_comment": "CANONICAL machine-readable OpenRouter model matrix. This file records current provider catalog, pricing, feature, and compatibility evidence; model-router's private role-policy.json is the cross-transport routing authority. Native Codex identities and native Claude aliases are absent from OpenRouter catalog models. native_api_equivalent_cost is observation-only pricing evidence and never routing authority. anthropic/* routing slugs are rejected before provider contact.",
   "schema_version": 1,
   "snapshot_date": "2026-08-27",
-  "catalog_observed_at": "2026-08-27T08:05:25+08:00",
+  "catalog_observed_at": "2026-08-27T10:12:09+08:00",
   "catalog_source": "https://openrouter.ai/api/v1/models",
-  "catalog_snapshot_sha256": "3b44c98c663ed46fa4f1d94beb96256d699170b9c2ba5f5a02f99fabcad55bde",
+  "catalog_snapshot_sha256": "7ecdcc989e5e8b532fbafede78a2ec132248c5c2e90744d2dfc8b7141f2fc010",
   "native_api_equivalent_cost": {
     "schema_version": 1,
     "snapshot_date": "2026-08-12",
@@ -1262,7 +1262,7 @@
       "name": "GLM 5.3 Flash (formerly Ox Alpha)",
       "catalog_name": "Z.ai: GLM 5.3 Flash",
       "catalog_status": "available",
-      "recommendation_status": "catalogued-awaiting-local-benchmark",
+      "recommendation_status": "catalogued-local-benchmark-rate-limited",
       "input_usd_per_m": 0.075,
       "output_usd_per_m": 0.25,
       "cache_read_usd_per_m": 0.015,
@@ -1305,12 +1305,19 @@
         "top_p"
       ],
       "reasoning": {
-        "mandatory": null,
-        "default_enabled": null,
-        "supported_efforts": null,
-        "default_effort": null
+        "mandatory": true,
+        "default_enabled": true,
+        "supported_efforts": [
+          "max",
+          "high",
+          "low"
+        ],
+        "default_effort": "max"
       },
-      "default_parameters": {},
+      "default_parameters": {
+        "temperature": 1,
+        "top_p": 0.95
+      },
       "supports_tools": true,
       "supports_reasoning": true,
       "supports_reasoning_effort": true,
@@ -1318,11 +1325,11 @@
       "quality_rank": null,
       "benchmark_evidence": {
         "source": "OpenRouter live catalog and model page",
-        "source_version": "catalog observed 2026-08-27T08:05:25+08:00",
+        "source_version": "catalog observed 2026-08-27T10:12:09+08:00",
         "exact_variant": "z-ai/glm-5.3-flash-20260826",
         "status": "catalog identity and Ox Alpha reveal only; no comparable quality score"
       },
-      "local_evidence": "No local benchmark evidence before 2026-08-27. The 2026-08-27 run was blocked before inference because the resolved OpenRouter key had no verified provider-side weekly USD 10 limit.",
+      "local_evidence": "2026-08-27 pipeline-legacy-translation attempt 1 failed before output with HTTP 429 rate_limited; fallback was disabled, billed cost was $0, and the other three cases were skipped after provider refusal.",
       "role": "Selected for a bounded local benchmark as the live identity formerly called Ox Alpha; this model is not routed.",
       "snapshot_date": "2026-08-27",
       "sources": [
@@ -1332,5 +1339,5 @@
       ]
     }
   ],
-  "catalog_snapshot": "/home/ned/.local/state/openrouter-model-pulse/catalog/models-20260827T080303.json"
+  "catalog_snapshot": "/home/ned/.local/state/openrouter-model-pulse/catalog/models-20260827T100539.json"
 }
