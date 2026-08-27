@@ -226,6 +226,8 @@ else
     OPENROUTER_BUNDLE_VERSION="$OPENROUTER_BUNDLE_VERSION" \
     OPENROUTER_BUNDLE_CACHE_CLASS="$OPENROUTER_BUNDLE_CACHE_CLASS" \
     OPENROUTER_BUNDLE_REASON="$OPENROUTER_BUNDLE_REASON" \
+    MODEL_ROUTER_CODEX_CLI_PATH="$ROUTER_CODEX_CLI" \
+    MODEL_ROUTER_CLAUDE_CLI_PATH="$ROUTER_CLAUDE_CLI" \
     "$DIR/availability-probe.sh" | jq -c '. + {probeSource:"live"}')" || AVAILABILITY='{"probeSource":"live"}'
 fi
 PROBE_SOURCE="$(printf '%s' "$AVAILABILITY" | jq -r '.probeSource')"
@@ -272,6 +274,39 @@ candidate_has_capabilities() {
     | all($needed[]; . as $cap | $candidate.capabilities | index($cap) != null)
     and (($requested | index("read-repository") | not)
       or $candidate.transport == "codex-cli" or $evidence != "")'
+}
+
+closed_openrouter_failure_reason() {
+  local receipt="$1" failure_kind failure_reason http_status
+  if ! jq -e 'type == "object"' "$receipt" >/dev/null 2>&1; then
+    printf '%s\n' provider_transport_failed
+    return
+  fi
+  failure_kind="$(jq -r '.failureKind // empty' "$receipt")"
+  failure_reason="$(jq -r '.failureReason // empty' "$receipt")"
+  http_status="$(jq -r '.httpStatus // empty' "$receipt")"
+  if [ "$http_status" = 404 ]; then
+    printf '%s\n' provider_model_unavailable
+    return
+  fi
+  case "$failure_reason" in
+    key_permission_denied) printf '%s\n' provider_credential_unavailable ;;
+    guardrail_blocked) printf '%s\n' provider_boundary_declined ;;
+    organization_monthly_budget_exceeded) printf '%s\n' organization_monthly_budget_exceeded ;;
+    insufficient_credits) printf '%s\n' insufficient_credits ;;
+    rate_limited) printf '%s\n' rate_limited ;;
+    model_not_found|no_available_provider) printf '%s\n' provider_model_unavailable ;;
+    unknown_http_error) printf '%s\n' unknown_provider_failure ;;
+    "")
+      case "$failure_kind" in
+        transport_error|curl_timeout|stream_timeout|incomplete_stream|stream_error|malformed_stream)
+          printf '%s\n' provider_transport_failed
+          ;;
+        *) printf '%s\n' unknown_provider_failure ;;
+      esac
+      ;;
+    *) printf '%s\n' unknown_provider_failure ;;
+  esac
 }
 
 transport_eligibility() {
@@ -485,11 +520,7 @@ invoke_candidate() {
           < "$prompt_copy" > "$TRANSPORT_OUTPUT" 2>>"$PRIVATE_LOG"
         rc=$?
         if [ "$rc" -ne 0 ]; then
-          if jq -e '.httpStatus == 404 or .failureReason == "model_not_found" or .failureReason == "no_available_provider"' "$PROVIDER_RECEIPT" >/dev/null 2>&1; then
-            INVOKE_REASON="provider_model_unavailable"
-          else
-            INVOKE_REASON="provider_transport_failed"
-          fi
+          INVOKE_REASON="$(closed_openrouter_failure_reason "$PROVIDER_RECEIPT")"
         fi
         rm -f "$system_file" "$prompt_copy"
         return "$rc"

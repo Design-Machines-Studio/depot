@@ -388,7 +388,7 @@
     {
       "name": "model-router",
       "source": "./plugins/model-router",
-      "version": "0.4.0",
+      "version": "0.4.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -456,7 +456,7 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.19.9",
+      "version": "1.19.10",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

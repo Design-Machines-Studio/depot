@@ -87,11 +87,11 @@ protocol below before invoking it.
 
 ## Environment Variables
 
-- `OPENROUTER_API_KEY`: your OpenRouter API key. Never commit it. Mutually
-  exclusive with `OPENROUTER_API_KEY_FILE`.
+- `OPENROUTER_API_KEY`: your OpenRouter API key. Never commit it. A non-empty
+  value takes precedence over `OPENROUTER_API_KEY_FILE`.
 - `OPENROUTER_API_KEY_FILE`: preferred for non-interactive harnesses. The
   wrapper accepts only a non-symlink regular file owned by the current UID with
-  mode 0600 and a single non-empty UTF-8 line.
+  mode 0600 and a single non-empty UTF-8 line when no raw key is present.
 - `OPENROUTER_SYSTEM` (default: terse coding assistant): inline system prompt.
 - `OPENROUTER_SYSTEM_FILE`: readable regular file containing the exact system
   prompt bytes. It is mutually exclusive with `OPENROUTER_SYSTEM`; authorized

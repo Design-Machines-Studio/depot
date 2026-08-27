@@ -12,7 +12,9 @@ including `rate_limit_probe_no_response`, `rate_limit_response_malformed`,
 `workflow_kernel_unavailable`, `provider_bundle_unavailable`,
 `provider_credential_unavailable`, `provider_availability_unknown`,
 `provider_boundary_declined`, `provider_transport_failed`,
-`provider_model_unavailable`, `browser_transport_unavailable`, and
+`provider_model_unavailable`, `organization_monthly_budget_exceeded`,
+`insufficient_credits`, `rate_limited`, `unknown_provider_failure`,
+`browser_transport_unavailable`, and
 `model_participant_unavailable`. They
 never contain raw CLI/provider output, account identity, quota balances,
 credentials, prompts, or private paths.

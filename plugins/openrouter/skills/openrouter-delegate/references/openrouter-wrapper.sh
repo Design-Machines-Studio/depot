@@ -13,8 +13,8 @@
 #   OPENROUTER_API_KEY   required unless OPENROUTER_API_KEY_FILE is used
 #   OPENROUTER_API_KEY_FILE
 #                       optional regular, non-symlink key file owned by the
-#                       current UID with mode 0600; mutually exclusive with
-#                       OPENROUTER_API_KEY
+#                       current UID with mode 0600; used only when
+#                       OPENROUTER_API_KEY is empty
 #   OPENROUTER_SYSTEM    optional system prompt (default: terse coding assistant)
 #   OPENROUTER_SYSTEM_FILE
 #                       optional byte-preserving system prompt file; mutually
@@ -113,11 +113,6 @@ CREDENTIAL_LOADER="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/openrouter-cred
 if load_openrouter_api_key; then
   :
 else
-  credential_rc=$?
-  if [ "$credential_rc" -eq 2 ]; then
-    echo "### RUNNER FAILURE: OPENROUTER_API_KEY and OPENROUTER_API_KEY_FILE are mutually exclusive" >&2
-    exit 2
-  fi
   echo "### RUNNER FAILURE: OPENROUTER_API_KEY_FILE must be a non-symlink regular file owned by the current UID with mode 0600 and one non-empty line" >&2
   exit 1
 fi

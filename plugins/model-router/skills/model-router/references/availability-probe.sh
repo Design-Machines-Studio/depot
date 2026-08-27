@@ -17,8 +17,10 @@ set -uo pipefail
 
 # Resolve supported CLIs from the operator's incoming PATH, then reset PATH
 # before every other lookup. Exact machine paths are process-local evidence.
-CODEX_CLI="$(command -v codex 2>/dev/null || true)"
-CLAUDE_CLI="$(command -v claude 2>/dev/null || true)"
+CODEX_CLI="${MODEL_ROUTER_CODEX_CLI_PATH:-}"
+CLAUDE_CLI="${MODEL_ROUTER_CLAUDE_CLI_PATH:-}"
+[ -n "$CODEX_CLI" ] && [ -x "$CODEX_CLI" ] || CODEX_CLI="$(command -v codex 2>/dev/null || true)"
+[ -n "$CLAUDE_CLI" ] && [ -x "$CLAUDE_CLI" ] || CLAUDE_CLI="$(command -v claude 2>/dev/null || true)"
 PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export PATH
 
@@ -354,7 +356,7 @@ EOF
 
 openrouter_json() {
   local response="" rc=0 balance="" credential_loader="" active_host="" bundle_json="" bundle_ref="" header_file="" probe_key="" credential_state="missing"
-  if [ -n "${OPENROUTER_API_KEY_FILE:-}" ] && [ -z "${OPENROUTER_API_KEY:-}" ]; then
+  if [ -n "${OPENROUTER_API_KEY:-}" ] || [ -n "${OPENROUTER_API_KEY_FILE:-}" ]; then
     case "${OPENROUTER_BUNDLE_RESOLVED:-0}:${OPENROUTER_BUNDLE_REF:-}" in
       "1:~/"*) credential_loader="$HOME/${OPENROUTER_BUNDLE_REF#\~/}/skills/openrouter-delegate/references/openrouter-credential.sh" ;;
     esac
@@ -387,6 +389,8 @@ openrouter_json() {
       # shellcheck source=/dev/null
       . "$credential_loader"
       load_openrouter_api_key || OPENROUTER_API_KEY=""
+    else
+      OPENROUTER_API_KEY=""
     fi
   fi
   if [ -n "${OPENROUTER_API_KEY:-}" ]; then

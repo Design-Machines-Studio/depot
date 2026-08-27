@@ -534,6 +534,27 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         result.receipt_path = receipt  # type: ignore[attr-defined]
         return result
 
+    def credential_transport(
+        self, *, raw_key: str | None, key_file: Path | None,
+    ) -> subprocess.CompletedProcess[str]:
+        """Exercise shared credential resolution through the loopback wrapper."""
+        receipt = self.root / "credential-receipt.json"
+        env = self.env()
+        env.pop("OPENROUTER_API_KEY", None)
+        env.pop("OPENROUTER_API_KEY_FILE", None)
+        if raw_key is not None:
+            env["OPENROUTER_API_KEY"] = raw_key
+        if key_file is not None:
+            env["OPENROUTER_API_KEY_FILE"] = str(key_file)
+        result = subprocess.run(
+            [str(WRAPPER), "z-ai/glm-5.2", "safe", "10"],
+            env={**env, "OPENROUTER_RECEIPT_FILE": str(receipt)},
+            text=True,
+            capture_output=True,
+        )
+        result.receipt_path = receipt  # type: ignore[attr-defined]
+        return result
+
     def test_direct_is_one_pass_and_receipt_is_content_free(self) -> None:
         result = self.direct("Review harmless public configuration.")
         self.assertEqual(result.returncode, 0, result.stderr)
@@ -805,6 +826,48 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
                              text=True, capture_output=True)
         self.assertEqual(bad.returncode, 1)
         self.assertEqual(FixtureHandler.contacts, contacts)
+
+    def test_raw_environment_credential_only(self) -> None:
+        result = self.credential_transport(raw_key="test", key_file=None)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(FixtureHandler.authorizations, ["Bearer test"])
+
+    def test_key_file_credential_only(self) -> None:
+        key = self.root / "file-only-key"
+        key.write_text("test\n")
+        key.chmod(0o600)
+        result = self.credential_transport(raw_key=None, key_file=key)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(FixtureHandler.authorizations, ["Bearer test"])
+
+    def test_raw_environment_credential_wins_when_both_are_present(self) -> None:
+        file_marker = "FILE_SECRET_FIXTURE_MARKER"
+        key = self.root / "lower-precedence-key"
+        key.write_text(file_marker + "\n")
+        key.chmod(0o600)
+        result = self.credential_transport(raw_key="test", key_file=key)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(FixtureHandler.authorizations, ["Bearer test"])
+        receipt_text = result.receipt_path.read_text()  # type: ignore[attr-defined]
+        visible = result.stdout + result.stderr + receipt_text
+        self.assertNotIn(file_marker, visible)
+        self.assertNotIn("Bearer test", visible)
+
+    def test_invalid_key_file_without_raw_credential_fails_closed(self) -> None:
+        key = self.root / "invalid-key"
+        key.write_text("FILE_SECRET_FIXTURE_MARKER\n")
+        key.chmod(0o644)
+        result = self.credential_transport(raw_key=None, key_file=key)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(FixtureHandler.contacts, 0)
+        self.assertNotIn("FILE_SECRET_FIXTURE_MARKER", result.stdout + result.stderr)
+        self.assertFalse(result.receipt_path.exists())  # type: ignore[attr-defined]
+
+    def test_missing_credential_sources_fail_closed(self) -> None:
+        result = self.credential_transport(raw_key=None, key_file=None)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(FixtureHandler.contacts, 0)
+        self.assertFalse(result.receipt_path.exists())  # type: ignore[attr-defined]
 
     def init_repo(self, name: str = "repo") -> Path:
         repo = self.root / name
