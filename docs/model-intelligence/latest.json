@@ -1,6 +1,6 @@
 {
   "benchmarks": {
-    "attempts": 7,
+    "attempts": 8,
     "groups": [
       {
         "attempts": 1,
@@ -60,12 +60,13 @@
       }
     ],
     "incomplete_attempts": [
-      "/home/ned/benchmark-results/depot-role-v1/2026-08-27/openrouter/z-ai/glm-5.3-flash/pipeline-legacy-translation/run-1"
+      "/home/ned/benchmark-results/depot-role-v1/2026-08-27/openrouter/z-ai/glm-5.3-flash/pipeline-legacy-translation/run-1",
+      "/home/ned/benchmark-results/depot-role-v1/2026-08-27/openrouter/z-ai/glm-5.3-flash/pipeline-legacy-translation/run-2"
     ],
     "measured_cost_usd": 0.0,
     "result_root": "/home/ned/benchmark-results/depot-role-v1"
   },
-  "generated_at": "2026-08-27T10:13:42+08:00",
+  "generated_at": "2026-08-27T10:49:36+08:00",
   "production": {
     "artifact_paths": {
       "metrics": [

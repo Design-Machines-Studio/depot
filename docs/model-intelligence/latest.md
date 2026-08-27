@@ -5,8 +5,8 @@
 - Run cost summaries: 3
 - Workflow metrics: 3
 - Empty cost summaries: 2
-- Benchmark attempts: 7
-- Incomplete benchmark attempts: 1
+- Benchmark attempts: 8
+- Incomplete benchmark attempts: 2
 
 ## Production economics by model
 
