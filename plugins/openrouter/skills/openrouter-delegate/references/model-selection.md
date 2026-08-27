@@ -26,9 +26,8 @@ receipt before a later paid or policy-changing run.
 | `x-ai/grok-4.6` | $2 / $6 | 500,000 | Demanding bounded reasoning and distinct-family evidence |
 | `google/gemini-3.7-flash` | $0.375 / $1.875 | 1,048,576 | Fast multimodal/tools/web-search evidence |
 | `meta/muse-spark-1.2` | $1.25 / $4.25 | 1,048,576 | Catalogued; no text-only active consumer |
-| `z-ai/glm-5.2` | $1.19 / $3.74 | 1,048,576 | Evidence only; excluded from every active ladder |
 | `z-ai/glm-5.3` | $1.40 / $4.40 | 1,048,576 | Catalogued-not-routed; mandatory reasoning defaults to max |
-| `z-ai/glm-5.3-flash` | $0.075 / $0.25 | 1,310,720 | Formerly Ox Alpha; no attempt after all harness repairs and not routed |
+| `z-ai/glm-5.3-flash` | $0.075 / $0.25 | 1,310,720 | Formerly Ox Alpha; three corrected pipeline attempts at 100/100; single-case evidence only |
 | `moonshotai/kimi-k3` | $3 / $15 | 1,048,576 | Focused security-analysis evidence at high cost |
 | `openai/gpt-5.6-luna` | $0.20 / $1.20 | 1,050,000 | Economical mechanical-analysis evidence |
 | `openai/gpt-5.6-terra` | $2 / $12 | 1,050,000 | Catalogued compatibility evidence; no default role |
@@ -110,8 +109,9 @@ exclude private and ZDR activity. DeepSeek V4 Flash 0731's very low measured
 cost and second-place OpenRouter usage reinforce its bounded-work candidacy,
 while its lower index and middling task time argue against treating it as a deep
 reasoning default. Gemini 3.7 Flash remains the fast research head. Kimi remains
-focused on security because its strong score came with high time and cost. GLM
-5.2's adoption does not outweigh its weaker coding result and local evidence.
+focused on security because its strong score came with high time and cost.
+Historical GLM 5.2 evidence is retained but is not transferred to either exact
+GLM 5.3 variant.
 
 Ox Alpha was revealed as the exact live identity `z-ai/glm-5.3-flash`; it is
 catalogued for the local suite but not routed. Two initial HTTP 429 attempts
@@ -121,7 +121,14 @@ DeepSeek control both returned the requested chunk directly, proving that the
 prompt still failed to require the top-level `chunks` envelope. Those results
 are retained but not comparable.
 
-After OpenRouter 1.19.8 made that envelope explicit, three exact
+After OpenRouter 1.19.9 made the complete prompt contract explicit, three exact
+`z-ai/glm-5.3-flash` attempts scored 100/100 with no model fallback. Their
+comparable medians were 5 seconds, 160 prompt tokens, 155 completion tokens,
+111 reasoning tokens, and $0.0000975 provider-billed cost. The three other
+applicable cases and production canary remain untested, so GLM 5.3 Flash is not
+routed.
+
+After OpenRouter 1.19.9 made that envelope explicit, three exact
 `deepseek/deepseek-v4-pro-0813` attempts scored 100/100 with no model fallback.
 Their comparable medians were 6 seconds, 163 prompt tokens, 258 completion
 tokens, 195 reasoning tokens, and $0.00123684 provider-billed cost. This

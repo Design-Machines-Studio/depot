@@ -231,7 +231,7 @@
         "exact_variant": null,
         "status": "vendor-family-claims-only; no comparable exact-0813 score located"
       },
-      "local_evidence": "2026-08-17 canary produced a valid seven-line minimal unified diff in 7 seconds; 125 prompt, 709 completion, 661 reasoning tokens; $0.00297264. On 2026-08-27, one retained pipeline-legacy-translation control scored 15/100 before the top-level chunks envelope was explicit and is not comparable. After OpenRouter 1.19.8 repaired that prompt, three exact-model attempts scored 100/100 with no model fallback; comparable medians were 6 seconds, 163 prompt tokens, 258 completion tokens, 195 reasoning tokens, and $0.00123684 provider-billed cost. Single-case evidence does not justify a routing change.",
+      "local_evidence": "2026-08-17 canary produced a valid seven-line minimal unified diff in 7 seconds; 125 prompt, 709 completion, 661 reasoning tokens; $0.00297264. On 2026-08-27, one retained pipeline-legacy-translation control scored 15/100 before the top-level chunks envelope was explicit and is not comparable. After OpenRouter 1.19.9 repaired that prompt, three exact-model attempts scored 100/100 with no model fallback; comparable medians were 6 seconds, 163 prompt tokens, 258 completion tokens, 195 reasoning tokens, and $0.00123684 provider-billed cost. Single-case evidence does not justify a routing change.",
       "role": "Catalog and local single-case evidence support long-context reasoning, tools, and structured output; this model remains a later routed candidate rather than a role head.",
       "snapshot_date": "2026-08-27",
       "sources": [
@@ -1262,7 +1262,7 @@
       "name": "GLM 5.3 Flash (formerly Ox Alpha)",
       "catalog_name": "Z.ai: GLM 5.3 Flash",
       "catalog_status": "available",
-      "recommendation_status": "catalogued-awaiting-comparable-local-benchmark",
+      "recommendation_status": "candidate-bounded-execution-evidence",
       "input_usd_per_m": 0.075,
       "output_usd_per_m": 0.25,
       "cache_read_usd_per_m": 0.015,
@@ -1329,8 +1329,8 @@
         "exact_variant": "z-ai/glm-5.3-flash-20260826",
         "status": "catalog identity and Ox Alpha reveal only; no comparable quality score"
       },
-      "local_evidence": "2026-08-27 retained four pipeline-legacy-translation attempts. Attempts 1-2 hit HTTP 429 because same-model provider fallback was incorrectly disabled. Attempt 3 used an under-specified mapping prompt. Attempt 4 reached Modal and parsed, but a DeepSeek control proved the prompt still failed to require the top-level chunks envelope. No GLM attempt remains after all three harness repairs; total retained GLM billed cost was $0.000430069465. The other cases were not run.",
-      "role": "Selected for a bounded local benchmark as the live identity formerly called Ox Alpha; this model is not routed.",
+      "local_evidence": "2026-08-27 retained seven pipeline-legacy-translation attempts. Attempts 1-2 hit HTTP 429 because same-model provider fallback was incorrectly disabled; attempts 3-4 predated the complete prompt contract and are not comparable. After OpenRouter 1.19.9 made the mapping and top-level chunks envelope explicit, three exact-model attempts scored 100/100 with no model fallback; comparable medians were 5 seconds, 160 prompt tokens, 155 completion tokens, 111 reasoning tokens, and $0.0000975 provider-billed cost. Total retained GLM billed cost was $0.000705319465. The other three applicable cases were not run, so no routing change is justified.",
+      "role": "Catalog and local single-case evidence support bounded structured transformation; this model is not routed and is not a role head.",
       "snapshot_date": "2026-08-27",
       "sources": [
         "https://openrouter.ai/api/v1/models",
