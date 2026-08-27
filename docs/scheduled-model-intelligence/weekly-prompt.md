@@ -99,7 +99,8 @@ case capabilities. Admission to the matrix is not admission to role policy.
 ## 3. Run controlled comparisons
 
 For each OpenRouter candidate and applicable case, use a unique directory and
-disable fallback through the existing runner:
+disable model fallback through the existing runner. Same-model provider fallback
+must remain enabled so endpoint capacity does not masquerade as model failure:
 
 ```sh
 "$BENCH" --run \

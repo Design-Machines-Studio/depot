@@ -118,7 +118,7 @@ case "$COMMAND" in
     "$BOUNDARY" --mode artifact-delegation --policy "$POLICY" --content-file "$system" --content-file "$prompt" >/dev/null
     start="$(date +%s)"
     env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$system" OPENROUTER_WORKLOAD=mechanical \
-      OPENROUTER_ALLOW_FALLBACKS=0 OPENROUTER_RECEIPT_FILE="$receipt" \
+      OPENROUTER_RECEIPT_FILE="$receipt" \
       "$WRAPPER" "$MODEL" - 3600 < "$prompt" > "$output"
     end="$(date +%s)"; DURATION="$((end-start))"; OUTPUT_FILE="$output"; RECEIPT_FILE="$receipt"; RESULT_FILE="$result"
     score_case

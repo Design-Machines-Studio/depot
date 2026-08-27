@@ -141,6 +141,7 @@ Security is the sole Kimi route:
 moonshotai/kimi-k3 -> x-ai/grok-4.6
 ```
 
-Set `OPENROUTER_ALLOW_FALLBACKS=0` for a measured one-model call. Receipts must
-record the requested and returned model so provider fallback is never confused
-with model-family independence.
+Pass exactly one model slug and no fallback slug for a measured one-model call.
+Leave same-model provider fallback enabled so a transient endpoint failure does
+not invalidate the candidate. Receipts must record requested and returned models,
+model fallback, and provider-fallback policy as separate evidence.
