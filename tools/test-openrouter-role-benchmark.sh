@@ -18,6 +18,7 @@ assert grep -Fq '"executorEffort":"medium"' "$TMP/prompt"
 assert grep -Fq '"executorCapabilities":["read-repository","write-repository","structured-output"]' "$TMP/prompt"
 assert grep -Fq '"legacyExecutorTranslation":{"occurred":true,"sourceField":"executor"}' "$TMP/prompt"
 assert grep -Fq 'no Markdown fences or prose' "$TMP/prompt"
+assert grep -Fq 'Return the translated chunk as the sole entry in a top-level "chunks" array; do not return the chunk object directly.' "$TMP/prompt"
 
 printf '%s\n' '{"chunks":[{"id":"docs-1","executor":"openrouter","kind":"docs"}]}' > "$TMP/legacy"
 "$ROOT/plugins/pipeline/references/translate-legacy-executor.sh" "$TMP/legacy" > "$TMP/output"
