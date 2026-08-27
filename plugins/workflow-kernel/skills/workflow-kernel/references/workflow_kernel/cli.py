@@ -284,7 +284,18 @@ def command_decide_validation_retry(args):
     return 0
 
 
-def _load_json(path):
+def _load_json(path, *, strict=False):
+    def reject_duplicate_object(pairs):
+        value = {}
+        for key, item in pairs:
+            if key in value:
+                raise ValueError("duplicate JSON member")
+            value[key] = item
+        return value
+
+    def reject_constant(_value):
+        raise ValueError("non-finite JSON constant")
+
     try:
         binding = bind_durable_path(Path(path))
         with _OwnedResourceScope() as owned:
@@ -300,8 +311,17 @@ def _load_json(path):
                 total += len(chunk)
                 if total > MAX_JSON_BYTES:
                     raise ValueError("json input too large")
-            return json.loads(b"".join(chunks).decode("utf-8"))
-    except (OSError, UnicodeError, json.JSONDecodeError, RecursionError):
+            raw = b"".join(chunks).decode("utf-8")
+            if strict:
+                return json.loads(
+                    raw,
+                    object_pairs_hook=reject_duplicate_object,
+                    parse_constant=reject_constant,
+                )
+            return json.loads(raw)
+    except (
+        OSError, UnicodeError, ValueError, json.JSONDecodeError, RecursionError,
+    ):
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
             ErrorDetailKey.REASON_CODE.value: "invalid_json_input",
         }) from None
@@ -1231,6 +1251,34 @@ def command_observe_pipeline(args):
     _emit({
         "observed": True, "event_count": len(events), "output": str(output),
         "prediction_bound": False,
+    })
+    return 0
+
+
+def command_reconcile_legacy_browser(args):
+    """Atomically append Pipeline's one closed legacy-browser supersession."""
+    from .pipeline_adapter import build_legacy_browser_reconciliation
+
+    _reject_symlinked_components(args.events)
+    lock_descriptor = _open_receipt_stream_lock(args.events)
+    try:
+        fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+        receipts = _load_json(args.events, strict=True)
+        candidate = build_legacy_browser_reconciliation(
+            receipts,
+            target_sequence=args.target_sequence,
+            occurred_at=args.occurred_at,
+            authoritative_receipt=args.authoritative_receipt,
+        )
+        _write_json(args.events, list(candidate))
+    finally:
+        os.close(lock_descriptor)
+    receipt = candidate[-1]
+    _emit({
+        "reconciled": True,
+        "sequence": receipt["sequence"],
+        "target_sequence": receipt["target_sequence"],
+        "target_receipt_digest": receipt["target_receipt_digest"],
     })
     return 0
 
@@ -3756,6 +3804,27 @@ def parser():
     observe_pipeline.add_argument("--receipts", required=True)
     observe_pipeline.add_argument("--state-dir", required=True)
     observe_pipeline.set_defaults(handler=command_observe_pipeline)
+
+    reconcile_legacy_browser = commands.add_parser(
+        "reconcile-legacy-browser",
+        help="append the closed Pipeline legacy browser-recovery reconciliation",
+        description=(
+            "Derive and atomically append one reconciliation for an exact earlier "
+            "blocked browser_recovery row that lacks recovery_receipts. The "
+            "original row remains unchanged; all other invalid rows are rejected."
+        ),
+    )
+    reconcile_legacy_browser.add_argument("--events", required=True)
+    reconcile_legacy_browser.add_argument(
+        "--target-sequence", required=True, type=int,
+    )
+    reconcile_legacy_browser.add_argument("--occurred-at", required=True)
+    reconcile_legacy_browser.add_argument(
+        "--authoritative-receipt", required=True,
+    )
+    reconcile_legacy_browser.set_defaults(
+        handler=command_reconcile_legacy_browser,
+    )
 
     observe_review = commands.add_parser("observe-review", help="observe authoritative review receipts")
     observe_review.add_argument("--request", required=True)

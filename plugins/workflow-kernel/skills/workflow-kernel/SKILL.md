@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.17.0
+version: 0.18.0
 ---
 
 # Workflow Kernel
@@ -77,7 +77,9 @@ command.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
-0.17.0 surface includes state/replay and inspection commands, exact-ref
+0.18.0 surface adds the Pipeline-owned `reconcile-legacy-browser` writer for
+one exact historical blocked receipt; it preserves the original row and cannot
+create browser or terminal success. The 0.17.0 surface includes state/replay and inspection commands, exact-ref
 repository verification planning/execution with deterministic fresh results,
 initial contract binding and retry
 decisions, prediction/observation/comparison, canonical review-contribution
@@ -96,6 +98,12 @@ Consume successful operational output and errors as stable JSON. Treat
   one exact expected feature head. Quick review may remain quick or escalate to
   full, but it may never produce another effective mode or contradict its
   requested mode without a recorded escalation.
+- Pipeline may reconcile only one exact earlier legacy `browser_recovery` row
+  through `reconcile-legacy-browser`. The later reconciliation binds the raw
+  canonical receipt digest, run, sequence, stage, and current contract digest
+  under the fixed `legacy_browser_recovery_missing_canonical_proof` reason. The
+  target remains blocked; duplicates, mismatches, already-canonical targets,
+  and every broader omission fail closed.
 - Evaluate persona/browser coverage with
   `VerificationGate.evaluate(..., work_kind=..., rendered_surface=...)`.
   `rendered_surface` is the independent closed applicability value
