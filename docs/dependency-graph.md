@@ -76,7 +76,7 @@ graph LR
 | ned | superpowers | optional | `>=1.0.0` |
 | pipeline | dm-review | required | `>=1.74.0` |
 | pipeline | model-router | required | `>=0.4.0` |
-| pipeline | workflow-kernel | required | `>=0.18.0` |
+| pipeline | workflow-kernel | required | `>=0.18.1` |
 | pipeline | ned | optional | `>=1.4.0` |
 | pipeline | design-machines | optional | `>=1.3.0` |
 | pipeline | assembly | optional | `>=3.10.1` |
