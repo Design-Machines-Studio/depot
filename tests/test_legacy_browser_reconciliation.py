@@ -30,7 +30,7 @@ class LegacyBrowserReconciliationTests(unittest.TestCase):
         return list(build_legacy_browser_reconciliation(
             self.receipts(),
             target_sequence=1,
-            occurred_at="2026-01-01T00:03:00Z",
+            occurred_at="2026-01-01T00:09:00Z",
             authoritative_receipt="receipts/legacy-reconciliation.json",
         ))
 
@@ -46,8 +46,48 @@ class LegacyBrowserReconciliationTests(unittest.TestCase):
         self.assertEqual(events[2].payload["stage"], "browser_verification")
         self.assertEqual(events[2].payload["status"], "passed")
         self.assertEqual(events[2].payload["browser_passed"], 1)
-        self.assertEqual(events[3].payload["stage"], "legacy_browser_reconciliation")
-        self.assertEqual(events[3].payload["status"], "recorded")
+        self.assertEqual(events[-1].payload["stage"], "legacy_browser_reconciliation")
+        self.assertEqual(events[-1].payload["status"], "recorded")
+
+    def test_closed_historical_stage_set_preserves_identity_and_semantics(self):
+        original = self.receipts()
+        events = translate_pipeline_receipts(self.reconciled())
+        historical = original[3:]
+        self.assertEqual(len(events), len(original) + 1)
+        self.assertEqual(
+            [receipt["stage"] for receipt in historical],
+            [
+                "chunk", "run", "shadow_observation", "shadow_comparison",
+                "metrics", "cost_summary",
+            ],
+        )
+        for receipt, event in zip(historical, events[3:9]):
+            with self.subTest(stage=receipt["stage"]):
+                self.assertEqual(event.payload["stage"], receipt["stage"])
+                self.assertEqual(event.payload["status"], receipt["status"])
+                self.assertEqual(
+                    event.payload["reason_code"], receipt["reason_code"],
+                )
+                field = (
+                    "cost_usd"
+                    if receipt["stage"] == "cost_summary" else "usage_count"
+                )
+                self.assertEqual(event.payload[field], receipt[field])
+        self.assertEqual(events[3].payload["status"], "failed")
+        self.assertEqual(events[4].payload["status"], "skipped")
+
+    def test_unknown_and_retired_stages_remain_rejected(self):
+        for stage in (
+            "unknown_future_stage",
+            "verification_contract_revised",
+            "verification_contract_revision_authorized",
+        ):
+            candidate = copy.deepcopy(self.reconciled())
+            candidate[3]["stage"] = stage
+            with self.subTest(stage=stage), self.assertRaisesRegex(
+                ValueError, "unknown receipt stage",
+            ):
+                translate_pipeline_receipts(candidate)
 
     def test_wrong_identity_contract_order_or_reason_fails_closed(self):
         mutations = {}
@@ -110,21 +150,22 @@ class LegacyBrowserReconciliationTests(unittest.TestCase):
         receipts = self.receipts()
         first_claim = self.reconciled()[-1]
         second_target = copy.deepcopy(receipts[1])
+        second_sequence = len(receipts)
         second_target.update({
-            "sequence": 3,
-            "occurred_at": "2026-01-01T00:03:00Z",
+            "sequence": second_sequence,
+            "occurred_at": "2026-01-01T00:09:00Z",
             "authoritative_receipt": "receipts/second-target.json",
         })
         first_claim.update({
-            "sequence": 4,
-            "occurred_at": "2026-01-01T00:04:00Z",
+            "sequence": second_sequence + 1,
+            "occurred_at": "2026-01-01T00:10:00Z",
         })
         second_claim = copy.deepcopy(first_claim)
         second_claim.update({
-            "sequence": 5,
-            "occurred_at": "2026-01-01T00:05:00Z",
+            "sequence": second_sequence + 2,
+            "occurred_at": "2026-01-01T00:11:00Z",
             "authoritative_receipt": "receipts/second-reconciliation.json",
-            "target_sequence": 3,
+            "target_sequence": second_sequence,
             "target_receipt_digest": canonical_observation_receipt_digest(
                 second_target,
             ),

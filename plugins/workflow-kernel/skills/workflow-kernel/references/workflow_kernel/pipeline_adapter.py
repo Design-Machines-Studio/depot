@@ -34,6 +34,9 @@ PIPELINE_STAGES = frozenset({
     "requirements_cross_check", "terminal_reconciliation", "run_summary",
     "verification_contract_bound",
     "attempt_usage", "browser_recovery",
+    # Closed retained identities emitted by the historical Pipeline ledger.
+    "chunk", "run", "shadow_observation", "shadow_comparison", "metrics",
+    "cost_summary",
     LEGACY_BROWSER_RECONCILIATION_STAGE,
 })
 _RUN_ID_SEPARATORS = re.compile(r"[^a-z0-9]+")
