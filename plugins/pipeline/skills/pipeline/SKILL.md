@@ -116,6 +116,12 @@ After producing `independent-prediction-receipts.json` and before any correspond
 "$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest plans/<feature-slug>/manifest.json --prediction-receipts plans/<feature-slug>/independent-prediction-receipts.json --state-dir plans/<feature-slug>
 ```
 
+When an owner-approved retained ledger contains the closed legacy
+`browser_recovery` shape, load
+`plugins/pipeline/references/legacy-browser-reconciliation.md`. Never skip or
+rewrite that row. Use only that reference's canonical writer before observation;
+all other invalid receipt input remains fail-closed.
+
 At each phase boundary, append the authoritative receipt to the cumulative ordered redacted ledger; do not invoke the observer per phase. After all implementation chunks complete and before the approved final review, rewrite `plans/<feature-slug>/authoritative-receipts.json` through the `all-chunks-complete` boundary and invoke exactly:
 
 ```text

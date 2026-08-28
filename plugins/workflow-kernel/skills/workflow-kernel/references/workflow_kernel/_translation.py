@@ -14,15 +14,19 @@ import math
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from types import MappingProxyType
 from typing import Iterable, Mapping, Optional, Tuple
 
 from .model import GateDecision, HostCapability, NodeSpec, WorkflowClass
 from .redaction import (
-    contains_high_confidence_secret, normalize_evidence_reference, redact,
-    sanitize_durable_payload,
+    MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH,
+    MAX_TOTAL_STRING_BYTES, bounded_iterable, contains_high_confidence_secret,
+    freeze_json, normalize_evidence_reference, redact, sanitize_durable_payload,
+    thaw,
 )
 from .schema import KernelError, WorkflowEvent
+from .transitions import MAX_EVENT_ITEMS
 
 
 # Single execution-mode vocabulary, matching the Markdown contract
@@ -82,6 +86,9 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "raw_lane_outputs_digest",
     "human_intervention_id", "human_intervention_reason",
     "human_intervention", "missing_case_ids", "recovery_receipt_digests",
+    "target_run_id", "target_sequence", "target_stage",
+    "target_receipt_digest", "target_contract_digest",
+    "reconciliation_reason",
     "matrix_snapshot_date", "rung_rationale", "diff_scope",
     "full_diff_override", "slice_status",
     "selective_rerun", "lanes_rerun", "lanes_skipped", "rerun_reasons",
@@ -241,6 +248,21 @@ _CANONICAL_FINDING_ID = re.compile(r"finding-v1:sha256\(([0-9a-f]{64})\)\Z")
 _LINE_ANCHOR = re.compile(r"lines=([1-9][0-9]*)-([1-9][0-9]*)\Z")
 _MAX_MISSING_CASE_IDS = 256
 _MAX_MISSING_CASE_ID_BYTES = 16_384
+LEGACY_BROWSER_RECONCILIATION_STAGE = "legacy_browser_reconciliation"
+LEGACY_BROWSER_RECONCILIATION_REASON = (
+    "legacy_browser_recovery_missing_canonical_proof"
+)
+_LEGACY_BROWSER_RECONCILIATION_FIELDS = frozenset({
+    "target_run_id", "target_sequence", "target_stage",
+    "target_receipt_digest", "target_contract_digest",
+    "reconciliation_reason",
+})
+_LEGACY_BROWSER_RECONCILIATION_RECEIPT_FIELDS = (
+    _LEGACY_BROWSER_RECONCILIATION_FIELDS | frozenset({
+        "run_id", "sequence", "stage", "status", "occurred_at",
+        "authoritative_receipt", "contract_digest",
+    })
+)
 
 
 def required_text(value: object, field: str) -> str:
@@ -765,7 +787,9 @@ def validate_family_independence(receipt: Mapping[str, object]) -> None:
             raise ValueError("independent review family overlap")
 
 
-def _validate_observation_receipt(receipt: dict) -> dict:
+def _validate_observation_receipt(
+    receipt: dict, *, allow_legacy_browser_missing_proof: bool = False,
+) -> dict:
     """Validate optional telemetry without treating it as authoritative."""
     receipt.pop("human_intervention", None)
     if "decision_profile" in receipt:
@@ -1056,22 +1080,25 @@ def _validate_observation_receipt(receipt: dict) -> dict:
     browser_recoveries = ()
     if receipt.get("stage") == "browser_recovery":
         recovery_values = receipt.get("recovery_receipts")
-        if type(recovery_values) is not list or not recovery_values:
+        if (
+            type(recovery_values) is not list or not recovery_values
+        ) and not allow_legacy_browser_missing_proof:
             raise ValueError("browser recovery lacks canonical proof")
-        try:
-            from .browser_evidence import BrowserRecoveryReceipt
-            browser_recoveries = tuple(
-                BrowserRecoveryReceipt.from_dict(value)
-                for value in recovery_values
-            )
-        except (TypeError, ValueError):
-            raise ValueError("browser recovery lacks canonical proof") from None
-        receipt["recovery_receipt_digests"] = [
-            "sha256:" + hashlib.sha256(json.dumps(
-                value.to_dict(), sort_keys=True, separators=(",", ":"),
-            ).encode("utf-8")).hexdigest()
-            for value in browser_recoveries
-        ]
+        if recovery_values:
+            try:
+                from .browser_evidence import BrowserRecoveryReceipt
+                browser_recoveries = tuple(
+                    BrowserRecoveryReceipt.from_dict(value)
+                    for value in recovery_values
+                )
+            except (TypeError, ValueError):
+                raise ValueError("browser recovery lacks canonical proof") from None
+            receipt["recovery_receipt_digests"] = [
+                "sha256:" + hashlib.sha256(json.dumps(
+                    value.to_dict(), sort_keys=True, separators=(",", ":"),
+                ).encode("utf-8")).hexdigest()
+                for value in browser_recoveries
+            ]
 
     validation_help = (
         receipt.get("stage") == "deterministic_validation"
@@ -1117,9 +1144,12 @@ def _validate_observation_receipt(receipt: dict) -> dict:
             ):
                 raise ValueError("browser intervention lacks case identity")
             receipt["missing_case_ids"] = cases
-            if len(browser_recoveries) != len(cases):
-                raise ValueError("browser intervention lacks recovery proof")
             if (
+                not allow_legacy_browser_missing_proof
+                and len(browser_recoveries) != len(cases)
+            ):
+                raise ValueError("browser intervention lacks recovery proof")
+            if not allow_legacy_browser_missing_proof and (
                 tuple(value.case_id for value in browser_recoveries) != tuple(cases)
                 or any(
                     value.status != "blocked"
@@ -1131,6 +1161,118 @@ def _validate_observation_receipt(receipt: dict) -> dict:
                 raise ValueError("browser intervention lacks recovery proof")
         receipt["human_intervention"] = True
     return receipt
+
+
+def canonical_observation_receipt_digest(receipt: object) -> str:
+    """Digest one exact bounded raw receipt without rewriting its history."""
+    if type(receipt) is not dict:
+        raise ValueError("invalid reconciliation target")
+
+    def require_exact_json(value: object, depth: int = 0) -> None:
+        if depth > MAX_PAYLOAD_DEPTH:
+            raise ValueError("invalid reconciliation target")
+        if value is None or type(value) in {bool, str, int, float}:
+            return
+        if type(value) is list:
+            for item in bounded_iterable(value, max_items=MAX_PAYLOAD_ITEMS):
+                require_exact_json(item, depth + 1)
+            return
+        if type(value) is dict:
+            for key in bounded_iterable(value, max_items=MAX_PAYLOAD_ITEMS):
+                if type(key) is not str:
+                    raise ValueError("invalid reconciliation target")
+                require_exact_json(value[key], depth + 1)
+            return
+        raise ValueError("invalid reconciliation target")
+
+    try:
+        require_exact_json(receipt)
+        snapshot = thaw(freeze_json(
+            receipt,
+            max_depth=MAX_PAYLOAD_DEPTH,
+            max_items=MAX_PAYLOAD_ITEMS,
+            max_string_length=MAX_STRING_LENGTH,
+            max_total_string_bytes=MAX_TOTAL_STRING_BYTES,
+        ))
+        if snapshot != receipt:
+            raise ValueError("invalid reconciliation target")
+        encoded = json.dumps(
+            snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+    except (OverflowError, TypeError, ValueError, RecursionError):
+        raise ValueError("invalid reconciliation target") from None
+    return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+
+def timezone_aware_timestamp(value: object, name: str) -> datetime:
+    """Parse one exact timezone-aware ISO-8601 receipt timestamp."""
+    try:
+        parsed = datetime.fromisoformat(
+            required_text(value, name).replace("Z", "+00:00"),
+        )
+    except ValueError:
+        raise ValueError("invalid " + name) from None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("invalid " + name)
+    return parsed
+
+
+def _legacy_browser_reconciliations(values: tuple[dict, ...]) -> dict[int, dict]:
+    claims = []
+    for position, raw in enumerate(values):
+        normalized = _normalized_receipt_fields(raw)
+        if normalized.get("stage") == LEGACY_BROWSER_RECONCILIATION_STAGE:
+            claims.append((position, normalized))
+    if not claims:
+        return {}
+    if len(claims) != 1:
+        raise ValueError("multiple legacy browser reconciliations")
+
+    targets = {}
+    for position, claim in claims:
+        if set(claim) != _LEGACY_BROWSER_RECONCILIATION_RECEIPT_FIELDS:
+            raise ValueError("incomplete legacy browser reconciliation")
+        if (
+            claim.get("status") != "recorded"
+            or claim.get("reconciliation_reason")
+            != LEGACY_BROWSER_RECONCILIATION_REASON
+            or claim.get("target_stage") != "browser_recovery"
+            or type(claim.get("target_sequence")) is not int
+            or claim["target_sequence"] < 0
+            or claim["target_sequence"] >= position
+            or claim.get("target_run_id") != claim.get("run_id")
+            or type(claim.get("target_receipt_digest")) is not str
+            or _CONTRACT_DIGEST.fullmatch(claim["target_receipt_digest"]) is None
+            or type(claim.get("target_contract_digest")) is not str
+            or claim.get("contract_digest") != claim["target_contract_digest"]
+        ):
+            raise ValueError("invalid legacy browser reconciliation")
+        target_position = claim["target_sequence"]
+        target = values[target_position]
+        normalized_target = _normalized_receipt_fields(target)
+        target_occurred_at = timezone_aware_timestamp(
+            normalized_target.get("occurred_at"), "reconciliation target timestamp",
+        )
+        reconciliation_occurred_at = timezone_aware_timestamp(
+            claim.get("occurred_at"), "reconciliation timestamp",
+        )
+        if (
+            normalized_target.get("sequence") != target_position
+            or normalized_target.get("run_id") != claim["target_run_id"]
+            or normalized_target.get("stage") != claim["target_stage"]
+            or normalized_target.get("status") != "blocked"
+            or normalized_target.get("reason_code") != "human_help_required"
+            or normalized_target.get("contract_digest")
+            != claim["target_contract_digest"]
+            or "recovery_receipts" in normalized_target
+            or canonical_observation_receipt_digest(target)
+            != claim["target_receipt_digest"]
+            or reconciliation_occurred_at <= target_occurred_at
+        ):
+            raise ValueError("legacy browser reconciliation target mismatch")
+        targets[target_position] = claim
+    return targets
 
 
 def _safe_receipt_payload(receipt: Mapping[str, object], reference: str) -> dict:
@@ -1247,19 +1389,25 @@ def _validate_contract_receipt(receipt: dict, current: object):
 def translate_receipts(
     receipts: Iterable[Mapping[str, object]], allowed_stages: frozenset, *,
     isolation_default: object = None,
+    allow_legacy_browser_reconciliation: bool = False,
 ) -> Tuple[WorkflowEvent, ...]:
     if isolation_default is not None and isolation_default not in ISOLATION_STRATEGIES:
         raise ValueError("invalid isolation strategy")
     try:
-        values = tuple(receipts)
+        values = tuple(bounded_iterable(receipts, max_items=MAX_EVENT_ITEMS))
     except Exception:
         raise ValueError("invalid receipts") from None
+    if any(type(receipt) is not dict for receipt in values):
+        raise ValueError("receipt must be an object")
+    reconciled_targets = (
+        _legacy_browser_reconciliations(values)
+        if allow_legacy_browser_reconciliation else {}
+    )
     normalized_values = []
-    for receipt in values:
-        if type(receipt) is not dict:
-            raise ValueError("receipt must be an object")
+    for position, receipt in enumerate(values):
         normalized_values.append(_validate_observation_receipt(
             _normalized_receipt_fields(receipt),
+            allow_legacy_browser_missing_proof=position in reconciled_targets,
         ))
     has_contract_binding = any(
         receipt.get("stage") in _CONTRACT_STAGES

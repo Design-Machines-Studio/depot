@@ -654,6 +654,71 @@ class RunCostSummaryTests(unittest.TestCase):
         finally:
             shutil.rmtree(directory, ignore_errors=True)
 
+    def test_emit_refuses_the_authoritative_stream_as_an_output(self):
+        """The transaction must not unlink its input before reading it."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        try:
+            events = self._events_file(directory)
+            receipt = os.path.join(directory, "run-receipt.md")
+            with open(events, "rb") as handle:
+                original = handle.read()
+            alias = os.path.join(directory, ".", os.path.basename(events))
+            self.assertEqual(
+                self._emit(events=events, output=alias, receipt=receipt), 2,
+            )
+            with open(events, "rb") as handle:
+                self.assertEqual(handle.read(), original)
+            self.assertFalse(os.path.exists(receipt))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_emit_refuses_the_authoritative_stream_as_its_receipt(self):
+        """Appending the inventory line to the input would corrupt its JSON."""
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        try:
+            events = self._events_file(directory)
+            output = os.path.join(directory, "run-cost-summary.json")
+            with open(events, "rb") as handle:
+                original = handle.read()
+            self.assertEqual(
+                self._emit(events=events, output=output, receipt=events), 2,
+            )
+            with open(events, "rb") as handle:
+                self.assertEqual(handle.read(), original)
+            self.assertFalse(os.path.exists(output))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
+    def test_emit_refuses_a_hard_link_to_the_authoritative_stream(self):
+        import os
+        import shutil
+        import tempfile
+
+        directory = tempfile.mkdtemp()
+        try:
+            events = self._events_file(directory)
+            output = os.path.join(directory, "hard-linked-output.json")
+            receipt = os.path.join(directory, "run-receipt.md")
+            os.link(events, output)
+            with open(events, "rb") as handle:
+                original = handle.read()
+            self.assertEqual(
+                self._emit(events=events, output=output, receipt=receipt), 2,
+            )
+            with open(events, "rb") as handle:
+                self.assertEqual(handle.read(), original)
+            self.assertFalse(os.path.exists(receipt))
+        finally:
+            shutil.rmtree(directory, ignore_errors=True)
+
     def test_emit_clears_a_stale_artifact_before_writing(self):
         """A stale file at the fixed path must never be recorded as this run's."""
         import os
@@ -697,6 +762,38 @@ class RunCostSummaryTests(unittest.TestCase):
             self.assertEqual(lines, ["run-cost-summary: skipped (summary-failed)"])
         finally:
             shutil.rmtree(directory, ignore_errors=True)
+
+    def test_emit_rejects_ambiguous_events_before_output_mutation(self):
+        import os
+        import shutil
+        import tempfile
+
+        for name, raw in (
+            ("duplicate", b'[{"sequence":0,"sequence":1}]'),
+            ("non-finite", b'[{"sequence":NaN}]'),
+        ):
+            with self.subTest(name=name):
+                directory = tempfile.mkdtemp()
+                try:
+                    events = os.path.join(directory, "authoritative-receipts.json")
+                    output = os.path.join(directory, "run-cost-summary.json")
+                    receipt = os.path.join(directory, "run-receipt.md")
+                    with open(events, "wb") as handle:
+                        handle.write(raw)
+                    with open(output, "wb") as handle:
+                        handle.write(b'{"stale":true}')
+                    with open(receipt, "wb") as handle:
+                        handle.write(b"existing receipt\n")
+                    self.assertEqual(
+                        self._emit(events=events, output=output, receipt=receipt),
+                        2,
+                    )
+                    with open(output, "rb") as handle:
+                        self.assertEqual(handle.read(), b'{"stale":true}')
+                    with open(receipt, "rb") as handle:
+                        self.assertEqual(handle.read(), b"existing receipt\n")
+                finally:
+                    shutil.rmtree(directory, ignore_errors=True)
 
     def test_emit_writes_nothing_through_a_symlinked_receipt_directory(self):
         """Refusing a path and then writing to it is not a guard.

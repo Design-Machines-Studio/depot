@@ -730,6 +730,15 @@ class PipelineAdapterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             translate_pipeline_receipts([bound, stale])
 
+    def test_unreconciled_legacy_browser_recovery_still_fails_closed(self):
+        receipts = json.loads(
+            (FIXTURES / "pipeline-legacy-browser-recovery.json").read_text()
+        )
+        with self.assertRaisesRegex(
+            ValueError, "browser recovery lacks canonical proof",
+        ):
+            translate_pipeline_receipts(receipts)
+
     def test_only_declared_pre_contract_stages_are_allowed_before_binding(self):
         digest = "sha256:" + "a" * 64
         binding = {

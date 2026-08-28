@@ -92,7 +92,9 @@ contains the asset, it emits the kernel's structured
   behavioral-contract consumers may declare `>=0.5.0`; exact-ref repository
   verification planning/execution consumers require `>=0.14.0`; ordinary run-cost-summary
   consumers require `>=0.8.0`;
-  matrix-backed run-cost-summary consumers require `>=0.13.0`.
+  matrix-backed run-cost-summary consumers require `>=0.13.0`. Pipeline
+  consumers invoking the closed legacy browser-recovery reconciliation require
+  `>=0.18.0`.
   Candidates are ordered by their parsed semver
   path segment, newest first, and the plugin manifest's declared name and
   version must match. Reject symlink escapes, project-cwd/PATH discovery,

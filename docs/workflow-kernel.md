@@ -6,6 +6,8 @@ owned-resource cleanup. Pipeline and dm-review depend on it, while the kernel
 depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
+Version 0.18.0 adds one Pipeline-owned, append-only reconciliation for an exact
+legacy blocked browser-recovery receipt while preserving the historical block.
 Version 0.13.0 adds optional, visibly imputed API-equivalent attempt costs from
 a caller-supplied trusted model matrix while preserving the observation-only summary
 contract. Version 0.8.0 added the `run-cost-summary` command -- a canonical,
@@ -139,6 +141,37 @@ Comparison distinguishes semantic match, explained host difference, missing
 authoritative evidence, unexpected transition, prediction gap, and unsafe to
 promote. Metrics aggregate observed reliability and produce proposal-only
 routing recommendations; they never mutate routing policy.
+
+### One closed legacy browser reconciliation
+
+`reconcile-legacy-browser` is the only producer path for the compatibility
+receipt introduced in 0.18.0. It atomically appends to one Pipeline receipt
+array and derives every security-sensitive identity from the exact target:
+
+```sh
+"$WORKFLOW_KERNEL" reconcile-legacy-browser \
+  --events authoritative-receipts.json \
+  --target-sequence 27 \
+  --occurred-at 2026-01-01T00:00:00Z \
+  --authoritative-receipt authoritative-receipts.json
+```
+
+Eligibility is deliberately closed: the target is an earlier same-run
+`browser_recovery` row with `status: blocked`, `reason_code:
+human_help_required`, authoritative contract provenance, and no
+`recovery_receipts`. The appended row binds the exact target run, sequence,
+stage, canonical raw-receipt digest, contract digest, and fixed reconciliation
+reason. Duplicate, cross-run, cross-contract, reordered, wrong-stage,
+wrong-reason, already-canonical, ambiguous, or digest-mismatched input fails
+without changing the ledger.
+
+The target remains unchanged and translates as a blocked human intervention.
+The reconciliation is an observation-compatibility record only: it cannot
+create browser acceptance, verification success, or a terminal run outcome.
+Pipeline owns whether to invoke the command; the kernel does not infer or append
+authority during observation. See
+`plugins/pipeline/references/legacy-browser-reconciliation.md` for the producer
+contract.
 
 ### Repository verification planning
 
