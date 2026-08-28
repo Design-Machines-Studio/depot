@@ -27,7 +27,7 @@ receipt before a later paid or policy-changing run.
 | `google/gemini-3.7-flash` | $0.375 / $1.875 | 1,048,576 | Fast multimodal/tools/web-search evidence |
 | `meta/muse-spark-1.2` | $1.25 / $4.25 | 1,048,576 | Catalogued; no text-only active consumer |
 | `z-ai/glm-5.3` | $1.40 / $4.40 | 1,048,576 | Catalogued-not-routed; mandatory reasoning defaults to max |
-| `z-ai/glm-5.3-flash` | $0.075 / $0.25 | 1,310,720 | Formerly Ox Alpha; three corrected pipeline attempts at 100/100; single-case evidence only |
+| `z-ai/glm-5.3-flash` | $0.075 / $0.25 | 1,310,720 | Pipeline 3/3 at 100/100; mechanical screen failed the strict JSON-only contract |
 | `moonshotai/kimi-k3` | $3 / $15 | 1,048,576 | Focused security-analysis evidence at high cost |
 | `openai/gpt-5.6-luna` | $0.20 / $1.20 | 1,050,000 | Economical mechanical-analysis evidence |
 | `openai/gpt-5.6-terra` | $2 / $12 | 1,050,000 | Catalogued compatibility evidence; no default role |
@@ -127,6 +127,15 @@ comparable medians were 5 seconds, 160 prompt tokens, 155 completion tokens,
 111 reasoning tokens, and $0.0000975 provider-billed cost. The three other
 applicable cases and production canary remain untested, so GLM 5.3 Flash is not
 routed.
+
+On 2026-08-28, the first `mechanical-owned-edit` screen was blocked before
+output by the organization monthly budget and billed $0. An operator-authorized
+retry reached the exact model through Modal but wrapped otherwise correct fields
+in a Markdown fence despite the explicit JSON-only instruction. The strict
+parser therefore scored it 0/100; it took 4 seconds, used 100 prompt, 196
+completion, and 142 reasoning tokens, cost $0.0001129887, and used no model
+fallback. Later attempts were skipped. This is model contract evidence, not a
+reason to weaken the scorer or change routing.
 
 After OpenRouter 1.19.9 made that envelope explicit, three exact
 `deepseek/deepseek-v4-pro-0813` attempts scored 100/100 with no model fallback.
