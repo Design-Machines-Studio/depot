@@ -6,7 +6,10 @@ owned-resource cleanup. Pipeline and dm-review depend on it, while the kernel
 depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
-Version 0.18.0 adds one Pipeline-owned, append-only reconciliation for an exact
+Version 0.18.1 repairs that reconciliation's exact raw-receipt digest boundary
+for schema-owned colon-bearing identifiers without weakening durable-string,
+URI, redaction, or semantic eligibility checks. Version 0.18.0 adds one
+Pipeline-owned, append-only reconciliation for an exact
 legacy blocked browser-recovery receipt while preserving the historical block.
 Version 0.13.0 adds optional, visibly imputed API-equivalent attempt costs from
 a caller-supplied trusted model matrix while preserving the observation-only summary

@@ -1,13 +1,17 @@
 import copy
+import hashlib
 import json
 import unittest
 from pathlib import Path
+from unittest import mock
 
+from workflow_kernel import _translation
 from workflow_kernel._translation import canonical_observation_receipt_digest
 from workflow_kernel.pipeline_adapter import (
     build_legacy_browser_reconciliation,
     translate_pipeline_receipts,
 )
+from workflow_kernel.redaction import freeze_json
 
 
 FIXTURE = (
@@ -240,6 +244,112 @@ class LegacyBrowserReconciliationTests(unittest.TestCase):
 
         with self.assertRaises(ValueError):
             canonical_observation_receipt_digest(DictSubclass(self.receipts()[1]))
+
+    def test_digest_is_canonical_raw_json_and_byte_sensitive(self):
+        target = self.receipts()[1]
+        encoded = json.dumps(
+            target, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            allow_nan=False,
+        ).encode("utf-8")
+        expected = "sha256:" + hashlib.sha256(encoded).hexdigest()
+        self.assertEqual(canonical_observation_receipt_digest(target), expected)
+
+        reordered = dict(reversed(tuple(target.items())))
+        self.assertEqual(canonical_observation_receipt_digest(reordered), expected)
+
+        changed = copy.deepcopy(target)
+        changed["human_intervention_id"] = (
+            "browser-help-sha256:" + "c" * 64
+        )
+        self.assertNotEqual(
+            canonical_observation_receipt_digest(changed), expected,
+        )
+
+    def test_digest_boundary_retains_all_bounded_exact_json_requirements(self):
+        target = self.receipts()[1]
+
+        for name, value in (
+            ("non-finite", float("nan")),
+            ("unsupported", object()),
+        ):
+            candidate = copy.deepcopy(target)
+            candidate["extra"] = value
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                canonical_observation_receipt_digest(candidate)
+
+        class StringSubclass(str):
+            pass
+
+        class IntSubclass(int):
+            pass
+
+        class FloatSubclass(float):
+            pass
+
+        class NestedDictSubclass(dict):
+            pass
+
+        for name, value in (
+            ("string-subclass", StringSubclass("value")),
+            ("integer-subclass", IntSubclass(1)),
+            ("float-subclass", FloatSubclass(1.0)),
+            ("mapping-subclass", NestedDictSubclass({"key": "value"})),
+        ):
+            candidate = copy.deepcopy(target)
+            candidate["extra"] = value
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                canonical_observation_receipt_digest(candidate)
+
+        key_subclass = copy.deepcopy(target)
+        key_subclass[StringSubclass("extra")] = "value"
+        with self.assertRaises(ValueError):
+            canonical_observation_receipt_digest(key_subclass)
+
+        cycle = copy.deepcopy(target)
+        cycle["extra"] = cycle
+        with self.assertRaises(ValueError):
+            canonical_observation_receipt_digest(cycle)
+
+        with mock.patch.object(_translation, "MAX_PAYLOAD_DEPTH", 1):
+            with self.assertRaises(ValueError):
+                canonical_observation_receipt_digest({"outer": {"inner": 1}})
+        with mock.patch.object(_translation, "MAX_PAYLOAD_ITEMS", 3):
+            with self.assertRaises(ValueError):
+                canonical_observation_receipt_digest({"a": 1, "b": 2, "c": 3})
+        with mock.patch.object(_translation, "MAX_STRING_LENGTH", 3):
+            with self.assertRaises(ValueError):
+                canonical_observation_receipt_digest({"key": "four"})
+        with mock.patch.object(_translation, "MAX_TOTAL_STRING_BYTES", 4):
+            with self.assertRaises(ValueError):
+                canonical_observation_receipt_digest({"k": "éé"})
+
+    def test_digestibility_does_not_grant_durable_eligibility(self):
+        candidate = {"value": "custom-scheme://private.example/path"}
+        digest = canonical_observation_receipt_digest(candidate)
+        self.assertRegex(digest, r"\Asha256:[0-9a-f]{64}\Z")
+        with self.assertRaises((TypeError, ValueError)):
+            freeze_json(candidate)
+
+    def test_schema_owned_case_digest_identifiers_remain_exact_and_closed(self):
+        reconciled = self.reconciled()
+        self.assertEqual(
+            reconciled[1]["missing_case_ids"],
+            self.receipts()[1]["missing_case_ids"],
+        )
+
+        malformed = self.receipts()
+        malformed[1]["missing_case_ids"][0] = "case-sha256:" + "A" * 64
+        self.assertRegex(
+            canonical_observation_receipt_digest(malformed[1]),
+            r"\Asha256:[0-9a-f]{64}\Z",
+        )
+        with self.assertRaises(ValueError):
+            build_legacy_browser_reconciliation(
+                malformed,
+                target_sequence=1,
+                occurred_at="2026-01-01T00:03:00Z",
+                authoritative_receipt="receipts/reconciliation.json",
+            )
 
 
 if __name__ == "__main__":

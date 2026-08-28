@@ -2,6 +2,7 @@ import copy
 import json
 import hashlib
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -426,6 +427,15 @@ class RuntimeCliTests(unittest.TestCase):
             source = json.loads(
                 (FIXTURES / "pipeline-legacy-browser-recovery.json").read_text()
             )
+            self.assertRegex(
+                source[1]["human_intervention_id"],
+                r"\Abrowser-help-sha256:[0-9a-f]{64}\Z",
+            )
+            self.assertEqual(len(source[1]["missing_case_ids"]), 3)
+            self.assertTrue(all(
+                re.fullmatch(r"case-sha256:[0-9a-f]{64}", case_id)
+                for case_id in source[1]["missing_case_ids"]
+            ))
             ledger = root / "authoritative-receipts.json"
             ledger.write_text(json.dumps(source))
             appended = self.run_cli(

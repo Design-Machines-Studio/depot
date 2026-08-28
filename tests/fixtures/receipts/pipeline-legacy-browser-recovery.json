@@ -32,9 +32,13 @@
     "workflow_class": "feature",
     "execution_mode": "generic",
     "contract_digest": "sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-    "human_intervention_id": "browser-help-compat",
+    "human_intervention_id": "browser-help-sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
     "human_intervention_reason": "browser_evidence_unavailable",
-    "missing_case_ids": ["case-browser-primary"]
+    "missing_case_ids": [
+      "case-sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+      "case-sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+      "case-sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+    ]
   },
   {
     "run_id": "compat-run",
