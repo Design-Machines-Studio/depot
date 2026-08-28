@@ -27,9 +27,10 @@ kernel's canonical document encoding, and current contract digest.
 
 The target must be the exact earlier `blocked` / `human_help_required` shape,
 must lack `recovery_receipts`, and must follow the same authoritative contract
-binding as the reconciliation. The reconciliation must occur later in the same
-contiguous run. An already canonical target is ineligible; no reconciliation is
-needed for it.
+binding as the reconciliation. Both timestamps must be timezone-aware ISO-8601,
+and the reconciliation timestamp must be strictly later than the target's in the
+same contiguous run. An already canonical target is ineligible; no
+reconciliation is needed for it.
 
 The original row is never replaced or normalized. It remains a blocked human
 intervention in observation and metrics. The reconciliation row has no browser

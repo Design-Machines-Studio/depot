@@ -79,7 +79,7 @@ class LegacyBrowserReconciliationTests(unittest.TestCase):
             "authoritative_receipt": "receipts/duplicate-reconciliation.json",
         })
         duplicate.append(second)
-        with self.assertRaisesRegex(ValueError, "duplicate"):
+        with self.assertRaisesRegex(ValueError, "multiple"):
             translate_pipeline_receipts(duplicate)
 
         conflicting = copy.deepcopy(duplicate)
@@ -101,6 +101,106 @@ class LegacyBrowserReconciliationTests(unittest.TestCase):
                 occurred_at="2026-01-01T00:03:00Z",
                 authoritative_receipt="receipts/reconciliation.json",
             )
+
+    def test_multiple_distinct_reconciliation_targets_fail(self):
+        receipts = self.receipts()
+        first_claim = self.reconciled()[-1]
+        second_target = copy.deepcopy(receipts[1])
+        second_target.update({
+            "sequence": 3,
+            "occurred_at": "2026-01-01T00:03:00Z",
+            "authoritative_receipt": "receipts/second-target.json",
+        })
+        first_claim.update({
+            "sequence": 4,
+            "occurred_at": "2026-01-01T00:04:00Z",
+        })
+        second_claim = copy.deepcopy(first_claim)
+        second_claim.update({
+            "sequence": 5,
+            "occurred_at": "2026-01-01T00:05:00Z",
+            "authoritative_receipt": "receipts/second-reconciliation.json",
+            "target_sequence": 3,
+            "target_receipt_digest": canonical_observation_receipt_digest(
+                second_target,
+            ),
+        })
+        with self.assertRaisesRegex(ValueError, "multiple"):
+            translate_pipeline_receipts([
+                *receipts, second_target, first_claim, second_claim,
+            ])
+
+    def test_reconciliation_timestamp_must_be_aware_and_later_than_target(self):
+        original = self.receipts()
+        for name, occurred_at in (
+            ("earlier", "2025-12-31T23:59:00Z"),
+            ("equal", "2026-01-01T00:01:00Z"),
+            ("naive", "2026-01-01T00:03:00"),
+            ("malformed", "not-a-timestamp"),
+        ):
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                build_legacy_browser_reconciliation(
+                    original,
+                    target_sequence=1,
+                    occurred_at=occurred_at,
+                    authoritative_receipt="receipts/reconciliation.json",
+                )
+            self.assertEqual(original, self.receipts())
+
+        for name, target_occurred_at in (
+            ("naive-target", "2026-01-01T00:01:00"),
+            ("malformed-target", "not-a-timestamp"),
+        ):
+            candidate = copy.deepcopy(original)
+            candidate[1]["occurred_at"] = target_occurred_at
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                build_legacy_browser_reconciliation(
+                    candidate,
+                    target_sequence=1,
+                    occurred_at="2026-01-01T00:03:00Z",
+                    authoritative_receipt="receipts/reconciliation.json",
+                )
+            self.assertEqual(len(candidate), len(original))
+
+        offset_target = copy.deepcopy(original)
+        offset_target[1]["occurred_at"] = "2026-01-01T01:01:00+01:00"
+        offset_reconciled = build_legacy_browser_reconciliation(
+            offset_target,
+            target_sequence=1,
+            occurred_at="2026-01-01T00:02:00Z",
+            authoritative_receipt="receipts/reconciliation.json",
+        )
+        self.assertEqual(len(offset_reconciled), len(offset_target) + 1)
+
+        reconciled = build_legacy_browser_reconciliation(
+            original,
+            target_sequence=1,
+            occurred_at="2026-01-01T01:02:00+01:00",
+            authoritative_receipt="receipts/reconciliation.json",
+        )
+        self.assertEqual(len(reconciled), len(original) + 1)
+
+    def test_existing_reconciliation_timestamp_must_be_aware_and_later(self):
+        for name, field, occurred_at in (
+            ("earlier-claim", "claim", "2025-12-31T23:59:00Z"),
+            ("equal-claim", "claim", "2026-01-01T00:01:00Z"),
+            ("naive-claim", "claim", "2026-01-01T00:03:00"),
+            ("malformed-claim", "claim", "not-a-timestamp"),
+            ("naive-target", "target", "2026-01-01T00:01:00"),
+            ("malformed-target", "target", "not-a-timestamp"),
+        ):
+            candidate = copy.deepcopy(self.reconciled())
+            candidate[-1 if field == "claim" else 1]["occurred_at"] = occurred_at
+            with self.subTest(name=name), self.assertRaises(ValueError):
+                translate_pipeline_receipts(candidate)
+
+        offset = copy.deepcopy(self.reconciled())
+        offset[1]["occurred_at"] = "2026-01-01T01:01:00+01:00"
+        offset[-1]["target_receipt_digest"] = (
+            canonical_observation_receipt_digest(offset[1])
+        )
+        offset[-1]["occurred_at"] = "2026-01-01T01:03:00+01:00"
+        self.assertEqual(len(translate_pipeline_receipts(offset)), len(offset))
 
     def test_reconciliation_alone_cannot_create_passing_or_terminal_semantics(self):
         receipts = self.receipts()[:2]

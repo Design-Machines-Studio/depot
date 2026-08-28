@@ -1185,7 +1185,7 @@ def _require_bound_prediction(state_dir, observation_type, spec):
 def command_bind_prediction(args):
     from .repository_scope import repository_scope
 
-    source = _load_json(args.prediction_receipts)
+    source = _load_json(args.prediction_receipts, strict=True)
     if type(source) is not list:
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
     if args.type == "pipeline":
@@ -1230,7 +1230,7 @@ def command_observe_pipeline(args):
     from .pipeline_adapter import translate_manifest, translate_pipeline_receipts
 
     manifest = _load_json(args.manifest)
-    receipts = _load_json(args.receipts)
+    receipts = _load_json(args.receipts, strict=True)
     if not isinstance(manifest, dict) or not isinstance(receipts, list):
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
     spec = translate_manifest(manifest, _profile_from_receipts(receipts))
@@ -1293,7 +1293,7 @@ def command_observe_review(args):
     )
 
     request = ReviewRequest.from_mapping(_load_json(args.request))
-    receipts = _load_json(args.receipts)
+    receipts = _load_json(args.receipts, strict=True)
     if not isinstance(receipts, list):
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
     # Validate every receipt field, including the sealed references, before
@@ -1390,7 +1390,7 @@ def command_export_review_contributions(args):
     raw_findings = _load_json(args.raw_findings)
     lane_receipts = _load_json(args.lane_receipts)
     raw_lane_outputs = _load_json(args.raw_lane_outputs)
-    receipts = _load_json(args.receipts)
+    receipts = _load_json(args.receipts, strict=True)
     if (
         type(decisions) is not dict or type(raw_findings) is not dict
         or type(lane_receipts) is not dict or type(raw_lane_outputs) is not dict
@@ -1454,7 +1454,7 @@ def command_compare(args):
     if not observation.is_file():
         observation = state_dir / "review-shadow-observation.json"
     document = _load_json(observation)
-    receipts = _load_json(args.authoritative_receipts)
+    receipts = _load_json(args.authoritative_receipts, strict=True)
     if not isinstance(document, dict) or not isinstance(receipts, list):
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
     if document.get("artifact_role") != "authoritative_observation":
@@ -1576,7 +1576,7 @@ def command_metrics(args):
     from .metrics import MetricsAggregator
     from .pipeline_adapter import translate_pipeline_receipts
 
-    receipts = _load_json(args.events)
+    receipts = _load_json(args.events, strict=True)
     if not isinstance(receipts, list):
         raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
     try:
@@ -1693,7 +1693,7 @@ def _read_receipt_events(events_path):
     from .dm_review_adapter import translate_review_receipts
     from .pipeline_adapter import translate_pipeline_receipts
 
-    receipts = _load_json(events_path)
+    receipts = _load_json(events_path, strict=True)
     if not isinstance(receipts, list):
         # `InvalidSchemaError` rather than `ValueError`, because that is what the
         # legacy entry point raised for this exact input and both entry points
@@ -1773,14 +1773,18 @@ def command_emit_cost_summary(args):
     command is the transaction: it owns the artifact path, writes the artifact,
     and records exactly one inventory line naming what actually happened.
 
-    It always exits 0. The artifact is observation-only, so a measurement
-    failure must never become a workflow failure -- and because this command
-    records its own skip line, exiting non-zero would leave the caller nothing
-    useful to do anyway. The only case the caller still handles is the launcher
-    itself failing to run, which no process inside it can report.
+    Measurement outcomes always exit 0. Invalid invocation or ambiguous JSON
+    input exits 2 before the transaction mutates either output path. The
+    artifact is observation-only, so a later measurement failure never becomes
+    a workflow failure and records its own skip line.
     """
     if not _emit_paths_are_distinct(args):
         return EXIT_INVALID
+    # The transaction owns deletion of a stale artifact and appending its run
+    # receipt line. Reject ambiguous JSON before either mutation; the later
+    # reader still owns adapter translation and all semantic validation.
+    if os.path.exists(args.events):
+        _load_json(args.events, strict=True)
     outcome = _prepare_emit_artifact_path(args)
     if outcome.reason is None:
         outcome = _EmitOutcome(_run_emit_summary(args), recordable=True)
@@ -1808,21 +1812,35 @@ def _emit_stderr(message):
 
 
 def _emit_paths_are_distinct(args):
-    """Refuse one path used as both the artifact and the receipt.
+    """Refuse one path used for more than one transaction role.
 
-    The emission sequence unlinks `--output`, writes JSON to it, then appends a
-    text line to `--receipt`; aiming them at one file produces
-    `{json}\\nrun-cost-summary: ...` -- an artifact no parser can read, emitted
-    with a success exit. The wired consumers use different extensions so this
-    cannot happen there, but the CLI is a public entry point and a corrupt
-    artifact that reports success is worse than a refused invocation.
+    The command reads `--events`, unlinks and replaces `--output`, then appends
+    a text line to `--receipt`. Reusing any file for two of those roles either
+    destroys the authoritative stream or leaves JSON followed by Markdown.
+    Compare both normalized spellings and existing-file identities so a
+    relative alias or hard link cannot bypass the preflight.
     """
-    if os.path.abspath(args.output) != os.path.abspath(args.receipt):
-        return True
-    _emit_stderr(
-        "--output and --receipt are the same path: " + os.path.abspath(args.output)
+    paths = (
+        ("--events", args.events),
+        ("--output", args.output),
+        ("--receipt", args.receipt),
     )
-    return False
+    for index, (left_name, left_path) in enumerate(paths):
+        left = os.path.abspath(left_path)
+        for right_name, right_path in paths[index + 1:]:
+            right = os.path.abspath(right_path)
+            same_file = left == right
+            if not same_file:
+                try:
+                    same_file = os.path.samefile(left, right)
+                except OSError:
+                    pass
+            if same_file:
+                _emit_stderr(
+                    f"{left_name} and {right_name} are the same path: {left}"
+                )
+                return False
+    return True
 
 
 def _prepare_emit_artifact_path(args):
@@ -2111,7 +2129,7 @@ def _reserve_openrouter_invocation(
             reconciled = True
             continue
         try:
-            bound_receipts = _load_json(receipt_stream)
+            bound_receipts = _load_json(receipt_stream, strict=True)
         except (InvalidSchemaError, OSError, TypeError, ValueError):
             blocking_duplicates.append(item)
             continue
@@ -2210,7 +2228,7 @@ def _append_receipts_locked(receipts_path, error_label, bodies, run_id,
     land or neither does, so a recorded lane cannot be missing its usage row.
     """
     if os.path.exists(receipts_path):
-        receipts = _load_json(receipts_path)
+        receipts = _load_json(receipts_path, strict=True)
         if not isinstance(receipts, list):
             sys.stderr.write(
                 error_label + ": receipt target is not a receipt array\n"
@@ -2634,6 +2652,12 @@ def command_record_attempt(args):
             fcntl.flock(consumption_lock, fcntl.LOCK_EX)
         lock_descriptor = _open_receipt_stream_lock(args.receipts)
         fcntl.flock(lock_descriptor, fcntl.LOCK_EX)
+        if os.path.exists(args.receipts):
+            # Reject ambiguous input before the OpenRouter reservation writes
+            # its durable consumption ledger. The append helper re-reads under
+            # this same lock so its existing schema/translation gate stays the
+            # single owner of the candidate stream.
+            _load_json(args.receipts, strict=True)
         if consumption_path is not None:
             reservation_ledger, reservation = _reserve_openrouter_invocation(
                 consumption_path, args.receipts, args.run_id, args.lane,

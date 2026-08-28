@@ -449,6 +449,32 @@ class OpenRouterUsageAppendTests(unittest.TestCase):
             import shutil
             shutil.rmtree(directory, ignore_errors=True)
 
+    def test_append_rejects_ambiguous_existing_stream_without_mutation(self):
+        import os
+        import shutil
+        import tempfile
+
+        for name, raw in (
+            ("duplicate", b'[{"run_id":"first","run_id":"second"}]'),
+            ("non-finite", b'[{"sequence":NaN}]'),
+        ):
+            with self.subTest(name=name):
+                directory = tempfile.mkdtemp()
+                receipts_path = os.path.join(
+                    directory, "authoritative-receipts.json",
+                )
+                try:
+                    with open(receipts_path, "wb") as handle:
+                        handle.write(raw)
+                    self.assertNotEqual(
+                        self._run(self._base(receipts_path, "a", "chunk-a")),
+                        0,
+                    )
+                    with open(receipts_path, "rb") as handle:
+                        self.assertEqual(handle.read(), raw)
+                finally:
+                    shutil.rmtree(directory, ignore_errors=True)
+
     def test_appended_stream_feeds_a_populated_cost_summary(self):
         """The point of the boundary: lanes[] is no longer empty."""
         import os
@@ -913,6 +939,47 @@ class RecordAttemptTests(unittest.TestCase):
             )
             self.assertEqual(summary["lanes"][0]["lane"], "security")
 
+    def test_record_attempt_rejects_ambiguous_stream_without_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            for name, raw in (
+                ("duplicate", b'[{"run_id":"first","run_id":"second"}]'),
+                ("non-finite", b'[{"sequence":NaN}]'),
+            ):
+                with self.subTest(name=name):
+                    receipts = Path(directory) / (name + "-receipts.json")
+                    receipts.write_bytes(raw)
+                    code, _, _ = _invoke(self._argv(receipts, "security", 1))
+                    self.assertNotEqual(code, 0)
+                    self.assertEqual(receipts.read_bytes(), raw)
+
+    def test_ambiguous_stream_does_not_create_consumption_ledger(self):
+        for name, raw in (
+            ("duplicate", b'[{"run_id":"first","run_id":"second"}]'),
+            ("non-finite", b'[{"sequence":NaN}]'),
+        ):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                receipt = _receipt(SUCCESS_FIXTURE)
+                receipt["authorization"] = {
+                    "runId": "record-attempt-1",
+                    "laneId": "security",
+                    "requestEnvelopeSha256": "b" * 64,
+                }
+                receipt_path = Path(directory) / "openrouter-receipt.json"
+                receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+                receipts = Path(directory) / "authoritative-receipts.json"
+                receipts.write_bytes(raw)
+                code, _, _ = _invoke(self._argv(
+                    receipts, "security", 1,
+                    openrouter_receipt=receipt_path,
+                    request_envelope_sha256="b" * 64,
+                ))
+                self.assertNotEqual(code, 0)
+                self.assertEqual(receipts.read_bytes(), raw)
+                self.assertFalse((
+                    Path(directory) / ".workflow-kernel" /
+                    "openrouter-consumptions.json"
+                ).exists())
+
     def test_review_iteration_receipt_rejects_incoherent_selection(self):
         from workflow_kernel.dm_review_adapter import translate_review_receipts
 
@@ -1264,6 +1331,45 @@ class RecordAttemptTests(unittest.TestCase):
                 self._stream(ledger_path)["consumptions"][0]["status"],
                 "pending",
             )
+
+    def test_pending_reservation_rejects_ambiguous_bound_stream(self):
+        for name, raw in (
+            ("duplicate", b'[{"run_id":"first","run_id":"second"}]'),
+            ("non-finite", b'[{"sequence":NaN}]'),
+        ):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as directory:
+                receipt = _receipt(SUCCESS_FIXTURE)
+                receipt["authorization"] = {
+                    "runId": "record-attempt-1",
+                    "laneId": "security",
+                    "requestEnvelopeSha256": "b" * 64,
+                }
+                receipt_path = Path(directory) / "openrouter-receipt.json"
+                receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+                receipts = Path(directory) / "authoritative-receipts.json"
+                argv = self._argv(
+                    receipts, "security", 1, openrouter_receipt=receipt_path,
+                    request_envelope_sha256="b" * 64,
+                )
+                first_code, _, first_error = _invoke(argv)
+                self.assertEqual(first_code, 0, first_error)
+
+                ledger_path = (
+                    Path(directory) / ".workflow-kernel" /
+                    "openrouter-consumptions.json"
+                )
+                ledger = self._stream(ledger_path)
+                ledger["consumptions"][0]["status"] = "pending"
+                ledger_path.write_text(json.dumps(ledger), encoding="utf-8")
+                receipts.write_bytes(raw)
+
+                retry_code, _, _ = _invoke(argv)
+                self.assertNotEqual(retry_code, 0)
+                self.assertEqual(receipts.read_bytes(), raw)
+                self.assertEqual(
+                    self._stream(ledger_path)["consumptions"][0]["status"],
+                    "pending",
+                )
 
     def test_consumption_lock_failure_closes_open_descriptor(self):
         import os

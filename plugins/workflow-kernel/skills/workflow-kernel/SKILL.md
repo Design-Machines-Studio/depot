@@ -66,6 +66,11 @@ conflicting run IDs, illegal transitions, and non-JSON payload values. Preserve
 `interrupted` as its own terminal outcome. Permit terminal mutation only for
 evidence attachment and one cleanup reconciliation.
 
+Authoritative receipt streams use strict JSON decoding. Prediction binding,
+Pipeline and review observation, review contribution export, comparison,
+metrics, cost summaries, attempt recording, and measurement append paths reject
+duplicate object members and non-finite constants before writing any output.
+
 For disposable run roots, temporary repositories, caches, raw output, Git
 worktrees/branches, and Docker resources, read
 `references/exact-owned-cleanup.md`. Filesystem paths use the small
@@ -102,8 +107,9 @@ Consume successful operational output and errors as stable JSON. Treat
   through `reconcile-legacy-browser`. The later reconciliation binds the raw
   canonical receipt digest, run, sequence, stage, and current contract digest
   under the fixed `legacy_browser_recovery_missing_canonical_proof` reason. The
-  target remains blocked; duplicates, mismatches, already-canonical targets,
-  and every broader omission fail closed.
+  target remains blocked; both timestamps are timezone-aware and the
+  reconciliation is strictly later; duplicates, mismatches, already-canonical
+  targets, and every broader omission fail closed.
 - Evaluate persona/browser coverage with
   `VerificationGate.evaluate(..., work_kind=..., rendered_surface=...)`.
   `rendered_surface` is the independent closed applicability value

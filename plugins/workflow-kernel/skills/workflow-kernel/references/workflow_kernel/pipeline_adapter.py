@@ -11,7 +11,7 @@ from ._translation import (
     LEGACY_BROWSER_RECONCILIATION_REASON,
     LEGACY_BROWSER_RECONCILIATION_STAGE,
     canonical_observation_receipt_digest, required_text, safe_reference,
-    translate_receipts,
+    timezone_aware_timestamp, translate_receipts,
 )
 from .model import (
     BuilderSessionDecision, HostCapabilities, WorkflowClass, WorkflowContext,
@@ -255,6 +255,14 @@ def build_legacy_browser_reconciliation(
     target = receipts[target_sequence]
     if type(target) is not dict:
         raise ValueError("invalid legacy browser reconciliation target")
+    target_occurred_at = timezone_aware_timestamp(
+        target.get("occurred_at"), "legacy browser reconciliation target timestamp",
+    )
+    reconciliation_occurred_at = timezone_aware_timestamp(
+        occurred_at, "legacy browser reconciliation timestamp",
+    )
+    if reconciliation_occurred_at <= target_occurred_at:
+        raise ValueError("invalid legacy browser reconciliation timestamp")
     target_run_id = required_text(target.get("run_id"), "target run id")
     target_contract_digest = target.get(
         "contract_digest", target.get("contractDigest"),

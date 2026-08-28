@@ -204,6 +204,42 @@ class RuntimeCliTests(unittest.TestCase):
                 len(list((state_dir / "contribution-inputs").glob("*.json"))), 5,
             )
 
+            for name, raw in (
+                ("duplicate", '[{"sequence":0,"sequence":1}]'),
+                ("non-finite", '[{"sequence":NaN}]'),
+            ):
+                with self.subTest(name=name):
+                    ambiguous = root / (name + "-review-receipts.json")
+                    ambiguous.write_text(raw, encoding="utf-8")
+                    observe_state = root / (name + "-observe-state")
+                    observe_state.mkdir()
+                    observed = self.run_cli(
+                        "observe-review", "--request", request,
+                        "--receipts", ambiguous, "--state-dir", observe_state,
+                    )
+                    self.assertEqual(observed.returncode, 2)
+                    self.assertFalse(
+                        (observe_state / "review-shadow-observation.json").exists(),
+                    )
+
+                    export_state = root / (name + "-export-state")
+                    export_state.mkdir()
+                    export_output = root / (name + "-export.json")
+                    exported_ambiguous = self.run_cli(
+                        "export-review-contributions", "--request", request,
+                        "--decisions", decisions,
+                        "--raw-findings", raw_findings,
+                        "--lane-receipts", lane_receipts,
+                        "--raw-lane-outputs", raw_lane_outputs,
+                        "--receipts", ambiguous,
+                        "--state-dir", export_state, "--output", export_output,
+                    )
+                    self.assertEqual(exported_ambiguous.returncode, 2)
+                    self.assertFalse(export_output.exists())
+                    self.assertFalse(
+                        (export_state / "contribution-inputs").exists(),
+                    )
+
             unsafe_state = root / "unsafe-state"
             unsafe_state.mkdir()
             unsafe_decisions = json.loads(decisions.read_text(encoding="utf-8"))
@@ -535,6 +571,75 @@ class RuntimeCliTests(unittest.TestCase):
                         ambiguous_error["error"]["code"], "invalid_schema",
                     )
                     self.assertNotIn(str(ambiguous), rejected_ambiguous.stderr)
+
+            serialized = json.dumps(reconciled, separators=(",", ":"))
+            for name, ambiguous_value in (
+                (
+                    "duplicate-target-member",
+                    serialized.replace(
+                        '"stage":"browser_recovery"',
+                        '"stage":"wrong","stage":"browser_recovery"',
+                        1,
+                    ),
+                ),
+                (
+                    "duplicate-claim-member",
+                    serialized.replace(
+                        '"target_stage":"browser_recovery"',
+                        '"target_stage":"wrong","target_stage":"browser_recovery"',
+                        1,
+                    ),
+                ),
+            ):
+                with self.subTest(name=name):
+                    ambiguous = root / (name + ".json")
+                    ambiguous.write_text(ambiguous_value)
+                    observation_before = observation.read_bytes()
+                    prediction_before = (
+                        root / "pipeline-shadow-prediction.json"
+                    ).read_bytes()
+                    commands = {
+                        "prediction": (
+                            "bind-prediction", "--type", "pipeline",
+                            "--manifest", manifest,
+                            "--prediction-receipts", ambiguous,
+                            "--state-dir", root,
+                        ),
+                        "observation": (
+                            "observe-pipeline", "--manifest", manifest,
+                            "--receipts", ambiguous, "--state-dir", root,
+                        ),
+                        "comparison": (
+                            "compare", "--state-dir", root,
+                            "--authoritative-receipts", ambiguous,
+                            "--output", root / (name + "-comparison.json"),
+                        ),
+                        "metrics": (
+                            "metrics", "--events", ambiguous,
+                            "--output", root / (name + "-metrics.json"),
+                        ),
+                        "cost": (
+                            "run-cost-summary", "--events", ambiguous,
+                            "--output", root / (name + "-cost.json"),
+                        ),
+                    }
+                    for command_name, argv in commands.items():
+                        with self.subTest(command=command_name):
+                            rejected = self.run_cli(*argv)
+                            self.assertEqual(rejected.returncode, 2)
+                            error = json.loads(rejected.stderr)
+                            self.assertEqual(error["error"]["code"], "invalid_schema")
+                    self.assertEqual(observation.read_bytes(), observation_before)
+                    self.assertEqual(
+                        (root / "pipeline-shadow-prediction.json").read_bytes(),
+                        prediction_before,
+                    )
+                    self.assertFalse(any(
+                        (root / (name + suffix)).exists()
+                        for suffix in (
+                            "-comparison.json", "-metrics.json", "-cost.json",
+                        )
+                    ))
 
     def test_prediction_and_observation_reject_decision_profile_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:

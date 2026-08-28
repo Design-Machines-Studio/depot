@@ -14,6 +14,7 @@ import math
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import datetime
 from types import MappingProxyType
 from typing import Iterable, Mapping, Optional, Tuple
 
@@ -1204,6 +1205,19 @@ def canonical_observation_receipt_digest(receipt: object) -> str:
     return "sha256:" + hashlib.sha256(encoded).hexdigest()
 
 
+def timezone_aware_timestamp(value: object, name: str) -> datetime:
+    """Parse one exact timezone-aware ISO-8601 receipt timestamp."""
+    try:
+        parsed = datetime.fromisoformat(
+            required_text(value, name).replace("Z", "+00:00"),
+        )
+    except ValueError:
+        raise ValueError("invalid " + name) from None
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise ValueError("invalid " + name)
+    return parsed
+
+
 def _legacy_browser_reconciliations(values: tuple[dict, ...]) -> dict[int, dict]:
     claims = []
     for position, raw in enumerate(values):
@@ -1212,6 +1226,8 @@ def _legacy_browser_reconciliations(values: tuple[dict, ...]) -> dict[int, dict]
             claims.append((position, normalized))
     if not claims:
         return {}
+    if len(claims) != 1:
+        raise ValueError("multiple legacy browser reconciliations")
 
     targets = {}
     for position, claim in claims:
@@ -1233,10 +1249,14 @@ def _legacy_browser_reconciliations(values: tuple[dict, ...]) -> dict[int, dict]
         ):
             raise ValueError("invalid legacy browser reconciliation")
         target_position = claim["target_sequence"]
-        if target_position in targets:
-            raise ValueError("duplicate legacy browser reconciliation")
         target = values[target_position]
         normalized_target = _normalized_receipt_fields(target)
+        target_occurred_at = timezone_aware_timestamp(
+            normalized_target.get("occurred_at"), "reconciliation target timestamp",
+        )
+        reconciliation_occurred_at = timezone_aware_timestamp(
+            claim.get("occurred_at"), "reconciliation timestamp",
+        )
         if (
             normalized_target.get("sequence") != target_position
             or normalized_target.get("run_id") != claim["target_run_id"]
@@ -1248,6 +1268,7 @@ def _legacy_browser_reconciliations(values: tuple[dict, ...]) -> dict[int, dict]
             or "recovery_receipts" in normalized_target
             or canonical_observation_receipt_digest(target)
             != claim["target_receipt_digest"]
+            or reconciliation_occurred_at <= target_occurred_at
         ):
             raise ValueError("legacy browser reconciliation target mismatch")
         targets[target_position] = claim
