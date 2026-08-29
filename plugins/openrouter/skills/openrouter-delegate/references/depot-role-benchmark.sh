@@ -184,13 +184,21 @@ evaluate_case() {
       add_assertion "$destination" mechanical.validation-outcome semantic "$passed" 20 'passed' 'Report the disclosed validation outcome.'
       ;;
     architect-routing-tradeoff)
-      passed=false; jq -e '(.decision | type) == "string" and (.rationale | type) == "string" and (.preservedBoundary | type) == "array" and (.rejected | type) == "array"' "$input" >/dev/null && passed=true
+      passed=false; jq -e '
+        (.decision | type) == "string" and (.rationale | type) == "string"
+        and (((.preservedBoundary | type) == "string" and (.preservedBoundary | length) > 0)
+          or ((.preservedBoundary | type) == "array" and (.preservedBoundary | length) > 0
+            and all(.preservedBoundary[]; type == "string" and length > 0)))
+        and (((.rejected | type) == "string" and (.rejected | length) > 0)
+          or ((.rejected | type) == "array" and (.rejected | length) > 0
+            and all(.rejected[]; type == "string" and length > 0)))
+      ' "$input" >/dev/null && passed=true
       add_assertion "$destination" architect.tradeoff-envelope mandatory "$passed" 0 'decision, rationale, preservedBoundary, and rejected' 'Return every contracted field.'
       passed=false; jq -e '.decision | test("preserv|keep|current ownership|policy-owned|deterministic"; "i")' "$input" >/dev/null && passed=true
       add_assertion "$destination" architect.policy-owned-selection semantic "$passed" 25 'preserve deterministic policy-owned selection' 'Keep selection in role policy.'
-      passed=false; jq -e '[.preservedBoundary[]?] | any(.[]; test("pipeline"; "i")) and any(.[]; test("role[ -]?policy|role policy"; "i"))' "$input" >/dev/null && passed=true
+      passed=false; jq -e '([.preservedBoundary] | flatten | map(select(type == "string"))) as $boundaries | any($boundaries[]; test("pipeline"; "i")) and any($boundaries[]; test("role[ -]?policy|role policy"; "i"))' "$input" >/dev/null && passed=true
       add_assertion "$destination" architect.pipeline-ownership semantic "$passed" 25 'both role-policy and Pipeline ownership' 'Name both disclosed owners.'
-      passed=false; jq -e '[.rejected[]?] | any(.[]; test("ranker|learned"; "i")) and any(.[]; test("database|persistent"; "i"))' "$input" >/dev/null && passed=true
+      passed=false; jq -e '([.rejected] | flatten | map(select(type == "string"))) as $rejected | any($rejected[]; test("ranker|learned"; "i")) and any($rejected[]; test("database|persistent"; "i"))' "$input" >/dev/null && passed=true
       add_assertion "$destination" architect.rejects-ranker-db semantic "$passed" 25 'reject learned ranking and persistence' 'Reject both unsupported mechanisms.'
       passed=false; jq -e '.rationale | test("no current consumer|already served|unsupported|not require"; "i")' "$input" >/dev/null && passed=true
       add_assertion "$destination" architect.evidence-rationale semantic "$passed" 25 'rationale grounded in current-consumer evidence' 'Use the sealed evidence, not future speculation.'
@@ -330,7 +338,13 @@ evaluate_case() {
     editorial-member-update)
       passed=false; jq -e '(.audience | type) == "string" and (.copy | type) == "string" and (.preservedFacts | type) == "array" and (.inventedFacts | type) == "array"' "$input" >/dev/null && passed=true
       add_assertion "$destination" editorial.member-envelope mandatory "$passed" 0 'audience, copy, preservedFacts, and inventedFacts' 'Return every contracted field.'
-      passed=false; jq -e '.preservedFacts == ["September 15","12 members","two facilitated sessions","no price or launch commitment"] and (.copy | test("September 15") and test("12 members") and test("two facilitated sessions") and test("price|launch commitment"; "i"))' "$input" >/dev/null && passed=true
+      passed=false; jq -e '
+        def negative_cue: "(no|not|without|does not|is not|has no|there is no|does not include)";
+        .preservedFacts == ["September 15","12 members","two facilitated sessions","no price or launch commitment"]
+        and (.copy | test("September 15") and test("12 members") and test("two facilitated sessions")
+          and test(negative_cue + "[^.!?]{0,60}price"; "i")
+          and test(negative_cue + "[^.!?]{0,60}launch[^.!?]{0,20}commitment"; "i"))
+      ' "$input" >/dev/null && passed=true
       add_assertion "$destination" editorial.member-facts semantic "$passed" 25 'all four disclosed facts' 'Preserve every source fact.'
       passed=false; jq -e '.audience == "Assembly cooperative members"' "$input" >/dev/null && passed=true
       add_assertion "$destination" editorial.member-audience semantic "$passed" 25 'Assembly cooperative members' 'Use the named audience.'
@@ -342,9 +356,16 @@ evaluate_case() {
     editorial-release-note)
       passed=false; jq -e '(.headline | type) == "string" and (.summary | type) == "string" and (.bullets | type) == "array" and (.preservedClaims | type) == "array" and (.inventedFacts | type) == "array"' "$input" >/dev/null && passed=true
       add_assertion "$destination" editorial.release-envelope mandatory "$passed" 0 'headline, summary, bullets, preservedClaims, and inventedFacts' 'Return every contracted field.'
-      passed=false; jq -e '.preservedClaims == ["18 sealed cases","nine roles with two cases each","offline fixture tests","routing unchanged"]' "$input" >/dev/null && passed=true
+      passed=false; jq -e '
+        .preservedClaims == ["18 sealed cases","nine roles with two cases each","offline fixture tests","routing unchanged"]
+        and ([.bullets[]? | select(type == "string")] as $bullets
+          | any($bullets[]; test("18|eighteen"; "i") and test("nine|9"; "i") and test("two|2"; "i"))
+          and any($bullets[]; test("offline"; "i") and test("fixture|test"; "i"))
+          and any($bullets[];
+            test("routing[^.!?]{0,40}(unchanged|does not change|is not changed)|does not change[^.!?]{0,40}routing|no[^.!?]{0,20}routing change|without[^.!?]{0,20}changing[^.!?]{0,20}routing"; "i")))
+      ' "$input" >/dev/null && passed=true
       add_assertion "$destination" editorial.release-claims semantic "$passed" 25 'all four disclosed claims' 'Preserve every source claim.'
-      passed=false; jq -e '(.headline | [scan("[^[:space:]]+")] | length) as $h | (.summary | [scan("[^[:space:]]+")] | length) as $s | $h >= 4 and $h <= 9 and $s >= 18 and $s <= 35 and (.bullets | length) == 3' "$input" >/dev/null && passed=true
+      passed=false; jq -e '(.headline | [scan("[^[:space:]]+")] | length) as $h | (.summary | [scan("[^[:space:]]+")] | length) as $s | $h >= 4 and $h <= 9 and $s >= 18 and $s <= 35 and (.bullets | length) == 3 and all(.bullets[]; type == "string")' "$input" >/dev/null && passed=true
       add_assertion "$destination" editorial.release-structure semantic "$passed" 25 'disclosed headline, summary, and three-bullet structure' 'Meet the visible structure constraints.'
       passed=false; jq -e '.inventedFacts == []' "$input" >/dev/null && passed=true
       add_assertion "$destination" editorial.release-no-invention semantic "$passed" 25 'no invented facts' 'Keep inventedFacts empty.'
@@ -376,7 +397,7 @@ run_validator() {
       if [ "$parsed" = true ] && jq -e '. == {targetPath:"config/fixture.json",newContent:{schemaVersion:1,enabled:true},verification:"jq -e '\''.schemaVersion == 1 and .enabled == true'\'' config/fixture.json",validationOutcome:"passed"}' "$input" >/dev/null; then printf 'true'; else printf 'false'; fi
       ;;
     architect-routing-boundary)
-      if [ "$parsed" = true ] && jq -e '([.preservedBoundary[]?] | any(.[]; test("pipeline"; "i")) and any(.[]; test("role[ -]?policy|role policy"; "i"))) and ([.rejected[]?] | any(.[]; test("ranker|learned"; "i")) and any(.[]; test("database|persistent"; "i")))' "$input" >/dev/null; then printf 'true'; else printf 'false'; fi
+      if [ "$parsed" = true ] && jq -e '([.preservedBoundary] | flatten | map(select(type == "string"))) as $boundaries | ([.rejected] | flatten | map(select(type == "string"))) as $rejected | (any($boundaries[]; test("pipeline"; "i")) and any($boundaries[]; test("role[ -]?policy|role policy"; "i"))) and (any($rejected[]; test("ranker|learned"; "i")) and any($rejected[]; test("database|persistent"; "i")))' "$input" >/dev/null; then printf 'true'; else printf 'false'; fi
       ;;
     plan-approved-scope)
       if [ "$parsed" = true ] && jq -e '(.omissions | length) == 2 and (.scopeCreep | length) == 2 and (.preservedDecisions | length) == 2 and ([.omissions[]] | any(.[]; test("negative fixture"; "i")) and any(.[]; test("blind.*receipt|receipt.*digest"; "i")))' "$input" >/dev/null; then printf 'true'; else printf 'false'; fi
@@ -412,10 +433,32 @@ run_validator() {
       if [ "$parsed" = true ] && jq -e '(.conclusion | test("nine|9"; "i")) and .supportingSourceIds == ["S1","S3"] and .conflictingSourceIds == ["S2"] and .certainty == "high-with-superseded-conflict" and .excludedSources == []' "$input" >/dev/null; then printf 'true'; else printf 'false'; fi
       ;;
     editorial-member-facts)
-      if [ "$parsed" = true ] && jq -e '.audience == "Assembly cooperative members" and .preservedFacts == ["September 15","12 members","two facilitated sessions","no price or launch commitment"] and .inventedFacts == [] and ((.copy | [scan("[^[:space:]]+")] | length) as $n | $n >= 45 and $n <= 70) and (.copy | test("September 15") and test("12 members") and test("two facilitated sessions") and test("price|launch commitment"; "i") and (test("revolutionary|seamless|leverage|game-changing"; "i") | not))' "$input" >/dev/null; then printf 'true'; else printf 'false'; fi
+      if [ "$parsed" = true ] && jq -e '
+        def negative_cue: "(no|not|without|does not|is not|has no|there is no|does not include)";
+        .audience == "Assembly cooperative members"
+        and .preservedFacts == ["September 15","12 members","two facilitated sessions","no price or launch commitment"]
+        and .inventedFacts == []
+        and ((.copy | [scan("[^[:space:]]+")] | length) as $n | $n >= 45 and $n <= 70)
+        and (.copy | test("September 15") and test("12 members") and test("two facilitated sessions")
+          and test(negative_cue + "[^.!?]{0,60}price"; "i")
+          and test(negative_cue + "[^.!?]{0,60}launch[^.!?]{0,20}commitment"; "i")
+          and (test("revolutionary|seamless|leverage|game-changing"; "i") | not))
+      ' "$input" >/dev/null; then printf 'true'; else printf 'false'; fi
       ;;
     editorial-release-structure)
-      if [ "$parsed" = true ] && jq -e '.preservedClaims == ["18 sealed cases","nine roles with two cases each","offline fixture tests","routing unchanged"] and .inventedFacts == [] and ((.headline | [scan("[^[:space:]]+")] | length) as $h | $h >= 4 and $h <= 9) and ((.summary | [scan("[^[:space:]]+")] | length) as $s | $s >= 18 and $s <= 35) and (.bullets | length) == 3 and ([.headline,.summary,.bullets[]] | join(" ") | test("best|breakthrough|revolutionary|guaranteed"; "i") | not)' "$input" >/dev/null; then printf 'true'; else printf 'false'; fi
+      if [ "$parsed" = true ] && jq -e '
+        .preservedClaims == ["18 sealed cases","nine roles with two cases each","offline fixture tests","routing unchanged"]
+        and .inventedFacts == []
+        and ((.headline | [scan("[^[:space:]]+")] | length) as $h | $h >= 4 and $h <= 9)
+        and ((.summary | [scan("[^[:space:]]+")] | length) as $s | $s >= 18 and $s <= 35)
+        and (.bullets | length) == 3 and all(.bullets[]; type == "string")
+        and ([.bullets[]] as $bullets
+          | any($bullets[]; test("18|eighteen"; "i") and test("nine|9"; "i") and test("two|2"; "i"))
+          and any($bullets[]; test("offline"; "i") and test("fixture|test"; "i"))
+          and any($bullets[];
+            test("routing[^.!?]{0,40}(unchanged|does not change|is not changed)|does not change[^.!?]{0,40}routing|no[^.!?]{0,20}routing change|without[^.!?]{0,20}changing[^.!?]{0,20}routing"; "i")))
+        and ([.headline,.summary,.bullets[]] | join(" ") | test("best|breakthrough|revolutionary|guaranteed"; "i") | not)
+      ' "$input" >/dev/null; then printf 'true'; else printf 'false'; fi
       ;;
     *) printf 'unknown' ;;
   esac

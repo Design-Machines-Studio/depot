@@ -135,6 +135,30 @@ assert jq -e '
   | (.semanticAlternatives | length) > 0
   and (.prompt | contains("no exact nextChunk label, executor label, or capability wording is required"))
 ' "$SUITE"
+assert jq -e '
+  .cases[] | select(.id == "architect-routing-tradeoff")
+  | .revision == 2 and .promptRevision == 2
+  and (.prompt | contains("either a non-empty string or a non-empty array of strings"))
+  and any(.semanticAlternatives[]; .id == "scalar-boundary-wording"
+    and (.output.preservedBoundary | type) == "string"
+    and (.output.rejected | type) == "string")
+' "$SUITE"
+
+# Editorial regression controls keep metadata valid while prose contradicts or
+# omits sealed facts, proving deterministic gates inspect the copy itself.
+assert jq -e '
+  (.cases[] | select(.id == "editorial-member-update")) as $member
+  | ($member.expected.preservedFacts) as $facts
+  | any($member.negativeFixtures[]; .id == "metadata-hides-positive-commitment"
+    and .output.preservedFacts == $facts and .output.inventedFacts == [])
+' "$SUITE"
+assert jq -e '
+  (.cases[] | select(.id == "editorial-release-note")) as $release
+  | ($release.expected.preservedClaims) as $claims
+  | all(["metadata-hides-routing-change","metadata-with-irrelevant-bullets"][]; . as $id
+    | any($release.negativeFixtures[]; .id == $id
+      and .output.preservedClaims == $claims and .output.inventedFacts == []))
+' "$SUITE"
 
 # Every deliberate negative fails its named public assertion rather than a
 # hidden wording oracle or benchmark fault.
@@ -180,7 +204,7 @@ editorial_digest="sha256:$(sha256sum "$TMP/editorial-normalized" | awk '{print $
 make_human_receipt() {
   local destination="$1"
   jq -n --arg digest "$editorial_digest" '
-    {schemaVersion:1,suiteId:"depot-role-v2",caseId:"editorial-member-update",caseRevision:1,
+    {schemaVersion:1,suiteId:"depot-role-v2",caseId:"editorial-member-update",caseRevision:2,
      rubricRevision:1,outputArtifactSha256:$digest,blindToCandidate:true,
      observedAt:"2026-08-29T00:00:00Z",criterionScores:{"member-clarity":5,"member-voice":4}}' > "$destination"
 }

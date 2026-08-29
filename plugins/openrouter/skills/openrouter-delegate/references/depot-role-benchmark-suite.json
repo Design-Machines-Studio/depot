@@ -116,16 +116,16 @@
     },
     {
       "id": "architect-routing-tradeoff",
-      "revision": 1,
-      "promptRevision": 1,
+      "revision": 2,
+      "promptRevision": 2,
       "role": "architect",
       "taskType": "architecture-tradeoff",
       "objective": "Resolve an architecture tradeoff while rejecting unsupported machinery.",
       "requiredCapabilities": ["read-repository", "long-context", "structured-output"],
       "workload": "quality",
       "executionMode": "single-turn-sealed-evidence-pack",
-      "prompt": "Return one raw JSON object with decision, rationale, preservedBoundary, and rejected. Sealed evidence: role-policy.json already owns deterministic candidate order; Pipeline owns workflow depth and role intent; model-router validates provider-neutral role requests and dispatches one transport at a time. A proposal would add a persistent routing database and learned ranker solely to choose roles. Decide between preserving the current ownership split or adopting that proposal. Accept any wording that preserves policy-owned deterministic selection and rejects the database/ranker because no current consumer requires it. preservedBoundary must name both role policy and Pipeline ownership; rejected must be non-empty.",
-      "outputContract": {"format": "one raw JSON object", "fields": {"decision": "semantic decision", "rationale": "evidence-based rationale", "preservedBoundary": "role-policy and Pipeline ownership", "rejected": "non-empty rejected machinery"}},
+      "prompt": "Return one raw JSON object with decision, rationale, preservedBoundary, and rejected. Sealed evidence: role-policy.json already owns deterministic candidate order; Pipeline owns workflow depth and role intent; model-router validates provider-neutral role requests and dispatches one transport at a time. A proposal would add a persistent routing database and learned ranker solely to choose roles. Decide between preserving the current ownership split or adopting that proposal. Accept any wording that preserves policy-owned deterministic selection and rejects the database/ranker because no current consumer requires it. preservedBoundary must be either a non-empty string or a non-empty array of strings and must name both role policy and Pipeline ownership; rejected must be either a non-empty string or a non-empty array of strings and must reject both the database and ranker.",
+      "outputContract": {"format": "one raw JSON object", "fields": {"decision": "semantic decision", "rationale": "evidence-based rationale", "preservedBoundary": "non-empty string or non-empty string array naming role-policy and Pipeline ownership", "rejected": "non-empty string or non-empty string array rejecting both the database and ranker"}},
       "mandatoryAssertions": [{"id": "strict-json-object", "description": "Raw output is one JSON object."}, {"id": "normalized-json-object", "description": "Normalized output is one JSON object."}, {"id": "architect.tradeoff-envelope", "description": "All fields are present with required types."}],
       "semanticCriteria": [{"id": "architect.policy-owned-selection", "description": "Preserves deterministic policy-owned selection."}, {"id": "architect.pipeline-ownership", "description": "Preserves Pipeline workflow-depth ownership."}, {"id": "architect.rejects-ranker-db", "description": "Rejects the unsupported ranker/database."}, {"id": "architect.evidence-rationale", "description": "Uses the sealed current-consumer evidence."}],
       "validatorCriteria": [{"id": "architect-routing-boundary", "description": "Decision preserves both ownership boundaries and rejects the proposal."}],
@@ -134,7 +134,7 @@
       "fixtureProvenance": {"kind": "sealed-architecture-pack", "sources": ["role-policy.json", "routing-policy.json", "model-router contract excerpt"], "liveAccess": false},
       "applicability": {"toolUse": false, "browser": false, "multiTurn": false, "repositoryValidation": false},
       "expected": {"decision": "preserve deterministic policy-owned selection", "rationale": "No current consumer requires learned ranking or persistence.", "preservedBoundary": ["role policy owns candidate selection", "Pipeline owns workflow depth and role intent"], "rejected": ["persistent routing database", "learned ranker"]},
-      "semanticAlternatives": [{"id": "ownership-first-wording", "output": {"decision": "keep the current ownership split", "rationale": "The sealed consumers are already served; extra persistence is unsupported.", "preservedBoundary": ["role-policy deterministic dispatch", "Pipeline role intent"], "rejected": ["database-backed learned selector"]}}],
+      "semanticAlternatives": [{"id": "ownership-first-wording", "output": {"decision": "keep the current ownership split", "rationale": "The sealed consumers are already served; extra persistence is unsupported.", "preservedBoundary": ["role-policy deterministic dispatch", "Pipeline role intent"], "rejected": ["database-backed learned selector"]}}, {"id": "scalar-boundary-wording", "output": {"decision": "preserve the deterministic ownership split", "rationale": "No current consumer requires added persistence or learned selection.", "preservedBoundary": "role policy owns deterministic candidate selection while Pipeline owns workflow depth and role intent", "rejected": "reject the persistent routing database and learned ranker"}}],
       "negativeFixtures": [{"id": "adopts-unsupported-machinery", "output": {"decision": "adopt the learned ranker", "rationale": "It may help later.", "preservedBoundary": ["ranker owns selection"], "rejected": []}, "mustFailAssertionIds": ["architect.policy-owned-selection", "architect.rejects-ranker-db"]}]
     },
     {
@@ -392,7 +392,7 @@
     },
     {
       "id": "editorial-member-update",
-      "revision": 1,
+      "revision": 2,
       "promptRevision": 1,
       "role": "editorial",
       "taskType": "factual-audience-rewrite",
@@ -413,11 +413,11 @@
       "humanRubric": {"rubricRevision": 1, "criteria": [{"id": "member-clarity", "description": "Clear to cooperative members.", "scoreMin": 1, "scoreMax": 5}, {"id": "member-voice", "description": "Natural, respectful member-facing voice.", "scoreMin": 1, "scoreMax": 5}]},
       "expected": {"audience": "Assembly cooperative members", "copy": "The pilot begins September 15 with 12 members. We will collect feedback in two facilitated sessions so participants can describe what works and what needs attention. This pilot does not include a price or launch commitment; it is a focused chance for members to test the work and share grounded feedback.", "preservedFacts": ["September 15", "12 members", "two facilitated sessions", "no price or launch commitment"], "inventedFacts": []},
       "semanticAlternatives": [],
-      "negativeFixtures": [{"id": "invented-price", "output": {"audience": "Assembly cooperative members", "copy": "The pilot begins September 15 with 12 members. Two facilitated sessions will collect feedback. The confirmed launch price is ten dollars, and everyone can expect a polished experience when the pilot concludes for this cooperative group later in the fall.", "preservedFacts": ["September 15", "12 members", "two facilitated sessions", "no price or launch commitment"], "inventedFacts": ["confirmed launch price"]}, "mustFailAssertionIds": ["editorial.member-no-invention"]}]
+      "negativeFixtures": [{"id": "invented-price", "output": {"audience": "Assembly cooperative members", "copy": "The pilot begins September 15 with 12 members. Two facilitated sessions will collect feedback. The confirmed launch price is ten dollars, and everyone can expect a polished experience when the pilot concludes for this cooperative group later in the fall.", "preservedFacts": ["September 15", "12 members", "two facilitated sessions", "no price or launch commitment"], "inventedFacts": ["confirmed launch price"]}, "mustFailAssertionIds": ["editorial.member-no-invention"]}, {"id": "metadata-hides-positive-commitment", "output": {"audience": "Assembly cooperative members", "copy": "The pilot begins September 15 with 12 members, and feedback will be collected in two facilitated sessions. A price has now been approved, and the team has made a launch commitment for this member program. Participants can use the sessions to discuss the confirmed release plan and prepare for the scheduled public launch together.", "preservedFacts": ["September 15", "12 members", "two facilitated sessions", "no price or launch commitment"], "inventedFacts": []}, "mustFailAssertionIds": ["editorial.member-facts"]}]
     },
     {
       "id": "editorial-release-note",
-      "revision": 1,
+      "revision": 2,
       "promptRevision": 1,
       "role": "editorial",
       "taskType": "structure-and-tone-edit",
@@ -438,7 +438,7 @@
       "humanRubric": {"rubricRevision": 1, "criteria": [{"id": "release-clarity", "description": "Release information is easy to scan.", "scoreMin": 1, "scoreMax": 5}, {"id": "release-tone", "description": "Tone is factual and proportionate.", "scoreMin": 1, "scoreMax": 5}]},
       "expected": {"headline": "Depot Role Benchmark Version Two", "summary": "The updated benchmark broadens role coverage with sealed, offline evidence while leaving model routing behavior unchanged for current Depot evaluation work.", "bullets": ["Eighteen sealed cases cover all nine roles with two cases each.", "Fixture tests run entirely offline.", "The corpus update does not change routing behavior."], "preservedClaims": ["18 sealed cases", "nine roles with two cases each", "offline fixture tests", "routing unchanged"], "inventedFacts": []},
       "semanticAlternatives": [],
-      "negativeFixtures": [{"id": "hype-and-routing-change", "output": {"headline": "A Revolutionary Depot Breakthrough", "summary": "The best benchmark now guarantees improved routing decisions through a new corpus that changes how candidates are selected for every role.", "bullets": ["Eighteen cases cover roles.", "Tests are offline.", "Routing is now smarter."], "preservedClaims": ["18 sealed cases", "nine roles with two cases each", "offline fixture tests"], "inventedFacts": ["improved routing decisions"]}, "mustFailAssertionIds": ["editorial.release-claims", "editorial.release-no-invention", "editorial.release-tone"]}]
+      "negativeFixtures": [{"id": "hype-and-routing-change", "output": {"headline": "A Revolutionary Depot Breakthrough", "summary": "The best benchmark now guarantees improved routing decisions through a new corpus that changes how candidates are selected for every role.", "bullets": ["Eighteen cases cover roles.", "Tests are offline.", "Routing is now smarter."], "preservedClaims": ["18 sealed cases", "nine roles with two cases each", "offline fixture tests"], "inventedFacts": ["improved routing decisions"]}, "mustFailAssertionIds": ["editorial.release-claims", "editorial.release-no-invention", "editorial.release-tone"]}, {"id": "metadata-hides-routing-change", "output": {"headline": "Depot Role Corpus Update Details", "summary": "The updated corpus records broader sealed evaluation coverage and offline fixture checks while documenting the operational effects for current Depot benchmark participants.", "bullets": ["Eighteen sealed cases cover all nine roles with two cases each.", "Fixture tests run entirely offline.", "Routing now changes candidate selection for every benchmark role."], "preservedClaims": ["18 sealed cases", "nine roles with two cases each", "offline fixture tests", "routing unchanged"], "inventedFacts": []}, "mustFailAssertionIds": ["editorial.release-claims"]}, {"id": "metadata-with-irrelevant-bullets", "output": {"headline": "Depot Role Corpus Update Details", "summary": "The updated corpus records broader sealed evaluation coverage and offline fixture checks while documenting the operational effects for current Depot benchmark participants.", "bullets": ["Teams receive a concise benchmark overview.", "The documentation uses a consistent structure.", "Readers can scan the update quickly."], "preservedClaims": ["18 sealed cases", "nine roles with two cases each", "offline fixture tests", "routing unchanged"], "inventedFacts": []}, "mustFailAssertionIds": ["editorial.release-claims"]}]
     }
   ]
 }
