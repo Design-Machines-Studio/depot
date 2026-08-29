@@ -33,7 +33,7 @@ usage() {
   printf '%s\n' \
     'usage: depot-role-production-canary.sh --list' \
     '       depot-role-production-canary.sh --validate --attempt-file PATH --artifact-root PATH' \
-    '       depot-role-production-canary.sh --run --work-unit ID --transport codex-cli|claude-cli|openrouter --model EXACT_ID --effort low|medium|high|max --base-revision COMMIT --result-dir PATH [--max-corrections 0|1|2]'
+    '       depot-role-production-canary.sh --run --work-unit ID --transport codex-cli|openrouter --model EXACT_ID --effort low|medium|high|max --base-revision COMMIT --result-dir PATH [--max-corrections 0|1|2]'
 }
 
 while [ "$#" -gt 0 ]; do
@@ -163,44 +163,93 @@ canonical_validation_digest() {
 
 schema_shape_ok() {
   jq -e '
+    def integer: type == "number" and floor == .;
+    def nullable_nonnegative: . == null or (type == "number" and . >= 0);
+    def timestamp:
+      type == "string"
+      and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$");
+    def nullable_timestamp: . == null or timestamp;
+    def coverage:
+      type == "object"
+      and (keys | sort) == (["applicable","observed","rate","reason","total"] | sort)
+      and (.applicable | type == "boolean")
+      and (.observed == null or (.observed | integer and . >= 0))
+      and (.total == null or (.total | integer and . >= 0))
+      and (.rate == null or (.rate | type == "number" and . >= 0 and . <= 1))
+      and (.reason == null or (.reason | type == "string" and length <= 240));
     (keys | sort) == (["artifacts","attemptId","bindings","boundaries","cost","evidenceClass","harnessVersion","identity","outcome","quality","repository","schemaVersion","telemetry","timing"] | sort)
     and .schemaVersion == 1 and .evidenceClass == "production-canary" and .harnessVersion == 1
     and (.attemptId | type == "string" and test("^[a-z0-9][a-z0-9._-]{7,95}$"))
-    and (.repository | type == "object")
+    and (.repository | type == "object" and (keys | sort) == (["baseRevision","changedFileCount","cleanBase","headRevision","identity","patchDigest"] | sort))
     and (.repository.identity == "Design-Machines-Studio/depot")
     and (.repository.baseRevision | type == "string" and test("^[0-9a-f]{40}$"))
     and (.repository.headRevision | type == "string" and test("^[0-9a-f]{40}$"))
     and (.repository.cleanBase | type == "boolean")
     and (.repository.patchDigest | type == "string" and test("^sha256:[0-9a-f]{64}$"))
-    and (.repository.changedFileCount | type == "number" and . >= 0 and . <= 64)
-    and (.bindings | type == "object") and (.bindings.pluginVersions | type == "object")
+    and (.repository.changedFileCount | integer and . >= 0 and . <= 64)
+    and (.bindings | type == "object" and (keys | sort) == (["pluginVersions","rolePolicyDigest","sealedCaseDigest","sealedCaseId","sealedScorerDigest","sealedSuiteId","taskFixtureDigest","validationContractDigest","workUnitDigest","workUnitId","workUnitRevision"] | sort))
+    and (.bindings.workUnitId | type == "string" and length > 0)
+    and (.bindings.workUnitRevision | integer and . >= 1)
+    and all(.bindings.workUnitDigest,.bindings.taskFixtureDigest,.bindings.validationContractDigest,.bindings.sealedCaseDigest,.bindings.sealedScorerDigest,.bindings.rolePolicyDigest; type == "string" and test("^sha256:[0-9a-f]{64}$"))
+    and .bindings.sealedSuiteId == "depot-role-v2"
+    and (.bindings.sealedCaseId | type == "string" and length > 0)
+    and (.bindings.pluginVersions | type == "object" and (keys | sort) == (["model-router","openrouter"] | sort))
+    and all(.bindings.pluginVersions[]; type == "string" and test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+    and (.identity | type == "object" and (keys | sort) == (["aliasResolution","fallbackUsed","provider","requestedCandidate","role","servedIdentity","transport"] | sort))
     and (.identity.role | IN("architect","plan-critic","builder-fast","builder-deep","review-fast","review-deep","security-review","research-fast","editorial"))
     and (.identity.transport | IN("codex-cli","claude-cli","openrouter"))
-    and (.identity.requestedCandidate | type == "string" and length > 0)
-    and ((.identity.servedIdentity == null) or (.identity.servedIdentity | type == "string" and length > 0))
-    and ((.identity.provider == null) or (.identity.provider | type == "string" and length > 0))
+    and (.identity.requestedCandidate | type == "string" and length > 0 and length <= 128)
+    and ((.identity.servedIdentity == null) or (.identity.servedIdentity | type == "string" and length > 0 and length <= 128))
+    and ((.identity.provider == null) or (.identity.provider | type == "string" and length > 0 and length <= 128))
     and ((.identity.fallbackUsed == null) or (.identity.fallbackUsed | type == "boolean"))
+    and (.identity.aliasResolution | type == "object" and (keys | sort) == (["allowedServedIdentities","status"] | sort))
     and (.identity.aliasResolution.status | IN("exact","mapped","unmapped","unknown"))
-    and (.identity.aliasResolution.allowedServedIdentities | type == "array")
+    and (.identity.aliasResolution.allowedServedIdentities | type == "array" and length <= 16 and length == (unique | length))
+    and all(.identity.aliasResolution.allowedServedIdentities[]; type == "string" and length > 0 and length <= 128)
     and (.boundaries | keys | sort) == (["evaluatorBinding","fixtureIntegrity","harnessComplete","instrumentationComplete","repositoryIntegrity","requiredToolAvailable","validatorIntegrity"] | sort)
     and all(.boundaries[]; type == "boolean")
-    and (.quality.mandatoryAssertions | type == "array" and length > 0)
-    and all(.quality.mandatoryAssertions[]; (keys | sort) == ["id","pass"] and (.id | type == "string" and length > 0) and (.pass | type == "boolean"))
+    and (.quality | type == "object" and (keys | sort) == (["correctionCount","falsePositives","finalValidity","firstPassValidity","mandatoryAssertions","usefulFindings","validationAttempts"] | sort))
+    and (.quality.mandatoryAssertions | type == "array" and length > 0 and length <= 64)
+    and all(.quality.mandatoryAssertions[]; (keys | sort) == ["id","pass"] and (.id | type == "string" and length > 0 and length <= 128) and (.pass | type == "boolean"))
     and ((.quality.firstPassValidity == null) or (.quality.firstPassValidity | type == "boolean"))
     and ((.quality.finalValidity == null) or (.quality.finalValidity | type == "boolean"))
-    and ((.quality.correctionCount == null) or (.quality.correctionCount | type == "number" and . >= 0 and . <= 2))
-    and ((.quality.validationAttempts == null) or (.quality.validationAttempts | type == "number" and . >= 1 and . <= 3))
-    and (.timing.startedAt | type == "string") and (.timing.endedAt | type == "string")
-    and (.telemetry.tokens | keys | sort) == ["input","output","reasoning"]
-    and (.telemetry.contextCoverage | type == "object") and (.telemetry.toolCoverage | type == "object")
-    and (.cost.currency == "USD") and (.cost.receiptCoverage | IN("measured","subscription","missing"))
+    and ((.quality.usefulFindings == null) or (.quality.usefulFindings | integer and . >= 0))
+    and ((.quality.falsePositives == null) or (.quality.falsePositives | integer and . >= 0))
+    and ((.quality.correctionCount == null) or (.quality.correctionCount | integer and . >= 0 and . <= 2))
+    and ((.quality.validationAttempts == null) or (.quality.validationAttempts | integer and . >= 1 and . <= 3))
+    and (.timing | type == "object" and (keys | sort) == (["endedAt","firstUsefulAt","startedAt","timeToFirstUsefulSeconds","timeToValidSeconds","totalDurationSeconds","validAt"] | sort))
+    and (.timing.startedAt | timestamp) and (.timing.firstUsefulAt | nullable_timestamp)
+    and (.timing.validAt | nullable_timestamp) and (.timing.endedAt | timestamp)
+    and (.timing.timeToFirstUsefulSeconds | nullable_nonnegative)
+    and (.timing.timeToValidSeconds | nullable_nonnegative)
+    and (.timing.totalDurationSeconds | nullable_nonnegative)
+    and (.telemetry | type == "object" and (keys | sort) == (["contextCoverage","tokens","toolCallsByClass","toolCoverage"] | sort))
+    and (.telemetry.toolCallsByClass == null or (.telemetry.toolCallsByClass | type == "object" and (keys | sort) == (["other","repositoryRead","repositoryWrite","validation"] | sort) and all(.[]; integer and . >= 0)))
+    and (.telemetry.tokens | type == "object" and (keys | sort) == (["input","output","reasoning"] | sort))
+    and all(.telemetry.tokens[]; . == null or (integer and . >= 0))
+    and (.telemetry.contextCoverage | coverage) and (.telemetry.toolCoverage | coverage)
+    and (.cost | type == "object" and (keys | sort) == (["currency","maximumBoundUsd","measuredUsd","receiptCoverage"] | sort))
+    and (.cost.currency == "USD")
+    and (.cost.maximumBoundUsd == null or (.cost.maximumBoundUsd | type == "number" and . >= 0 and . <= 1))
+    and (.cost.measuredUsd == null or (.cost.measuredUsd | type == "number" and . >= 0 and . <= 1))
+    and (.cost.receiptCoverage | IN("measured","subscription","missing"))
     and (.artifacts | type == "array" and length > 0 and length <= 16)
     and all(.artifacts[];
       (keys | sort) == ["bytes","kind","path","sha256"]
-      and (.path | type == "string" and length > 0 and startswith("/") | not)
+      and (.kind | IN("prompt","output","patch","validation","transport-receipt","diagnostic"))
+      and (.path | type == "string" and length > 0 and length <= 240
+        and (startswith("/") | not) and test("^[A-Za-z0-9._/-]+$"))
       and (.path | split("/") | index("..") | not)
       and (.sha256 | type == "string" and test("^sha256:[0-9a-f]{64}$"))
-      and (.bytes | type == "number" and . >= 0 and . <= 1048576))
+      and (.bytes | integer and . >= 0 and . <= 1048576))
+    and (.outcome | type == "object" and (keys | sort) == (["benchmarkFault","comparable","evidenceState","faultCode","faultOwner","modelConclusion","transportSuccess"] | sort))
+    and (.outcome.transportSuccess | type == "boolean")
+    and (.outcome.benchmarkFault | type == "boolean")
+    and (.outcome.faultOwner | IN(null,"fixture","evaluator","validator","repository","instrumentation","tool","harness"))
+    and (.outcome.faultCode == null or (.outcome.faultCode | type == "string" and length <= 128))
+    and (.outcome.comparable | type == "boolean")
+    and (.outcome.modelConclusion | IN(null,"valid","invalid"))
+    and (.outcome.evidenceState | IN("incompatible","benchmark-faulted","comparable-but-insufficient"))
   ' "$1" >/dev/null 2>&1
 }
 
@@ -386,6 +435,14 @@ validate_attempt() {
 }
 
 prepare_result_dir() {
+  [ ! -L "$RESULT_DIR" ] || { printf 'production canary: real result directory required\n' >&2; exit 2; }
+  RESULT_DIR="$(realpath -m -- "$RESULT_DIR")"
+  case "$RESULT_DIR" in
+    "$ROOT"|"$ROOT"/*)
+      printf 'production canary: result directory must be outside the source checkout\n' >&2
+      exit 2
+      ;;
+  esac
   if [ -e "$RESULT_DIR" ]; then
     [ -d "$RESULT_DIR" ] && [ ! -L "$RESULT_DIR" ] || { printf 'production canary: real result directory required\n' >&2; exit 2; }
     [ -z "$(find "$RESULT_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ] || { printf 'production canary: result directory must be empty\n' >&2; exit 2; }
@@ -393,7 +450,6 @@ prepare_result_dir() {
     mkdir -p "$RESULT_DIR"
   fi
   chmod 700 "$RESULT_DIR"
-  RESULT_DIR="$(realpath -- "$RESULT_DIR")"
 }
 
 materialize_fixture() {
@@ -429,13 +485,14 @@ build_prompt() {
       context_total=$((context_total + bytes))
       [ "$context_total" -le "$(jq -r '.limits.contextBytes' "$WORK_UNITS")" ] || { printf 'production canary: context byte bound exceeded\n' >&2; return 1; }
       printf '\n## %s\n' "$rel"
-      sed -n '1,220p' "$path"
+      cat -- "$path"
     done < <(jq -r '.contextPaths[]' <<<"$unit")
   } > "$destination"
 }
 
 repository_validation() {
-  local validator="$1" worktree="$2"
+  local validator="$1" worktree="$2" unit="$3" expected_files actual_files
+  [ -z "$(find "$worktree/.depot-canary" -type l -print -quit)" ] || return 1
   case "$validator" in
     no-owned-edit) [ -z "$(git -C "$worktree" status --porcelain --untracked-files=all | grep -v '^?? \.depot-canary/' || true)" ] ;;
     builder-fast-owned-edit)
@@ -444,6 +501,13 @@ repository_validation() {
       jq -e '.coveredRoles == ["architect","builder"]' "$worktree/.depot-canary/suite.json" >/dev/null 2>&1 \
         && jq -e '.expectedRoleCount == 2 and .expectedCaseCount == 4' "$worktree/.depot-canary/test.json" >/dev/null 2>&1 ;;
     *) return 2 ;;
+  esac || return 1
+  case "$validator" in
+    builder-fast-owned-edit|builder-deep-multifile)
+      expected_files="$(jq -r '(.fixture // {}) | keys[]' <<<"$unit" | sort)"
+      actual_files="$(find "$worktree/.depot-canary" -type f -printf '%P\n' | sort)"
+      [ "$actual_files" = "$expected_files" ]
+      ;;
   esac
 }
 
@@ -466,6 +530,58 @@ artifact_row() {
     --argjson bytes "$(wc -c < "$root/$path" | tr -d '[:space:]')" '{kind:$kind,path:$path,sha256:$digest,bytes:$bytes}'
 }
 
+ensure_openrouter_receipt() {
+  local receipt="$1" raw="$2" requested="$3" case_id="$4" role="$5" workload="$6" status="$7"
+  if [ -f "$receipt" ] && [ ! -L "$receipt" ] && jq -e 'type == "object"' "$receipt" >/dev/null 2>&1; then
+    cp "$receipt" "$raw"
+    return 0
+  fi
+  printf '{}\n' > "$raw"
+  jq -n --arg requested "$requested" --arg caseId "$case_id" --arg role "$role" \
+    --arg workload "$workload" --argjson status "$status" '
+      {schemaVersion:2,outcome:"failed",failureKind:"missing-transport-receipt",
+       requestedModel:$requested,modelCandidates:[$requested],responseModel:null,
+       responseModelProvenance:"not_available",servingProvider:null,
+       servingProviderProvenance:"not_available",attemptedModel:$requested,
+       attemptedModels:[$requested],attemptProvenance:"request",fallbackUsed:null,
+       transport:"openrouter",transportStatus:$status,usage:{},
+       benchmark:{suiteId:"depot-role-v2",caseId:$caseId,role:$role,workload:$workload}}
+    ' > "$receipt"
+  return 1
+}
+
+retain_scorer_fault() {
+  local scorer_result="$1" case_id="$2"
+  jq -n --arg caseId "$case_id" '
+    {schemaVersion:2,caseId:$caseId,validationPassed:false,overallSuccess:false,
+     benchmarkFault:true,failureOwner:"validator",failureClass:"scorer-failure",
+     assertions:[{id:"production-canary-scorer",class:"mandatory",pass:false,
+       repairHint:"repair the sealed scorer before rerunning the canary"}]}
+  ' > "$scorer_result"
+}
+
+bound_retained_artifact() {
+  local path="$1" limit="$2" temporary
+  [ "$(wc -c < "$path" | tr -d '[:space:]')" -le "$limit" ] && return 0
+  temporary="$RESULT_DIR/.bounded-$(basename "$path")"
+  head -c "$limit" "$path" > "$temporary"
+  mv "$temporary" "$path"
+  return 1
+}
+
+prune_unretained_attempt_artifacts() {
+  local candidate final_output="$1" final_receipt="$2" final_raw="$3" final_score="$4"
+  for candidate in "$RESULT_DIR"/output-*.json "$RESULT_DIR"/transport-receipt-*.json \
+    "$RESULT_DIR"/transport-events-*.json "$RESULT_DIR"/validation-*.json; do
+    [ -e "$candidate" ] || continue
+    case "$candidate" in
+      "$final_output"|"$final_receipt"|"$final_raw"|"$final_score") ;;
+      *) rm -- "$candidate" ;;
+    esac
+  done
+  rm -f -- "$RESULT_DIR"/diagnostic-*.txt "$RESULT_DIR/system.txt" "$RESULT_DIR/receipt.tmp"
+}
+
 run_canary() {
   local unit role case_id validator source_head remote_url temp_root worktree baseline prompt started_epoch started_at
   local attempt_index=1 valid=false first_valid=null first_useful_at=null valid_at=null first_useful_seconds=null valid_seconds=null
@@ -474,15 +590,21 @@ run_canary() {
   local final_output final_receipt final_raw final_score counts useful false_positive transport_success=false
   local served='' provider='' fallback=null alias_status=unknown allowed='[]' cost_bound=null measured_cost=null cost_coverage=missing
   local fixture_ok=true evaluator_ok=true validator_ok=true repository_ok=true instrumentation_ok=true tool_ok=true harness_ok=true
-  local attempt_id artifacts_file attempt_file validation_file openrouter_version model_router_version maximum_corrections paid_maximum_corrections paid_limit alias
+  local attempt_id artifacts_file attempt_file validation_file openrouter_version model_router_version maximum_corrections paid_maximum_corrections paid_limit alias artifact_limit patch_limit retained
 
   require_authorities
   [ -n "$WORK_UNIT_ID" ] && [ -n "$TRANSPORT" ] && [ -n "$MODEL" ] && [ -n "$BASE_REVISION" ] && [ -n "$RESULT_DIR" ] || { usage >&2; exit 2; }
-  case "$TRANSPORT" in codex-cli|claude-cli|openrouter) ;; *) usage >&2; exit 2 ;; esac
+  [ "$TRANSPORT" != claude-cli ] || {
+    printf 'production canary: claude-cli transport disabled until a filesystem sandbox is available\n' >&2
+    exit 2
+  }
+  case "$TRANSPORT" in codex-cli|openrouter) ;; *) usage >&2; exit 2 ;; esac
   case "$EFFORT" in low|medium|high|max) ;; *) usage >&2; exit 2 ;; esac
   maximum_corrections="$(jq -r '.limits.maximumCorrections' "$WORK_UNITS")"
   paid_maximum_corrections="$(jq -r '.limits.paidMaximumCorrections' "$WORK_UNITS")"
   paid_limit="$(jq -r '.limits.paidMaximumUsd' "$WORK_UNITS")"
+  artifact_limit="$(jq -r '.limits.artifactBytes' "$WORK_UNITS")"
+  patch_limit="$(jq -r '.limits.patchBytes' "$WORK_UNITS")"
   case "$MAX_CORRECTIONS" in ''|*[!0-9]*) usage >&2; exit 2 ;; esac
   [ "$MAX_CORRECTIONS" -le "$maximum_corrections" ] || { printf 'production canary: correction limit exceeded\n' >&2; exit 2; }
   [ "$TRANSPORT" != openrouter ] || [ "$MAX_CORRECTIONS" -le "$paid_maximum_corrections" ] || { printf 'production canary: paid attempts permit no correction retry\n' >&2; exit 2; }
@@ -509,6 +631,7 @@ run_canary() {
   trap 'cleanup_on_exit $?' EXIT
   trap 'exit 130' INT
   trap 'exit 143' TERM
+  case "$RESULT_DIR" in "$temp_root"|"$temp_root"/*) printf 'production canary: result directory overlaps disposable worktree root\n' >&2; exit 2 ;; esac
   git -C "$ROOT" worktree add --detach "$worktree" "$BASE_REVISION" >/dev/null
   [ "$(git -C "$worktree" rev-parse HEAD)" = "$BASE_REVISION" ] && [ -z "$(git -C "$worktree" status --porcelain)" ] || { printf 'production canary: repository setup failure\n' >&2; exit 2; }
   materialize_fixture "$unit" "$worktree"
@@ -547,18 +670,6 @@ run_canary() {
            other:([$commands[] | select((test("(^|[ ;])(rg|sed|jq|git (show|diff|status)|head|tail|wc)( |$)|apply_patch|(^|[ ;])(mv|cp|mkdir)( |$)|test|validate|diff --check|jq -e") | not))] | length)}
         ' "$raw" 2>/dev/null || printf 'null')"
         ;;
-      claude-cli)
-        set +e
-        (cd "$worktree" && "${DEPOT_CANARY_CLAUDE_BIN:-$(command -v claude)}" --print --model "$MODEL" --effort "$EFFORT" \
-          --permission-mode bypassPermissions --allowedTools 'Read,Grep,Glob,Bash,Edit,Write' --no-session-persistence \
-          --output-format json < "$prompt") > "$raw" 2> "$stderr_file"
-        status=$?
-        set -e
-        jq -r '.result // empty' "$raw" > "$output" 2>/dev/null || : > "$output"
-        identity_json="$(jq -c '{served:(.response.model // .model // null),provider:(.response.provider // .provider // null),fallback:(.fallbackUsed // .fallback_used // null)}' "$raw" 2>/dev/null || printf '{"served":null,"provider":null,"fallback":null}')"
-        usage_json="$(jq -c '(.usage // {}) | {input:(.input_tokens // null),output:(.output_tokens // null),reasoning:(.reasoning_tokens // null)}' "$raw" 2>/dev/null || printf '{"input":null,"output":null,"reasoning":null}')"
-        tools_json=null
-        ;;
       openrouter)
         input_bytes="$(wc -c < "$prompt" | tr -d '[:space:]')"
         cost_bound="$(jq -r --arg model "$MODEL" --argjson bytes "$input_bytes" '
@@ -569,10 +680,13 @@ run_canary() {
         printf '%s\n' 'You are completing one bounded Depot production canary. Return only the required JSON object.' > "$RESULT_DIR/system.txt"
         set +e
         OPENROUTER_ALLOW_FALLBACKS=0 OPENROUTER_SYSTEM_FILE="$RESULT_DIR/system.txt" OPENROUTER_WORKLOAD="$(jq -r --arg id "$case_id" '.cases[] | select(.id == $id) | .workload' "$SUITE")" \
-          OPENROUTER_RECEIPT_FILE="$receipt" "$WRAPPER" "$MODEL" - 900 < "$prompt" > "$output" 2> "$stderr_file"
+        OPENROUTER_RECEIPT_FILE="$receipt" "$WRAPPER" "$MODEL" - 900 < "$prompt" > "$output" 2> "$stderr_file"
         status=$?
         set -e
-        cp "$receipt" "$raw" 2>/dev/null || printf '{}\n' > "$raw"
+        if ! ensure_openrouter_receipt "$receipt" "$raw" "$MODEL" "$case_id" "$role" \
+          "$(jq -r --arg id "$case_id" '.cases[] | select(.id == $id) | .workload' "$SUITE")" "$status"; then
+          instrumentation_ok=false
+        fi
         identity_json="$(jq -c '{served:(.responseModel // null),provider:(.servingProvider // null),fallback:(.fallbackUsed // null)}' "$receipt" 2>/dev/null || printf '{"served":null,"provider":null,"fallback":null}')"
         usage_json="$(jq -c '(.usage // {}) | {input:(.prompt_tokens // null),output:(.completion_tokens // null),reasoning:(.reasoning_tokens // null)}' "$receipt" 2>/dev/null || printf '{"input":null,"output":null,"reasoning":null}')"
         tools_json='{"repositoryRead":0,"repositoryWrite":0,"validation":0,"other":0}'
@@ -600,12 +714,18 @@ run_canary() {
            benchmark:{suiteId:$suiteId,caseId:$caseId,role:$role,workload:$workload}}
         ' > "$receipt"
     fi
+    final_output="$output"; final_receipt="$receipt"; final_raw="$raw"; final_score="$scorer_result"
     set +e
     "$BENCH" --score --case "$case_id" --output-file "$output" --receipt-file "$receipt" --result-file "$scorer_result" --duration-seconds "$(( $(date +%s) - started_epoch ))" >/dev/null
     scorer_status=$?
     set -e
-    [ "$scorer_status" -eq 0 ] || { validator_ok=false; harness_ok=false; break; }
-    repo_ok=false; repository_validation "$validator" "$worktree" && repo_ok=true
+    if [ "$scorer_status" -ne 0 ]; then
+      retain_scorer_fault "$scorer_result" "$case_id"
+      validator_ok=false
+      harness_ok=false
+      break
+    fi
+    repo_ok=false; repository_validation "$validator" "$worktree" "$unit" && repo_ok=true
     if [ -n "$(git -C "$worktree" status --porcelain --untracked-files=all | grep -v '^?? \.depot-canary/' || true)" ]; then repo_ok=false; fi
     if [ "$validator" = no-owned-edit ] && ! diff -qr "$baseline" "$worktree/.depot-canary" >/dev/null 2>&1; then repo_ok=false; fi
     validation_ok=false
@@ -617,7 +737,6 @@ run_canary() {
         first_useful_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; first_useful_seconds="$((end_epoch-started_epoch))"
       fi
     fi
-    final_output="$output"; final_receipt="$receipt"; final_raw="$raw"; final_score="$scorer_result"
     if [ "$validation_ok" = true ]; then valid=true; valid_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; valid_seconds="$((end_epoch-started_epoch))"; break; fi
     [ "$attempt_index" -le "$MAX_CORRECTIONS" ] || break
     {
@@ -628,6 +747,7 @@ run_canary() {
     attempt_index=$((attempt_index+1))
   done
 
+  prune_unretained_attempt_artifacts "$final_output" "$final_receipt" "$final_raw" "$final_score"
   transport_success=false; [ "$status" -eq 0 ] && transport_success=true
   alias="$(resolve_alias "$role" "$MODEL" "$TRANSPORT" "$served")"
   allowed="$(jq -c '.allowed' <<<"$alias")"
@@ -644,7 +764,10 @@ run_canary() {
     diff -ruN "$baseline" "$worktree/.depot-canary" > "$RESULT_DIR/patch.diff" || true
     changed_count="$(find "$worktree/.depot-canary" -type f -print0 | while IFS= read -r -d '' file; do rel="${file#"$worktree/.depot-canary/"}"; if [ ! -f "$baseline/$rel" ] || ! cmp -s "$baseline/$rel" "$file"; then printf '%s\n' "$rel"; fi; done | wc -l | tr -d '[:space:]')"
   fi
-  [ "$(wc -c < "$RESULT_DIR/patch.diff" | tr -d '[:space:]')" -le "$(jq -r '.limits.patchBytes' "$WORK_UNITS")" ] || { repository_ok=false; harness_ok=false; }
+  if ! bound_retained_artifact "$RESULT_DIR/patch.diff" "$patch_limit"; then
+    repository_ok=false
+    harness_ok=false
+  fi
   patch_digest="$(sha256_file "$RESULT_DIR/patch.diff")"
   ended_at="$(date -u +%Y-%m-%dT%H:%M:%SZ)"; end_epoch="$(date +%s)"; duration="$((end_epoch-started_epoch))"
   counts="$(classify_review_counts "$case_id" "$final_output")"; useful="$(jq -r '.useful' <<<"$counts")"; false_positive="$(jq -r '.falsePositive' <<<"$counts")"
@@ -654,19 +777,25 @@ run_canary() {
     context_observed=0
     while IFS= read -r rel; do grep -F "$rel" "$final_raw" >/dev/null 2>&1 && context_observed=$((context_observed+1)); done < <(jq -r '.contextPaths[]' <<<"$unit")
   fi
-  tool_coverage="$(jq -c --argjson tools "$tools_json" --arg transport "$TRANSPORT" --argjson applicable "$(jq -r '.toolCoverage.applicable' <<<"$unit")" --arg reason "$(jq -r '.toolCoverage.reason' <<<"$unit")" '
-    if $applicable then {applicable:true,observed:(if $tools == null then null else (($tools|to_entries|map(.value)|add) > 0 | if . then 1 else 0 end) end),total:1,
-      rate:(if $tools == null then null else (($tools|to_entries|map(.value)|add) > 0 | if . then 1 else 0 end) end),reason:$reason}
+  tool_coverage="$(jq -c --argjson tools "$tools_json" --argjson applicable "$(jq -r '.toolCoverage.applicable' <<<"$unit")" --arg reason "$(jq -r '.toolCoverage.reason' <<<"$unit")" '
+    (if $tools == null then null else (($tools|to_entries|map(.value)|add) > 0 | if . then 1 else 0 end) end) as $observed
+    | if $applicable then {applicable:true,observed:$observed,total:1,rate:$observed,reason:$reason}
     else {applicable:false,observed:null,total:null,rate:null,reason:$reason} end
   ' <<<"{}")"
   [ "$tools_json" != null ] || { if [ "$(jq -r '.toolCoverage.applicable' <<<"$unit")" = true ]; then instrumentation_ok=false; fi; }
 
-  artifacts_file="$RESULT_DIR/artifacts.ndjson"; : > "$artifacts_file"
-  if [ "$(wc -c < "$final_raw" | tr -d '[:space:]')" -gt "$(jq -r '.limits.artifactBytes' "$WORK_UNITS")" ]; then
-    head -c "$(jq -r '.limits.artifactBytes' "$WORK_UNITS")" "$final_raw" > "$RESULT_DIR/events.bounded"
-    mv "$RESULT_DIR/events.bounded" "$final_raw"
-    instrumentation_ok=false
+  for retained in "$prompt" "$final_output" "$final_receipt" "$final_raw"; do
+    if ! bound_retained_artifact "$retained" "$artifact_limit"; then
+      instrumentation_ok=false
+      harness_ok=false
+    fi
+  done
+  if [ "$(wc -c < "$final_score" | tr -d '[:space:]')" -gt "$artifact_limit" ]; then
+    retain_scorer_fault "$final_score" "$case_id"
+    validator_ok=false
+    harness_ok=false
   fi
+  artifacts_file="$RESULT_DIR/artifacts.ndjson"; : > "$artifacts_file"
   artifact_row prompt "$RESULT_DIR" prompt.txt >> "$artifacts_file"
   artifact_row output "$RESULT_DIR" "${final_output#"$RESULT_DIR/"}" >> "$artifacts_file"
   artifact_row patch "$RESULT_DIR" patch.diff >> "$artifacts_file"
@@ -722,9 +851,14 @@ run_canary() {
     refresh_attempt_validation "$attempt_file" "$validation_file"
     printf 'production canary: owned cleanup failure retained at %s\n' "$CANARY_TEMP_ROOT" >&2
   fi
+  rm -f -- "$artifacts_file"
   trap - EXIT INT TERM
   jq -n --slurpfile attempt "$attempt_file" --slurpfile validation "$validation_file" '{attempt:$attempt[0],validation:$validation[0]}'
 }
+
+if [ "${DEPOT_CANARY_SOURCE_ONLY:-0}" = 1 ]; then
+  return 0 2>/dev/null || exit 0
+fi
 
 case "$COMMAND" in
   --list)

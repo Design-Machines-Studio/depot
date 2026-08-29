@@ -2,9 +2,6 @@
   "schemaVersion": 1,
   "suiteId": "depot-role-production-canary-v1",
   "harnessVersion": 1,
-  "repositoryIdentity": "Design-Machines-Studio/depot",
-  "sealedSuite": "depot-role-benchmark-suite.json",
-  "rolePolicy": "../../../../model-router/skills/model-router/references/role-policy.json",
   "limits": {
     "contextBytes": 65536,
     "artifactBytes": 1048576,

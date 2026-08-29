@@ -1083,6 +1083,7 @@ class ModelIntelligenceTest(unittest.TestCase):
             evidence_state: str = "comparable-but-insufficient",
             false_positives: int | None = None,
             measured_cost: float | None = None,
+            first_pass_validity: bool | None = None,
         ) -> None:
             directory = canary_root / name
             directory.mkdir(parents=True)
@@ -1103,8 +1104,9 @@ class ModelIntelligenceTest(unittest.TestCase):
                 "paidCostComplete": True,
                 "modelConclusion": conclusion,
                 "evidenceState": evidence_state,
+                "diagnostics": [],
                 "quality": {
-                    "firstPassValidity": conclusion == "valid",
+                    "firstPassValidity": conclusion == "valid" if first_pass_validity is None else first_pass_validity,
                     "finalValidity": conclusion == "valid",
                     "mandatoryAssertions": [{"id": "strict-json-object", "pass": True}],
                     "usefulFindings": 1 if role.startswith("review-") else None,
@@ -1113,22 +1115,62 @@ class ModelIntelligenceTest(unittest.TestCase):
                     "validationAttempts": 1,
                 },
                 "timing": {
+                    "startedAt": "2026-08-29T00:00:00Z",
+                    "firstUsefulAt": "2026-08-29T00:00:01Z",
+                    "validAt": "2026-08-29T00:00:02Z" if conclusion == "valid" else None,
+                    "endedAt": "2026-08-29T00:00:02Z",
                     "timeToFirstUsefulSeconds": 1,
                     "timeToValidSeconds": 2 if conclusion == "valid" else None,
                     "totalDurationSeconds": 2,
                 },
                 "telemetry": {
+                    "toolCallsByClass": {
+                        "repositoryRead": 1,
+                        "repositoryWrite": 0,
+                        "validation": 1,
+                        "other": 0,
+                    },
                     "tokens": {"input": None, "output": None, "reasoning": None},
-                    "contextCoverage": {"applicable": True, "rate": 1},
-                    "toolCoverage": {"applicable": True, "rate": 1},
+                    "contextCoverage": {
+                        "applicable": True, "observed": 1, "total": 1,
+                        "rate": 1, "reason": "fixture",
+                    },
+                    "toolCoverage": {
+                        "applicable": True, "observed": 1, "total": 1,
+                        "rate": 1, "reason": "fixture",
+                    },
                 },
-                "bindings": {"workUnitId": work_units[role]},
-                "repository": {"baseRevision": "5" * 40},
+                "bindings": {
+                    "workUnitId": work_units[role],
+                    "workUnitRevision": 1,
+                    "workUnitDigest": "sha256:" + "a" * 64,
+                    "taskFixtureDigest": "sha256:" + "b" * 64,
+                    "validationContractDigest": "sha256:" + "c" * 64,
+                    "sealedSuiteId": "depot-role-v2",
+                    "sealedCaseId": "fixture-case",
+                    "sealedCaseDigest": "sha256:" + "d" * 64,
+                    "sealedScorerDigest": "sha256:" + "e" * 64,
+                    "rolePolicyDigest": "sha256:" + "f" * 64,
+                    "pluginVersions": {"openrouter": "1.20.0", "model-router": "0.4.2"},
+                },
+                "repository": {
+                    "identity": "Design-Machines-Studio/depot",
+                    "baseRevision": "5" * 40,
+                    "headRevision": "5" * 40,
+                    "cleanBase": True,
+                    "patchDigest": "sha256:" + "0" * 64,
+                    "changedFileCount": 0,
+                },
                 "cost": {
+                    "currency": "USD",
+                    "maximumBoundUsd": 0.5 if measured_cost is not None else None,
                     "measuredUsd": measured_cost,
                     "receiptCoverage": "measured" if measured_cost is not None else "subscription",
                 },
-                "artifacts": [],
+                "artifacts": [{
+                    "kind": "diagnostic", "path": "fixture.json",
+                    "sha256": "sha256:" + "1" * 64, "bytes": 2,
+                }],
             }
             (directory / "canary-validation.json").write_text(json.dumps(artifact))
 
@@ -1137,6 +1179,7 @@ class ModelIntelligenceTest(unittest.TestCase):
                 f"paid-{index}", role="research-fast",
                 candidate="google/gemini-3.7-flash", transport="openrouter",
                 comparable=True, conclusion="valid", measured_cost=0.01,
+                first_pass_validity=index < 3,
             )
         write_validation(
             "incompatible", role="research-fast", candidate="gpt-5.6-luna",
@@ -1153,6 +1196,29 @@ class ModelIntelligenceTest(unittest.TestCase):
             transport="openrouter", comparable=True, conclusion="invalid",
             false_positives=1, measured_cost=0.02,
         )
+
+        valid_artifact = json.loads((canary_root / "paid-0" / "canary-validation.json").read_text())
+        malformed_variants = {
+            "malformed-quality": valid_artifact | {"quality": []},
+            "extra-top-level": valid_artifact | {"unexpected": True},
+            "contradictory-state": valid_artifact | {
+                "benchmarkFault": True,
+                "faultOwner": None,
+                "faultCode": None,
+            },
+            "malformed-coverage": valid_artifact | {
+                "telemetry": valid_artifact["telemetry"] | {
+                    "contextCoverage": {
+                        "applicable": True, "observed": 2, "total": 1,
+                        "rate": 2, "reason": "invalid",
+                    }
+                }
+            },
+        }
+        for name, artifact in malformed_variants.items():
+            directory = canary_root / name
+            directory.mkdir()
+            (directory / "canary-validation.json").write_text(json.dumps(artifact))
 
         output = self.root / "canary-report.json"
         markdown = self.root / "canary-report.md"
@@ -1171,11 +1237,13 @@ class ModelIntelligenceTest(unittest.TestCase):
         paid = next(group for group in canary["groups"] if group["requested_candidate"] == "google/gemini-3.7-flash")
         self.assertEqual(paid["evidence_state"], "gate-clearing")
         self.assertEqual(paid["valid_attempts"], 5)
+        self.assertEqual(paid["first_pass_rate"], 0.6)
         self.assertEqual(paid["coverage"]["input_tokens"], {"recorded": 0, "comparable_attempts": 5, "rate": 0.0})
         review = next(group for group in canary["groups"] if group["role"] == "review-fast")
         self.assertEqual(review["false_positives"], 1)
         self.assertEqual(review["final_valid_rate"], 0)
         self.assertEqual(len(canary["benchmark_faults"]), 1)
+        self.assertEqual(len(canary["malformed_artifacts"]), 4)
         self.assertIsNone(canary["benchmark_faults"][0]["model_conclusion"])
         self.assertTrue(all(not row["candidate_order_changed"] for row in canary["routing_ledger"]))
         self.assertEqual(canary["routing_conclusion"], "no routing change justified")

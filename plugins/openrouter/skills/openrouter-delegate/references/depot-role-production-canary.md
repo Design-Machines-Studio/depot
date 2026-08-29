@@ -38,6 +38,11 @@ then removes the worktree on success, failure, interruption, or benchmark
 fault. It retains only the bounded result directory. The result directory must
 be new or empty, real, and outside the operator checkout.
 
+Live `claude-cli` canaries are disabled until the harness can enforce a
+filesystem sandbox around the candidate process. The validator and reporter
+continue to accept compatible historical Claude evidence, but the runner
+stops before candidate contact when `--transport claude-cli` is requested.
+
 OpenRouter uses the same work-unit prompt, context extracts, v2 scorer, and
 attempt schema:
 
@@ -90,7 +95,10 @@ failed-assertion feedback. Independent reruns are separate attempts.
 
 - Keep raw attempts outside Git below a private, mode-0700 result root.
 - Retain only the bounded artifacts named by the attempt; do not retain
-  unrestricted transcripts.
+  unrestricted transcripts. Correction intermediates, stderr, system prompts,
+  and temporary receipt files are removed; every retained prompt, output,
+  patch, validation, receipt, and diagnostic is capped by the checked-in byte
+  limits.
 - Candidate identity stays out of participant prompts and in the private
   attempt and final operator report.
 - Never send credentials, environment files, client repositories, private

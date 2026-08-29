@@ -21,6 +21,13 @@ assert rg -F 'date -u +%Y%m%dt%H%M%Sz' "$RUNNER"
 assert rg -F 'CANARY_TEMP_ROOT="$temp_root"; CANARY_WORKTREE="$worktree"' "$RUNNER"
 assert rg -F 'if ! cleanup_owned_resources; then' "$RUNNER"
 assert rg -F '.validationPassed == true and .benchmarkFault == false' "$RUNNER"
+assert jq -e 'has("repositoryIdentity") | not' "$UNITS"
+assert jq -e 'has("sealedSuite") | not' "$UNITS"
+assert jq -e 'has("rolePolicy") | not' "$UNITS"
+assert rg -F 'cat -- "$path"' "$RUNNER"
+reject rg -F "sed -n '1,220p'" "$RUNNER"
+reject rg -F "sed -n '1,\$p'" "$RUNNER"
+reject rg -F 'bypassPermissions' "$RUNNER"
 
 make_attempt() {
   local unit_id="$1" destination="$2" unit role case_id candidate transport provider work_digest fixture_digest validation_digest
@@ -141,8 +148,7 @@ assert jq -e '.benchmarkFault and .faultOwner == "instrumentation" and .faultCod
 
 mkdir "$TMP/over-paid-bound"; cp "$BASE"/{prompt.txt,output.json,patch.diff,validation.json,transport-receipt.json,attempt.json} "$TMP/over-paid-bound/"
 jq '.cost.maximumBoundUsd=1.01' "$TMP/over-paid-bound/attempt.json" > "$TMP/mutated"; mv "$TMP/mutated" "$TMP/over-paid-bound/attempt.json"
-"$RUNNER" --validate --attempt-file "$TMP/over-paid-bound/attempt.json" --artifact-root "$TMP/over-paid-bound" > "$TMP/over-paid-bound/result.json"
-assert jq -e '.benchmarkFault and .faultOwner == "instrumentation" and .faultCode == "missing-paid-cost-receipt" and .modelConclusion == null' "$TMP/over-paid-bound/result.json"
+reject "$RUNNER" --validate --attempt-file "$TMP/over-paid-bound/attempt.json" --artifact-root "$TMP/over-paid-bound"
 
 mkdir "$TMP/failed-validation"; cp "$BASE"/{prompt.txt,output.json,patch.diff,validation.json,transport-receipt.json,attempt.json} "$TMP/failed-validation/"
 jq '.validationPassed=false | .overallSuccess=false | .assertions[0].pass=false' "$TMP/failed-validation/validation.json" > "$TMP/mutated"; mv "$TMP/mutated" "$TMP/failed-validation/validation.json"
@@ -172,5 +178,73 @@ assert jq -e '.benchmarkFault and .evidenceState == "benchmark-faulted" and .mod
 
 jq '.schemaVersion=99' "$BASE/attempt.json" > "$TMP/unknown-schema.json"
 reject "$RUNNER" --validate --attempt-file "$TMP/unknown-schema.json" --artifact-root "$BASE"
+
+jq '.timing.startedAt="not-a-timestamp"' "$BASE/attempt.json" > "$TMP/bad-timestamp.json"
+reject "$RUNNER" --validate --attempt-file "$TMP/bad-timestamp.json" --artifact-root "$BASE"
+jq '.quality.unexpected=true' "$BASE/attempt.json" > "$TMP/extra-quality-key.json"
+reject "$RUNNER" --validate --attempt-file "$TMP/extra-quality-key.json" --artifact-root "$BASE"
+jq '.repository.identity="example/other"' "$BASE/attempt.json" > "$TMP/bad-repository-identity.json"
+reject "$RUNNER" --validate --attempt-file "$TMP/bad-repository-identity.json" --artifact-root "$BASE"
+jq '.telemetry.contextCoverage={applicable:true,observed:2,total:1,rate:2,reason:"invalid"}' "$BASE/attempt.json" > "$TMP/bad-coverage.json"
+reject "$RUNNER" --validate --attempt-file "$TMP/bad-coverage.json" --artifact-root "$BASE"
+
+# Disabled native transport and result-directory containment fail before provider contact.
+reject "$RUNNER" --run --work-unit canary-architect-routing-boundary --transport claude-cli \
+  --model fable --effort high --base-revision HEAD --result-dir "$TMP/claude-disabled"
+assert test ! -e "$TMP/claude-disabled"
+reject env DEPOT_CANARY_SOURCE_ONLY=1 bash -c '
+  runner="$1"; result="$2"; set --; source "$runner"; RESULT_DIR="$result"; prepare_result_dir
+' _ "$RUNNER" "$ROOT/.depot-canary-result-test"
+assert test ! -e "$ROOT/.depot-canary-result-test"
+mkdir "$TMP/result-target"
+ln -s "$TMP/result-target" "$TMP/result-link"
+reject env DEPOT_CANARY_SOURCE_ONLY=1 bash -c '
+  runner="$1"; result="$2"; set --; source "$runner"; RESULT_DIR="$result"; prepare_result_dir
+' _ "$RUNNER" "$TMP/result-link"
+
+# Helper-level fault retention and artifact bounding remain offline and deterministic.
+assert env DEPOT_CANARY_SOURCE_ONLY=1 bash -c '
+  runner="$1"; scratch="$2"; set --; source "$runner"
+  RESULT_DIR="$scratch"; mkdir -p "$RESULT_DIR"
+  if ensure_openrouter_receipt "$RESULT_DIR/receipt.json" "$RESULT_DIR/raw.json" model case role workload 17; then exit 1; fi
+  jq -e '\''.[0].failureKind == "missing-transport-receipt" and .[1] == {}'\'' \
+    <(jq -s . "$RESULT_DIR/receipt.json" "$RESULT_DIR/raw.json") >/dev/null
+  retain_scorer_fault "$RESULT_DIR/score.json" case
+  jq -e '\''.benchmarkFault and .failureClass == "scorer-failure"'\'' "$RESULT_DIR/score.json" >/dev/null
+  head -c 100 /dev/zero > "$RESULT_DIR/patch.diff"
+  if bound_retained_artifact "$RESULT_DIR/patch.diff" 16; then exit 1; fi
+  [ "$(wc -c < "$RESULT_DIR/patch.diff")" -eq 16 ]
+  head -c 100 /dev/zero > "$RESULT_DIR/transport-events-2.json"
+  if bound_retained_artifact "$RESULT_DIR/transport-events-2.json" 16; then exit 1; fi
+  [ "$(wc -c < "$RESULT_DIR/transport-events-2.json")" -eq 16 ]
+  : > "$RESULT_DIR/output-1.json"; : > "$RESULT_DIR/output-2.json"
+  : > "$RESULT_DIR/transport-receipt-1.json"; : > "$RESULT_DIR/transport-events-1.json"
+  : > "$RESULT_DIR/validation-1.json"; : > "$RESULT_DIR/system.txt"; : > "$RESULT_DIR/diagnostic-1.txt"
+  prune_unretained_attempt_artifacts "$RESULT_DIR/output-2.json" "$RESULT_DIR/receipt.json" "$RESULT_DIR/raw.json" "$RESULT_DIR/score.json"
+  [ -e "$RESULT_DIR/output-2.json" ] && [ ! -e "$RESULT_DIR/output-1.json" ] \
+    && [ ! -e "$RESULT_DIR/system.txt" ] && [ ! -e "$RESULT_DIR/diagnostic-1.txt" ]
+' _ "$RUNNER" "$TMP/helpers"
+
+# Builder validators reject additions outside the exact owned fixture set.
+assert env DEPOT_CANARY_SOURCE_ONLY=1 bash -c '
+  runner="$1"; scratch="$2"; set --; source "$runner"
+  unit="$(work_unit_json canary-builder-fast-owned-edit)"
+  mkdir -p "$scratch/.depot-canary/config"
+  printf '\''{"schemaVersion":1,"enabled":true}\n'\'' > "$scratch/.depot-canary/config/fixture.json"
+  repository_validation builder-fast-owned-edit "$scratch" "$unit"
+  : > "$scratch/.depot-canary/extra.json"
+  ! repository_validation builder-fast-owned-edit "$scratch" "$unit"
+' _ "$RUNNER" "$TMP/builder-files"
+
+# Prompt construction retains bounded context beyond the former hidden 220-line cutoff.
+assert env DEPOT_CANARY_SOURCE_ONLY=1 bash -c '
+  runner="$1"; scratch="$2"; set --; source "$runner"
+  mkdir -p "$scratch/worktree"
+  for line in $(seq 1 250); do printf "context-line-%s\n" "$line"; done > "$scratch/worktree/long.txt"
+  unit="$(work_unit_json canary-research-claim-map | jq '\''.contextPaths=["long.txt"]'\'')"
+  BASE_REVISION=50946ef1dad6aa879a0b4feb701222102d9e4229
+  build_prompt "$unit" "$scratch/worktree" "$scratch/prompt.txt"
+  grep -Fx "context-line-250" "$scratch/prompt.txt" >/dev/null
+' _ "$RUNNER" "$TMP/full-context"
 
 printf 'production canary: %d assertions passed (offline; no provider contact)\n' "$pass"

@@ -570,6 +570,252 @@ def canary_measurements(validation: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def validate_production_canary_validation(
+    validation: Any,
+    roles: dict[str, Any],
+    units_by_id: dict[str, dict[str, Any]],
+) -> dict[str, Any]:
+    """Validate the closed reporter-side production-canary evidence contract."""
+
+    def require_object(value: Any, keys: set[str], label: str) -> dict[str, Any]:
+        if not isinstance(value, dict) or set(value) != keys:
+            raise IntelligenceError(f"{label} object shape invalid")
+        return value
+
+    def require_text(value: Any, label: str, maximum: int = 240) -> str:
+        if not isinstance(value, str) or not value or len(value) > maximum:
+            raise IntelligenceError(f"{label} invalid")
+        return value
+
+    def require_bool(value: Any, label: str) -> bool:
+        if type(value) is not bool:
+            raise IntelligenceError(f"{label} must be boolean")
+        return value
+
+    def require_integer(value: Any, label: str, minimum: int = 0, maximum: int | None = None) -> int:
+        if type(value) is not int or value < minimum or (maximum is not None and value > maximum):
+            raise IntelligenceError(f"{label} invalid")
+        return value
+
+    def require_number_or_none(value: Any, label: str, maximum: float | None = None) -> float | None:
+        if value is None:
+            return None
+        if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
+            raise IntelligenceError(f"{label} invalid")
+        if maximum is not None and value > maximum:
+            raise IntelligenceError(f"{label} invalid")
+        return float(value)
+
+    def require_timestamp_or_none(value: Any, label: str) -> str | None:
+        if value is None:
+            return None
+        text = require_text(value, label)
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise IntelligenceError(f"{label} invalid") from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise IntelligenceError(f"{label} invalid")
+        return text
+
+    def require_digest(value: Any, label: str) -> str:
+        text = require_text(value, label)
+        if re.fullmatch(r"sha256:[0-9a-f]{64}", text) is None:
+            raise IntelligenceError(f"{label} invalid")
+        return text
+
+    def validate_coverage(value: Any, label: str) -> None:
+        coverage = require_object(value, {"applicable", "observed", "total", "rate", "reason"}, label)
+        applicable = require_bool(coverage["applicable"], f"{label}.applicable")
+        observed = coverage["observed"]
+        total = coverage["total"]
+        rate = coverage["rate"]
+        reason = coverage["reason"]
+        if reason is not None:
+            require_text(reason, f"{label}.reason")
+        if not applicable:
+            if any(item is not None for item in (observed, total, rate)):
+                raise IntelligenceError(f"{label} non-applicable values invalid")
+            return
+        observed_value = require_integer(observed, f"{label}.observed")
+        total_value = require_integer(total, f"{label}.total", minimum=1)
+        rate_value = require_number_or_none(rate, f"{label}.rate", maximum=1)
+        if rate_value is None or observed_value > total_value or not math.isclose(rate_value, observed_value / total_value):
+            raise IntelligenceError(f"{label} values inconsistent")
+
+    top = require_object(
+        validation,
+        {
+            "schemaVersion", "evidenceClass", "attemptId", "role", "requestedCandidate",
+            "transport", "servedIdentity", "benchmarkFault", "faultOwner", "faultCode",
+            "comparable", "identityConfirmed", "instrumentationComplete", "paidCostComplete",
+            "modelConclusion", "evidenceState", "diagnostics", "quality", "timing",
+            "telemetry", "repository", "bindings", "cost", "artifacts",
+        },
+        "validation",
+    )
+    if top["schemaVersion"] != 1 or top["evidenceClass"] != "production-canary-validation":
+        raise IntelligenceError("unsupported canary validation contract")
+    require_text(top["attemptId"], "attemptId", 96)
+    role = require_text(top["role"], "role", 64)
+    candidate = require_text(top["requestedCandidate"], "requestedCandidate", 128)
+    transport = require_text(top["transport"], "transport", 32)
+    if role not in roles or transport not in {"codex-cli", "claude-cli", "openrouter"}:
+        raise IntelligenceError("unknown canary role or transport")
+    admitted = [
+        item for item in roles[role]
+        if isinstance(item, dict) and item.get("model") == candidate and item.get("transport") == transport
+    ] if isinstance(roles[role], list) else []
+    if len(admitted) != 1:
+        raise IntelligenceError("candidate is not policy-admitted for role and transport")
+    if top["servedIdentity"] is not None:
+        require_text(top["servedIdentity"], "servedIdentity", 128)
+
+    benchmark_fault = require_bool(top["benchmarkFault"], "benchmarkFault")
+    comparable = require_bool(top["comparable"], "comparable")
+    identity_confirmed = require_bool(top["identityConfirmed"], "identityConfirmed")
+    instrumentation_complete = require_bool(top["instrumentationComplete"], "instrumentationComplete")
+    paid_cost_complete = require_bool(top["paidCostComplete"], "paidCostComplete")
+    if top["faultOwner"] not in {None, "fixture", "evaluator", "validator", "repository", "instrumentation", "tool", "harness"}:
+        raise IntelligenceError("faultOwner invalid")
+    if top["faultCode"] is not None:
+        require_text(top["faultCode"], "faultCode", 128)
+    if top["modelConclusion"] not in {None, "valid", "invalid"}:
+        raise IntelligenceError("modelConclusion invalid")
+    if top["evidenceState"] not in {"incompatible", "benchmark-faulted", "comparable-but-insufficient"}:
+        raise IntelligenceError("evidenceState invalid")
+    diagnostics = top["diagnostics"]
+    if not isinstance(diagnostics, list) or len(diagnostics) > 64 or any(not isinstance(item, str) or len(item) > 240 for item in diagnostics):
+        raise IntelligenceError("diagnostics invalid")
+    if benchmark_fault:
+        if comparable or top["modelConclusion"] is not None or top["evidenceState"] != "benchmark-faulted" or top["faultOwner"] is None or top["faultCode"] is None:
+            raise IntelligenceError("benchmark fault state inconsistent")
+    elif comparable:
+        if top["modelConclusion"] not in {"valid", "invalid"} or top["evidenceState"] != "comparable-but-insufficient" or top["faultOwner"] is not None or top["faultCode"] is not None:
+            raise IntelligenceError("comparable state inconsistent")
+        if not all((identity_confirmed, instrumentation_complete, paid_cost_complete)):
+            raise IntelligenceError("comparable evidence is incomplete")
+    elif top["modelConclusion"] is not None or top["evidenceState"] != "incompatible":
+        raise IntelligenceError("incompatible state inconsistent")
+
+    quality = require_object(
+        top["quality"],
+        {"firstPassValidity", "finalValidity", "mandatoryAssertions", "usefulFindings", "falsePositives", "correctionCount", "validationAttempts"},
+        "quality",
+    )
+    for name in ("firstPassValidity", "finalValidity"):
+        if quality[name] is not None:
+            require_bool(quality[name], f"quality.{name}")
+    assertions = quality["mandatoryAssertions"]
+    if not isinstance(assertions, list) or not assertions or len(assertions) > 64:
+        raise IntelligenceError("quality.mandatoryAssertions invalid")
+    assertion_ids: set[str] = set()
+    for assertion in assertions:
+        row = require_object(assertion, {"id", "pass"}, "mandatory assertion")
+        assertion_id = require_text(row["id"], "mandatory assertion id", 128)
+        require_bool(row["pass"], "mandatory assertion pass")
+        if assertion_id in assertion_ids:
+            raise IntelligenceError("duplicate mandatory assertion")
+        assertion_ids.add(assertion_id)
+    for name in ("usefulFindings", "falsePositives"):
+        if quality[name] is not None:
+            require_integer(quality[name], f"quality.{name}")
+    if quality["correctionCount"] is not None:
+        require_integer(quality["correctionCount"], "quality.correctionCount", maximum=2)
+    if quality["validationAttempts"] is not None:
+        require_integer(quality["validationAttempts"], "quality.validationAttempts", minimum=1, maximum=3)
+    if quality["correctionCount"] is not None and quality["validationAttempts"] != quality["correctionCount"] + 1:
+        raise IntelligenceError("quality correction and attempt counts inconsistent")
+    if top["modelConclusion"] == "valid" and (quality["finalValidity"] is not True or not all(row["pass"] for row in assertions)):
+        raise IntelligenceError("valid conclusion contradicts quality evidence")
+    if top["modelConclusion"] == "invalid" and quality["finalValidity"] is not False:
+        raise IntelligenceError("invalid conclusion contradicts quality evidence")
+
+    timing = require_object(
+        top["timing"],
+        {"startedAt", "firstUsefulAt", "validAt", "endedAt", "timeToFirstUsefulSeconds", "timeToValidSeconds", "totalDurationSeconds"},
+        "timing",
+    )
+    started = require_timestamp_or_none(timing["startedAt"], "timing.startedAt")
+    ended = require_timestamp_or_none(timing["endedAt"], "timing.endedAt")
+    if started is None or ended is None:
+        raise IntelligenceError("timing endpoints required")
+    require_timestamp_or_none(timing["firstUsefulAt"], "timing.firstUsefulAt")
+    require_timestamp_or_none(timing["validAt"], "timing.validAt")
+    for name in ("timeToFirstUsefulSeconds", "timeToValidSeconds", "totalDurationSeconds"):
+        require_number_or_none(timing[name], f"timing.{name}")
+
+    telemetry = require_object(top["telemetry"], {"toolCallsByClass", "tokens", "contextCoverage", "toolCoverage"}, "telemetry")
+    tool_calls = telemetry["toolCallsByClass"]
+    if tool_calls is not None:
+        tool_calls = require_object(tool_calls, {"repositoryRead", "repositoryWrite", "validation", "other"}, "telemetry.toolCallsByClass")
+        for name, value in tool_calls.items():
+            require_integer(value, f"telemetry.toolCallsByClass.{name}")
+    tokens = require_object(telemetry["tokens"], {"input", "output", "reasoning"}, "telemetry.tokens")
+    for name, value in tokens.items():
+        if value is not None:
+            require_integer(value, f"telemetry.tokens.{name}")
+    validate_coverage(telemetry["contextCoverage"], "telemetry.contextCoverage")
+    validate_coverage(telemetry["toolCoverage"], "telemetry.toolCoverage")
+
+    repository = require_object(top["repository"], {"identity", "baseRevision", "headRevision", "cleanBase", "patchDigest", "changedFileCount"}, "repository")
+    if repository["identity"] != "Design-Machines-Studio/depot":
+        raise IntelligenceError("repository identity invalid")
+    for name in ("baseRevision", "headRevision"):
+        if not isinstance(repository[name], str) or re.fullmatch(r"[0-9a-f]{40}", repository[name]) is None:
+            raise IntelligenceError(f"repository.{name} invalid")
+    require_bool(repository["cleanBase"], "repository.cleanBase")
+    require_digest(repository["patchDigest"], "repository.patchDigest")
+    require_integer(repository["changedFileCount"], "repository.changedFileCount", maximum=64)
+    if comparable and (not repository["cleanBase"] or repository["baseRevision"] != repository["headRevision"]):
+        raise IntelligenceError("comparable repository evidence drifted")
+
+    bindings = require_object(
+        top["bindings"],
+        {"workUnitId", "workUnitRevision", "workUnitDigest", "taskFixtureDigest", "validationContractDigest", "sealedSuiteId", "sealedCaseId", "sealedCaseDigest", "sealedScorerDigest", "rolePolicyDigest", "pluginVersions"},
+        "bindings",
+    )
+    work_unit_id = require_text(bindings["workUnitId"], "bindings.workUnitId", 128)
+    if work_unit_id not in units_by_id or units_by_id[work_unit_id].get("role") != role:
+        raise IntelligenceError("canary work-unit binding does not match role")
+    require_integer(bindings["workUnitRevision"], "bindings.workUnitRevision", minimum=1)
+    for name in ("workUnitDigest", "taskFixtureDigest", "validationContractDigest", "sealedCaseDigest", "sealedScorerDigest", "rolePolicyDigest"):
+        require_digest(bindings[name], f"bindings.{name}")
+    if bindings["sealedSuiteId"] != "depot-role-v2":
+        raise IntelligenceError("bindings.sealedSuiteId invalid")
+    require_text(bindings["sealedCaseId"], "bindings.sealedCaseId", 128)
+    versions = require_object(bindings["pluginVersions"], {"openrouter", "model-router"}, "bindings.pluginVersions")
+    for name, value in versions.items():
+        if not isinstance(value, str) or re.fullmatch(r"[0-9]+\.[0-9]+\.[0-9]+", value) is None:
+            raise IntelligenceError(f"bindings.pluginVersions.{name} invalid")
+
+    cost = require_object(top["cost"], {"currency", "maximumBoundUsd", "measuredUsd", "receiptCoverage"}, "cost")
+    if cost["currency"] != "USD" or cost["receiptCoverage"] not in {"measured", "subscription", "missing"}:
+        raise IntelligenceError("cost contract invalid")
+    require_number_or_none(cost["maximumBoundUsd"], "cost.maximumBoundUsd", maximum=1)
+    measured = require_number_or_none(cost["measuredUsd"], "cost.measuredUsd", maximum=1)
+    if cost["receiptCoverage"] == "measured" and measured is None:
+        raise IntelligenceError("measured cost receipt missing value")
+    if cost["receiptCoverage"] != "measured" and measured is not None:
+        raise IntelligenceError("unmeasured cost carries a measured value")
+
+    artifacts = top["artifacts"]
+    if not isinstance(artifacts, list) or not artifacts or len(artifacts) > 16:
+        raise IntelligenceError("artifacts invalid")
+    paths: set[str] = set()
+    for artifact in artifacts:
+        row = require_object(artifact, {"kind", "path", "sha256", "bytes"}, "artifact")
+        if row["kind"] not in {"prompt", "output", "patch", "validation", "transport-receipt", "diagnostic"}:
+            raise IntelligenceError("artifact kind invalid")
+        path = require_text(row["path"], "artifact path")
+        if path.startswith("/") or ".." in Path(path).parts or re.fullmatch(r"[A-Za-z0-9._/-]+", path) is None or path in paths:
+            raise IntelligenceError("artifact path invalid")
+        paths.add(path)
+        require_digest(row["sha256"], "artifact digest")
+        require_integer(row["bytes"], "artifact bytes", maximum=1_048_576)
+    return top
+
+
 def production_canary_rollup(root: Path | None) -> dict[str, Any]:
     policy = load_json(DEFAULT_ROLE_POLICY)
     units = load_json(DEFAULT_CANARY_WORK_UNITS)
@@ -594,39 +840,31 @@ def production_canary_rollup(root: Path | None) -> dict[str, Any]:
     for path in paths:
         try:
             validation = load_json(path)
-            if not isinstance(validation, dict):
-                raise IntelligenceError("validation object required")
-            if validation.get("schemaVersion") != 1 or validation.get("evidenceClass") != "production-canary-validation":
-                raise IntelligenceError("unsupported canary validation contract")
-            role = validation.get("role")
-            candidate = validation.get("requestedCandidate")
-            transport = validation.get("transport")
-            if not all(isinstance(item, str) and item for item in (role, candidate, transport)):
-                raise IntelligenceError("attributable role/candidate/transport required")
-            if role not in roles:
-                raise IntelligenceError("unknown canary role")
-            bindings = validation.get("bindings") if isinstance(validation.get("bindings"), dict) else {}
+            validation = validate_production_canary_validation(validation, roles, units_by_id)
+            role = validation["role"]
+            candidate = validation["requestedCandidate"]
+            transport = validation["transport"]
+            bindings = validation["bindings"]
             work_unit_id = bindings.get("workUnitId")
-            if work_unit_id not in units_by_id or units_by_id[work_unit_id].get("role") != role:
-                raise IntelligenceError("canary work-unit binding does not match role")
             measurements = canary_measurements(validation)
-            cost = validation.get("cost") if isinstance(validation.get("cost"), dict) else {}
+            cost = validation["cost"]
+            quality = validation["quality"]
             attempts.append(
                 {
                     "path": safe_relative(path),
-                    "attempt_id": validation.get("attemptId"),
+                    "attempt_id": validation["attemptId"],
                     "role": role,
                     "requested_candidate": candidate,
                     "transport": transport,
-                    "served_identity": validation.get("servedIdentity"),
+                    "served_identity": validation["servedIdentity"],
                     "work_unit_id": work_unit_id,
-                    "benchmark_fault": validation.get("benchmarkFault") is True,
-                    "fault_owner": validation.get("faultOwner"),
-                    "fault_code": validation.get("faultCode"),
-                    "comparable": validation.get("comparable") is True,
-                    "model_conclusion": validation.get("modelConclusion"),
-                    "evidence_state": validation.get("evidenceState"),
-                    "mandatory_assertions": validation.get("quality", {}).get("mandatoryAssertions", []),
+                    "benchmark_fault": validation["benchmarkFault"] is True,
+                    "fault_owner": validation["faultOwner"],
+                    "fault_code": validation["faultCode"],
+                    "comparable": validation["comparable"] is True,
+                    "model_conclusion": validation["modelConclusion"],
+                    "evidence_state": validation["evidenceState"],
+                    "mandatory_assertions": quality["mandatoryAssertions"],
                     "measured_cost_usd": number(cost.get("measuredUsd")),
                     "cost_receipt_coverage": cost.get("receiptCoverage"),
                     **measurements,
@@ -688,9 +926,10 @@ def production_canary_rollup(root: Path | None) -> dict[str, Any]:
                 "valid_attempts": len(valid),
                 "benchmark_faults": len(faults),
                 "incompatible_attempts": len(incompatible),
-                "first_pass_rate": median(
-                    1 if item["first_pass_validity"] is True else 0
-                    for item in comparable if item["first_pass_validity"] is not None
+                "first_pass_rate": (
+                    sum(item["first_pass_validity"] is True for item in comparable if item["first_pass_validity"] is not None)
+                    / sum(item["first_pass_validity"] is not None for item in comparable)
+                    if any(item["first_pass_validity"] is not None for item in comparable) else None
                 ),
                 "final_valid_rate": len(valid) / len(comparable) if comparable else None,
                 "median_correction_count": median(item["correction_count"] for item in comparable),
