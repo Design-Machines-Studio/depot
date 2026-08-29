@@ -165,7 +165,10 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
     execution_path_patterns = execution_patterns(profile)
     pattern_sets.add(execution_path_patterns)
     input_digest_map = input_digests(repository, pattern_sets)
-    if boundary in {"merge_candidate", "post_merge"}:
+    if (
+        boundary in {"merge_candidate", "post_merge"}
+        and not _allow_declared_mutation
+    ):
         committed_input_digests = tree_input_digests(
             repository, head_commit, pattern_sets,
         )
