@@ -22,6 +22,7 @@ reject() {
 score() {
   local suite="$1" output="$2" receipt="$3" result="$4"
   shift 4
+  rm -f "$result"
   DEPOT_BENCH_SUITE="$suite" "$RUNNER" --score --case review-zero-deferral \
     --output-file "$output" --receipt-file "$receipt" --result-file "$result" "$@"
 }
@@ -37,7 +38,7 @@ jq '
     )
 ' "$CHECKED_SUITE" > "$TMP/suite.json"
 
-printf '%s\n' '{"schemaVersion":2,"outcome":"success","requestedModel":"fixture/requested","responseModel":"fixture/served","responseModelProvenance":"response","servingProvider":"fixture-endpoint","servingProviderProvenance":"response","attemptedModel":"fixture/requested","attemptedModels":["fixture/requested"],"attemptProvenance":"response_model","fallbackUsed":false,"routing":{"workload":"quality"},"usage":{"prompt_tokens":10,"completion_tokens":5}}' > "$TMP/receipt.json"
+printf '%s\n' '{"schemaVersion":2,"outcome":"success","requestedModel":"fixture/requested","modelCandidates":["fixture/requested"],"responseModel":"fixture/requested","responseModelProvenance":"response","servingProvider":"fixture-endpoint","servingProviderProvenance":"response","attemptedModel":"fixture/requested","attemptedModels":["fixture/requested"],"attemptProvenance":"response_model","fallbackUsed":false,"routing":{"workload":"quality"},"benchmark":{"suiteId":"depot-role-fixture-v2","caseId":"review-zero-deferral","role":"review-fast","workload":"quality"},"usage":{"prompt_tokens":10,"completion_tokens":5}}' > "$TMP/receipt.json"
 printf '%s\n' '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}' > "$TMP/output"
 cp "$TMP/output" "$TMP/raw-copy"
 score "$TMP/suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/result.json" --duration-seconds 2
@@ -47,7 +48,7 @@ assert jq -e '
   and .contractPassed and .mandatoryPassed and .semanticPassed and .semanticScore == 100
   and .validationPassed and .overallSuccess and .comparable and (.benchmarkFault | not)
   and .transport == "openrouter" and .endpointProvider == "fixture-endpoint"
-  and .requestedIdentity == "fixture/requested" and .servedIdentity == "fixture/served"
+  and .requestedIdentity == "fixture/requested" and .servedIdentity == "fixture/requested"
   and .identityStatus.confidence == "confirmed" and .failureClass == "none"
   and .behavioralContract.revision == 1
   and .behavioralContract.digest == "sha256:3ecea8dc49c02a8a8ac2a6e7ede9993fb6609f7520d5438ab8bf0cf9170ba32a"
@@ -97,9 +98,10 @@ assert jq -e '.schemaVersion == 2 and .suiteId == "depot-role-v2"' "$TMP/result.
 printf '%s\n' '{"findings":[],"deferred":false}' > "$TMP/output"
 score "$TMP/suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/result.json"
 assert jq -e '
-  .strictParse.passed and .normalizedParse.passed and (.mandatoryPassed | not)
+  .strictParse.passed and .normalizedParse.passed and .contractPassed and (.mandatoryPassed | not)
   and (.semanticPassed | not) and .semanticScore < 100 and (.overallSuccess | not)
-  and .failureClass == "visible-output-contract-violation"
+  and .failureStage == "mandatory" and .failureClass == "mandatory-assertion-failure"
+  and .modelConclusion == "mandatory-failure"
 ' "$TMP/result.json"
 
 # Hidden prompt/schema assertions are benchmark faults, not model conclusions.
@@ -120,6 +122,24 @@ assert jq -e '
   and (.comparable | not) and .modelConclusion == null
 ' "$TMP/result.json"
 
+# The scorer digest covers aggregation, validator, attribution, and comparability code.
+printf '%s\n' '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}' > "$TMP/output"
+score "$TMP/suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/result.json"
+scorer_digest="$(jq -r '.evidenceBindings.scorerDigest.actual' "$TMP/result.json")"
+jq --arg digest "$scorer_digest" '.cases[1].bindings.scorerDigest = $digest' \
+  "$TMP/suite.json" > "$TMP/scorer-bound-suite.json"
+sed 's/one or more disclosed mandatory assertions failed/one or more declared mandatory assertions failed/' \
+  "$RUNNER" > "$TMP/mutated-runner.sh"
+chmod +x "$TMP/mutated-runner.sh"
+DEPOT_BENCH_SUITE="$TMP/scorer-bound-suite.json" "$TMP/mutated-runner.sh" --score \
+  --case review-zero-deferral --output-file "$TMP/output" --receipt-file "$TMP/receipt.json" \
+  --result-file "$TMP/mutated-result.json"
+assert jq -e --arg baseline "$scorer_digest" '
+  .evidenceBindings.scorerDigest.actual != $baseline
+  and (.evidenceBindings.scorerDigest.match | not)
+  and .benchmarkFault and (.comparable | not)
+' "$TMP/mutated-result.json"
+
 # Suite assertion and validator IDs are data, but dispatch remains code-owned.
 jq '.cases[1].assertionIds = ["suite-supplied-command"]' "$TMP/suite.json" > "$TMP/unknown-assertion-suite.json"
 score "$TMP/unknown-assertion-suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/result.json"
@@ -139,16 +159,26 @@ assert jq -e '
   and (.comparable | not) and .modelConclusion == null
 ' "$TMP/result.json"
 
-# Receipt selection mismatch is a harness fault; stage does not imply ownership.
-jq '.benchmark = {suiteId:"depot-role-fixture-v2",caseId:"wrong-case",role:"review-fast",workload:"quality"}' "$TMP/receipt.json" > "$TMP/harness-receipt.json"
-score "$TMP/suite.json" "$TMP/output" "$TMP/harness-receipt.json" "$TMP/result.json"
-assert jq -e '
-  .failureStage == "harness" and .failureOwner == "benchmark"
-  and .failureClass == "benchmark-harness-fault" and .benchmarkFault
-  and (.comparable | not) and .modelConclusion == null
-' "$TMP/result.json"
+# Receipt binding is explicit. Absent or forged suite/case/role/workload evidence
+# makes identity unknown and is retained as a non-comparable harness fault.
+for binding in absent suiteId caseId role workload; do
+  case "$binding" in
+    absent) jq 'del(.benchmark)' "$TMP/receipt.json" ;;
+    suiteId) jq '.benchmark.suiteId = "forged-suite"' "$TMP/receipt.json" ;;
+    caseId) jq '.benchmark.caseId = "wrong-case"' "$TMP/receipt.json" ;;
+    role) jq '.benchmark.role = "architect"' "$TMP/receipt.json" ;;
+    workload) jq '.benchmark.workload = "bulk"' "$TMP/receipt.json" ;;
+  esac > "$TMP/harness-receipt.json"
+  score "$TMP/suite.json" "$TMP/output" "$TMP/harness-receipt.json" "$TMP/result.json"
+  assert jq -e '
+    .identityStatus.confidence == "unknown"
+    and .failureStage == "harness" and .failureOwner == "benchmark"
+    and .failureClass == "benchmark-harness-fault" and .benchmarkFault
+    and (.comparable | not) and .modelConclusion == null
+  ' "$TMP/result.json"
+done
 
-printf '%s\n' '{"schemaVersion":2,"outcome":"error","failureKind":"http_error","httpStatus":429,"requestedModel":"fixture/requested","responseModel":null,"fallbackUsed":null,"servingProvider":null}' > "$TMP/transport-receipt.json"
+printf '%s\n' '{"schemaVersion":2,"outcome":"error","failureKind":"http_error","httpStatus":429,"requestedModel":"fixture/requested","responseModel":null,"fallbackUsed":null,"servingProvider":null,"benchmark":{"suiteId":"depot-role-fixture-v2","caseId":"review-zero-deferral","role":"review-fast","workload":"quality"}}' > "$TMP/transport-receipt.json"
 score "$TMP/suite.json" "$TMP/output" "$TMP/transport-receipt.json" "$TMP/result.json"
 assert jq -e '
   .transportOutcome.status == "failed" and .failureStage == "transport"
@@ -165,6 +195,22 @@ assert jq -e '
   and (.comparable | not) and .modelConclusion == null
 ' "$TMP/result.json"
 
+# Requested-model aliases, missing response provenance, and inconsistent
+# fallback evidence cannot confirm the served identity.
+for identity_fault in requested-alias missing-provenance fallback-inconsistent; do
+  case "$identity_fault" in
+    requested-alias) jq '.responseModelProvenance = "requested_model"' "$TMP/receipt.json" ;;
+    missing-provenance) jq 'del(.responseModelProvenance)' "$TMP/receipt.json" ;;
+    fallback-inconsistent) jq '.fallbackUsed = true | .modelCandidates += ["fixture/fallback"]' "$TMP/receipt.json" ;;
+  esac > "$TMP/identity-receipt.json"
+  score "$TMP/suite.json" "$TMP/output" "$TMP/identity-receipt.json" "$TMP/result.json"
+  assert jq -e '
+    .identityStatus.confidence == "unknown" and .failureStage == "identity"
+    and .failureOwner == "operational" and .failureClass == "unknown-served-identity"
+    and (.benchmarkFault | not) and (.comparable | not) and .modelConclusion == null
+  ' "$TMP/result.json"
+done
+
 # Semantic and validation failures become model evidence only after known-good gates.
 printf '%s\n' '{"findings":[{"id":"AUTH-1","severity":"P2"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}' > "$TMP/output"
 score "$TMP/suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/result.json"
@@ -176,13 +222,25 @@ assert jq -e '
 ' "$TMP/result.json"
 
 printf '%s\n' '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}' > "$TMP/output"
-jq '.cases[1].validatorId = "fixture-fail"' "$TMP/suite.json" > "$TMP/validation-suite.json"
+jq '.cases[1].validatorId = "review-finding-order"' "$TMP/suite.json" > "$TMP/validation-suite.json"
+printf '%s\n' '{"findings":[{"id":"DOC-3","severity":"P3"},{"id":"ROUTE-2","severity":"P2"},{"id":"AUTH-1","severity":"P1"}],"deferred":false}' > "$TMP/output"
 score "$TMP/validation-suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/result.json"
 assert jq -e '
   .contractPassed and .mandatoryPassed and .semanticPassed and (.validationPassed | not)
   and .failureStage == "validation" and .failureOwner == "model"
   and .failureClass == "deterministic-validation-failure" and .modelConclusion == "validation-failure"
   and .comparable and (.overallSuccess | not) and (.benchmarkFault | not)
+' "$TMP/result.json"
+
+# The validator self-test rejects a declared expected answer that the validator
+# itself cannot accept, making the defect benchmark-owned rather than model-owned.
+jq '.cases[1].validatorId = "review-finding-order" | .cases[1].expected.findings |= reverse' \
+  "$TMP/suite.json" > "$TMP/broken-validator-suite.json"
+score "$TMP/broken-validator-suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/result.json"
+assert jq -e '
+  .failureStage == "scorer" and .failureOwner == "benchmark"
+  and .failureClass == "benchmark-scorer-fault" and .benchmarkFault
+  and (.comparable | not) and .modelConclusion == null
 ' "$TMP/result.json"
 
 # Every comparability binding independently blocks aggregation when it mismatches.
@@ -203,16 +261,40 @@ for binding in suite case prompt scorer normalizer; do
 done
 
 # Requested/served/fallback provenance is copied without identity substitution.
-jq '.requestedModel="fixture/requested-exact" | .responseModel="fixture/served-exact" | .attemptedModel="fixture/fallback-exact" | .attemptedModels=["fixture/requested-exact","fixture/fallback-exact"] | .fallbackUsed=true | .attemptProvenance="response_model"' "$TMP/receipt.json" > "$TMP/fallback-receipt.json"
+jq '.requestedModel="fixture/requested-exact"
+  | .modelCandidates=["fixture/requested-exact","fixture/fallback-exact"]
+  | .responseModel="fixture/fallback-exact"
+  | .attemptedModel="fixture/fallback-exact"
+  | .attemptedModels=["fixture/requested-exact","fixture/fallback-exact"]
+  | .fallbackUsed=true | .attemptProvenance="response_model"' \
+  "$TMP/receipt.json" > "$TMP/fallback-receipt.json"
 score "$TMP/suite.json" "$TMP/output" "$TMP/fallback-receipt.json" "$TMP/result.json"
 assert jq -e '
-  .requestedIdentity == "fixture/requested-exact" and .servedIdentity == "fixture/served-exact"
+  .requestedIdentity == "fixture/requested-exact" and .servedIdentity == "fixture/fallback-exact"
+  and .identityStatus.confidence == "confirmed" and .comparable
   and .fallback.used == true and .fallback.attemptedIdentity == "fixture/fallback-exact"
   and .fallback.attemptedIdentities == ["fixture/requested-exact","fixture/fallback-exact"]
   and .fallback.provenance == "response_model"
 ' "$TMP/result.json"
 
-# Live-run preflight uses only stubs and must reject before wrapper execution.
+# Score publication never overwrites retained evidence and rejects every input
+# alias, including the optional parser-fault artifact.
+printf '%s\n' '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}' > "$TMP/output"
+score "$TMP/suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/retained-result.json"
+cp "$TMP/retained-result.json" "$TMP/retained-copy.json"
+reject env DEPOT_BENCH_SUITE="$TMP/suite.json" "$RUNNER" --score --case review-zero-deferral \
+  --output-file "$TMP/output" --receipt-file "$TMP/receipt.json" --result-file "$TMP/retained-result.json"
+assert cmp "$TMP/retained-copy.json" "$TMP/retained-result.json"
+printf '%s\n' '{"schemaVersion":1,"code":"normalizer-fixture-rejection","fixtureId":"whole-response-json-fence","expectedAccepted":true,"observedAccepted":false}' > "$TMP/parser-fault-alias.json"
+for alias in "$TMP/suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/parser-fault-alias.json"; do
+  fault_args=()
+  [ "$alias" != "$TMP/parser-fault-alias.json" ] || fault_args=(--fault-file "$TMP/parser-fault-alias.json")
+  reject env DEPOT_BENCH_SUITE="$TMP/suite.json" "$RUNNER" --score --case review-zero-deferral \
+    --output-file "$TMP/output" --receipt-file "$TMP/receipt.json" --result-file "$alias" "${fault_args[@]}"
+done
+
+# Provider-capable --run rejects all asset overrides and non-canonical role
+# policies before transport. Fixture overrides are confined to --offline-run.
 printf '%s\n' '#!/usr/bin/env bash' 'printf called > "${CALL_MARKER:?}"' 'exit 99' > "$TMP/wrapper-stub.sh"
 chmod +x "$TMP/wrapper-stub.sh"
 printf '%s\n' '{"models":[{"slug":"fixture/model","catalog_status":"available"}]}' > "$TMP/matrix.json"
@@ -223,15 +305,17 @@ printf '%s\n' 'not-json' > "$TMP/malformed-policy.json"
 run_reject() {
   local suite="$1" policy="$2" result_dir="$3"
   CALL_MARKER="$TMP/wrapper-called" DEPOT_BENCH_SUITE="$suite" DEPOT_BENCH_MATRIX="$TMP/matrix.json" \
-    DEPOT_BENCH_WRAPPER="$TMP/wrapper-stub.sh" "$RUNNER" --run --case review-zero-deferral \
-    --model fixture/model --role-policy "$policy" --result-dir "$result_dir"
+    DEPOT_BENCH_WRAPPER="$TMP/wrapper-stub.sh" "$RUNNER" --offline-run --case review-zero-deferral \
+    --model fixture/model --role-policy "$policy" --output-file "$TMP/output" \
+    --receipt-file "$TMP/receipt.json" --result-dir "$result_dir"
 }
 
 reject run_reject "$TMP/suite.json" "$TMP/ineligible-policy.json" "$TMP/run-ineligible"
 reject run_reject "$TMP/suite.json" "$TMP/malformed-policy.json" "$TMP/run-malformed"
 reject env CALL_MARKER="$TMP/wrapper-called" DEPOT_BENCH_SUITE="$TMP/suite.json" \
   DEPOT_BENCH_MATRIX="$TMP/matrix.json" DEPOT_BENCH_WRAPPER="$TMP/wrapper-stub.sh" \
-  "$RUNNER" --run --case review-zero-deferral --model fixture/model --result-dir "$TMP/run-missing-policy"
+  "$RUNNER" --offline-run --case review-zero-deferral --model fixture/model \
+  --output-file "$TMP/output" --receipt-file "$TMP/receipt.json" --result-dir "$TMP/run-missing-policy"
 jq '.cases[1].workload = "guessed"' "$TMP/suite.json" > "$TMP/invalid-workload-suite.json"
 reject run_reject "$TMP/invalid-workload-suite.json" "$TMP/policy.json" "$TMP/run-workload"
 jq '.cases[1].requiredCapabilities = ["long-context"]' "$TMP/suite.json" > "$TMP/capability-suite.json"
@@ -241,23 +325,36 @@ reject run_reject "$TMP/suite.json" "$TMP/policy.json" "$TMP/non-empty-result"
 assert test ! -e "$TMP/wrapper-called"
 assert test -f "$TMP/non-empty-result/retained.json"
 
-# A fully eligible run reaches only a local wrapper stub and selects the case workload.
-printf '%s\n' '#!/usr/bin/env bash' 'exit 0' > "$TMP/boundary-stub.sh"
-chmod +x "$TMP/boundary-stub.sh"
-printf '%s\n' \
-  '#!/usr/bin/env bash' \
-  'printf "%s\n" "${OPENROUTER_WORKLOAD:?}" > "${STUB_WORKLOAD_FILE:?}"' \
-  'jq -n --arg requested "$1" '\''{schemaVersion:2,outcome:"success",requestedModel:$requested,responseModel:$requested,responseModelProvenance:"response",servingProvider:"stub-endpoint",attemptedModel:$requested,attemptedModels:[$requested],attemptProvenance:"response_model",fallbackUsed:false,routing:{workload:env.OPENROUTER_WORKLOAD}}'\'' > "${OPENROUTER_RECEIPT_FILE:?}"' \
-  'printf "%s\n" '\''{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}'\''' \
-  > "$TMP/success-wrapper-stub.sh"
-chmod +x "$TMP/success-wrapper-stub.sh"
-STUB_WORKLOAD_FILE="$TMP/selected-workload" DEPOT_BENCH_SUITE="$TMP/suite.json" \
-  DEPOT_BENCH_MATRIX="$TMP/matrix.json" DEPOT_BENCH_BOUNDARY="$TMP/boundary-stub.sh" \
-  DEPOT_BENCH_WRAPPER="$TMP/success-wrapper-stub.sh" \
-  "$RUNNER" --run --case review-zero-deferral --model fixture/model \
-  --role-policy "$TMP/policy.json" --result-dir "$TMP/success-run" >/dev/null
-assert grep -Fxq quality "$TMP/selected-workload"
-assert jq -e '.transport == "openrouter" and .endpointProvider == "stub-endpoint" and .overallSuccess' \
+# A fully eligible offline run selects the case workload, binds the receipt,
+# and cannot invoke even a caller-supplied wrapper.
+CALL_MARKER="$TMP/wrapper-called" DEPOT_BENCH_SUITE="$TMP/suite.json" \
+  DEPOT_BENCH_MATRIX="$TMP/matrix.json" DEPOT_BENCH_WRAPPER="$TMP/wrapper-stub.sh" \
+  "$RUNNER" --offline-run --case review-zero-deferral --model fixture/model \
+  --role-policy "$TMP/policy.json" --output-file "$TMP/output" \
+  --receipt-file "$TMP/receipt.json" --result-dir "$TMP/success-run" >/dev/null
+assert test ! -e "$TMP/wrapper-called"
+assert jq -e '.workload == "quality" and .identityStatus.receiptBinding == {
+    suiteId:"depot-role-fixture-v2",caseId:"review-zero-deferral",role:"review-fast",workload:"quality"
+  } and .transport == "openrouter" and .endpointProvider == "fixture-endpoint" and .overallSuccess' \
   "$TMP/success-run/result.json"
+
+ROLE_POLICY="$ROOT/plugins/model-router/skills/model-router/references/role-policy.json"
+reject env DEPOT_BENCH_SUITE="$TMP/suite.json" CALL_MARKER="$TMP/wrapper-called" \
+  DEPOT_BENCH_WRAPPER="$TMP/wrapper-stub.sh" "$RUNNER" --run \
+  --case pipeline-legacy-translation --model deepseek/deepseek-v4-flash-0731 \
+  --role-policy "$ROLE_POLICY" --result-dir "$TMP/live-override-rejected"
+reject env CALL_MARKER="$TMP/wrapper-called" "$RUNNER" --run \
+  --case pipeline-legacy-translation --model deepseek/deepseek-v4-flash-0731 \
+  --role-policy "$TMP/policy.json" --result-dir "$TMP/live-policy-rejected"
+mkdir "$TMP/live-non-empty"
+printf retained > "$TMP/live-non-empty/retained.json"
+reject "$RUNNER" --run --case pipeline-legacy-translation \
+  --model deepseek/deepseek-v4-flash-0731 --role-policy "$ROLE_POLICY" \
+  --result-dir "$TMP/live-non-empty"
+reject "$RUNNER" --run --case pipeline-legacy-translation \
+  --model z-ai/glm-5.3-flash --role-policy "$ROLE_POLICY" \
+  --result-dir "$TMP/live-ineligible"
+assert test ! -e "$TMP/wrapper-called"
+assert test -f "$TMP/live-non-empty/retained.json"
 
 printf 'benchmark evidence contract: %d assertions passed (offline; local stubs only)\n' "$pass"

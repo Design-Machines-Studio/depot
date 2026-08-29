@@ -4,13 +4,24 @@
 set -euo pipefail
 
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-SUITE="${DEPOT_BENCH_SUITE:-$DIR/depot-role-benchmark-suite.json}"
-MATRIX="${DEPOT_BENCH_MATRIX:-$DIR/model-matrix.json}"
-BOUNDARY="${DEPOT_BENCH_BOUNDARY:-$DIR/delegation-boundary.sh}"
-POLICY="${DEPOT_BENCH_SECURITY_POLICY:-$DIR/delegation-security-policy.json}"
-WRAPPER="${DEPOT_BENCH_WRAPPER:-$DIR/openrouter-wrapper.sh}"
+CANONICAL_SUITE="$DIR/depot-role-benchmark-suite.json"
+CANONICAL_MATRIX="$DIR/model-matrix.json"
+CANONICAL_BOUNDARY="$DIR/delegation-boundary.sh"
+CANONICAL_POLICY="$DIR/delegation-security-policy.json"
+CANONICAL_WRAPPER="$DIR/openrouter-wrapper.sh"
+CANONICAL_ROLE_POLICY="$DIR/../../../../model-router/skills/model-router/references/role-policy.json"
 COMMAND="${1:-}"
 shift || true
+
+SUITE="$CANONICAL_SUITE"
+MATRIX="$CANONICAL_MATRIX"
+BOUNDARY="$CANONICAL_BOUNDARY"
+POLICY="$CANONICAL_POLICY"
+WRAPPER="$CANONICAL_WRAPPER"
+if [ "$COMMAND" != --run ]; then
+  SUITE="${DEPOT_BENCH_SUITE:-$SUITE}"
+  MATRIX="${DEPOT_BENCH_MATRIX:-$MATRIX}"
+fi
 
 CASE_ID=""
 MODEL=""
@@ -31,6 +42,7 @@ usage() {
     'usage: depot-role-benchmark.sh --list' \
     '       depot-role-benchmark.sh --prepare --case ID --output-file PATH' \
     '       depot-role-benchmark.sh --score --case ID --output-file PATH --receipt-file PATH --result-file PATH [--fault-file PATH] [--duration-seconds N]' \
+    '       depot-role-benchmark.sh --offline-run --case ID --model EXACT_SLUG --role-policy PATH --output-file PATH --receipt-file PATH --result-dir PATH' \
     '       depot-role-benchmark.sh --run --case ID --model EXACT_SLUG --role-policy PATH --result-dir PATH'
 }
 
@@ -61,6 +73,22 @@ require_json_object() {
 }
 sha256_file() { sha256sum "$1" | awk '{print "sha256:" $1}'; }
 
+require_new_result_path() {
+  local target input
+  target="$(realpath -m -- "$RESULT_FILE")"
+  [ -d "$(dirname "$target")" ] || { printf 'benchmark: result parent directory must exist\n' >&2; exit 2; }
+  [ ! -e "$RESULT_FILE" ] && [ ! -L "$RESULT_FILE" ] || {
+    printf 'benchmark: result file must not already exist: %s\n' "$RESULT_FILE" >&2
+    exit 2
+  }
+  for input in "$SUITE" "$OUTPUT_FILE" "$RECEIPT_FILE" ${FAULT_FILE:+"$FAULT_FILE"}; do
+    [ "$target" != "$(realpath -m -- "$input")" ] || {
+      printf 'benchmark: result file must be distinct from every input artifact\n' >&2
+      exit 2
+    }
+  done
+}
+
 require_json_object "$SUITE"
 case_exists() { jq -e --arg id "$CASE_ID" 'any(.cases[]; .id == $id)' "$SUITE" >/dev/null; }
 require_case() {
@@ -82,6 +110,7 @@ case_workload() {
   esac
 }
 
+# scorer-closure-begin
 add_assertion() {
   local destination="$1" id="$2" class="$3" passed="$4" weight="$5" expected="$6" hint="$7"
   jq -n --arg id "$id" --arg class "$class" --argjson passed "$passed" \
@@ -156,6 +185,90 @@ evaluate_case() {
   esac
 }
 
+run_validator() {
+  local input="$1" validator_id="$2" parsed="$3"
+  case "$validator_id" in
+    none) printf 'true' ;;
+    review-finding-order)
+      if [ "$parsed" = true ] && jq -e '[.findings[]?.id] == ["AUTH-1","ROUTE-2","DOC-3"]' "$input" >/dev/null; then
+        printf 'true'
+      else
+        printf 'false'
+      fi
+      ;;
+    *) printf 'unknown' ;;
+  esac
+}
+
+aggregate_assertions() {
+  local assertions_file="$1"
+  contract_passed=false; mandatory_passed=false; semantic_passed=false; semantic_score=0
+  [ "$STRICT_OK" = true ] && [ "$NORMALIZED_OK" = true ] && contract_passed=true
+  if [ "$NORMALIZED_OK" = true ] && ! jq -s -e '
+    any(.[]; .class == "mandatory"
+      and (.id != "strict-json-object" and .id != "normalized-json-object")
+      and .pass == false)
+  ' "$assertions_file" >/dev/null; then mandatory_passed=true; fi
+  if jq -s -e '[.[] | select(.class == "semantic")] as $semantic
+    | ($semantic | length) > 0 and all($semantic[]; .pass)' "$assertions_file" >/dev/null; then
+    semantic_passed=true
+  fi
+  semantic_score="$(jq -s '[.[] | select(.class == "semantic" and .pass) | .weight] | add // 0' "$assertions_file")"
+}
+
+classify_failure() {
+  : > "$reasons_file"
+  if [ "$prompt_fault" = true ]; then
+    failure_class=benchmark-prompt-contract-fault; failure_stage=prompt/contract; failure_owner=benchmark; model_conclusion=null
+    jq -n '"prompt or schema does not disclose every scored assertion"' >> "$reasons_file"
+  elif [ "$scorer_fault" = true ]; then
+    failure_class=benchmark-scorer-fault; failure_stage=scorer; failure_owner=benchmark; model_conclusion=null
+    jq -n '"scorer or validator contradicts the declared case"' >> "$reasons_file"
+  elif [ "$parser_fault" = true ]; then
+    failure_class=benchmark-parser-normalizer-fault; failure_stage=parser/normalizer; failure_owner=benchmark; model_conclusion=null
+    jq -n '"normalizer rejected an input accepted by its code-owned fixture contract"' >> "$reasons_file"
+  elif [ "$harness_fault" = true ] || [ "$binding_fault" = true ]; then
+    failure_class=benchmark-harness-fault; failure_stage=harness; failure_owner=benchmark; model_conclusion=null
+    if [ "$harness_fault" = true ]; then
+      jq -n '"receipt evidence is absent or does not match the declared case"' >> "$reasons_file"
+    fi
+    if [ "$binding_fault" = true ]; then
+      jq -n '"suite, case, prompt, scorer, or normalizer binding mismatch"' >> "$reasons_file"
+    fi
+  elif [ "$transport_status" != success ]; then
+    failure_class=transport-failure; failure_stage=transport; failure_owner=operational; model_conclusion=null
+    jq -n '"provider or CLI transport did not complete successfully"' >> "$reasons_file"
+  elif [ "$identity_confidence" != confirmed ]; then
+    failure_class=unknown-served-identity; failure_stage=identity; failure_owner=operational; model_conclusion=null
+    jq -n '"served identity, endpoint provider, or fallback provenance is not confirmed by the receipt"' >> "$reasons_file"
+  elif [ "$contract_passed" != true ]; then
+    failure_class=visible-output-contract-violation; failure_stage=format/contract; failure_owner=model; model_conclusion=contract-failure
+    jq -n '"visible output violated the disclosed strict JSON object contract"' >> "$reasons_file"
+  elif [ "$mandatory_passed" != true ]; then
+    failure_class=mandatory-assertion-failure; failure_stage=mandatory; failure_owner=model; model_conclusion=mandatory-failure
+    jq -n '"one or more disclosed mandatory assertions failed"' >> "$reasons_file"
+  elif [ "$semantic_passed" != true ]; then
+    failure_class=semantic-assertion-failure; failure_stage=semantic; failure_owner=model; model_conclusion=semantic-failure
+    jq -n '"one or more disclosed semantic assertions failed"' >> "$reasons_file"
+  elif [ "$validation_passed" != true ]; then
+    failure_class=deterministic-validation-failure; failure_stage=validation; failure_owner=model; model_conclusion=validation-failure
+    jq -n '"code-owned deterministic validation failed"' >> "$reasons_file"
+  else
+    failure_class=none; failure_stage=none; failure_owner=none; model_conclusion=success
+  fi
+}
+
+determine_comparability() {
+  benchmark_fault=false; comparable=false; overall_success=false
+  if [ "$prompt_fault" = true ] || [ "$scorer_fault" = true ] || [ "$parser_fault" = true ] \
+    || [ "$harness_fault" = true ] || [ "$binding_fault" = true ]; then benchmark_fault=true; fi
+  if [ "$benchmark_fault" = false ] && [ "$transport_status" = success ] \
+    && [ "$identity_confidence" = confirmed ]; then comparable=true; fi
+  if [ "$comparable" = true ] && [ "$contract_passed" = true ] && [ "$mandatory_passed" = true ] \
+    && [ "$semantic_passed" = true ] && [ "$validation_passed" = true ]; then overall_success=true; fi
+}
+# scorer-closure-end
+
 normalize_output() {
   local raw_file="$1" normalized_file="$2"
   STRICT_OK=false
@@ -182,14 +295,16 @@ score_case() {
   local assertions_file normalized_file audit_file reasons_file bindings_file
   local transport_status identity_confidence identity_provenance transport endpoint_provider workload
   local mandatory_passed semantic_passed semantic_score validation_passed validator_id contract_passed
+  local expected_validation receipt_binding_ok identity_evidence_ok result_parent
   local benchmark_fault=false comparable=false overall_success=false failure_class failure_stage failure_owner model_conclusion
   local prompt_fault=false scorer_fault=false parser_fault=false harness_fault=false binding_fault=false
 
   work="$(mktemp -d "${TMPDIR:-/tmp}/depot-benchmark-score.XXXXXX")"
+  audit_file=""
   case_json="$work/case.json"; normalized_file="$work/normalized.json"; assertions_file="$work/assertions.ndjson"
   expected_file="$work/expected.json"; expected_assertions="$work/expected-assertions.ndjson"
   reasons_file="$work/reasons.ndjson"; bindings_file="$work/bindings.json"
-  trap 'rm -rf "$work"' RETURN
+  trap 'rm -rf "$work"; [ -z "${audit_file:-}" ] || rm -f "$audit_file"' RETURN
   jq --arg id "$CASE_ID" '.cases[] | select(.id == $id)' "$SUITE" > "$case_json"
   workload="$(case_workload)"
   normalize_output "$OUTPUT_FILE" "$normalized_file"
@@ -202,7 +317,7 @@ score_case() {
   jq -cS 'del(.bindings)' "$case_json" > "$work/case-content.json"; case_digest="$(sha256_file "$work/case-content.json")"
   jq -j '.prompt' "$case_json" > "$work/prompt-content"
   prompt_digest="$(sha256_file "$work/prompt-content")"
-  awk '/^evaluate_case\(\) \{/{emit=1} /^normalize_output\(\) \{/{emit=0} emit' \
+  awk '/^# scorer-closure-begin$/{emit=1} /^# scorer-closure-end$/{print; emit=0} emit' \
     "${BASH_SOURCE[0]}" > "$work/scorer-content"
   jq -cS '{id,expected,assertionIds,assertions,validatorId:(.validatorId // "none")}' \
     "$case_json" >> "$work/scorer-content"
@@ -250,11 +365,10 @@ score_case() {
   if jq -e '.formatRequirementDisclosed == false' "$case_json" >/dev/null; then prompt_fault=true; fi
 
   validator_id="$(jq -r '.validatorId // "none"' "$case_json")"
-  case "$validator_id" in
-    none) validation_passed=true ;;
-    fixture-fail) validation_passed=false ;;
-    *) scorer_fault=true; validation_passed=false ;;
-  esac
+  validation_passed="$(run_validator "$normalized_file" "$validator_id" "$NORMALIZED_OK")"
+  expected_validation="$(run_validator "$expected_file" "$validator_id" true)"
+  if [ "$validation_passed" = unknown ]; then scorer_fault=true; validation_passed=false; fi
+  if [ "$expected_validation" != true ]; then scorer_fault=true; fi
 
   if [ -n "$FAULT_FILE" ]; then
     require_json_object "$FAULT_FILE"
@@ -265,62 +379,52 @@ score_case() {
     fi
   fi
 
-  if jq -e --arg suite "$suite_id" --arg caseId "$CASE_ID" --arg role "$(jq -r '.role' "$case_json")" --arg workload "$workload" '
-    (.benchmark? // {}) as $b
-    | (($b.suiteId? // $suite) != $suite) or (($b.caseId? // $caseId) != $caseId)
-      or (($b.role? // $role) != $role) or (($b.workload? // $workload) != $workload)
-  ' "$RECEIPT_FILE" >/dev/null; then harness_fault=true; fi
+  receipt_binding_ok=false
+  if jq -e --arg suite "$suite_id" --arg caseId "$CASE_ID" \
+    --arg role "$(jq -r '.role' "$case_json")" --arg workload "$workload" '
+      (.benchmark | type) == "object"
+      and .benchmark.suiteId == $suite and .benchmark.caseId == $caseId
+      and .benchmark.role == $role and .benchmark.workload == $workload
+    ' "$RECEIPT_FILE" >/dev/null; then receipt_binding_ok=true; else harness_fault=true; fi
 
-  transport_status="$(jq -r 'if .outcome == "success" then "success" elif .outcome == "failed" or .outcome == "error" then "failed" elif (.responseModel | type) == "string" then "success" else "failed" end' "$RECEIPT_FILE")"
-  transport="$(jq -r '.transport // "openrouter"' "$RECEIPT_FILE")"
+  transport_status="$(jq -r 'if .outcome == "success" then "success" else "failed" end' "$RECEIPT_FILE")"
+  transport=openrouter
   endpoint_provider="$(jq -r '.servingProvider // empty' "$RECEIPT_FILE")"
-  identity_confidence=unknown; identity_provenance="$(jq -r '.responseModelProvenance // (if (.responseModel | type) == "string" then "receipt" else "not-available" end)' "$RECEIPT_FILE")"
-  if jq -e '(.requestedModel | type) == "string" and (.requestedModel | length) > 0 and (.responseModel | type) == "string" and (.responseModel | length) > 0 and (.fallbackUsed | type) == "boolean"' "$RECEIPT_FILE" >/dev/null; then identity_confidence=confirmed; fi
+  identity_confidence=unknown
+  identity_provenance="$(jq -r '.responseModelProvenance // "not-available"' "$RECEIPT_FILE")"
+  identity_evidence_ok=false
+  if jq -e '
+    def nonempty: type == "string" and length > 0;
+    . as $receipt
+    | ($receipt.requestedModel | nonempty) and ($receipt.responseModel | nonempty)
+    and $receipt.responseModelProvenance == "response"
+    and ($receipt.servingProvider | nonempty) and $receipt.servingProviderProvenance == "response"
+    and ($receipt.fallbackUsed | type) == "boolean"
+    and ($receipt.modelCandidates | type) == "array" and all($receipt.modelCandidates[]; nonempty)
+    and ($receipt.attemptedModel | nonempty)
+    and ($receipt.attemptedModels | type) == "array" and all($receipt.attemptedModels[]; nonempty)
+    and $receipt.attemptProvenance == "response_model"
+    and (if $receipt.fallbackUsed then
+      ($receipt.modelCandidates | length) > 1
+      and $receipt.modelCandidates[0] == $receipt.requestedModel
+      and $receipt.attemptedModels == $receipt.modelCandidates
+      and $receipt.attemptedModel == $receipt.responseModel
+      and ($receipt.modelCandidates | index($receipt.responseModel)) != null
+    else
+      $receipt.modelCandidates == [$receipt.requestedModel]
+      and $receipt.attemptedModels == [$receipt.requestedModel]
+      and $receipt.attemptedModel == $receipt.requestedModel
+      and $receipt.responseModel == $receipt.requestedModel
+    end)
+  ' "$RECEIPT_FILE" >/dev/null; then identity_evidence_ok=true; fi
+  if [ "$receipt_binding_ok" = true ] && [ "$identity_evidence_ok" = true ]; then identity_confidence=confirmed; fi
 
-  mandatory_passed=false; semantic_passed=false; semantic_score=0; contract_passed=false
-  if ! jq -s -e 'any(.[]; .class == "mandatory" and .pass == false)' "$assertions_file" >/dev/null; then mandatory_passed=true; fi
-  if jq -s -e '[.[] | select(.class == "semantic")] as $semantic | ($semantic | length) > 0 and all($semantic[]; .pass)' "$assertions_file" >/dev/null; then semantic_passed=true; fi
-  semantic_score="$(jq -s '[.[] | select(.class == "semantic" and .pass) | .weight] | add // 0' "$assertions_file")"
-  [ "$STRICT_OK" = true ] && [ "$NORMALIZED_OK" = true ] && [ "$mandatory_passed" = true ] && contract_passed=true
+  aggregate_assertions "$assertions_file"
+  classify_failure
+  determine_comparability
 
-  : > "$reasons_file"
-  if [ "$prompt_fault" = true ]; then
-    failure_class=benchmark-prompt-contract-fault; failure_stage=prompt/contract; failure_owner=benchmark; model_conclusion=null
-    jq -n '"prompt or schema does not disclose every scored assertion"' >> "$reasons_file"
-  elif [ "$scorer_fault" = true ]; then
-    failure_class=benchmark-scorer-fault; failure_stage=scorer; failure_owner=benchmark; model_conclusion=null
-    jq -n '"scorer or validator contradicts the declared case"' >> "$reasons_file"
-  elif [ "$parser_fault" = true ]; then
-    failure_class=benchmark-parser-normalizer-fault; failure_stage=parser/normalizer; failure_owner=benchmark; model_conclusion=null
-    jq -n '"normalizer rejected an input accepted by its code-owned fixture contract"' >> "$reasons_file"
-  elif [ "$harness_fault" = true ] || [ "$binding_fault" = true ]; then
-    failure_class=benchmark-harness-fault; failure_stage=harness; failure_owner=benchmark; model_conclusion=null
-    [ "$harness_fault" = true ] && jq -n '"receipt evidence selection does not match the declared case"' >> "$reasons_file"
-    [ "$binding_fault" = true ] && jq -n '"suite, case, prompt, scorer, or normalizer binding mismatch"' >> "$reasons_file"
-  elif [ "$transport_status" != success ]; then
-    failure_class=transport-failure; failure_stage=transport; failure_owner=operational; model_conclusion=null
-    jq -n '"provider or CLI transport did not complete successfully"' >> "$reasons_file"
-  elif [ "$identity_confidence" != confirmed ]; then
-    failure_class=unknown-served-identity; failure_stage=identity; failure_owner=operational; model_conclusion=null
-    jq -n '"served identity is not confirmed by receipt provenance"' >> "$reasons_file"
-  elif [ "$contract_passed" != true ]; then
-    failure_class=visible-output-contract-violation; failure_stage=format/contract; failure_owner=model; model_conclusion=contract-failure
-    jq -n '"visible output violated the disclosed JSON or required-envelope contract"' >> "$reasons_file"
-  elif [ "$semantic_passed" != true ]; then
-    failure_class=semantic-assertion-failure; failure_stage=semantic; failure_owner=model; model_conclusion=semantic-failure
-    jq -n '"one or more disclosed semantic assertions failed"' >> "$reasons_file"
-  elif [ "$validation_passed" != true ]; then
-    failure_class=deterministic-validation-failure; failure_stage=validation; failure_owner=model; model_conclusion=validation-failure
-    jq -n '"code-owned deterministic validation failed"' >> "$reasons_file"
-  else
-    failure_class=none; failure_stage=none; failure_owner=none; model_conclusion=success
-  fi
-
-  if [ "$prompt_fault" = true ] || [ "$scorer_fault" = true ] || [ "$parser_fault" = true ] || [ "$harness_fault" = true ] || [ "$binding_fault" = true ]; then benchmark_fault=true; fi
-  if [ "$benchmark_fault" = false ] && [ "$transport_status" = success ] && [ "$identity_confidence" = confirmed ]; then comparable=true; fi
-  if [ "$comparable" = true ] && [ "$contract_passed" = true ] && [ "$mandatory_passed" = true ] && [ "$semantic_passed" = true ] && [ "$validation_passed" = true ]; then overall_success=true; fi
-
-  audit_file="$work/result.json"
+  result_parent="$(dirname "$(realpath -m -- "$RESULT_FILE")")"
+  audit_file="$(mktemp "$result_parent/.depot-benchmark-result.XXXXXX")"
   jq -n --rawfile raw "$OUTPUT_FILE" --slurpfile normalized "$normalized_file" --slurpfile receipt "$RECEIPT_FILE" \
     --slurpfile assertions "$assertions_file" --slurpfile reasons "$reasons_file" --slurpfile bindings "$bindings_file" \
     --arg suiteId "$suite_id" --arg caseId "$CASE_ID" --arg role "$(jq -r '.role' "$case_json")" \
@@ -339,7 +443,8 @@ score_case() {
        normalizedOutput:(if $normalizedOk then $normalized[0] else null end),
        transport:$transport,endpointProvider:(if $endpointProvider == "" then null else $endpointProvider end),
        transportOutcome:{status:$transportStatus,failureKind:($receipt[0].failureKind // null),httpStatus:($receipt[0].httpStatus // null)},
-       identityStatus:{confidence:$identityConfidence,provenance:$identityProvenance},
+       identityStatus:{confidence:$identityConfidence,provenance:$identityProvenance,
+         receiptBinding:($receipt[0].benchmark // null)},
        requestedIdentity:($receipt[0].requestedModel // null),servedIdentity:($receipt[0].responseModel // null),
        fallback:{used:(if $receipt[0] | has("fallbackUsed") then $receipt[0].fallbackUsed else null end),
          attemptedIdentity:($receipt[0].attemptedModel // null),attemptedIdentities:($receipt[0].attemptedModels // null),
@@ -354,7 +459,68 @@ score_case() {
        qualityScore:$score,parsed:$normalizedOk,
        requestedModel:($receipt[0].requestedModel // null),servedModel:($receipt[0].responseModel // null),
        provider:($receipt[0].servingProvider // null),fallbackUsed:(if $receipt[0] | has("fallbackUsed") then $receipt[0].fallbackUsed else null end)}' > "$audit_file"
-  mv "$audit_file" "$RESULT_FILE"
+  ln "$audit_file" "$RESULT_FILE" || { printf 'benchmark: result file appeared before publication\n' >&2; return 2; }
+  rm -f "$audit_file"
+  audit_file=""
+}
+
+validate_run_inputs() {
+  local role capabilities
+  require_json_object "$ROLE_POLICY"; require_json_object "$MATRIX"
+  workload="$(case_workload)"
+  role="$(jq -r --arg id "$CASE_ID" '.cases[] | select(.id == $id) | .role' "$SUITE")"
+  capabilities="$(jq -c --arg id "$CASE_ID" '.cases[] | select(.id == $id) | .requiredCapabilities // []' "$SUITE")"
+  jq -e --arg model "$MODEL" 'any(.models[]; .slug == $model and .catalog_status == "available")' "$MATRIX" >/dev/null || {
+    printf 'benchmark: exact available matrix model required\n' >&2; exit 2
+  }
+  jq -e --arg role "$role" --arg model "$MODEL" --argjson needed "$capabilities" '
+    any(.roles[$role][]?; . as $candidate
+      | .model == $model and .transport == "openrouter"
+        and all($needed[]; . as $cap | $candidate.capabilities | index($cap) != null))
+  ' "$ROLE_POLICY" >/dev/null || {
+    printf 'benchmark: model is not eligible for the case role and capabilities\n' >&2; exit 2
+  }
+}
+
+prepare_result_dir() {
+  if [ -e "$RESULT_DIR" ]; then
+    [ -d "$RESULT_DIR" ] && [ ! -L "$RESULT_DIR" ] || {
+      printf 'benchmark: result directory must be a real directory\n' >&2; exit 2
+    }
+    [ -z "$(find "$RESULT_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ] || {
+      printf 'benchmark: result directory must be empty\n' >&2; exit 2
+    }
+  else
+    mkdir -p "$RESULT_DIR"
+  fi
+  chmod 700 "$RESULT_DIR"
+}
+
+bind_receipt_to_case() {
+  local bound suite_id role workload
+  suite_id="$(jq -r 'if .schemaVersion == 1 then "depot-role-v2" else .suiteId end' "$SUITE")"
+  role="$(jq -r --arg id "$CASE_ID" '.cases[] | select(.id == $id) | .role' "$SUITE")"
+  workload="$(case_workload)"
+  bound="${RECEIPT_FILE}.bound.$$"
+  jq --arg suite "$suite_id" --arg caseId "$CASE_ID" --arg role "$role" --arg workload "$workload" \
+    '.benchmark = {suiteId:$suite,caseId:$caseId,role:$role,workload:$workload}' \
+    "$RECEIPT_FILE" > "$bound"
+  mv "$bound" "$RECEIPT_FILE"
+}
+
+reject_live_overrides() {
+  local variable
+  for variable in DEPOT_BENCH_SUITE DEPOT_BENCH_MATRIX DEPOT_BENCH_BOUNDARY \
+    DEPOT_BENCH_SECURITY_POLICY DEPOT_BENCH_WRAPPER; do
+    if [ -n "${!variable+x}" ]; then
+      printf 'benchmark: --run rejects asset override %s\n' "$variable" >&2
+      exit 2
+    fi
+  done
+  [ "$(realpath -- "$ROLE_POLICY")" = "$(realpath -- "$CANONICAL_ROLE_POLICY")" ] || {
+    printf 'benchmark: --run requires the checked-in role policy\n' >&2
+    exit 2
+  }
 }
 
 case "$COMMAND" in
@@ -371,27 +537,37 @@ case "$COMMAND" in
     [ -n "$OUTPUT_FILE" ] && [ -n "$RECEIPT_FILE" ] && [ -n "$RESULT_FILE" ] || { usage >&2; exit 2; }
     [[ "$DURATION" =~ ^[0-9]+([.][0-9]+)?$ ]] || { printf 'benchmark: invalid duration\n' >&2; exit 2; }
     require_regular "$OUTPUT_FILE"; require_json_object "$RECEIPT_FILE"
+    [ -z "$FAULT_FILE" ] || require_json_object "$FAULT_FILE"
+    require_new_result_path
     score_case
+    ;;
+  --offline-run)
+    require_case
+    [ -n "$MODEL" ] && [ -n "$ROLE_POLICY" ] && [ -n "$OUTPUT_FILE" ] \
+      && [ -n "$RECEIPT_FILE" ] && [ -n "$RESULT_DIR" ] || { usage >&2; exit 2; }
+    require_regular "$OUTPUT_FILE"; require_json_object "$RECEIPT_FILE"
+    validate_run_inputs
+    prepare_result_dir
+    source_output="$OUTPUT_FILE"; source_receipt="$RECEIPT_FILE"
+    prompt="$RESULT_DIR/prompt.txt"; system="$RESULT_DIR/system.txt"; output="$RESULT_DIR/output.json"
+    receipt="$RESULT_DIR/receipt.json"; result="$RESULT_DIR/result.json"
+    jq -r --arg id "$CASE_ID" '.cases[] | select(.id == $id) | .prompt' "$SUITE" > "$prompt"
+    printf '%s\n' 'You are completing one bounded Depot benchmark. Return JSON only. You have no command authority.' > "$system"
+    cp "$source_output" "$output"; cp "$source_receipt" "$receipt"
+    OUTPUT_FILE="$output"; RECEIPT_FILE="$receipt"; RESULT_FILE="$result"
+    bind_receipt_to_case
+    require_new_result_path
+    score_case
+    cat "$result"
     ;;
   --run)
     require_case
     [ -n "$MODEL" ] && [ -n "$ROLE_POLICY" ] && [ -n "$RESULT_DIR" ] || { usage >&2; exit 2; }
-    require_json_object "$ROLE_POLICY"; require_json_object "$MATRIX"
-    workload="$(case_workload)"; role="$(jq -r --arg id "$CASE_ID" '.cases[] | select(.id == $id) | .role' "$SUITE")"
-    capabilities="$(jq -c --arg id "$CASE_ID" '.cases[] | select(.id == $id) | .requiredCapabilities // []' "$SUITE")"
-    jq -e --arg model "$MODEL" 'any(.models[]; .slug == $model and .catalog_status == "available")' "$MATRIX" >/dev/null || { printf 'benchmark: exact available matrix model required\n' >&2; exit 2; }
-    jq -e --arg role "$role" --arg model "$MODEL" --argjson needed "$capabilities" '
-      any(.roles[$role][]?; . as $candidate
-        | .model == $model and .transport == "openrouter"
-          and all($needed[]; . as $cap | $candidate.capabilities | index($cap) != null))
-    ' "$ROLE_POLICY" >/dev/null || { printf 'benchmark: model is not eligible for the case role and capabilities\n' >&2; exit 2; }
-    if [ -e "$RESULT_DIR" ]; then
-      [ -d "$RESULT_DIR" ] && [ ! -L "$RESULT_DIR" ] || { printf 'benchmark: result directory must be a real directory\n' >&2; exit 2; }
-      [ -z "$(find "$RESULT_DIR" -mindepth 1 -maxdepth 1 -print -quit)" ] || { printf 'benchmark: result directory must be empty\n' >&2; exit 2; }
-    else
-      mkdir -p "$RESULT_DIR"
-    fi
-    chmod 700 "$RESULT_DIR"
+    require_json_object "$ROLE_POLICY"
+    reject_live_overrides
+    validate_run_inputs
+    prepare_result_dir
+    workload="$(case_workload)"
     prompt="$RESULT_DIR/prompt.txt"; system="$RESULT_DIR/system.txt"; output="$RESULT_DIR/output.json"
     receipt="$RESULT_DIR/receipt.json"; result="$RESULT_DIR/result.json"
     jq -r --arg id "$CASE_ID" '.cases[] | select(.id == $id) | .prompt' "$SUITE" > "$prompt"
@@ -410,6 +586,9 @@ case "$COMMAND" in
           responseModel:null,servingProvider:null,fallbackUsed:null}' > "$receipt"
     fi
     end="$(date +%s)"; DURATION="$((end-start))"; OUTPUT_FILE="$output"; RECEIPT_FILE="$receipt"; RESULT_FILE="$result"
+    require_json_object "$RECEIPT_FILE"
+    bind_receipt_to_case
+    require_new_result_path
     score_case
     cat "$result"
     [ "$wrapper_status" -eq 0 ] || exit "$wrapper_status"
