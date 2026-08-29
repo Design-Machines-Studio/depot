@@ -9,6 +9,7 @@ WRAPPER="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrout
 WEEKLY="$ROOT/docs/scheduled-model-intelligence/weekly-prompt.md"
 LATEST="$ROOT/docs/model-intelligence/latest.json"
 PAID_COST_CHECK="$ROOT/tools/validate-paid-benchmark-costs.sh"
+BINDING_CHECK="$ROOT/tools/update-depot-role-benchmark-bindings.sh"
 failures=0
 
 check() {
@@ -74,6 +75,31 @@ check 'paid receipt gate rejects partial cost coverage' sh -c '
   printf '\''{"usage":{}}\n'\'' > "$fixture/openrouter/model/case/run-2/receipt.json"
   ! "$1" "$fixture/openrouter" 2>/dev/null
 ' sh "$PAID_COST_CHECK"
+
+check 'paid receipt gate rejects every incomplete cost boundary' sh -c '
+  fixture="$(mktemp -d)" || exit 1
+  trap '\''rm -rf -- "$fixture"'\'' EXIT
+  check="$1"
+  mkdir -p "$fixture/empty"
+  ! "$check" "$fixture/empty" 2>/dev/null || exit 1
+  for kind in malformed string null negative; do
+    root="$fixture/$kind/model/case/run-1"
+    mkdir -p "$root"
+    case "$kind" in
+      malformed) printf '\''not-json\n'\'' > "$root/receipt.json" ;;
+      string) printf '\''{"usage":{"cost":"0.25"}}\n'\'' > "$root/receipt.json" ;;
+      null) printf '\''{"usage":{"cost":null}}\n'\'' > "$root/receipt.json" ;;
+      negative) printf '\''{"usage":{"cost":-0.01}}\n'\'' > "$root/receipt.json" ;;
+    esac
+    ! "$check" "$fixture/$kind" 2>/dev/null || exit 1
+  done
+  mkdir -p "$fixture/symlink/model/case/run-1"
+  printf '\''{"usage":{"cost":0.25}}\n'\'' > "$fixture/valid.json"
+  ln -s "$fixture/valid.json" "$fixture/symlink/model/case/run-1/receipt.json"
+  ! "$check" "$fixture/symlink" 2>/dev/null
+' sh "$PAID_COST_CHECK"
+
+check 'repository-owned evaluator bindings are current' "$BINDING_CHECK" --check
 
 check 'live model-intelligence report uses v2 no-conclusion semantics' sh -c \
   "jq -e '.schema_version == 2 and (.quality_efficiency.roles | length) == 9 and .benchmarks.routing_conclusion == \"no routing change justified\"' '$LATEST' >/dev/null && \

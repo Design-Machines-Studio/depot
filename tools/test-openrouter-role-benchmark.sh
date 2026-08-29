@@ -224,11 +224,12 @@ assert jq -e '
   and ([.. | objects | keys[]] | map(select(. != "blindToCandidate" and test("candidate|model|provider|transport"; "i"))) | length) == 0
 ' "$TMP/human-valid/human-rubric.json"
 
-for fixture in unblinded digest-mismatch case-mismatch rubric-mismatch unknown-criterion identity-bearing; do
+for fixture in unblinded bare-digest digest-mismatch case-mismatch rubric-mismatch unknown-criterion identity-bearing; do
   mkdir -p "$TMP/human-$fixture"
   make_human_receipt "$TMP/human-$fixture/human-rubric.json"
   case "$fixture" in
     unblinded) jq '.blindToCandidate = false' "$TMP/human-$fixture/human-rubric.json" > "$TMP/human-mutated" ;;
+    bare-digest) jq '.outputArtifactSha256 |= sub("^sha256:"; "")' "$TMP/human-$fixture/human-rubric.json" > "$TMP/human-mutated" ;;
     digest-mismatch) jq '.outputArtifactSha256 = "sha256:ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"' "$TMP/human-$fixture/human-rubric.json" > "$TMP/human-mutated" ;;
     case-mismatch) jq '.caseRevision = 999' "$TMP/human-$fixture/human-rubric.json" > "$TMP/human-mutated" ;;
     rubric-mismatch) jq '.rubricRevision = 999' "$TMP/human-$fixture/human-rubric.json" > "$TMP/human-mutated" ;;

@@ -77,13 +77,13 @@ reports it:
 ./tools/run-native-depot-role-benchmark.sh \
   --case review-zero-deferral \
   --transport codex-cli \
-  --model gpt-5.6-sol \
+  --model gpt-5.6-luna \
   --effort medium \
-  --result-dir /home/ned/benchmark-results/depot-role-v2/manual/codex-cli/gpt-5.6-sol/review-zero-deferral/run-1
+  --result-dir /home/ned/benchmark-results/depot-role-v2/manual/codex-cli/gpt-5.6-luna/review-zero-deferral/run-1
 ```
 
-Use `--transport claude-cli --model fable` for an admitted Claude subscription
-candidate. Native results record subscription billing and any CLI-reported
+Use `--case assembly-next-chunk --transport claude-cli --model fable` for an
+admitted Claude architect candidate. Native results record subscription billing and any CLI-reported
 tokens. Missing counters remain missing; billed cost is never invented.
 
 ## Interpretation, faults, and promotion

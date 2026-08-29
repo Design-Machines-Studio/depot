@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-08-29T14:04:01+08:00",
+  "generated_at": "2026-08-29T18:00:00+08:00",
   "quality_efficiency": {
     "roles": [
       {
@@ -2149,7 +2149,7 @@
     "routing_conclusion": "no routing change justified"
   },
   "benchmarks": {
-    "result_root": "/home/ned/benchmark-results/depot-role-v2",
+    "result_root": "/home/ned/ai/depot/.worktrees/pipeline/benchmark-evidence-521e4833/feature-manager/.model-intelligence/no-benchmark-evidence",
     "attempts": 0,
     "current_v2_attempts": 0,
     "groups": [],
@@ -4823,147 +4823,30 @@
     }
   },
   "production": {
-    "cost_summary_artifacts": 3,
-    "metrics_artifacts": 3,
-    "empty_cost_summaries": 2,
+    "cost_summary_artifacts": 0,
+    "metrics_artifacts": 0,
+    "empty_cost_summaries": 0,
     "malformed_artifacts": [],
-    "by_model": [
-      {
-        "attempts": 4,
-        "duration_seconds": 5331.0,
-        "input_tokens": 156997.0,
-        "output_tokens": 157616.0,
-        "reasoning_tokens": 143731.0,
-        "input_bytes": 0.0,
-        "measured_cost_usd": 2.8345398,
-        "measured_cost_attempts": 4,
-        "estimated_attempts": 0,
-        "measurement_sources": {
-          "openrouter_api_receipt": 4
-        },
-        "model": "moonshotai/kimi-k3",
-        "finding_contributions": 0
-      },
-      {
-        "attempts": 1,
-        "duration_seconds": 300.0,
-        "input_tokens": 20394.0,
-        "output_tokens": 30209.0,
-        "reasoning_tokens": 24272.0,
-        "input_bytes": 0.0,
-        "measured_cost_usd": 0.1614712,
-        "measured_cost_attempts": 1,
-        "estimated_attempts": 0,
-        "measurement_sources": {
-          "openrouter_api_receipt": 1
-        },
-        "model": "z-ai/glm-5.2",
-        "finding_contributions": 0
-      }
-    ],
-    "by_lane_model": [
-      {
-        "lane": "01-openrouter-usage-translator",
-        "model": "moonshotai/kimi-k3",
-        "attempts": 1,
-        "duration_seconds": 431.0,
-        "input_tokens": 24410.0,
-        "output_tokens": 39601.0,
-        "reasoning_tokens": 34999.0,
-        "input_bytes": 0.0,
-        "measured_cost_usd": 0.6670722,
-        "measured_cost_attempts": 1,
-        "estimated_attempts": 0
-      },
-      {
-        "lane": "02-lane-input-bytes",
-        "model": "moonshotai/kimi-k3",
-        "attempts": 1,
-        "duration_seconds": 400.0,
-        "input_tokens": 16158.0,
-        "output_tokens": 40837.0,
-        "reasoning_tokens": 35155.0,
-        "input_bytes": 0.0,
-        "measured_cost_usd": 0.6608562,
-        "measured_cost_attempts": 1,
-        "estimated_attempts": 0
-      },
-      {
-        "lane": "03-emission-contract-and-baselines",
-        "model": "z-ai/glm-5.2",
-        "attempts": 1,
-        "duration_seconds": 300.0,
-        "input_tokens": 20394.0,
-        "output_tokens": 30209.0,
-        "reasoning_tokens": 24272.0,
-        "input_bytes": 0.0,
-        "measured_cost_usd": 0.1614712,
-        "measured_cost_attempts": 1,
-        "estimated_attempts": 0
-      },
-      {
-        "lane": "adversary-r1",
-        "model": "moonshotai/kimi-k3",
-        "attempts": 1,
-        "duration_seconds": 3600.0,
-        "input_tokens": 52660.0,
-        "output_tokens": 35579.0,
-        "reasoning_tokens": 32395.0,
-        "input_bytes": 0.0,
-        "measured_cost_usd": 0.6914922,
-        "measured_cost_attempts": 1,
-        "estimated_attempts": 0
-      },
-      {
-        "lane": "adversary-r2",
-        "model": "moonshotai/kimi-k3",
-        "attempts": 1,
-        "duration_seconds": 900.0,
-        "input_tokens": 63769.0,
-        "output_tokens": 41599.0,
-        "reasoning_tokens": 41182.0,
-        "input_bytes": 0.0,
-        "measured_cost_usd": 0.8151192,
-        "measured_cost_attempts": 1,
-        "estimated_attempts": 0
-      }
-    ],
+    "by_model": [],
+    "by_lane_model": [],
     "quality": {
       "finding_contributions_by_model": {},
       "finding_contributions_by_provider": {},
       "canonical_findings": 0,
-      "median_completion_rate": 1.0,
-      "median_fallback_rate": 0.1,
-      "median_validation_first_pass_rate": 0.0,
-      "retry_reasons": {
-        "cascade_exhausted": 1,
-        "codex_usage_cap": 5
-      },
-      "model_attempt_counts_from_metrics": {
-        "moonshotai/kimi-k3": 4,
-        "z-ai/glm-5.2": 1
-      },
-      "provider_attempt_counts_from_metrics": {
-        "Friendli": 1,
-        "Modal": 4
-      }
+      "median_completion_rate": null,
+      "median_fallback_rate": null,
+      "median_validation_first_pass_rate": null,
+      "retry_reasons": {},
+      "model_attempt_counts_from_metrics": {},
+      "provider_attempt_counts_from_metrics": {}
     },
     "artifact_paths": {
-      "run_cost_summaries": [
-        "/home/ned/ai/depot/plans/r0-measurement-backbone/run-cost-summary.json",
-        "/home/ned/ai/depot/plans/r1-review-burn-cuts/prior-blocked-run/run-cost-summary.json",
-        "/home/ned/ai/depot/plans/r1-review-burn-cuts/run-cost-summary.json"
-      ],
-      "metrics": [
-        "/home/ned/ai/depot/plans/r0-measurement-backbone/metrics.json",
-        "/home/ned/ai/depot/plans/r1-review-burn-cuts/metrics.json",
-        "/home/ned/ai/depot/plans/r1-review-burn-cuts/prior-blocked-run/metrics.json"
-      ]
+      "run_cost_summaries": [],
+      "metrics": []
     }
   },
-  "repository": "/home/ned/ai/depot/.worktrees/pipeline/benchmark-evidence-521e4833/05-integration-and-docs",
+  "repository": "Design-Machines-Studio/depot",
   "run_roots": [
-    "/home/ned/ai/depot/plans",
-    "/home/ned/ai/depot/.workflow-kernel/runs"
+    ".model-intelligence/no-production-evidence"
   ]
 }

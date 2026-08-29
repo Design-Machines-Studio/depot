@@ -7,7 +7,8 @@ The command deliberately separates facts from policy:
   matrix and can refresh existing exact entries. It never admits a new model or
   changes role routing.
 * ``report`` aggregates repository-owned run-cost summaries, workflow metrics,
-  and Depot role benchmark results. It never reads prompt/model output content.
+  and Depot role benchmark results. It reads normalized editorial output only
+  to recompute a blinded human-rubric digest and never publishes that content.
 
 Scheduled tasks use this command so daily and weekly runs share one evidence
 contract instead of reconstructing ad-hoc jq pipelines.
@@ -547,7 +548,7 @@ V2_BINDINGS = (
 )
 MODEL_FAILURE_CATEGORIES = {"contract", "mandatory", "semantic", "validation"}
 OPERATIONAL_FAILURE_CATEGORIES = {"benchmark", "prompt", "parser", "scorer", "harness", "transport", "identity"}
-DIGEST_PATTERN = re.compile(r"(?:sha256:)?[0-9a-f]{64}")
+DIGEST_PATTERN = re.compile(r"sha256:[0-9a-f]{64}")
 
 
 def binding_value(result: dict[str, Any], name: str) -> Any:
@@ -728,15 +729,22 @@ def closed_identity_proof(result: dict[str, Any], receipt: dict[str, Any]) -> bo
     fallback = fallback if isinstance(fallback, dict) else {}
     requested = result.get("requestedIdentity")
     served = result.get("servedIdentity")
+    transport = result.get("transport")
+    native = transport in {"codex-cli", "claude-cli"}
+    accepted_provenance = (
+        {"response", "modelUsage-unique-max-output-tokens"} if native else {"response"}
+    )
     if not (
         isinstance(requested, str)
         and requested
-        and served == requested
+        and isinstance(served, str)
+        and served
+        and (native or served == requested)
         and identity.get("confidence") == "confirmed"
-        and identity.get("provenance") == "response"
+        and identity.get("provenance") in accepted_provenance
         and fallback.get("used") is False
-        and fallback.get("attemptedIdentity") == requested
-        and fallback.get("attemptedIdentities") == [requested]
+        and fallback.get("attemptedIdentity") == served
+        and fallback.get("attemptedIdentities") == [served]
         and fallback.get("provenance") == "response_model"
     ):
         return False
@@ -745,10 +753,10 @@ def closed_identity_proof(result: dict[str, Any], receipt: dict[str, Any]) -> bo
         "responseModel": served,
         "transport": result.get("transport"),
         "fallbackUsed": False,
-        "attemptedModel": requested,
-        "attemptedModels": [requested],
+        "attemptedModel": served,
+        "attemptedModels": [served],
         "attemptProvenance": "response_model",
-        "responseModelProvenance": "response",
+        "responseModelProvenance": identity.get("provenance"),
     }
     return all(
         name not in receipt or receipt.get(name) == expected
@@ -1242,12 +1250,31 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
         behavior = result.get("behavioralContract")
         behavior = behavior if isinstance(behavior, dict) else {}
         bindings = result.get("evidenceBindings")
+        suite_bindings = suite.get("bindings")
+        suite_bindings = suite_bindings if isinstance(suite_bindings, dict) else {}
+        case_bindings_by_id = suite_bindings.get("cases")
+        case_bindings_by_id = case_bindings_by_id if isinstance(case_bindings_by_id, dict) else {}
+        case_bindings = case_bindings_by_id.get(case_id)
+        case_bindings = case_bindings if isinstance(case_bindings, dict) else {}
+        binding_authority = {
+            "suiteRevision": suite_bindings.get("suiteRevision"),
+            "suiteDigest": suite_bindings.get("suiteDigest"),
+            "caseRevision": case_bindings.get("caseRevision"),
+            "caseDigest": case_bindings.get("caseDigest"),
+            "promptRevision": case_bindings.get("promptRevision"),
+            "promptDigest": case_bindings.get("promptDigest"),
+            "scorerRevision": case_bindings.get("scorerRevision"),
+            "scorerDigest": case_bindings.get("scorerDigest"),
+            "normalizerRevision": suite_bindings.get("normalizerRevision"),
+            "normalizerDigest": suite_bindings.get("normalizerDigest"),
+        }
         bindings_ok = isinstance(bindings, dict) and all(
-            isinstance(bindings.get(name), dict)
+            authority is not None
+            and isinstance(bindings.get(name), dict)
             and bindings[name].get("match") is True
-            and bindings[name].get("actual") is not None
-            and bindings[name].get("declared") == bindings[name].get("actual")
-            for name in V2_BINDINGS
+            and bindings[name].get("actual") == authority
+            and bindings[name].get("declared") == authority
+            for name, authority in binding_authority.items()
         )
         authoritative_role = case.get("role") if isinstance(case, dict) else None
         requested_candidate = result.get("requestedIdentity")
@@ -1926,7 +1953,7 @@ def render_report(report: dict[str, Any]) -> str:
             "",
             "- Token counts and deterministic input bytes are different units and are never added together.",
             "- Subscription marginal cost, API-equivalent opportunity cost, and provider-billed spend remain separate views.",
-            "- A model-role change requires three successful attempts on every applicable local case plus production evidence; incomplete coverage cannot promote a model.",
+            "- A model-role change requires three comparable, identity-confirmed, no-model-fallback successful attempts on every applicable distinct local case in one digest-compatible cohort plus production evidence; incomplete coverage cannot promote a model.",
             f"- Routing conclusion: {benchmark['routing_conclusion']}.",
             "",
         ]
@@ -1940,6 +1967,13 @@ def report_command(args: argparse.Namespace) -> int:
     generated_at = parse_observed_at(args.observed_at).isoformat(timespec="seconds")
     production = production_rollup(roots)
     benchmarks = benchmark_rollup(benchmark_root)
+
+    def repository_path(path: Path) -> str:
+        try:
+            return str(path.relative_to(REPO_ROOT))
+        except ValueError:
+            return str(path)
+
     report = {
         "schema_version": 2,
         "generated_at": generated_at,
@@ -1950,8 +1984,8 @@ def report_command(args: argparse.Namespace) -> int:
         },
         "benchmarks": benchmarks,
         "production": production,
-        "repository": str(REPO_ROOT),
-        "run_roots": [str(root) for root in roots],
+        "repository": "Design-Machines-Studio/depot",
+        "run_roots": [repository_path(root) for root in roots],
     }
     report_json = json.dumps(report, indent=2, ensure_ascii=False) + "\n"
     if args.json_output:

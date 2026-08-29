@@ -110,10 +110,10 @@ No accepted blinded digest-matched editorial human evidence is available; human 
 ## Production quality signals
 
 - Canonical findings: 0
-- Median completion rate: 1.0
-- Median fallback rate: 0.1
-- Median first-pass validation rate: 0.0
-- Retry reasons: `{"cascade_exhausted": 1, "codex_usage_cap": 5}`
+- Median completion rate: None
+- Median fallback rate: None
+- Median first-pass validation rate: None
+- Retry reasons: `{}`
 
 These are workflow signals, not direct causal model-quality scores. Missing model attribution remains missing.
 
@@ -130,24 +130,15 @@ Recorded duration, prompt/completion/reasoning/cache tokens, context, and tool t
 - Benchmark provider-billed cost: None
 - Benchmark recorded-cost coverage: `{"attempts": 0, "rate": null, "recorded": 0}`
 
-| Model | Attempts | Duration | Input tokens | Output tokens | Input bytes | Provider-billed cost | Finding contributions |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| moonshotai/kimi-k3 | 4 | 5331.0s | 156997 | 157616 | 0 | $2.8345 | 0 |
-| z-ai/glm-5.2 | 1 | 300.0s | 20394 | 30209 | 0 | $0.1615 | 0 |
+No model-attributed lane usage is available.
 
 ### Production economics by lane and model
 
-| Lane | Model | Attempts | Duration | Input tokens | Output tokens | Input bytes | Provider-billed cost |
-|---|---|---:|---:|---:|---:|---:|---:|
-| 01-openrouter-usage-translator | moonshotai/kimi-k3 | 1 | 431.0s | 24410 | 39601 | 0 | $0.6671 |
-| 02-lane-input-bytes | moonshotai/kimi-k3 | 1 | 400.0s | 16158 | 40837 | 0 | $0.6609 |
-| 03-emission-contract-and-baselines | z-ai/glm-5.2 | 1 | 300.0s | 20394 | 30209 | 0 | $0.1615 |
-| adversary-r1 | moonshotai/kimi-k3 | 1 | 3600.0s | 52660 | 35579 | 0 | $0.6915 |
-| adversary-r2 | moonshotai/kimi-k3 | 1 | 900.0s | 63769 | 41599 | 0 | $0.8151 |
+No lane/model-attributed usage is available.
 
 ## Interpretation limits
 
 - Token counts and deterministic input bytes are different units and are never added together.
 - Subscription marginal cost, API-equivalent opportunity cost, and provider-billed spend remain separate views.
-- A model-role change requires three successful attempts on every applicable local case plus production evidence; incomplete coverage cannot promote a model.
+- A model-role change requires three comparable, identity-confirmed, no-model-fallback successful attempts on every applicable distinct local case in one digest-compatible cohort plus production evidence; incomplete coverage cannot promote a model.
 - Routing conclusion: no routing change justified.

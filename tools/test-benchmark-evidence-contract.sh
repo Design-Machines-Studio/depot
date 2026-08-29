@@ -31,6 +31,7 @@ jq '
   .schemaVersion = 2
   | .suiteId = "depot-role-fixture-v2"
   | .suiteRevision = 1
+  | .bindings = null
   | .cases |= map(
       .revision = 1 | .promptRevision = 1
       | .workload = (if .taskType == "bounded-edit" or .taskType == "structured-transformation" then "mechanical" else "quality" end)
@@ -40,6 +41,24 @@ jq '
 
 printf '%s\n' '{"schemaVersion":2,"outcome":"success","requestedModel":"fixture/requested","modelCandidates":["fixture/requested"],"responseModel":"fixture/requested","responseModelProvenance":"response","servingProvider":"fixture-endpoint","servingProviderProvenance":"response","attemptedModel":"fixture/requested","attemptedModels":["fixture/requested"],"attemptProvenance":"response_model","fallbackUsed":false,"routing":{"workload":"quality"},"benchmark":{"suiteId":"depot-role-fixture-v2","caseId":"review-zero-deferral","role":"review-fast","workload":"quality"},"usage":{"prompt_tokens":10,"completion_tokens":5}}' > "$TMP/receipt.json"
 printf '%s\n' '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}' > "$TMP/output"
+score "$TMP/suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/bootstrap-result.json"
+jq --slurpfile result "$TMP/bootstrap-result.json" '
+  .bindings = {
+    suiteRevision:$result[0].evidenceBindings.suiteRevision.actual,
+    suiteDigest:$result[0].evidenceBindings.suiteDigest.actual,
+    normalizerRevision:$result[0].evidenceBindings.normalizerRevision.actual,
+    normalizerDigest:$result[0].evidenceBindings.normalizerDigest.actual,
+    cases:{"review-zero-deferral":{
+      caseRevision:$result[0].evidenceBindings.caseRevision.actual,
+      caseDigest:$result[0].evidenceBindings.caseDigest.actual,
+      promptRevision:$result[0].evidenceBindings.promptRevision.actual,
+      promptDigest:$result[0].evidenceBindings.promptDigest.actual,
+      scorerRevision:$result[0].evidenceBindings.scorerRevision.actual,
+      scorerDigest:$result[0].evidenceBindings.scorerDigest.actual
+    }}
+  }
+' "$TMP/suite.json" > "$TMP/bound-suite.json"
+mv "$TMP/bound-suite.json" "$TMP/suite.json"
 cp "$TMP/output" "$TMP/raw-copy"
 score "$TMP/suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/result.json" --duration-seconds 2
 assert jq -e '
@@ -247,9 +266,9 @@ assert jq -e '
 for binding in suite case prompt scorer normalizer; do
   case "$binding" in
     suite) jq '.bindings.suiteRevision = 999' "$TMP/suite.json" ;;
-    case) jq '.cases[1].bindings.caseRevision = 999' "$TMP/suite.json" ;;
-    prompt) jq '.cases[1].bindings.promptDigest = "sha256:wrong"' "$TMP/suite.json" ;;
-    scorer) jq '.cases[1].bindings.scorerRevision = 999' "$TMP/suite.json" ;;
+    case) jq '.bindings.cases["review-zero-deferral"].caseRevision = 999' "$TMP/suite.json" ;;
+    prompt) jq '.bindings.cases["review-zero-deferral"].promptDigest = "sha256:wrong"' "$TMP/suite.json" ;;
+    scorer) jq '.bindings.cases["review-zero-deferral"].scorerRevision = 999' "$TMP/suite.json" ;;
     normalizer) jq '.bindings.normalizerDigest = "sha256:wrong"' "$TMP/suite.json" ;;
   esac > "$TMP/binding-suite.json"
   score "$TMP/binding-suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/result.json"
@@ -271,7 +290,8 @@ jq '.requestedModel="fixture/requested-exact"
 score "$TMP/suite.json" "$TMP/output" "$TMP/fallback-receipt.json" "$TMP/result.json"
 assert jq -e '
   .requestedIdentity == "fixture/requested-exact" and .servedIdentity == "fixture/fallback-exact"
-  and .identityStatus.confidence == "confirmed" and .comparable
+  and .identityStatus.confidence == "confirmed" and (.comparable | not)
+  and .failureClass == "model-fallback-unattributable" and .modelConclusion == null
   and .fallback.used == true and .fallback.attemptedIdentity == "fixture/fallback-exact"
   and .fallback.attemptedIdentities == ["fixture/requested-exact","fixture/fallback-exact"]
   and .fallback.provenance == "response_model"

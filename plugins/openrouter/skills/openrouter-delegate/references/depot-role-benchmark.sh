@@ -558,6 +558,9 @@ classify_failure() {
   elif [ "$identity_confidence" != confirmed ]; then
     failure_class=unknown-served-identity; failure_stage=identity; failure_owner=operational; model_conclusion=null
     jq -n '"served identity, endpoint provider, or fallback provenance is not confirmed by the receipt"' >> "$reasons_file"
+  elif jq -e '.fallbackUsed == true' "$RECEIPT_FILE" >/dev/null; then
+    failure_class=model-fallback-unattributable; failure_stage=identity; failure_owner=operational; model_conclusion=null
+    jq -n '"a different served identity completed the attempt, so the output is not attributable to the requested candidate"' >> "$reasons_file"
   elif [ "$contract_passed" != true ]; then
     failure_class=visible-output-contract-violation; failure_stage=format/contract; failure_owner=model; model_conclusion=contract-failure
     jq -n '"visible output violated the disclosed strict JSON object contract"' >> "$reasons_file"
@@ -580,7 +583,8 @@ determine_comparability() {
   if [ "$prompt_fault" = true ] || [ "$scorer_fault" = true ] || [ "$parser_fault" = true ] \
     || [ "$harness_fault" = true ] || [ "$binding_fault" = true ]; then benchmark_fault=true; fi
   if [ "$benchmark_fault" = false ] && [ "$transport_status" = success ] \
-    && [ "$identity_confidence" = confirmed ]; then comparable=true; fi
+    && [ "$identity_confidence" = confirmed ] \
+    && jq -e '.fallbackUsed == false' "$RECEIPT_FILE" >/dev/null; then comparable=true; fi
   if [ "$comparable" = true ] && [ "$contract_passed" = true ] && [ "$mandatory_passed" = true ] \
     && [ "$semantic_passed" = true ] && [ "$validation_passed" = true ]; then overall_success=true; fi
 }
@@ -647,15 +651,15 @@ score_case() {
     --arg scorerDigest "$scorer_digest" --arg normalizerDigest "$normalizer_digest" \
     --argjson suiteRevision "$suite_revision" --argjson caseRevision "$case_revision" --argjson promptRevision "$prompt_revision" \
     --argjson scorerRevision "$SCORER_REVISION" --argjson normalizerRevision "$NORMALIZER_REVISION" '
-      def check($declared; $actual): {declared:($declared // $actual),actual:$actual,match:(($declared // $actual) == $actual)};
+      def check($declared; $actual): {declared:$declared,actual:$actual,match:($declared != null and $declared == $actual)};
       {suiteRevision:check($suite[0].bindings.suiteRevision;$suiteRevision),
        suiteDigest:check($suite[0].bindings.suiteDigest;$suiteDigest),
-       caseRevision:check($case[0].bindings.caseRevision;$caseRevision),
-       caseDigest:check($case[0].bindings.caseDigest;$caseDigest),
-       promptRevision:check($case[0].bindings.promptRevision;$promptRevision),
-       promptDigest:check($case[0].bindings.promptDigest;$promptDigest),
-       scorerRevision:check($case[0].bindings.scorerRevision;$scorerRevision),
-       scorerDigest:check($case[0].bindings.scorerDigest;$scorerDigest),
+       caseRevision:check($suite[0].bindings.cases[$case[0].id].caseRevision;$caseRevision),
+       caseDigest:check($suite[0].bindings.cases[$case[0].id].caseDigest;$caseDigest),
+       promptRevision:check($suite[0].bindings.cases[$case[0].id].promptRevision;$promptRevision),
+       promptDigest:check($suite[0].bindings.cases[$case[0].id].promptDigest;$promptDigest),
+       scorerRevision:check($suite[0].bindings.cases[$case[0].id].scorerRevision;$scorerRevision),
+       scorerDigest:check($suite[0].bindings.cases[$case[0].id].scorerDigest;$scorerDigest),
        normalizerRevision:check($suite[0].bindings.normalizerRevision;$normalizerRevision),
        normalizerDigest:check($suite[0].bindings.normalizerDigest;$normalizerDigest)}' > "$bindings_file"
   if ! jq -e 'all(.[]; .match)' "$bindings_file" >/dev/null; then binding_fault=true; fi
@@ -706,17 +710,26 @@ score_case() {
     ' "$RECEIPT_FILE" >/dev/null; then receipt_binding_ok=true; else harness_fault=true; fi
 
   transport_status="$(jq -r 'if .outcome == "success" then "success" else "failed" end' "$RECEIPT_FILE")"
-  transport=openrouter
+  transport="$(jq -r '.transport // "openrouter"' "$RECEIPT_FILE")"
   endpoint_provider="$(jq -r '.servingProvider // empty' "$RECEIPT_FILE")"
   identity_confidence=unknown
   identity_provenance="$(jq -r '.responseModelProvenance // "not-available"' "$RECEIPT_FILE")"
   identity_evidence_ok=false
-  if jq -e '
+  if jq -e --arg transport "$transport" '
     def nonempty: type == "string" and length > 0;
     . as $receipt
     | ($receipt.requestedModel | nonempty) and ($receipt.responseModel | nonempty)
-    and $receipt.responseModelProvenance == "response"
-    and ($receipt.servingProvider | nonempty) and $receipt.servingProviderProvenance == "response"
+    and (if $transport == "openrouter" then
+      $receipt.responseModelProvenance == "response"
+      and ($receipt.servingProvider | nonempty) and $receipt.servingProviderProvenance == "response"
+    else
+      ($transport == "codex-cli" or $transport == "claude-cli")
+      and ($receipt.responseModelProvenance == "response"
+        or $receipt.responseModelProvenance == "modelUsage-unique-max-output-tokens")
+      and ($receipt.servingProvider | nonempty)
+      and ($receipt.servingProviderProvenance == "response"
+        or $receipt.servingProviderProvenance == "modelUsage")
+    end)
     and ($receipt.fallbackUsed | type) == "boolean"
     and ($receipt.modelCandidates | type) == "array" and all($receipt.modelCandidates[]; nonempty)
     and ($receipt.attemptedModel | nonempty)
@@ -728,11 +741,15 @@ score_case() {
       and $receipt.attemptedModels == $receipt.modelCandidates
       and $receipt.attemptedModel == $receipt.responseModel
       and ($receipt.modelCandidates | index($receipt.responseModel)) != null
-    else
+    elif $transport == "openrouter" then
       $receipt.modelCandidates == [$receipt.requestedModel]
       and $receipt.attemptedModels == [$receipt.requestedModel]
       and $receipt.attemptedModel == $receipt.requestedModel
       and $receipt.responseModel == $receipt.requestedModel
+    else
+      $receipt.modelCandidates == [$receipt.requestedModel]
+      and $receipt.attemptedModels == [$receipt.responseModel]
+      and $receipt.attemptedModel == $receipt.responseModel
     end)
   ' "$RECEIPT_FILE" >/dev/null; then identity_evidence_ok=true; fi
   if [ "$receipt_binding_ok" = true ] && [ "$identity_evidence_ok" = true ]; then identity_confidence=confirmed; fi

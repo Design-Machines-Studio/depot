@@ -155,18 +155,20 @@ For each native incumbent, run the same prompt and deterministic scorer:
 
 Run a one-attempt screen first. It discovers opportunities only and cannot
 promote or demote a candidate. Count failures and incomplete directories. Only
-candidates with a comparable, identity-confirmed success that satisfies every
+candidates with a comparable, identity-confirmed success, `fallback.used == false`, and every
 closed case assertion and remains contextually plausible on latency, context,
 capability, and cost may proceed to attempts 2 and 3. Do not discard failed
 runs or rerun into the same directory.
 
-Inspect `result.json` after every native or paid attempt. If `benchmarkFault` is
-true, `modelConclusion` is null because of a benchmark fault, an evidence
-binding mismatches, or the failure stage is prompt/contract,
-parser/normalizer, scorer, or harness, stop all native and OpenRouter benchmark
-calls immediately and write the reason to `$BENCH_STOP`. Preserve and report
-the evidence as incompatible or
-benchmark-owned; never count it against the candidate. Repair the benchmark
+Inspect `result.json` after every native or paid attempt. The following conditions
+stop all native and OpenRouter benchmark calls:
+
+- `benchmarkFault` is `true`;
+- any evidence binding has `match:false`;
+- `failureStage` is `prompt/contract`, `parser/normalizer`, `scorer`, or `harness`.
+
+Write the reason to `$BENCH_STOP`. Preserve and report the evidence as
+incompatible or benchmark-owned; never count it against the candidate. Repair the benchmark
 locally and run both offline benchmark fixture validators plus the Python
 intelligence/native test. Do not make any benchmark rerun during this weekly
 task; a later run may collect new evidence after the repair is reviewed and

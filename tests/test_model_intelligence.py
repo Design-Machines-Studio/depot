@@ -39,7 +39,6 @@ class ModelIntelligenceTest(unittest.TestCase):
         transport: str,
         observed_at: str,
         endpoint_provider: str = "openai",
-        digest_suffix: str = "a",
         success: bool = True,
         failure_class: str = "none",
         failure_owner: str = "none",
@@ -57,17 +56,19 @@ class ModelIntelligenceTest(unittest.TestCase):
             ).read_text()
         )
         case = next(item for item in suite["cases"] if item["id"] == case_id)
+        suite_bindings = suite["bindings"]
+        case_bindings = suite_bindings["cases"][case_id]
         bindings = {
-            "suiteRevision": suite["suiteRevision"],
-            "suiteDigest": f"suite-{digest_suffix}",
-            "caseRevision": case["revision"],
-            "caseDigest": f"case-{digest_suffix}",
-            "promptRevision": case["promptRevision"],
-            "promptDigest": f"prompt-{digest_suffix}",
-            "scorerRevision": 2,
-            "scorerDigest": f"scorer-{digest_suffix}",
-            "normalizerRevision": 2,
-            "normalizerDigest": f"normalizer-{digest_suffix}",
+            "suiteRevision": suite_bindings["suiteRevision"],
+            "suiteDigest": suite_bindings["suiteDigest"],
+            "caseRevision": case_bindings["caseRevision"],
+            "caseDigest": case_bindings["caseDigest"],
+            "promptRevision": case_bindings["promptRevision"],
+            "promptDigest": case_bindings["promptDigest"],
+            "scorerRevision": case_bindings["scorerRevision"],
+            "scorerDigest": case_bindings["scorerDigest"],
+            "normalizerRevision": suite_bindings["normalizerRevision"],
+            "normalizerDigest": suite_bindings["normalizerDigest"],
         }
         gate = success
         return {
@@ -403,7 +404,6 @@ class ModelIntelligenceTest(unittest.TestCase):
             model=model,
             transport="openrouter",
             observed_at="2026-08-29T01:04:00Z",
-            digest_suffix="incompatible",
         )
         incompatible["evidenceBindings"]["promptDigest"]["match"] = False
         self.write_attempt(benchmark_root, "05-incompatible", incompatible)
@@ -494,13 +494,12 @@ class ModelIntelligenceTest(unittest.TestCase):
 
     def test_v2_digest_compatibility_and_missing_ordering_stay_separate_and_null(self) -> None:
         benchmark_root = self.root / "digest-v2"
-        for name, suffix in (("one", "a"), ("two", "b")):
+        for name in ("one", "two"):
             evidence = self.v2_result(
                 case_id="mechanical-owned-edit",
                 model="gpt-5.6-luna",
                 transport="codex-cli",
                 observed_at="not-an-order",
-                digest_suffix=suffix,
             )
             evidence["durationSeconds"] = None
             evidence["usage"] = {
@@ -511,6 +510,12 @@ class ModelIntelligenceTest(unittest.TestCase):
                 "cache_creation_tokens": None,
                 "cost": None,
             }
+            if name == "two":
+                evidence["evidenceBindings"]["suiteDigest"] = {
+                    "declared": "sha256:" + "b" * 64,
+                    "actual": "sha256:" + "b" * 64,
+                    "match": True,
+                }
             self.write_attempt(benchmark_root, name, evidence)
         output = self.root / "digest.json"
         completed = self.run_tool(
@@ -525,9 +530,10 @@ class ModelIntelligenceTest(unittest.TestCase):
             str(output),
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
-        groups = json.loads(output.read_text())["benchmarks"]["groups"]
-        self.assertEqual(len(groups), 2)
-        self.assertNotEqual(groups[0]["suite_digest"], groups[1]["suite_digest"])
+        rollup = json.loads(output.read_text())["benchmarks"]
+        groups = rollup["groups"]
+        self.assertEqual(len(groups), 1)
+        self.assertEqual(len(rollup["incompatible_v2"]), 1)
         for group in groups:
             self.assertIsNone(group["first_pass_validated"])
             self.assertIsNone(group["model_rework_to_valid"])
@@ -542,7 +548,6 @@ class ModelIntelligenceTest(unittest.TestCase):
             model="gpt-5.6-luna",
             transport="codex-cli",
             observed_at="2026-08-29T03:00:00Z",
-            digest_suffix="mandatory",
             success=False,
             failure_class="mandatory-assertion-failure",
             failure_owner="model",
@@ -554,7 +559,6 @@ class ModelIntelligenceTest(unittest.TestCase):
             model="gpt-5.6-luna",
             transport="codex-cli",
             observed_at="2026-08-29T03:01:00Z",
-            digest_suffix="validation",
             success=False,
             failure_class="deterministic-validation-failure",
             failure_owner="model",
@@ -567,7 +571,6 @@ class ModelIntelligenceTest(unittest.TestCase):
             model="gpt-5.6-luna",
             transport="codex-cli",
             observed_at="2026-08-29T03:02:00Z",
-            digest_suffix="identity",
             success=True,
             failure_class="unknown-served-identity",
             failure_owner="operational",
@@ -594,20 +597,21 @@ class ModelIntelligenceTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         groups = json.loads(output.read_text())["benchmarks"]["groups"]
         categories = {
-            group["attempt_records"][0]["failure_category"]: group
+            attempt["failure_category"]: (group, attempt)
             for group in groups
+            for attempt in group["attempt_records"]
         }
         self.assertEqual(set(categories), {"mandatory", "validation", "identity"})
-        self.assertEqual(categories["mandatory"]["best_deterministic_quality"], 50)
-        self.assertEqual(categories["mandatory"]["validated_attempts"], 0)
-        self.assertEqual(categories["validation"]["model_attributable_failures"], 1)
-        self.assertEqual(categories["identity"]["comparable_attempts"], 0)
-        self.assertEqual(categories["identity"]["operational_retries"], {"identity": 1})
+        group = groups[0]
+        self.assertEqual(group["validated_attempts"], 0)
+        self.assertEqual(group["model_attributable_failures"], 2)
+        self.assertEqual(group["comparable_attempts"], 2)
+        self.assertEqual(group["operational_retries"], {"identity": 1})
 
     def test_editorial_human_evidence_is_optional_blinded_and_digest_matched(self) -> None:
         benchmark_root = self.root / "editorial-v2"
         output_artifact = {"copy": "member update", "preservedFacts": []}
-        digest = hashlib.sha256(
+        digest = "sha256:" + hashlib.sha256(
             (json.dumps(output_artifact, indent=2) + "\n").encode()
         ).hexdigest()
         accepted_result = self.v2_result(
@@ -651,7 +655,6 @@ class ModelIntelligenceTest(unittest.TestCase):
             transport="claude-cli",
             observed_at="2026-08-29T02:02:00Z",
             endpoint_provider="anthropic",
-            digest_suffix="rejected",
         )
         self.write_attempt(
             benchmark_root,
@@ -679,7 +682,11 @@ class ModelIntelligenceTest(unittest.TestCase):
         self.assertEqual(editorial["editorial_human_evidence"]["median_mean_score"], 4.5)
         missing_group = next(group for group in rollup["groups"] if group["case_id"] == "editorial-release-note")
         self.assertIsNone(missing_group["editorial_human_evidence"])
-        rejected_group = next(group for group in rollup["groups"] if group["suite_digest"] == "suite-rejected")
+        rejected_group = next(
+            group for group in rollup["groups"]
+            if group["case_id"] == "editorial-member-update"
+            and group["editorial_human_rejections"]
+        )
         self.assertEqual(
             rejected_group["editorial_human_rejections"],
             {"malformed or identity-bearing human rubric fields": 1},
@@ -693,7 +700,6 @@ class ModelIntelligenceTest(unittest.TestCase):
             model=model,
             transport="openrouter",
             observed_at="2026-08-29T04:00:00Z",
-            digest_suffix="fallback",
         )
         self.write_attempt(benchmark_root, "fallback-00-valid", valid)
         fallback_variants = {
@@ -708,7 +714,6 @@ class ModelIntelligenceTest(unittest.TestCase):
                 model=model,
                 transport="openrouter",
                 observed_at=f"2026-08-29T04:0{offset}:00Z",
-                digest_suffix="fallback",
             )
             evidence["fallback"] = fallback
             self.write_attempt(benchmark_root, f"fallback-{offset:02d}-{name}", evidence)
@@ -716,28 +721,28 @@ class ModelIntelligenceTest(unittest.TestCase):
         authority_variants = []
         wrong_role = self.v2_result(
             case_id="review-zero-deferral", model=model, transport="openrouter",
-            observed_at="2026-08-29T04:10:00Z", digest_suffix="wrong-role",
+            observed_at="2026-08-29T04:10:00Z",
         )
         wrong_role["role"] = "builder-fast"
         authority_variants.append(("wrong-role", wrong_role, None))
         wrong_candidate = self.v2_result(
             case_id="review-zero-deferral", model="not/policy-eligible", transport="openrouter",
-            observed_at="2026-08-29T04:11:00Z", digest_suffix="wrong-candidate",
+            observed_at="2026-08-29T04:11:00Z",
         )
         authority_variants.append(("wrong-candidate", wrong_candidate, None))
         wrong_transport = self.v2_result(
             case_id="review-zero-deferral", model=model, transport="codex-cli",
-            observed_at="2026-08-29T04:12:00Z", digest_suffix="wrong-transport",
+            observed_at="2026-08-29T04:12:00Z",
         )
         authority_variants.append(("wrong-transport", wrong_transport, None))
         missing_capability = self.v2_result(
             case_id="research-claim-source-map", model="gpt-5.6-luna", transport="codex-cli",
-            observed_at="2026-08-29T04:13:00Z", digest_suffix="missing-capability",
+            observed_at="2026-08-29T04:13:00Z",
         )
         authority_variants.append(("missing-capability", missing_capability, None))
         receipt_mismatch = self.v2_result(
             case_id="review-zero-deferral", model=model, transport="openrouter",
-            observed_at="2026-08-29T04:14:00Z", digest_suffix="receipt-mismatch",
+            observed_at="2026-08-29T04:14:00Z",
         )
         authority_variants.append(
             ("receipt-mismatch", receipt_mismatch, {"requestedModel": "other/model", "transport": "openrouter"})
@@ -753,7 +758,11 @@ class ModelIntelligenceTest(unittest.TestCase):
         )
         self.assertEqual(completed.returncode, 0, completed.stderr)
         rollup = json.loads(output.read_text())["benchmarks"]
-        fallback_group = next(group for group in rollup["groups"] if group["suite_digest"] == "suite-fallback")
+        fallback_group = next(
+            group for group in rollup["groups"]
+            if group["case_id"] == "review-zero-deferral"
+            and group["requested_candidate"] == model
+        )
         self.assertEqual(fallback_group["attempts"], 5)
         self.assertEqual(fallback_group["comparable_attempts"], 1)
         self.assertEqual(fallback_group["validated_attempts"], 1)
@@ -777,7 +786,7 @@ class ModelIntelligenceTest(unittest.TestCase):
             evidence = self.v2_result(
                 case_id=case_id, model=model, transport=transport,
                 observed_at=f"2026-08-29T05:{len(list(benchmark_root.glob('*'))):02d}:00Z",
-                digest_suffix="cohort", duration=duration,
+                duration=duration,
             )
             evidence["evidenceBindings"]["scorerDigest"] = {
                 "declared": scorer, "actual": scorer, "match": True,
@@ -812,26 +821,15 @@ class ModelIntelligenceTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         rollup = json.loads(output.read_text())["benchmarks"]
         role = next(item for item in rollup["roles"] if item["role"] == "review-fast")
-        self.assertEqual(len(role["evaluator_cohorts"]), 2)
-        self.assertEqual({item["scorer_digest"] for item in role["evaluator_cohorts"]}, {"scorer-a", "scorer-b"})
-        self.assertTrue(all(item["complete_case_coverage"] for item in role["evaluator_cohorts"]))
+        self.assertEqual(role["evaluator_cohorts"], [])
         self.assertIsNone(role["first_pass_validated_rate"])
         self.assertIsNone(role["best_deterministic_quality"])
         self.assertIsNone(role["median_duration_seconds"])
-        luna = next(item for item in rollup["model_role_evidence"] if item["role"] == "review-fast" and item["model"] == "gpt-5.6-luna")
-        self.assertTrue(luna["controlled_competitive_evidence"])
-        self.assertEqual(len(luna["competitive_evidence_cohorts"]), 2)
-        for cohort in luna["competitive_evidence_cohorts"]:
-            self.assertIn(cohort["scorer_digest"], {"scorer-a", "scorer-b"})
-            self.assertEqual({group["case_id"] for group in cohort["case_groups"]}, set(cases))
-            self.assertTrue(all(group["prompt_digest"] == "prompt-cohort" for group in cohort["case_groups"]))
-        deepseek = next(item for item in rollup["model_role_evidence"] if item["role"] == "review-fast" and item["model"] == "deepseek/deepseek-v4-flash-0731")
-        self.assertFalse(deepseek["controlled_competitive_evidence"])
-        self.assertEqual(deepseek["competitive_evidence_cohorts"], [])
-        group_medians = {group["median_duration_seconds"] for group in rollup["groups"] if group["requested_candidate"] == "gpt-5.6-luna"}
-        self.assertEqual(group_medians, {4.0, 12.0})
+        self.assertEqual(len(rollup["incompatible_v2"]), 18)
+        self.assertTrue(all(item["model_conclusion"] is None for item in rollup["incompatible_v2"]))
+        self.assertEqual(rollup["groups"], [])
         self.assertIn("Median duration", markdown.read_text())
-        self.assertIn("evaluator cohorts", markdown.read_text())
+        self.assertIn("Incompatible v2 attempts retained: 18", markdown.read_text())
 
     def test_v2_same_case_binding_conflicts_null_role_metrics_and_competition(self) -> None:
         benchmark_root = self.root / "case-binding-cohorts-v2"
@@ -843,7 +841,6 @@ class ModelIntelligenceTest(unittest.TestCase):
                 model=model,
                 transport="codex-cli",
                 observed_at=f"2026-08-29T06:{len(list(benchmark_root.glob('*'))):02d}:00Z",
-                digest_suffix="case-binding",
                 duration=2 if binding == "a" else 10,
             )
             evidence["evidenceBindings"]["caseDigest"] = {
@@ -874,25 +871,12 @@ class ModelIntelligenceTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         rollup = json.loads(output.read_text())["benchmarks"]
         role = next(item for item in rollup["roles"] if item["role"] == "review-fast")
-        self.assertEqual(len(role["evaluator_cohorts"]), 1)
-        cohort = role["evaluator_cohorts"][0]
-        self.assertFalse(cohort["case_binding_consistent"])
-        self.assertIsNone(cohort["comparable_attempts"])
-        self.assertIsNone(cohort["median_duration_seconds"])
-        zero_case = next(
-            item for item in cohort["case_coverage"]
-            if item["case_id"] == "review-zero-deferral"
-        )
-        self.assertEqual(len(zero_case["case_binding_cohorts"]), 2)
-        self.assertTrue(role["case_binding_conflict"])
+        self.assertEqual(role["evaluator_cohorts"], [])
+        self.assertFalse(role["case_binding_conflict"])
         self.assertIsNone(role["best_deterministic_quality"])
         self.assertIsNone(role["median_duration_seconds"])
-        evidence = next(
-            item for item in rollup["model_role_evidence"]
-            if item["role"] == "review-fast" and item["model"] == model
-        )
-        self.assertFalse(evidence["controlled_competitive_evidence"])
-        self.assertEqual(evidence["competitive_evidence_cohorts"], [])
+        self.assertEqual(len(rollup["incompatible_v2"]), 9)
+        self.assertEqual(rollup["groups"], [])
 
     def test_degraded_attempts_retain_receipt_evidence_and_all_recorded_spend_once(self) -> None:
         benchmark_root = self.root / "retained-v2"
@@ -921,7 +905,7 @@ class ModelIntelligenceTest(unittest.TestCase):
         self.write_attempt(benchmark_root, "historical", historical)
         incompatible = self.v2_result(
             case_id="review-zero-deferral", model=model, transport="openrouter",
-            observed_at="2026-08-29T06:00:00Z", digest_suffix="incompatible",
+            observed_at="2026-08-29T06:00:00Z",
             usage={"cost": 0.2},
         )
         incompatible["evidenceBindings"]["promptDigest"]["match"] = False
@@ -999,30 +983,30 @@ class ModelIntelligenceTest(unittest.TestCase):
 
         no_artifact = self.v2_result(
             case_id="editorial-member-update", model="fable", transport="claude-cli",
-            observed_at="2026-08-29T07:00:00Z", digest_suffix="no-artifact",
+            observed_at="2026-08-29T07:00:00Z",
         )
         no_artifact["normalizedOutputArtifactSha256"] = "a" * 64
         self.write_attempt(benchmark_root, "no-artifact", no_artifact, human=rubric("a" * 64))
         bad_rubric = self.v2_result(
             case_id="editorial-member-update", model="fable", transport="claude-cli",
-            observed_at="2026-08-29T07:01:00Z", digest_suffix="bad-rubric",
+            observed_at="2026-08-29T07:01:00Z",
         )
         self.write_attempt(benchmark_root, "bad-rubric", bad_rubric, output=artifact, human=rubric("SHA256:" + digest.upper()))
         bad_result = self.v2_result(
             case_id="editorial-member-update", model="fable", transport="claude-cli",
-            observed_at="2026-08-29T07:02:00Z", digest_suffix="bad-result",
+            observed_at="2026-08-29T07:02:00Z",
         )
-        bad_result["normalizedOutputArtifactSha256"] = "b" * 64
+        bad_result["normalizedOutputArtifactSha256"] = "sha256:" + "b" * 64
         self.write_attempt(benchmark_root, "bad-result", bad_result, output=artifact, human=rubric(digest))
         invalid_result = self.v2_result(
             case_id="editorial-member-update", model="fable", transport="claude-cli",
-            observed_at="2026-08-29T07:02:30Z", digest_suffix="invalid-result",
+            observed_at="2026-08-29T07:02:30Z",
         )
         invalid_result["normalizedOutputArtifactSha256"] = "SHA256:" + digest.upper()
         self.write_attempt(benchmark_root, "invalid-result", invalid_result, output=artifact, human=rubric(digest))
         accepted = self.v2_result(
             case_id="editorial-member-update", model="fable", transport="claude-cli",
-            observed_at="2026-08-29T07:03:00Z", digest_suffix="accepted-declared",
+            observed_at="2026-08-29T07:03:00Z",
         )
         accepted["normalizedOutputArtifactSha256"] = "sha256:" + digest
         self.write_attempt(benchmark_root, "accepted", accepted, output=artifact, human=rubric("sha256:" + digest))
@@ -1175,8 +1159,14 @@ printf '%s\n' '{event}'
         self.assertEqual(receipt["fallbackProvenance"], "cli-event")
 
     def test_claude_explicit_response_identity_precedes_root_requested_alias(self) -> None:
+        expected = {
+            "nextChunk": "depot-role-benchmark",
+            "executorRole": "builder-fast",
+            "executorCapabilities": ["read-repository", "write-repository", "structured-output"],
+            "rejectedComplexity": ["Issue #86 Floor observation schemas", "daemon", "generic workflow engine"],
+        }
         telemetry = {
-            "result": "{}",
+            "result": json.dumps(expected, separators=(",", ":")),
             "model": "opus",
             "response": {"model": "claude-opus-5", "provider": "anthropic"},
             "fallbackUsed": False,
@@ -1205,6 +1195,11 @@ printf '%s\n' '{event}'
             [item["model"] for item in receipt["ancillaryModelUsage"]],
             ["claude-haiku-4-5"],
         )
+        scored = json.loads((result_dir / "result.json").read_text())
+        self.assertTrue(scored["comparable"])
+        self.assertTrue(scored["overallSuccess"])
+        self.assertEqual(scored["requestedIdentity"], "opus")
+        self.assertEqual(scored["servedIdentity"], "claude-opus-5")
 
     def test_claude_usage_identity_requires_every_output_counter(self) -> None:
         telemetry = {
