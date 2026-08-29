@@ -351,6 +351,112 @@ printf '%s\n' '{event}'
         self.assertFalse(receipt["fallbackUsed"])
         self.assertEqual(receipt["fallbackProvenance"], "cli-event")
 
+    def test_claude_explicit_response_identity_precedes_root_requested_alias(self) -> None:
+        telemetry = {
+            "result": "{}",
+            "model": "opus",
+            "response": {"model": "claude-opus-5", "provider": "anthropic"},
+            "fallbackUsed": False,
+            "modelUsage": {
+                "claude-haiku-4-5": {"outputTokens": 90, "provider": "anthropic"},
+                "claude-opus-5": {"outputTokens": 10, "provider": "anthropic"},
+            },
+        }
+        stub = self.claude_stub("claude-explicit-response-stub", telemetry)
+        result_dir = self.root / "claude-explicit-response-result"
+        result = self.run_native(
+            case="assembly-next-chunk",
+            transport="claude-cli",
+            model="opus",
+            result_dir=result_dir,
+            stub=stub,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertEqual(receipt["requestedModel"], "opus")
+        self.assertEqual(receipt["responseModel"], "claude-opus-5")
+        self.assertEqual(receipt["responseModelProvenance"], "response")
+        self.assertEqual(receipt["primaryModelProvenance"], "response")
+        self.assertEqual(receipt["primaryModelUsage"]["outputTokens"], 10)
+        self.assertEqual(
+            [item["model"] for item in receipt["ancillaryModelUsage"]],
+            ["claude-haiku-4-5"],
+        )
+
+    def test_claude_usage_identity_requires_every_output_counter(self) -> None:
+        telemetry = {
+            "result": "{}",
+            "modelUsage": {
+                "claude-haiku-4-5": {"provider": "anthropic"},
+                "claude-opus-5": {"outputTokens": 10, "provider": "anthropic"},
+            },
+        }
+        stub = self.claude_stub("claude-incomplete-usage-stub", telemetry)
+        result_dir = self.root / "claude-incomplete-usage-result"
+        result = self.run_native(
+            case="assembly-next-chunk",
+            transport="claude-cli",
+            model="opus",
+            result_dir=result_dir,
+            stub=stub,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertIsNone(receipt["responseModel"])
+        self.assertTrue(receipt["identityAmbiguous"])
+        self.assertEqual(
+            receipt["responseModelProvenance"],
+            "modelUsage-incomplete-output-counters",
+        )
+        scored = json.loads((result_dir / "result.json").read_text())
+        self.assertFalse(scored["comparable"])
+        self.assertIsNone(scored["modelConclusion"])
+
+    def test_codex_split_usage_retains_each_last_reported_counter(self) -> None:
+        output = '{"findings":[],"deferred":false}'
+        events = [
+            {
+                "type": "turn.started",
+                "model": "gpt-5.6-luna",
+                "provider": "openai",
+                "fallbackUsed": False,
+                "usage": {"input_tokens": 11, "reasoning_output_tokens": 3},
+            },
+            {
+                "type": "usage.updated",
+                "usage": {"output_tokens": 20, "cache_write_input_tokens": 7},
+            },
+            {
+                "type": "turn.completed",
+                "usage": {"input_usage_count": 13, "cached_input_tokens": 5},
+            },
+        ]
+        event_stream = "\n".join(
+            json.dumps(event, separators=(",", ":")) for event in events
+        )
+        stub = self.codex_stub("codex-split-usage-stub", event_stream, output)
+        result_dir = self.root / "codex-split-usage-result"
+        result = self.run_native(
+            case="review-zero-deferral",
+            transport="codex-cli",
+            model="gpt-5.6-luna",
+            result_dir=result_dir,
+            stub=stub,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertEqual(
+            receipt["usage"],
+            {
+                "prompt_tokens": 13,
+                "completion_tokens": 20,
+                "reasoning_tokens": 3,
+                "cache_read_tokens": 5,
+                "cache_creation_tokens": 7,
+                "cost": None,
+            },
+        )
+
     def test_claude_opus_primary_retains_haiku_as_ancillary(self) -> None:
         raw_response = {
             "nextChunk": "role-complete benchmark corpus and deterministic scorer",
@@ -407,9 +513,17 @@ printf '%s\n' '{event}'
         )
         self.assertEqual(receipt["usage"]["cache_read_tokens"], 11)
         self.assertEqual(receipt["usage"]["cache_creation_tokens"], 22083)
+        self.assertEqual(
+            receipt["responseModelProvenance"],
+            "modelUsage-unique-max-output-tokens",
+        )
         self.assertIsNone(receipt["fallbackUsed"])
         self.assertEqual(receipt["fallbackProvenance"], "not_available")
         scored = json.loads((result_dir / "result.json").read_text())
+        self.assertEqual(
+            scored["identityStatus"]["provenance"],
+            "modelUsage-unique-max-output-tokens",
+        )
         self.assertFalse(scored["comparable"])
         self.assertEqual(scored["failureClass"], "unknown-served-identity")
         self.assertEqual((result_dir / "output.json").read_text(), json.dumps(raw_response) + "\n")
@@ -494,6 +608,194 @@ printf '%s\n' '{event}'
             ["gpt-5.6-luna", "gpt-5.6-luna-20260829"],
         )
         self.assertEqual(receipt["attemptedModel"], "gpt-5.6-luna-20260829")
+
+    def test_contradictory_fallback_telemetry_stays_ambiguous(self) -> None:
+        output = '{"findings":[],"deferred":false}'
+        event_streams = {
+            "false-with-extra-attempt": [
+                {
+                    "type": "turn.completed",
+                    "model": "gpt-5.6-luna",
+                    "provider": "openai",
+                    "fallbackUsed": False,
+                    "attemptedModels": ["gpt-5.6-luna", "gpt-5.6-sol"],
+                }
+            ],
+            "inconsistent-booleans": [
+                {
+                    "type": "turn.started",
+                    "model": "gpt-5.6-luna",
+                    "provider": "openai",
+                    "fallbackUsed": False,
+                },
+                {"type": "turn.completed", "fallbackUsed": True},
+            ],
+        }
+        for name, events in event_streams.items():
+            with self.subTest(name=name):
+                stream = "\n".join(
+                    json.dumps(event, separators=(",", ":")) for event in events
+                )
+                stub = self.codex_stub(f"codex-{name}-stub", stream, output)
+                result_dir = self.root / f"codex-{name}-result"
+                result = self.run_native(
+                    case="review-zero-deferral",
+                    transport="codex-cli",
+                    model="gpt-5.6-luna",
+                    result_dir=result_dir,
+                    stub=stub,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                receipt = json.loads((result_dir / "receipt.json").read_text())
+                self.assertIsNone(receipt["fallbackUsed"])
+                self.assertTrue(receipt["fallbackAmbiguous"])
+                self.assertEqual(
+                    receipt["fallbackProvenance"], "contradictory-cli-events"
+                )
+                self.assertEqual(
+                    receipt["fallbackReportedValues"],
+                    [False] if name == "false-with-extra-attempt" else [False, True],
+                )
+                if name == "false-with-extra-attempt":
+                    self.assertEqual(
+                        receipt["attemptedModels"],
+                        ["gpt-5.6-luna", "gpt-5.6-sol"],
+                    )
+                scored = json.loads((result_dir / "result.json").read_text())
+                self.assertFalse(scored["comparable"])
+                self.assertFalse(scored["overallSuccess"])
+
+    def test_present_wrong_typed_native_telemetry_is_malformed(self) -> None:
+        output = '{"findings":[],"deferred":false}'
+        codex_base = {
+            "type": "turn.completed",
+            "model": "gpt-5.6-luna",
+            "provider": "openai",
+            "fallbackUsed": False,
+            "usage": {"input_tokens": 2},
+        }
+        claude_base = {
+            "result": output,
+            "response": {"model": "fable", "provider": "anthropic"},
+            "fallbackUsed": False,
+            "usage": {"input_tokens": 2},
+        }
+        malformed: list[tuple[str, str, str, dict[str, object]]] = [
+            (
+                "codex-counter",
+                "codex-cli",
+                "gpt-5.6-luna",
+                {**codex_base, "usage": {"input_tokens": "2"}},
+            ),
+            (
+                "codex-identity",
+                "codex-cli",
+                "gpt-5.6-luna",
+                {**codex_base, "model": 56},
+            ),
+            (
+                "codex-provider",
+                "codex-cli",
+                "gpt-5.6-luna",
+                {**codex_base, "provider": False},
+            ),
+            (
+                "codex-fallback",
+                "codex-cli",
+                "gpt-5.6-luna",
+                {**codex_base, "fallbackUsed": "false"},
+            ),
+            (
+                "codex-usage",
+                "codex-cli",
+                "gpt-5.6-luna",
+                {**codex_base, "usage": []},
+            ),
+            (
+                "codex-attempts",
+                "codex-cli",
+                "gpt-5.6-luna",
+                {**codex_base, "attemptedModels": "gpt-5.6-luna"},
+            ),
+            (
+                "claude-counter",
+                "claude-cli",
+                "fable",
+                {**claude_base, "usage": {"input_tokens": "2"}},
+            ),
+            (
+                "claude-model-usage-counter",
+                "claude-cli",
+                "fable",
+                {
+                    **claude_base,
+                    "modelUsage": {"fable": {"outputTokens": "2"}},
+                },
+            ),
+            (
+                "claude-identity",
+                "claude-cli",
+                "fable",
+                {
+                    **claude_base,
+                    "response": {"model": 5, "provider": "anthropic"},
+                },
+            ),
+            (
+                "claude-provider",
+                "claude-cli",
+                "fable",
+                {**claude_base, "provider": []},
+            ),
+            (
+                "claude-fallback",
+                "claude-cli",
+                "fable",
+                {**claude_base, "fallbackUsed": 0},
+            ),
+            (
+                "claude-usage",
+                "claude-cli",
+                "fable",
+                {**claude_base, "usage": "missing"},
+            ),
+            (
+                "claude-attempts",
+                "claude-cli",
+                "fable",
+                {**claude_base, "attemptedModels": [5]},
+            ),
+        ]
+        for name, transport, model, telemetry in malformed:
+            with self.subTest(name=name):
+                stub = (
+                    self.codex_stub(
+                        f"{name}-stub",
+                        json.dumps(telemetry, separators=(",", ":")),
+                        output,
+                    )
+                    if transport == "codex-cli"
+                    else self.claude_stub(f"{name}-stub", telemetry)
+                )
+                result_dir = self.root / f"{name}-result"
+                result = self.run_native(
+                    case=(
+                        "review-zero-deferral"
+                        if transport == "codex-cli"
+                        else "assembly-next-chunk"
+                    ),
+                    transport=transport,
+                    model=model,
+                    result_dir=result_dir,
+                    stub=stub,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                receipt = json.loads((result_dir / "receipt.json").read_text())
+                self.assertEqual(receipt["outcome"], "failed")
+                self.assertEqual(receipt["failureKind"], "malformed-telemetry")
+                scored = json.loads((result_dir / "result.json").read_text())
+                self.assertFalse(scored["overallSuccess"])
+                self.assertIsNone(scored["modelConclusion"])
 
     def test_fenced_claude_object_normalizes_without_hiding_strict_failure(self) -> None:
         response = "```json\n{}\n```"

@@ -119,7 +119,7 @@ telemetry_valid=false
 output_present=false
 identity_json='{"identity":null,"provenance":"not_available","ambiguous":false,"primaryUsage":null,"ancillaryUsage":[]}'
 usage_json='{"prompt_tokens":null,"completion_tokens":null,"reasoning_tokens":null,"cache_read_tokens":null,"cache_creation_tokens":null,"cost":null}'
-fallback_json='{"used":null,"provenance":"not_available","attemptedModel":null,"attemptedModels":[]}'
+fallback_json='{"used":null,"provenance":"not_available","ambiguous":true,"reportedValues":[],"attemptedModel":null,"attemptedModels":[]}'
 provider_json='{"provider":null,"provenance":"not_available"}'
 
 if [ "$TRANSPORT" = codex-cli ]; then
@@ -134,41 +134,87 @@ if [ "$TRANSPORT" = codex-cli ]; then
   status=$?
   set -e
   [ -s "$OUTPUT" ] && output_present=true
-  if jq -s -e 'length > 0 and all(.[]; type == "object")' "$RAW" >/dev/null 2>&1; then
+  if jq -s -e '
+    def nonempty_string: type == "string" and length > 0;
+    def counter: type == "number" and . >= 0;
+    def counters_valid:
+      . as $object
+      | all([
+          "input_tokens","input_usage_count","output_tokens","output_usage_count",
+          "reasoning_tokens","reasoning_output_tokens","reasoning_usage_count",
+          "cached_input_tokens","cache_read_input_tokens","cache_read_usage_count",
+          "cache_creation_input_tokens","cache_write_input_tokens","cache_creation_usage_count"
+        ][]; . as $name | (($object | has($name) | not) or ($object[$name] | counter)));
+    def event_fields_valid:
+      ((has("model") | not) or (.model | nonempty_string))
+      and ((has("provider") | not) or (.provider | nonempty_string))
+      and ((has("response") | not) or
+        (.response | type == "object"
+          and ((has("model") | not) or (.model | nonempty_string))
+          and ((has("provider") | not) or (.provider | nonempty_string))))
+      and ((has("turn") | not) or
+        (.turn | type == "object"
+          and ((has("model") | not) or (.model | nonempty_string))))
+      and ((has("fallbackUsed") | not) or (.fallbackUsed | type == "boolean"))
+      and ((has("fallback_used") | not) or (.fallback_used | type == "boolean"))
+      and ((has("attemptedModels") | not) or
+        (.attemptedModels | type == "array" and all(.[]; nonempty_string)))
+      and ((has("attempted_models") | not) or
+        (.attempted_models | type == "array" and all(.[]; nonempty_string)));
+    length > 0 and all(.[]; type == "object" and event_fields_valid)
+    and all(.[] | .. | objects;
+      counters_valid and ((has("usage") | not) or (.usage | type == "object")))
+  ' "$RAW" >/dev/null 2>&1; then
     telemetry_valid=true
     identity_json="$(jq -sc '
       [.[].model?, .[].response?.model?, .[].turn?.model?]
       | flatten | map(select(type == "string" and length > 0)) | unique as $models
       | {identity:(if ($models | length) == 1 then $models[0] else null end),
-         provenance:(if ($models | length) == 1 then "cli-event-response-model"
+         provenance:(if ($models | length) == 1 then "response"
            elif ($models | length) > 1 then "ambiguous-cli-event-models" else "not_available" end),
          ambiguous:(($models | length) > 1),primaryUsage:null,ancillaryUsage:[]}
     ' "$RAW")"
     usage_json="$(jq -sc '
-      [.. | objects | select(
-        has("input_tokens") or has("output_tokens") or has("reasoning_tokens") or
-        has("input_usage_count") or has("output_usage_count") or
-        has("cached_input_tokens") or has("cache_read_usage_count") or
-        has("cache_creation_input_tokens") or has("cache_creation_usage_count")
-      )] | last // {} as $usage
-      | {prompt_tokens:($usage.input_tokens // $usage.input_usage_count // null),
-         completion_tokens:($usage.output_tokens // $usage.output_usage_count // null),
-         reasoning_tokens:($usage.reasoning_tokens // $usage.reasoning_usage_count // null),
-         cache_read_tokens:($usage.cached_input_tokens // $usage.cache_read_input_tokens // $usage.cache_read_usage_count // null),
-         cache_creation_tokens:($usage.cache_creation_input_tokens // $usage.cache_creation_usage_count // null),cost:null}
+      def reported($object; $names): any($names[]; . as $name | $object | has($name));
+      def reported_value($object; $names):
+        first($names[] as $name | select($object | has($name)) | $object[$name]);
+      reduce (.[] | .. | objects) as $object
+        ({prompt_tokens:null,completion_tokens:null,reasoning_tokens:null,
+          cache_read_tokens:null,cache_creation_tokens:null,cost:null};
+         if reported($object; ["input_tokens","input_usage_count"])
+           then .prompt_tokens = reported_value($object; ["input_tokens","input_usage_count"]) else . end
+         | if reported($object; ["output_tokens","output_usage_count"])
+           then .completion_tokens = reported_value($object; ["output_tokens","output_usage_count"]) else . end
+         | if reported($object; ["reasoning_tokens","reasoning_output_tokens","reasoning_usage_count"])
+           then .reasoning_tokens = reported_value($object; ["reasoning_tokens","reasoning_output_tokens","reasoning_usage_count"]) else . end
+         | if reported($object; ["cached_input_tokens","cache_read_input_tokens","cache_read_usage_count"])
+           then .cache_read_tokens = reported_value($object; ["cached_input_tokens","cache_read_input_tokens","cache_read_usage_count"]) else . end
+         | if reported($object; ["cache_creation_input_tokens","cache_write_input_tokens","cache_creation_usage_count"])
+           then .cache_creation_tokens = reported_value($object; ["cache_creation_input_tokens","cache_write_input_tokens","cache_creation_usage_count"]) else . end)
     ' "$RAW")"
-    fallback_json="$(jq -sc '
+    fallback_json="$(jq -sc --arg requested "$MODEL" --argjson identity "$identity_json" '
       . as $events
       | [$events[].fallbackUsed?, $events[].fallback_used?] | flatten | map(select(type == "boolean")) | unique as $values
-      | [$events[].attemptedModels?, $events[].attempted_models?] | flatten | map(select(type == "string" and length > 0)) as $attempts
-      | {used:(if ($values | length) == 1 then $values[0] else null end),
-         provenance:(if ($values | length) == 1 then "cli-event" elif ($values | length) > 1 then "ambiguous-cli-events" else "not_available" end),
+      | [$events[] | (.attemptedModels? // empty)[], (.attempted_models? // empty)[]] as $attempts
+      | (($values | length) > 1
+          or (($values | length) == 1 and $values[0] == false
+            and (($attempts | length) > 0 and $attempts != [$requested]))
+          or (($values | length) == 1 and $values[0] == true
+            and ($attempts | length) > 0
+            and (($attempts | length) < 2 or $attempts[0] != $requested
+              or ($identity.identity != null
+                and (($attempts | index($identity.identity)) == null
+                  or ($attempts | last) != $identity.identity))))) as $contradictory
+      | {used:(if $contradictory then null elif ($values | length) == 1 then $values[0] else null end),
+         provenance:(if $contradictory then "contradictory-cli-events"
+           elif ($values | length) == 1 then "cli-event" else "not_available" end),
+         ambiguous:$contradictory,reportedValues:$values,
          attemptedModel:($attempts | last // null),attemptedModels:$attempts}
     ' "$RAW")"
     provider_json="$(jq -sc '
       [.[].provider?, .[].response?.provider?] | flatten | map(select(type == "string" and length > 0)) | unique as $providers
       | {provider:(if ($providers | length) == 1 then $providers[0] else null end),
-         provenance:(if ($providers | length) == 1 then "cli-event" elif ($providers | length) > 1 then "ambiguous-cli-events" else "not_available" end)}
+         provenance:(if ($providers | length) == 1 then "response" elif ($providers | length) > 1 then "ambiguous-cli-events" else "not_available" end)}
     ' "$RAW")"
   fi
 else
@@ -181,9 +227,43 @@ else
   status=$?
   set -e
   if jq -e '
+    def nonempty_string: type == "string" and length > 0;
+    def counter: type == "number" and . >= 0;
+    def optional_counter($object; $name): ($object | has($name) | not) or ($object[$name] | counter);
     type == "object"
-    and ((has("usage") | not) or (.usage | type == "object"))
-    and ((has("modelUsage") | not) or (.modelUsage | type == "object" and all(.[]; type == "object")))
+    and ((has("structured_output") | not) or (.structured_output | type == "object"))
+    and ((has("result") | not) or (.result | type == "string"))
+    and ((has("model") | not) or (.model | nonempty_string))
+    and ((has("provider") | not) or (.provider | nonempty_string))
+    and ((has("response") | not) or
+      (.response | type == "object"
+        and ((has("model") | not) or (.model | nonempty_string))
+        and ((has("provider") | not) or (.provider | nonempty_string))))
+    and ((has("fallbackUsed") | not) or (.fallbackUsed | type == "boolean"))
+    and ((has("fallback_used") | not) or (.fallback_used | type == "boolean"))
+    and ((has("attemptedModels") | not) or
+      (.attemptedModels | type == "array" and all(.[]; nonempty_string)))
+    and ((has("attempted_models") | not) or
+      (.attempted_models | type == "array" and all(.[]; nonempty_string)))
+    and ((has("usage") | not) or
+      (.usage | type == "object"
+        and optional_counter(.; "input_tokens") and optional_counter(.; "output_tokens")
+        and optional_counter(.; "reasoning_tokens")
+        and optional_counter(.; "cache_read_input_tokens")
+        and optional_counter(.; "cache_creation_input_tokens")
+        and ((has("output_tokens_details") | not) or
+          (.output_tokens_details | type == "object"
+            and optional_counter(.; "reasoning_tokens")))))
+    and ((has("modelUsage") | not) or
+      (.modelUsage | type == "object" and all(.[];
+        type == "object"
+        and optional_counter(.; "inputTokens") and optional_counter(.; "input_tokens")
+        and optional_counter(.; "outputTokens") and optional_counter(.; "output_tokens")
+        and optional_counter(.; "cacheReadInputTokens") and optional_counter(.; "cache_read_input_tokens")
+        and optional_counter(.; "cacheCreationInputTokens") and optional_counter(.; "cache_creation_input_tokens")
+        and ((has("provider") | not) or (.provider | nonempty_string))
+        and ((has("outputTokens") and has("output_tokens")) | not
+          or .outputTokens == .output_tokens))))
   ' "$RAW" >/dev/null 2>&1; then
     telemetry_valid=true
     if jq -e '.structured_output | type == "object"' "$RAW" >/dev/null 2>&1; then
@@ -196,28 +276,32 @@ else
       def usage_rows($root): ($root.modelUsage // {} | to_entries
         | map({model:.key,usage:.value,outputTokens:(.value.outputTokens // .value.output_tokens // null)}));
       . as $root
-      | [($root.model // empty),($root.response.model // empty)] | map(select(type == "string" and length > 0)) | unique as $explicit
       | usage_rows($root) as $rows
-      | if ($explicit | length) == 1 then $explicit[0] as $primary
-          | {identity:$primary,provenance:"explicit-response-model",ambiguous:false,
+      | if ($root.response.model // null) != null then $root.response.model as $primary
+          | {identity:$primary,provenance:"response",ambiguous:false,
              primaryUsage:($rows | map(select(.model == $primary)) | first // null),
              ancillaryUsage:($rows | map(select(.model != $primary)))}
-        elif ($explicit | length) > 1 then
-          {identity:null,provenance:"ambiguous-explicit-response-models",ambiguous:true,
-           primaryUsage:null,ancillaryUsage:$rows}
         else
-          [$rows[] | select(.outputTokens | type == "number" and . > 0)] as $positive
-          | ($positive | map(.outputTokens) | max // null) as $maximum
-          | [$positive[] | select(.outputTokens == $maximum)] as $winners
-          | if ($winners | length) == 1 then $winners[0].model as $primary
+          (all($rows[]; .outputTokens | type == "number" and . >= 0)) as $complete
+          | if ($rows | length) > 0 and $complete then
+              ($rows | map(.outputTokens) | max) as $maximum
+              | [$rows[] | select(.outputTokens == $maximum and .outputTokens > 0)] as $winners
+              | if ($winners | length) == 1 then $winners[0].model as $primary
               | {identity:$primary,provenance:"modelUsage-unique-max-output-tokens",ambiguous:false,
                  primaryUsage:($winners[0]),ancillaryUsage:($rows | map(select(.model != $primary)))}
-            elif ($winners | length) > 1 then
+                elif ($winners | length) > 1 then
               {identity:null,provenance:"modelUsage-tied-max-output-tokens",ambiguous:true,
+               primaryUsage:null,ancillaryUsage:$rows}
+                else
+              {identity:null,provenance:"modelUsage-no-positive-output-tokens",ambiguous:true,
+               primaryUsage:null,ancillaryUsage:$rows}
+                end
+            elif ($rows | length) > 0 then
+              {identity:null,provenance:"modelUsage-incomplete-output-counters",ambiguous:true,
                primaryUsage:null,ancillaryUsage:$rows}
             else
               {identity:null,provenance:"not_available",ambiguous:false,
-               primaryUsage:null,ancillaryUsage:$rows}
+               primaryUsage:null,ancillaryUsage:[]}
             end
         end
     ' "$RAW")"
@@ -228,22 +312,37 @@ else
          cache_read_tokens:($usage.cache_read_input_tokens // null),
          cache_creation_tokens:($usage.cache_creation_input_tokens // null),cost:null}
     ' "$RAW")"
-    fallback_json="$(jq -c '
+    fallback_json="$(jq -c --arg requested "$MODEL" --argjson identity "$identity_json" '
       . as $root
       | [$root.fallbackUsed?,$root.fallback_used?] | map(select(type == "boolean")) | unique as $values
-      | [($root.attemptedModels // empty),($root.attempted_models // empty)] | flatten | map(select(type == "string" and length > 0)) as $attempts
-      | {used:(if ($values | length) == 1 then $values[0] else null end),
-         provenance:(if ($values | length) == 1 then "response" elif ($values | length) > 1 then "ambiguous-response-fields" else "not_available" end),
+      | [($root.attemptedModels // empty),($root.attempted_models // empty)] | flatten as $attempts
+      | (($values | length) > 1
+          or (($values | length) == 1 and $values[0] == false
+            and (($attempts | length) > 0 and $attempts != [$requested]))
+          or (($values | length) == 1 and $values[0] == true
+            and ($attempts | length) > 0
+            and (($attempts | length) < 2 or $attempts[0] != $requested
+              or ($identity.identity != null
+                and (($attempts | index($identity.identity)) == null
+                  or ($attempts | last) != $identity.identity))))) as $contradictory
+      | {used:(if $contradictory then null elif ($values | length) == 1 then $values[0] else null end),
+         provenance:(if $contradictory then "contradictory-response-fields"
+           elif ($values | length) == 1 then "response" else "not_available" end),
+         ambiguous:$contradictory,reportedValues:$values,
          attemptedModel:($attempts | last // null),attemptedModels:$attempts}
     ' "$RAW")"
     provider_json="$(jq -c --argjson identity "$identity_json" '
       . as $root
-      | [($root.provider // empty),($root.response.provider // empty),
-       (if $identity.identity == null then empty
-        else ($root.modelUsage[$identity.identity].provider // empty) end)]
-      | map(select(type == "string" and length > 0)) | unique as $providers
-      | {provider:(if ($providers | length) == 1 then $providers[0] else null end),
-         provenance:(if ($providers | length) == 1 then "response" elif ($providers | length) > 1 then "ambiguous-response-fields" else "not_available" end)}
+      | [($root.provider // empty),($root.response.provider // empty)] | unique as $explicit
+      | (if $identity.identity == null then null
+         else ($root.modelUsage[$identity.identity].provider // null) end) as $usage_provider
+      | if ($explicit | length) == 1 then
+          {provider:$explicit[0],provenance:"response"}
+        elif ($explicit | length) > 1 then
+          {provider:null,provenance:"ambiguous-response-fields"}
+        elif $usage_provider != null then
+          {provider:$usage_provider,provenance:"modelUsage"}
+        else {provider:null,provenance:"not_available"} end
     ' "$RAW")"
   fi
 fi
@@ -276,15 +375,16 @@ jq -n \
    modelCandidates:(if $fallback.used == true and ($fallback.attemptedModels | length) > 0
      then $fallback.attemptedModels else [$requested] end),
    responseModel:(if $response == "" then null else $response end),
-   responseModelProvenance:(if $response == "" then $responseProvenance else "response" end),
+   responseModelProvenance:$responseProvenance,
    primaryModelProvenance:$responseProvenance,
    servingProvider:(if $provider == "" then null else $provider end),
-   servingProviderProvenance:(if $provider == "" then $providerProvenance else "response" end),
+   servingProviderProvenance:$providerProvenance,
    transport:$transport,billingMode:$billing,effort:$effort,outcome:$outcome,
    failureKind:(if $failureKind == "null" then null else $failureKind end),usage:$usage,
    primaryModelUsage:$identity.primaryUsage,ancillaryModelUsage:$identity.ancillaryUsage,
    identityAmbiguous:$identity.ambiguous,
    fallbackUsed:$fallback.used,fallbackProvenance:$fallback.provenance,
+   fallbackAmbiguous:$fallback.ambiguous,fallbackReportedValues:$fallback.reportedValues,
    attemptedModel:(if $fallback.used == false and $response != "" then $response else $fallback.attemptedModel end),
    attemptedModels:(if $fallback.used == false and $response != "" then [$response] else $fallback.attemptedModels end),
    attemptProvenance:(if $fallback.used != null and $response != "" then "response_model" else $fallback.provenance end),
@@ -294,7 +394,7 @@ jq -n \
    costProvenance:"subscription-no-call-cost-reported",
    benchmark:{suiteId:$suite,caseId:$caseId,role:$role,workload:$workload},
    ambiguity_resolved:true,
-   ambiguity_summary:"A unique maximum positive output-token count is primary when explicit response identity is absent; ties are ambiguous."}
+   ambiguity_summary:"Explicit response identity is primary; otherwise complete modelUsage output counters may establish a unique positive maximum, while malformed fields and contradictions fail closed."}
 ' > "$RECEIPT"
 
 "$BENCH" --score --case "$CASE_ID" --output-file "$OUTPUT" \
