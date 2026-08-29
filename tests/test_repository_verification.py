@@ -14,7 +14,7 @@ from workflow_kernel.verification_errors import VerificationPlannerError
 from workflow_kernel.verification_execution import run_bounded_capture
 from workflow_kernel.verification_orchestrator import execute_plan
 from workflow_kernel.verification_repository import (
-    git_changed_paths, tree_input_digests, validate_profile,
+    git_changed_paths, input_digests, tree_input_digests, validate_profile,
 )
 from workflow_kernel.verification_planning import build_plan as kernel_build_plan
 
@@ -299,6 +299,17 @@ class RepositoryVerificationTests(unittest.TestCase):
         }
         self.assertFalse(schema_matches(
             invalid_plan, json.loads(PLAN_SCHEMA.read_text(encoding="utf-8")),
+        ))
+        private_refresh_plan = {
+            **plan,
+            "request": {
+                **plan["request"],
+                "_allow_declared_mutation": True,
+            },
+        }
+        self.assertFalse(schema_matches(
+            private_refresh_plan,
+            json.loads(PLAN_SCHEMA.read_text(encoding="utf-8")),
         ))
 
     def test_assembly_example_is_a_valid_closed_profile(self):
@@ -713,6 +724,23 @@ class RepositoryVerificationTests(unittest.TestCase):
                     include_worktree=True, environment=TEST_ENVIRONMENT,
                 )
 
+    def test_terminal_plan_rejects_dirty_tracked_input(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, profile = self.repository(directory)
+            base_commit, candidate_commit = prepare_candidate(
+                repository, ["internal/source/source.go"],
+            )
+            (repository / "internal/source/source.go").write_text(
+                "package source\nconst Dirty = true\n", encoding="utf-8",
+            )
+            with self.assertRaises(VerificationPlannerError):
+                kernel_build_plan(
+                    profile, repository, ".dm/verification.json",
+                    ["internal/source/source.go"],
+                    "merge_candidate", "high", base_commit=base_commit,
+                    head_commit=candidate_commit, environment=TEST_ENVIRONMENT,
+                )
+
     def test_execution_closure_changes_invalidate_a_saved_plan(self):
         with tempfile.TemporaryDirectory() as directory:
             repository, profile, script = self.execution_repository(directory)
@@ -843,6 +871,87 @@ class RepositoryVerificationTests(unittest.TestCase):
             if lane["lane_id"] == "go-focused"
         ][0]
         self.assertNotEqual(focused_result["input_digest"], before)
+
+    def test_declared_terminal_mutation_refreshes_generated_input_digest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            repository = root / "repository"
+            generated = repository / "internal/source/generated_templ.go"
+            downstream_ran = root / "downstream-ran"
+            document = profile_document()
+            generator = {
+                "id": "generate",
+                "tier": "fast",
+                "cadences": ["merge_candidate"],
+                "owner": "local",
+                "argv": [
+                    sys.executable, "-c",
+                    (
+                        "from pathlib import Path; "
+                        f"Path({str(generated)!r}).write_text('package source\\n')"
+                    ),
+                ],
+                "changed_paths": ["**/*.templ"],
+                "input_paths": ["**/*.templ", ".dm/verification.json"],
+                "execution_paths": [".dm/verification.json"],
+                "mutates_repository": True,
+                "required_environment": ["DM_VERIFICATION_SUBSTRATE"],
+                "execution_environment": ["DM_VERIFICATION_SUBSTRATE"],
+            }
+            downstream = {
+                "id": "consume-generated",
+                "tier": "full",
+                "cadences": ["merge_candidate"],
+                "owner": "local",
+                "argv": [
+                    sys.executable, "-c",
+                    (
+                        "from pathlib import Path; "
+                        f"assert Path({str(generated)!r}).is_file(); "
+                        f"Path({str(downstream_ran)!r}).touch()"
+                    ),
+                ],
+                "changed_paths": ["**/*.templ"],
+                "input_paths": ["**/*.go", ".dm/verification.json"],
+                "execution_paths": [".dm/verification.json"],
+                "after": ["generate"],
+                "required_environment": ["DM_VERIFICATION_SUBSTRATE"],
+                "execution_environment": ["DM_VERIFICATION_SUBSTRATE"],
+            }
+            document["lanes"] = [document["lanes"][0], generator, downstream]
+            repository, profile = self.repository(repository, document)
+            (repository / ".gitignore").write_text(
+                "internal/source/generated_templ.go\n", encoding="utf-8",
+            )
+            (repository / "internal/source/view.templ").write_text(
+                "package source\n", encoding="utf-8",
+            )
+            base_commit, candidate_commit = prepare_candidate(
+                repository, [".gitignore", "internal/source/view.templ"],
+            )
+            plan = kernel_build_plan(
+                profile, repository, ".dm/verification.json",
+                [".gitignore", "internal/source/view.templ"],
+                "merge_candidate", "high", base_commit=base_commit,
+                head_commit=candidate_commit, environment=TEST_ENVIRONMENT,
+            )
+            before = {
+                lane["id"]: lane for lane in plan["lanes"]
+            }["consume-generated"]["input_digest"]
+            result, outcome = execute(profile, repository, plan)
+            refreshed = input_digests(
+                repository,
+                {("**/*.go", ".dm/verification.json")},
+            )[("**/*.go", ".dm/verification.json")]
+            downstream_ran_exists = downstream_ran.is_file()
+        downstream_result = [
+            lane for lane in result["lanes"]
+            if lane["lane_id"] == "consume-generated"
+        ][0]
+        self.assertEqual(outcome, "complete")
+        self.assertTrue(downstream_ran_exists)
+        self.assertNotEqual(downstream_result["input_digest"], before)
+        self.assertEqual(downstream_result["input_digest"], refreshed)
 
     def test_dependency_order_moves_generator_before_consumer(self):
         document = profile_document()
@@ -1422,6 +1531,26 @@ class RepositoryVerificationTests(unittest.TestCase):
             env=env, capture_output=True, check=False, text=True,
         )
         self.assertNotIn("--output", run_help.stdout)
+        for private_flag in (
+            "--allow-declared-mutation", "--_allow_declared_mutation",
+        ):
+            with (
+                self.subTest(private_flag=private_flag),
+                tempfile.TemporaryDirectory() as directory,
+            ):
+                rejected = subprocess.run([
+                    sys.executable, "-m", "workflow_kernel",
+                    "plan-verification", "--repository-root", directory,
+                    "--profile", str(Path(directory) / "verification.json"),
+                    "--boundary", "chunk", "--risk", "low",
+                    "--base-ref", "HEAD", "--candidate-ref", "HEAD",
+                    "--output", str(Path(directory) / "plan.json"),
+                    private_flag,
+                ], env=env, capture_output=True, check=False, text=True)
+            self.assertEqual(rejected.returncode, 2)
+            self.assertEqual(
+                json.loads(rejected.stderr)["error"]["code"], "invalid_schema",
+            )
 
 
 if __name__ == "__main__":
