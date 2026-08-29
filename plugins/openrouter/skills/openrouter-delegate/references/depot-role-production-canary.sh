@@ -26,6 +26,8 @@ EFFORT="medium"
 BASE_REVISION=""
 RESULT_DIR=""
 MAX_CORRECTIONS="1"
+CANARY_TEMP_ROOT=""
+CANARY_WORKTREE=""
 
 usage() {
   printf '%s\n' \
@@ -117,6 +119,28 @@ record_boundary_fault() {
   fault_owner="$owner"
   fault_code="$code"
   [ -z "$detail" ] || diagnostics="$detail"
+}
+
+cleanup_owned_resources() {
+  [ -n "$CANARY_TEMP_ROOT" ] || return 0
+  case "$CANARY_TEMP_ROOT" in "${TMPDIR:-/tmp}"/depot-production-canary.??????) ;; *) return 1 ;; esac
+  [ "$CANARY_WORKTREE" = "$CANARY_TEMP_ROOT/worktree" ] || return 1
+  if git -C "$ROOT" worktree list --porcelain | grep -Fx "worktree $CANARY_WORKTREE" >/dev/null 2>&1; then
+    git -C "$ROOT" worktree remove --force "$CANARY_WORKTREE" >/dev/null 2>&1 || return 1
+  fi
+  rm -rf -- "$CANARY_TEMP_ROOT" || return 1
+  CANARY_TEMP_ROOT=""
+  CANARY_WORKTREE=""
+}
+
+cleanup_on_exit() {
+  local rc="${1:-1}"
+  trap - EXIT INT TERM
+  if ! cleanup_owned_resources; then
+    printf 'production canary: owned cleanup failure: %s\n' "$CANARY_TEMP_ROOT" >&2
+    [ "$rc" -ne 0 ] || rc=1
+  fi
+  exit "$rc"
 }
 
 canonical_work_unit_digest() {
@@ -221,11 +245,22 @@ validate_semantic_artifact_bindings() {
     .schemaVersion == 2 and .caseId == $caseId and (.benchmarkFault | type == "boolean")
     and (.overallSuccess | type == "boolean") and (.assertions | type == "array")
     and ([.assertions[] | select(.class == "mandatory") | {id,pass}] == $attempt[0].quality.mandatoryAssertions)
-    and (($attempt[0].quality.finalValidity != true) or (.overallSuccess == true and .benchmarkFault == false))
+    and (($attempt[0].quality.finalValidity != true) or (.validationPassed == true and .benchmarkFault == false))
   ' "$root/$validation_path" >/dev/null 2>&1; then
     SEMANTIC_ARTIFACT_FAULT=true
     SEMANTIC_ARTIFACT_DIAGNOSTICS="$(jq -c '. + ["validation-summary-mismatch"]' <<<"$SEMANTIC_ARTIFACT_DIAGNOSTICS")"
   fi
+}
+
+refresh_attempt_validation() {
+  local attempt="$1" validation="$2"
+  validate_attempt "$attempt" "$RESULT_DIR" > "$validation"
+  jq --slurpfile result "$validation" '.outcome = {
+    transportSuccess:.outcome.transportSuccess,benchmarkFault:$result[0].benchmarkFault,
+    faultOwner:$result[0].faultOwner,faultCode:$result[0].faultCode,comparable:$result[0].comparable,
+    modelConclusion:$result[0].modelConclusion,evidenceState:$result[0].evidenceState}' "$attempt" > "$RESULT_DIR/attempt.tmp"
+  mv "$RESULT_DIR/attempt.tmp" "$attempt"
+  validate_attempt "$attempt" "$RESULT_DIR" > "$validation"
 }
 
 validate_attempt() {
@@ -470,16 +505,10 @@ run_canary() {
   prepare_result_dir
   temp_root="$(mktemp -d "${TMPDIR:-/tmp}/depot-production-canary.XXXXXX")"
   worktree="$temp_root/worktree"; baseline="$temp_root/baseline"
-  cleanup() {
-    local rc=$?
-    trap - EXIT INT TERM
-    if git -C "$ROOT" worktree list --porcelain | grep -Fx "worktree $worktree" >/dev/null 2>&1; then
-      git -C "$ROOT" worktree remove --force "$worktree" >/dev/null 2>&1 || true
-    fi
-    rm -rf -- "$temp_root"
-    exit "$rc"
-  }
-  trap cleanup EXIT INT TERM
+  CANARY_TEMP_ROOT="$temp_root"; CANARY_WORKTREE="$worktree"
+  trap 'cleanup_on_exit $?' EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
   git -C "$ROOT" worktree add --detach "$worktree" "$BASE_REVISION" >/dev/null
   [ "$(git -C "$worktree" rev-parse HEAD)" = "$BASE_REVISION" ] && [ -z "$(git -C "$worktree" status --porcelain)" ] || { printf 'production canary: repository setup failure\n' >&2; exit 2; }
   materialize_fixture "$unit" "$worktree"
@@ -580,7 +609,7 @@ run_canary() {
     if [ -n "$(git -C "$worktree" status --porcelain --untracked-files=all | grep -v '^?? \.depot-canary/' || true)" ]; then repo_ok=false; fi
     if [ "$validator" = no-owned-edit ] && ! diff -qr "$baseline" "$worktree/.depot-canary" >/dev/null 2>&1; then repo_ok=false; fi
     validation_ok=false
-    jq -e '.overallSuccess == true and .benchmarkFault == false' "$scorer_result" >/dev/null 2>&1 && [ "$repo_ok" = true ] && validation_ok=true
+    jq -e '.validationPassed == true and .benchmarkFault == false' "$scorer_result" >/dev/null 2>&1 && [ "$repo_ok" = true ] && validation_ok=true
     end_epoch="$(date +%s)"
     if [ "$attempt_index" -eq 1 ]; then
       first_valid="$validation_ok"
@@ -686,13 +715,14 @@ run_canary() {
        artifacts:$artifacts,
        outcome:{transportSuccess:$transportSuccess,benchmarkFault:false,faultOwner:null,faultCode:null,comparable:false,modelConclusion:null,evidenceState:"incompatible"}}
     ' > "$attempt_file"
-  validate_attempt "$attempt_file" "$RESULT_DIR" > "$validation_file"
-  jq --slurpfile validation "$validation_file" '.outcome = {
-    transportSuccess:.outcome.transportSuccess,benchmarkFault:$validation[0].benchmarkFault,
-    faultOwner:$validation[0].faultOwner,faultCode:$validation[0].faultCode,comparable:$validation[0].comparable,
-    modelConclusion:$validation[0].modelConclusion,evidenceState:$validation[0].evidenceState}' "$attempt_file" > "$RESULT_DIR/attempt.tmp"
-  mv "$RESULT_DIR/attempt.tmp" "$attempt_file"
-  validate_attempt "$attempt_file" "$RESULT_DIR" > "$validation_file"
+  refresh_attempt_validation "$attempt_file" "$validation_file"
+  if ! cleanup_owned_resources; then
+    jq '.boundaries.harnessComplete=false' "$attempt_file" > "$RESULT_DIR/attempt.tmp"
+    mv "$RESULT_DIR/attempt.tmp" "$attempt_file"
+    refresh_attempt_validation "$attempt_file" "$validation_file"
+    printf 'production canary: owned cleanup failure retained at %s\n' "$CANARY_TEMP_ROOT" >&2
+  fi
+  trap - EXIT INT TERM
   jq -n --slurpfile attempt "$attempt_file" --slurpfile validation "$validation_file" '{attempt:$attempt[0],validation:$validation[0]}'
 }
 

@@ -18,6 +18,9 @@ reject() { if "$@" >/dev/null 2>&1; then printf 'FAIL: unexpectedly accepted: %s
 digest_file() { sha256sum "$1" | awk '{print "sha256:" $1}'; }
 
 assert rg -F 'date -u +%Y%m%dt%H%M%Sz' "$RUNNER"
+assert rg -F 'CANARY_TEMP_ROOT="$temp_root"; CANARY_WORKTREE="$worktree"' "$RUNNER"
+assert rg -F 'if ! cleanup_owned_resources; then' "$RUNNER"
+assert rg -F '.validationPassed == true and .benchmarkFault == false' "$RUNNER"
 
 make_attempt() {
   local unit_id="$1" destination="$2" unit role case_id candidate transport provider work_digest fixture_digest validation_digest
@@ -45,7 +48,7 @@ make_attempt() {
   printf 'bounded prompt\n' > "$destination/prompt.txt"
   printf '{}\n' > "$destination/output.json"
   : > "$destination/patch.diff"
-  jq -n --arg caseId "$case_id" '{schemaVersion:2,caseId:$caseId,overallSuccess:true,benchmarkFault:false,
+  jq -n --arg caseId "$case_id" '{schemaVersion:2,caseId:$caseId,validationPassed:true,overallSuccess:true,benchmarkFault:false,
     assertions:[{id:"strict-json-object",class:"mandatory",pass:true}]}' > "$destination/validation.json"
   jq -n --arg model "$candidate" --arg provider "$provider" --arg transport "$transport" \
     '{requestedModel:$model,responseModel:$model,servingProvider:$provider,transport:$transport,fallbackUsed:false,usage:{cost:0.01}}' > "$destination/transport-receipt.json"
@@ -142,7 +145,7 @@ jq '.cost.maximumBoundUsd=1.01' "$TMP/over-paid-bound/attempt.json" > "$TMP/muta
 assert jq -e '.benchmarkFault and .faultOwner == "instrumentation" and .faultCode == "missing-paid-cost-receipt" and .modelConclusion == null' "$TMP/over-paid-bound/result.json"
 
 mkdir "$TMP/failed-validation"; cp "$BASE"/{prompt.txt,output.json,patch.diff,validation.json,transport-receipt.json,attempt.json} "$TMP/failed-validation/"
-jq '.overallSuccess=false | .assertions[0].pass=false' "$TMP/failed-validation/validation.json" > "$TMP/mutated"; mv "$TMP/mutated" "$TMP/failed-validation/validation.json"
+jq '.validationPassed=false | .overallSuccess=false | .assertions[0].pass=false' "$TMP/failed-validation/validation.json" > "$TMP/mutated"; mv "$TMP/mutated" "$TMP/failed-validation/validation.json"
 jq --arg digest "$(digest_file "$TMP/failed-validation/validation.json")" --argjson bytes "$(wc -c < "$TMP/failed-validation/validation.json")" '
   .quality.firstPassValidity=false | .quality.finalValidity=false | .quality.mandatoryAssertions[0].pass=false
   | .timing.validAt=null | .timing.timeToValidSeconds=null
@@ -153,7 +156,7 @@ jq --arg digest "$(digest_file "$TMP/failed-validation/validation.json")" --argj
 assert jq -e '(.benchmarkFault | not) and .comparable and .modelConclusion == "invalid"' "$TMP/failed-validation/result.json"
 
 REVIEW="$TMP/canary-review-fast-false-positive"
-jq '.overallSuccess=false | .assertions[0].pass=false' "$REVIEW/validation.json" > "$TMP/mutated"; mv "$TMP/mutated" "$REVIEW/validation.json"
+jq '.validationPassed=false | .overallSuccess=false | .assertions[0].pass=false' "$REVIEW/validation.json" > "$TMP/mutated"; mv "$TMP/mutated" "$REVIEW/validation.json"
 jq --arg digest "$(digest_file "$REVIEW/validation.json")" --argjson bytes "$(wc -c < "$REVIEW/validation.json")" '
   .quality.falsePositives=1 | .quality.finalValidity=false | .quality.mandatoryAssertions[0].pass=false
   | (.artifacts[] | select(.kind == "validation") | .sha256)=$digest
