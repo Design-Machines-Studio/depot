@@ -339,11 +339,17 @@ evaluate_case() {
       passed=false; jq -e '(.audience | type) == "string" and (.copy | type) == "string" and (.preservedFacts | type) == "array" and (.inventedFacts | type) == "array"' "$input" >/dev/null && passed=true
       add_assertion "$destination" editorial.member-envelope mandatory "$passed" 0 'audience, copy, preservedFacts, and inventedFacts' 'Return every contracted field.'
       passed=false; jq -e '
-        def negative_cue: "(no|not|without|does not|is not|has no|there is no|does not include)";
+        def affirmative_price_or_launch:
+          test("(approved|confirmed|set|announced|scheduled)[^.!?]{0,20}(price|pricing|launch)|(price|pricing)[^.!?]{0,20}(approved|confirmed|set|announced)|(made|approved|confirmed)[^.!?]{0,20}launch commitment|launch commitment[^.!?]{0,20}(exists|approved|confirmed|made)|scheduled[^.!?]{0,20}public launch"; "i");
+        def denies_price:
+          test("does not include[^.!?]{0,20}(a )?(price|pricing)|(no|without)[^.!?]{0,12}(approved |confirmed |set |announced )?(price|pricing)|(price|pricing)[^.!?]{0,12}(is|has been)?[^.!?]{0,8}not (approved|confirmed|set|announced)"; "i");
+        def denies_launch_commitment:
+          test("does not include[^.!?]{0,30}launch commitment|(no|without)[^.!?]{0,20}launch commitment|launch commitment[^.!?]{0,12}(is|has been)?[^.!?]{0,8}not (made|approved|confirmed)"; "i");
         .preservedFacts == ["September 15","12 members","two facilitated sessions","no price or launch commitment"]
         and (.copy | test("September 15") and test("12 members") and test("two facilitated sessions")
-          and test(negative_cue + "[^.!?]{0,60}price"; "i")
-          and test(negative_cue + "[^.!?]{0,60}launch[^.!?]{0,20}commitment"; "i"))
+          and denies_price
+          and denies_launch_commitment
+          and (affirmative_price_or_launch | not))
       ' "$input" >/dev/null && passed=true
       add_assertion "$destination" editorial.member-facts semantic "$passed" 25 'all four disclosed facts' 'Preserve every source fact.'
       passed=false; jq -e '.audience == "Assembly cooperative members"' "$input" >/dev/null && passed=true
@@ -362,7 +368,8 @@ evaluate_case() {
           | any($bullets[]; test("18|eighteen"; "i") and test("nine|9"; "i") and test("two|2"; "i"))
           and any($bullets[]; test("offline"; "i") and test("fixture|test"; "i"))
           and any($bullets[];
-            test("routing[^.!?]{0,40}(unchanged|does not change|is not changed)|does not change[^.!?]{0,40}routing|no[^.!?]{0,20}routing change|without[^.!?]{0,20}changing[^.!?]{0,20}routing"; "i")))
+            (test("not[^.!?]{0,12}unchanged|no longer[^.!?]{0,12}unchanged|routing[^.!?]{0,30}(now changes|has changed|is changed)|candidate selection[^.!?]{0,30}(now changes|has changed|is changed)"; "i") | not)
+            and test("routing[^.!?]{0,40}(unchanged|does not change|is not changed)|does not change[^.!?]{0,40}routing|no[^.!?]{0,20}routing change|without[^.!?]{0,20}changing[^.!?]{0,20}routing"; "i")))
       ' "$input" >/dev/null && passed=true
       add_assertion "$destination" editorial.release-claims semantic "$passed" 25 'all four disclosed claims' 'Preserve every source claim.'
       passed=false; jq -e '(.headline | [scan("[^[:space:]]+")] | length) as $h | (.summary | [scan("[^[:space:]]+")] | length) as $s | $h >= 4 and $h <= 9 and $s >= 18 and $s <= 35 and (.bullets | length) == 3 and all(.bullets[]; type == "string")' "$input" >/dev/null && passed=true
