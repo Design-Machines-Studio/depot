@@ -114,13 +114,18 @@ tokens. Missing counters remain missing; billed cost is never invented.
 
 ## Blinded editorial evidence
 
-Editorial attempts may include
-`<attempt-directory>/human-rubric.json`. The closed receipt contains only
+Editorial attempts may include `<attempt-directory>/human-rubric.json`, but the
+editor must never receive that model-bearing path. A coordinator exports only
+the normalized output under a generic filename plus the exact rubric to an
+opaque digest-named handoff outside the benchmark tree, then joins the returned
+receipt to the attempt after verifying its digest and revisions. The closed
+receipt contains only
 `schemaVersion`, `suiteId`, `caseId`, `caseRevision`, `rubricRevision`,
 `outputArtifactSha256`, `blindToCandidate`, `observedAt`, and
 `criterionScores`. Join it to the normalized `output.json` artifact SHA-256 and
 matching case and rubric revisions. `blindToCandidate` must be `true`; candidate,
-model, provider, and transport identity are prohibited.
+model, provider, and transport identity are prohibited from the handoff and
+receipt.
 
 Reject malformed, unblinded, identity-bearing, unknown-criterion,
 invalid-score, digest-mismatched, case-mismatched, or rubric-mismatched

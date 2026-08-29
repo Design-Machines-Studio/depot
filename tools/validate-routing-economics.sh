@@ -6,6 +6,8 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 POLICY="$ROOT/plugins/model-router/skills/model-router/references/role-policy.json"
 MATRIX="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-matrix.json"
 WRAPPER="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
+WEEKLY="$ROOT/docs/scheduled-model-intelligence/weekly-prompt.md"
+LATEST="$ROOT/docs/model-intelligence/latest.json"
 failures=0
 
 check() {
@@ -51,6 +53,16 @@ check 'OpenRouter wrapper retains content-free receipt fields' sh -c \
 
 check 'Pipeline postmortem reports roles and keeps exact identity private' sh -c \
   "grep -Fq 'roleSplit:' '$ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md' && grep -Fq 'private model-router receipts' '$ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md'"
+
+check 'weekly benchmark procedure stops faults, partial spend, and identity leakage' sh -c \
+  "grep -Fq 'recorded as nomination-only and not as runnable targets' '$WEEKLY' && \
+   grep -Fq 'stop all native and OpenRouter benchmark' '$WEEKLY' && \
+   grep -Fq 'find \"\$WEEK_ROOT/openrouter\" -type d -name' '$WEEKLY' && \
+   grep -Fq 'coordinator—not the editor' '$WEEKLY'"
+
+check 'live model-intelligence report uses v2 no-conclusion semantics' sh -c \
+  "jq -e '.schema_version == 2 and (.quality_efficiency.roles | length) == 9 and .benchmarks.routing_conclusion == \"no routing change justified\"' '$LATEST' >/dev/null && \
+   ! grep -Fq 'parsed_successes' '$LATEST' && ! grep -Fq 'depot-role-v1' '$LATEST'"
 
 check 'provider-neutral drift and leak validator passes' "$ROOT/tools/validate-provider-neutral-routing.sh"
 check 'resolver economics fixtures pass' "$ROOT/tools/test-model-router.sh"

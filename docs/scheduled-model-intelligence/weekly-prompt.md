@@ -75,7 +75,8 @@ the native benchmark receipt to retain the actual served model when the CLI
 reports it. Build a written candidate plan at
 `$WEEK_ROOT/benchmark-plan.json` containing:
 
-- at most two newly nominated OpenRouter models from the fresh catalog receipt;
+- at most two newly nominated OpenRouter models from the fresh catalog receipt,
+  recorded as nomination-only and not as runnable targets;
 - the current first OpenRouter candidate for each suite role;
 - the current first native subscription candidate for each suite role;
 - the precomputed v2 eligibility record, current compatible distinct-case
@@ -84,7 +85,7 @@ reports it. Build a written candidate plan at
   the order in which budget will be spent.
 
 Verify that `$ELIGIBILITY` names `depot-role-v2`, all 18 distinct cases, and all
-nine roles before any paid call. Every planned candidate/case pair must appear
+nine roles before any paid call. Every runnable candidate/case pair must appear
 as eligible for that case's role and required capabilities. If eligibility or
 coverage is missing, malformed, or inconsistent with the checked-in suite and
 policy, stop before paid calls and repair the planning evidence. Do not infer
@@ -94,10 +95,10 @@ Public rankings and external benchmarks are nomination evidence only. Record
 the exact model/harness variant, source version/date, and incompatibilities.
 Never transfer a score from a different version or harness.
 
-A nominated OpenRouter model must be admitted to the matrix before the runner
-can call it. Add only candidates selected in the bounded plan. Populate exact
-catalog identity, price, context, feature/parameter, provider-limit, reasoning,
-and source fields from the captured snapshot; use:
+A nominated OpenRouter model may be recorded in the matrix without becoming a
+runnable benchmark target. Add only candidates selected in the bounded plan.
+Populate exact catalog identity, price, context, feature/parameter,
+provider-limit, reasoning, and source fields from the captured snapshot; use:
 
 - `recommendation_status: "catalogued-awaiting-local-benchmark"`
 - `quality_rank: null` unless exact comparable evidence exists
@@ -105,13 +106,18 @@ and source fields from the captured snapshot; use:
 - a role sentence that explicitly says the model is not routed
 
 Do not add aliases, `anthropic/*`, unpriced entries, or models lacking required
-case capabilities. Admission to the matrix is not admission to role policy.
+case capabilities. Admission to the matrix is not admission to role policy and
+does not authorize the benchmark runner. Keep those entries as untested
+nominations. A future screen requires a separately reviewed, non-routing
+benchmark-admission contract; never add an untested model to executable role
+policy just to make a call pass.
 
 ## 3. Run controlled comparisons
 
-For each OpenRouter candidate and applicable case, use a unique directory and
-disable model fallback through the existing runner. Same-model provider fallback
-must remain enabled so endpoint capacity does not masquerade as model failure:
+For each already policy-admitted OpenRouter candidate and applicable case, use a
+unique directory and disable model fallback through the existing runner.
+Same-model provider fallback must remain enabled so endpoint capacity does not
+masquerade as model failure:
 
 ```sh
 "$BENCH" --run \
@@ -142,12 +148,13 @@ runs or rerun into the same directory.
 Inspect `result.json` after every native or paid attempt. If `benchmarkFault` is
 true, `modelConclusion` is null because of a benchmark fault, an evidence
 binding mismatches, or the failure stage is prompt/contract,
-parser/normalizer, scorer, or harness, stop the paid benchmark phase
-immediately. Preserve and report the evidence as incompatible or
+parser/normalizer, scorer, or harness, stop all native and OpenRouter benchmark
+calls immediately. Preserve and report the evidence as incompatible or
 benchmark-owned; never count it against the candidate. Repair the benchmark
 locally and run both offline benchmark fixture validators plus the Python
-intelligence/native test. Do not make a paid rerun during this weekly task; a
-later run may collect new evidence after the repair is reviewed and validated.
+intelligence/native test. Do not make any benchmark rerun during this weekly
+task; a later run may collect new evidence after the repair is reviewed and
+validated.
 
 After every paid OpenRouter attempt, recalculate actual measured spend from all
 `result.json` files under `$WEEK_ROOT`. Every paid retained result must contain
@@ -159,6 +166,18 @@ the next call or the measured sum reaches $10. Never substitute list price for
 provider-reported billed cost. Use this exact rollup after each paid attempt:
 
 ```sh
+find "$WEEK_ROOT/openrouter" -type d -name 'run-*' -exec sh -c '
+  for attempt_dir do
+    jq -e "(.usage.cost | type) == \"number\" and .usage.cost >= 0" \
+      "$attempt_dir/receipt.json" >/dev/null || {
+        printf "missing provider-billed cost: %s\n" "$attempt_dir" >&2
+        exit 1
+      }
+  done
+' sh {} + || {
+  printf 'weekly benchmark spend telemetry is incomplete; stopping paid calls\n'
+  break
+}
 rtk python tools/model-intelligence.py report \
   --run-root "$WEEK_ROOT/no-production-evidence" \
   --benchmark-root "$WEEK_ROOT" \
@@ -177,13 +196,16 @@ rtk awk -v spend="$SPEND_USD" -v cap="$BUDGET_USD" \
 
 Report untested candidates and cases.
 
-For editorial cases, a human editor may later add only the closed blind receipt
-at `<attempt-directory>/human-rubric.json`, joined to the normalized output
-artifact SHA-256 plus matching case and rubric revisions. Require
-`blindToCandidate:true`; prohibit candidate, model, provider, and transport
-identity; reject malformed, unblinded, unknown-criterion, or mismatched
-receipts; and keep absence null. This separate human-quality axis never changes
-deterministic gates or supplies a model-judge conclusion.
+For editorial cases, a coordinator—not the editor—creates an opaque,
+digest-named handoff outside the model-bearing benchmark tree. It contains only
+the normalized output under a generic filename and the exact case rubric; its
+path and contents expose no candidate, model, provider, or transport identity.
+The editor returns the closed receipt inside that opaque handoff. The
+coordinator verifies its output digest and case/rubric revisions, then joins it
+to `<attempt-directory>/human-rubric.json`. Require `blindToCandidate:true`;
+reject malformed, unblinded, unknown-criterion, or mismatched receipts; and keep
+absence null. This separate human-quality axis never changes deterministic
+gates or supplies a model-judge conclusion.
 
 ## 4. Rebuild and inspect the combined report
 

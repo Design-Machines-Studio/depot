@@ -1,295 +1,4944 @@
 {
-  "benchmarks": {
-    "attempts": 17,
-    "groups": [
+  "schema_version": 2,
+  "generated_at": "2026-08-29T14:04:01+08:00",
+  "quality_efficiency": {
+    "roles": [
       {
-        "attempts": 1,
-        "case_id": "assembly-next-chunk",
-        "median_completion_tokens": 348.0,
-        "median_cost_usd": null,
-        "median_duration_seconds": 10.0,
-        "median_prompt_tokens": 2.0,
-        "median_quality_score": 15.0,
-        "median_reasoning_tokens": null,
-        "model": "claude-fable-5",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "claude-cli"
-      },
-      {
-        "attempts": 1,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 534.0,
-        "median_cost_usd": 0.00230076,
-        "median_duration_seconds": 7.0,
-        "median_prompt_tokens": 141.0,
-        "median_quality_score": 15.0,
-        "median_reasoning_tokens": null,
-        "model": "deepseek/deepseek-v4-pro-0813",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "BaseTen"
-      },
-      {
-        "attempts": 2,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 230.0,
-        "median_cost_usd": 0.00112596,
-        "median_duration_seconds": 5.0,
-        "median_prompt_tokens": 163.0,
-        "median_quality_score": 100.0,
-        "median_reasoning_tokens": null,
-        "model": "deepseek/deepseek-v4-pro-0813",
-        "parsed_successes": 2,
-        "success_rate": 1.0,
-        "transport": "Fireworks"
-      },
-      {
-        "attempts": 1,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 356.0,
-        "median_cost_usd": 0.00162492,
-        "median_duration_seconds": 6.0,
-        "median_prompt_tokens": 163.0,
-        "median_quality_score": 100.0,
-        "median_reasoning_tokens": null,
-        "model": "deepseek/deepseek-v4-pro-0813",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "Parasail"
-      },
-      {
-        "attempts": 1,
-        "case_id": "mechanical-owned-edit",
-        "median_completion_tokens": 877.0,
-        "median_cost_usd": null,
-        "median_duration_seconds": 26.0,
-        "median_prompt_tokens": 65851.0,
-        "median_quality_score": 50.0,
-        "median_reasoning_tokens": null,
-        "model": "gpt-5.6-luna",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "codex-cli"
-      },
-      {
-        "attempts": 1,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 436.0,
-        "median_cost_usd": null,
-        "median_duration_seconds": 14.0,
-        "median_prompt_tokens": 25772.0,
-        "median_quality_score": 35.0,
-        "median_reasoning_tokens": null,
-        "model": "gpt-5.6-luna",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "codex-cli"
-      },
-      {
-        "attempts": 3,
-        "case_id": "review-zero-deferral",
-        "median_completion_tokens": 81.0,
-        "median_cost_usd": null,
-        "median_duration_seconds": 6.0,
-        "median_prompt_tokens": 12631.0,
-        "median_quality_score": 100.0,
-        "median_reasoning_tokens": null,
-        "model": "gpt-5.6-luna",
-        "parsed_successes": 3,
-        "success_rate": 1.0,
-        "transport": "codex-cli"
-      },
-      {
-        "attempts": 1,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": null,
-        "median_cost_usd": null,
+        "role": "architect",
+        "policy_candidates": 4,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "assembly-next-chunk",
+            "case_revision": 2,
+            "prompt_revision": 2,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "architect-routing-tradeoff",
+            "case_revision": 2,
+            "prompt_revision": 2,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "assembly-next-chunk",
+          "architect-routing-tradeoff"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
         "median_duration_seconds": null,
-        "median_prompt_tokens": null,
-        "median_quality_score": null,
-        "median_reasoning_tokens": null,
-        "model": "z-ai/glm-5.3-flash",
-        "parsed_successes": 0,
-        "success_rate": 0.0,
-        "transport": "BaseTen"
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
       },
       {
-        "attempts": 1,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 569.0,
-        "median_cost_usd": 0.000305319465,
-        "median_duration_seconds": 16.0,
-        "median_prompt_tokens": 139.0,
-        "median_quality_score": 15.0,
-        "median_reasoning_tokens": null,
-        "model": "z-ai/glm-5.3-flash",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "Modal"
+        "role": "plan-critic",
+        "policy_candidates": 5,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "plan-approved-scope-audit",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output",
+              "independent-family"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "plan-contradiction-repair",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output",
+              "independent-family"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "plan-approved-scope-audit",
+          "plan-contradiction-repair"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
       },
       {
-        "attempts": 2,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 176.5,
-        "median_cost_usd": 0.00011224999999999999,
-        "median_duration_seconds": 4.5,
-        "median_prompt_tokens": 160.0,
-        "median_quality_score": 100.0,
-        "median_reasoning_tokens": null,
-        "model": "z-ai/glm-5.3-flash",
-        "parsed_successes": 2,
-        "success_rate": 1.0,
-        "transport": "Parasail"
+        "role": "builder-fast",
+        "policy_candidates": 2,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "pipeline-legacy-translation",
+            "case_revision": 2,
+            "prompt_revision": 2,
+            "required_capabilities": [
+              "read-repository",
+              "write-repository",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": true
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "mechanical-owned-edit",
+            "case_revision": 2,
+            "prompt_revision": 2,
+            "required_capabilities": [
+              "read-repository",
+              "write-repository",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": true
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "pipeline-legacy-translation",
+          "mechanical-owned-edit"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
       },
       {
-        "attempts": 1,
-        "case_id": "pipeline-legacy-translation",
-        "median_completion_tokens": 155.0,
-        "median_cost_usd": 5.075e-05,
-        "median_duration_seconds": 7.0,
-        "median_prompt_tokens": 160.0,
-        "median_quality_score": 100.0,
-        "median_reasoning_tokens": null,
-        "model": "z-ai/glm-5.3-flash",
-        "parsed_successes": 1,
-        "success_rate": 1.0,
-        "transport": "Reka"
+        "role": "builder-deep",
+        "policy_candidates": 4,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "builder-multifile-repair",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "write-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": true
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "builder-validation-feedback-repair",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "write-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": true
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "builder-multifile-repair",
+          "builder-validation-feedback-repair"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
+      },
+      {
+        "role": "review-fast",
+        "policy_candidates": 2,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "review-zero-deferral",
+            "case_revision": 2,
+            "prompt_revision": 2,
+            "required_capabilities": [
+              "read-repository",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "review-false-positive-control",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "review-zero-deferral",
+          "review-false-positive-control"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
+      },
+      {
+        "role": "review-deep",
+        "policy_candidates": 3,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "review-cross-file-invariant",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "review-validation-claims",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": true
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "review-cross-file-invariant",
+          "review-validation-claims"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
+      },
+      {
+        "role": "security-review",
+        "policy_candidates": 5,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "security-auth-boundary",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output",
+              "independent-family"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "security-release-integrity",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output",
+              "independent-family"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "security-auth-boundary",
+          "security-release-integrity"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
+      },
+      {
+        "role": "research-fast",
+        "policy_candidates": 2,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "research-claim-source-map",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "research-conflicting-evidence",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "research-claim-source-map",
+          "research-conflicting-evidence"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
+      },
+      {
+        "role": "editorial",
+        "policy_candidates": 3,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "editorial-member-update",
+            "case_revision": 2,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "editorial-release-note",
+            "case_revision": 2,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "editorial-member-update",
+          "editorial-release-note"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
       }
     ],
-    "incomplete_attempts": [
-      "/home/ned/benchmark-results/depot-role-v1/2026-08-27/openrouter/z-ai/glm-5.3-flash/pipeline-legacy-translation/run-1",
-      "/home/ned/benchmark-results/depot-role-v1/2026-08-27/openrouter/z-ai/glm-5.3-flash/pipeline-legacy-translation/run-2"
+    "model_role_evidence": [
+      {
+        "model": "fable",
+        "role": "architect",
+        "transport": "claude-cli",
+        "family": "anthropic",
+        "billing": "subscription-or-local-paid-credits",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "architect-routing-tradeoff",
+          "assembly-next-chunk"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-sol",
+        "role": "architect",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "tool-use",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "architect-routing-tradeoff",
+          "assembly-next-chunk"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "opus",
+        "role": "architect",
+        "transport": "claude-cli",
+        "family": "anthropic",
+        "billing": "subscription-or-local-paid-credits",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "architect-routing-tradeoff",
+          "assembly-next-chunk"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "qwen/qwen3.8-max",
+        "role": "architect",
+        "transport": "openrouter",
+        "family": "qwen",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "architect-routing-tradeoff",
+          "assembly-next-chunk"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "qwen/qwen3.8-max",
+        "role": "plan-critic",
+        "transport": "openrouter",
+        "family": "qwen",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "plan-approved-scope-audit",
+          "plan-contradiction-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "deepseek/deepseek-v4-pro-0813",
+        "role": "plan-critic",
+        "transport": "openrouter",
+        "family": "deepseek",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "plan-approved-scope-audit",
+          "plan-contradiction-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "x-ai/grok-4.6",
+        "role": "plan-critic",
+        "transport": "openrouter",
+        "family": "x-ai",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "plan-approved-scope-audit",
+          "plan-contradiction-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "opus",
+        "role": "plan-critic",
+        "transport": "claude-cli",
+        "family": "anthropic",
+        "billing": "subscription-or-local-paid-credits",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "plan-approved-scope-audit",
+          "plan-contradiction-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-terra",
+        "role": "plan-critic",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "tool-use",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "plan-approved-scope-audit",
+          "plan-contradiction-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "deepseek/deepseek-v4-flash-0731",
+        "role": "builder-fast",
+        "transport": "openrouter",
+        "family": "deepseek",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "write-repository",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "mechanical-owned-edit",
+          "pipeline-legacy-translation"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-luna",
+        "role": "builder-fast",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "write-repository",
+          "tool-use",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "mechanical-owned-edit",
+          "pipeline-legacy-translation"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-sol",
+        "role": "builder-deep",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "write-repository",
+          "tool-use",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "builder-multifile-repair",
+          "builder-validation-feedback-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-terra",
+        "role": "builder-deep",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "write-repository",
+          "tool-use",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "builder-multifile-repair",
+          "builder-validation-feedback-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "deepseek/deepseek-v4-pro-0813",
+        "role": "builder-deep",
+        "transport": "openrouter",
+        "family": "deepseek",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "write-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "builder-multifile-repair",
+          "builder-validation-feedback-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "x-ai/grok-4.6",
+        "role": "builder-deep",
+        "transport": "openrouter",
+        "family": "x-ai",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "write-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "builder-multifile-repair",
+          "builder-validation-feedback-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "deepseek/deepseek-v4-flash-0731",
+        "role": "review-fast",
+        "transport": "openrouter",
+        "family": "deepseek",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "review-false-positive-control",
+          "review-zero-deferral"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-luna",
+        "role": "review-fast",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "tool-use",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "review-false-positive-control",
+          "review-zero-deferral"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "qwen/qwen3.8-max",
+        "role": "review-deep",
+        "transport": "openrouter",
+        "family": "qwen",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "review-cross-file-invariant",
+          "review-validation-claims"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "deepseek/deepseek-v4-pro-0813",
+        "role": "review-deep",
+        "transport": "openrouter",
+        "family": "deepseek",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "review-cross-file-invariant",
+          "review-validation-claims"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-terra",
+        "role": "review-deep",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "tool-use",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "review-cross-file-invariant",
+          "review-validation-claims"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "moonshotai/kimi-k3",
+        "role": "security-review",
+        "transport": "openrouter",
+        "family": "moonshotai",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "security-auth-boundary",
+          "security-release-integrity"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "x-ai/grok-4.6",
+        "role": "security-review",
+        "transport": "openrouter",
+        "family": "x-ai",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "security-auth-boundary",
+          "security-release-integrity"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "qwen/qwen3.8-max",
+        "role": "security-review",
+        "transport": "openrouter",
+        "family": "qwen",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "security-auth-boundary",
+          "security-release-integrity"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "opus",
+        "role": "security-review",
+        "transport": "claude-cli",
+        "family": "anthropic",
+        "billing": "subscription-or-local-paid-credits",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "security-auth-boundary",
+          "security-release-integrity"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-terra",
+        "role": "security-review",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "tool-use",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "security-auth-boundary",
+          "security-release-integrity"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "google/gemini-3.7-flash",
+        "role": "research-fast",
+        "transport": "openrouter",
+        "family": "google",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "research-claim-source-map",
+          "research-conflicting-evidence"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-luna",
+        "role": "research-fast",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "tool-use",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "research-claim-source-map",
+          "research-conflicting-evidence"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "fable",
+        "role": "editorial",
+        "transport": "claude-cli",
+        "family": "anthropic",
+        "billing": "subscription-or-local-paid-credits",
+        "capabilities": [
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "editorial-member-update",
+          "editorial-release-note"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "opus",
+        "role": "editorial",
+        "transport": "claude-cli",
+        "family": "anthropic",
+        "billing": "subscription-or-local-paid-credits",
+        "capabilities": [
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "editorial-member-update",
+          "editorial-release-note"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "qwen/qwen3.8-max",
+        "role": "editorial",
+        "transport": "openrouter",
+        "family": "qwen",
+        "billing": "api",
+        "capabilities": [
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "editorial-member-update",
+          "editorial-release-note"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      }
     ],
-    "measured_cost_usd": 0.006882919465000001,
-    "result_root": "/home/ned/benchmark-results/depot-role-v1"
+    "routing_conclusion": "no routing change justified"
   },
-  "generated_at": "2026-08-27T14:59:45+08:00",
-  "production": {
-    "artifact_paths": {
-      "metrics": [
-        "/home/ned/ai/depot/plans/r0-measurement-backbone/metrics.json",
-        "/home/ned/ai/depot/plans/r1-review-burn-cuts/metrics.json",
-        "/home/ned/ai/depot/plans/r1-review-burn-cuts/prior-blocked-run/metrics.json"
-      ],
-      "run_cost_summaries": [
-        "/home/ned/ai/depot/plans/r0-measurement-backbone/run-cost-summary.json",
-        "/home/ned/ai/depot/plans/r1-review-burn-cuts/prior-blocked-run/run-cost-summary.json",
-        "/home/ned/ai/depot/plans/r1-review-burn-cuts/run-cost-summary.json"
-      ]
-    },
-    "by_lane_model": [
+  "benchmarks": {
+    "result_root": "/home/ned/benchmark-results/depot-role-v2",
+    "attempts": 0,
+    "current_v2_attempts": 0,
+    "groups": [],
+    "roles": [
       {
-        "attempts": 1,
-        "duration_seconds": 431.0,
-        "estimated_attempts": 0,
-        "input_bytes": 0.0,
-        "input_tokens": 24410.0,
-        "lane": "01-openrouter-usage-translator",
-        "measured_cost_attempts": 1,
-        "measured_cost_usd": 0.6670722,
-        "model": "moonshotai/kimi-k3",
-        "output_tokens": 39601.0,
-        "reasoning_tokens": 34999.0
+        "role": "architect",
+        "policy_candidates": 4,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "assembly-next-chunk",
+            "case_revision": 2,
+            "prompt_revision": 2,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "architect-routing-tradeoff",
+            "case_revision": 2,
+            "prompt_revision": 2,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "assembly-next-chunk",
+          "architect-routing-tradeoff"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
       },
       {
-        "attempts": 1,
-        "duration_seconds": 400.0,
-        "estimated_attempts": 0,
-        "input_bytes": 0.0,
-        "input_tokens": 16158.0,
-        "lane": "02-lane-input-bytes",
-        "measured_cost_attempts": 1,
-        "measured_cost_usd": 0.6608562,
-        "model": "moonshotai/kimi-k3",
-        "output_tokens": 40837.0,
-        "reasoning_tokens": 35155.0
+        "role": "plan-critic",
+        "policy_candidates": 5,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "plan-approved-scope-audit",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output",
+              "independent-family"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "plan-contradiction-repair",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output",
+              "independent-family"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "plan-approved-scope-audit",
+          "plan-contradiction-repair"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
       },
       {
-        "attempts": 1,
-        "duration_seconds": 300.0,
-        "estimated_attempts": 0,
-        "input_bytes": 0.0,
-        "input_tokens": 20394.0,
-        "lane": "03-emission-contract-and-baselines",
-        "measured_cost_attempts": 1,
-        "measured_cost_usd": 0.1614712,
-        "model": "z-ai/glm-5.2",
-        "output_tokens": 30209.0,
-        "reasoning_tokens": 24272.0
+        "role": "builder-fast",
+        "policy_candidates": 2,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "pipeline-legacy-translation",
+            "case_revision": 2,
+            "prompt_revision": 2,
+            "required_capabilities": [
+              "read-repository",
+              "write-repository",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": true
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "mechanical-owned-edit",
+            "case_revision": 2,
+            "prompt_revision": 2,
+            "required_capabilities": [
+              "read-repository",
+              "write-repository",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": true
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "pipeline-legacy-translation",
+          "mechanical-owned-edit"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
       },
       {
-        "attempts": 1,
-        "duration_seconds": 3600.0,
-        "estimated_attempts": 0,
-        "input_bytes": 0.0,
-        "input_tokens": 52660.0,
-        "lane": "adversary-r1",
-        "measured_cost_attempts": 1,
-        "measured_cost_usd": 0.6914922,
-        "model": "moonshotai/kimi-k3",
-        "output_tokens": 35579.0,
-        "reasoning_tokens": 32395.0
+        "role": "builder-deep",
+        "policy_candidates": 4,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "builder-multifile-repair",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "write-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": true
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "builder-validation-feedback-repair",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "write-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": true
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "builder-multifile-repair",
+          "builder-validation-feedback-repair"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
       },
       {
-        "attempts": 1,
-        "duration_seconds": 900.0,
-        "estimated_attempts": 0,
-        "input_bytes": 0.0,
-        "input_tokens": 63769.0,
-        "lane": "adversary-r2",
-        "measured_cost_attempts": 1,
-        "measured_cost_usd": 0.8151192,
-        "model": "moonshotai/kimi-k3",
-        "output_tokens": 41599.0,
-        "reasoning_tokens": 41182.0
+        "role": "review-fast",
+        "policy_candidates": 2,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "review-zero-deferral",
+            "case_revision": 2,
+            "prompt_revision": 2,
+            "required_capabilities": [
+              "read-repository",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "review-false-positive-control",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "review-zero-deferral",
+          "review-false-positive-control"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
+      },
+      {
+        "role": "review-deep",
+        "policy_candidates": 3,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "review-cross-file-invariant",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "review-validation-claims",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": true
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "review-cross-file-invariant",
+          "review-validation-claims"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
+      },
+      {
+        "role": "security-review",
+        "policy_candidates": 5,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "security-auth-boundary",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output",
+              "independent-family"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "security-release-integrity",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output",
+              "independent-family"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "security-auth-boundary",
+          "security-release-integrity"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
+      },
+      {
+        "role": "research-fast",
+        "policy_candidates": 2,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "research-claim-source-map",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "research-conflicting-evidence",
+            "case_revision": 1,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "read-repository",
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "research-claim-source-map",
+          "research-conflicting-evidence"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
+      },
+      {
+        "role": "editorial",
+        "policy_candidates": 3,
+        "required_cases": 2,
+        "case_coverage": [
+          {
+            "case_id": "editorial-member-update",
+            "case_revision": 2,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          },
+          {
+            "case_id": "editorial-release-note",
+            "case_revision": 2,
+            "prompt_revision": 1,
+            "required_capabilities": [
+              "long-context",
+              "structured-output"
+            ],
+            "applicability": {
+              "toolUse": false,
+              "browser": false,
+              "multiTurn": false,
+              "repositoryValidation": false
+            },
+            "compatible_groups": 0,
+            "comparable_attempts": null,
+            "validated_attempts": null,
+            "evaluator_cohorts": [],
+            "latest_observed_at": null
+          }
+        ],
+        "evaluator_cohorts": [],
+        "complete_evaluator_cohorts": 0,
+        "case_binding_conflict": false,
+        "missing_cases": [
+          "editorial-member-update",
+          "editorial-release-note"
+        ],
+        "gap": "no comparable current evidence",
+        "confidence": "none",
+        "freshness": {
+          "latest_observed_at": null,
+          "suite_revision": 1,
+          "policy_snapshot": "openrouter:2026-08-25"
+        },
+        "best_deterministic_quality": null,
+        "validated_attempts": null,
+        "comparable_attempts": null,
+        "first_pass_validated_rate": null,
+        "median_duration_seconds": null,
+        "median_time_to_first_validated_seconds": null,
+        "median_attempts_to_valid": null,
+        "median_model_rework_to_valid": null,
+        "median_tokens_to_first_validated": {
+          "prompt_tokens": null,
+          "completion_tokens": null,
+          "reasoning_tokens": null,
+          "cache_read_tokens": null,
+          "cache_creation_tokens": null
+        },
+        "median_context_to_first_validated": null,
+        "useful_finding_yield": null,
+        "false_positive_yield": null,
+        "operational_retries": {},
+        "model_failure_counts": {},
+        "instrumentation": {
+          "duration_seconds": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "tool_calls": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "correction_count": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "useful_findings": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "false_positives": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "attempt_order": {
+            "recorded": null,
+            "groups": null,
+            "rate": null
+          }
+        },
+        "editorial_human_evidence": null,
+        "incomplete_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
       }
     ],
+    "model_role_evidence": [
+      {
+        "model": "fable",
+        "role": "architect",
+        "transport": "claude-cli",
+        "family": "anthropic",
+        "billing": "subscription-or-local-paid-credits",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "architect-routing-tradeoff",
+          "assembly-next-chunk"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-sol",
+        "role": "architect",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "tool-use",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "architect-routing-tradeoff",
+          "assembly-next-chunk"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "opus",
+        "role": "architect",
+        "transport": "claude-cli",
+        "family": "anthropic",
+        "billing": "subscription-or-local-paid-credits",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "architect-routing-tradeoff",
+          "assembly-next-chunk"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "qwen/qwen3.8-max",
+        "role": "architect",
+        "transport": "openrouter",
+        "family": "qwen",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "architect-routing-tradeoff",
+          "assembly-next-chunk"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "qwen/qwen3.8-max",
+        "role": "plan-critic",
+        "transport": "openrouter",
+        "family": "qwen",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "plan-approved-scope-audit",
+          "plan-contradiction-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "deepseek/deepseek-v4-pro-0813",
+        "role": "plan-critic",
+        "transport": "openrouter",
+        "family": "deepseek",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "plan-approved-scope-audit",
+          "plan-contradiction-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "x-ai/grok-4.6",
+        "role": "plan-critic",
+        "transport": "openrouter",
+        "family": "x-ai",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "plan-approved-scope-audit",
+          "plan-contradiction-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "opus",
+        "role": "plan-critic",
+        "transport": "claude-cli",
+        "family": "anthropic",
+        "billing": "subscription-or-local-paid-credits",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "plan-approved-scope-audit",
+          "plan-contradiction-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-terra",
+        "role": "plan-critic",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "tool-use",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "plan-approved-scope-audit",
+          "plan-contradiction-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "deepseek/deepseek-v4-flash-0731",
+        "role": "builder-fast",
+        "transport": "openrouter",
+        "family": "deepseek",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "write-repository",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "mechanical-owned-edit",
+          "pipeline-legacy-translation"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-luna",
+        "role": "builder-fast",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "write-repository",
+          "tool-use",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "mechanical-owned-edit",
+          "pipeline-legacy-translation"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-sol",
+        "role": "builder-deep",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "write-repository",
+          "tool-use",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "builder-multifile-repair",
+          "builder-validation-feedback-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-terra",
+        "role": "builder-deep",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "write-repository",
+          "tool-use",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "builder-multifile-repair",
+          "builder-validation-feedback-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "deepseek/deepseek-v4-pro-0813",
+        "role": "builder-deep",
+        "transport": "openrouter",
+        "family": "deepseek",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "write-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "builder-multifile-repair",
+          "builder-validation-feedback-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "x-ai/grok-4.6",
+        "role": "builder-deep",
+        "transport": "openrouter",
+        "family": "x-ai",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "write-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "builder-multifile-repair",
+          "builder-validation-feedback-repair"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "deepseek/deepseek-v4-flash-0731",
+        "role": "review-fast",
+        "transport": "openrouter",
+        "family": "deepseek",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "review-false-positive-control",
+          "review-zero-deferral"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-luna",
+        "role": "review-fast",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "tool-use",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "review-false-positive-control",
+          "review-zero-deferral"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "qwen/qwen3.8-max",
+        "role": "review-deep",
+        "transport": "openrouter",
+        "family": "qwen",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "review-cross-file-invariant",
+          "review-validation-claims"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "deepseek/deepseek-v4-pro-0813",
+        "role": "review-deep",
+        "transport": "openrouter",
+        "family": "deepseek",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "review-cross-file-invariant",
+          "review-validation-claims"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-terra",
+        "role": "review-deep",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "tool-use",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "review-cross-file-invariant",
+          "review-validation-claims"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "moonshotai/kimi-k3",
+        "role": "security-review",
+        "transport": "openrouter",
+        "family": "moonshotai",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "security-auth-boundary",
+          "security-release-integrity"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "x-ai/grok-4.6",
+        "role": "security-review",
+        "transport": "openrouter",
+        "family": "x-ai",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "security-auth-boundary",
+          "security-release-integrity"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "qwen/qwen3.8-max",
+        "role": "security-review",
+        "transport": "openrouter",
+        "family": "qwen",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "security-auth-boundary",
+          "security-release-integrity"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "opus",
+        "role": "security-review",
+        "transport": "claude-cli",
+        "family": "anthropic",
+        "billing": "subscription-or-local-paid-credits",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "security-auth-boundary",
+          "security-release-integrity"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-terra",
+        "role": "security-review",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "tool-use",
+          "long-context",
+          "structured-output",
+          "independent-family"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "security-auth-boundary",
+          "security-release-integrity"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "google/gemini-3.7-flash",
+        "role": "research-fast",
+        "transport": "openrouter",
+        "family": "google",
+        "billing": "api",
+        "capabilities": [
+          "read-repository",
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "research-claim-source-map",
+          "research-conflicting-evidence"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "gpt-5.6-luna",
+        "role": "research-fast",
+        "transport": "codex-cli",
+        "family": "openai",
+        "billing": "included-subscription",
+        "capabilities": [
+          "read-repository",
+          "tool-use",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "research-claim-source-map",
+          "research-conflicting-evidence"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "fable",
+        "role": "editorial",
+        "transport": "claude-cli",
+        "family": "anthropic",
+        "billing": "subscription-or-local-paid-credits",
+        "capabilities": [
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "editorial-member-update",
+          "editorial-release-note"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "opus",
+        "role": "editorial",
+        "transport": "claude-cli",
+        "family": "anthropic",
+        "billing": "subscription-or-local-paid-credits",
+        "capabilities": [
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "editorial-member-update",
+          "editorial-release-note"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      },
+      {
+        "model": "qwen/qwen3.8-max",
+        "role": "editorial",
+        "transport": "openrouter",
+        "family": "qwen",
+        "billing": "api",
+        "capabilities": [
+          "long-context",
+          "structured-output"
+        ],
+        "strengths": [],
+        "failures": [],
+        "prohibited_evidence": [],
+        "gaps": [
+          "editorial-member-update",
+          "editorial-release-note"
+        ],
+        "validated_case_coverage": 0,
+        "controlled_competitive_evidence": false,
+        "competitive_evidence_cohorts": [],
+        "benchmark_faults": 0,
+        "benchmark_fault_conclusion": null,
+        "row_level_conclusion": null,
+        "routing_conclusion": "no routing change justified"
+      }
+    ],
+    "incomplete_attempts": [],
+    "historical_v1": [],
+    "incompatible_v2": [],
+    "measured_cost_usd": null,
+    "matrix_opportunities": [],
+    "routing_conclusion": "no routing change justified",
+    "views": {
+      "quality": {
+        "validated_attempts": 0,
+        "comparable_attempts": 0,
+        "roles_with_validated_evidence": [],
+        "evaluator_cohorts": {
+          "architect": [],
+          "plan-critic": [],
+          "builder-fast": [],
+          "builder-deep": [],
+          "review-fast": [],
+          "review-deep": [],
+          "security-review": [],
+          "research-fast": [],
+          "editorial": []
+        }
+      },
+      "reliability": {
+        "model_failure_counts": {},
+        "operational_retry_counts": {},
+        "historical_v1_attempts": 0,
+        "incompatible_v2_attempts": 0,
+        "retained_attempts": 0
+      },
+      "latency": {
+        "architect": {
+          "median_duration_seconds": null,
+          "coverage": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "evaluator_cohorts": []
+        },
+        "plan-critic": {
+          "median_duration_seconds": null,
+          "coverage": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "evaluator_cohorts": []
+        },
+        "builder-fast": {
+          "median_duration_seconds": null,
+          "coverage": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "evaluator_cohorts": []
+        },
+        "builder-deep": {
+          "median_duration_seconds": null,
+          "coverage": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "evaluator_cohorts": []
+        },
+        "review-fast": {
+          "median_duration_seconds": null,
+          "coverage": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "evaluator_cohorts": []
+        },
+        "review-deep": {
+          "median_duration_seconds": null,
+          "coverage": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "evaluator_cohorts": []
+        },
+        "security-review": {
+          "median_duration_seconds": null,
+          "coverage": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "evaluator_cohorts": []
+        },
+        "research-fast": {
+          "median_duration_seconds": null,
+          "coverage": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "evaluator_cohorts": []
+        },
+        "editorial": {
+          "median_duration_seconds": null,
+          "coverage": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "evaluator_cohorts": []
+        }
+      },
+      "tokens_context": {
+        "architect": {
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          }
+        },
+        "plan-critic": {
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          }
+        },
+        "builder-fast": {
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          }
+        },
+        "builder-deep": {
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          }
+        },
+        "review-fast": {
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          }
+        },
+        "review-deep": {
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          }
+        },
+        "security-review": {
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          }
+        },
+        "research-fast": {
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          }
+        },
+        "editorial": {
+          "prompt_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "completion_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "reasoning_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_read_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "cache_creation_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          },
+          "context_tokens": {
+            "recorded": null,
+            "attempts": null,
+            "rate": null
+          }
+        }
+      },
+      "provider_spend": {
+        "measured_cost_usd": null,
+        "recorded_cost_coverage": {
+          "recorded": 0,
+          "attempts": 0,
+          "rate": null
+        }
+      },
+      "subscription_marginal_cost": {
+        "value": null,
+        "reason": "reported only when supplied by production evidence"
+      },
+      "api_equivalent_cost": {
+        "value": null,
+        "reason": "not inferred or combined with billed spend"
+      },
+      "capabilities": {
+        "architect": [
+          "long-context",
+          "read-repository",
+          "structured-output",
+          "tool-use"
+        ],
+        "plan-critic": [
+          "independent-family",
+          "long-context",
+          "read-repository",
+          "structured-output",
+          "tool-use"
+        ],
+        "builder-fast": [
+          "read-repository",
+          "structured-output",
+          "tool-use",
+          "write-repository"
+        ],
+        "builder-deep": [
+          "long-context",
+          "read-repository",
+          "structured-output",
+          "tool-use",
+          "write-repository"
+        ],
+        "review-fast": [
+          "read-repository",
+          "structured-output",
+          "tool-use"
+        ],
+        "review-deep": [
+          "long-context",
+          "read-repository",
+          "structured-output",
+          "tool-use"
+        ],
+        "security-review": [
+          "independent-family",
+          "long-context",
+          "read-repository",
+          "structured-output",
+          "tool-use"
+        ],
+        "research-fast": [
+          "long-context",
+          "read-repository",
+          "structured-output",
+          "tool-use"
+        ],
+        "editorial": [
+          "long-context",
+          "structured-output"
+        ]
+      },
+      "family_diversity": {
+        "architect": [
+          "anthropic",
+          "openai",
+          "qwen"
+        ],
+        "plan-critic": [
+          "anthropic",
+          "deepseek",
+          "openai",
+          "qwen",
+          "x-ai"
+        ],
+        "builder-fast": [
+          "deepseek",
+          "openai"
+        ],
+        "builder-deep": [
+          "deepseek",
+          "openai",
+          "x-ai"
+        ],
+        "review-fast": [
+          "deepseek",
+          "openai"
+        ],
+        "review-deep": [
+          "deepseek",
+          "openai",
+          "qwen"
+        ],
+        "security-review": [
+          "anthropic",
+          "moonshotai",
+          "openai",
+          "qwen",
+          "x-ai"
+        ],
+        "research-fast": [
+          "google",
+          "openai"
+        ],
+        "editorial": [
+          "anthropic",
+          "qwen"
+        ]
+      },
+      "editorial_human": null
+    }
+  },
+  "production": {
+    "cost_summary_artifacts": 3,
+    "metrics_artifacts": 3,
+    "empty_cost_summaries": 2,
+    "malformed_artifacts": [],
     "by_model": [
       {
         "attempts": 4,
         "duration_seconds": 5331.0,
-        "estimated_attempts": 0,
-        "finding_contributions": 0,
-        "input_bytes": 0.0,
         "input_tokens": 156997.0,
-        "measured_cost_attempts": 4,
+        "output_tokens": 157616.0,
+        "reasoning_tokens": 143731.0,
+        "input_bytes": 0.0,
         "measured_cost_usd": 2.8345398,
+        "measured_cost_attempts": 4,
+        "estimated_attempts": 0,
         "measurement_sources": {
           "openrouter_api_receipt": 4
         },
         "model": "moonshotai/kimi-k3",
-        "output_tokens": 157616.0,
-        "reasoning_tokens": 143731.0
+        "finding_contributions": 0
       },
       {
         "attempts": 1,
         "duration_seconds": 300.0,
-        "estimated_attempts": 0,
-        "finding_contributions": 0,
-        "input_bytes": 0.0,
         "input_tokens": 20394.0,
-        "measured_cost_attempts": 1,
+        "output_tokens": 30209.0,
+        "reasoning_tokens": 24272.0,
+        "input_bytes": 0.0,
         "measured_cost_usd": 0.1614712,
+        "measured_cost_attempts": 1,
+        "estimated_attempts": 0,
         "measurement_sources": {
           "openrouter_api_receipt": 1
         },
         "model": "z-ai/glm-5.2",
-        "output_tokens": 30209.0,
-        "reasoning_tokens": 24272.0
+        "finding_contributions": 0
       }
     ],
-    "cost_summary_artifacts": 3,
-    "empty_cost_summaries": 2,
-    "malformed_artifacts": [],
-    "metrics_artifacts": 3,
+    "by_lane_model": [
+      {
+        "lane": "01-openrouter-usage-translator",
+        "model": "moonshotai/kimi-k3",
+        "attempts": 1,
+        "duration_seconds": 431.0,
+        "input_tokens": 24410.0,
+        "output_tokens": 39601.0,
+        "reasoning_tokens": 34999.0,
+        "input_bytes": 0.0,
+        "measured_cost_usd": 0.6670722,
+        "measured_cost_attempts": 1,
+        "estimated_attempts": 0
+      },
+      {
+        "lane": "02-lane-input-bytes",
+        "model": "moonshotai/kimi-k3",
+        "attempts": 1,
+        "duration_seconds": 400.0,
+        "input_tokens": 16158.0,
+        "output_tokens": 40837.0,
+        "reasoning_tokens": 35155.0,
+        "input_bytes": 0.0,
+        "measured_cost_usd": 0.6608562,
+        "measured_cost_attempts": 1,
+        "estimated_attempts": 0
+      },
+      {
+        "lane": "03-emission-contract-and-baselines",
+        "model": "z-ai/glm-5.2",
+        "attempts": 1,
+        "duration_seconds": 300.0,
+        "input_tokens": 20394.0,
+        "output_tokens": 30209.0,
+        "reasoning_tokens": 24272.0,
+        "input_bytes": 0.0,
+        "measured_cost_usd": 0.1614712,
+        "measured_cost_attempts": 1,
+        "estimated_attempts": 0
+      },
+      {
+        "lane": "adversary-r1",
+        "model": "moonshotai/kimi-k3",
+        "attempts": 1,
+        "duration_seconds": 3600.0,
+        "input_tokens": 52660.0,
+        "output_tokens": 35579.0,
+        "reasoning_tokens": 32395.0,
+        "input_bytes": 0.0,
+        "measured_cost_usd": 0.6914922,
+        "measured_cost_attempts": 1,
+        "estimated_attempts": 0
+      },
+      {
+        "lane": "adversary-r2",
+        "model": "moonshotai/kimi-k3",
+        "attempts": 1,
+        "duration_seconds": 900.0,
+        "input_tokens": 63769.0,
+        "output_tokens": 41599.0,
+        "reasoning_tokens": 41182.0,
+        "input_bytes": 0.0,
+        "measured_cost_usd": 0.8151192,
+        "measured_cost_attempts": 1,
+        "estimated_attempts": 0
+      }
+    ],
     "quality": {
-      "canonical_findings": 0,
       "finding_contributions_by_model": {},
       "finding_contributions_by_provider": {},
+      "canonical_findings": 0,
       "median_completion_rate": 1.0,
       "median_fallback_rate": 0.1,
       "median_validation_first_pass_rate": 0.0,
+      "retry_reasons": {
+        "cascade_exhausted": 1,
+        "codex_usage_cap": 5
+      },
       "model_attempt_counts_from_metrics": {
         "moonshotai/kimi-k3": 4,
         "z-ai/glm-5.2": 1
@@ -297,17 +4946,24 @@
       "provider_attempt_counts_from_metrics": {
         "Friendli": 1,
         "Modal": 4
-      },
-      "retry_reasons": {
-        "cascade_exhausted": 1,
-        "codex_usage_cap": 5
       }
+    },
+    "artifact_paths": {
+      "run_cost_summaries": [
+        "/home/ned/ai/depot/plans/r0-measurement-backbone/run-cost-summary.json",
+        "/home/ned/ai/depot/plans/r1-review-burn-cuts/prior-blocked-run/run-cost-summary.json",
+        "/home/ned/ai/depot/plans/r1-review-burn-cuts/run-cost-summary.json"
+      ],
+      "metrics": [
+        "/home/ned/ai/depot/plans/r0-measurement-backbone/metrics.json",
+        "/home/ned/ai/depot/plans/r1-review-burn-cuts/metrics.json",
+        "/home/ned/ai/depot/plans/r1-review-burn-cuts/prior-blocked-run/metrics.json"
+      ]
     }
   },
-  "repository": "/home/ned/ai/depot-worktrees/ox-alpha-benchmark-20260827T080421",
+  "repository": "/home/ned/ai/depot/.worktrees/pipeline/benchmark-evidence-521e4833/05-integration-and-docs",
   "run_roots": [
     "/home/ned/ai/depot/plans",
     "/home/ned/ai/depot/.workflow-kernel/runs"
-  ],
-  "schema_version": 1
+  ]
 }

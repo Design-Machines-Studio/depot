@@ -72,7 +72,12 @@ stays null; do not collapse the axes into an opaque leaderboard.
 ## Blinded editorial human evidence
 
 The two editorial cases may carry one bounded human receipt at
-`<attempt-directory>/human-rubric.json`. It has this closed schema:
+`<attempt-directory>/human-rubric.json`, but the editor must never receive that
+model-bearing path. A coordinator exports only the normalized output under a
+generic filename plus the exact case rubric to an opaque digest-named handoff
+outside the benchmark result tree. The editor writes the receipt there; the
+coordinator verifies it and joins it back to the attempt. It has this closed
+schema:
 
 ```json
 {
@@ -94,8 +99,9 @@ The two editorial cases may carry one bounded human receipt at
 Join the receipt only to the normalized output artifact digest and matching
 suite, case, case revision, and rubric revision. `blindToCandidate` must be
 `true`; neither keys nor values may carry candidate, model, provider, or
-transport identity. Criterion IDs must exactly equal the case rubric and each
-score must be numeric from 1 through 5. Reject malformed, unblinded,
+transport identity, and neither the handoff path nor its contents may reveal
+them. Criterion IDs must exactly equal the case rubric and each score must be
+numeric from 1 through 5. Reject malformed, unblinded,
 identity-bearing, unknown-criterion, invalid-score, digest-mismatched,
 case-mismatched, or rubric-mismatched receipts. If the receipt is absent or
 rejected, human quality remains null.
