@@ -58,7 +58,24 @@ check 'weekly benchmark procedure stops faults, partial spend, and identity leak
   "grep -Fq 'recorded as nomination-only and not as runnable targets' '$WEEKLY' && \
    grep -Fq 'stop all native and OpenRouter benchmark' '$WEEKLY' && \
    grep -Fq 'find \"\$WEEK_ROOT/openrouter\" -type d -name' '$WEEKLY' && \
+   grep -Fq 'paid-calls.stopped' '$WEEKLY' && \
+   grep -Fq '> \"\$PAID_STOP\"' '$WEEKLY' && \
+   ! grep -Eq '^[[:space:]]*break([[:space:]]|$)' '$WEEKLY' && \
    grep -Fq 'coordinator—not the editor' '$WEEKLY'"
+
+check 'paid receipt gate rejects partial cost coverage' sh -c '
+  fixture="$(mktemp -d)" || exit 1
+  trap '\''rm -rf -- "$fixture"'\'' EXIT
+  mkdir -p "$fixture/openrouter/model/case/run-1" "$fixture/openrouter/model/case/run-2"
+  printf '\''{"usage":{"cost":0.25}}\n'\'' > "$fixture/openrouter/model/case/run-1/receipt.json"
+  printf '\''{"usage":{}}\n'\'' > "$fixture/openrouter/model/case/run-2/receipt.json"
+  ! find "$fixture/openrouter" -type d -name '\''run-*'\'' -exec sh -c '\''
+    for attempt_dir do
+      jq -e "(.usage.cost | type) == \"number\" and .usage.cost >= 0" \
+        "$attempt_dir/receipt.json" >/dev/null || exit 1
+    done
+  '\'' sh {} +
+'
 
 check 'live model-intelligence report uses v2 no-conclusion semantics' sh -c \
   "jq -e '.schema_version == 2 and (.quality_efficiency.roles | length) == 9 and .benchmarks.routing_conclusion == \"no routing change justified\"' '$LATEST' >/dev/null && \

@@ -59,6 +59,8 @@ POLICY=./plugins/model-router/skills/model-router/references/role-policy.json
 BENCH_ROOT="/home/ned/benchmark-results/depot-role-v2"
 WEEK_ROOT="$BENCH_ROOT/$RUN_DATE"
 ELIGIBILITY="$BENCH_ROOT/eligibility-$RUN_DATE.json"
+PAID_STOP="$WEEK_ROOT/paid-calls.stopped"
+BENCH_STOP="$WEEK_ROOT/all-benchmark-calls.stopped"
 BUDGET_USD=10
 mkdir -p "$WEEK_ROOT"
 
@@ -120,16 +122,29 @@ Same-model provider fallback must remain enabled so endpoint capacity does not
 masquerade as model failure:
 
 ```sh
+[ ! -f "$PAID_STOP" ] && [ ! -f "$BENCH_STOP" ] || {
+  [ ! -f "$PAID_STOP" ] || cat "$PAID_STOP" >&2
+  [ ! -f "$BENCH_STOP" ] || cat "$BENCH_STOP" >&2
+  exit 1
+}
 "$BENCH" --run \
   --case "$CASE_ID" \
   --model "$MODEL" \
   --role-policy "$POLICY" \
-  --result-dir "$WEEK_ROOT/openrouter/$MODEL/$CASE_ID/run-$ATTEMPT"
+  --result-dir "$WEEK_ROOT/openrouter/$MODEL/$CASE_ID/run-$ATTEMPT" || {
+    printf 'paid benchmark call failed; no later paid call is authorized\n' \
+      > "$PAID_STOP"
+    exit 1
+  }
 ```
 
 For each native incumbent, run the same prompt and deterministic scorer:
 
 ```sh
+[ ! -f "$BENCH_STOP" ] || {
+  cat "$BENCH_STOP" >&2
+  exit 1
+}
 "$NATIVE_BENCH" \
   --case "$CASE_ID" \
   --transport "$TRANSPORT" \
@@ -149,7 +164,8 @@ Inspect `result.json` after every native or paid attempt. If `benchmarkFault` is
 true, `modelConclusion` is null because of a benchmark fault, an evidence
 binding mismatches, or the failure stage is prompt/contract,
 parser/normalizer, scorer, or harness, stop all native and OpenRouter benchmark
-calls immediately. Preserve and report the evidence as incompatible or
+calls immediately and write the reason to `$BENCH_STOP`. Preserve and report
+the evidence as incompatible or
 benchmark-owned; never count it against the candidate. Repair the benchmark
 locally and run both offline benchmark fixture validators plus the Python
 intelligence/native test. Do not make any benchmark rerun during this weekly
@@ -175,8 +191,9 @@ find "$WEEK_ROOT/openrouter" -type d -name 'run-*' -exec sh -c '
       }
   done
 ' sh {} + || {
-  printf 'weekly benchmark spend telemetry is incomplete; stopping paid calls\n'
-  break
+  printf 'weekly benchmark spend telemetry is incomplete; stopping paid calls\n' \
+    > "$PAID_STOP"
+  exit 1
 }
 rtk python tools/model-intelligence.py report \
   --run-root "$WEEK_ROOT/no-production-evidence" \
@@ -184,13 +201,15 @@ rtk python tools/model-intelligence.py report \
   --json-output "$WEEK_ROOT/spend.json" >/dev/null
 SPEND_USD="$(jq -r '.benchmarks.measured_cost_usd' "$WEEK_ROOT/spend.json")"
 [ "$SPEND_USD" != "null" ] || {
-  printf 'weekly benchmark spend telemetry is incomplete; stopping paid calls\n'
-  break
+  printf 'weekly benchmark spend telemetry is incomplete; stopping paid calls\n' \
+    > "$PAID_STOP"
+  exit 1
 }
 rtk awk -v spend="$SPEND_USD" -v cap="$BUDGET_USD" \
   'BEGIN { if (spend >= cap) exit 1 }' || {
-    printf 'weekly benchmark spend cap reached: %s\n' "$SPEND_USD"
-    break
+    printf 'weekly benchmark spend cap reached: %s\n' "$SPEND_USD" \
+      > "$PAID_STOP"
+    exit 1
   }
 ```
 
