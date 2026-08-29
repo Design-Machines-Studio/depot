@@ -225,8 +225,10 @@ it is surfaced by exit code rather than by stderr alone. It reports the absence
 of a report, never a measurement verdict.
 
 Exit 2 is the other non-zero outcome, and it means the invocation itself was
-wrong -- bad flags, or `--output` and `--receipt` pointing at one path. Nothing
-ran, so nothing is recorded.
+wrong -- bad flags, any two of `--events`, `--output`, and `--receipt` pointing
+at the same file, or an authoritative receipt stream with duplicate JSON
+members or non-finite constants. Nothing ran, so no transaction path is
+mutated.
 
 **The `||` fallback must be status-aware.** Exit 6 means the accepted receipt
 path could not be written, so the caller makes one last append attempt with the

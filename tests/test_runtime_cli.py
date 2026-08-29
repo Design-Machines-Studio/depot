@@ -1,6 +1,8 @@
+import copy
 import json
 import hashlib
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -203,6 +205,42 @@ class RuntimeCliTests(unittest.TestCase):
                 len(list((state_dir / "contribution-inputs").glob("*.json"))), 5,
             )
 
+            for name, raw in (
+                ("duplicate", '[{"sequence":0,"sequence":1}]'),
+                ("non-finite", '[{"sequence":NaN}]'),
+            ):
+                with self.subTest(name=name):
+                    ambiguous = root / (name + "-review-receipts.json")
+                    ambiguous.write_text(raw, encoding="utf-8")
+                    observe_state = root / (name + "-observe-state")
+                    observe_state.mkdir()
+                    observed = self.run_cli(
+                        "observe-review", "--request", request,
+                        "--receipts", ambiguous, "--state-dir", observe_state,
+                    )
+                    self.assertEqual(observed.returncode, 2)
+                    self.assertFalse(
+                        (observe_state / "review-shadow-observation.json").exists(),
+                    )
+
+                    export_state = root / (name + "-export-state")
+                    export_state.mkdir()
+                    export_output = root / (name + "-export.json")
+                    exported_ambiguous = self.run_cli(
+                        "export-review-contributions", "--request", request,
+                        "--decisions", decisions,
+                        "--raw-findings", raw_findings,
+                        "--lane-receipts", lane_receipts,
+                        "--raw-lane-outputs", raw_lane_outputs,
+                        "--receipts", ambiguous,
+                        "--state-dir", export_state, "--output", export_output,
+                    )
+                    self.assertEqual(exported_ambiguous.returncode, 2)
+                    self.assertFalse(export_output.exists())
+                    self.assertFalse(
+                        (export_state / "contribution-inputs").exists(),
+                    )
+
             unsafe_state = root / "unsafe-state"
             unsafe_state.mkdir()
             unsafe_decisions = json.loads(decisions.read_text(encoding="utf-8"))
@@ -380,6 +418,245 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertEqual(artifact["artifact_role"], "authoritative_observation")
             self.assertEqual(artifact["run_spec"]["workflow_class"], "feature")
             self.assertEqual(artifact["event_count"], 11)
+
+    def test_legacy_browser_reconciliation_writer_and_processing_paths_are_atomic(self):
+        from workflow_kernel.cost_summary import validate_run_cost_summary
+
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            source = json.loads(
+                (FIXTURES / "pipeline-legacy-browser-recovery.json").read_text()
+            )
+            self.assertRegex(
+                source[1]["human_intervention_id"],
+                r"\Abrowser-help-sha256:[0-9a-f]{64}\Z",
+            )
+            self.assertEqual(len(source[1]["missing_case_ids"]), 3)
+            self.assertTrue(all(
+                re.fullmatch(r"case-sha256:[0-9a-f]{64}", case_id)
+                for case_id in source[1]["missing_case_ids"]
+            ))
+            ledger = root / "authoritative-receipts.json"
+            ledger.write_text(json.dumps(source))
+            appended = self.run_cli(
+                "reconcile-legacy-browser",
+                "--events", ledger,
+                "--target-sequence", "1",
+                "--occurred-at", "2026-01-01T00:09:00Z",
+                "--authoritative-receipt", "receipts/reconciliation.json",
+            )
+            self.assertEqual(appended.returncode, 0, appended.stderr)
+            reconciled = json.loads(ledger.read_text())
+            self.assertEqual(reconciled[:-1], source)
+            self.assertEqual(reconciled[-1]["sequence"], 9)
+
+            before_duplicate = ledger.read_bytes()
+            duplicate = self.run_cli(
+                "reconcile-legacy-browser",
+                "--events", ledger,
+                "--target-sequence", "1",
+                "--occurred-at", "2026-01-01T00:10:00Z",
+                "--authoritative-receipt", "receipts/duplicate.json",
+            )
+            self.assertEqual(duplicate.returncode, 2)
+            self.assertEqual(ledger.read_bytes(), before_duplicate)
+
+            manifest = root / "manifest.json"
+            manifest.write_text(json.dumps({
+                "feature": "compat-run", "workflowClass": "feature",
+                "executionMode": "generic", "chunks": [],
+            }))
+            self.init_lifecycle(root, "compat-run")
+            bound = self.run_cli(
+                "bind-prediction", "--type", "pipeline",
+                "--manifest", manifest, "--prediction-receipts", ledger,
+                "--state-dir", root,
+            )
+            self.assertEqual(bound.returncode, 0, bound.stderr)
+            self.start_lifecycle(root, "compat-run")
+
+            observed = self.run_cli(
+                "observe-pipeline", "--manifest", manifest,
+                "--receipts", ledger, "--state-dir", root,
+            )
+            self.assertEqual(observed.returncode, 0, observed.stderr)
+            observation = root / "pipeline-shadow-observation.json"
+            observation_events = json.loads(observation.read_text())["events"]
+            self.assertEqual(observation_events[1]["payload"]["status"], "blocked")
+            self.assertEqual(
+                [event["payload"]["stage"] for event in observation_events[3:9]],
+                [
+                    "chunk", "run", "shadow_observation", "shadow_comparison",
+                    "metrics", "cost_summary",
+                ],
+            )
+            self.assertEqual(observation_events[3]["payload"]["status"], "failed")
+            self.assertEqual(observation_events[4]["payload"]["status"], "skipped")
+
+            comparison = root / "comparison.json"
+            compared = self.run_cli(
+                "compare", "--state-dir", root,
+                "--authoritative-receipts", ledger,
+                "--output", comparison,
+            )
+            self.assertEqual(compared.returncode, 0, compared.stderr)
+            self.assertTrue(json.loads(comparison.read_text())["semantic_match"])
+
+            metrics = root / "metrics.json"
+            measured = self.run_cli(
+                "metrics", "--events", ledger, "--output", metrics,
+            )
+            self.assertEqual(measured.returncode, 0, measured.stderr)
+            self.assertEqual(json.loads(metrics.read_text())["event_count"], 10)
+
+            cost = root / "run-cost-summary.json"
+            costed = self.run_cli(
+                "run-cost-summary", "--events", ledger, "--output", cost,
+            )
+            self.assertEqual(costed.returncode, 0, costed.stderr)
+            validate_run_cost_summary(json.loads(cost.read_text()))
+
+            invalid = copy.deepcopy(reconciled)
+            invalid[-1]["target_receipt_digest"] = "sha256:" + "d" * 64
+            invalid_ledger = root / "invalid-receipts.json"
+            invalid_ledger.write_text(json.dumps(invalid))
+            invalid_outputs = {
+                "observation": root / "invalid-observation.json",
+                "comparison": root / "invalid-comparison.json",
+                "metrics": root / "invalid-metrics.json",
+                "cost": root / "invalid-cost.json",
+            }
+            rejected_observation = self.run_cli(
+                "observe-pipeline", "--manifest", manifest,
+                "--receipts", invalid_ledger,
+                "--state-dir", invalid_outputs["observation"],
+            )
+            self.assertEqual(rejected_observation.returncode, 2)
+            rejected_comparison = self.run_cli(
+                "compare", "--state-dir", root,
+                "--authoritative-receipts", invalid_ledger,
+                "--output", invalid_outputs["comparison"],
+            )
+            self.assertEqual(rejected_comparison.returncode, 2)
+            rejected_metrics = self.run_cli(
+                "metrics", "--events", invalid_ledger,
+                "--output", invalid_outputs["metrics"],
+            )
+            self.assertEqual(rejected_metrics.returncode, 2)
+            rejected_cost = self.run_cli(
+                "run-cost-summary", "--events", invalid_ledger,
+                "--output", invalid_outputs["cost"],
+            )
+            self.assertEqual(rejected_cost.returncode, 2)
+            self.assertFalse(any(path.exists() for path in invalid_outputs.values()))
+
+            malformed = root / "malformed.json"
+            malformed.write_text("{not-json")
+            malformed_before = malformed.read_bytes()
+            rejected_writer = self.run_cli(
+                "reconcile-legacy-browser", "--events", malformed,
+                "--target-sequence", "1",
+                "--occurred-at", "2026-01-01T00:04:00Z",
+                "--authoritative-receipt", "receipts/reconciliation.json",
+            )
+            self.assertEqual(rejected_writer.returncode, 2)
+            self.assertEqual(malformed.read_bytes(), malformed_before)
+            error = json.loads(rejected_writer.stderr)
+            self.assertEqual(error["error"]["code"], "invalid_schema")
+
+            for name, ambiguous_value in (
+                (
+                    "duplicate-member",
+                    b'[{"run_id":"first","run_id":"second"}]\n',
+                ),
+                ("non-finite", b'[{"sequence":NaN}]\n'),
+            ):
+                with self.subTest(name=name):
+                    ambiguous = root / (name + ".json")
+                    ambiguous.write_bytes(ambiguous_value)
+                    ambiguous_before = ambiguous.read_bytes()
+                    rejected_ambiguous = self.run_cli(
+                        "reconcile-legacy-browser", "--events", ambiguous,
+                        "--target-sequence", "0",
+                        "--occurred-at", "2026-01-01T00:04:00Z",
+                        "--authoritative-receipt", "receipts/reconciliation.json",
+                    )
+                    self.assertEqual(rejected_ambiguous.returncode, 2)
+                    self.assertEqual(ambiguous.read_bytes(), ambiguous_before)
+                    ambiguous_error = json.loads(rejected_ambiguous.stderr)
+                    self.assertEqual(
+                        ambiguous_error["error"]["code"], "invalid_schema",
+                    )
+                    self.assertNotIn(str(ambiguous), rejected_ambiguous.stderr)
+
+            serialized = json.dumps(reconciled, separators=(",", ":"))
+            for name, ambiguous_value in (
+                (
+                    "duplicate-target-member",
+                    serialized.replace(
+                        '"stage":"browser_recovery"',
+                        '"stage":"wrong","stage":"browser_recovery"',
+                        1,
+                    ),
+                ),
+                (
+                    "duplicate-claim-member",
+                    serialized.replace(
+                        '"target_stage":"browser_recovery"',
+                        '"target_stage":"wrong","target_stage":"browser_recovery"',
+                        1,
+                    ),
+                ),
+            ):
+                with self.subTest(name=name):
+                    ambiguous = root / (name + ".json")
+                    ambiguous.write_text(ambiguous_value)
+                    observation_before = observation.read_bytes()
+                    prediction_before = (
+                        root / "pipeline-shadow-prediction.json"
+                    ).read_bytes()
+                    commands = {
+                        "prediction": (
+                            "bind-prediction", "--type", "pipeline",
+                            "--manifest", manifest,
+                            "--prediction-receipts", ambiguous,
+                            "--state-dir", root,
+                        ),
+                        "observation": (
+                            "observe-pipeline", "--manifest", manifest,
+                            "--receipts", ambiguous, "--state-dir", root,
+                        ),
+                        "comparison": (
+                            "compare", "--state-dir", root,
+                            "--authoritative-receipts", ambiguous,
+                            "--output", root / (name + "-comparison.json"),
+                        ),
+                        "metrics": (
+                            "metrics", "--events", ambiguous,
+                            "--output", root / (name + "-metrics.json"),
+                        ),
+                        "cost": (
+                            "run-cost-summary", "--events", ambiguous,
+                            "--output", root / (name + "-cost.json"),
+                        ),
+                    }
+                    for command_name, argv in commands.items():
+                        with self.subTest(command=command_name):
+                            rejected = self.run_cli(*argv)
+                            self.assertEqual(rejected.returncode, 2)
+                            error = json.loads(rejected.stderr)
+                            self.assertEqual(error["error"]["code"], "invalid_schema")
+                    self.assertEqual(observation.read_bytes(), observation_before)
+                    self.assertEqual(
+                        (root / "pipeline-shadow-prediction.json").read_bytes(),
+                        prediction_before,
+                    )
+                    self.assertFalse(any(
+                        (root / (name + suffix)).exists()
+                        for suffix in (
+                            "-comparison.json", "-metrics.json", "-cost.json",
+                        )
+                    ))
 
     def test_prediction_and_observation_reject_decision_profile_mismatch(self):
         with tempfile.TemporaryDirectory() as directory:

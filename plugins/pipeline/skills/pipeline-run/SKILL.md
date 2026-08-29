@@ -158,6 +158,12 @@ Every builder dispatch and completion must name those exact current values; a
 missing or mismatched claim is deterministic validation failure, never success.
 The kernel seals/validates this artifact but never schedules a builder or gate.
 
+When an owner-approved retained ledger has the one historical noncanonical
+`browser_recovery` shape, load
+`plugins/pipeline/references/legacy-browser-reconciliation.md` and use its
+canonical writer. Never rewrite or skip the target, and never apply the command
+to any other invalid row.
+
 Append every later authoritative receipt to the cumulative ledger. Observe only
 at the `all-chunks-complete` checkpoint before the approved final review and at the
 terminal checkpoint. Each observation uses:

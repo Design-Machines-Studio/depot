@@ -77,6 +77,11 @@ BEHAVIORAL_CLI_CASES = {
     "bind-prediction": ("--type", "pipeline", "--manifest", "<missing>", "--prediction-receipts", "<missing>", "--state-dir", "<state>"),
     "bind-verification-contract": ("--state-dir", "<state>", "--contract", "<missing>"),
     "observe-pipeline": ("--manifest", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
+    "reconcile-legacy-browser": (
+        "--events", "<missing>", "--target-sequence", "1",
+        "--occurred-at", "2026-01-01T00:03:00Z",
+        "--authoritative-receipt", "authoritative-receipts.json",
+    ),
     "observe-review": ("--request", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
     "export-review-contributions": ("--request", "<missing>", "--decisions", "<missing>", "--raw-findings", "<missing>", "--lane-receipts", "<missing>", "--raw-lane-outputs", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>", "--output", "<output>"),
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
@@ -509,7 +514,8 @@ def check_cli(context):
         "init", "validate", "append", "replay", "status",
         "decide-validation-retry", "bind-prediction",
         "bind-verification-contract",
-        "observe-pipeline", "observe-review", "export-review-contributions",
+        "observe-pipeline", "reconcile-legacy-browser", "observe-review",
+        "export-review-contributions",
         "compare", "metrics", "run-cost-summary", "emit-cost-summary",
         "openrouter-usage",
         "lane-input-bytes", "record-attempt",
@@ -635,6 +641,19 @@ def check_cli(context):
             "compare", "--state-dir", root,
             "--authoritative-receipts", RECEIPTS / "pipeline-codex.json",
             "--output", root / "parity.json",
+        )
+        legacy_receipts = root / "pipeline-legacy-browser-recovery.json"
+        legacy_receipts.write_text(
+            (RECEIPTS / "pipeline-legacy-browser-recovery.json").read_text(
+                encoding="utf-8",
+            ),
+            encoding="utf-8",
+        )
+        successful(
+            "reconcile-legacy-browser", "--events", legacy_receipts,
+            "--target-sequence", "1",
+            "--occurred-at", "2026-01-01T00:03:00Z",
+            "--authoritative-receipt", "authoritative-receipts.json",
         )
 
         review_run = initialize("review-1")

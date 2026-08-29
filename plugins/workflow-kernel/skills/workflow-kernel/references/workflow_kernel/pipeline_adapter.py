@@ -8,19 +8,23 @@ from typing import Iterable, Mapping, Optional, Tuple
 
 from ._translation import (
     COMMON_RECEIPT_FIELDS, EXECUTION_MODES, ChunkSpec, RunSpec, dual_key,
-    required_text, safe_reference, translate_receipts,
+    LEGACY_BROWSER_RECONCILIATION_REASON,
+    LEGACY_BROWSER_RECONCILIATION_STAGE,
+    canonical_observation_receipt_digest, required_text, safe_reference,
+    timezone_aware_timestamp, translate_receipts,
 )
 from .model import (
     BuilderSessionDecision, HostCapabilities, WorkflowClass, WorkflowContext,
 )
 from .schema import WorkflowEvent
+from .transitions import MAX_EVENT_ITEMS
 from .workflows import WorkflowTemplates
 
 
 __all__ = [
     "COMMON_RECEIPT_FIELDS", "EXECUTION_MODES", "ChunkSpec", "PIPELINE_STAGES",
     "RunSpec", "translate_builder_decision", "translate_manifest",
-    "translate_pipeline_receipts",
+    "build_legacy_browser_reconciliation", "translate_pipeline_receipts",
 ]
 
 PIPELINE_STAGES = frozenset({
@@ -30,6 +34,10 @@ PIPELINE_STAGES = frozenset({
     "requirements_cross_check", "terminal_reconciliation", "run_summary",
     "verification_contract_bound",
     "attempt_usage", "browser_recovery",
+    # Closed retained identities emitted by the historical Pipeline ledger.
+    "chunk", "run", "shadow_observation", "shadow_comparison", "metrics",
+    "cost_summary",
+    LEGACY_BROWSER_RECONCILIATION_STAGE,
 })
 _RUN_ID_SEPARATORS = re.compile(r"[^a-z0-9]+")
 _EXACT_COMMIT = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})\Z")
@@ -229,7 +237,59 @@ def translate_pipeline_receipts(
 ) -> Tuple[WorkflowEvent, ...]:
     return translate_receipts(
         receipts, PIPELINE_STAGES, isolation_default="per-chunk-worktree",
+        allow_legacy_browser_reconciliation=True,
     )
+
+
+def build_legacy_browser_reconciliation(
+    receipts: object, *, target_sequence: object, occurred_at: object,
+    authoritative_receipt: object,
+) -> tuple[dict, ...]:
+    """Append the one closed Pipeline legacy-browser reconciliation shape."""
+    if (
+        type(receipts) is not list
+        or len(receipts) >= MAX_EVENT_ITEMS
+        or type(target_sequence) is not int
+        or target_sequence < 0
+        or target_sequence >= len(receipts)
+        or type(occurred_at) is not str
+    ):
+        raise ValueError("invalid legacy browser reconciliation request")
+    target = receipts[target_sequence]
+    if type(target) is not dict:
+        raise ValueError("invalid legacy browser reconciliation target")
+    target_occurred_at = timezone_aware_timestamp(
+        target.get("occurred_at"), "legacy browser reconciliation target timestamp",
+    )
+    reconciliation_occurred_at = timezone_aware_timestamp(
+        occurred_at, "legacy browser reconciliation timestamp",
+    )
+    if reconciliation_occurred_at <= target_occurred_at:
+        raise ValueError("invalid legacy browser reconciliation timestamp")
+    target_run_id = required_text(target.get("run_id"), "target run id")
+    target_contract_digest = target.get(
+        "contract_digest", target.get("contractDigest"),
+    )
+    if type(target_contract_digest) is not str:
+        raise ValueError("invalid legacy browser reconciliation target")
+    reference = safe_reference(authoritative_receipt)
+    candidate = [*receipts, {
+        "run_id": target_run_id,
+        "sequence": len(receipts),
+        "stage": LEGACY_BROWSER_RECONCILIATION_STAGE,
+        "status": "recorded",
+        "occurred_at": occurred_at,
+        "authoritative_receipt": reference,
+        "contract_digest": target_contract_digest,
+        "target_run_id": target_run_id,
+        "target_sequence": target_sequence,
+        "target_stage": "browser_recovery",
+        "target_receipt_digest": canonical_observation_receipt_digest(target),
+        "target_contract_digest": target_contract_digest,
+        "reconciliation_reason": LEGACY_BROWSER_RECONCILIATION_REASON,
+    }]
+    translate_pipeline_receipts(candidate)
+    return tuple(candidate)
 
 
 def translate_builder_decision(
