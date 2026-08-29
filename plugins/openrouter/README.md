@@ -50,6 +50,18 @@ High-consequence security completion still requires a reviewer family different 
 
 Every live caller selects one coherent installed plugin root with workflow-kernel `resolve-plugin-bundle`, then derives its wrapper, policy, boundary, protocols, and templates from that root. Semantic version wins over mtime; the active host breaks only equal-version ties. Durable receipts keep the version, cache class, and reason, never the absolute home path.
 
+## Benchmark evidence
+
+The manual `depot-role-v2` suite covers all nine roles with two distinct cases
+each. It keeps raw and normalized output, digest-bound evaluator revisions,
+confirmed identity provenance, and stage-attributed failures. Screens discover
+opportunities only; they do not change routing. Promotion requires three
+comparable successful attempts on every applicable distinct case plus the
+existing production and policy gates. Benchmark-owned faults have no model
+conclusion and must be repaired before more evidence is collected. Validated
+quality and contextual efficiency lead interpretation; provider spend and
+access remain separate guardrails.
+
 ## Requirements
 
 - `OPENROUTER_API_KEY` or a validated `OPENROUTER_API_KEY_FILE` is required for every live wrapper transmission and activates eligible configured-key lanes.
