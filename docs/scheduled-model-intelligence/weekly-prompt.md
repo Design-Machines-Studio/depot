@@ -182,15 +182,7 @@ the next call or the measured sum reaches $10. Never substitute list price for
 provider-reported billed cost. Use this exact rollup after each paid attempt:
 
 ```sh
-find "$WEEK_ROOT/openrouter" -type d -name 'run-*' -exec sh -c '
-  for attempt_dir do
-    jq -e "(.usage.cost | type) == \"number\" and .usage.cost >= 0" \
-      "$attempt_dir/receipt.json" >/dev/null || {
-        printf "missing provider-billed cost: %s\n" "$attempt_dir" >&2
-        exit 1
-      }
-  done
-' sh {} + || {
+rtk ./tools/validate-paid-benchmark-costs.sh "$WEEK_ROOT/openrouter" || {
   printf 'weekly benchmark spend telemetry is incomplete; stopping paid calls\n' \
     > "$PAID_STOP"
   exit 1

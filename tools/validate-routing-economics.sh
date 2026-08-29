@@ -8,6 +8,7 @@ MATRIX="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-mat
 WRAPPER="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"
 WEEKLY="$ROOT/docs/scheduled-model-intelligence/weekly-prompt.md"
 LATEST="$ROOT/docs/model-intelligence/latest.json"
+PAID_COST_CHECK="$ROOT/tools/validate-paid-benchmark-costs.sh"
 failures=0
 
 check() {
@@ -57,7 +58,7 @@ check 'Pipeline postmortem reports roles and keeps exact identity private' sh -c
 check 'weekly benchmark procedure stops faults, partial spend, and identity leakage' sh -c \
   "grep -Fq 'recorded as nomination-only and not as runnable targets' '$WEEKLY' && \
    grep -Fq 'stop all native and OpenRouter benchmark' '$WEEKLY' && \
-   grep -Fq 'find \"\$WEEK_ROOT/openrouter\" -type d -name' '$WEEKLY' && \
+   grep -Fq './tools/validate-paid-benchmark-costs.sh \"\$WEEK_ROOT/openrouter\"' '$WEEKLY' && \
    grep -Fq 'paid-calls.stopped' '$WEEKLY' && \
    grep -Fq '> \"\$PAID_STOP\"' '$WEEKLY' && \
    ! grep -Eq '^[[:space:]]*break([[:space:]]|$)' '$WEEKLY' && \
@@ -66,16 +67,13 @@ check 'weekly benchmark procedure stops faults, partial spend, and identity leak
 check 'paid receipt gate rejects partial cost coverage' sh -c '
   fixture="$(mktemp -d)" || exit 1
   trap '\''rm -rf -- "$fixture"'\'' EXIT
-  mkdir -p "$fixture/openrouter/model/case/run-1" "$fixture/openrouter/model/case/run-2"
+  mkdir -p "$fixture/openrouter/model/case/run-1"
   printf '\''{"usage":{"cost":0.25}}\n'\'' > "$fixture/openrouter/model/case/run-1/receipt.json"
+  "$1" "$fixture/openrouter" || exit 1
+  mkdir -p "$fixture/openrouter/model/case/run-2"
   printf '\''{"usage":{}}\n'\'' > "$fixture/openrouter/model/case/run-2/receipt.json"
-  ! find "$fixture/openrouter" -type d -name '\''run-*'\'' -exec sh -c '\''
-    for attempt_dir do
-      jq -e "(.usage.cost | type) == \"number\" and .usage.cost >= 0" \
-        "$attempt_dir/receipt.json" >/dev/null || exit 1
-    done
-  '\'' sh {} +
-'
+  ! "$1" "$fixture/openrouter" 2>/dev/null
+' sh "$PAID_COST_CHECK"
 
 check 'live model-intelligence report uses v2 no-conclusion semantics' sh -c \
   "jq -e '.schema_version == 2 and (.quality_efficiency.roles | length) == 9 and .benchmarks.routing_conclusion == \"no routing change justified\"' '$LATEST' >/dev/null && \
