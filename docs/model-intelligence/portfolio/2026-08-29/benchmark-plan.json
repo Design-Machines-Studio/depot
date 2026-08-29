@@ -1,0 +1,33 @@
+{
+  "schemaVersion": 1,
+  "mode": "full-matrix-portfolio-audit",
+  "runDate": "2026-08-29",
+  "sourceRef": "origin/main",
+  "sourceCommit": "f0221f6a9e083385ea1114ffd8524b8a0626ad46",
+  "suiteId": "depot-role-v1",
+  "catalogObservedAt": "2026-08-29T08:07:31+08:00",
+  "screenPolicy": "one retained attempt for each routed incumbent or canary with an applicable sealed case",
+  "advancePolicy": "three attempts only after parsed 100/100 output, mandatory assertions, no model fallback, and plausible duration/cost",
+  "paidStopPolicy": "stop on first provider refusal; report measured provider-billed cost after every paid call",
+  "providerGuardrail": {
+    "limit": null,
+    "limitRemaining": null,
+    "limitReset": null
+  },
+  "screens": [
+    {"order":1,"role":"architect","caseId":"assembly-next-chunk","transport":"claude-cli","model":"fable","routingClass":"routed-incumbent"},
+    {"order":2,"role":"architect","caseId":"assembly-next-chunk","transport":"codex-cli","model":"gpt-5.6-sol","routingClass":"canary"},
+    {"order":3,"role":"architect","caseId":"assembly-next-chunk","transport":"claude-cli","model":"opus","routingClass":"canary"},
+    {"order":4,"role":"architect","caseId":"assembly-next-chunk","transport":"openrouter","model":"qwen/qwen3.8-max","routingClass":"canary"},
+    {"order":5,"role":"builder-fast","caseId":"pipeline-legacy-translation","transport":"openrouter","model":"deepseek/deepseek-v4-flash-0731","routingClass":"routed-incumbent"},
+    {"order":6,"role":"builder-fast","caseId":"pipeline-legacy-translation","transport":"codex-cli","model":"gpt-5.6-luna","routingClass":"canary"},
+    {"order":7,"role":"review-fast","caseId":"review-zero-deferral","transport":"openrouter","model":"deepseek/deepseek-v4-flash-0731","routingClass":"routed-incumbent"},
+    {"order":8,"role":"review-fast","caseId":"review-zero-deferral","transport":"codex-cli","model":"gpt-5.6-luna","routingClass":"canary"}
+  ],
+  "unsealedRoles": ["plan-critic","builder-deep","review-deep","security-review","research-fast","editorial"],
+  "newNomination": {
+    "model":"tencent/hy4-preview",
+    "canonicalModel":"tencent/hy4-preview-20260827",
+    "disposition":"admission-worthy nomination only; not in matrix or role policy; no call"
+  }
+}

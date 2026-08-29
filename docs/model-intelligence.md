@@ -10,6 +10,13 @@ they are interchangeable:
 3. Production evidence: Workflow Kernel `metrics.json` and
    `run-cost-summary.json` artifacts from actual Pipeline and dm-review runs.
 
+The role-policy portfolio layer is documented in
+`docs/model-intelligence/portfolio-benchmark.md`. Its machine-readable contract
+is `depot-role-portfolio.json`: every report reconstructs the complete
+model-role grid even when only changed or decision-relevant cells receive new
+calls. Monthly full audits provide breadth; weekly maintenance provides
+freshness.
+
 Public benchmarks and OpenRouter rankings nominate candidates. They do not
 promote models. Native subscription runs retain their marginal-cost advantage,
 while API-equivalent pricing makes their opportunity cost visible.
@@ -110,3 +117,17 @@ python3 tests/test_model_intelligence.py -v
 
 Run `./tools/validate-composition.sh --all` before committing a matrix, policy,
 plugin-version, or generated-manifest change.
+
+## T3 portfolio prompts
+
+- `docs/scheduled-model-intelligence/full-matrix-prompt.md` runs the monthly
+  complete portfolio audit.
+- `docs/scheduled-model-intelligence/matrix-maintenance-prompt.md` runs the
+  bounded weekly maintenance loop.
+- `docs/scheduled-model-intelligence/weekly-prompt.md` remains the detailed
+  controlled benchmark and routing gate shared by both modes.
+
+Raw candidate outputs, private source excerpts, provider receipts, key-state
+files, and stderr remain below `/home/ned/benchmark-results`. Commit reusable
+contracts, source selectors, hashes, content-free grids, aggregate evidence,
+and routing-decision ledgers only.

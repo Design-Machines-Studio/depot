@@ -4,12 +4,27 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNNER="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/depot-role-benchmark.sh"
 SUITE="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/depot-role-benchmark-suite.json"
+PORTFOLIO="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/depot-role-portfolio.json"
+ROLE_POLICY="$ROOT/plugins/model-router/skills/model-router/references/role-policy.json"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/depot-role-benchmark.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 pass=0
 assert() { "$@" >/dev/null || { printf 'FAIL: %s\n' "$*" >&2; exit 1; }; pass=$((pass+1)); }
 
 assert test -x "$RUNNER"
+assert jq -e '.schemaVersion == 1 and .portfolioId == "depot-role-portfolio-v1"' "$PORTFOLIO"
+assert jq -e --slurpfile policy "$ROLE_POLICY" '
+  ([.roles[].id] | sort) == ($policy[0].roles | keys | sort)
+' "$PORTFOLIO"
+assert jq -e --slurpfile suite "$SUITE" '
+  ([.roles[].closedCases[]] - [$suite[0].cases[].id]) | length == 0
+' "$PORTFOLIO"
+assert jq -e '
+  ([.cases[].id] | length) == ([.cases[].id] | unique | length)
+  and all(.cases[]; (.roles | length) > 0)
+  and (([.roles[].prototypeCases[]] - [.cases[].id]) | length == 0)
+  and any(.roleGaps[]; .proposedRole == "frontend-builder")
+' "$PORTFOLIO"
 assert sh -c "[ \"\$('$RUNNER' --list | wc -l | tr -d ' ')\" = 4 ]"
 "$RUNNER" --prepare --case pipeline-legacy-translation --output-file "$TMP/prompt"
 assert grep -Fq 'provider-neutral contract' "$TMP/prompt"

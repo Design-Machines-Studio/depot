@@ -265,7 +265,8 @@ printf '%s\n' '{"selected_root":"~/.codex/plugins/cache/depot/openrouter/1.19.1"
 STUB
 cat > "$FAKE_REFS/delegation-boundary.sh" <<'STUB'
 #!/usr/bin/env bash
-dirname "${BASH_SOURCE[0]}" >> "$FAKE_BUNDLE_LOG"
+refs="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+printf '%s\n' "$refs" >> "$FAKE_BUNDLE_LOG"
 [ "${FAKE_BOUNDARY_OUTCOME:-allow}" = allow ]
 STUB
 cp "$ROOT/plugins/openrouter/skills/openrouter-delegate/references/openrouter-credential.sh" \

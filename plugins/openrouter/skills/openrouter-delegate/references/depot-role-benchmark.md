@@ -1,9 +1,17 @@
 # Depot Role Benchmark
 
-This is a small project-specific complement to public coding-agent benchmarks,
-not a replacement for them. It measures four contracts Depot actually depends
-on: Pipeline manifest translation, review severity with zero deferral, bounded
-Assembly chunk selection, and an exact owned mechanical edit.
+This is the closed-case execution layer of Depot's model-role portfolio, not a
+replacement for public coding-agent benchmarks. It measures four contracts
+Depot actually depends on: Pipeline manifest translation, review severity with
+zero deferral, bounded Assembly chunk selection, and an exact owned mechanical
+edit.
+
+`depot-role-portfolio.json` adds the complete role grid, Baseplate prototype
+contracts, case-status vocabulary, cadence, artifact boundary, and promotion
+policy. `depot-role-baseplate-cases.md` explains the repository-grounded
+scenarios without publishing private source excerpts or raw model output. A
+prototype is not runnable promotion evidence until its complete task,
+evidence-builder, deterministic scorer, and receipt contract are sealed.
 
 The suite is manual and one-candidate-at-a-time. It never schedules a sweep,
 chooses a model for an orchestrator, or uses another model as a judge. Each

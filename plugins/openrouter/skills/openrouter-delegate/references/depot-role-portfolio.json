@@ -1,0 +1,208 @@
+{
+  "schemaVersion": 1,
+  "portfolioId": "depot-role-portfolio-v1",
+  "rolePolicy": "../../../model-router/skills/model-router/references/role-policy.json",
+  "closedSuite": "depot-role-benchmark-suite.json",
+  "sourceOfTruth": {
+    "models": "Fresh OpenRouter catalog plus exact native identities admitted by role-policy.json.",
+    "roles": "role-policy.json; this portfolio must neither invent nor omit a routed role.",
+    "cases": "Closed cases in depot-role-benchmark-suite.json plus the explicitly classified Baseplate prototypes below.",
+    "results": "Private immutable receipts below /home/ned/benchmark-results; Git contains only contracts, hashes, grids, and content-free aggregate evidence."
+  },
+  "cadence": {
+    "maintenance": {
+      "schedule": "weekly",
+      "scope": "Reconstruct every model-role cell; call only changed, stale, rotating-incumbent, or unresolved high-value cells."
+    },
+    "fullAudit": {
+      "schedule": "first Sunday of each month",
+      "scope": "Screen every eligible model-role cell with a sealed case, then deepen only decision-relevant candidates."
+    }
+  },
+  "cellStates": [
+    "ineligible",
+    "catalogued-untested",
+    "stale",
+    "screen-failed",
+    "screened",
+    "benchmarked",
+    "canary",
+    "incumbent",
+    "promotion-blocked"
+  ],
+  "caseStatuses": {
+    "closed-runnable": "Integrated with the standard deterministic runner.",
+    "prototype-sealed": "Prompt and deterministic assertions are preserved, but evidence materialization is not yet integrated with the standard runner.",
+    "prototype-unsealed": "A prior experiment exists, but its complete prompt/scorer contract was not retained well enough to claim reproducibility.",
+    "planned-gap": "Required portfolio coverage with no retained benchmark evidence yet."
+  },
+  "roles": [
+    {
+      "id": "architect",
+      "closedCases": ["assembly-next-chunk"],
+      "prototypeCases": ["baseplate-federation-architecture"],
+      "coverage": "partial",
+      "gap": "The closed case is too small to prove federated architecture, rollout, and operational judgment."
+    },
+    {
+      "id": "plan-critic",
+      "closedCases": [],
+      "prototypeCases": ["baseplate-federation-plan-critique"],
+      "coverage": "missing",
+      "gap": "No sealed case checks whether a critic catches protocol, trust, update, rollback, and team-size failures in another plan."
+    },
+    {
+      "id": "builder-fast",
+      "closedCases": ["pipeline-legacy-translation", "mechanical-owned-edit"],
+      "prototypeCases": [],
+      "coverage": "closed",
+      "gap": "Current cases prove structured mechanical output, not repository edits or validation."
+    },
+    {
+      "id": "builder-deep",
+      "closedCases": [],
+      "prototypeCases": ["baseplate-scoped-db-implementation", "baseplate-live-wires-datastar-ui"],
+      "coverage": "missing",
+      "gap": "Prior scoped-DB output was retained, but the exact task/scorer was not made reproducible; frontend implementation remains untested."
+    },
+    {
+      "id": "review-fast",
+      "closedCases": ["review-zero-deferral"],
+      "prototypeCases": [],
+      "coverage": "closed",
+      "gap": "The closed case measures classification, not attributable findings on a real patch."
+    },
+    {
+      "id": "review-deep",
+      "closedCases": [],
+      "prototypeCases": ["baseplate-scoped-db-deep-review"],
+      "coverage": "missing",
+      "gap": "No sealed repository review measures correct findings, false positives, or verification contribution."
+    },
+    {
+      "id": "security-review",
+      "closedCases": [],
+      "prototypeCases": ["baseplate-federation-security-review"],
+      "coverage": "missing",
+      "gap": "No sealed case tests trust, nonce, SSRF, grant, key-change, revocation, and independent-family sign-off boundaries."
+    },
+    {
+      "id": "research-fast",
+      "closedCases": [],
+      "prototypeCases": ["baseplate-stack-compatibility-research"],
+      "coverage": "prototype",
+      "gap": "The evidence-bound scorer is reproducible, but source discovery and the standard runner are not covered."
+    },
+    {
+      "id": "editorial",
+      "closedCases": [],
+      "prototypeCases": ["baseplate-federated-release-note"],
+      "coverage": "missing",
+      "gap": "No sealed case measures technically exact, operator-appropriate release communication."
+    }
+  ],
+  "cases": [
+    {
+      "id": "baseplate-scoped-db-implementation",
+      "roles": ["builder-deep"],
+      "status": "prototype-unsealed",
+      "sourceRevision": "f527fdf4b69725d73ed4ba01a3b4903a6b694211",
+      "sourceSelectors": [
+        "AGENTS.md:1-150",
+        "internal/module/scoped_db.go",
+        "internal/module/scoped_db_test.go"
+      ],
+      "measurement": "Produce a bounded Go patch and validate exact repository behavior without changing unrelated contracts.",
+      "missingProof": "The original exact prompt, fixture state, and deterministic scorer were not retained as a single sealed artifact."
+    },
+    {
+      "id": "baseplate-federation-architecture",
+      "roles": ["architect"],
+      "status": "prototype-unsealed",
+      "sourceRevision": "f527fdf4b69725d73ed4ba01a3b4903a6b694211",
+      "promptSha256": "1e749af4b2ada634f13a588b6f6435218a49826f80ebc268e57e1baf0a5345d1",
+      "sourceSelectors": [
+        "AGENTS.md:1-150",
+        "docs/adr-006-member-identity-federation.md",
+        "docs/adr-014-update-system.md",
+        "docs/wiki/Federation.md",
+        "internal/baseplate/federation/capabilities.go",
+        "internal/baseplate/federation/federation_http.go",
+        "internal/baseplate/federation/model.go",
+        "internal/baseplate/federation/service_assembly_info.go",
+        "internal/baseplate/federation/service_trust_delivery.go",
+        "internal/update/health.go",
+        "internal/update/handoff.go",
+        "internal/update/orchestrator.go"
+      ],
+      "measurement": "Choose and defend a pull, push, or hybrid compatibility-observation design for sovereign 4-50-user installs, including protocol evolution, trust, offline behavior, update truth, rollback, observability, and a two-install verification matrix.",
+      "closedGateCount": 7,
+      "missingProof": "The task hash and three-attempt outputs exist, but the exact scorer and evidence-builder were not retained beside the run."
+    },
+    {
+      "id": "baseplate-stack-compatibility-research",
+      "roles": ["research-fast"],
+      "status": "prototype-sealed",
+      "sourceRevision": "f527fdf4b69725d73ed4ba01a3b4903a6b694211",
+      "promptSha256": "5e4eb127192e324cccbefd13272511d3203acd3d26f9d7e0141c28090a2f7864",
+      "scorerSha256": "61a293015cd9278867318d0303e15dff6e5ef76a6d49932ae0a660f9ee4ef799",
+      "sourceSelectors": [
+        "go.mod",
+        "Dockerfile",
+        "Makefile",
+        ".github/workflows",
+        "official Templ documentation",
+        "official Datastar Go documentation",
+        "official NATS JetStream documentation"
+      ],
+      "measurement": "Produce an evidence-bound compatibility recommendation for exact Go, Templ, Datastar Go, and NATS/JetStream pins while rejecting two synthetic unsupported claims.",
+      "missingProof": "Tool-enabled source discovery and standard-runner integration are absent."
+    },
+    {
+      "id": "baseplate-federation-plan-critique",
+      "roles": ["plan-critic"],
+      "status": "planned-gap",
+      "derivedFrom": "baseplate-federation-architecture",
+      "measurement": "Review a seeded federation architecture plan and retain every protocol, trust, update, rollback, operability, and scope finding with calibrated severity."
+    },
+    {
+      "id": "baseplate-scoped-db-deep-review",
+      "roles": ["review-deep"],
+      "status": "planned-gap",
+      "derivedFrom": "baseplate-scoped-db-implementation",
+      "measurement": "Review a seeded Go patch for scoping escape, transaction misuse, SQL behavior, concurrency, test gaps, and unsupported findings."
+    },
+    {
+      "id": "baseplate-federation-security-review",
+      "roles": ["security-review"],
+      "status": "planned-gap",
+      "derivedFrom": "baseplate-federation-architecture",
+      "measurement": "Find seeded trust, nonce, SSRF, grant, key-change, revocation, data-minimization, and family-independence defects without inventing vulnerabilities."
+    },
+    {
+      "id": "baseplate-live-wires-datastar-ui",
+      "roles": ["builder-deep"],
+      "status": "planned-gap",
+      "measurement": "Implement a bounded Templ, Datastar, and Live Wires interaction with generated-code, browser, accessibility, and repository validation gates."
+    },
+    {
+      "id": "baseplate-federated-release-note",
+      "roles": ["editorial"],
+      "status": "planned-gap",
+      "measurement": "Write an operator-facing release note that distinguishes running, staged, failed, rolled-back, and deliberately downgraded versions across federated installs."
+    }
+  ],
+  "roleGaps": [
+    {
+      "proposedRole": "frontend-builder",
+      "reason": "No current role directly owns Templ, Datastar, Live Wires, browser, responsive, and accessibility implementation. Builder-deep is only a temporary measurement host.",
+      "promotionBoundary": "Do not add the role from benchmark preference alone; first prove a distinct routing need and update role-policy consumers and validators."
+    }
+  ],
+  "promotionPolicy": {
+    "screen": "One retained successful attempt is nomination evidence only.",
+    "controlled": "Three retained successful attempts on every applicable closed case, no model fallback, no case median below 90, and complete compatible claimed-axis coverage.",
+    "canary": "A new paid candidate enters only as a later rung.",
+    "head": "Role-head movement additionally requires at least five attributable production attempts with acceptable completion, fallback, retry, and first-pass validation evidence."
+  }
+}
