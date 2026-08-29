@@ -1063,6 +1063,194 @@ class ModelIntelligenceTest(unittest.TestCase):
         self.assertEqual(rejections["declared normalized output digest mismatch"], 1)
         self.assertEqual(rejections["declared normalized output digest syntax invalid"], 1)
 
+    def test_production_canary_stays_separate_and_uses_closed_ledger_states(self) -> None:
+        canary_root = self.root / "canaries"
+        work_units = {
+            "architect": "canary-architect-routing-boundary",
+            "research-fast": "canary-research-claim-map",
+            "review-fast": "canary-review-fast-false-positive",
+        }
+
+        def write_validation(
+            name: str,
+            *,
+            role: str,
+            candidate: str,
+            transport: str,
+            comparable: bool,
+            conclusion: str | None,
+            benchmark_fault: bool = False,
+            evidence_state: str = "comparable-but-insufficient",
+            false_positives: int | None = None,
+            measured_cost: float | None = None,
+            first_pass_validity: bool | None = None,
+        ) -> None:
+            directory = canary_root / name
+            directory.mkdir(parents=True)
+            artifact = {
+                "schemaVersion": 1,
+                "evidenceClass": "production-canary-validation",
+                "attemptId": name,
+                "role": role,
+                "requestedCandidate": candidate,
+                "transport": transport,
+                "servedIdentity": candidate,
+                "benchmarkFault": benchmark_fault,
+                "faultOwner": "fixture" if benchmark_fault else None,
+                "faultCode": "broken-fixture" if benchmark_fault else None,
+                "comparable": comparable,
+                "identityConfirmed": not benchmark_fault,
+                "instrumentationComplete": True,
+                "paidCostComplete": True,
+                "modelConclusion": conclusion,
+                "evidenceState": evidence_state,
+                "diagnostics": [],
+                "quality": {
+                    "firstPassValidity": conclusion == "valid" if first_pass_validity is None else first_pass_validity,
+                    "finalValidity": conclusion == "valid",
+                    "mandatoryAssertions": [{"id": "strict-json-object", "pass": True}],
+                    "usefulFindings": 1 if role.startswith("review-") else None,
+                    "falsePositives": false_positives,
+                    "correctionCount": 0,
+                    "validationAttempts": 1,
+                },
+                "timing": {
+                    "startedAt": "2026-08-29T00:00:00Z",
+                    "firstUsefulAt": "2026-08-29T00:00:01Z",
+                    "validAt": "2026-08-29T00:00:02Z" if conclusion == "valid" else None,
+                    "endedAt": "2026-08-29T00:00:02Z",
+                    "timeToFirstUsefulSeconds": 1,
+                    "timeToValidSeconds": 2 if conclusion == "valid" else None,
+                    "totalDurationSeconds": 2,
+                },
+                "telemetry": {
+                    "toolCallsByClass": {
+                        "repositoryRead": 1,
+                        "repositoryWrite": 0,
+                        "validation": 1,
+                        "other": 0,
+                    },
+                    "tokens": {"input": None, "output": None, "reasoning": None},
+                    "contextCoverage": {
+                        "applicable": True, "observed": 1, "total": 1,
+                        "rate": 1, "reason": "fixture",
+                    },
+                    "toolCoverage": {
+                        "applicable": True, "observed": 1, "total": 1,
+                        "rate": 1, "reason": "fixture",
+                    },
+                },
+                "bindings": {
+                    "workUnitId": work_units[role],
+                    "workUnitRevision": 1,
+                    "workUnitDigest": "sha256:" + "a" * 64,
+                    "taskFixtureDigest": "sha256:" + "b" * 64,
+                    "validationContractDigest": "sha256:" + "c" * 64,
+                    "sealedSuiteId": "depot-role-v2",
+                    "sealedCaseId": "fixture-case",
+                    "sealedCaseDigest": "sha256:" + "d" * 64,
+                    "sealedScorerDigest": "sha256:" + "e" * 64,
+                    "rolePolicyDigest": "sha256:" + "f" * 64,
+                    "pluginVersions": {"openrouter": "1.20.0", "model-router": "0.4.2"},
+                },
+                "repository": {
+                    "identity": "Design-Machines-Studio/depot",
+                    "baseRevision": "5" * 40,
+                    "headRevision": "5" * 40,
+                    "cleanBase": True,
+                    "patchDigest": "sha256:" + "0" * 64,
+                    "changedFileCount": 0,
+                },
+                "cost": {
+                    "currency": "USD",
+                    "maximumBoundUsd": 0.5 if measured_cost is not None else None,
+                    "measuredUsd": measured_cost,
+                    "receiptCoverage": "measured" if measured_cost is not None else "subscription",
+                },
+                "artifacts": [{
+                    "kind": "diagnostic", "path": "fixture.json",
+                    "sha256": "sha256:" + "1" * 64, "bytes": 2,
+                }],
+            }
+            (directory / "canary-validation.json").write_text(json.dumps(artifact))
+
+        for index in range(5):
+            write_validation(
+                f"paid-{index}", role="research-fast",
+                candidate="google/gemini-3.7-flash", transport="openrouter",
+                comparable=True, conclusion="valid", measured_cost=0.01,
+                first_pass_validity=index < 3,
+            )
+        write_validation(
+            "incompatible", role="research-fast", candidate="gpt-5.6-luna",
+            transport="codex-cli", comparable=False, conclusion=None,
+            evidence_state="incompatible",
+        )
+        write_validation(
+            "fault", role="architect", candidate="fable", transport="claude-cli",
+            comparable=False, conclusion=None, benchmark_fault=True,
+            evidence_state="benchmark-faulted",
+        )
+        write_validation(
+            "false-positive", role="review-fast", candidate="deepseek/deepseek-v4-flash-0731",
+            transport="openrouter", comparable=True, conclusion="invalid",
+            false_positives=1, measured_cost=0.02,
+        )
+
+        valid_artifact = json.loads((canary_root / "paid-0" / "canary-validation.json").read_text())
+        malformed_variants = {
+            "malformed-quality": valid_artifact | {"quality": []},
+            "extra-top-level": valid_artifact | {"unexpected": True},
+            "contradictory-state": valid_artifact | {
+                "benchmarkFault": True,
+                "faultOwner": None,
+                "faultCode": None,
+            },
+            "malformed-coverage": valid_artifact | {
+                "telemetry": valid_artifact["telemetry"] | {
+                    "contextCoverage": {
+                        "applicable": True, "observed": 2, "total": 1,
+                        "rate": 2, "reason": "invalid",
+                    }
+                }
+            },
+        }
+        for name, artifact in malformed_variants.items():
+            directory = canary_root / name
+            directory.mkdir()
+            (directory / "canary-validation.json").write_text(json.dumps(artifact))
+
+        output = self.root / "canary-report.json"
+        markdown = self.root / "canary-report.md"
+        completed = self.run_tool(
+            "report", "--run-root", str(self.root / "no-runs"),
+            "--benchmark-root", str(self.root / "no-benchmarks"),
+            "--canary-root", str(canary_root),
+            "--observed-at", "2026-08-29T09:00:00+08:00",
+            "--json-output", str(output), "--markdown-output", str(markdown),
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        report = json.loads(output.read_text())
+        canary = report["production_canary"]
+        self.assertEqual(report["benchmarks"]["attempts"], 0)
+        self.assertEqual(report["production"]["metrics_artifacts"], 0)
+        paid = next(group for group in canary["groups"] if group["requested_candidate"] == "google/gemini-3.7-flash")
+        self.assertEqual(paid["evidence_state"], "gate-clearing")
+        self.assertEqual(paid["valid_attempts"], 5)
+        self.assertEqual(paid["first_pass_rate"], 0.6)
+        self.assertEqual(paid["coverage"]["input_tokens"], {"recorded": 0, "comparable_attempts": 5, "rate": 0.0})
+        review = next(group for group in canary["groups"] if group["role"] == "review-fast")
+        self.assertEqual(review["false_positives"], 1)
+        self.assertEqual(review["final_valid_rate"], 0)
+        self.assertEqual(len(canary["benchmark_faults"]), 1)
+        self.assertEqual(len(canary["malformed_artifacts"]), 4)
+        self.assertIsNone(canary["benchmark_faults"][0]["model_conclusion"])
+        self.assertTrue(all(not row["candidate_order_changed"] for row in canary["routing_ledger"]))
+        self.assertEqual(canary["routing_conclusion"], "no routing change justified")
+        rendered = markdown.read_text()
+        self.assertIn("## Production-canary evidence (separate)", rendered)
+        self.assertIn("does not enter sealed v2 aggregates", rendered)
+
 
 class NativeDepotBenchmarkTest(unittest.TestCase):
     def setUp(self) -> None:
