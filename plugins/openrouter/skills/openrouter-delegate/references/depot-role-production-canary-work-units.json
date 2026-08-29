@@ -1,0 +1,114 @@
+{
+  "schemaVersion": 1,
+  "suiteId": "depot-role-production-canary-v1",
+  "harnessVersion": 1,
+  "repositoryIdentity": "Design-Machines-Studio/depot",
+  "sealedSuite": "depot-role-benchmark-suite.json",
+  "rolePolicy": "../../../../model-router/skills/model-router/references/role-policy.json",
+  "limits": {
+    "contextBytes": 65536,
+    "artifactBytes": 1048576,
+    "patchBytes": 131072,
+    "maximumCorrections": 2,
+    "paidMaximumCorrections": 0,
+    "paidMaximumUsd": 1.0,
+    "gateClearingComparableValidAttempts": 5
+  },
+  "workUnits": [
+    {
+      "id": "canary-architect-routing-boundary",
+      "revision": 1,
+      "role": "architect",
+      "sealedCaseId": "architect-routing-tradeoff",
+      "contextPaths": ["docs/model-intelligence.md", "plugins/model-router/skills/model-router/references/role-policy.json"],
+      "repositoryValidator": "no-owned-edit",
+      "toolCoverage": {"applicable": true, "reason": "Repository discovery distinguishes a production canary from the sealed prompt."},
+      "task": "Inspect the bound Depot sources, preserve current routing ownership, and return the sealed case output contract."
+    },
+    {
+      "id": "canary-plan-approved-scope",
+      "revision": 1,
+      "role": "plan-critic",
+      "sealedCaseId": "plan-approved-scope-audit",
+      "contextPaths": ["docs/model-intelligence/mi-canary-01-scope.md", "docs/model-intelligence.md"],
+      "repositoryValidator": "no-owned-edit",
+      "toolCoverage": {"applicable": true, "reason": "The critic must verify the approved repository scope."},
+      "task": "Inspect the approved scope and identify only the sealed omissions, scope creep, and preserved decisions."
+    },
+    {
+      "id": "canary-builder-fast-owned-edit",
+      "revision": 1,
+      "role": "builder-fast",
+      "sealedCaseId": "mechanical-owned-edit",
+      "contextPaths": ["AGENTS.md"],
+      "repositoryValidator": "builder-fast-owned-edit",
+      "toolCoverage": {"applicable": true, "reason": "The work unit requires one owned file edit and deterministic validation."},
+      "fixture": {"config/fixture.json": {"schemaVersion": 1, "enabled": false}},
+      "task": "Edit .depot-canary/config/fixture.json to the sealed expected content, validate it, and return the sealed case output contract."
+    },
+    {
+      "id": "canary-builder-deep-multifile",
+      "revision": 1,
+      "role": "builder-deep",
+      "sealedCaseId": "builder-multifile-repair",
+      "contextPaths": ["AGENTS.md", "plugins/openrouter/skills/openrouter-delegate/references/depot-role-benchmark.md"],
+      "repositoryValidator": "builder-deep-multifile",
+      "toolCoverage": {"applicable": true, "reason": "The work unit requires a two-file repair and retained validation."},
+      "fixture": {
+        "suite.json": {"coveredRoles": ["architect"]},
+        "test.json": {"expectedRoleCount": 1, "expectedCaseCount": 2}
+      },
+      "task": "Repair both files below .depot-canary exactly as the sealed case requires, validate them, and return the sealed case output contract."
+    },
+    {
+      "id": "canary-review-fast-false-positive",
+      "revision": 1,
+      "role": "review-fast",
+      "sealedCaseId": "review-false-positive-control",
+      "contextPaths": ["tools/test-openrouter-role-benchmark.sh", "plugins/openrouter/skills/openrouter-delegate/references/depot-role-benchmark.sh"],
+      "repositoryValidator": "no-owned-edit",
+      "toolCoverage": {"applicable": true, "reason": "The reviewer must inspect the actual scorer and its focused tests."},
+      "task": "Inspect the bounded scorer/test pair and return the sealed adjudicated findings without inventing a false positive."
+    },
+    {
+      "id": "canary-review-deep-cross-file",
+      "revision": 1,
+      "role": "review-deep",
+      "sealedCaseId": "review-cross-file-invariant",
+      "contextPaths": ["plugins/openrouter/skills/openrouter-delegate/references/depot-role-benchmark-suite.json", "plugins/openrouter/skills/openrouter-delegate/references/depot-role-benchmark.sh"],
+      "repositoryValidator": "no-owned-edit",
+      "toolCoverage": {"applicable": true, "reason": "The review crosses the suite declaration and scorer implementation."},
+      "task": "Check the cross-file case/scorer invariant and return the sealed finding contract with evidence."
+    },
+    {
+      "id": "canary-security-release-integrity",
+      "revision": 1,
+      "role": "security-review",
+      "sealedCaseId": "security-release-integrity",
+      "contextPaths": ["tools/check-release-preflight.sh", "plugins/openrouter/skills/openrouter-delegate/references/openrouter-wrapper.sh"],
+      "repositoryValidator": "no-owned-edit",
+      "toolCoverage": {"applicable": true, "reason": "The security role must inspect the real release and identity boundaries."},
+      "task": "Inspect the bounded release-integrity surfaces and return only the sealed exploitable findings."
+    },
+    {
+      "id": "canary-research-claim-map",
+      "revision": 1,
+      "role": "research-fast",
+      "sealedCaseId": "research-claim-source-map",
+      "contextPaths": ["plugins/model-router/skills/model-router/references/role-policy.json", "plugins/pipeline/references/routing-policy.json", "plugins/dm-review/skills/review/references/deployment-context.md"],
+      "repositoryValidator": "no-owned-edit",
+      "toolCoverage": {"applicable": true, "reason": "Native candidates can discover sources; external candidates receive the same bounded extracts."},
+      "task": "Verify the three repository claims against the bound sources and return the sealed claim-to-source map."
+    },
+    {
+      "id": "canary-editorial-release-note",
+      "revision": 1,
+      "role": "editorial",
+      "sealedCaseId": "editorial-release-note",
+      "contextPaths": ["docs/model-intelligence.md", "plugins/openrouter/README.md"],
+      "repositoryValidator": "no-owned-edit",
+      "toolCoverage": {"applicable": false, "reason": "The same bounded factual extracts are supplied to every editorial transport."},
+      "task": "Use only the bound release facts and return the sealed operator release-note contract."
+    }
+  ]
+}

@@ -1,0 +1,220 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.xyz/depot/depot-role-production-canary-attempt-v1.schema.json",
+  "title": "Depot role production-canary attempt",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion", "evidenceClass", "harnessVersion", "attemptId",
+    "repository", "bindings", "identity", "boundaries", "quality",
+    "timing", "telemetry", "cost", "artifacts", "outcome"
+  ],
+  "properties": {
+    "schemaVersion": {"const": 1},
+    "evidenceClass": {"const": "production-canary"},
+    "harnessVersion": {"const": 1},
+    "attemptId": {"type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{7,95}$"},
+    "repository": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["identity", "baseRevision", "headRevision", "cleanBase", "patchDigest", "changedFileCount"],
+      "properties": {
+        "identity": {"const": "Design-Machines-Studio/depot"},
+        "baseRevision": {"$ref": "#/$defs/commit"},
+        "headRevision": {"$ref": "#/$defs/commit"},
+        "cleanBase": {"type": "boolean"},
+        "patchDigest": {"$ref": "#/$defs/digest"},
+        "changedFileCount": {"type": "integer", "minimum": 0, "maximum": 64}
+      }
+    },
+    "bindings": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "workUnitId", "workUnitRevision", "workUnitDigest", "taskFixtureDigest",
+        "validationContractDigest", "sealedSuiteId", "sealedCaseId",
+        "sealedCaseDigest", "sealedScorerDigest", "rolePolicyDigest", "pluginVersions"
+      ],
+      "properties": {
+        "workUnitId": {"type": "string", "minLength": 1},
+        "workUnitRevision": {"type": "integer", "minimum": 1},
+        "workUnitDigest": {"$ref": "#/$defs/digest"},
+        "taskFixtureDigest": {"$ref": "#/$defs/digest"},
+        "validationContractDigest": {"$ref": "#/$defs/digest"},
+        "sealedSuiteId": {"const": "depot-role-v2"},
+        "sealedCaseId": {"type": "string", "minLength": 1},
+        "sealedCaseDigest": {"$ref": "#/$defs/digest"},
+        "sealedScorerDigest": {"$ref": "#/$defs/digest"},
+        "rolePolicyDigest": {"$ref": "#/$defs/digest"},
+        "pluginVersions": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["openrouter", "model-router"],
+          "properties": {
+            "openrouter": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"},
+            "model-router": {"type": "string", "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"}
+          }
+        }
+      }
+    },
+    "identity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["role", "requestedCandidate", "transport", "servedIdentity", "provider", "aliasResolution", "fallbackUsed"],
+      "properties": {
+        "role": {"$ref": "#/$defs/role"},
+        "requestedCandidate": {"type": "string", "minLength": 1, "maxLength": 128},
+        "transport": {"enum": ["codex-cli", "claude-cli", "openrouter"]},
+        "servedIdentity": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "provider": {"type": ["string", "null"], "minLength": 1, "maxLength": 128},
+        "aliasResolution": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["status", "allowedServedIdentities"],
+          "properties": {
+            "status": {"enum": ["exact", "mapped", "unmapped", "unknown"]},
+            "allowedServedIdentities": {
+              "type": "array", "maxItems": 16, "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1, "maxLength": 128}
+            }
+          }
+        },
+        "fallbackUsed": {"type": ["boolean", "null"]}
+      }
+    },
+    "boundaries": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["fixtureIntegrity", "evaluatorBinding", "validatorIntegrity", "repositoryIntegrity", "instrumentationComplete", "requiredToolAvailable", "harnessComplete"],
+      "properties": {
+        "fixtureIntegrity": {"type": "boolean"},
+        "evaluatorBinding": {"type": "boolean"},
+        "validatorIntegrity": {"type": "boolean"},
+        "repositoryIntegrity": {"type": "boolean"},
+        "instrumentationComplete": {"type": "boolean"},
+        "requiredToolAvailable": {"type": "boolean"},
+        "harnessComplete": {"type": "boolean"}
+      }
+    },
+    "quality": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["firstPassValidity", "finalValidity", "mandatoryAssertions", "usefulFindings", "falsePositives", "correctionCount", "validationAttempts"],
+      "properties": {
+        "firstPassValidity": {"type": ["boolean", "null"]},
+        "finalValidity": {"type": ["boolean", "null"]},
+        "mandatoryAssertions": {
+          "type": "array", "minItems": 1, "maxItems": 64,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["id", "pass"],
+            "properties": {
+              "id": {"type": "string", "minLength": 1, "maxLength": 128},
+              "pass": {"type": "boolean"}
+            }
+          }
+        },
+        "usefulFindings": {"type": ["integer", "null"], "minimum": 0},
+        "falsePositives": {"type": ["integer", "null"], "minimum": 0},
+        "correctionCount": {"type": ["integer", "null"], "minimum": 0, "maximum": 2},
+        "validationAttempts": {"type": ["integer", "null"], "minimum": 1, "maximum": 3}
+      }
+    },
+    "timing": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["startedAt", "firstUsefulAt", "validAt", "endedAt", "timeToFirstUsefulSeconds", "timeToValidSeconds", "totalDurationSeconds"],
+      "properties": {
+        "startedAt": {"$ref": "#/$defs/timestamp"},
+        "firstUsefulAt": {"anyOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]},
+        "validAt": {"anyOf": [{"$ref": "#/$defs/timestamp"}, {"type": "null"}]},
+        "endedAt": {"$ref": "#/$defs/timestamp"},
+        "timeToFirstUsefulSeconds": {"type": ["number", "null"], "minimum": 0},
+        "timeToValidSeconds": {"type": ["number", "null"], "minimum": 0},
+        "totalDurationSeconds": {"type": ["number", "null"], "minimum": 0}
+      }
+    },
+    "telemetry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["toolCallsByClass", "tokens", "contextCoverage", "toolCoverage"],
+      "properties": {
+        "toolCallsByClass": {
+          "type": ["object", "null"],
+          "additionalProperties": false,
+          "required": ["repositoryRead", "repositoryWrite", "validation", "other"],
+          "properties": {
+            "repositoryRead": {"type": "integer", "minimum": 0},
+            "repositoryWrite": {"type": "integer", "minimum": 0},
+            "validation": {"type": "integer", "minimum": 0},
+            "other": {"type": "integer", "minimum": 0}
+          }
+        },
+        "tokens": {
+          "type": "object", "additionalProperties": false,
+          "required": ["input", "output", "reasoning"],
+          "properties": {
+            "input": {"type": ["integer", "null"], "minimum": 0},
+            "output": {"type": ["integer", "null"], "minimum": 0},
+            "reasoning": {"type": ["integer", "null"], "minimum": 0}
+          }
+        },
+        "contextCoverage": {"$ref": "#/$defs/coverage"},
+        "toolCoverage": {"$ref": "#/$defs/coverage"}
+      }
+    },
+    "cost": {
+      "type": "object", "additionalProperties": false,
+      "required": ["currency", "maximumBoundUsd", "measuredUsd", "receiptCoverage"],
+      "properties": {
+        "currency": {"const": "USD"},
+        "maximumBoundUsd": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "measuredUsd": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "receiptCoverage": {"enum": ["measured", "subscription", "missing"]}
+      }
+    },
+    "artifacts": {
+      "type": "array", "minItems": 1, "maxItems": 16,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["kind", "path", "sha256", "bytes"],
+        "properties": {
+          "kind": {"enum": ["prompt", "output", "patch", "validation", "transport-receipt", "diagnostic"]},
+          "path": {"type": "string", "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+$", "maxLength": 240},
+          "sha256": {"$ref": "#/$defs/digest"},
+          "bytes": {"type": "integer", "minimum": 0, "maximum": 1048576}
+        }
+      }
+    },
+    "outcome": {
+      "type": "object", "additionalProperties": false,
+      "required": ["transportSuccess", "benchmarkFault", "faultOwner", "faultCode", "comparable", "modelConclusion", "evidenceState"],
+      "properties": {
+        "transportSuccess": {"type": "boolean"},
+        "benchmarkFault": {"type": "boolean"},
+        "faultOwner": {"enum": [null, "fixture", "evaluator", "validator", "repository", "instrumentation", "tool", "harness"]},
+        "faultCode": {"type": ["string", "null"], "maxLength": 128},
+        "comparable": {"type": "boolean"},
+        "modelConclusion": {"enum": [null, "valid", "invalid"]},
+        "evidenceState": {"enum": ["incompatible", "benchmark-faulted", "comparable-but-insufficient"]}
+      }
+    }
+  },
+  "$defs": {
+    "commit": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "timestamp": {"type": "string", "format": "date-time"},
+    "role": {"enum": ["architect", "plan-critic", "builder-fast", "builder-deep", "review-fast", "review-deep", "security-review", "research-fast", "editorial"]},
+    "coverage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["applicable", "observed", "total", "rate", "reason"],
+      "properties": {
+        "applicable": {"type": "boolean"},
+        "observed": {"type": ["integer", "null"], "minimum": 0},
+        "total": {"type": ["integer", "null"], "minimum": 0},
+        "rate": {"type": ["number", "null"], "minimum": 0, "maximum": 1},
+        "reason": {"type": ["string", "null"], "maxLength": 240}
+      }
+    }
+  }
+}

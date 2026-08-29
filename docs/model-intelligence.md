@@ -1,15 +1,18 @@
 # Depot model intelligence
 
-Depot model intelligence combines three evidence classes without pretending
+Depot model intelligence combines four evidence classes without pretending
 they are interchangeable:
 
 1. Controlled `depot-role-v2` evidence: validated quality, stage-attributed
    reliability, time/rework to valid, latency, context and telemetry coverage,
    exact identity provenance, and compatible evaluator digests for 18 distinct
    cases across all nine roles.
-2. Production evidence: Workflow Kernel `metrics.json` and
+2. `depot-role-production-canary-v1` evidence: exact-revision disposable Depot
+   work units with first/final validity, corrections, validation cycles,
+   tool/context coverage, attributable identity, and fault isolation.
+3. Production evidence: Workflow Kernel `metrics.json` and
    `run-cost-summary.json` artifacts from actual Pipeline and dm-review runs.
-3. Provider catalog and access facts: exact availability, capabilities,
+4. Provider catalog and access facts: exact availability, capabilities,
    context limits, provider limits, pricing, and billed spend.
 
 Lead interpretation with validated quality and contextual efficiency. Public
@@ -48,6 +51,7 @@ Aggregate local production artifacts and retained v2 benchmark evidence:
   --run-root /home/ned/ai/depot/plans \
   --run-root /home/ned/ai/depot/.workflow-kernel/runs \
   --benchmark-root /home/ned/benchmark-results/depot-role-v2 \
+  --canary-root /home/ned/benchmark-results/depot-role-production-canary \
   --json-output docs/model-intelligence/latest.json \
   --markdown-output docs/model-intelligence/latest.md
 ```
@@ -57,6 +61,12 @@ normalizer, and behavioral-contract revisions and digests match. It reports all
 nine policy roles and their distinct-case coverage. Historical v1, incompatible
 v2, incomplete, transport, and unknown-identity attempts remain visible but do
 not enter current model quality comparisons.
+
+Production-canary attempts are ingested only from validated
+`canary-validation.json` artifacts. Their quality, correction, latency,
+token, context/tool coverage, fault, and routing-ledger views remain separate
+from sealed v2 results, ordinary Pipeline/dm-review observations, and provider
+economics. See the OpenRouter production-canary operator reference.
 
 Run an exact OpenRouter model through one v2 case:
 
@@ -139,6 +149,7 @@ gates and is never a model judge.
 ```sh
 ./tools/test-benchmark-evidence-contract.sh
 ./tools/test-openrouter-role-benchmark.sh
+./tools/test-production-canary.sh
 python3 tests/test_model_intelligence.py -v
 ./tools/validate-provider-neutral-routing.sh
 ./tools/validate-routing-economics.sh

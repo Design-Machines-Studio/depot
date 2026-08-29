@@ -73,6 +73,12 @@ access remain separate guardrails.
 - Use provider-side per-key spending limits for runaway-cost control.
 - Optional OpenRouter MCP: `codex mcp add openrouter --url https://mcp.openrouter.ai/mcp`, then `codex mcp login openrouter`. Its expiring OAuth key does not replace the persistent team API key.
 
+## Production canaries
+
+Run one attributable disposable-repository role canary only after its offline
+fixtures pass. See
+`skills/openrouter-delegate/references/depot-role-production-canary.md`.
+
 ## Budgets and content-safe HTTP failures
 
 OpenRouter account credit balance, organization monthly budget, and per-key

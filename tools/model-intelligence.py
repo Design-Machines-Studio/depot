@@ -42,6 +42,10 @@ DEFAULT_BENCHMARK_SUITE = (
     REPO_ROOT
     / "plugins/openrouter/skills/openrouter-delegate/references/depot-role-benchmark-suite.json"
 )
+DEFAULT_CANARY_WORK_UNITS = (
+    REPO_ROOT
+    / "plugins/openrouter/skills/openrouter-delegate/references/depot-role-production-canary-work-units.json"
+)
 
 
 class IntelligenceError(ValueError):
@@ -520,6 +524,223 @@ def production_rollup(roots: list[Path]) -> dict[str, Any]:
             "run_cost_summaries": [safe_relative(path) for path in cost_paths],
             "metrics": [safe_relative(path) for path in metrics_paths],
         },
+    }
+
+
+CANARY_MEASUREMENTS = (
+    "first_pass_validity",
+    "final_validity",
+    "useful_findings",
+    "false_positives",
+    "correction_count",
+    "validation_attempts",
+    "time_to_first_useful_seconds",
+    "time_to_valid_seconds",
+    "total_duration_seconds",
+    "input_tokens",
+    "output_tokens",
+    "reasoning_tokens",
+    "context_coverage",
+    "tool_coverage",
+)
+
+
+def canary_measurements(validation: dict[str, Any]) -> dict[str, Any]:
+    quality = validation.get("quality") if isinstance(validation.get("quality"), dict) else {}
+    timing = validation.get("timing") if isinstance(validation.get("timing"), dict) else {}
+    telemetry = validation.get("telemetry") if isinstance(validation.get("telemetry"), dict) else {}
+    tokens = telemetry.get("tokens") if isinstance(telemetry.get("tokens"), dict) else {}
+    context = telemetry.get("contextCoverage") if isinstance(telemetry.get("contextCoverage"), dict) else {}
+    tools = telemetry.get("toolCoverage") if isinstance(telemetry.get("toolCoverage"), dict) else {}
+    return {
+        "first_pass_validity": quality.get("firstPassValidity"),
+        "final_validity": quality.get("finalValidity"),
+        "useful_findings": quality.get("usefulFindings"),
+        "false_positives": quality.get("falsePositives"),
+        "correction_count": quality.get("correctionCount"),
+        "validation_attempts": quality.get("validationAttempts"),
+        "time_to_first_useful_seconds": timing.get("timeToFirstUsefulSeconds"),
+        "time_to_valid_seconds": timing.get("timeToValidSeconds"),
+        "total_duration_seconds": timing.get("totalDurationSeconds"),
+        "input_tokens": tokens.get("input"),
+        "output_tokens": tokens.get("output"),
+        "reasoning_tokens": tokens.get("reasoning"),
+        "context_coverage": context.get("rate") if context.get("applicable") is True else None,
+        "tool_coverage": tools.get("rate") if tools.get("applicable") is True else None,
+    }
+
+
+def production_canary_rollup(root: Path | None) -> dict[str, Any]:
+    policy = load_json(DEFAULT_ROLE_POLICY)
+    units = load_json(DEFAULT_CANARY_WORK_UNITS)
+    roles = policy.get("roles") if isinstance(policy, dict) else None
+    limits = units.get("limits") if isinstance(units, dict) else None
+    work_units = units.get("workUnits") if isinstance(units, dict) else None
+    if not isinstance(roles, dict) or not isinstance(limits, dict) or not isinstance(work_units, list):
+        raise IntelligenceError("production-canary policy or work-unit authority is malformed")
+    units_by_id = {
+        unit.get("id"): unit for unit in work_units
+        if isinstance(unit, dict) and isinstance(unit.get("id"), str)
+    }
+    if len(units_by_id) != len(work_units):
+        raise IntelligenceError("production-canary work-unit identities are malformed")
+    required_valid = integer(limits.get("gateClearingComparableValidAttempts"))
+    if required_valid is None or required_valid < 1:
+        raise IntelligenceError("production-canary gate threshold is malformed")
+
+    paths = find_artifacts([root], "canary-validation.json") if root is not None else []
+    attempts: list[dict[str, Any]] = []
+    malformed: list[str] = []
+    for path in paths:
+        try:
+            validation = load_json(path)
+            if not isinstance(validation, dict):
+                raise IntelligenceError("validation object required")
+            if validation.get("schemaVersion") != 1 or validation.get("evidenceClass") != "production-canary-validation":
+                raise IntelligenceError("unsupported canary validation contract")
+            role = validation.get("role")
+            candidate = validation.get("requestedCandidate")
+            transport = validation.get("transport")
+            if not all(isinstance(item, str) and item for item in (role, candidate, transport)):
+                raise IntelligenceError("attributable role/candidate/transport required")
+            if role not in roles:
+                raise IntelligenceError("unknown canary role")
+            bindings = validation.get("bindings") if isinstance(validation.get("bindings"), dict) else {}
+            work_unit_id = bindings.get("workUnitId")
+            if work_unit_id not in units_by_id or units_by_id[work_unit_id].get("role") != role:
+                raise IntelligenceError("canary work-unit binding does not match role")
+            measurements = canary_measurements(validation)
+            cost = validation.get("cost") if isinstance(validation.get("cost"), dict) else {}
+            attempts.append(
+                {
+                    "path": safe_relative(path),
+                    "attempt_id": validation.get("attemptId"),
+                    "role": role,
+                    "requested_candidate": candidate,
+                    "transport": transport,
+                    "served_identity": validation.get("servedIdentity"),
+                    "work_unit_id": work_unit_id,
+                    "benchmark_fault": validation.get("benchmarkFault") is True,
+                    "fault_owner": validation.get("faultOwner"),
+                    "fault_code": validation.get("faultCode"),
+                    "comparable": validation.get("comparable") is True,
+                    "model_conclusion": validation.get("modelConclusion"),
+                    "evidence_state": validation.get("evidenceState"),
+                    "mandatory_assertions": validation.get("quality", {}).get("mandatoryAssertions", []),
+                    "measured_cost_usd": number(cost.get("measuredUsd")),
+                    "cost_receipt_coverage": cost.get("receiptCoverage"),
+                    **measurements,
+                }
+            )
+        except IntelligenceError as exc:
+            malformed.append(f"{safe_relative(path)}: {exc}")
+
+    groups: list[dict[str, Any]] = []
+    ledger: list[dict[str, Any]] = []
+    by_key: dict[tuple[str, str, str], list[dict[str, Any]]] = defaultdict(list)
+    for attempt in attempts:
+        by_key[(attempt["role"], attempt["requested_candidate"], attempt["transport"])].append(attempt)
+
+    for role, candidates in roles.items():
+        if not isinstance(candidates, list):
+            continue
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            model = candidate.get("model")
+            transport = candidate.get("transport")
+            if not isinstance(model, str) or not isinstance(transport, str):
+                continue
+            matching = by_key.get((role, model, transport), [])
+            comparable = [item for item in matching if item["comparable"]]
+            valid = [item for item in comparable if item["model_conclusion"] == "valid"]
+            faults = [item for item in matching if item["benchmark_fault"]]
+            incompatible = [
+                item for item in matching
+                if not item["comparable"] and not item["benchmark_fault"]
+            ]
+            if not matching:
+                state = "absent"
+            elif comparable:
+                state = "gate-clearing" if len(valid) >= required_valid else "comparable-but-insufficient"
+            elif faults:
+                state = "benchmark-faulted"
+            else:
+                state = "incompatible"
+            coverage = {
+                field: {
+                    "recorded": sum(item.get(field) is not None for item in comparable),
+                    "comparable_attempts": len(comparable),
+                    "rate": (
+                        sum(item.get(field) is not None for item in comparable) / len(comparable)
+                        if comparable else None
+                    ),
+                }
+                for field in CANARY_MEASUREMENTS
+            }
+            row = {
+                "role": role,
+                "requested_candidate": model,
+                "transport": transport,
+                "evidence_state": state,
+                "attempts": len(matching),
+                "comparable_attempts": len(comparable),
+                "valid_attempts": len(valid),
+                "benchmark_faults": len(faults),
+                "incompatible_attempts": len(incompatible),
+                "first_pass_rate": median(
+                    1 if item["first_pass_validity"] is True else 0
+                    for item in comparable if item["first_pass_validity"] is not None
+                ),
+                "final_valid_rate": len(valid) / len(comparable) if comparable else None,
+                "median_correction_count": median(item["correction_count"] for item in comparable),
+                "median_validation_attempts": median(item["validation_attempts"] for item in comparable),
+                "median_time_to_first_useful_seconds": median(item["time_to_first_useful_seconds"] for item in comparable),
+                "median_time_to_valid_seconds": median(item["time_to_valid_seconds"] for item in comparable),
+                "median_total_duration_seconds": median(item["total_duration_seconds"] for item in comparable),
+                "useful_findings": sum(
+                    int(item["useful_findings"]) for item in comparable
+                    if integer(item["useful_findings"]) is not None
+                ) if any(item["useful_findings"] is not None for item in comparable) else None,
+                "false_positives": sum(
+                    int(item["false_positives"]) for item in comparable
+                    if integer(item["false_positives"]) is not None
+                ) if any(item["false_positives"] is not None for item in comparable) else None,
+                "coverage": coverage,
+                "measured_cost_usd": sum(
+                    item["measured_cost_usd"] for item in matching
+                    if item["measured_cost_usd"] is not None
+                ) if any(item["measured_cost_usd"] is not None for item in matching) else None,
+                "gate_required_valid_attempts": required_valid,
+            }
+            ledger.append(
+                {
+                    "role": role,
+                    "requested_candidate": model,
+                    "transport": transport,
+                    "production_canary_evidence_state": state,
+                    "candidate_order_changed": False,
+                }
+            )
+            if matching:
+                groups.append(row | {"attempt_records": matching})
+
+    return {
+        "schema_version": 1,
+        "evidence_class": "production-canary",
+        "result_root": safe_relative(root) if root is not None else None,
+        "attempts": len(attempts),
+        "groups": groups,
+        "routing_ledger": ledger,
+        "benchmark_faults": [item for item in attempts if item["benchmark_fault"]],
+        "incompatible_attempts": [
+            item for item in attempts if not item["comparable"] and not item["benchmark_fault"]
+        ],
+        "malformed_artifacts": malformed,
+        "measured_cost_usd": sum(
+            item["measured_cost_usd"] for item in attempts if item["measured_cost_usd"] is not None
+        ) if any(item["measured_cost_usd"] is not None for item in attempts) else None,
+        "routing_conclusion": "no routing change justified",
     }
 
 
@@ -1764,6 +1985,7 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
 def render_report(report: dict[str, Any]) -> str:
     production = report["production"]
     benchmark = report["benchmarks"]
+    canary = report["production_canary"]
     def available(value: Any) -> Any:
         return "n/a" if value is None else value
 
@@ -1900,6 +2122,43 @@ def render_report(report: dict[str, Any]) -> str:
     else:
         lines.append("No accepted blinded digest-matched editorial human evidence is available; human quality remains null.")
 
+    lines.extend(["", "## Production-canary evidence (separate)", ""])
+    if canary["groups"]:
+        lines.extend(
+            [
+                "| Role | Candidate | Transport | State | Valid/comparable | First pass | Corrections | Time to valid | Useful/false positive | Cost |",
+                "|---|---|---|---|---:|---:|---:|---:|---:|---:|",
+            ]
+        )
+        for group in canary["groups"]:
+            first_pass = "n/a" if group["first_pass_rate"] is None else f"{group['first_pass_rate']:.0%}"
+            corrections = "n/a" if group["median_correction_count"] is None else f"{group['median_correction_count']:g}"
+            time_valid = "n/a" if group["median_time_to_valid_seconds"] is None else f"{group['median_time_to_valid_seconds']:.1f}s"
+            findings = f"{available(group['useful_findings'])}/{available(group['false_positives'])}"
+            cost = "n/a" if group["measured_cost_usd"] is None else f"${group['measured_cost_usd']:.6f}"
+            lines.append(
+                f"| {group['role']} | {group['requested_candidate']} | {group['transport']} | "
+                f"{group['evidence_state']} | {group['valid_attempts']}/{group['comparable_attempts']} | "
+                f"{first_pass} | {corrections} | {time_valid} | {findings} | {cost} |"
+            )
+        lines.extend(
+            [
+                "",
+                "Coverage denominators are per exact candidate/role/transport group. Null token, timing, context, or tool measurements reduce their recorded/comparable-attempt rate and never become zero.",
+            ]
+        )
+    else:
+        lines.append("No validated production-canary evidence is available.")
+    lines.extend(
+        [
+            "",
+            f"- Benchmark faults: {len(canary['benchmark_faults'])}; no model conclusion.",
+            f"- Incompatible attempts: {len(canary['incompatible_attempts'])}; no model conclusion.",
+            f"- Canary routing conclusion: {canary['routing_conclusion']}.",
+            "- Canary evidence does not enter sealed v2 aggregates, ordinary Pipeline/dm-review observations, provider economics, or candidate ordering.",
+        ]
+    )
+
     quality = production["quality"]
     lines.extend(
         [
@@ -1974,6 +2233,7 @@ def render_report(report: dict[str, Any]) -> str:
 def report_command(args: argparse.Namespace) -> int:
     roots = [Path(item).resolve() for item in args.run_root] if args.run_root else list(DEFAULT_RUN_ROOTS)
     benchmark_root = Path(args.benchmark_root).resolve() if args.benchmark_root else None
+    canary_root = Path(args.canary_root).resolve() if args.canary_root else None
     generated_at = parse_observed_at(args.observed_at).isoformat(timespec="seconds")
     def repository_path(path: Path) -> str:
         try:
@@ -1983,6 +2243,7 @@ def report_command(args: argparse.Namespace) -> int:
 
     production = production_rollup(roots)
     benchmarks = benchmark_rollup(benchmark_root)
+    production_canary = production_canary_rollup(canary_root)
     benchmarks["result_root"] = (
         repository_path(benchmark_root) if benchmark_root is not None else None
     )
@@ -1996,6 +2257,7 @@ def report_command(args: argparse.Namespace) -> int:
             "routing_conclusion": benchmarks["routing_conclusion"],
         },
         "benchmarks": benchmarks,
+        "production_canary": production_canary,
         "production": production,
         "repository": "Design-Machines-Studio/depot",
         "run_roots": [repository_path(root) for root in roots],
@@ -2025,6 +2287,7 @@ def build_parser() -> argparse.ArgumentParser:
     report = subparsers.add_parser("report", help="aggregate production and benchmark evidence")
     report.add_argument("--run-root", action="append", default=[])
     report.add_argument("--benchmark-root")
+    report.add_argument("--canary-root", help="validated production-canary attempt root")
     report.add_argument("--observed-at")
     report.add_argument("--json-output")
     report.add_argument("--markdown-output")
