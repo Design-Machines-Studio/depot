@@ -1004,6 +1004,9 @@ EVALUATOR_COHORT_FIELDS = (
     "suite_id", "suite_revision", "suite_digest", "scorer_revision", "scorer_digest",
     "normalizer_revision", "normalizer_digest", "behavior_revision", "behavior_digest",
 )
+CASE_BINDING_FIELDS = (
+    "case_revision", "case_digest", "prompt_revision", "prompt_digest",
+)
 
 
 def evaluator_cohort_key(group: dict[str, Any]) -> tuple[Any, ...]:
@@ -1025,8 +1028,15 @@ def evaluator_cohort_rollup(
     ]
     valid_groups = [group for group in groups if group["attempts_to_valid"] is not None]
     case_coverage = []
+    case_binding_consistent = True
     for case in role_cases:
         matching = [group for group in groups if group["case_id"] == case.get("id")]
+        binding_groups: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
+        for group in matching:
+            if group["comparable_attempts"] > 0:
+                binding_groups[tuple(group[name] for name in CASE_BINDING_FIELDS)].append(group)
+        if len(binding_groups) > 1:
+            case_binding_consistent = False
         case_coverage.append(
             {
                 "case_id": case.get("id"),
@@ -1047,33 +1057,63 @@ def evaluator_cohort_rollup(
                 ],
                 "comparable_attempts": sum(group["comparable_attempts"] for group in matching),
                 "validated_attempts": sum(group["validated_attempts"] for group in matching),
+                "case_binding_cohorts": [
+                    {
+                        **dict(zip(CASE_BINDING_FIELDS, binding)),
+                        "comparable_attempts": sum(
+                            group["comparable_attempts"] for group in binding_matching
+                        ),
+                        "validated_attempts": sum(
+                            group["validated_attempts"] for group in binding_matching
+                        ),
+                    }
+                    for binding, binding_matching in sorted(
+                        binding_groups.items(),
+                        key=lambda item: tuple(str(part) for part in item[0]),
+                    )
+                ],
             }
         )
     return {
         **dict(zip(EVALUATOR_COHORT_FIELDS, key)),
-        "complete_case_coverage": bool(case_coverage) and all(
+        "case_binding_consistent": case_binding_consistent,
+        "complete_case_coverage": case_binding_consistent and bool(case_coverage) and all(
             item["comparable_attempts"] > 0 for item in case_coverage
         ),
         "case_coverage": case_coverage,
-        "comparable_attempts": len(comparable_attempts),
-        "validated_attempts": sum(group["validated_attempts"] for group in groups),
+        "retained_comparable_attempts": len(comparable_attempts),
+        "comparable_attempts": len(comparable_attempts) if case_binding_consistent else None,
+        "validated_attempts": (
+            sum(group["validated_attempts"] for group in groups)
+            if case_binding_consistent else None
+        ),
         "best_deterministic_quality": max(
             (group["best_deterministic_quality"] for group in groups if group["best_deterministic_quality"] is not None),
             default=None,
+        ) if case_binding_consistent else None,
+        "first_pass_validated_rate": (
+            sum(first_pass) / len(first_pass)
+            if case_binding_consistent and first_pass else None
         ),
-        "first_pass_validated_rate": sum(first_pass) / len(first_pass) if first_pass else None,
-        "median_duration_seconds": median(
-            attempt["duration_seconds"] for attempt in comparable_attempts
+        "median_duration_seconds": (
+            median(attempt["duration_seconds"] for attempt in comparable_attempts)
+            if case_binding_consistent else None
         ),
         "median_time_to_first_validated_seconds": median(
             group["time_to_first_validated_seconds"] for group in valid_groups
+        ) if case_binding_consistent else None,
+        "median_attempts_to_valid": (
+            median(group["attempts_to_valid"] for group in valid_groups)
+            if case_binding_consistent else None
         ),
-        "median_attempts_to_valid": median(group["attempts_to_valid"] for group in valid_groups),
         "median_model_rework_to_valid": median(
             group["model_rework_to_valid"] for group in valid_groups
-        ),
+        ) if case_binding_consistent else None,
         "median_tokens_to_first_validated": {
-            field: median(group["tokens_to_first_validated"][field] for group in valid_groups)
+            field: (
+                median(group["tokens_to_first_validated"][field] for group in valid_groups)
+                if case_binding_consistent else None
+            )
             for field in (
                 "prompt_tokens", "completion_tokens", "reasoning_tokens",
                 "cache_read_tokens", "cache_creation_tokens",
@@ -1081,9 +1121,15 @@ def evaluator_cohort_rollup(
         },
         "median_context_to_first_validated": median(
             group["context_to_first_validated"] for group in valid_groups
+        ) if case_binding_consistent else None,
+        "useful_finding_yield": (
+            median(group["useful_finding_yield"] for group in groups)
+            if case_binding_consistent else None
         ),
-        "useful_finding_yield": median(group["useful_finding_yield"] for group in groups),
-        "false_positive_yield": median(group["false_positive_yield"] for group in groups),
+        "false_positive_yield": (
+            median(group["false_positive_yield"] for group in groups)
+            if case_binding_consistent else None
+        ),
         "model_failure_counts": dict(sorted(sum(
             (
                 Counter({
@@ -1098,7 +1144,11 @@ def evaluator_cohort_rollup(
             (Counter(group["operational_retries"]) for group in groups), Counter()
         ).items())),
         "instrumentation": {
-            field: telemetry_coverage(comparable_attempts, field)
+            field: (
+                telemetry_coverage(comparable_attempts, field)
+                if case_binding_consistent
+                else {"recorded": None, "attempts": None, "rate": None}
+            )
             for field in (
                 "duration_seconds", "prompt_tokens", "completion_tokens", "reasoning_tokens",
                 "cache_read_tokens", "cache_creation_tokens", "context_tokens", "tool_calls",
@@ -1341,8 +1391,16 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
             )
         ]
         metric_cohorts = [
-            cohort for cohort in evaluator_cohorts if cohort["comparable_attempts"] > 0
+            cohort for cohort in evaluator_cohorts
+            if cohort["case_binding_consistent"]
+            and cohort["comparable_attempts"] is not None
+            and cohort["comparable_attempts"] > 0
         ]
+        binding_conflict = any(
+            not cohort["case_binding_consistent"]
+            and cohort["retained_comparable_attempts"] > 0
+            for cohort in evaluator_cohorts
+        )
         selected_cohort = metric_cohorts[0] if len(metric_cohorts) == 1 else None
         selected_key = (
             tuple(selected_cohort[name] for name in EVALUATOR_COHORT_FIELDS)
@@ -1430,9 +1488,10 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
                 "complete_evaluator_cohorts": sum(
                     cohort["complete_case_coverage"] for cohort in evaluator_cohorts
                 ),
+                "case_binding_conflict": binding_conflict,
                 "missing_cases": missing_cases,
-                "gap": "no comparable current evidence" if not has_comparable else ("multiple evaluator cohorts" if len(metric_cohorts) > 1 else ("incomplete case coverage" if missing_cases else None)),
-                "confidence": "none" if not has_comparable else ("cohort-separated" if len(metric_cohorts) > 1 else ("partial" if missing_cases else "controlled-current")),
+                "gap": "conflicting case/prompt bindings" if binding_conflict else ("no comparable current evidence" if not has_comparable else ("multiple evaluator cohorts" if len(metric_cohorts) > 1 else ("incomplete case coverage" if missing_cases else None))),
+                "confidence": "cohort-separated" if binding_conflict else ("none" if not has_comparable else ("cohort-separated" if len(metric_cohorts) > 1 else ("partial" if missing_cases else "controlled-current"))),
                 "freshness": {"latest_observed_at": latest, "suite_revision": suite.get("suiteRevision"), "policy_snapshot": policy.get("matrixSnapshot")},
                 "best_deterministic_quality": selected_cohort["best_deterministic_quality"] if selected_cohort is not None else None,
                 "validated_attempts": selected_cohort["validated_attempts"] if selected_cohort is not None else None,
@@ -1519,11 +1578,18 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
                 complete_case_groups: list[dict[str, Any]] = []
                 complete = bool(role_case_ids)
                 for case_id in role_case_ids:
-                    eligible = [
+                    case_groups = [
                         group for group in cohort_groups_for_candidate
-                        if group["case_id"] == case_id and group["validated_attempts"] >= 3
+                        if group["case_id"] == case_id and group["comparable_attempts"] > 0
                     ]
-                    if not eligible:
+                    case_bindings = {
+                        tuple(group[name] for name in CASE_BINDING_FIELDS)
+                        for group in case_groups
+                    }
+                    eligible = [
+                        group for group in case_groups if group["validated_attempts"] >= 3
+                    ]
+                    if len(case_bindings) != 1 or len(eligible) != 1:
                         complete = False
                     complete_case_groups.extend(eligible)
                 cohort_has_model_failures = any(
@@ -1589,11 +1655,11 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
         "views": {
             "quality": {
                 "validated_attempts": (
-                    None if any(role["comparable_attempts"] is None and len([cohort for cohort in role["evaluator_cohorts"] if cohort["comparable_attempts"]]) > 1 for role in role_rows)
+                    None if any(role["case_binding_conflict"] or (role["comparable_attempts"] is None and len([cohort for cohort in role["evaluator_cohorts"] if cohort["comparable_attempts"]]) > 1) for role in role_rows)
                     else sum((role["validated_attempts"] or 0) for role in role_rows)
                 ),
                 "comparable_attempts": (
-                    None if any(role["comparable_attempts"] is None and len([cohort for cohort in role["evaluator_cohorts"] if cohort["comparable_attempts"]]) > 1 for role in role_rows)
+                    None if any(role["case_binding_conflict"] or (role["comparable_attempts"] is None and len([cohort for cohort in role["evaluator_cohorts"] if cohort["comparable_attempts"]]) > 1) for role in role_rows)
                     else sum((role["comparable_attempts"] or 0) for role in role_rows)
                 ),
                 "roles_with_validated_evidence": [
@@ -1724,9 +1790,13 @@ def render_report(report: dict[str, Any]) -> str:
                 cohort_duration = "n/a" if cohort["median_duration_seconds"] is None else f"{cohort['median_duration_seconds']:.1f}s"
                 cohort_time = "n/a" if cohort["median_time_to_first_validated_seconds"] is None else f"{cohort['median_time_to_first_validated_seconds']:.1f}s"
                 cohort_quality = "n/a" if cohort["best_deterministic_quality"] is None else f"{cohort['best_deterministic_quality']:g}"
+                cohort_validated = (
+                    "n/a" if cohort["validated_attempts"] is None
+                    else f"{cohort['validated_attempts']}/{cohort['comparable_attempts']}"
+                )
                 lines.append(
                     f"| {cohort['scorer_revision']}/{cohort['scorer_digest']} | "
-                    f"{str(cohort['complete_case_coverage']).lower()} | {cohort['validated_attempts']}/{cohort['comparable_attempts']} | "
+                    f"{str(cohort['complete_case_coverage']).lower()} | {cohort_validated} | "
                     f"{cohort_quality} | {cohort_first_pass} | {cohort_duration} | {cohort_time} |"
                 )
             lines.append("")

@@ -833,6 +833,67 @@ class ModelIntelligenceTest(unittest.TestCase):
         self.assertIn("Median duration", markdown.read_text())
         self.assertIn("evaluator cohorts", markdown.read_text())
 
+    def test_v2_same_case_binding_conflicts_null_role_metrics_and_competition(self) -> None:
+        benchmark_root = self.root / "case-binding-cohorts-v2"
+        model = "gpt-5.6-luna"
+
+        def add_attempt(name: str, case_id: str, binding: str, attempt: int) -> None:
+            evidence = self.v2_result(
+                case_id=case_id,
+                model=model,
+                transport="codex-cli",
+                observed_at=f"2026-08-29T06:{len(list(benchmark_root.glob('*'))):02d}:00Z",
+                digest_suffix="case-binding",
+                duration=2 if binding == "a" else 10,
+            )
+            evidence["evidenceBindings"]["caseDigest"] = {
+                "declared": f"case-{binding}", "actual": f"case-{binding}", "match": True,
+            }
+            evidence["evidenceBindings"]["promptDigest"] = {
+                "declared": f"prompt-{binding}", "actual": f"prompt-{binding}", "match": True,
+            }
+            self.write_attempt(benchmark_root, name, evidence)
+
+        for attempt in range(1, 4):
+            add_attempt(f"zero-a-{attempt}", "review-zero-deferral", "a", attempt)
+            add_attempt(f"zero-b-{attempt}", "review-zero-deferral", "b", attempt)
+            add_attempt(
+                f"false-positive-a-{attempt}",
+                "review-false-positive-control",
+                "a",
+                attempt,
+            )
+
+        output = self.root / "case-binding-cohorts.json"
+        completed = self.run_tool(
+            "report", "--run-root", str(self.root / "no-runs"),
+            "--benchmark-root", str(benchmark_root),
+            "--observed-at", "2026-08-29T09:00:00+08:00",
+            "--json-output", str(output),
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        rollup = json.loads(output.read_text())["benchmarks"]
+        role = next(item for item in rollup["roles"] if item["role"] == "review-fast")
+        self.assertEqual(len(role["evaluator_cohorts"]), 1)
+        cohort = role["evaluator_cohorts"][0]
+        self.assertFalse(cohort["case_binding_consistent"])
+        self.assertIsNone(cohort["comparable_attempts"])
+        self.assertIsNone(cohort["median_duration_seconds"])
+        zero_case = next(
+            item for item in cohort["case_coverage"]
+            if item["case_id"] == "review-zero-deferral"
+        )
+        self.assertEqual(len(zero_case["case_binding_cohorts"]), 2)
+        self.assertTrue(role["case_binding_conflict"])
+        self.assertIsNone(role["best_deterministic_quality"])
+        self.assertIsNone(role["median_duration_seconds"])
+        evidence = next(
+            item for item in rollup["model_role_evidence"]
+            if item["role"] == "review-fast" and item["model"] == model
+        )
+        self.assertFalse(evidence["controlled_competitive_evidence"])
+        self.assertEqual(evidence["competitive_evidence_cohorts"], [])
+
     def test_degraded_attempts_retain_receipt_evidence_and_all_recorded_spend_once(self) -> None:
         benchmark_root = self.root / "retained-v2"
         model = "deepseek/deepseek-v4-flash-0731"
