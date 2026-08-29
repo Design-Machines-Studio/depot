@@ -154,10 +154,10 @@ For each native incumbent, run the same prompt and deterministic scorer:
 ```
 
 Run a one-attempt screen first. It discovers opportunities only and cannot
-promote or demote a candidate. Count failures and incomplete directories. Only
-candidates with a comparable, identity-confirmed success, `fallback.used == false`, and every
-closed case assertion and remains contextually plausible on latency, context,
-capability, and cost may proceed to attempts 2 and 3. Do not discard failed
+promote or demote a candidate. Count failures and incomplete directories.
+Proceed only when the first attempt is comparable and identity-confirmed, has
+`fallback.used == false`, satisfies every closed assertion, and remains plausible
+on latency, context, capability, and cost. Do not discard failed
 runs or rerun into the same directory.
 
 Inspect `result.json` after every native or paid attempt. The following conditions

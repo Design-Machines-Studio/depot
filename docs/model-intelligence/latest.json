@@ -1,6 +1,6 @@
 {
   "schema_version": 2,
-  "generated_at": "2026-08-29T18:00:00+08:00",
+  "generated_at": "2026-08-29T15:18:54+08:00",
   "quality_efficiency": {
     "roles": [
       {
@@ -2149,7 +2149,7 @@
     "routing_conclusion": "no routing change justified"
   },
   "benchmarks": {
-    "result_root": "/home/ned/ai/depot/.worktrees/pipeline/benchmark-evidence-521e4833/feature-manager/.model-intelligence/no-benchmark-evidence",
+    "result_root": null,
     "attempts": 0,
     "current_v2_attempts": 0,
     "groups": [],
@@ -4847,6 +4847,7 @@
   },
   "repository": "Design-Machines-Studio/depot",
   "run_roots": [
-    ".model-intelligence/no-production-evidence"
+    "plans",
+    ".workflow-kernel/runs"
   ]
 }

@@ -779,6 +779,42 @@ class ModelIntelligenceTest(unittest.TestCase):
         self.assertEqual(rollup["views"]["reliability"]["operational_retry_counts"]["harness"], 5)
         self.assertEqual(rollup["views"]["reliability"]["retained_attempts"], 10)
 
+    def test_native_served_identity_must_match_the_policy_alias_mapping(self) -> None:
+        benchmark_root = self.root / "native-alias-authority-v2"
+        allowed = self.v2_result(
+            case_id="assembly-next-chunk", model="opus", transport="claude-cli",
+            observed_at="2026-08-29T04:20:00Z", endpoint_provider="anthropic",
+        )
+        allowed["servedIdentity"] = "claude-opus-5"
+        allowed["fallback"]["attemptedIdentity"] = "claude-opus-5"
+        allowed["fallback"]["attemptedIdentities"] = ["claude-opus-5"]
+        rejected = self.v2_result(
+            case_id="review-zero-deferral", model="gpt-5.6-luna", transport="codex-cli",
+            observed_at="2026-08-29T04:21:00Z", endpoint_provider="openai",
+        )
+        rejected["servedIdentity"] = "gpt-5.6-sol"
+        rejected["fallback"]["attemptedIdentity"] = "gpt-5.6-sol"
+        rejected["fallback"]["attemptedIdentities"] = ["gpt-5.6-sol"]
+        self.write_attempt(benchmark_root, "allowed-opus-alias", allowed)
+        self.write_attempt(benchmark_root, "rejected-cross-model", rejected)
+
+        output = self.root / "native-alias-authority.json"
+        completed = self.run_tool(
+            "report", "--run-root", str(self.root / "no-runs"),
+            "--benchmark-root", str(benchmark_root),
+            "--observed-at", "2026-08-29T09:00:00+08:00", "--json-output", str(output),
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        groups = json.loads(output.read_text())["benchmarks"]["groups"]
+        opus = next(group for group in groups if group["requested_candidate"] == "opus")
+        luna = next(group for group in groups if group["requested_candidate"] == "gpt-5.6-luna")
+        self.assertEqual(opus["validated_attempts"], 1)
+        self.assertEqual(opus["comparable_attempts"], 1)
+        self.assertEqual(luna["validated_attempts"], 0)
+        self.assertEqual(luna["comparable_attempts"], 0)
+        self.assertEqual(luna["operational_retries"], {"identity": 1})
+        self.assertIsNone(luna["attempt_records"][0]["model_conclusion"])
+
     def test_v2_role_metrics_and_competitive_evidence_never_mix_evaluator_cohorts(self) -> None:
         benchmark_root = self.root / "cohorts-v2"
 
@@ -1395,6 +1431,31 @@ printf '%s\n' '{event}'
         scored = json.loads((result_dir / "result.json").read_text())
         self.assertIsNone(scored["servedIdentity"])
         self.assertFalse(scored["comparable"])
+
+    def test_codex_cross_model_identity_is_not_credited_to_requested_candidate(self) -> None:
+        output = '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}'
+        event = json.dumps(
+            {
+                "type": "turn.completed", "model": "gpt-5.6-sol", "provider": "openai",
+                "fallbackUsed": False, "usage": {"input_tokens": 20, "output_tokens": 10},
+            },
+            separators=(",", ":"),
+        )
+        stub = self.codex_stub("codex-cross-model-stub", event, output)
+        result_dir = self.root / "codex-cross-model-result"
+        result = self.run_native(
+            case="review-zero-deferral", transport="codex-cli", model="gpt-5.6-luna",
+            result_dir=result_dir, stub=stub,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertEqual(receipt["requestedModel"], "gpt-5.6-luna")
+        self.assertEqual(receipt["responseModel"], "gpt-5.6-sol")
+        scored = json.loads((result_dir / "result.json").read_text())
+        self.assertFalse(scored["comparable"])
+        self.assertFalse(scored["overallSuccess"])
+        self.assertEqual(scored["failureClass"], "unknown-served-identity")
+        self.assertIsNone(scored["modelConclusion"])
 
     def test_codex_explicit_fallback_true_retains_attempt_provenance(self) -> None:
         output = '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}'

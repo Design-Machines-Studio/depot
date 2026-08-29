@@ -722,7 +722,9 @@ def retained_attempt(
     }
 
 
-def closed_identity_proof(result: dict[str, Any], receipt: dict[str, Any]) -> bool:
+def closed_identity_proof(
+    result: dict[str, Any], receipt: dict[str, Any], policy_candidate: dict[str, Any] | None
+) -> bool:
     identity = result.get("identityStatus")
     identity = identity if isinstance(identity, dict) else {}
     fallback = result.get("fallback")
@@ -734,12 +736,17 @@ def closed_identity_proof(result: dict[str, Any], receipt: dict[str, Any]) -> bo
     accepted_provenance = (
         {"response", "modelUsage-unique-max-output-tokens"} if native else {"response"}
     )
+    served_identities = (
+        policy_candidate.get("servedIdentities") if isinstance(policy_candidate, dict) else []
+    )
+    served_identities = served_identities if isinstance(served_identities, list) else []
+    identity_allowed = served == requested or (native and served in served_identities)
     if not (
         isinstance(requested, str)
         and requested
         and isinstance(served, str)
         and served
-        and (native or served == requested)
+        and identity_allowed
         and identity.get("confidence") == "confirmed"
         and identity.get("provenance") in accepted_provenance
         and fallback.get("used") is False
@@ -1329,7 +1336,7 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
         )
         compatible = bindings_ok and authority_ok and policy_ok and receipt_binding_ok
         fallback = result.get("fallback")
-        identity_ok = closed_identity_proof(result, receipt)
+        identity_ok = closed_identity_proof(result, receipt, policy_candidate)
         category = failure_category(result, compatible, identity_ok)
         transport_outcome = result.get("transportOutcome")
         transport_outcome = transport_outcome if isinstance(transport_outcome, dict) else {}
@@ -1757,6 +1764,9 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
 def render_report(report: dict[str, Any]) -> str:
     production = report["production"]
     benchmark = report["benchmarks"]
+    def available(value: Any) -> Any:
+        return "n/a" if value is None else value
+
     lines = [
         f"# Depot model intelligence — {report['generated_at'][:10]}",
         "",
@@ -1897,9 +1907,9 @@ def render_report(report: dict[str, Any]) -> str:
             "## Production quality signals",
             "",
             f"- Canonical findings: {quality['canonical_findings']}",
-            f"- Median completion rate: {quality['median_completion_rate']}",
-            f"- Median fallback rate: {quality['median_fallback_rate']}",
-            f"- Median first-pass validation rate: {quality['median_validation_first_pass_rate']}",
+            f"- Median completion rate: {available(quality['median_completion_rate'])}",
+            f"- Median fallback rate: {available(quality['median_fallback_rate'])}",
+            f"- Median first-pass validation rate: {available(quality['median_validation_first_pass_rate'])}",
             f"- Retry reasons: `{json.dumps(quality['retry_reasons'], sort_keys=True)}`",
             "",
             "These are workflow signals, not direct causal model-quality scores. Missing model attribution remains missing.",
@@ -1914,7 +1924,7 @@ def render_report(report: dict[str, Any]) -> str:
             "",
             "## Provider spend and access economics",
             "",
-            f"- Benchmark provider-billed cost: {benchmark['views']['provider_spend']['measured_cost_usd']}",
+            f"- Benchmark provider-billed cost: {available(benchmark['views']['provider_spend']['measured_cost_usd'])}",
             f"- Benchmark recorded-cost coverage: `{json.dumps(benchmark['views']['provider_spend']['recorded_cost_coverage'], sort_keys=True)}`",
             "",
         ]
@@ -1965,14 +1975,17 @@ def report_command(args: argparse.Namespace) -> int:
     roots = [Path(item).resolve() for item in args.run_root] if args.run_root else list(DEFAULT_RUN_ROOTS)
     benchmark_root = Path(args.benchmark_root).resolve() if args.benchmark_root else None
     generated_at = parse_observed_at(args.observed_at).isoformat(timespec="seconds")
-    production = production_rollup(roots)
-    benchmarks = benchmark_rollup(benchmark_root)
-
     def repository_path(path: Path) -> str:
         try:
             return str(path.relative_to(REPO_ROOT))
         except ValueError:
-            return str(path)
+            return f"external:{path.name or 'root'}"
+
+    production = production_rollup(roots)
+    benchmarks = benchmark_rollup(benchmark_root)
+    benchmarks["result_root"] = (
+        repository_path(benchmark_root) if benchmark_root is not None else None
+    )
 
     report = {
         "schema_version": 2,

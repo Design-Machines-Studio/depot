@@ -4,6 +4,7 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RUNNER="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/depot-role-benchmark.sh"
 CHECKED_SUITE="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/depot-role-benchmark-suite.json"
+ROLE_POLICY="$ROOT/plugins/model-router/skills/model-router/references/role-policy.json"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/benchmark-evidence-contract.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 pass=0
@@ -23,7 +24,8 @@ score() {
   local suite="$1" output="$2" receipt="$3" result="$4"
   shift 4
   rm -f "$result"
-  DEPOT_BENCH_SUITE="$suite" "$RUNNER" --score --case review-zero-deferral \
+  DEPOT_BENCH_SUITE="$suite" DEPOT_BENCH_ROLE_POLICY="$ROLE_POLICY" \
+    "$RUNNER" --score --case review-zero-deferral \
     --output-file "$output" --receipt-file "$receipt" --result-file "$result" "$@"
 }
 
@@ -150,7 +152,8 @@ jq --arg digest "$scorer_digest" '.cases[1].bindings.scorerDigest = $digest' \
 sed 's/one or more disclosed mandatory assertions failed/one or more declared mandatory assertions failed/' \
   "$RUNNER" > "$TMP/mutated-runner.sh"
 chmod +x "$TMP/mutated-runner.sh"
-DEPOT_BENCH_SUITE="$TMP/scorer-bound-suite.json" "$TMP/mutated-runner.sh" --score \
+DEPOT_BENCH_SUITE="$TMP/scorer-bound-suite.json" DEPOT_BENCH_ROLE_POLICY="$ROLE_POLICY" \
+  "$TMP/mutated-runner.sh" --score \
   --case review-zero-deferral --output-file "$TMP/output" --receipt-file "$TMP/receipt.json" \
   --result-file "$TMP/mutated-result.json"
 assert jq -e --arg baseline "$scorer_digest" '
@@ -302,14 +305,16 @@ assert jq -e '
 printf '%s\n' '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}' > "$TMP/output"
 score "$TMP/suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/retained-result.json"
 cp "$TMP/retained-result.json" "$TMP/retained-copy.json"
-reject env DEPOT_BENCH_SUITE="$TMP/suite.json" "$RUNNER" --score --case review-zero-deferral \
+reject env DEPOT_BENCH_SUITE="$TMP/suite.json" DEPOT_BENCH_ROLE_POLICY="$ROLE_POLICY" \
+  "$RUNNER" --score --case review-zero-deferral \
   --output-file "$TMP/output" --receipt-file "$TMP/receipt.json" --result-file "$TMP/retained-result.json"
 assert cmp "$TMP/retained-copy.json" "$TMP/retained-result.json"
 printf '%s\n' '{"schemaVersion":1,"code":"normalizer-fixture-rejection","fixtureId":"whole-response-json-fence","expectedAccepted":true,"observedAccepted":false}' > "$TMP/parser-fault-alias.json"
 for alias in "$TMP/suite.json" "$TMP/output" "$TMP/receipt.json" "$TMP/parser-fault-alias.json"; do
   fault_args=()
   [ "$alias" != "$TMP/parser-fault-alias.json" ] || fault_args=(--fault-file "$TMP/parser-fault-alias.json")
-  reject env DEPOT_BENCH_SUITE="$TMP/suite.json" "$RUNNER" --score --case review-zero-deferral \
+  reject env DEPOT_BENCH_SUITE="$TMP/suite.json" DEPOT_BENCH_ROLE_POLICY="$ROLE_POLICY" \
+    "$RUNNER" --score --case review-zero-deferral \
     --output-file "$TMP/output" --receipt-file "$TMP/receipt.json" --result-file "$alias" "${fault_args[@]}"
 done
 

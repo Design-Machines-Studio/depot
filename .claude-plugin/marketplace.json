@@ -388,7 +388,7 @@
     {
       "name": "model-router",
       "source": "./plugins/model-router",
-      "version": "0.4.1",
+      "version": "0.4.2",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

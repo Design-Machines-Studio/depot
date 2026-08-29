@@ -110,9 +110,9 @@ No accepted blinded digest-matched editorial human evidence is available; human 
 ## Production quality signals
 
 - Canonical findings: 0
-- Median completion rate: None
-- Median fallback rate: None
-- Median first-pass validation rate: None
+- Median completion rate: n/a
+- Median fallback rate: n/a
+- Median first-pass validation rate: n/a
 - Retry reasons: `{}`
 
 These are workflow signals, not direct causal model-quality scores. Missing model attribution remains missing.
@@ -127,7 +127,7 @@ Recorded duration, prompt/completion/reasoning/cache tokens, context, and tool t
 
 ## Provider spend and access economics
 
-- Benchmark provider-billed cost: None
+- Benchmark provider-billed cost: n/a
 - Benchmark recorded-cost coverage: `{"attempts": 0, "rate": null, "recorded": 0}`
 
 No model-attributed lane usage is available.

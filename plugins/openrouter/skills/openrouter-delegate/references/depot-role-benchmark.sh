@@ -614,6 +614,7 @@ score_case() {
   local work case_json suite_id suite_revision suite_digest case_revision case_digest
   local prompt_revision prompt_digest scorer_digest normalizer_digest expected_file expected_assertions
   local assertions_file normalized_file audit_file reasons_file bindings_file human_evidence_file
+  local identity_policy
   local transport_status identity_confidence identity_provenance transport endpoint_provider workload
   local mandatory_passed semantic_passed semantic_score validation_passed validator_id contract_passed
   local expected_validation receipt_binding_ok identity_evidence_ok result_parent
@@ -628,6 +629,8 @@ score_case() {
   trap 'rm -rf "$work"; [ -z "${audit_file:-}" ] || rm -f "$audit_file"' RETURN
   jq --arg id "$CASE_ID" '.cases[] | select(.id == $id)' "$SUITE" > "$case_json"
   workload="$(case_workload)"
+  identity_policy="${ROLE_POLICY:-${DEPOT_BENCH_ROLE_POLICY:-$CANONICAL_ROLE_POLICY}}"
+  require_json_object "$identity_policy"
   normalize_output "$OUTPUT_FILE" "$normalized_file"
   evaluate_case "$normalized_file" "$assertions_file" "$NORMALIZED_OK"
 
@@ -715,7 +718,8 @@ score_case() {
   identity_confidence=unknown
   identity_provenance="$(jq -r '.responseModelProvenance // "not-available"' "$RECEIPT_FILE")"
   identity_evidence_ok=false
-  if jq -e --arg transport "$transport" '
+  if jq -e --arg transport "$transport" --slurpfile policy "$identity_policy" \
+    --arg role "$(jq -r '.role' "$case_json")" '
     def nonempty: type == "string" and length > 0;
     . as $receipt
     | ($receipt.requestedModel | nonempty) and ($receipt.responseModel | nonempty)
@@ -729,6 +733,10 @@ score_case() {
       and ($receipt.servingProvider | nonempty)
       and ($receipt.servingProviderProvenance == "response"
         or $receipt.servingProviderProvenance == "modelUsage")
+      and ($receipt.responseModel == $receipt.requestedModel
+        or any($policy[0].roles[$role][];
+          .model == $receipt.requestedModel and .transport == $transport
+          and ((.servedIdentities // []) | index($receipt.responseModel)) != null))
     end)
     and ($receipt.fallbackUsed | type) == "boolean"
     and ($receipt.modelCandidates | type) == "array" and all($receipt.modelCandidates[]; nonempty)

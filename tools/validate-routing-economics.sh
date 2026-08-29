@@ -34,6 +34,12 @@ check 'architect begins with eligible native Fable then native Sol' jq -e '
   .roles.architect[0].model == "fable" and
   .roles.architect[1].model == "gpt-5.6-sol"' "$POLICY"
 
+check 'native aliases bind to exact approved served identities' jq -e '
+  all(.roles[][]; if .transport == "claude-cli" then
+    (.servedIdentities | type) == "array" and (.servedIdentities | length) == 1
+    and all(.servedIdentities[]; test("^claude-(fable|opus)-[0-9]+$"))
+  else has("servedIdentities") | not end)' "$POLICY"
+
 check 'security head is isolated from ordinary roles' jq -e '
   .roles["security-review"][0].model == "moonshotai/kimi-k3" and
   ([.roles | to_entries[] | select(.key != "security-review") | .value[].model | select(test("kimi";"i"))] | length == 0)' "$POLICY"
