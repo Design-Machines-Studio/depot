@@ -235,10 +235,51 @@ class NativeDepotBenchmarkTest(unittest.TestCase):
         path.chmod(path.stat().st_mode | stat.S_IXUSR)
         return path
 
-    def test_codex_subscription_attempt_uses_existing_scorer(self) -> None:
-        stub = self.executable(
-            "codex-stub",
-            """#!/usr/bin/env bash
+    def run_native(
+        self,
+        *,
+        case: str,
+        transport: str,
+        model: str,
+        result_dir: Path,
+        stub: Path,
+        extra_env: dict[str, str] | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        env = os.environ.copy()
+        env[
+            "DEPOT_BENCH_CODEX_BIN"
+            if transport == "codex-cli"
+            else "DEPOT_BENCH_CLAUDE_BIN"
+        ] = str(stub)
+        if extra_env:
+            env.update(extra_env)
+        return subprocess.run(
+            [
+                str(NATIVE_BENCH),
+                "--case",
+                case,
+                "--transport",
+                transport,
+                "--model",
+                model,
+                "--effort",
+                "medium",
+                "--result-dir",
+                str(result_dir),
+            ],
+            cwd=REPO,
+            text=True,
+            capture_output=True,
+            env=env,
+        )
+
+    def codex_stub(self, name: str, event: str, output: str | None) -> Path:
+        output_command = (
+            f"printf '%s\\n' '{output}' > \"$output\"" if output is not None else ":"
+        )
+        return self.executable(
+            name,
+            f"""#!/usr/bin/env bash
 set -eu
 output=''
 while [ "$#" -gt 0 ]; do
@@ -248,73 +289,653 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 cat >/dev/null
-printf '%s\n' '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}' > "$output"
-printf '%s\n' '{"usage":{"input_tokens":20,"output_tokens":10}}'
+{output_command}
+printf '%s\n' '{event}'
 """,
         )
+
+    def claude_stub(self, name: str, telemetry: dict[str, object]) -> Path:
+        return self.executable(
+            name,
+            "#!/usr/bin/env bash\nset -eu\ncat >/dev/null\nprintf '%s\\n' '"
+            + json.dumps(telemetry, separators=(",", ":"))
+            + "'\n",
+        )
+
+    def test_codex_explicit_identity_and_independent_usage_use_v2_scorer(self) -> None:
+        output = '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}'
+        event = json.dumps(
+            {
+                "type": "turn.completed",
+                "model": "gpt-5.6-luna",
+                "provider": "openai",
+                "fallbackUsed": False,
+                "usage": {
+                    "input_tokens": 20,
+                    "output_tokens": 10,
+                    "reasoning_tokens": 3,
+                    "cached_input_tokens": 4,
+                    "cache_creation_input_tokens": 5,
+                },
+            },
+            separators=(",", ":"),
+        )
+        stub = self.codex_stub("codex-stub", event, output)
         result_dir = self.root / "codex-result"
-        env = os.environ.copy()
-        env["DEPOT_BENCH_CODEX_BIN"] = str(stub)
-        result = subprocess.run(
-            [
-                str(NATIVE_BENCH),
-                "--case",
-                "review-zero-deferral",
-                "--transport",
-                "codex-cli",
-                "--model",
-                "gpt-5.6-sol",
-                "--effort",
-                "medium",
-                "--result-dir",
-                str(result_dir),
-            ],
-            cwd=REPO,
-            text=True,
-            capture_output=True,
-            env=env,
+        result = self.run_native(
+            case="review-zero-deferral",
+            transport="codex-cli",
+            model="gpt-5.6-luna",
+            result_dir=result_dir,
+            stub=stub,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         scored = json.loads((result_dir / "result.json").read_text())
         self.assertEqual(scored["qualityScore"], 100)
+        self.assertTrue(scored["overallSuccess"])
         self.assertEqual(scored["transport"], "codex-cli")
         self.assertEqual(scored["billingMode"], "included-subscription")
-
-    def test_claude_subscription_attempt_uses_existing_scorer(self) -> None:
-        stub = self.executable(
-            "claude-stub",
-            """#!/usr/bin/env bash
-set -eu
-cat >/dev/null
-printf '%s\n' '{"structured_output":{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false},"usage":{"input_tokens":10,"output_tokens":5}}'
-""",
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertEqual(receipt["responseModel"], "gpt-5.6-luna")
+        self.assertEqual(
+            receipt["usage"],
+            {
+                "prompt_tokens": 20,
+                "completion_tokens": 10,
+                "reasoning_tokens": 3,
+                "cache_read_tokens": 4,
+                "cache_creation_tokens": 5,
+                "cost": None,
+            },
         )
-        result_dir = self.root / "claude-result"
-        env = os.environ.copy()
-        env["DEPOT_BENCH_CLAUDE_BIN"] = str(stub)
-        result = subprocess.run(
-            [
-                str(NATIVE_BENCH),
-                "--case",
-                "review-zero-deferral",
-                "--transport",
-                "claude-cli",
-                "--model",
-                "fable",
-                "--effort",
-                "medium",
-                "--result-dir",
-                str(result_dir),
+        self.assertFalse(receipt["fallbackUsed"])
+        self.assertEqual(receipt["fallbackProvenance"], "cli-event")
+
+    def test_claude_explicit_response_identity_precedes_root_requested_alias(self) -> None:
+        telemetry = {
+            "result": "{}",
+            "model": "opus",
+            "response": {"model": "claude-opus-5", "provider": "anthropic"},
+            "fallbackUsed": False,
+            "modelUsage": {
+                "claude-haiku-4-5": {"outputTokens": 90, "provider": "anthropic"},
+                "claude-opus-5": {"outputTokens": 10, "provider": "anthropic"},
+            },
+        }
+        stub = self.claude_stub("claude-explicit-response-stub", telemetry)
+        result_dir = self.root / "claude-explicit-response-result"
+        result = self.run_native(
+            case="assembly-next-chunk",
+            transport="claude-cli",
+            model="opus",
+            result_dir=result_dir,
+            stub=stub,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertEqual(receipt["requestedModel"], "opus")
+        self.assertEqual(receipt["responseModel"], "claude-opus-5")
+        self.assertEqual(receipt["responseModelProvenance"], "response")
+        self.assertEqual(receipt["primaryModelProvenance"], "response")
+        self.assertEqual(receipt["primaryModelUsage"]["outputTokens"], 10)
+        self.assertEqual(
+            [item["model"] for item in receipt["ancillaryModelUsage"]],
+            ["claude-haiku-4-5"],
+        )
+
+    def test_claude_usage_identity_requires_every_output_counter(self) -> None:
+        telemetry = {
+            "result": "{}",
+            "modelUsage": {
+                "claude-haiku-4-5": {"provider": "anthropic"},
+                "claude-opus-5": {"outputTokens": 10, "provider": "anthropic"},
+            },
+        }
+        stub = self.claude_stub("claude-incomplete-usage-stub", telemetry)
+        result_dir = self.root / "claude-incomplete-usage-result"
+        result = self.run_native(
+            case="assembly-next-chunk",
+            transport="claude-cli",
+            model="opus",
+            result_dir=result_dir,
+            stub=stub,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertIsNone(receipt["responseModel"])
+        self.assertTrue(receipt["identityAmbiguous"])
+        self.assertEqual(
+            receipt["responseModelProvenance"],
+            "modelUsage-incomplete-output-counters",
+        )
+        scored = json.loads((result_dir / "result.json").read_text())
+        self.assertFalse(scored["comparable"])
+        self.assertIsNone(scored["modelConclusion"])
+
+    def test_codex_split_usage_retains_each_last_reported_counter(self) -> None:
+        output = '{"findings":[],"deferred":false}'
+        events = [
+            {
+                "type": "turn.started",
+                "model": "gpt-5.6-luna",
+                "provider": "openai",
+                "fallbackUsed": False,
+                "usage": {"input_tokens": 11, "reasoning_output_tokens": 3},
+            },
+            {
+                "type": "usage.updated",
+                "usage": {"output_tokens": 20, "cache_write_input_tokens": 7},
+            },
+            {
+                "type": "turn.completed",
+                "usage": {"input_usage_count": 13, "cached_input_tokens": 5},
+            },
+        ]
+        event_stream = "\n".join(
+            json.dumps(event, separators=(",", ":")) for event in events
+        )
+        stub = self.codex_stub("codex-split-usage-stub", event_stream, output)
+        result_dir = self.root / "codex-split-usage-result"
+        result = self.run_native(
+            case="review-zero-deferral",
+            transport="codex-cli",
+            model="gpt-5.6-luna",
+            result_dir=result_dir,
+            stub=stub,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertEqual(
+            receipt["usage"],
+            {
+                "prompt_tokens": 13,
+                "completion_tokens": 20,
+                "reasoning_tokens": 3,
+                "cache_read_tokens": 5,
+                "cache_creation_tokens": 7,
+                "cost": None,
+            },
+        )
+
+    def test_claude_opus_primary_retains_haiku_as_ancillary(self) -> None:
+        raw_response = {
+            "nextChunk": "role-complete benchmark corpus and deterministic scorer",
+            "executorRole": "bounded repository architect",
+            "executorCapabilities": ["repository reading", "structured results"],
+            "rejectedComplexity": ["hosted judge", "generic workflow engine"],
+        }
+        telemetry = {
+            "result": json.dumps(raw_response),
+            "usage": {
+                "input_tokens": 995,
+                "output_tokens": 1203,
+                "reasoning_tokens": 77,
+                "cache_read_input_tokens": 11,
+                "cache_creation_input_tokens": 22083,
+            },
+            "modelUsage": {
+                "claude-haiku-4-5-20251001": {
+                    "inputTokens": 993,
+                    "outputTokens": 13,
+                    "cacheReadInputTokens": 0,
+                    "cacheCreationInputTokens": 0,
+                    "provider": "anthropic",
+                },
+                "claude-opus-5": {
+                    "inputTokens": 2,
+                    "outputTokens": 1190,
+                    "cacheReadInputTokens": 0,
+                    "cacheCreationInputTokens": 22083,
+                    "provider": "anthropic",
+                },
+            },
+        }
+        stub = self.claude_stub("claude-opus-stub", telemetry)
+        result_dir = self.root / "claude-opus-result"
+        result = self.run_native(
+            case="assembly-next-chunk",
+            transport="claude-cli",
+            model="opus",
+            result_dir=result_dir,
+            stub=stub,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertEqual(receipt["responseModel"], "claude-opus-5")
+        self.assertEqual(
+            receipt["primaryModelProvenance"],
+            "modelUsage-unique-max-output-tokens",
+        )
+        self.assertEqual(receipt["primaryModelUsage"]["outputTokens"], 1190)
+        self.assertEqual(
+            [item["model"] for item in receipt["ancillaryModelUsage"]],
+            ["claude-haiku-4-5-20251001"],
+        )
+        self.assertEqual(receipt["usage"]["cache_read_tokens"], 11)
+        self.assertEqual(receipt["usage"]["cache_creation_tokens"], 22083)
+        self.assertEqual(
+            receipt["responseModelProvenance"],
+            "modelUsage-unique-max-output-tokens",
+        )
+        self.assertIsNone(receipt["fallbackUsed"])
+        self.assertEqual(receipt["fallbackProvenance"], "not_available")
+        scored = json.loads((result_dir / "result.json").read_text())
+        self.assertEqual(
+            scored["identityStatus"]["provenance"],
+            "modelUsage-unique-max-output-tokens",
+        )
+        self.assertFalse(scored["comparable"])
+        self.assertEqual(scored["failureClass"], "unknown-served-identity")
+        self.assertEqual((result_dir / "output.json").read_text(), json.dumps(raw_response) + "\n")
+        self.assertEqual(json.loads((result_dir / "native-events.json").read_text()), telemetry)
+
+    def test_claude_tied_output_usage_is_ambiguous(self) -> None:
+        telemetry = {
+            "result": "{}",
+            "fallbackUsed": False,
+            "modelUsage": {
+                "claude-opus-5": {"outputTokens": 20, "provider": "anthropic"},
+                "claude-haiku-4-5": {"outputTokens": 20, "provider": "anthropic"},
+            },
+        }
+        stub = self.claude_stub("claude-ambiguous-stub", telemetry)
+        result_dir = self.root / "claude-ambiguous-result"
+        result = self.run_native(
+            case="assembly-next-chunk",
+            transport="claude-cli",
+            model="opus",
+            result_dir=result_dir,
+            stub=stub,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertIsNone(receipt["responseModel"])
+        self.assertTrue(receipt["identityAmbiguous"])
+        self.assertEqual(receipt["primaryModelProvenance"], "modelUsage-tied-max-output-tokens")
+        scored = json.loads((result_dir / "result.json").read_text())
+        self.assertFalse(scored["comparable"])
+        self.assertFalse(scored["overallSuccess"])
+        self.assertIsNone(scored["modelConclusion"])
+
+    def test_codex_missing_served_identity_never_substitutes_requested_alias(self) -> None:
+        output = '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}'
+        event = '{"type":"turn.completed","fallbackUsed":false,"usage":{"input_tokens":20,"output_tokens":10}}'
+        stub = self.codex_stub("codex-no-identity-stub", event, output)
+        result_dir = self.root / "codex-no-identity-result"
+        result = self.run_native(
+            case="review-zero-deferral",
+            transport="codex-cli",
+            model="gpt-5.6-luna",
+            result_dir=result_dir,
+            stub=stub,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertEqual(receipt["requestedModel"], "gpt-5.6-luna")
+        self.assertIsNone(receipt["responseModel"])
+        self.assertEqual(receipt["responseModelProvenance"], "not_available")
+        scored = json.loads((result_dir / "result.json").read_text())
+        self.assertIsNone(scored["servedIdentity"])
+        self.assertFalse(scored["comparable"])
+
+    def test_codex_explicit_fallback_true_retains_attempt_provenance(self) -> None:
+        output = '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}'
+        event = json.dumps(
+            {
+                "type": "turn.completed",
+                "model": "gpt-5.6-luna-20260829",
+                "provider": "openai",
+                "fallbackUsed": True,
+                "attemptedModels": ["gpt-5.6-luna", "gpt-5.6-luna-20260829"],
+            },
+            separators=(",", ":"),
+        )
+        stub = self.codex_stub("codex-fallback-stub", event, output)
+        result_dir = self.root / "codex-fallback-result"
+        result = self.run_native(
+            case="review-zero-deferral",
+            transport="codex-cli",
+            model="gpt-5.6-luna",
+            result_dir=result_dir,
+            stub=stub,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertTrue(receipt["fallbackUsed"])
+        self.assertEqual(receipt["fallbackProvenance"], "cli-event")
+        self.assertEqual(
+            receipt["attemptedModels"],
+            ["gpt-5.6-luna", "gpt-5.6-luna-20260829"],
+        )
+        self.assertEqual(receipt["attemptedModel"], "gpt-5.6-luna-20260829")
+
+    def test_contradictory_fallback_telemetry_stays_ambiguous(self) -> None:
+        output = '{"findings":[],"deferred":false}'
+        event_streams = {
+            "false-with-extra-attempt": [
+                {
+                    "type": "turn.completed",
+                    "model": "gpt-5.6-luna",
+                    "provider": "openai",
+                    "fallbackUsed": False,
+                    "attemptedModels": ["gpt-5.6-luna", "gpt-5.6-sol"],
+                }
             ],
-            cwd=REPO,
-            text=True,
-            capture_output=True,
-            env=env,
+            "inconsistent-booleans": [
+                {
+                    "type": "turn.started",
+                    "model": "gpt-5.6-luna",
+                    "provider": "openai",
+                    "fallbackUsed": False,
+                },
+                {"type": "turn.completed", "fallbackUsed": True},
+            ],
+        }
+        for name, events in event_streams.items():
+            with self.subTest(name=name):
+                stream = "\n".join(
+                    json.dumps(event, separators=(",", ":")) for event in events
+                )
+                stub = self.codex_stub(f"codex-{name}-stub", stream, output)
+                result_dir = self.root / f"codex-{name}-result"
+                result = self.run_native(
+                    case="review-zero-deferral",
+                    transport="codex-cli",
+                    model="gpt-5.6-luna",
+                    result_dir=result_dir,
+                    stub=stub,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                receipt = json.loads((result_dir / "receipt.json").read_text())
+                self.assertIsNone(receipt["fallbackUsed"])
+                self.assertTrue(receipt["fallbackAmbiguous"])
+                self.assertEqual(
+                    receipt["fallbackProvenance"], "contradictory-cli-events"
+                )
+                self.assertEqual(
+                    receipt["fallbackReportedValues"],
+                    [False] if name == "false-with-extra-attempt" else [False, True],
+                )
+                if name == "false-with-extra-attempt":
+                    self.assertEqual(
+                        receipt["attemptedModels"],
+                        ["gpt-5.6-luna", "gpt-5.6-sol"],
+                    )
+                scored = json.loads((result_dir / "result.json").read_text())
+                self.assertFalse(scored["comparable"])
+                self.assertFalse(scored["overallSuccess"])
+
+    def test_present_wrong_typed_native_telemetry_is_malformed(self) -> None:
+        output = '{"findings":[],"deferred":false}'
+        codex_base = {
+            "type": "turn.completed",
+            "model": "gpt-5.6-luna",
+            "provider": "openai",
+            "fallbackUsed": False,
+            "usage": {"input_tokens": 2},
+        }
+        claude_base = {
+            "result": output,
+            "response": {"model": "fable", "provider": "anthropic"},
+            "fallbackUsed": False,
+            "usage": {"input_tokens": 2},
+        }
+        malformed: list[tuple[str, str, str, dict[str, object]]] = [
+            (
+                "codex-counter",
+                "codex-cli",
+                "gpt-5.6-luna",
+                {**codex_base, "usage": {"input_tokens": "2"}},
+            ),
+            (
+                "codex-identity",
+                "codex-cli",
+                "gpt-5.6-luna",
+                {**codex_base, "model": 56},
+            ),
+            (
+                "codex-provider",
+                "codex-cli",
+                "gpt-5.6-luna",
+                {**codex_base, "provider": False},
+            ),
+            (
+                "codex-fallback",
+                "codex-cli",
+                "gpt-5.6-luna",
+                {**codex_base, "fallbackUsed": "false"},
+            ),
+            (
+                "codex-usage",
+                "codex-cli",
+                "gpt-5.6-luna",
+                {**codex_base, "usage": []},
+            ),
+            (
+                "codex-attempts",
+                "codex-cli",
+                "gpt-5.6-luna",
+                {**codex_base, "attemptedModels": "gpt-5.6-luna"},
+            ),
+            (
+                "claude-counter",
+                "claude-cli",
+                "fable",
+                {**claude_base, "usage": {"input_tokens": "2"}},
+            ),
+            (
+                "claude-model-usage-counter",
+                "claude-cli",
+                "fable",
+                {
+                    **claude_base,
+                    "modelUsage": {"fable": {"outputTokens": "2"}},
+                },
+            ),
+            (
+                "claude-identity",
+                "claude-cli",
+                "fable",
+                {
+                    **claude_base,
+                    "response": {"model": 5, "provider": "anthropic"},
+                },
+            ),
+            (
+                "claude-provider",
+                "claude-cli",
+                "fable",
+                {**claude_base, "provider": []},
+            ),
+            (
+                "claude-fallback",
+                "claude-cli",
+                "fable",
+                {**claude_base, "fallbackUsed": 0},
+            ),
+            (
+                "claude-usage",
+                "claude-cli",
+                "fable",
+                {**claude_base, "usage": "missing"},
+            ),
+            (
+                "claude-attempts",
+                "claude-cli",
+                "fable",
+                {**claude_base, "attemptedModels": [5]},
+            ),
+        ]
+        for name, transport, model, telemetry in malformed:
+            with self.subTest(name=name):
+                stub = (
+                    self.codex_stub(
+                        f"{name}-stub",
+                        json.dumps(telemetry, separators=(",", ":")),
+                        output,
+                    )
+                    if transport == "codex-cli"
+                    else self.claude_stub(f"{name}-stub", telemetry)
+                )
+                result_dir = self.root / f"{name}-result"
+                result = self.run_native(
+                    case=(
+                        "review-zero-deferral"
+                        if transport == "codex-cli"
+                        else "assembly-next-chunk"
+                    ),
+                    transport=transport,
+                    model=model,
+                    result_dir=result_dir,
+                    stub=stub,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                receipt = json.loads((result_dir / "receipt.json").read_text())
+                self.assertEqual(receipt["outcome"], "failed")
+                self.assertEqual(receipt["failureKind"], "malformed-telemetry")
+                scored = json.loads((result_dir / "result.json").read_text())
+                self.assertFalse(scored["overallSuccess"])
+                self.assertIsNone(scored["modelConclusion"])
+
+    def test_fenced_claude_object_normalizes_without_hiding_strict_failure(self) -> None:
+        response = "```json\n{}\n```"
+        telemetry = {
+            "result": response,
+            "model": "fable",
+            "provider": "anthropic",
+            "fallbackUsed": False,
+            "usage": {"input_tokens": 2, "output_tokens": 3},
+        }
+        stub = self.claude_stub("claude-fenced-stub", telemetry)
+        result_dir = self.root / "claude-fenced-result"
+        result = self.run_native(
+            case="assembly-next-chunk",
+            transport="claude-cli",
+            model="fable",
+            result_dir=result_dir,
+            stub=stub,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         scored = json.loads((result_dir / "result.json").read_text())
-        self.assertEqual(scored["qualityScore"], 100)
-        self.assertEqual(scored["transport"], "claude-cli")
+        self.assertFalse(scored["strictParse"]["passed"])
+        self.assertTrue(scored["normalizedParse"]["passed"])
+        self.assertEqual(
+            scored["normalizedParse"]["normalization"],
+            "whole-response-markdown-json-fence",
+        )
+        self.assertEqual(scored["rawOutput"], response + "\n")
+        self.assertFalse(scored["contractPassed"])
+        self.assertFalse(scored["overallSuccess"])
+
+    def test_operational_failures_cannot_be_quality_successes(self) -> None:
+        output = '{"findings":[],"deferred":false}'
+        cases = {
+            "nonzero": self.executable(
+                "codex-nonzero-stub",
+                "#!/usr/bin/env bash\nset -eu\noutput=''\nwhile [ \"$#\" -gt 0 ]; do case \"$1\" in --output-last-message) output=\"$2\"; shift 2 ;; *) shift ;; esac; done\ncat >/dev/null\nprintf '%s\\n' '"
+                + output
+                + "' > \"$output\"\nprintf '%s\\n' '{\"type\":\"turn.completed\",\"model\":\"gpt-5.6-luna\",\"provider\":\"openai\",\"fallbackUsed\":false}'\nexit 7\n",
+            ),
+            "missing-output": self.codex_stub(
+                "codex-missing-output-stub",
+                '{"type":"turn.completed","model":"gpt-5.6-luna","provider":"openai","fallbackUsed":false}',
+                None,
+            ),
+            "malformed-telemetry": self.codex_stub(
+                "codex-malformed-stub", "{malformed", output
+            ),
+        }
+        for name, stub in cases.items():
+            with self.subTest(name=name):
+                result_dir = self.root / f"operational-{name}"
+                result = self.run_native(
+                    case="review-zero-deferral",
+                    transport="codex-cli",
+                    model="gpt-5.6-luna",
+                    result_dir=result_dir,
+                    stub=stub,
+                )
+                self.assertNotEqual(result.returncode, 0)
+                receipt = json.loads((result_dir / "receipt.json").read_text())
+                self.assertEqual(receipt["outcome"], "failed")
+                scored = json.loads((result_dir / "result.json").read_text())
+                self.assertFalse(scored["overallSuccess"])
+                self.assertIsNone(scored["modelConclusion"])
+
+    def test_preflight_rejections_do_not_invoke_cli_or_overwrite_results(self) -> None:
+        marker = self.root / "invoked"
+        stub = self.executable(
+            "marker-stub",
+            "#!/usr/bin/env bash\nprintf invoked > \"$DEPOT_BENCH_MARKER\"\nexit 99\n",
+        )
+        policy_path = REPO / "plugins/model-router/skills/model-router/references/role-policy.json"
+        insufficient_policy = json.loads(policy_path.read_text())
+        luna = next(
+            candidate
+            for candidate in insufficient_policy["roles"]["review-fast"]
+            if candidate["model"] == "gpt-5.6-luna"
+        )
+        luna["capabilities"].remove("structured-output")
+        insufficient_path = self.root / "insufficient-policy.json"
+        insufficient_path.write_text(json.dumps(insufficient_policy))
+        malformed_policy = self.root / "malformed-policy.json"
+        malformed_policy.write_text("{malformed")
+        malformed_suite = self.root / "malformed-suite.json"
+        malformed_suite.write_text(json.dumps({"schemaVersion": 1, "cases": []}))
+
+        scenarios = [
+            ("unknown-case", "not-a-v2-case", "gpt-5.6-luna", {}),
+            ("wrong-role", "review-zero-deferral", "gpt-5.6-sol", {}),
+            (
+                "insufficient-capabilities",
+                "review-zero-deferral",
+                "gpt-5.6-luna",
+                {"DEPOT_BENCH_ROLE_POLICY": str(insufficient_path)},
+            ),
+            (
+                "malformed-policy",
+                "review-zero-deferral",
+                "gpt-5.6-luna",
+                {"DEPOT_BENCH_ROLE_POLICY": str(malformed_policy)},
+            ),
+            (
+                "malformed-suite",
+                "review-zero-deferral",
+                "gpt-5.6-luna",
+                {"DEPOT_BENCH_SUITE": str(malformed_suite)},
+            ),
+        ]
+        for name, case, model, overrides in scenarios:
+            with self.subTest(name=name):
+                marker.unlink(missing_ok=True)
+                result = self.run_native(
+                    case=case,
+                    transport="codex-cli",
+                    model=model,
+                    result_dir=self.root / f"rejected-{name}",
+                    stub=stub,
+                    extra_env={"DEPOT_BENCH_MARKER": str(marker), **overrides},
+                )
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(marker.exists())
+
+        marker.unlink(missing_ok=True)
+        nonempty = self.root / "nonempty-result"
+        nonempty.mkdir()
+        sentinel = nonempty / "retained.txt"
+        sentinel.write_text("do not overwrite")
+        result = self.run_native(
+            case="review-zero-deferral",
+            transport="codex-cli",
+            model="gpt-5.6-luna",
+            result_dir=nonempty,
+            stub=stub,
+            extra_env={"DEPOT_BENCH_MARKER": str(marker)},
+        )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertFalse(marker.exists())
+        self.assertEqual(list(nonempty.iterdir()), [sentinel])
+        self.assertEqual(sentinel.read_text(), "do not overwrite")
 
 
 if __name__ == "__main__":
