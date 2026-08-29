@@ -16,10 +16,13 @@ retain every result, including failures, to avoid selection bias.
 ./depot-role-benchmark.sh --run \
   --case pipeline-legacy-translation \
   --model deepseek/deepseek-v4-flash-0731 \
+  --role-policy ../../../../model-router/skills/model-router/references/role-policy.json \
   --result-dir /private/operator-owned/result-directory
 ```
 
-`--run` validates the exact slug against the checked-in OpenRouter matrix,
+`--run` requires the explicit checked-in role policy, rejects substituted live
+suite/matrix/wrapper assets, and validates the exact slug against both the role
+policy and checked-in OpenRouter matrix,
 uses the same input eligibility as a native Claude/Codex candidate, disables
 model fallback, invokes the existing wrapper, and produces a private
 provider receipt plus a compact scored result. The explicit model is permitted

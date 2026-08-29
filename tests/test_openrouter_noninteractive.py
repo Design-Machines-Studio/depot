@@ -441,7 +441,10 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
             [
                 str(BENCHMARK), "--run",
                 "--case", "pipeline-legacy-translation",
-                "--model", "z-ai/glm-5.3-flash",
+                "--model", "deepseek/deepseek-v4-flash-0731",
+                "--role-policy", str(
+                    REPO / "plugins/model-router/skills/model-router/references/role-policy.json"
+                ),
                 "--result-dir", str(result_dir),
             ],
             text=True,
@@ -451,7 +454,7 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
 
         self.assertEqual(result.returncode, 0, result.stderr)
         payload = FixtureHandler.requests[-1]
-        self.assertEqual(payload["model"], "z-ai/glm-5.3-flash")
+        self.assertEqual(payload["model"], "deepseek/deepseek-v4-flash-0731")
         self.assertNotIn("models", payload)
         self.assertTrue(payload["provider"]["allow_fallbacks"])
 
