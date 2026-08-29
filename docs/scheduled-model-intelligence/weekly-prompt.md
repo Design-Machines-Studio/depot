@@ -24,7 +24,7 @@ be verified by:
 
 ```sh
 CREDENTIAL=plugins/openrouter/skills/openrouter-delegate/references/openrouter-credential.sh
-KEY_STATE="/home/ned/benchmark-results/depot-role-v1/key-state-$(date +%F).json"
+KEY_STATE="/home/ned/benchmark-results/depot-role-v2/key-state-$(date +%F).json"
 (
   set +x
   . "$CREDENTIAL"
@@ -56,7 +56,9 @@ NATIVE_BENCH=./tools/run-native-depot-role-benchmark.sh
 SUITE=./plugins/openrouter/skills/openrouter-delegate/references/depot-role-benchmark-suite.json
 MATRIX=./plugins/openrouter/skills/openrouter-delegate/references/model-matrix.json
 POLICY=./plugins/model-router/skills/model-router/references/role-policy.json
-WEEK_ROOT="/home/ned/benchmark-results/depot-role-v1/$RUN_DATE"
+BENCH_ROOT="/home/ned/benchmark-results/depot-role-v2"
+WEEK_ROOT="$BENCH_ROOT/$RUN_DATE"
+ELIGIBILITY="$BENCH_ROOT/eligibility-$RUN_DATE.json"
 BUDGET_USD=10
 mkdir -p "$WEEK_ROOT"
 
@@ -76,8 +78,17 @@ reports it. Build a written candidate plan at
 - at most two newly nominated OpenRouter models from the fresh catalog receipt;
 - the current first OpenRouter candidate for each suite role;
 - the current first native subscription candidate for each suite role;
+- the precomputed v2 eligibility record, current compatible distinct-case
+  coverage from the daily report, and case/evaluator revision digests;
 - case IDs, three target attempts, effort, rationale, estimated call count, and
   the order in which budget will be spent.
+
+Verify that `$ELIGIBILITY` names `depot-role-v2`, all 18 distinct cases, and all
+nine roles before any paid call. Every planned candidate/case pair must appear
+as eligible for that case's role and required capabilities. If eligibility or
+coverage is missing, malformed, or inconsistent with the checked-in suite and
+policy, stop before paid calls and repair the planning evidence. Do not infer
+eligibility from price, public rankings, or a retired evidence contract.
 
 Public rankings and external benchmarks are nomination evidence only. Record
 the exact model/harness variant, source version/date, and incompatibilities.
@@ -106,6 +117,7 @@ must remain enabled so endpoint capacity does not masquerade as model failure:
 "$BENCH" --run \
   --case "$CASE_ID" \
   --model "$MODEL" \
+  --role-policy "$POLICY" \
   --result-dir "$WEEK_ROOT/openrouter/$MODEL/$CASE_ID/run-$ATTEMPT"
 ```
 
@@ -120,14 +132,29 @@ For each native incumbent, run the same prompt and deterministic scorer:
   --result-dir "$WEEK_ROOT/$TRANSPORT/$MODEL/$CASE_ID/run-$ATTEMPT"
 ```
 
-Run a one-attempt screen first. Count failures and incomplete directories.
-Only candidates that parse, satisfy every closed case assertion, and remain
-plausible on cost/duration proceed to attempts 2 and 3. Do not discard failed
+Run a one-attempt screen first. It discovers opportunities only and cannot
+promote or demote a candidate. Count failures and incomplete directories. Only
+candidates with a comparable, identity-confirmed success that satisfies every
+closed case assertion and remains contextually plausible on latency, context,
+capability, and cost may proceed to attempts 2 and 3. Do not discard failed
 runs or rerun into the same directory.
 
+Inspect `result.json` after every native or paid attempt. If `benchmarkFault` is
+true, `modelConclusion` is null because of a benchmark fault, an evidence
+binding mismatches, or the failure stage is prompt/contract,
+parser/normalizer, scorer, or harness, stop the paid benchmark phase
+immediately. Preserve and report the evidence as incompatible or
+benchmark-owned; never count it against the candidate. Repair the benchmark
+locally and run both offline benchmark fixture validators plus the Python
+intelligence/native test. Do not make a paid rerun during this weekly task; a
+later run may collect new evidence after the repair is reviewed and validated.
+
 After every paid OpenRouter attempt, recalculate actual measured spend from all
-`result.json` files under `$WEEK_ROOT`; read `.usage.cost // 0`, record the sum
-in `$WEEK_ROOT/spend.json`, and stop paid calls when the provider key refuses
+`result.json` files under `$WEEK_ROOT`. Every paid retained result must contain
+a numeric provider-reported `.usage.cost`; missing or non-numeric cost telemetry
+is an instrumentation fault, not zero spend. Preserve that attempt, stop paid
+calls, and report the missing coverage. Record the aggregate in
+`$WEEK_ROOT/spend.json`, and also stop paid calls when the provider key refuses
 the next call or the measured sum reaches $10. Never substitute list price for
 provider-reported billed cost. Use this exact rollup after each paid attempt:
 
@@ -137,6 +164,10 @@ rtk python tools/model-intelligence.py report \
   --benchmark-root "$WEEK_ROOT" \
   --json-output "$WEEK_ROOT/spend.json" >/dev/null
 SPEND_USD="$(jq -r '.benchmarks.measured_cost_usd' "$WEEK_ROOT/spend.json")"
+[ "$SPEND_USD" != "null" ] || {
+  printf 'weekly benchmark spend telemetry is incomplete; stopping paid calls\n'
+  break
+}
 rtk awk -v spend="$SPEND_USD" -v cap="$BUDGET_USD" \
   'BEGIN { if (spend >= cap) exit 1 }' || {
     printf 'weekly benchmark spend cap reached: %s\n' "$SPEND_USD"
@@ -145,6 +176,14 @@ rtk awk -v spend="$SPEND_USD" -v cap="$BUDGET_USD" \
 ```
 
 Report untested candidates and cases.
+
+For editorial cases, a human editor may later add only the closed blind receipt
+at `<attempt-directory>/human-rubric.json`, joined to the normalized output
+artifact SHA-256 plus matching case and rubric revisions. Require
+`blindToCandidate:true`; prohibit candidate, model, provider, and transport
+identity; reject malformed, unblinded, unknown-criterion, or mismatched
+receipts; and keep absence null. This separate human-quality axis never changes
+deterministic gates or supplies a model-judge conclusion.
 
 ## 4. Rebuild and inspect the combined report
 
@@ -166,7 +205,7 @@ rtk python tools/model-intelligence.py report \
 rtk python tools/model-intelligence.py report \
   --run-root "$SOURCE_REPO/plans" \
   --run-root "$SOURCE_REPO/.workflow-kernel/runs" \
-  --benchmark-root /home/ned/benchmark-results/depot-role-v1 \
+  --benchmark-root /home/ned/benchmark-results/depot-role-v2 \
   --json-output "$REPORT_DIR/latest.json" \
   --markdown-output "$REPORT_DIR/latest.md"
 
@@ -176,8 +215,10 @@ jq '.benchmarks.groups, .production.by_model, .production.quality' \
 
 Review each axis separately:
 
-- success rate and all retained failures;
-- median deterministic quality by case;
+- validated success rate and all retained failures, separated into
+  model-attributable, operational, benchmark-owned, and incompatible evidence;
+- deterministic quality by distinct case within one compatible evaluator
+  cohort;
 - median duration;
 - prompt, completion, reasoning, and cache tokens when reported;
 - deterministic input bytes as a separate native measurement unit;
@@ -189,7 +230,10 @@ Review each axis separately:
   finding contributions from production metrics;
 - coverage gaps that prevent comparison.
 
-Do not produce one opaque weighted leaderboard.
+Lead with validated quality and contextual efficiency. Keep provider spend,
+subscription economics, and access as secondary views. Do not produce one
+opaque weighted leaderboard. Benchmark-owned or incompatible attempts always
+carry `no model conclusion` and cannot change candidate recommendations.
 
 ## 5. Guarded routing decisions
 
@@ -198,9 +242,11 @@ results. A role-policy edit is allowed on this automation branch only when all
 applicable gates pass:
 
 1. The exact model remains available in the fresh matrix.
-2. Every applicable case has at least three retained successful attempts,
-   fallback is false, no case median is below 90, and overall median quality is
-   not worse than the comparable incumbent by more than two points.
+2. Every applicable distinct role case has at least three retained comparable
+   successful attempts in one digest-compatible evaluator cohort, confirmed
+   served identity, fallback false, no benchmark-owned fault, no case median
+   below 90, and overall median quality not worse than the comparable incumbent
+   by more than two points.
 3. Duration/token/cost coverage is sufficient to support the claimed advantage;
    missing evidence cannot be scored as zero.
 4. Family-independence and capability constraints remain satisfied.
@@ -217,7 +263,9 @@ applicable gates pass:
    without weakening unrelated invariants.
 
 When a gate fails, retain the evidence and write `no policy change` with the
-exact failed gate. Do not promote by intuition.
+exact failed gate. A screen, benchmark fault, incompatible digest, historical
+v1 result, or missing human editorial receipt is never promotion or demotion
+evidence. Do not promote by intuition.
 
 When a gate passes, edit only
 `plugins/model-router/skills/model-router/references/role-policy.json`, update
