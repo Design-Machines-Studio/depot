@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -28,6 +29,118 @@ class ModelIntelligenceTest(unittest.TestCase):
         return subprocess.run(
             [str(TOOL), *args], cwd=REPO, text=True, capture_output=True
         )
+
+    def v2_result(
+        self,
+        *,
+        case_id: str,
+        model: str,
+        transport: str,
+        observed_at: str,
+        endpoint_provider: str = "openai",
+        digest_suffix: str = "a",
+        success: bool = True,
+        failure_class: str = "none",
+        failure_owner: str = "none",
+        benchmark_fault: bool = False,
+        transport_status: str = "success",
+        identity_confidence: str = "confirmed",
+        quality_score: int = 100,
+        duration: int | None = 2,
+        usage: dict[str, int | float | None] | None = None,
+    ) -> dict[str, object]:
+        suite = json.loads(
+            (
+                REPO
+                / "plugins/openrouter/skills/openrouter-delegate/references/depot-role-benchmark-suite.json"
+            ).read_text()
+        )
+        case = next(item for item in suite["cases"] if item["id"] == case_id)
+        bindings = {
+            "suiteRevision": suite["suiteRevision"],
+            "suiteDigest": f"suite-{digest_suffix}",
+            "caseRevision": case["revision"],
+            "caseDigest": f"case-{digest_suffix}",
+            "promptRevision": case["promptRevision"],
+            "promptDigest": f"prompt-{digest_suffix}",
+            "scorerRevision": 2,
+            "scorerDigest": f"scorer-{digest_suffix}",
+            "normalizerRevision": 2,
+            "normalizerDigest": f"normalizer-{digest_suffix}",
+        }
+        gate = success
+        return {
+            "schemaVersion": 2,
+            "suiteId": suite["suiteId"],
+            "caseId": case_id,
+            "role": case["role"],
+            "observedAt": observed_at,
+            "behavioralContract": suite["behavioralContract"],
+            "evidenceBindings": {
+                name: {"declared": value, "actual": value, "match": True}
+                for name, value in bindings.items()
+            },
+            "transport": transport,
+            "endpointProvider": endpoint_provider,
+            "transportOutcome": {"status": transport_status, "failureKind": None},
+            "identityStatus": {"confidence": identity_confidence, "provenance": "response"},
+            "requestedIdentity": model,
+            "servedIdentity": model,
+            "fallback": {
+                "used": False,
+                "attemptedIdentity": model,
+                "attemptedIdentities": [model],
+                "provenance": "response_model",
+            },
+            "durationSeconds": duration,
+            "usage": usage
+            if usage is not None
+            else {
+                "prompt_tokens": 10,
+                "completion_tokens": 5,
+                "reasoning_tokens": 2,
+                "cache_read_tokens": 3,
+                "cache_creation_tokens": 1,
+                "cost": 0.01,
+            },
+            "strictParse": {"passed": gate},
+            "normalizedParse": {"passed": True, "normalization": "strict-raw-object"},
+            "contractPassed": gate,
+            "mandatoryPassed": gate,
+            "semanticPassed": gate,
+            "semanticScore": quality_score,
+            "validationPassed": gate,
+            "benchmarkFault": benchmark_fault,
+            "comparable": not benchmark_fault and transport_status == "success" and identity_confidence == "confirmed",
+            "overallSuccess": success,
+            "failureClass": failure_class,
+            "failureOwner": failure_owner,
+            "failureReasons": [] if success else [failure_class],
+            "modelConclusion": "success" if success else None,
+            "qualityScore": quality_score,
+            "parsed": True,
+        }
+
+    def write_attempt(
+        self,
+        benchmark_root: Path,
+        name: str,
+        result: dict[str, object],
+        *,
+        receipt: dict[str, object] | None = None,
+        output: dict[str, object] | None = None,
+        human: dict[str, object] | None = None,
+    ) -> Path:
+        directory = benchmark_root / name
+        directory.mkdir(parents=True)
+        (directory / "result.json").write_text(json.dumps(result))
+        if receipt is not None:
+            (directory / "receipt.json").write_text(json.dumps(receipt))
+        if output is not None:
+            (directory / "output.json").write_text(json.dumps(output))
+        if human is not None:
+            (directory / "human-rubric.json").write_text(json.dumps(human))
+        return directory
 
     def test_catalog_refresh_updates_existing_models_and_only_nominates_new(self) -> None:
         matrix = self.root / "matrix.json"
@@ -219,6 +332,347 @@ class ModelIntelligenceTest(unittest.TestCase):
         self.assertEqual(rows["native/model"]["input_bytes"], 400)
         self.assertEqual(rows["example/model"]["finding_contributions"], 2)
         self.assertIn("different units", markdown.read_text())
+
+    def test_v2_rollup_uses_validated_gates_grouping_and_attributable_rework(self) -> None:
+        benchmark_root = self.root / "bench-v2"
+        model = "deepseek/deepseek-v4-flash-0731"
+        benchmark_fault = self.v2_result(
+            case_id="review-zero-deferral",
+            model=model,
+            transport="openrouter",
+            observed_at="2026-08-29T01:00:00Z",
+            endpoint_provider="Baidu",
+            success=False,
+            failure_class="benchmark-prompt-contract-fault",
+            failure_owner="benchmark",
+            benchmark_fault=True,
+        )
+        partial = self.v2_result(
+            case_id="review-zero-deferral",
+            model=model,
+            transport="openrouter",
+            observed_at="2026-08-29T01:01:00Z",
+            endpoint_provider="Reka AI",
+            success=False,
+            failure_class="semantic-assertion-failure",
+            failure_owner="model",
+            quality_score=15,
+            duration=2,
+        )
+        partial["contractPassed"] = True
+        partial["mandatoryPassed"] = True
+        partial["semanticPassed"] = False
+        partial["validationPassed"] = False
+        validated = self.v2_result(
+            case_id="review-zero-deferral",
+            model=model,
+            transport="openrouter",
+            observed_at="2026-08-29T01:02:00Z",
+            endpoint_provider="DeepInfra",
+            duration=3,
+            usage={
+                "prompt_tokens": 20,
+                "completion_tokens": 7,
+                "reasoning_tokens": 4,
+                "cache_read_tokens": 6,
+                "cache_creation_tokens": 2,
+                "cost": 0.02,
+            },
+        )
+        for name, evidence in (
+            ("01-benchmark-fault", benchmark_fault),
+            ("02-partial", partial),
+            ("03-valid", validated),
+        ):
+            self.write_attempt(benchmark_root, name, evidence)
+
+        transport_failure = self.v2_result(
+            case_id="review-false-positive-control",
+            model=model,
+            transport="openrouter",
+            observed_at="2026-08-29T01:03:00Z",
+            success=False,
+            failure_class="transport-failure",
+            failure_owner="operational",
+            transport_status="failed",
+        )
+        self.write_attempt(benchmark_root, "04-transport-failure", transport_failure)
+        incompatible = self.v2_result(
+            case_id="review-zero-deferral",
+            model=model,
+            transport="openrouter",
+            observed_at="2026-08-29T01:04:00Z",
+            digest_suffix="incompatible",
+        )
+        incompatible["evidenceBindings"]["promptDigest"]["match"] = False
+        self.write_attempt(benchmark_root, "05-incompatible", incompatible)
+        incomplete_dir = benchmark_root / "06-incomplete"
+        incomplete_dir.mkdir(parents=True)
+        (incomplete_dir / "receipt.json").write_text(
+            json.dumps(
+                {
+                    "schemaVersion": 2,
+                    "requestedModel": model,
+                    "transport": "openrouter",
+                    "outcome": "failed",
+                    "failureKind": "http-error",
+                    "durationSeconds": 9,
+                    "usage": {"prompt_tokens": 11, "cache_read_tokens": 4},
+                    "benchmark": {
+                        "suiteId": "depot-role-v2",
+                        "caseId": "review-zero-deferral",
+                        "role": "review-fast",
+                    },
+                }
+            )
+        )
+
+        output = self.root / "v2.json"
+        markdown = self.root / "v2.md"
+        completed = self.run_tool(
+            "report",
+            "--run-root",
+            str(self.root / "no-runs"),
+            "--benchmark-root",
+            str(benchmark_root),
+            "--observed-at",
+            "2026-08-29T09:00:00+08:00",
+            "--json-output",
+            str(output),
+            "--markdown-output",
+            str(markdown),
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        report = json.loads(output.read_text())
+        rollup = report["benchmarks"]
+        primary = next(group for group in rollup["groups"] if group["case_id"] == "review-zero-deferral")
+        self.assertEqual(primary["attempts"], 3)
+        self.assertEqual(primary["comparable_attempts"], 2)
+        self.assertEqual(primary["validated_attempts"], 1)
+        self.assertFalse(primary["first_pass_validated"])
+        self.assertEqual(primary["model_rework_to_valid"], 1)
+        self.assertEqual(primary["time_to_first_validated_seconds"], 5)
+        self.assertEqual(primary["tokens_to_first_validated"]["prompt_tokens"], 30)
+        self.assertEqual(primary["operational_retries_before_valid"], {"prompt": 1})
+        self.assertEqual(
+            set(primary["endpoint_providers"]), {"Baidu", "Reka AI", "DeepInfra"}
+        )
+        self.assertEqual(primary["failure_counts"]["semantic"], 1)
+        self.assertNotIn(15, [group["validated_attempts"] for group in rollup["groups"]])
+        self.assertEqual(len(rollup["incompatible_v2"]), 1)
+        self.assertEqual(rollup["incompatible_v2"][0]["model_conclusion"], None)
+        self.assertEqual(rollup["incomplete_attempts"][0]["duration_seconds"], 9)
+        self.assertEqual(rollup["incomplete_attempts"][0]["prompt_tokens"], 11)
+        self.assertEqual(rollup["routing_conclusion"], "no routing change justified")
+        self.assertEqual(
+            {role["role"] for role in rollup["roles"]},
+            set(
+                json.loads(
+                    (
+                        REPO
+                        / "plugins/model-router/skills/model-router/references/role-policy.json"
+                    ).read_text()
+                )["roles"]
+            ),
+        )
+        self.assertLess(
+            markdown.read_text().index("Per-role validated quality and efficiency"),
+            markdown.read_text().index("Provider spend and access economics"),
+        )
+        self.assertIn("no model conclusion", markdown.read_text())
+
+    def test_v2_digest_compatibility_and_missing_ordering_stay_separate_and_null(self) -> None:
+        benchmark_root = self.root / "digest-v2"
+        for name, suffix in (("one", "a"), ("two", "b")):
+            evidence = self.v2_result(
+                case_id="mechanical-owned-edit",
+                model="gpt-5.6-luna",
+                transport="codex-cli",
+                observed_at="not-an-order",
+                digest_suffix=suffix,
+            )
+            evidence["durationSeconds"] = None
+            evidence["usage"] = {
+                "prompt_tokens": None,
+                "completion_tokens": None,
+                "reasoning_tokens": None,
+                "cache_read_tokens": None,
+                "cache_creation_tokens": None,
+                "cost": None,
+            }
+            self.write_attempt(benchmark_root, name, evidence)
+        output = self.root / "digest.json"
+        completed = self.run_tool(
+            "report",
+            "--run-root",
+            str(self.root / "no-runs"),
+            "--benchmark-root",
+            str(benchmark_root),
+            "--observed-at",
+            "2026-08-29T09:00:00+08:00",
+            "--json-output",
+            str(output),
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        groups = json.loads(output.read_text())["benchmarks"]["groups"]
+        self.assertEqual(len(groups), 2)
+        self.assertNotEqual(groups[0]["suite_digest"], groups[1]["suite_digest"])
+        for group in groups:
+            self.assertIsNone(group["first_pass_validated"])
+            self.assertIsNone(group["model_rework_to_valid"])
+            self.assertIsNone(group["time_to_first_validated_seconds"])
+            self.assertIsNone(group["tokens_to_first_validated"]["prompt_tokens"])
+            self.assertEqual(group["telemetry_coverage"]["tool_calls"]["recorded"], 0)
+
+    def test_v2_mandatory_validation_and_identity_failures_are_distinct(self) -> None:
+        benchmark_root = self.root / "failure-classes-v2"
+        mandatory = self.v2_result(
+            case_id="review-zero-deferral",
+            model="gpt-5.6-luna",
+            transport="codex-cli",
+            observed_at="2026-08-29T03:00:00Z",
+            digest_suffix="mandatory",
+            success=False,
+            failure_class="mandatory-assertion-failure",
+            failure_owner="model",
+            quality_score=50,
+        )
+        mandatory["contractPassed"] = True
+        validation = self.v2_result(
+            case_id="review-zero-deferral",
+            model="gpt-5.6-luna",
+            transport="codex-cli",
+            observed_at="2026-08-29T03:01:00Z",
+            digest_suffix="validation",
+            success=False,
+            failure_class="deterministic-validation-failure",
+            failure_owner="model",
+        )
+        validation["contractPassed"] = True
+        validation["mandatoryPassed"] = True
+        validation["semanticPassed"] = True
+        identity = self.v2_result(
+            case_id="review-zero-deferral",
+            model="gpt-5.6-luna",
+            transport="codex-cli",
+            observed_at="2026-08-29T03:02:00Z",
+            digest_suffix="identity",
+            success=True,
+            failure_class="unknown-served-identity",
+            failure_owner="operational",
+            identity_confidence="unknown",
+        )
+        for name, evidence in (
+            ("mandatory", mandatory),
+            ("validation", validation),
+            ("identity", identity),
+        ):
+            self.write_attempt(benchmark_root, name, evidence)
+        output = self.root / "failure-classes.json"
+        completed = self.run_tool(
+            "report",
+            "--run-root",
+            str(self.root / "no-runs"),
+            "--benchmark-root",
+            str(benchmark_root),
+            "--observed-at",
+            "2026-08-29T09:00:00+08:00",
+            "--json-output",
+            str(output),
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        groups = json.loads(output.read_text())["benchmarks"]["groups"]
+        categories = {
+            group["attempt_records"][0]["failure_category"]: group
+            for group in groups
+        }
+        self.assertEqual(set(categories), {"mandatory", "validation", "identity"})
+        self.assertEqual(categories["mandatory"]["best_deterministic_quality"], 50)
+        self.assertEqual(categories["mandatory"]["validated_attempts"], 0)
+        self.assertEqual(categories["validation"]["model_attributable_failures"], 1)
+        self.assertEqual(categories["identity"]["comparable_attempts"], 0)
+        self.assertEqual(categories["identity"]["operational_retries"], {"identity": 1})
+
+    def test_editorial_human_evidence_is_optional_blinded_and_digest_matched(self) -> None:
+        benchmark_root = self.root / "editorial-v2"
+        output_artifact = {"copy": "member update", "preservedFacts": []}
+        digest = hashlib.sha256(
+            (json.dumps(output_artifact, indent=2) + "\n").encode()
+        ).hexdigest()
+        accepted_result = self.v2_result(
+            case_id="editorial-member-update",
+            model="fable",
+            transport="claude-cli",
+            observed_at="2026-08-29T02:00:00Z",
+            endpoint_provider="anthropic",
+        )
+        accepted_human = {
+            "schemaVersion": 1,
+            "suiteId": "depot-role-v2",
+            "caseId": "editorial-member-update",
+            "caseRevision": 2,
+            "rubricRevision": 1,
+            "outputArtifactSha256": digest,
+            "observedAt": "2026-08-29T02:30:00Z",
+            "blindToCandidate": True,
+            "criterionScores": {"member-clarity": 5, "member-voice": 4},
+        }
+        self.write_attempt(
+            benchmark_root,
+            "accepted",
+            accepted_result,
+            output=output_artifact,
+            human=accepted_human,
+        )
+        missing = self.v2_result(
+            case_id="editorial-release-note",
+            model="fable",
+            transport="claude-cli",
+            observed_at="2026-08-29T02:01:00Z",
+            endpoint_provider="anthropic",
+        )
+        self.write_attempt(benchmark_root, "missing", missing, output={"headline": "release"})
+        rejected = dict(accepted_human)
+        rejected["candidate"] = "fable"
+        rejected_result = self.v2_result(
+            case_id="editorial-member-update",
+            model="fable",
+            transport="claude-cli",
+            observed_at="2026-08-29T02:02:00Z",
+            endpoint_provider="anthropic",
+            digest_suffix="rejected",
+        )
+        self.write_attempt(
+            benchmark_root,
+            "rejected",
+            rejected_result,
+            output=output_artifact,
+            human=rejected,
+        )
+        report_path = self.root / "editorial.json"
+        completed = self.run_tool(
+            "report",
+            "--run-root",
+            str(self.root / "no-runs"),
+            "--benchmark-root",
+            str(benchmark_root),
+            "--observed-at",
+            "2026-08-29T09:00:00+08:00",
+            "--json-output",
+            str(report_path),
+        )
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        rollup = json.loads(report_path.read_text())["benchmarks"]
+        editorial = next(role for role in rollup["roles"] if role["role"] == "editorial")
+        self.assertEqual(editorial["editorial_human_evidence"]["accepted_receipts"], 1)
+        self.assertEqual(editorial["editorial_human_evidence"]["median_mean_score"], 4.5)
+        missing_group = next(group for group in rollup["groups"] if group["case_id"] == "editorial-release-note")
+        self.assertIsNone(missing_group["editorial_human_evidence"])
+        rejected_group = next(group for group in rollup["groups"] if group["suite_digest"] == "suite-rejected")
+        self.assertEqual(
+            rejected_group["editorial_human_rejections"],
+            {"malformed or identity-bearing human rubric fields": 1},
+        )
 
 
 class NativeDepotBenchmarkTest(unittest.TestCase):
