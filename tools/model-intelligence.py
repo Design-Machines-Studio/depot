@@ -19,6 +19,7 @@ import argparse
 import hashlib
 import json
 import math
+import re
 import statistics
 import sys
 from collections import Counter, defaultdict
@@ -546,6 +547,7 @@ V2_BINDINGS = (
 )
 MODEL_FAILURE_CATEGORIES = {"contract", "mandatory", "semantic", "validation"}
 OPERATIONAL_FAILURE_CATEGORIES = {"benchmark", "prompt", "parser", "scorer", "harness", "transport", "identity"}
+DIGEST_PATTERN = re.compile(r"(?:sha256:)?[0-9a-f]{64}")
 
 
 def binding_value(result: dict[str, Any], name: str) -> Any:
@@ -555,17 +557,28 @@ def binding_value(result: dict[str, Any], name: str) -> Any:
 
 
 def result_usage(result: dict[str, Any], receipt: dict[str, Any]) -> dict[str, float | None]:
-    usage = result.get("usage")
-    usage = usage if isinstance(usage, dict) else receipt.get("usage")
-    usage = usage if isinstance(usage, dict) else {}
+    result_values = result.get("usage")
+    result_values = result_values if isinstance(result_values, dict) else {}
+    receipt_values = receipt.get("usage")
+    receipt_values = receipt_values if isinstance(receipt_values, dict) else {}
 
     def usage_number(*names: str) -> float | None:
-        for name in names:
-            parsed = number(usage.get(name))
-            if parsed is not None:
-                return parsed
+        for source in (result_values, receipt_values):
+            for name in names:
+                parsed = number(source.get(name))
+                if parsed is not None:
+                    return parsed
         return None
 
+    cost_usd = usage_number("cost", "cost_usd")
+    if cost_usd is None:
+        for source in (result, receipt):
+            for name in ("providerBilledCostUsd", "billedCostUsd", "costUsd", "cost_usd"):
+                cost_usd = number(source.get(name))
+                if cost_usd is not None:
+                    break
+            if cost_usd is not None:
+                break
     return {
         "prompt_tokens": usage_number("prompt_tokens", "input_tokens"),
         "completion_tokens": usage_number("completion_tokens", "output_tokens"),
@@ -576,13 +589,14 @@ def result_usage(result: dict[str, Any], receipt: dict[str, Any]) -> dict[str, f
         "cache_creation_tokens": usage_number(
             "cache_creation_tokens", "cache_write_tokens", "cache_creation_input_tokens"
         ),
-        "cost_usd": usage_number("cost", "cost_usd"),
+        "cost_usd": cost_usd,
     }
 
 
 def supplied_number(result: dict[str, Any], receipt: dict[str, Any], *names: str) -> float | None:
     usage = result.get("usage") if isinstance(result.get("usage"), dict) else {}
-    for source in (result, usage, receipt):
+    receipt_usage = receipt.get("usage") if isinstance(receipt.get("usage"), dict) else {}
+    for source in (result, usage, receipt, receipt_usage):
         for name in names:
             parsed = number(source.get(name))
             if parsed is not None:
@@ -608,7 +622,7 @@ def attempt_order(result: dict[str, Any], receipt: dict[str, Any]) -> tuple[str,
     return None
 
 
-def failure_category(result: dict[str, Any], compatible: bool, fallback_ok: bool) -> str | None:
+def failure_category(result: dict[str, Any], compatible: bool, identity_ok: bool) -> str | None:
     failure_class = result.get("failureClass")
     failure_class = failure_class if isinstance(failure_class, str) else ""
     if not compatible:
@@ -627,7 +641,7 @@ def failure_category(result: dict[str, Any], compatible: bool, fallback_ok: bool
     if not isinstance(transport, dict) or transport.get("status") != "success":
         return "transport"
     identity = result.get("identityStatus")
-    if not isinstance(identity, dict) or identity.get("confidence") != "confirmed" or not fallback_ok:
+    if not isinstance(identity, dict) or identity.get("confidence") != "confirmed" or not identity_ok:
         return "identity"
     if result.get("contractPassed") is not True:
         return "contract"
@@ -646,32 +660,123 @@ def safe_failure_reason(result: dict[str, Any], receipt: dict[str, Any], categor
         for reason in reasons:
             if isinstance(reason, str) and reason:
                 return reason.replace("\n", " ")[:240]
-    for source, name in ((result, "failureClass"), (receipt, "failureKind")):
+    for source, name in (
+        (result, "failureClass"), (result, "failureReason"),
+        (receipt, "failureKind"), (receipt, "failureReason"),
+    ):
         reason = source.get(name)
         if isinstance(reason, str) and reason:
             return reason.replace("\n", " ")[:240]
     return category
 
 
-def normalized_output_digest(directory: Path, result: dict[str, Any]) -> str | None:
-    for name in ("normalizedOutputArtifactSha256", "normalizedOutputDigest"):
-        digest = result.get(name)
-        if isinstance(digest, str) and digest:
-            return digest.removeprefix("sha256:")
-    normalized = result.get("normalizedOutput")
+def retained_attempt(
+    directory: Path,
+    result: dict[str, Any],
+    receipt: dict[str, Any],
+    case: dict[str, Any] | None,
+    category: str,
+) -> dict[str, Any]:
+    benchmark = receipt.get("benchmark")
+    benchmark = benchmark if isinstance(benchmark, dict) else {}
+    transport_outcome = result.get("transportOutcome")
+    transport_outcome = transport_outcome if isinstance(transport_outcome, dict) else {}
+
+    def text_value(*values: Any) -> str | None:
+        return next((value for value in values if isinstance(value, str) and value), None)
+
+    usage = result_usage(result, receipt)
+    case_id = text_value(result.get("caseId"), benchmark.get("caseId"))
+    authoritative_role = case.get("role") if isinstance(case, dict) else None
+    return {
+        "path": str(directory),
+        "requested_candidate": text_value(
+            result.get("requestedIdentity"), result.get("requestedModel"), receipt.get("requestedModel")
+        ),
+        "served_identity": text_value(
+            result.get("servedIdentity"), result.get("servedModel"), receipt.get("responseModel")
+        ),
+        "endpoint_provider": text_value(
+            result.get("endpointProvider"), result.get("provider"), receipt.get("servingProvider")
+        ),
+        "billing_mode": text_value(result.get("billingMode"), receipt.get("billingMode")),
+        "transport": text_value(result.get("transport"), receipt.get("transport")),
+        "role": text_value(authoritative_role, result.get("role"), benchmark.get("role")),
+        "reported_role": text_value(result.get("role"), benchmark.get("role")),
+        "case_id": case_id,
+        "observed_at": text_value(result.get("observedAt"), receipt.get("observedAt")),
+        "receipt_outcome": text_value(
+            result.get("outcome"), receipt.get("outcome"), transport_outcome.get("status")
+        ),
+        "duration_seconds": supplied_number(result, receipt, "durationSeconds", "duration_seconds"),
+        **usage,
+        "provider_billed_cost_usd": usage["cost_usd"],
+        "context_tokens": supplied_number(
+            result, receipt, "contextTokens", "context_tokens", "inputContextTokens"
+        ),
+        "tool_calls": supplied_number(result, receipt, "toolCalls", "tool_calls", "toolUseCount"),
+        "failure_category": category,
+        "failure_reason": safe_failure_reason(result, receipt, category),
+        "model_conclusion": None,
+    }
+
+
+def closed_identity_proof(result: dict[str, Any], receipt: dict[str, Any]) -> bool:
+    identity = result.get("identityStatus")
+    identity = identity if isinstance(identity, dict) else {}
+    fallback = result.get("fallback")
+    fallback = fallback if isinstance(fallback, dict) else {}
+    requested = result.get("requestedIdentity")
+    served = result.get("servedIdentity")
+    if not (
+        isinstance(requested, str)
+        and requested
+        and served == requested
+        and identity.get("confidence") == "confirmed"
+        and identity.get("provenance") == "response"
+        and fallback.get("used") is False
+        and fallback.get("attemptedIdentity") == requested
+        and fallback.get("attemptedIdentities") == [requested]
+        and fallback.get("provenance") == "response_model"
+    ):
+        return False
+    optional_receipt_bindings = {
+        "requestedModel": requested,
+        "responseModel": served,
+        "transport": result.get("transport"),
+        "fallbackUsed": False,
+        "attemptedModel": requested,
+        "attemptedModels": [requested],
+        "attemptProvenance": "response_model",
+        "responseModelProvenance": "response",
+    }
+    return all(
+        name not in receipt or receipt.get(name) == expected
+        for name, expected in optional_receipt_bindings.items()
+    )
+
+
+def normalized_output_digest(directory: Path, result: dict[str, Any]) -> tuple[str | None, str | None]:
+    output_path = directory / "output.json"
+    if not output_path.is_file() or output_path.is_symlink():
+        return None, "human rubric normalized output artifact unavailable"
+    try:
+        normalized = json.loads(output_path.read_text())
+    except (OSError, json.JSONDecodeError):
+        return None, "human rubric normalized output artifact unavailable"
     if not isinstance(normalized, dict):
-        output_path = directory / "output.json"
-        if not output_path.is_file() or output_path.is_symlink():
-            return None
-        try:
-            candidate = json.loads(output_path.read_text())
-        except (OSError, json.JSONDecodeError):
-            return None
-        normalized = candidate if isinstance(candidate, dict) else None
-    if not isinstance(normalized, dict):
-        return None
+        return None, "human rubric normalized output artifact unavailable"
     artifact = json.dumps(normalized, indent=2, ensure_ascii=False) + "\n"
-    return sha256_bytes(artifact.encode())
+    recomputed = sha256_bytes(artifact.encode())
+    for name in ("normalizedOutputArtifactSha256", "normalizedOutputDigest"):
+        if name not in result:
+            continue
+        declared = result.get(name)
+        if not isinstance(declared, str) or DIGEST_PATTERN.fullmatch(declared) is None:
+            return None, "declared normalized output digest syntax invalid"
+        if declared.removeprefix("sha256:") != recomputed:
+            return None, "declared normalized output digest mismatch"
+    return recomputed, None
 
 
 def human_rubric_evidence(
@@ -701,7 +806,7 @@ def human_rubric_evidence(
         if isinstance(item, dict) and isinstance(item.get("id"), str)
     )
     scores = receipt.get("criterionScores") if isinstance(receipt, dict) else None
-    digest = normalized_output_digest(directory, result)
+    digest, digest_error = normalized_output_digest(directory, result)
     valid_scores = (
         isinstance(scores, dict)
         and sorted(scores) == criterion_ids
@@ -732,7 +837,11 @@ def human_rubric_evidence(
     ):
         return None, "human rubric case or rubric mismatch"
     receipt_digest = receipt.get("outputArtifactSha256")
-    if not isinstance(receipt_digest, str) or digest is None or receipt_digest.removeprefix("sha256:") != digest:
+    if digest_error is not None:
+        return None, digest_error
+    if not isinstance(receipt_digest, str) or DIGEST_PATTERN.fullmatch(receipt_digest) is None:
+        return None, "human rubric output digest syntax invalid"
+    if digest is None or receipt_digest.removeprefix("sha256:") != digest:
         return None, "human rubric output digest mismatch"
     if not valid_scores:
         return None, "unknown criterion IDs or invalid criterion scores"
@@ -841,6 +950,7 @@ def group_rollup(key: tuple[Any, ...], attempts: list[dict[str, Any]]) -> dict[s
         "model_rework_to_valid": model_rework,
         "attempts_to_valid": len(through_valid) if through_valid else None,
         "time_to_first_validated_seconds": sum_through_valid(through_valid, "duration_seconds"),
+        "median_duration_seconds": median(item["duration_seconds"] for item in comparable),
         "tokens_to_first_validated": {
             field: sum_through_valid(through_valid, field)
             for field in (
@@ -890,6 +1000,114 @@ def group_rollup(key: tuple[Any, ...], attempts: list[dict[str, Any]]) -> dict[s
     }
 
 
+EVALUATOR_COHORT_FIELDS = (
+    "suite_id", "suite_revision", "suite_digest", "scorer_revision", "scorer_digest",
+    "normalizer_revision", "normalizer_digest", "behavior_revision", "behavior_digest",
+)
+
+
+def evaluator_cohort_key(group: dict[str, Any]) -> tuple[Any, ...]:
+    return tuple(group[name] for name in EVALUATOR_COHORT_FIELDS)
+
+
+def evaluator_cohort_rollup(
+    key: tuple[Any, ...],
+    groups: list[dict[str, Any]],
+    role_cases: list[dict[str, Any]],
+) -> dict[str, Any]:
+    comparable_attempts = [
+        attempt for group in groups for attempt in group["attempt_records"]
+        if attempt["comparable"]
+    ]
+    first_pass = [
+        group["first_pass_validated"] for group in groups
+        if group["first_pass_validated"] is not None
+    ]
+    valid_groups = [group for group in groups if group["attempts_to_valid"] is not None]
+    case_coverage = []
+    for case in role_cases:
+        matching = [group for group in groups if group["case_id"] == case.get("id")]
+        case_coverage.append(
+            {
+                "case_id": case.get("id"),
+                "case_revision": case.get("revision"),
+                "prompt_revision": case.get("promptRevision"),
+                "groups": [
+                    {
+                        "requested_candidate": group["requested_candidate"],
+                        "transport": group["transport"],
+                        "case_revision": group["case_revision"],
+                        "case_digest": group["case_digest"],
+                        "prompt_revision": group["prompt_revision"],
+                        "prompt_digest": group["prompt_digest"],
+                        "comparable_attempts": group["comparable_attempts"],
+                        "validated_attempts": group["validated_attempts"],
+                    }
+                    for group in matching
+                ],
+                "comparable_attempts": sum(group["comparable_attempts"] for group in matching),
+                "validated_attempts": sum(group["validated_attempts"] for group in matching),
+            }
+        )
+    return {
+        **dict(zip(EVALUATOR_COHORT_FIELDS, key)),
+        "complete_case_coverage": bool(case_coverage) and all(
+            item["comparable_attempts"] > 0 for item in case_coverage
+        ),
+        "case_coverage": case_coverage,
+        "comparable_attempts": len(comparable_attempts),
+        "validated_attempts": sum(group["validated_attempts"] for group in groups),
+        "best_deterministic_quality": max(
+            (group["best_deterministic_quality"] for group in groups if group["best_deterministic_quality"] is not None),
+            default=None,
+        ),
+        "first_pass_validated_rate": sum(first_pass) / len(first_pass) if first_pass else None,
+        "median_duration_seconds": median(
+            attempt["duration_seconds"] for attempt in comparable_attempts
+        ),
+        "median_time_to_first_validated_seconds": median(
+            group["time_to_first_validated_seconds"] for group in valid_groups
+        ),
+        "median_attempts_to_valid": median(group["attempts_to_valid"] for group in valid_groups),
+        "median_model_rework_to_valid": median(
+            group["model_rework_to_valid"] for group in valid_groups
+        ),
+        "median_tokens_to_first_validated": {
+            field: median(group["tokens_to_first_validated"][field] for group in valid_groups)
+            for field in (
+                "prompt_tokens", "completion_tokens", "reasoning_tokens",
+                "cache_read_tokens", "cache_creation_tokens",
+            )
+        },
+        "median_context_to_first_validated": median(
+            group["context_to_first_validated"] for group in valid_groups
+        ),
+        "useful_finding_yield": median(group["useful_finding_yield"] for group in groups),
+        "false_positive_yield": median(group["false_positive_yield"] for group in groups),
+        "model_failure_counts": dict(sorted(sum(
+            (
+                Counter({
+                    name: count for name, count in group["failure_counts"].items()
+                    if name in MODEL_FAILURE_CATEGORIES
+                })
+                for group in groups
+            ),
+            Counter(),
+        ).items())),
+        "operational_retries": dict(sorted(sum(
+            (Counter(group["operational_retries"]) for group in groups), Counter()
+        ).items())),
+        "instrumentation": {
+            field: telemetry_coverage(comparable_attempts, field)
+            for field in (
+                "duration_seconds", "prompt_tokens", "completion_tokens", "reasoning_tokens",
+                "cache_read_tokens", "cache_creation_tokens", "context_tokens", "tool_calls",
+                "correction_count", "useful_findings", "false_positives",
+            )
+        },
+    }
+
+
 def benchmark_rollup(root: Path | None) -> dict[str, Any]:
     policy = load_json(DEFAULT_ROLE_POLICY)
     suite = load_json(DEFAULT_BENCHMARK_SUITE)
@@ -906,7 +1124,7 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
     incomplete: list[dict[str, Any]] = []
     historical_v1: list[dict[str, Any]] = []
     incompatible_v2: list[dict[str, Any]] = []
-    measured_cost_usd = 0.0
+    recorded_costs: list[float] = []
     expected_behavior = suite.get("behavioralContract")
     expected_behavior = expected_behavior if isinstance(expected_behavior, dict) else {}
 
@@ -919,71 +1137,54 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
         receipt = receipt if isinstance(receipt, dict) else {}
         result_path = directory / "result.json"
         if not result_path.is_file():
-            usage = result_usage({}, receipt)
             benchmark = receipt.get("benchmark")
             benchmark = benchmark if isinstance(benchmark, dict) else {}
             case_id = benchmark.get("caseId")
             case = case_by_id.get(case_id) if isinstance(case_id, str) else None
-            incomplete.append(
-                {
-                    "path": str(directory),
-                    "requested_candidate": receipt.get("requestedModel"),
-                    "transport": receipt.get("transport"),
-                    "role": benchmark.get("role") or (case.get("role") if isinstance(case, dict) else None),
-                    "case_id": case_id,
-                    "duration_seconds": supplied_number({}, receipt, "durationSeconds", "duration_seconds"),
-                    **usage,
-                    "receipt_outcome": receipt.get("outcome"),
-                    "failure_category": "transport" if receipt.get("outcome") == "failed" else "harness",
-                    "failure_reason": safe_failure_reason({}, receipt, "incomplete attempt"),
-                }
-            )
-            cost = usage["cost_usd"]
-            measured_cost_usd += cost if cost is not None else 0
+            category = "transport" if receipt.get("outcome") == "failed" else "harness"
+            retained = retained_attempt(directory, {}, receipt, case, category)
+            incomplete.append(retained)
+            if retained["cost_usd"] is not None:
+                recorded_costs.append(retained["cost_usd"])
             continue
         try:
             result = load_json(result_path)
-        except IntelligenceError as exc:
-            usage = result_usage({}, receipt)
+        except IntelligenceError:
             benchmark = receipt.get("benchmark")
             benchmark = benchmark if isinstance(benchmark, dict) else {}
-            incomplete.append(
-                {
-                    "path": str(directory),
-                    "requested_candidate": receipt.get("requestedModel"),
-                    "transport": receipt.get("transport"),
-                    "role": benchmark.get("role"),
-                    "case_id": benchmark.get("caseId"),
-                    "duration_seconds": supplied_number({}, receipt, "durationSeconds", "duration_seconds"),
-                    **usage,
-                    "receipt_outcome": receipt.get("outcome"),
-                    "failure_category": "parser",
-                    "failure_reason": str(exc),
-                }
-            )
+            case_id = benchmark.get("caseId")
+            case = case_by_id.get(case_id) if isinstance(case_id, str) else None
+            retained = retained_attempt(directory, {}, receipt, case, "parser")
+            incomplete.append(retained)
+            if retained["cost_usd"] is not None:
+                recorded_costs.append(retained["cost_usd"])
             continue
         if not isinstance(result, dict):
-            incomplete.append({"path": str(directory), "failure_category": "parser", "failure_reason": "result object required"})
+            benchmark = receipt.get("benchmark")
+            benchmark = benchmark if isinstance(benchmark, dict) else {}
+            case_id = benchmark.get("caseId")
+            case = case_by_id.get(case_id) if isinstance(case_id, str) else None
+            retained = retained_attempt(directory, {}, receipt, case, "parser")
+            if retained["failure_reason"] == "parser":
+                retained["failure_reason"] = "result object required"
+            incomplete.append(retained)
+            if retained["cost_usd"] is not None:
+                recorded_costs.append(retained["cost_usd"])
             continue
         if result.get("schemaVersion") != 2:
-            usage = result_usage(result, receipt)
+            result_case_id = result.get("caseId")
+            case = case_by_id.get(result_case_id) if isinstance(result_case_id, str) else None
+            retained = retained_attempt(directory, result, receipt, case, "harness")
             historical_v1.append(
-                {
-                    "path": str(directory),
+                retained | {
                     "schema_version": result.get("schemaVersion", 1),
-                    "requested_candidate": result.get("requestedModel"),
-                    "served_identity": result.get("servedModel"),
-                    "transport": result.get("transport"),
-                    "case_id": result.get("caseId"),
                     "parsed": result.get("parsed") if isinstance(result.get("parsed"), bool) else None,
                     "quality_score": number(result.get("qualityScore")),
-                    "duration_seconds": supplied_number(result, receipt, "durationSeconds", "duration_seconds"),
-                    **usage,
-                    "receipt_outcome": receipt.get("outcome"),
-                    "failure_reason": safe_failure_reason(result, receipt, None),
                     "classification": "historical/incompatible; no model conclusion",
                 }
             )
+            if retained["cost_usd"] is not None:
+                recorded_costs.append(retained["cost_usd"])
             continue
 
         case_id = result.get("caseId")
@@ -995,7 +1196,50 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
             isinstance(bindings.get(name), dict)
             and bindings[name].get("match") is True
             and bindings[name].get("actual") is not None
+            and bindings[name].get("declared") == bindings[name].get("actual")
             for name in V2_BINDINGS
+        )
+        authoritative_role = case.get("role") if isinstance(case, dict) else None
+        requested_candidate = result.get("requestedIdentity")
+        transport = result.get("transport")
+        role_candidates = policy_roles.get(authoritative_role)
+        role_candidates = role_candidates if isinstance(role_candidates, list) else []
+        policy_candidate = next(
+            (
+                candidate for candidate in role_candidates
+                if isinstance(candidate, dict)
+                and candidate.get("model") == requested_candidate
+                and candidate.get("transport") == transport
+            ),
+            None,
+        )
+        required_capabilities = case.get("requiredCapabilities") if isinstance(case, dict) else None
+        required_capabilities = required_capabilities if isinstance(required_capabilities, list) else []
+        candidate_capabilities = policy_candidate.get("capabilities") if isinstance(policy_candidate, dict) else None
+        candidate_capabilities = candidate_capabilities if isinstance(candidate_capabilities, list) else []
+        policy_ok = bool(
+            isinstance(policy_candidate, dict)
+            and result.get("role") == authoritative_role
+            and all(
+                isinstance(capability, str) and capability in candidate_capabilities
+                for capability in required_capabilities
+            )
+        )
+        receipt_benchmark = receipt.get("benchmark")
+        receipt_benchmark = receipt_benchmark if isinstance(receipt_benchmark, dict) else {}
+        receipt_binding_ok = all(
+            name not in receipt or receipt.get(name) == expected
+            for name, expected in (
+                ("requestedModel", requested_candidate),
+                ("transport", transport),
+            )
+        ) and all(
+            name not in receipt_benchmark or receipt_benchmark.get(name) == expected
+            for name, expected in (
+                ("suiteId", result.get("suiteId")),
+                ("caseId", case_id),
+                ("role", authoritative_role),
+            )
         )
         authority_ok = bool(
             isinstance(case, dict)
@@ -1006,29 +1250,17 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
             and behavior.get("revision") == expected_behavior.get("revision")
             and behavior.get("digest") == expected_behavior.get("digest")
         )
-        compatible = bindings_ok and authority_ok
+        compatible = bindings_ok and authority_ok and policy_ok and receipt_binding_ok
         fallback = result.get("fallback")
-        fallback_ok = bool(
-            isinstance(fallback, dict)
-            and isinstance(fallback.get("used"), bool)
-            and isinstance(fallback.get("provenance"), str)
-            and fallback.get("provenance")
-        )
-        category = failure_category(result, compatible, fallback_ok)
+        identity_ok = closed_identity_proof(result, receipt)
+        category = failure_category(result, compatible, identity_ok)
         transport_outcome = result.get("transportOutcome")
         transport_outcome = transport_outcome if isinstance(transport_outcome, dict) else {}
-        identity_status = result.get("identityStatus")
-        identity_status = identity_status if isinstance(identity_status, dict) else {}
         comparable = bool(
             compatible
             and result.get("benchmarkFault") is False
             and transport_outcome.get("status") == "success"
-            and identity_status.get("confidence") == "confirmed"
-            and fallback_ok
-            and isinstance(result.get("requestedIdentity"), str)
-            and bool(result.get("requestedIdentity"))
-            and isinstance(result.get("servedIdentity"), str)
-            and bool(result.get("servedIdentity"))
+            and identity_ok
         )
         validated = bool(
             comparable
@@ -1039,16 +1271,18 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
         )
         usage = result_usage(result, receipt)
         cost = usage["cost_usd"]
-        measured_cost_usd += cost if cost is not None else 0
+        if cost is not None:
+            recorded_costs.append(cost)
         human, human_rejection = human_rubric_evidence(directory, result, case)
         attempt = {
             "path": str(directory),
-            "requested_candidate": result.get("requestedIdentity"),
+            "requested_candidate": requested_candidate,
             "served_identity": result.get("servedIdentity"),
             "endpoint_provider": result.get("endpointProvider"),
             "billing_mode": result.get("billingMode") or receipt.get("billingMode"),
-            "transport": result.get("transport"),
-            "role": result.get("role"),
+            "transport": transport,
+            "role": authoritative_role,
+            "reported_role": result.get("role"),
             "case_id": case_id,
             "case_revision": binding_value(result, "caseRevision"),
             "observed_at": result.get("observedAt") if isinstance(result.get("observedAt"), str) else None,
@@ -1064,6 +1298,7 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
             "failure_reason": safe_failure_reason(result, receipt, category),
             "duration_seconds": supplied_number(result, receipt, "durationSeconds", "duration_seconds"),
             **usage,
+            "provider_billed_cost_usd": usage["cost_usd"],
             "context_tokens": supplied_number(result, receipt, "contextTokens", "context_tokens", "inputContextTokens"),
             "tool_calls": supplied_number(result, receipt, "toolCalls", "tool_calls", "toolUseCount"),
             "correction_count": supplied_number(result, receipt, "correctionCount", "correction_count"),
@@ -1096,11 +1331,29 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
     for role, candidates in policy_roles.items():
         role_cases = [case for case in cases if isinstance(case, dict) and case.get("role") == role]
         role_groups = [group for group in groups if group["role"] == role]
-        role_attempts = [
-            attempt for group in role_groups for attempt in group["attempt_records"]
-            if attempt["comparable"]
+        cohort_groups: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
+        for group in role_groups:
+            cohort_groups[evaluator_cohort_key(group)].append(group)
+        evaluator_cohorts = [
+            evaluator_cohort_rollup(key, matching, role_cases)
+            for key, matching in sorted(
+                cohort_groups.items(), key=lambda item: tuple(str(part) for part in item[0])
+            )
+        ]
+        metric_cohorts = [
+            cohort for cohort in evaluator_cohorts if cohort["comparable_attempts"] > 0
+        ]
+        selected_cohort = metric_cohorts[0] if len(metric_cohorts) == 1 else None
+        selected_key = (
+            tuple(selected_cohort[name] for name in EVALUATOR_COHORT_FIELDS)
+            if selected_cohort is not None else None
+        )
+        selected_groups = [
+            group for group in role_groups
+            if selected_key is not None and evaluator_cohort_key(group) == selected_key
         ]
         incomplete_for_role = [item for item in incomplete if item.get("role") == role]
+        incompatible_for_role = [item for item in incompatible_v2 if item.get("role") == role]
         role_operational_retries = sum(
             (Counter(group["operational_retries"]) for group in role_groups), Counter()
         )
@@ -1108,9 +1361,27 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
             item["failure_category"] for item in incomplete_for_role
             if item.get("failure_category") in OPERATIONAL_FAILURE_CATEGORIES
         )
+        role_operational_retries.update(
+            item["failure_category"] for item in incompatible_for_role
+            if item.get("failure_category") in OPERATIONAL_FAILURE_CATEGORIES
+        )
         case_coverage = []
         for case in role_cases:
             matching = [group for group in role_groups if group["case_id"] == case.get("id")]
+            cohort_coverage = [
+                next(
+                    item for item in cohort["case_coverage"]
+                    if item["case_id"] == case.get("id")
+                )
+                | {
+                    name: cohort[name] for name in EVALUATOR_COHORT_FIELDS
+                }
+                for cohort in evaluator_cohorts
+            ]
+            selected_case = next(
+                (item for item in cohort_coverage if selected_key is not None and tuple(item[name] for name in EVALUATOR_COHORT_FIELDS) == selected_key),
+                None,
+            )
             case_coverage.append(
                 {
                     "case_id": case.get("id"),
@@ -1119,20 +1390,35 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
                     "required_capabilities": case.get("requiredCapabilities", []),
                     "applicability": case.get("applicability"),
                     "compatible_groups": len(matching),
-                    "comparable_attempts": sum(group["comparable_attempts"] for group in matching),
-                    "validated_attempts": sum(group["validated_attempts"] for group in matching),
+                    "comparable_attempts": selected_case["comparable_attempts"] if selected_case is not None else None,
+                    "validated_attempts": selected_case["validated_attempts"] if selected_case is not None else None,
+                    "evaluator_cohorts": cohort_coverage,
                     "latest_observed_at": max(
                         (group["latest_observed_at"] for group in matching if group["latest_observed_at"] is not None),
                         default=None,
                     ),
                 }
             )
-        missing_cases = [item["case_id"] for item in case_coverage if item["comparable_attempts"] == 0]
-        first_pass = [group["first_pass_validated"] for group in role_groups if group["first_pass_validated"] is not None]
-        valid_groups = [group for group in role_groups if group["attempts_to_valid"] is not None]
+        missing_cases = [
+            item["case_id"] for item in case_coverage
+            if not any(cohort["comparable_attempts"] > 0 for cohort in item["evaluator_cohorts"])
+        ]
         latest = max(
             (group["latest_observed_at"] for group in role_groups if group["latest_observed_at"] is not None),
             default=None,
+        )
+        has_comparable = bool(metric_cohorts)
+        instrumentation = (
+            selected_cohort["instrumentation"]
+            if selected_cohort is not None
+            else {
+                field: {"recorded": None, "attempts": None, "rate": None}
+                for field in (
+                    "duration_seconds", "prompt_tokens", "completion_tokens", "reasoning_tokens",
+                    "cache_read_tokens", "cache_creation_tokens", "context_tokens", "tool_calls",
+                    "correction_count", "useful_findings", "false_positives",
+                )
+            }
         )
         role_rows.append(
             {
@@ -1140,44 +1426,38 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
                 "policy_candidates": len(candidates) if isinstance(candidates, list) else 0,
                 "required_cases": len(role_cases),
                 "case_coverage": case_coverage,
-                "missing_cases": missing_cases,
-                "gap": "no comparable current evidence" if not role_attempts else ("incomplete case coverage" if missing_cases else None),
-                "confidence": "none" if not role_attempts else ("partial" if missing_cases else "controlled-current"),
-                "freshness": {"latest_observed_at": latest, "suite_revision": suite.get("suiteRevision"), "policy_snapshot": policy.get("matrixSnapshot")},
-                "best_deterministic_quality": max(
-                    (group["best_deterministic_quality"] for group in role_groups if group["best_deterministic_quality"] is not None),
-                    default=None,
+                "evaluator_cohorts": evaluator_cohorts,
+                "complete_evaluator_cohorts": sum(
+                    cohort["complete_case_coverage"] for cohort in evaluator_cohorts
                 ),
-                "validated_attempts": sum(group["validated_attempts"] for group in role_groups),
-                "comparable_attempts": sum(group["comparable_attempts"] for group in role_groups),
-                "first_pass_validated_rate": sum(first_pass) / len(first_pass) if first_pass else None,
-                "median_time_to_first_validated_seconds": median(group["time_to_first_validated_seconds"] for group in valid_groups),
-                "median_attempts_to_valid": median(group["attempts_to_valid"] for group in valid_groups),
-                "median_model_rework_to_valid": median(group["model_rework_to_valid"] for group in valid_groups),
-                "median_tokens_to_first_validated": {
-                    field: median(group["tokens_to_first_validated"][field] for group in valid_groups)
-                    for field in (
+                "missing_cases": missing_cases,
+                "gap": "no comparable current evidence" if not has_comparable else ("multiple evaluator cohorts" if len(metric_cohorts) > 1 else ("incomplete case coverage" if missing_cases else None)),
+                "confidence": "none" if not has_comparable else ("cohort-separated" if len(metric_cohorts) > 1 else ("partial" if missing_cases else "controlled-current")),
+                "freshness": {"latest_observed_at": latest, "suite_revision": suite.get("suiteRevision"), "policy_snapshot": policy.get("matrixSnapshot")},
+                "best_deterministic_quality": selected_cohort["best_deterministic_quality"] if selected_cohort is not None else None,
+                "validated_attempts": selected_cohort["validated_attempts"] if selected_cohort is not None else None,
+                "comparable_attempts": selected_cohort["comparable_attempts"] if selected_cohort is not None else None,
+                "first_pass_validated_rate": selected_cohort["first_pass_validated_rate"] if selected_cohort is not None else None,
+                "median_duration_seconds": selected_cohort["median_duration_seconds"] if selected_cohort is not None else None,
+                "median_time_to_first_validated_seconds": selected_cohort["median_time_to_first_validated_seconds"] if selected_cohort is not None else None,
+                "median_attempts_to_valid": selected_cohort["median_attempts_to_valid"] if selected_cohort is not None else None,
+                "median_model_rework_to_valid": selected_cohort["median_model_rework_to_valid"] if selected_cohort is not None else None,
+                "median_tokens_to_first_validated": selected_cohort["median_tokens_to_first_validated"] if selected_cohort is not None else {
+                    field: None for field in (
                         "prompt_tokens", "completion_tokens", "reasoning_tokens",
                         "cache_read_tokens", "cache_creation_tokens",
                     )
                 },
-                "median_context_to_first_validated": median(group["context_to_first_validated"] for group in valid_groups),
-                "useful_finding_yield": median(group["useful_finding_yield"] for group in role_groups),
-                "false_positive_yield": median(group["false_positive_yield"] for group in role_groups),
+                "median_context_to_first_validated": selected_cohort["median_context_to_first_validated"] if selected_cohort is not None else None,
+                "useful_finding_yield": selected_cohort["useful_finding_yield"] if selected_cohort is not None else None,
+                "false_positive_yield": selected_cohort["false_positive_yield"] if selected_cohort is not None else None,
                 "operational_retries": dict(sorted(role_operational_retries.items())),
-                "model_failure_counts": dict(sorted(sum((Counter({key: value for key, value in group["failure_counts"].items() if key in MODEL_FAILURE_CATEGORIES}) for group in role_groups), Counter()).items())),
-                "instrumentation": {
-                    field: telemetry_coverage(role_attempts, field)
-                    for field in (
-                        "duration_seconds", "prompt_tokens", "completion_tokens", "reasoning_tokens",
-                        "cache_read_tokens", "cache_creation_tokens", "context_tokens", "tool_calls",
-                        "correction_count", "useful_findings", "false_positives",
-                    )
-                } | {
+                "model_failure_counts": dict(sorted(sum((Counter({key: value for key, value in group["failure_counts"].items() if key in MODEL_FAILURE_CATEGORIES}) for group in selected_groups), Counter()).items())) if selected_cohort is not None else {},
+                "instrumentation": instrumentation | {
                     "attempt_order": {
-                        "recorded": sum(group["ordering_available"] for group in role_groups),
-                        "groups": len(role_groups),
-                        "rate": (sum(group["ordering_available"] for group in role_groups) / len(role_groups)) if role_groups else None,
+                        "recorded": sum(group["ordering_available"] for group in selected_groups) if selected_cohort is not None else None,
+                        "groups": len(selected_groups) if selected_cohort is not None else None,
+                        "rate": (sum(group["ordering_available"] for group in selected_groups) / len(selected_groups)) if selected_groups else None,
                     }
                 },
                 "editorial_human_evidence": (
@@ -1190,7 +1470,8 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
                     if any(group["editorial_human_evidence"] is not None for group in role_groups) else None
                 ),
                 "incomplete_attempts": len(incomplete_for_role),
-                "retained_attempts": sum(group["attempts"] for group in role_groups) + len(incomplete_for_role),
+                "incompatible_v2_attempts": len(incompatible_for_role),
+                "retained_attempts": sum(group["attempts"] for group in role_groups) + len(incomplete_for_role) + len(incompatible_for_role),
             }
         )
 
@@ -1209,7 +1490,14 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
             observed_cases = {group["case_id"] for group in candidate_groups if group["comparable_attempts"]}
             validated_cases = {group["case_id"] for group in candidate_groups if group["validated_attempts"]}
             strengths = [
-                {"case_id": group["case_id"], "validated_attempts": group["validated_attempts"], "best_deterministic_quality": group["best_deterministic_quality"]}
+                {
+                    "case_id": group["case_id"], "case_revision": group["case_revision"],
+                    "case_digest": group["case_digest"], "prompt_revision": group["prompt_revision"],
+                    "prompt_digest": group["prompt_digest"], "scorer_revision": group["scorer_revision"],
+                    "scorer_digest": group["scorer_digest"],
+                    "validated_attempts": group["validated_attempts"],
+                    "best_deterministic_quality": group["best_deterministic_quality"],
+                }
                 for group in candidate_groups if group["validated_attempts"]
             ]
             failures = [
@@ -1221,32 +1509,48 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
                 sum(value for key, value in group["failure_counts"].items() if key in {"benchmark", "prompt", "parser", "scorer", "harness"})
                 for group in candidate_groups
             )
-            evaluator_families = {
-                (
-                    group["suite_revision"], group["suite_digest"],
-                    group["scorer_revision"],
-                    group["normalizer_revision"], group["normalizer_digest"],
-                    group["behavior_revision"], group["behavior_digest"],
+            candidate_cohorts: dict[tuple[Any, ...], list[dict[str, Any]]] = defaultdict(list)
+            for group in candidate_groups:
+                candidate_cohorts[evaluator_cohort_key(group)].append(group)
+            competitive_cohorts = []
+            for cohort_key, cohort_groups_for_candidate in sorted(
+                candidate_cohorts.items(), key=lambda item: tuple(str(part) for part in item[0])
+            ):
+                complete_case_groups: list[dict[str, Any]] = []
+                complete = bool(role_case_ids)
+                for case_id in role_case_ids:
+                    eligible = [
+                        group for group in cohort_groups_for_candidate
+                        if group["case_id"] == case_id and group["validated_attempts"] >= 3
+                    ]
+                    if not eligible:
+                        complete = False
+                    complete_case_groups.extend(eligible)
+                cohort_has_model_failures = any(
+                    any(key in MODEL_FAILURE_CATEGORIES for key in group["failure_counts"])
+                    for group in cohort_groups_for_candidate
                 )
-                for group in candidate_groups
-            }
-            competitive = any(
-                all(
-                    any(
-                        group["case_id"] == case_id
-                        and group["validated_attempts"] >= 3
-                        and (
-                            group["suite_revision"], group["suite_digest"],
-                            group["scorer_revision"],
-                            group["normalizer_revision"], group["normalizer_digest"],
-                            group["behavior_revision"], group["behavior_digest"],
-                        ) == evaluator_family
-                        for group in candidate_groups
+                if complete and not cohort_has_model_failures:
+                    competitive_cohorts.append(
+                        {
+                            **dict(zip(EVALUATOR_COHORT_FIELDS, cohort_key)),
+                            "case_groups": [
+                                {
+                                    "case_id": group["case_id"],
+                                    "case_revision": group["case_revision"],
+                                    "case_digest": group["case_digest"],
+                                    "prompt_revision": group["prompt_revision"],
+                                    "prompt_digest": group["prompt_digest"],
+                                    "scorer_revision": group["scorer_revision"],
+                                    "scorer_digest": group["scorer_digest"],
+                                    "normalizer_revision": group["normalizer_revision"],
+                                    "normalizer_digest": group["normalizer_digest"],
+                                    "validated_attempts": group["validated_attempts"],
+                                }
+                                for group in complete_case_groups
+                            ],
+                        }
                     )
-                    for case_id in role_case_ids
-                )
-                for evaluator_family in evaluator_families
-            )
             model_rows.append(
                 {
                     "model": candidate["model"],
@@ -1260,9 +1564,11 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
                     "prohibited_evidence": [],
                     "gaps": sorted(set(role_case_ids) - observed_cases),
                     "validated_case_coverage": len(validated_cases),
-                    "controlled_competitive_evidence": bool(role_case_ids and competitive and not failures),
+                    "controlled_competitive_evidence": bool(competitive_cohorts),
+                    "competitive_evidence_cohorts": competitive_cohorts,
                     "benchmark_faults": benchmark_faults,
                     "benchmark_fault_conclusion": "no model conclusion" if benchmark_faults else None,
+                    "row_level_conclusion": "no model conclusion" if benchmark_faults else ("attributable model evidence" if strengths or failures else None),
                     "routing_conclusion": "no routing change justified",
                 }
             )
@@ -1277,23 +1583,48 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
         "incomplete_attempts": incomplete,
         "historical_v1": historical_v1,
         "incompatible_v2": incompatible_v2,
-        "measured_cost_usd": measured_cost_usd,
+        "measured_cost_usd": sum(recorded_costs) if recorded_costs else None,
         "matrix_opportunities": [],
         "routing_conclusion": "no routing change justified",
         "views": {
             "quality": {
-                "validated_attempts": sum(role["validated_attempts"] for role in role_rows),
-                "comparable_attempts": sum(role["comparable_attempts"] for role in role_rows),
-                "roles_with_validated_evidence": [role["role"] for role in role_rows if role["validated_attempts"]],
+                "validated_attempts": (
+                    None if any(role["comparable_attempts"] is None and len([cohort for cohort in role["evaluator_cohorts"] if cohort["comparable_attempts"]]) > 1 for role in role_rows)
+                    else sum((role["validated_attempts"] or 0) for role in role_rows)
+                ),
+                "comparable_attempts": (
+                    None if any(role["comparable_attempts"] is None and len([cohort for cohort in role["evaluator_cohorts"] if cohort["comparable_attempts"]]) > 1 for role in role_rows)
+                    else sum((role["comparable_attempts"] or 0) for role in role_rows)
+                ),
+                "roles_with_validated_evidence": [
+                    role["role"] for role in role_rows
+                    if any(cohort["validated_attempts"] for cohort in role["evaluator_cohorts"])
+                ],
+                "evaluator_cohorts": {
+                    role["role"]: role["evaluator_cohorts"] for role in role_rows
+                },
             },
             "reliability": {
                 "model_failure_counts": dict(sorted(sum((Counter(role["model_failure_counts"]) for role in role_rows), Counter()).items())),
                 "operational_retry_counts": dict(sorted(sum((Counter(role["operational_retries"]) for role in role_rows), Counter()).items())),
                 "historical_v1_attempts": len(historical_v1),
                 "incompatible_v2_attempts": len(incompatible_v2),
+                "retained_attempts": len(directories),
             },
             "latency": {
-                role["role"]: role["instrumentation"]["duration_seconds"] for role in role_rows
+                role["role"]: {
+                    "median_duration_seconds": role["median_duration_seconds"],
+                    "coverage": role["instrumentation"]["duration_seconds"],
+                    "evaluator_cohorts": [
+                        {
+                            **{name: cohort[name] for name in EVALUATOR_COHORT_FIELDS},
+                            "median_duration_seconds": cohort["median_duration_seconds"],
+                            "coverage": cohort["instrumentation"]["duration_seconds"],
+                        }
+                        for cohort in role["evaluator_cohorts"]
+                    ],
+                }
+                for role in role_rows
             },
             "tokens_context": {
                 role["role"]: {
@@ -1305,7 +1636,14 @@ def benchmark_rollup(root: Path | None) -> dict[str, Any]:
                 }
                 for role in role_rows
             },
-            "provider_spend": {"measured_cost_usd": measured_cost_usd},
+            "provider_spend": {
+                "measured_cost_usd": sum(recorded_costs) if recorded_costs else None,
+                "recorded_cost_coverage": {
+                    "recorded": len(recorded_costs),
+                    "attempts": len(directories),
+                    "rate": len(recorded_costs) / len(directories) if directories else None,
+                },
+            },
             "subscription_marginal_cost": {"value": None, "reason": "reported only when supplied by production evidence"},
             "api_equivalent_cost": {"value": None, "reason": "not inferred or combined with billed spend"},
             "capabilities": {
@@ -1331,18 +1669,20 @@ def render_report(report: dict[str, Any]) -> str:
         "",
         "## Per-role validated quality and efficiency",
         "",
-        "| Role | Cases | Validated | Best quality | First pass | Time to valid | Attempts/rework | Confidence | Freshness | Gap |",
-        "|---|---:|---:|---:|---:|---:|---:|---|---|---|",
+        "| Role | Cases | Validated | Best quality | First pass | Median duration | Time to valid | Attempts/rework | Confidence | Freshness | Gap |",
+        "|---|---:|---:|---:|---:|---:|---:|---:|---|---|---|",
     ]
     for role in benchmark["roles"]:
         first_pass = "n/a" if role["first_pass_validated_rate"] is None else f"{role['first_pass_validated_rate']:.0%}"
         time_valid = "n/a" if role["median_time_to_first_validated_seconds"] is None else f"{role['median_time_to_first_validated_seconds']:.1f}s"
         attempts = "n/a" if role["median_attempts_to_valid"] is None else f"{role['median_attempts_to_valid']:g}/{role['median_model_rework_to_valid']:g}"
         score = "n/a" if role["best_deterministic_quality"] is None else f"{role['best_deterministic_quality']:g}"
+        duration = "n/a" if role["median_duration_seconds"] is None else f"{role['median_duration_seconds']:.1f}s"
+        validated = "n/a" if role["validated_attempts"] is None else f"{role['validated_attempts']}/{role['comparable_attempts']}"
         freshness = role["freshness"]["latest_observed_at"] or "none"
         lines.append(
             f"| {role['role']} | {role['required_cases'] - len(role['missing_cases'])}/{role['required_cases']} | "
-            f"{role['validated_attempts']}/{role['comparable_attempts']} | {score} | {first_pass} | {time_valid} | "
+            f"{validated} | {score} | {first_pass} | {duration} | {time_valid} | "
             f"{attempts} | {role['confidence']} | {freshness} | {role['gap'] or 'none'} |"
         )
     lines.extend(
@@ -1372,6 +1712,24 @@ def render_report(report: dict[str, Any]) -> str:
                 "",
             ]
         )
+        if role["evaluator_cohorts"]:
+            lines.extend(
+                [
+                    "| Evaluator cohort scorer | Complete cases | Validated | Best quality | First pass | Median duration | Time to valid |",
+                    "|---|---:|---:|---:|---:|---:|---:|",
+                ]
+            )
+            for cohort in role["evaluator_cohorts"]:
+                cohort_first_pass = "n/a" if cohort["first_pass_validated_rate"] is None else f"{cohort['first_pass_validated_rate']:.0%}"
+                cohort_duration = "n/a" if cohort["median_duration_seconds"] is None else f"{cohort['median_duration_seconds']:.1f}s"
+                cohort_time = "n/a" if cohort["median_time_to_first_validated_seconds"] is None else f"{cohort['median_time_to_first_validated_seconds']:.1f}s"
+                cohort_quality = "n/a" if cohort["best_deterministic_quality"] is None else f"{cohort['best_deterministic_quality']:g}"
+                lines.append(
+                    f"| {cohort['scorer_revision']}/{cohort['scorer_digest']} | "
+                    f"{str(cohort['complete_case_coverage']).lower()} | {cohort['validated_attempts']}/{cohort['comparable_attempts']} | "
+                    f"{cohort_quality} | {cohort_first_pass} | {cohort_duration} | {cohort_time} |"
+                )
+            lines.append("")
 
     lines.extend(["## Controlled model-role evidence", ""])
     evidenced_models = [
@@ -1381,14 +1739,15 @@ def render_report(report: dict[str, Any]) -> str:
     if evidenced_models:
         lines.extend(
             [
-                "| Role | Requested candidate | Transport | Validated strengths | Attributable failures | Gaps | Benchmark faults | Conclusion |",
-                "|---|---|---|---:|---:|---:|---:|---|",
+                "| Role | Requested candidate | Transport | Validated strengths | Attributable failures | Gaps | Benchmark faults | Row conclusion | Routing |",
+                "|---|---|---|---:|---:|---:|---:|---|---|",
             ]
         )
         for row in evidenced_models:
             lines.append(
                 f"| {row['role']} | {row['model']} | {row['transport']} | {len(row['strengths'])} | "
-                f"{len(row['failures'])} | {len(row['gaps'])} | {row['benchmark_faults']} | {row['routing_conclusion']} |"
+                f"{len(row['failures'])} | {len(row['gaps'])} | {row['benchmark_faults']} | "
+                f"{row['row_level_conclusion'] or 'none'} | {row['routing_conclusion']} |"
             )
     else:
         lines.append("No attributable current v2 model-role evidence is available.")
@@ -1397,17 +1756,18 @@ def render_report(report: dict[str, Any]) -> str:
     if benchmark["groups"]:
         lines.extend(
             [
-                "| Candidate | Transport | Role | Case/revision | Validated | First pass | Rework | Operational retries | Endpoint providers |",
-                "|---|---|---|---|---:|---:|---:|---|---|",
+                "| Candidate | Transport | Role | Case/revision | Validated | First pass | Rework | Median duration | Operational retries | Endpoint providers |",
+                "|---|---|---|---|---:|---:|---:|---:|---|---|",
             ]
         )
         for group in benchmark["groups"]:
             first_pass = "n/a" if group["first_pass_validated"] is None else str(group["first_pass_validated"]).lower()
             rework = "n/a" if group["model_rework_to_valid"] is None else str(group["model_rework_to_valid"])
+            duration = "n/a" if group["median_duration_seconds"] is None else f"{group['median_duration_seconds']:.1f}s"
             lines.append(
                 f"| {group['requested_candidate']} | {group['transport']} | {group['role']} | "
                 f"{group['case_id']}/{group['case_revision']} | {group['validated_attempts']}/{group['comparable_attempts']} | "
-                f"{first_pass} | {rework} | `{json.dumps(group['operational_retries'], sort_keys=True)}` | "
+                f"{first_pass} | {rework} | {duration} | `{json.dumps(group['operational_retries'], sort_keys=True)}` | "
                 f"`{json.dumps(group['endpoint_providers'], sort_keys=True)}` |"
             )
     else:
@@ -1456,6 +1816,9 @@ def render_report(report: dict[str, Any]) -> str:
             "Recorded duration, prompt/completion/reasoning/cache tokens, context, and tool telemetry remain independent axes. Coverage is reported above; missing values are not zero.",
             "",
             "## Provider spend and access economics",
+            "",
+            f"- Benchmark provider-billed cost: {benchmark['views']['provider_spend']['measured_cost_usd']}",
+            f"- Benchmark recorded-cost coverage: `{json.dumps(benchmark['views']['provider_spend']['recorded_cost_coverage'], sort_keys=True)}`",
             "",
         ]
     )
