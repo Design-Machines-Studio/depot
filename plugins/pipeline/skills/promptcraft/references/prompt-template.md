@@ -36,6 +36,11 @@ Do not paste the full roadmap, assessment, research brief, or Project snapshot.]
 | path/to/similar.go | Follow this handler's pattern |
 | path/to/types.go | DTO definitions to reuse |
 
+[For a declared prototype counterpart, list every relevant prototype template
+or component here with its canonical repository and exact commit. Paths may be
+resolved in a temporary/available checkout, but never hardcode a permanent
+workstation path.]
+
 ## Patterns to Follow
 
 [Specific patterns extracted from the assessment. Include actual code snippets where helpful.]
@@ -56,12 +61,25 @@ Load these skills for domain-specific guidance:
 
 Approved design: [path to brainstorm.html or mockup file]
 
+Prototype authority (when applicable):
+- Repository + exact commit: [canonical identity @ commit]
+- Authority source: [user, Issue/PR, root instructions, plan, or Assembly skill]
+- Prototype -> target cases: [route, state, viewport pairs]
+- Relevant source: [paths and concise structural excerpts]
+- Intentional differences: [approved production constraints]
+
 Key visual decisions:
 - [Decision 1: e.g., "Sidebar headings use h4 with font-medium, not h3"]
 - [Decision 2: e.g., "Block/Abstain buttons use button--outline-danger, visually smaller than position buttons"]
 - [Decision 3: e.g., "Natural-width buttons, not full-width"]
 
 The rendered result must match these visual treatments. If you cannot determine the visual intent from these descriptions, read the mockup file at the path above.
+
+When the prototype covers this surface, it is primary. Inspect its exact source
+before editing, then search existing target and Live Wires components before
+creating anything. Preserve its settled structure, class vocabulary, copy,
+action order, and control placement unless an approved requirement names a
+divergence. Generic SaaS heuristics cannot redesign a settled prototype choice.
 
 ## Acceptance Criteria
 
@@ -79,6 +97,18 @@ The rendered result must match these visual treatments. If you cannot determine 
 - [ ] [E.g., "Sidebar headings create a clear hierarchy -- h4 muted style, not competing with page heading"]
 
 Visual criteria describe the IMPRESSION, not the implementation. "Uses button--outline-danger" is structural. "Block button is visually subordinate to the Accept button" is visual. Include both types.
+
+For a declared prototype counterpart, include both kinds of parity proof:
+
+- [ ] Source comparison confirms the significant semantic/wrapper hierarchy,
+  component calls, exact Live Wires class strings, visible copy/metadata, and
+  action order, with every intentional difference named and justified.
+- [ ] Browser comparison covers prototype and target at matching routes,
+  states, and viewports with screenshots plus targeted DOM/accessibility/class
+  and computed layout evidence. Do not require global DOM, pixel, theme-token,
+  or exact-color equality.
+- [ ] If the prototype render is unavailable after browser recovery, preserve
+  source work and return `human_help_required`; do not claim rendered parity.
 
 ## Tool-Call Exploration Checkpoint & Delivery Contract
 
@@ -114,6 +144,11 @@ If the Task or Acceptance Criteria allow more than one reasonable interpretation
   of the diff; report them as "Noted, not fixed."
 - Do not reformat, rewrite comments, tighten types, or adjust imports on lines you are not otherwise changing for this chunk.
 - Do not create or modify `*_templ.go` files. Run `docker compose exec app templ generate` to regenerate them after editing `.templ` source files.
+- For a declared prototype counterpart, inspect the exact prototype source
+  before editing and compare both source and matched renders after editing.
+  Required functionality, authorization, accessibility, public APIs,
+  production data, and Baseplate/Fixture boundaries override imitation and
+  must be recorded as intentional differences.
 - When adding database migrations, verify the next sequence number: `ls migrations/*.sql | sort | tail -1`. Use the next consecutive number.
 - When this chunk actually changes authentication, middleware, an Authorizer action/resource, a privileged read/write, a role/member/account/install/module permission, or a privileged UI capability in Assembly code, the final acceptance criterion must include an Auth Boundary Map receipt covering: surfaces mapped, middleware gates, Authorizer action/resource pairs, default-deny UI capabilities, stale-session/operator/install edge cases, test coverage, and residual risk. A matching path name is a review hint, not proof of a boundary change.
 - [Any additional constraints specific to this chunk]

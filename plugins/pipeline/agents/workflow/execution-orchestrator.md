@@ -622,6 +622,13 @@ by another repository out of the diff; report them as `Noted, not fixed`.
 
 [FULL PROMPT CONTENT INLINED HERE]
 
+For a chunk carrying `prototypeReference`, include its relevant bounded
+`prototypeParity` packet here. Require exact prototype source inspection before
+editing, existing target/Live Wires component search, post-edit source
+comparison, matched prototype/target browser comparison, and named intentional
+differences. Generic UI benchmarks remain secondary to covered prototype
+decisions.
+
 When done:
 1. Verify all acceptance criteria are met
 2. State which approved Key Requirements and project outcome this chunk addresses
@@ -711,6 +718,12 @@ with `--phase "execute"`. Mark `[chunk-id] 7. Run evaluation gate` complete.
 
 When `renderedSurface: required`, load `plugins/pipeline/references/visual-verification-protocol.md` and run it. Do not emit `BROWSER_VERIFIED`, fabricate empty evidence, or skip the recovery ladder. Curl never satisfies required browser proof. Exhaustion is `human_help_required` with `stage: browser_recovery`. `not_declared` is valid only when declarations are absent; incomplete declarations block.
 
+When the chunk carries a prototype counterpart, also load
+`plugins/pipeline/references/prototype-authority.md`. Do not merge the chunk as
+rendered-parity complete until both post-edit source comparison and matched
+prototype/target browser evidence settle. A temporarily unavailable prototype
+render preserves source work but blocks the rendered-parity claim.
+
 ### 3i: Merge Back
 
 Before merging, search for `EVAL_GATE_PASSED: [chunk-id] |`. If absent: STOP, run Step 3g, then merge.
@@ -789,6 +802,12 @@ Key Requirements from the assessment `keyRequirements` island:
 
 Compact Project Alignment from the approved assessment:
 [INLINE CURRENT PROJECT GOAL, RELEVANT CONSTRAINTS/NON-GOALS, AND OWNERSHIP]
+
+Declared Prototype Context, when applicable:
+[INLINE THE CANONICAL REPOSITORY + EXACT COMMIT, RELEVANT SOURCE PATHS,
+MATCHED ROUTE/STATE/VIEWPORT CASES, BOUNDED PARITY CHECKLIST, AND INTENTIONAL
+DIFFERENCES. REQUIRE SOURCE AND RENDERED COMPARISON; TREAT GENERIC HEURISTICS AS
+SECONDARY FOR COVERED DECISIONS.]
 
 In addition to code quality, check whether the branch advances the approved
 project goal, satisfies every requirement/outcome, and stays within the approved

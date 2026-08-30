@@ -76,6 +76,18 @@ include a planning/report `.html` artifact that is never mounted by the product
 and a non-HTTP CLI `main.go` with no rendered output. Role routing cannot change
 this field or weaken its browser/persona evidence.
 
+## Optional Declared Prototype Context
+
+When a declared prototype covers a rendered chunk, the manifest carries the
+compact `prototypeReference` resolved during assessment and the chunk's
+relevant `prototypeParity` collection. They retain canonical repository + exact
+commit, authority source, relevant prototype/target files and route-state-
+viewport pairs, concise structural/class/copy/action decisions, evidence
+status, and intentional differences. They never embed complete templates or
+create a durable registry. Conflicting references block UI implementation;
+source-proven absence records `no prototype counterpart` and uses existing
+production patterns.
+
 ## Role fields
 
 | Field | Contract |

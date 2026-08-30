@@ -128,7 +128,15 @@ Cite White: "readers are lazy and in a hurry -- this page doesn't pass the WIIFM
 
 Skip if no `## Design Spec Context` was provided. This runs BEFORE general heuristic evaluation.
 
-For each visual decision, locate the element, capture it (element targeting or a crop of the full-page shot), and compare against the spec: button variants (correct class AND correct visual weight relative to surrounding buttons), heading hierarchy (correct tag AND correct prominence relative to other headings), spacing (correct token AND correct visual grouping of related elements), layout (correct component AND correct composition, neither too wide nor too cramped). Flag mismatches **P1**: "[url] [element] deviates from design spec -- spec says [X], rendered shows [Y]". If ALL decisions match, note "Design spec compliance: PASS ([N] decisions checked)".
+For each visual decision, locate the element in host evidence and compare against
+the spec: button variants (correct class AND visual weight), heading hierarchy,
+spacing/grouping, and layout composition. For a prototype packet, also compare
+the supplied source hierarchy, significant components, exact classes, literal
+copy/metadata, and action order. Generic benchmarks cannot replace covered
+prototype decisions. Classify mismatches by observable impact under the
+injected Visual Finding Rules rather than assigning blanket P1. If all
+decisions match, note "Design authority compliance: PASS ([N] decisions
+checked)".
 
 ### Phase 2: Spacing & Alignment Consistency
 
@@ -248,7 +256,14 @@ Also: very long titles or names (truncation, wrapping, overflow); tables and lis
 
 A component rendering on more than one route -- a shared editor, form, or dialog -- must look and behave the same on each. Sharing a component *is* a parity claim, even when nobody wrote it down.
 
-Screenshot it on each route at the same viewport, then compare computed `font-size`, `font-weight`, `color`, `padding`, `margin`, `background-color`, and `border` across routes. Any mismatch is **P1**: a route-specific wrapper or stale override has broken the abstraction while the component source stayed identical -- exactly the failure a source-only code review cannot see. Cite both URLs and name the differing properties.
+Screenshot it on each route at the same viewport, then compare computed
+`font-size`, `font-weight`, `color`, `padding`, `margin`, `background-color`,
+and `border` across routes. Classify a mismatch by observable impact: P1 only
+when it blocks a primary task, misleads authorization/governance, hides an
+essential control, or breaks explicitly critical parity; P2 for meaningful
+confusing/rework-causing drift; P3 for minor spacing/alignment/presentation
+drift. Cite both URLs and name the differing properties. Every supported
+severity remains mandatory before clean completion.
 
 ### Phase 10: AI Output Quality Gate
 

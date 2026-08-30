@@ -20,6 +20,13 @@ Pass invocation and T3 targets to `prepare` with `--target-url` and
 from file extensions, or guess a start command. The helper validates the URL;
 successful host navigation remains the readiness proof.
 
+"One target" applies per readiness state. When a host-resolved prototype
+parity packet supplies both an exact prototype URL and target URL, run this
+same gate for each in sequence and collect one bounded matched evidence packet;
+do not invent a broker or new transport. The prototype and target cases must
+use the same meaningful states and viewports. Required prototype evidence
+cannot be replaced by target-only navigation.
+
 ## Optional repository declaration
 
 When present, discover only `<repository>/.dm/ui-review.json`. Its closed
@@ -95,6 +102,9 @@ consumer is sufficient.
    each applicable UI analysis role. Request
    `review-deep` with `read-repository`, `long-context`, and
    `structured-output`; do not request `browser` or generic `tool-use`.
+   For a declared counterpart, include matched prototype/target route, state,
+   viewport, targeted hierarchy, actual classes, visible copy/action order, and
+   explanatory layout/spacing values. Exact theme colors are not a parity gate.
 8. Settle the public participant result through `ui-review-readiness.sh
    settle`, then clean every exact registered process or Compose resource.
    Install the same cleanup call on interruption and failure paths.

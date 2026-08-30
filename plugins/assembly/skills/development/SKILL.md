@@ -713,6 +713,34 @@ Assembly follows a three-phase distribution model. See `docs/DISTRIBUTION.md` fo
 
 The production backend lives in a separate repo (`assembly-baseplate`, DM-021) and is built from first principles. The prototype (`assembly`, DM-006) is the design workspace -- patterns are validated there, then implemented properly in production. Neither blocks the other. See ADR-002.
 
+### Prototype design authority for Baseplate and Fixtures
+
+For rendered Baseplate or Fixture work with a corresponding surface in the
+canonical `Design-Machines-Studio/assembly` prototype, the exact prototype
+source and rendered page are authoritative for semantic/wrapper hierarchy,
+Live Wires classes, component choices, literal copy, and control placement.
+Resolve the prototype by canonical remote and exact commit from the user,
+current native Issue/PR, root instructions, or active plan; never hardcode a
+permanent `/Users/...` or `/home/...` path.
+
+Read the relevant prototype templates/components before planning or editing,
+and search existing production and Live Wires components before inventing one.
+Compare source after editing and compare prototype/target renders at matching
+routes, states, and viewports. Source and browser evidence are complementary;
+matching screenshots cannot prove hierarchy/classes/copy, and matching classes
+cannot prove rendered composition.
+
+This is design authority, not a byte-for-byte port. Functional behavior,
+authorization, accessibility improvements, the public Fixture SDK, production
+data, CSRF, component APIs, and Baseplate host composition may require an
+intentional difference. Name and justify every such difference; never weaken a
+production boundary to imitate prototype code. If exact source inspection
+proves no counterpart exists, record that fact and use established production
+patterns rather than inventing a counterpart from a similar page.
+
+The generic examples in `pages.md` are fallback teaching examples only. They
+never override a corresponding exact prototype surface.
+
 ### Two-Repo Model
 
 | Repo | Project | Purpose |

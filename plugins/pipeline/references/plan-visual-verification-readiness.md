@@ -14,7 +14,11 @@ Apply the mode-specific rendered-surface audit:
 For required rendered work, verify the applicable prompts (full) or single-pass
 plan scope (Lean) enforce visual quality:
 
-- [ ] Cite a design spec, the `brainstorm.html` `visualDecisions` island, or approved visual requirements? With no visual baseline, flag **IMPORTANT** -- visual quality would otherwise be judged by heuristics only.
+- [ ] Resolve any conditionally declared prototype through
+  `prototype-authority.md` before local specs or heuristics. For a counterpart,
+  carry its repository/commit, source paths, matched cases, parity map, and
+  intentional differences. With no prototype, cite a local design spec, the
+  `brainstorm.html` `visualDecisions` island, or approved visual requirements.
 - [ ] Carry at least 2 visual acceptance criteria describing visual IMPRESSIONS, not just structural class names: "Block and Abstain buttons are visually smaller and lighter than the main position buttons" is an impression; "Button uses `button--outline-danger` class" is structural. Both are needed; impressions catch the gap between "correct class" and "correct visual effect."
 - [ ] Give each visual criterion a browser-verifiable test (screenshot comparison or getComputedStyle extraction): "Button has font-size < 1rem per getComputedStyle" is verifiable; "Code is clean" is not.
 - [ ] **[Full only]** Chunks modifying the same visual area (sidebar, form, card) carry aligned criteria -- not "prominent headings" in one and "subdued headings" in another.
@@ -26,6 +30,11 @@ In either case, the acceptance criteria MUST include:
 
 1. Screenshot comparison: "Screenshot of [A] and [B] at same viewport should show visually identical [component/layout]"
 2. Computed style comparison: "getComputedStyle on [selector] for [A] and [B] must match for: font-size, font-weight, color, padding, margin, background-color, border"
-3. Both criteria are **P1** -- visual parity requirements from the user are not optional polish.
+3. Classify mismatches by observable impact using `prototype-authority.md`:
+   P1 only for a blocked primary task, misleading authorization/governance
+   consequence, inaccessible essential control, or explicitly critical parity;
+   P2 for meaningful structure/component/copy/placement/interaction drift; P3
+   for minor spacing, alignment, metadata, or presentation drift. Every
+   supported severity remains mandatory before clean completion.
 
 If an approved visual-parity requirement lacks these criteria, emit one blocker scoped to the affected full-mode chunk or Lean single-pass scope.
