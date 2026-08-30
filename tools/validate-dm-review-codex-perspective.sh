@@ -395,7 +395,7 @@ for zero_deferral_surface in \
 done
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.74.0"' "canonical dm-review version is 1.74.0"
 require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.74.0"' "generated dm-review version is 1.74.0"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.61.1"' "canonical Pipeline version is 1.61.1"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.61.2"' "canonical Pipeline version is 1.61.2"
 require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.74.0"' "generated Pipeline dependency floor is current"
 
 printf "Synthesis identity fixtures\n"

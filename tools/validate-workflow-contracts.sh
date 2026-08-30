@@ -426,6 +426,108 @@ require_text "$assembly_sec_checks" "Public/Private URL Boundary" "security-audi
 require_text "$assembly_sec_checks" "Update / Release Preflight" "security-auditor checks update/release preflight"
 require_text "$assembly_sec_checks" "Responder-side share transport" "security-auditor reviews the federation responder side"
 
+printf "\nRepository-native verification contract:\n"
+
+# These exact-line checks mutate each normative anchor before accepting it. A
+# broad keyword match would stay green when one side of the decision gate was
+# weakened, which is the regression this contract is intended to prevent.
+require_line_mutation_sensitive "$orchestrator" \
+  "planning contract. A valid profile remains authoritative for planning, cadence," \
+  "planning contract. A valid profile may be bypassed." \
+  "valid profile remains authoritative"
+require_line_mutation_sensitive "$orchestrator" \
+  '`human_help_required` and preserves the exact validation evidence; never fall' \
+  '`human_help_required` and may discard validation evidence.' \
+  "malformed profile blocks with exact evidence"
+require_line_mutation_sensitive "$orchestrator" \
+  "type, including Assembly, does not change it. Applicable root repository" \
+  "type, including Assembly, selects a different policy." \
+  "no-profile policy is repository-type neutral"
+require_line_mutation_sensitive "$orchestrator" \
+  "instructions must designate exactly one canonical full repository-owned" \
+  "instructions may imply several full repository-owned commands." \
+  "root policy designates one canonical full entrypoint"
+require_line_mutation_sensitive "$orchestrator" \
+  "instruction file. Separately scoped focused or pre-push commands do not conflict" \
+  "instruction file. Every focused or pre-push command conflicts" \
+  "narrower commands do not conflict with the canonical designation"
+require_line_mutation_sensitive "$orchestrator" \
+  "entrypoint's directly named checked-in target or script exists and that it does" \
+  "named target or script need not exist." \
+  "native target exists and has its repository configuration"
+require_line_mutation_sensitive "$orchestrator" \
+  '`verificationPlanner: unavailable` and preserve the exact command and root' \
+  '`verificationPlanner: available` and omit command provenance.' \
+  "native evidence retains planner state command and policy source"
+require_line_mutation_sensitive "$orchestrator" \
+  "entrypoint names a nonexistent target or script or depends on missing repository" \
+  "entrypoint may name a nonexistent target or script." \
+  "invalid native policy blocks narrowly"
+require_line_mutation_sensitive "$orchestrator" \
+  "policy evidence. Never invent raw Go, Docker, package, build-tag, race, service," \
+  "Invent missing verification commands when convenient." \
+  "native policy forbids invented commands"
+require_line_mutation_sensitive "$orchestrator" \
+  'remote-CI, or other commands. Never synthesize or commit' \
+  'Synthesize `.dm/verification.json` when absent.' \
+  "native policy does not synthesize a profile"
+require_line_mutation_sensitive "$orchestrator" \
+  "chunk, finding, or execution level. Run it exactly once on the integrated" \
+  "chunk, finding, and execution level. Run it repeatedly on the integrated" \
+  "native cadence avoids repeated full runs"
+require_line_mutation_sensitive "$orchestrator" \
+  'On the profile path, the full non-race lane runs against the first tree where all sibling chunks actually coexist. A documentation or unrelated metadata-only change does not invalidate a code lane unless `.dm/verification.json` explicitly includes that path. A failed required profile level lane blocks dependent levels. Record the profile-path result:' \
+  'On every path, the full non-race lane runs against the first tree where all sibling chunks actually coexist. A documentation or unrelated metadata-only change does not invalidate a code lane unless `.dm/verification.json` explicitly includes that path. A failed required level lane blocks dependent levels. Record:' \
+  "execution-level full lane remains profile-only"
+require_line_mutation_sensitive "$orchestrator" \
+  "   relevance is uncertain, rerun the canonical native command once and bind the" \
+  "relevance is uncertain, reuse stale evidence without proof." \
+  "native repair cadence binds relevant or uncertain reruns to the new SHA"
+require_line_mutation_sensitive "$orchestrator" \
+  "Contract specimen: root \`AGENTS.md\` designates \`make verify\` as canonical full" \
+  "Contract specimen: root instructions do not name a command." \
+  "Governance specimen designates make verify canonical"
+require_line_mutation_sensitive "$orchestrator" \
+  "verification and names \`make conformance\` as narrower and \`make survivor\` as" \
+  "verification and treats every narrower command as conflicting." \
+  "Governance specimen preserves narrower and pre-push commands"
+require_line_mutation_sensitive "$orchestrator" \
+  "current candidate SHA or carried-forward passing evidence plus bounded diff" \
+  "any prior candidate SHA without additional evidence" \
+  "native merge gate accepts current-SHA or proof-bound carry-forward evidence"
+
+require_line_mutation_sensitive "$codex_native_parity" \
+  "fix. With no profile, apply the same repository-native policy as the Claude" \
+  "fix. With no profile, apply a Codex-specific repository-native policy." \
+  "Claude and Codex native policies remain equivalent"
+require_line_mutation_sensitive "$codex_native_parity" \
+  "evidence may be carried forward only with bounded diff proof that no relevant" \
+  "evidence may be carried forward without proof." \
+  "Codex preserves proof-bound evidence carry-forward"
+require_absent "$orchestrator" "an Assembly target (Go+Templ+Datastar) without" \
+  "orchestrator removes unconditional Assembly-profile refusal"
+require_absent "$codex_native_parity" 'Assembly target without `.dm/verification.json`' \
+  "Codex adapter removes unconditional Assembly-profile refusal"
+
+# The profile-aware cadence is deliberately unchanged while the native path is
+# introduced beside it.
+require_line_mutation_sensitive "$verification_planner" \
+  '| `chunk` | Worker completed one chunk | Doctor, fast, focused |' \
+  '| `chunk` | Worker completed one chunk | Full suite |' \
+  "profile chunk cadence remains focused"
+require_line_mutation_sensitive "$verification_planner" \
+  '| `revision_batch` | All fixes from one review pass are applied | Affected doctor, fast, focused |' \
+  '| `revision_batch` | Each finding is applied | Full suite |' \
+  "profile revision cadence remains batch-scoped"
+require_line_mutation_sensitive "$verification_planner" \
+  '| `execution_level` | Every chunk in one dependency level is merged | Integrated full non-race once |' \
+  '| `execution_level` | Every chunk is merged | Repeated full suite |' \
+  "profile execution-level cadence remains integrated once"
+require_line_mutation_sensitive "$verification_planner" \
+  '| `merge_candidate` | All levels are merged and before final review | Fresh exact-candidate run; remote lanes explicit |' \
+  '| `merge_candidate` | Before every chunk | Cached candidate run |' \
+  "profile merge-candidate cadence remains fresh"
+
 printf "\nAssembly release invocation-authority contract:\n"
 for release_surface in "$assembly_release" "$assembly_release_skill"; do
   release_rel="${release_surface#$REPO_ROOT/}"

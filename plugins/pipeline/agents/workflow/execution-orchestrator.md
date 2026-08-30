@@ -377,17 +377,49 @@ In `sequential-on-branch` mode:
 
 ### 1d: Repository Verification Planner
 
-When the repository carries a verification profile (`.dm/verification.json` or
-an equivalent declaration), load
+First distinguish an absent profile from a declared profile. When the repository
+declares a verification profile (`.dm/verification.json` or an equivalent
+declaration), load
 `plugins/pipeline/references/execution-verification-planner.md` and run its
-planning contract. With no profile, apply the no-profile rule (mirror the Codex
-adapter, do not fork it): an Assembly target (Go+Templ+Datastar) without
-`.dm/verification.json` fails closed -- stop with `human_help_required` for
-project verification configuration rather than restoring hardcoded Go/Docker
-commands. A non-Assembly repository with no profile runs repository-native
-verification and records `verificationPlanner: unavailable`; do not load the
-planner. Never substitute hardcoded Docker, Go package, service, or build-tag
-commands for a declared profile.
+planning contract. A valid profile remains authoritative for planning, cadence,
+and evidence. A malformed or unsafe declared profile stops with
+`human_help_required` and preserves the exact validation evidence; never fall
+back to repository-native verification.
+
+With no profile, apply one host-neutral repository-native policy; repository
+type, including Assembly, does not change it. Applicable root repository
+instructions must designate exactly one canonical full repository-owned
+verification entrypoint. A root instruction may delegate to the other root
+instruction file. Separately scoped focused or pre-push commands do not conflict
+with that canonical designation; different canonical full designations in
+applicable instructions do conflict and block. Confirm that the canonical
+entrypoint's directly named checked-in target or script exists and that it does
+not depend on missing repository configuration. When all checks pass, record
+`verificationPlanner: unavailable` and preserve the exact command and root
+policy-source path in the existing verification evidence where supported; do
+not invent a new receipt field.
+
+If the canonical designation is missing, ambiguous, or conflicting, or its
+entrypoint names a nonexistent target or script or depends on missing repository
+configuration, stop narrowly with `human_help_required` and preserve the failed
+policy evidence. Never invent raw Go, Docker, package, build-tag, race, service,
+remote-CI, or other commands. Never synthesize or commit
+`.dm/verification.json`.
+
+Contract specimen: root `AGENTS.md` designates `make verify` as canonical full
+verification and names `make conformance` as narrower and `make survivor` as
+pre-push; root `CLAUDE.md` delegates to `AGENTS.md`; checked-in `Makefile` owns
+`verify:`, `conformance:`, and `survivor:`. The narrower commands do not conflict,
+so with no missing configuration repository-native verification is available.
+
+On the repository-native path, per-chunk and review checks are focused checks
+explicitly approved by the prompt. Do not run the canonical native command per
+chunk, finding, or execution level. Run it exactly once on the integrated
+candidate before final review. After a repair batch, rerun it once only when
+relevant verification inputs changed; uncertainty counts as relevant and
+permits one rerun. After an irrelevant repair, carry prior canonical-command
+evidence forward only with bounded diff proof that no relevant verification
+input changed since its tested SHA.
 
 ## Step 2: Execute by Level
 
@@ -612,7 +644,7 @@ Verify before proceeding:
 
 1. **Completion check:** the subagent reported completion (not an error or question).
 2. **Commit check:** `git log <featureBranch>..<chunk-branch> --oneline` MUST show at least one commit.
-3. **Focused verification:** on profile-aware repositories, invoke `plan-verification` for boundary `chunk` using the exact chunk diff, then `run-verification`; do not run a repository-wide or race suite here. On the compatibility path, run only the repository's narrow documented check and record that no executable planner/cache authority was available.
+3. **Focused verification:** on profile-aware repositories, invoke `plan-verification` for boundary `chunk` using the exact chunk diff, then `run-verification`; do not run a repository-wide or race suite here. On the repository-native path, run only focused checks explicitly approved by the chunk prompt. Do not run the canonical native command here. Record `verificationPlanner: unavailable` plus the exact command and policy source in existing verification evidence where supported.
 4. **Role receipt check:** the public result contains the requested role,
    anonymous participant, closed disposition, requested/effective effort, and
    fallback state. The private receipt exists and is content-free; do not copy
@@ -650,7 +682,7 @@ For `renderedSurface: required`, run Datastar/markup static checks and one brows
 
 **Per-chunk review uses role dispatch.** dm-review is reserved for Step 4. Every per-chunk review receives the approved requirements and compact alignment context, never concrete participant identity. Flag as P1/P2/P3: work outside approved scope; conflict with project constraints; unnecessary architecture; changes owned by another repository; or correct work that misses the chunk's approved outcome. Reject adjacent useful work that does not repair an observable defect in the approved scope.
 
-**UI and Logic:** Request `review-deep` at high effort. If findings: collect the complete set; apply all accepted fixes as one revision batch; do not test after each individual edit; invoke planner once with `revision_batch`; re-run the affected role once. Max 2 iterations.
+**UI and Logic:** Request `review-deep` at high effort. If findings: collect the complete set; apply all accepted fixes as one revision batch; do not test after each individual edit; on the profile path invoke the planner once with `revision_batch`; on the repository-native path run only affected focused checks from the approved prompt. Re-run the affected role once. Max 2 iterations.
 
 **Integration:** Same, then verify cross-chunk wiring (routes, imports, connections).
 
@@ -702,9 +734,9 @@ Apply `repo-cleanup-contract.md`. Never suppress git exit status. Load `plugins/
 
 ### 3k: Verify the Integrated Execution Level
 
-After every chunk in the current execution level has completed Step 3j and its merge disposition is authoritative, check out `<featureBranch>` and invoke the repository planner exactly once with boundary `execution_level`, supplying the cumulative changed paths for that level, not one invocation per chunk.
+After every chunk in the current execution level has completed Step 3j and its merge disposition is authoritative, check out `<featureBranch>`. On the profile path, invoke the repository planner exactly once with boundary `execution_level`, supplying the cumulative changed paths for that level, not one invocation per chunk. On the repository-native path, do not run the canonical native command at this boundary; retain the focused evidence already collected.
 
-The full non-race lane runs against the first tree where all sibling chunks actually coexist. A documentation or unrelated metadata-only change does not invalidate a code lane unless `.dm/verification.json` explicitly includes that path. A failed required level lane blocks dependent levels. Record:
+On the profile path, the full non-race lane runs against the first tree where all sibling chunks actually coexist. A documentation or unrelated metadata-only change does not invalidate a code lane unless `.dm/verification.json` explicitly includes that path. A failed required profile level lane blocks dependent levels. Record the profile-path result:
 
 ```text
 LEVEL_VERIFICATION: <level> | passed: <N> | failed: <N>
@@ -714,7 +746,15 @@ LEVEL_VERIFICATION: <level> | passed: <N> | failed: <N>
 
 **THIS STEP IS MANDATORY.** After ALL chunks are merged, run exactly the validated final dm-review mode. `full` runs the full fan-out. `quick` runs the installed dm-review-quick protocol only when consequence is not high and the final diff has no bounded security-sensitive path; otherwise escalate to full.
 
-Before dispatching the review, invoke the repository planner with boundary `merge_candidate` on the exact feature-branch tree and run the selected lanes. It materializes every required remote race/security/container/harness lane as `remote_pending`, `blocked`, or `unavailable`; the kernel does not import remote results. The caller separately collects required native CI or independent review evidence bound to the exact candidate head.
+Before dispatching the review, verify the exact integrated feature-branch tree.
+On the profile path, invoke the repository planner with boundary
+`merge_candidate` and run its selected lanes. It materializes every required
+remote race/security/container/harness lane as `remote_pending`, `blocked`, or
+`unavailable`; the kernel does not import remote results. On the
+repository-native path, run the one canonical native command exactly once here
+and bind its result, exact command, policy source, and candidate SHA into the
+existing verification evidence. The caller separately collects required native
+CI or independent review evidence bound to the exact candidate head.
 
 First materialize the cumulative authoritative receipt array through the `all-chunks-complete` boundary and run the first `observe-pipeline` checkpoint. The observation remains shadow evidence and cannot approve the final review.
 
@@ -762,7 +802,12 @@ If P1/P2/P3 issues are found:
 
 1. Collect the complete finding set and fix it as one revision batch.
 2. Stage with `git add -A -- <dir>`, verify `git diff --cached --stat`, commit with `git commit -F <file>`.
-3. Invoke `revision_batch` once, then `merge_candidate` once. Do not test after every finding edit.
+3. On the profile path, invoke `revision_batch` once, then `merge_candidate`
+   once. On the repository-native path, an irrelevant repair may carry forward
+   prior canonical-command evidence only with bounded diff proof that no
+   relevant verification input changed. If a relevant input changed or
+   relevance is uncertain, rerun the canonical native command once and bind the
+   result to the new candidate SHA. Do not test after every finding edit.
 4. Re-run only the affected lanes on the exact newly tested SHA. Repeat the whole selected roster only when prior coverage was incomplete; if a repair changes a security-sensitive boundary, escalate to or repeat full mode.
 5. Stop when no P1/P2/P3 remain and every required lane and repository/browser/remote gate is complete.
 
@@ -780,7 +825,13 @@ After the final review, fire airlift per `plugins/pipeline/references/airlift-ch
 - `BLOCKED PENDING CALLER VERIFICATION` -- any required browser case has a `human_help_required` receipt or lacks complete passing browser evidence. Do NOT say "merge is safe" or "ready to merge".
 - `BLOCKED PENDING REMOTE VERIFICATION` -- any non-browser lane with `required: true` is `remote_pending`, `failed`, `blocked`, or `unavailable`. Caller verifies native CI or review evidence at the exact candidate head.
 
-Before emitting any merge recommendation, require passing local `merge_candidate` results from the current invocation against `.dm/verification.json`. Never substitute hardcoded Docker, Go package, service, or build-tag commands.
+Before emitting any merge recommendation, require passing local
+`merge_candidate` results from the current invocation on the profile path, or
+on the repository-native path either passing canonical-command evidence at the
+current candidate SHA or carried-forward passing evidence plus bounded diff
+proof that no relevant verification input changed since its tested SHA. Never
+substitute hardcoded Docker, Go package, service, build-tag, race, remote-CI, or
+other commands.
 
 **Doc-sync check:** if the feature introduced new patterns, modules, or conventions, verify `CLAUDE.md` and `README.md` reflect them; flag missing updates as P2.
 
