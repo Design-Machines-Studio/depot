@@ -50,6 +50,18 @@ High-consequence security completion still requires a reviewer family different 
 
 Every live caller selects one coherent installed plugin root with workflow-kernel `resolve-plugin-bundle`, then derives its wrapper, policy, boundary, protocols, and templates from that root. Semantic version wins over mtime; the active host breaks only equal-version ties. Durable receipts keep the version, cache class, and reason, never the absolute home path.
 
+## Benchmark evidence
+
+The manual `depot-role-v2` suite covers all nine roles with two distinct cases
+each. It keeps raw and normalized output, digest-bound evaluator revisions,
+confirmed identity provenance, and stage-attributed failures. Screens discover
+opportunities only; they do not change routing. Promotion requires three
+comparable successful attempts on every applicable distinct case plus the
+existing production and policy gates. Benchmark-owned faults have no model
+conclusion and must be repaired before more evidence is collected. Validated
+quality and contextual efficiency lead interpretation; provider spend and
+access remain separate guardrails.
+
 ## Requirements
 
 - `OPENROUTER_API_KEY` or a validated `OPENROUTER_API_KEY_FILE` is required for every live wrapper transmission and activates eligible configured-key lanes.
@@ -60,6 +72,12 @@ Every live caller selects one coherent installed plugin root with workflow-kerne
   secret-value embargo, held-section split, or payload-content fallback.
 - Use provider-side per-key spending limits for runaway-cost control.
 - Optional OpenRouter MCP: `codex mcp add openrouter --url https://mcp.openrouter.ai/mcp`, then `codex mcp login openrouter`. Its expiring OAuth key does not replace the persistent team API key.
+
+## Production canaries
+
+Run one attributable disposable-repository role canary only after its offline
+fixtures pass. See
+`skills/openrouter-delegate/references/depot-role-production-canary.md`.
 
 ## Budgets and content-safe HTTP failures
 

@@ -2,6 +2,7 @@ import copy
 import json
 import hashlib
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -426,26 +427,35 @@ class RuntimeCliTests(unittest.TestCase):
             source = json.loads(
                 (FIXTURES / "pipeline-legacy-browser-recovery.json").read_text()
             )
+            self.assertRegex(
+                source[1]["human_intervention_id"],
+                r"\Abrowser-help-sha256:[0-9a-f]{64}\Z",
+            )
+            self.assertEqual(len(source[1]["missing_case_ids"]), 3)
+            self.assertTrue(all(
+                re.fullmatch(r"case-sha256:[0-9a-f]{64}", case_id)
+                for case_id in source[1]["missing_case_ids"]
+            ))
             ledger = root / "authoritative-receipts.json"
             ledger.write_text(json.dumps(source))
             appended = self.run_cli(
                 "reconcile-legacy-browser",
                 "--events", ledger,
                 "--target-sequence", "1",
-                "--occurred-at", "2026-01-01T00:03:00Z",
+                "--occurred-at", "2026-01-01T00:09:00Z",
                 "--authoritative-receipt", "receipts/reconciliation.json",
             )
             self.assertEqual(appended.returncode, 0, appended.stderr)
             reconciled = json.loads(ledger.read_text())
             self.assertEqual(reconciled[:-1], source)
-            self.assertEqual(reconciled[-1]["sequence"], 3)
+            self.assertEqual(reconciled[-1]["sequence"], 9)
 
             before_duplicate = ledger.read_bytes()
             duplicate = self.run_cli(
                 "reconcile-legacy-browser",
                 "--events", ledger,
                 "--target-sequence", "1",
-                "--occurred-at", "2026-01-01T00:04:00Z",
+                "--occurred-at", "2026-01-01T00:10:00Z",
                 "--authoritative-receipt", "receipts/duplicate.json",
             )
             self.assertEqual(duplicate.returncode, 2)
@@ -471,10 +481,17 @@ class RuntimeCliTests(unittest.TestCase):
             )
             self.assertEqual(observed.returncode, 0, observed.stderr)
             observation = root / "pipeline-shadow-observation.json"
+            observation_events = json.loads(observation.read_text())["events"]
+            self.assertEqual(observation_events[1]["payload"]["status"], "blocked")
             self.assertEqual(
-                json.loads(observation.read_text())["events"][1]["payload"]["status"],
-                "blocked",
+                [event["payload"]["stage"] for event in observation_events[3:9]],
+                [
+                    "chunk", "run", "shadow_observation", "shadow_comparison",
+                    "metrics", "cost_summary",
+                ],
             )
+            self.assertEqual(observation_events[3]["payload"]["status"], "failed")
+            self.assertEqual(observation_events[4]["payload"]["status"], "skipped")
 
             comparison = root / "comparison.json"
             compared = self.run_cli(
@@ -490,7 +507,7 @@ class RuntimeCliTests(unittest.TestCase):
                 "metrics", "--events", ledger, "--output", metrics,
             )
             self.assertEqual(measured.returncode, 0, measured.stderr)
-            self.assertEqual(json.loads(metrics.read_text())["event_count"], 4)
+            self.assertEqual(json.loads(metrics.read_text())["event_count"], 10)
 
             cost = root / "run-cost-summary.json"
             costed = self.run_cli(

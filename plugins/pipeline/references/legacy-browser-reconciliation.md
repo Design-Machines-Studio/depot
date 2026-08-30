@@ -7,6 +7,8 @@ invalid-row allowlist, or best-effort observation mode.
 
 Pipeline owns the decision to append the reconciliation. Workflow Kernel owns
 only its deterministic derivation, validation, and atomic ledger replacement.
+This producer path requires Workflow Kernel `>=0.18.1`; version 0.18.0 cannot
+digest the retained schema-owned colon-bearing identifiers.
 Invoke it only for an owner-approved known historical row after preserving a
 copy of the authoritative ledger:
 

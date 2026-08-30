@@ -22,8 +22,7 @@ from .model import GateDecision, HostCapability, NodeSpec, WorkflowClass
 from .redaction import (
     MAX_PAYLOAD_DEPTH, MAX_PAYLOAD_ITEMS, MAX_STRING_LENGTH,
     MAX_TOTAL_STRING_BYTES, bounded_iterable, contains_high_confidence_secret,
-    freeze_json, normalize_evidence_reference, redact, sanitize_durable_payload,
-    thaw,
+    normalize_evidence_reference, redact, sanitize_durable_payload,
 )
 from .schema import KernelError, WorkflowEvent
 from .transitions import MAX_EVENT_ITEMS
@@ -244,6 +243,7 @@ _CONTRIBUTION_REASON_DISPOSITION = {
     "agent-findings-cap": "discarded",
 }
 _IDENTITY = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,255}\Z")
+_CASE_DIGEST_ID = re.compile(r"case-sha256:[0-9a-f]{64}\Z")
 _CANONICAL_FINDING_ID = re.compile(r"finding-v1:sha256\(([0-9a-f]{64})\)\Z")
 _LINE_ANCHOR = re.compile(r"lines=([1-9][0-9]*)-([1-9][0-9]*)\Z")
 _MAX_MISSING_CASE_IDS = 256
@@ -301,10 +301,13 @@ def canonical_finding_identity(
     return f"finding-v1:sha256({digest})", values
 
 
-def _bounded_identity(value: object, field: str) -> str:
-    value = required_text(value, field)
-    if _IDENTITY.fullmatch(value) is None:
-        raise ValueError("invalid " + field)
+def _bounded_missing_case_identity(value: object) -> str:
+    value = required_text(value, "missing case id")
+    if (
+        _IDENTITY.fullmatch(value) is None
+        and _CASE_DIGEST_ID.fullmatch(value) is None
+    ):
+        raise ValueError("invalid missing case id")
     return value
 
 
@@ -1133,7 +1136,7 @@ def _validate_observation_receipt(
                 raise ValueError("browser intervention lacks case identity")
             try:
                 cases = [
-                    _bounded_identity(item, "missing case id") for item in cases
+                    _bounded_missing_case_identity(item) for item in cases
                 ]
             except ValueError:
                 raise ValueError("browser intervention lacks case identity") from None
@@ -1168,34 +1171,62 @@ def canonical_observation_receipt_digest(receipt: object) -> str:
     if type(receipt) is not dict:
         raise ValueError("invalid reconciliation target")
 
-    def require_exact_json(value: object, depth: int = 0) -> None:
+    item_count = 0
+    text_bytes = 0
+    active_containers = set()
+
+    def snapshot_raw_json(value: object, depth: int = 0) -> object:
+        nonlocal item_count, text_bytes
         if depth > MAX_PAYLOAD_DEPTH:
             raise ValueError("invalid reconciliation target")
-        if value is None or type(value) in {bool, str, int, float}:
-            return
+        item_count += 1
+        if item_count > MAX_PAYLOAD_ITEMS:
+            raise ValueError("invalid reconciliation target")
+        if value is None or type(value) is bool:
+            return value
+        if type(value) is str:
+            if len(value) > MAX_STRING_LENGTH:
+                raise ValueError("invalid reconciliation target")
+            text_bytes += len(value.encode("utf-8"))
+            if text_bytes > MAX_TOTAL_STRING_BYTES:
+                raise ValueError("invalid reconciliation target")
+            return value
+        if type(value) is int:
+            return value
+        if type(value) is float:
+            if not math.isfinite(value):
+                raise ValueError("invalid reconciliation target")
+            return value
         if type(value) is list:
-            for item in bounded_iterable(value, max_items=MAX_PAYLOAD_ITEMS):
-                require_exact_json(item, depth + 1)
-            return
+            identity = id(value)
+            if identity in active_containers:
+                raise ValueError("invalid reconciliation target")
+            active_containers.add(identity)
+            try:
+                return [snapshot_raw_json(item, depth + 1) for item in value]
+            finally:
+                active_containers.remove(identity)
         if type(value) is dict:
-            for key in bounded_iterable(value, max_items=MAX_PAYLOAD_ITEMS):
-                if type(key) is not str:
-                    raise ValueError("invalid reconciliation target")
-                require_exact_json(value[key], depth + 1)
-            return
+            identity = id(value)
+            if identity in active_containers:
+                raise ValueError("invalid reconciliation target")
+            active_containers.add(identity)
+            try:
+                result = {}
+                for key in value:
+                    if type(key) is not str or len(key) > MAX_STRING_LENGTH:
+                        raise ValueError("invalid reconciliation target")
+                    text_bytes += len(key.encode("utf-8"))
+                    if text_bytes > MAX_TOTAL_STRING_BYTES:
+                        raise ValueError("invalid reconciliation target")
+                    result[key] = snapshot_raw_json(value[key], depth + 1)
+                return result
+            finally:
+                active_containers.remove(identity)
         raise ValueError("invalid reconciliation target")
 
     try:
-        require_exact_json(receipt)
-        snapshot = thaw(freeze_json(
-            receipt,
-            max_depth=MAX_PAYLOAD_DEPTH,
-            max_items=MAX_PAYLOAD_ITEMS,
-            max_string_length=MAX_STRING_LENGTH,
-            max_total_string_bytes=MAX_TOTAL_STRING_BYTES,
-        ))
-        if snapshot != receipt:
-            raise ValueError("invalid reconciliation target")
+        snapshot = snapshot_raw_json(receipt)
         encoded = json.dumps(
             snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"),
             allow_nan=False,

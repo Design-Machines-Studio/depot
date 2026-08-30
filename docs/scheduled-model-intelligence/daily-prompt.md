@@ -33,7 +33,7 @@ Run from the worktree root:
 ```sh
 rtk git status --short --branch
 rtk git rev-parse --show-toplevel
-rtk python tests/test_model_intelligence.py -v
+rtk python3 tests/test_model_intelligence.py -v
 ```
 
 If the worktree contains changes that predate this run, stop without editing
@@ -45,12 +45,31 @@ Set the exact paths and capture one catalog snapshot:
 SOURCE_REPO=/home/ned/ai/depot
 STATE_ROOT=/home/ned/.local/state/openrouter-model-pulse
 MATRIX=plugins/openrouter/skills/openrouter-delegate/references/model-matrix.json
+SUITE=plugins/openrouter/skills/openrouter-delegate/references/depot-role-benchmark-suite.json
+POLICY=plugins/model-router/skills/model-router/references/role-policy.json
+BENCH_ROOT=/home/ned/benchmark-results/depot-role-v2
 OBSERVED_AT="$(date --iso-8601=seconds)"
 RUN_DATE="$(date +%F)"
 CATALOG="$STATE_ROOT/catalog/models-$(date +%Y%m%dT%H%M%S%z).json"
 CATALOG_RECEIPT="$STATE_ROOT/receipts/catalog-$RUN_DATE.json"
+ELIGIBILITY="$BENCH_ROOT/eligibility-$RUN_DATE.json"
 
-mkdir -p "$STATE_ROOT/catalog" "$STATE_ROOT/receipts"
+mkdir -p "$STATE_ROOT/catalog" "$STATE_ROOT/receipts" "$BENCH_ROOT"
+jq -n --slurpfile suite "$SUITE" --slurpfile policy "$POLICY" '
+  {suite_id:$suite[0].suiteId,suite_revision:$suite[0].suiteRevision,
+   distinct_cases:($suite[0].cases | length),
+   roles:($suite[0].cases | map(.role) | unique),
+   cases:[$suite[0].cases[] as $case |
+     {case_id:$case.id,case_revision:$case.revision,prompt_revision:$case.promptRevision,
+      role:$case.role,required_capabilities:$case.requiredCapabilities,
+      eligible_candidates:[$policy[0].roles[$case.role][] as $candidate |
+        select(all($case.requiredCapabilities[]; . as $cap |
+          $candidate.capabilities | index($cap) != null)) |
+        {transport:$candidate.transport,model:$candidate.model,billing:$candidate.billing}]}]}' \
+  > "$ELIGIBILITY"
+jq '{suite_id,suite_revision,distinct_cases,roles,
+  cases:[.cases[] | {case_id,role,eligible_count:(.eligible_candidates|length)}]}' \
+  "$ELIGIBILITY"
 curl -fsS https://openrouter.ai/api/v1/models -o "$CATALOG"
 jq -e '.data | type == "array" and length > 0' "$CATALOG" >/dev/null
 sha256sum "$CATALOG"
@@ -109,7 +128,6 @@ Read actual run artifacts from the source checkout, not the isolated worktree:
 ```sh
 REPORT_DIR=docs/model-intelligence
 DAILY_DIR="$REPORT_DIR/daily"
-BENCH_ROOT=/home/ned/benchmark-results/depot-role-v1
 mkdir -p "$DAILY_DIR"
 
 rtk python tools/model-intelligence.py report \
@@ -132,6 +150,15 @@ jq '{production:{cost_summary_artifacts:.production.cost_summary_artifacts,
 
 Interpret honestly:
 
+- Lead with per-role validated quality, distinct-case coverage, first-pass
+  reliability, rework/time to valid, latency, context, and instrumentation.
+  Provider spend and access are separate secondary views.
+- Historical v1 and digest-incompatible v2 evidence cannot enter current
+  comparisons. Benchmark prompt, parser/normalizer, scorer, binding, or harness
+  faults have no model conclusion and cannot promote or demote a model.
+- If a benchmark fault appears, preserve its attempt, stop benchmark calls,
+  repair the benchmark locally, and pass offline fixtures before any later
+  evidence collection. The daily pulse itself makes no paid benchmark call.
 - `lanes: 0`, empty summaries, missing token/cost coverage, and unattributed
   models are measurement gaps—not zero cost or successful efficiency.
 - Never add token counts to input bytes.
@@ -147,8 +174,9 @@ Interpret honestly:
 Run:
 
 ```sh
-rtk python tests/test_model_intelligence.py -v
+rtk ./tools/test-benchmark-evidence-contract.sh
 rtk ./tools/test-openrouter-role-benchmark.sh
+rtk python3 tests/test_model_intelligence.py -v
 rtk ./tools/validate-provider-neutral-routing.sh
 rtk ./tools/validate-routing-economics.sh
 rtk ./tools/validate-dual-compat.sh

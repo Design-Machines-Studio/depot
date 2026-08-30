@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.18.0
+version: 0.18.2
 ---
 
 # Workflow Kernel
@@ -82,7 +82,12 @@ command.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
-0.18.0 surface adds the Pipeline-owned `reconcile-legacy-browser` writer for
+0.18.2 surface preserves exact committed-input binding for initial terminal
+plans while allowing the internal refresh after a successful declared
+mutating lane to bind newly generated live inputs. The 0.18.1 surface repairs
+the raw-receipt digest boundary for schema-owned colon-bearing identifiers.
+The 0.18.0 surface adds the Pipeline-owned
+`reconcile-legacy-browser` writer for
 one exact historical blocked receipt; it preserves the original row and cannot
 create browser or terminal success. The 0.17.0 surface includes state/replay and inspection commands, exact-ref
 repository verification planning/execution with deterministic fresh results,

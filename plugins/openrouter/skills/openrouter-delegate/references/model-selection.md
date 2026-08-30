@@ -18,7 +18,7 @@ receipt before a later paid or policy-changing run.
 | Exact slug | Input / output | Context | Catalog evidence |
 |---|---:|---:|---|
 | `deepseek/deepseek-v4-flash-0731` | $0.06 / $0.12 | 1,310,720 | Low-cost bounded reasoning/tools/structured output |
-| `deepseek/deepseek-v4-pro-0813` | $1.122 / $3.366 | 1,048,576 | Three corrected local pipeline attempts at 100/100; single-case evidence only |
+| `deepseek/deepseek-v4-pro-0813` | $1.122 / $3.366 | 1,048,576 | Historical v1: three corrected pipeline attempts at 100/100; incompatible single-case evidence only |
 | `qwen/qwen3.8-max` | $2 / $6 | 1,000,000 | Long-context independent analysis evidence |
 | `qwen/qwen3.8-2.4t-a95b` | $2 / $6 | 1,048,576 | Catalogued; no active consumer |
 | `qwen/qwen3.8-27b` | $0.425 / $2.55 | 1,000,000 | Catalogued; no active consumer |
@@ -27,7 +27,7 @@ receipt before a later paid or policy-changing run.
 | `google/gemini-3.7-flash` | $0.375 / $1.875 | 1,048,576 | Fast multimodal/tools/web-search evidence |
 | `meta/muse-spark-1.2` | $1.25 / $4.25 | 1,048,576 | Catalogued; no text-only active consumer |
 | `z-ai/glm-5.3` | $1.40 / $4.40 | 1,048,576 | Catalogued-not-routed; mandatory reasoning defaults to max |
-| `z-ai/glm-5.3-flash` | $0.075 / $0.25 | 1,310,720 | Formerly Ox Alpha; three corrected pipeline attempts at 100/100; single-case evidence only |
+| `z-ai/glm-5.3-flash` | $0.075 / $0.25 | 1,310,720 | Historical v1: formerly Ox Alpha; three corrected pipeline attempts at 100/100; incompatible single-case evidence only |
 | `moonshotai/kimi-k3` | $3 / $15 | 1,048,576 | Focused security-analysis evidence at high cost |
 | `openai/gpt-5.6-luna` | $0.20 / $1.20 | 1,050,000 | Economical mechanical-analysis evidence |
 | `openai/gpt-5.6-terra` | $2 / $12 | 1,050,000 | Catalogued compatibility evidence; no default role |
@@ -94,13 +94,29 @@ attempt receipt.
 
 Public benchmarks do not reproduce Depot's prompts, role contracts, request
 shape, or verification rules. `depot-role-benchmark.md` defines a bounded
-local complement: four versioned project cases, deterministic scoring, exact
-one-model runs, and compact cost/token/duration evidence. It is an explicit
-operator measurement surface and never becomes a provider-bearing orchestration
-prompt. Artificial Analysis Optima is documented as an optional manual hosted
-surface; Depot does not depend on it or automate its spend.
+local complement: `depot-role-v2` has 18 distinct cases covering all nine roles,
+stage-attributed failures, raw and normalized output, digest-bound evaluator
+cohorts, confirmed requested/served identity provenance, deterministic scoring,
+and exact one-model runs. It is an explicit operator measurement surface and
+never becomes a provider-bearing orchestration prompt. Screens nominate
+opportunities only. Promotion requires three comparable successful attempts on
+every applicable distinct case plus current production and policy gates.
 
-## Evidence interpretation
+Interpret current evidence quality-first: validated case quality, first-pass
+reliability, rework/time to valid, latency, context and telemetry coverage, and
+production signals precede provider spend and access economics. Benchmark-owned
+prompt, parser, scorer, binding, or harness faults and incompatible digests have
+no model conclusion; retain them, stop calls, repair locally, and validate the
+harness before collecting new evidence. The optional blind editorial receipt is
+a separate nullable human-quality axis, never a deterministic or model-judge
+gate. Artificial Analysis Optima remains an optional manual hosted surface;
+Depot does not depend on it or automate its spend.
+
+## Historical v1 evidence interpretation
+
+The evidence below was produced by the retired `depot-role-v1` contract. It is
+dated historical evidence, incompatible with v2 evaluator cohorts, and cannot
+support a current model conclusion or promotion without new v2 coverage.
 
 The 2026-08-25 refresh made no model inference call. Artificial Analysis Coding
 Agent Index v1.4 is a three-harness pass@1 composite, not a universal Depot

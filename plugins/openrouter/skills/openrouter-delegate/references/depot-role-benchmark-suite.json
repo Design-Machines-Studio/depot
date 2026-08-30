@@ -1,59 +1,2620 @@
 {
-  "schemaVersion": 1,
-  "suiteId": "depot-role-v1",
+  "schemaVersion": 2,
+  "suiteId": "depot-role-v2",
+  "suiteRevision": 1,
+  "behavioralContract": {
+    "revision": 1,
+    "digest": "sha256:3ecea8dc49c02a8a8ac2a6e7ede9993fb6609f7520d5438ab8bf0cf9170ba32a"
+  },
   "measurementPolicy": {
     "execution": "one-exact-model-per-invocation",
     "judge": "deterministic-local",
     "attemptsPerRecordedComparison": 3,
-    "promotionMinimum": "three successful attempts on every applicable case",
-    "hostedEvaluation": "optional-optima-manual-import"
+    "promotionMinimum": "three comparable, identity-confirmed, no-model-fallback successful attempts on every applicable distinct case in one digest-compatible cohort",
+    "hostedEvaluation": "not-used",
+    "liveProviderRequiredForFixtureValidation": false
+  },
+  "humanRubricContract": {
+    "path": "<attempt-directory>/human-rubric.json",
+    "join": "normalized-output-artifact-sha256",
+    "absence": "human-quality-null",
+    "invalidEvidence": "reject-human-evidence-without-changing-deterministic-gates",
+    "forbiddenIdentity": [
+      "candidate",
+      "model",
+      "provider",
+      "transport"
+    ]
   },
   "cases": [
     {
       "id": "pipeline-legacy-translation",
+      "revision": 2,
+      "promptRevision": 2,
       "role": "builder-fast",
-      "taskType": "structured-transformation",
-      "objective": "Translate a legacy Pipeline manifest without leaking provider selection into the new contract.",
-      "prompt": "Return one raw JSON object with no Markdown fences or prose. Translate this legacy Pipeline chunk: {\"id\":\"docs-1\",\"executor\":\"openrouter\",\"kind\":\"docs\"}. Use Depot's exact provider-neutral contract mapping: {\"executorRole\":\"builder-fast\",\"executorEffort\":\"medium\",\"executorCapabilities\":[\"read-repository\",\"write-repository\",\"structured-output\"],\"legacyExecutorTranslation\":{\"occurred\":true,\"sourceField\":\"executor\"}}. Return the translated chunk as the sole entry in a top-level \"chunks\" array; do not return the chunk object directly. Preserve id as docs-1, apply those exact values, and remove executor and kind.",
+      "taskType": "provider-neutral-legacy-transformation",
+      "objective": "Transform one sealed legacy Pipeline artifact without retaining provider selection.",
+      "requiredCapabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "workload": "mechanical",
+      "executionMode": "single-turn-sealed-repository-artifact",
+      "prompt": "Return one raw JSON object with no Markdown fences or prose. Sealed repository inputs: legacy chunk {\"id\":\"docs-1\",\"executor\":\"openrouter\",\"kind\":\"docs\"}; routing-policy excerpt: chunk kind docs maps to executorRole builder-fast, executorEffort medium, and executorCapabilities read-repository, write-repository, structured-output; legacy field executor must be removed and recorded as legacyExecutorTranslation with occurred true and sourceField executor. Apply the provider-neutral contract. Return the translated chunk as the sole entry in a top-level \"chunks\" array; do not return the chunk object directly. Preserve id docs-1 and remove kind. Validation outcome to satisfy: translated artifact is valid.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "chunks": "array of exactly one translated chunk"
+        },
+        "requiredChunkFields": [
+          "id",
+          "executorRole",
+          "executorEffort",
+          "executorCapabilities",
+          "legacyExecutorTranslation"
+        ],
+        "forbiddenChunkFields": [
+          "executor",
+          "kind"
+        ]
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "pipeline.single-chunk-envelope",
+          "description": "chunks contains exactly one object."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "pipeline.identity-role-effort",
+          "description": "Preserves docs-1 and derives the disclosed role and effort."
+        },
+        {
+          "id": "pipeline.capabilities",
+          "description": "Uses the disclosed capability set."
+        },
+        {
+          "id": "pipeline.legacy-field-removed",
+          "description": "Removes executor and kind."
+        },
+        {
+          "id": "pipeline.translation-provenance",
+          "description": "Records the disclosed translation provenance."
+        },
+        {
+          "id": "pipeline.envelope-quality",
+          "description": "Returns the required sole-entry envelope."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "pipeline-legacy-transform",
+          "description": "The complete transformed artifact matches the sealed policy excerpt and fixed valid outcome."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "pipeline.single-chunk-envelope",
+        "pipeline.identity-role-effort",
+        "pipeline.capabilities",
+        "pipeline.legacy-field-removed",
+        "pipeline.translation-provenance",
+        "pipeline.envelope-quality"
+      ],
+      "validatorId": "pipeline-legacy-transform",
+      "fixtureProvenance": {
+        "kind": "sealed-repository-artifact",
+        "sources": [
+          "plugins/pipeline/references/routing-policy.json",
+          "inline legacy chunk"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": true
+      },
       "expected": {
         "chunks": [
           {
             "id": "docs-1",
             "executorRole": "builder-fast",
-            "executorCapabilities": ["read-repository", "write-repository", "structured-output"],
+            "executorCapabilities": [
+              "read-repository",
+              "write-repository",
+              "structured-output"
+            ],
             "executorEffort": "medium",
-            "legacyExecutorTranslation": {"occurred": true, "sourceField": "executor"}
+            "legacyExecutorTranslation": {
+              "occurred": true,
+              "sourceField": "executor"
+            }
           }
         ]
       },
-      "optima": {"taskType": "Q&A", "grader": "objective-rubric"}
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "retains-provider-field",
+          "output": {
+            "chunks": [
+              {
+                "id": "docs-1",
+                "executor": "openrouter",
+                "executorRole": "builder-fast",
+                "executorCapabilities": [
+                  "read-repository",
+                  "write-repository",
+                  "structured-output"
+                ],
+                "executorEffort": "medium",
+                "legacyExecutorTranslation": {
+                  "occurred": true,
+                  "sourceField": "executor"
+                }
+              }
+            ]
+          },
+          "mustFailAssertionIds": [
+            "pipeline.legacy-field-removed"
+          ]
+        }
+      ]
     },
     {
       "id": "review-zero-deferral",
+      "revision": 2,
+      "promptRevision": 2,
       "role": "review-fast",
-      "taskType": "finding-classification",
-      "objective": "Retain and correctly classify a closed review set without deferring P1/P2/P3 work.",
-      "prompt": "Return JSON only with findings and deferred. Classify all three seeded findings and retain all of them: AUTH-1 permits an API-key Claude login to be labeled subscription use; expected P1. ROUTE-2 retries an exhausted model alias in the same family; expected P2. DOC-3 reports a skipped check as passed; expected P3. Each finding needs id and severity. deferred must be false.",
-      "expected": {"findings": [{"id": "AUTH-1", "severity": "P1"}, {"id": "ROUTE-2", "severity": "P2"}, {"id": "DOC-3", "severity": "P3"}], "deferred": false},
-      "optima": {"taskType": "Q&A", "grader": "objective-rubric"}
+      "taskType": "closed-finding-classification",
+      "objective": "Classify a closed finding set without deferral.",
+      "requiredCapabilities": [
+        "read-repository",
+        "structured-output"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-diff",
+      "prompt": "Return one raw JSON object with fields findings and deferred, without Markdown or prose. Closed diff findings: AUTH-1 permits an API-key Claude login to be labeled subscription use (P1); ROUTE-2 retries an exhausted model alias in the same family (P2); DOC-3 reports a skipped check as passed (P3). Retain all three exactly once, with id and severity, and set deferred to false. Validation requires finding order AUTH-1, ROUTE-2, DOC-3.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "findings": "three ordered {id,severity} objects",
+          "deferred": "false"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "review.complete-envelope",
+          "description": "All three findings are returned."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "review.AUTH-1",
+          "description": "AUTH-1 is P1."
+        },
+        {
+          "id": "review.ROUTE-2",
+          "description": "ROUTE-2 is P2."
+        },
+        {
+          "id": "review.DOC-3",
+          "description": "DOC-3 is P3."
+        },
+        {
+          "id": "review.zero-deferral",
+          "description": "Nothing is deferred."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "review-finding-order",
+          "description": "Findings use the disclosed stable order."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "review.complete-envelope",
+        "review.AUTH-1",
+        "review.ROUTE-2",
+        "review.DOC-3",
+        "review.zero-deferral"
+      ],
+      "validatorId": "review-finding-order",
+      "fixtureProvenance": {
+        "kind": "sealed-diff-findings",
+        "sources": [
+          "inline closed finding set"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": false
+      },
+      "expected": {
+        "findings": [
+          {
+            "id": "AUTH-1",
+            "severity": "P1"
+          },
+          {
+            "id": "ROUTE-2",
+            "severity": "P2"
+          },
+          {
+            "id": "DOC-3",
+            "severity": "P3"
+          }
+        ],
+        "deferred": false
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "defers-real-finding",
+          "output": {
+            "findings": [
+              {
+                "id": "AUTH-1",
+                "severity": "P1"
+              },
+              {
+                "id": "ROUTE-2",
+                "severity": "P2"
+              },
+              {
+                "id": "DOC-3",
+                "severity": "P3"
+              }
+            ],
+            "deferred": true
+          },
+          "mustFailAssertionIds": [
+            "review.zero-deferral"
+          ]
+        }
+      ]
     },
     {
       "id": "assembly-next-chunk",
+      "revision": 2,
+      "promptRevision": 2,
       "role": "architect",
-      "taskType": "bounded-planning",
-      "objective": "Choose exactly one demonstrated next Assembly coordination chunk while respecting explicit exclusions.",
-      "prompt": "Return JSON only with nextChunk, executorRole, executorCapabilities, rejectedComplexity. Evidence: Project 1 has an approved provider-neutral role-routing issue in Review; the next demonstrated consumer need is a versioned local role benchmark corpus and scorer. Issue #86 Floor observation schemas are not admitted. Choose exactly one next chunk. Do not choose Floor UI, a daemon, a broker, a database, an MCP server, or a generic workflow engine.",
-      "expected": {"nextChunk": "depot-role-benchmark", "executorRole": "builder-fast", "executorCapabilities": ["read-repository", "write-repository", "structured-output"], "rejectedComplexity": ["Issue #86 Floor observation schemas", "daemon", "generic workflow engine"]},
-      "optima": {"taskType": "Document", "grader": "objective-rubric"}
+      "taskType": "bounded-next-chunk-selection",
+      "objective": "Choose and bound one demonstrated next Assembly/Depot chunk.",
+      "requiredCapabilities": [
+        "read-repository",
+        "long-context",
+        "structured-output"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-evidence-pack",
+      "prompt": "Return one raw JSON object with string nextChunk, string executorRole, array executorCapabilities, and non-empty array rejectedComplexity. Evidence: provider-neutral role routing is independently reviewed; the remaining approved work is the role-complete Depot benchmark corpus and its deterministic case scorer. Issue #86 Floor observation schemas are not admitted. Choose and bound one next chunk supported by that evidence. Any clear wording for the benchmark corpus/scorer direction is accepted; no exact nextChunk label, executor label, or capability wording is required. Reject unsupported Floor UI, daemon, broker, database, MCP server, hosted judge, or generic workflow engine machinery.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "nextChunk": "one benchmark-corpus/scorer proposal in any clear wording",
+          "executorRole": "provider-neutral role wording",
+          "executorCapabilities": "provider-neutral capability wording",
+          "rejectedComplexity": "non-empty rejected scope"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "assembly.complete-envelope",
+          "description": "All four contracted fields have the required types."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "assembly.next-chunk",
+          "description": "Selects the proven benchmark corpus/scorer direction using semantic alternatives."
+        },
+        {
+          "id": "assembly.executor-role",
+          "description": "Supplies a provider-neutral role without a hidden exact label."
+        },
+        {
+          "id": "assembly.capabilities",
+          "description": "Supplies non-empty provider-neutral capabilities without hidden exact wording."
+        },
+        {
+          "id": "assembly.rejected-complexity",
+          "description": "Names rejected unsupported scope."
+        },
+        {
+          "id": "assembly.exclusions",
+          "description": "Does not select excluded machinery."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "architect-bounded-chunk",
+          "description": "The selection is benchmark-focused and excludes unsupported machinery."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "assembly.complete-envelope",
+        "assembly.next-chunk",
+        "assembly.executor-role",
+        "assembly.capabilities",
+        "assembly.rejected-complexity",
+        "assembly.exclusions"
+      ],
+      "validatorId": "architect-bounded-chunk",
+      "fixtureProvenance": {
+        "kind": "sealed-project-evidence",
+        "sources": [
+          "approved benchmark evidence contract",
+          "inline scope exclusions"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": false
+      },
+      "expected": {
+        "nextChunk": "depot-role-benchmark",
+        "executorRole": "builder-fast",
+        "executorCapabilities": [
+          "read-repository",
+          "write-repository",
+          "structured-output"
+        ],
+        "rejectedComplexity": [
+          "Issue #86 Floor observation schemas",
+          "daemon",
+          "generic workflow engine"
+        ]
+      },
+      "semanticAlternatives": [
+        {
+          "id": "descriptive-benchmark-wording",
+          "output": {
+            "nextChunk": "role-complete benchmark corpus and deterministic scorer",
+            "executorRole": "bounded repository builder",
+            "executorCapabilities": [
+              "repository reading",
+              "owned edits",
+              "structured results"
+            ],
+            "rejectedComplexity": [
+              "hosted judge",
+              "Floor UI"
+            ]
+          }
+        }
+      ],
+      "negativeFixtures": [
+        {
+          "id": "unsupported-engine",
+          "output": {
+            "nextChunk": "generic workflow engine",
+            "executorRole": "builder",
+            "executorCapabilities": [
+              "structured output"
+            ],
+            "rejectedComplexity": [
+              "nothing"
+            ]
+          },
+          "mustFailAssertionIds": [
+            "assembly.next-chunk",
+            "assembly.exclusions"
+          ]
+        }
+      ]
     },
     {
       "id": "mechanical-owned-edit",
+      "revision": 2,
+      "promptRevision": 2,
       "role": "builder-fast",
-      "taskType": "bounded-edit",
-      "objective": "Produce the exact content for one owned mechanical edit and name its fixed verification.",
-      "prompt": "Return JSON only with targetPath, newContent, verification. You own config/fixture.json. Its current content is {\"schemaVersion\":1,\"enabled\":false}. Change only enabled to true, preserve schemaVersion, and set verification to exactly: jq -e '.schemaVersion == 1 and .enabled == true' config/fixture.json",
-      "expected": {"targetPath": "config/fixture.json", "newContent": {"schemaVersion": 1, "enabled": true}, "verification": "jq -e '.schemaVersion == 1 and .enabled == true' config/fixture.json"},
-      "optima": {"taskType": "Agentic", "grader": "objective-rubric"}
+      "taskType": "bounded-owned-json-edit",
+      "objective": "Correct one small owned JSON artifact and report its fixed validation outcome.",
+      "requiredCapabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "workload": "mechanical",
+      "executionMode": "single-turn-sealed-repository-artifact",
+      "prompt": "Return one raw JSON object with targetPath, newContent, verification, and validationOutcome. Owned sealed artifact config/fixture.json currently contains {\"schemaVersion\":1,\"enabled\":false}. Change only enabled to true. targetPath must be config/fixture.json. verification must be exactly jq -e '.schemaVersion == 1 and .enabled == true' config/fixture.json and validationOutcome must be passed.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "targetPath": "config/fixture.json",
+          "newContent": "complete corrected JSON object",
+          "verification": "exact command disclosed in prompt",
+          "validationOutcome": "passed"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "mechanical.complete-envelope",
+          "description": "All contracted fields have the required types."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "mechanical.target",
+          "description": "Uses config/fixture.json."
+        },
+        {
+          "id": "mechanical.content",
+          "description": "Changes only enabled to true."
+        },
+        {
+          "id": "mechanical.verification",
+          "description": "Uses the disclosed fixed verification."
+        },
+        {
+          "id": "mechanical.validation-outcome",
+          "description": "Reports passed."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "mechanical-owned-json",
+          "description": "The complete artifact and validation result match the sealed input."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "mechanical.complete-envelope",
+        "mechanical.target",
+        "mechanical.content",
+        "mechanical.verification",
+        "mechanical.validation-outcome"
+      ],
+      "validatorId": "mechanical-owned-json",
+      "fixtureProvenance": {
+        "kind": "sealed-repository-artifact",
+        "sources": [
+          "inline config/fixture.json"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": true
+      },
+      "expected": {
+        "targetPath": "config/fixture.json",
+        "newContent": {
+          "schemaVersion": 1,
+          "enabled": true
+        },
+        "verification": "jq -e '.schemaVersion == 1 and .enabled == true' config/fixture.json",
+        "validationOutcome": "passed"
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "changes-schema-version",
+          "output": {
+            "targetPath": "config/fixture.json",
+            "newContent": {
+              "schemaVersion": 2,
+              "enabled": true
+            },
+            "verification": "jq -e '.schemaVersion == 1 and .enabled == true' config/fixture.json",
+            "validationOutcome": "passed"
+          },
+          "mustFailAssertionIds": [
+            "mechanical.content"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "architect-routing-tradeoff",
+      "revision": 2,
+      "promptRevision": 2,
+      "role": "architect",
+      "taskType": "architecture-tradeoff",
+      "objective": "Resolve an architecture tradeoff while rejecting unsupported machinery.",
+      "requiredCapabilities": [
+        "read-repository",
+        "long-context",
+        "structured-output"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-evidence-pack",
+      "prompt": "Return one raw JSON object with decision, rationale, preservedBoundary, and rejected. Sealed evidence: role-policy.json already owns deterministic candidate order; Pipeline owns workflow depth and role intent; model-router validates provider-neutral role requests and dispatches one transport at a time. A proposal would add a persistent routing database and learned ranker solely to choose roles. Decide between preserving the current ownership split or adopting that proposal. Accept any wording that preserves policy-owned deterministic selection and rejects the database/ranker because no current consumer requires it. preservedBoundary must be either a non-empty string or a non-empty array of strings and must name both role policy and Pipeline ownership; rejected must be either a non-empty string or a non-empty array of strings and must reject both the database and ranker.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "decision": "semantic decision",
+          "rationale": "evidence-based rationale",
+          "preservedBoundary": "non-empty string or non-empty string array naming role-policy and Pipeline ownership",
+          "rejected": "non-empty string or non-empty string array rejecting both the database and ranker"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "architect.tradeoff-envelope",
+          "description": "All fields are present with required types."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "architect.policy-owned-selection",
+          "description": "Preserves deterministic policy-owned selection."
+        },
+        {
+          "id": "architect.pipeline-ownership",
+          "description": "Preserves Pipeline workflow-depth ownership."
+        },
+        {
+          "id": "architect.rejects-ranker-db",
+          "description": "Rejects the unsupported ranker/database."
+        },
+        {
+          "id": "architect.evidence-rationale",
+          "description": "Uses the sealed current-consumer evidence."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "architect-routing-boundary",
+          "description": "Decision preserves both ownership boundaries and rejects the proposal."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "architect.tradeoff-envelope",
+        "architect.policy-owned-selection",
+        "architect.pipeline-ownership",
+        "architect.rejects-ranker-db",
+        "architect.evidence-rationale"
+      ],
+      "validatorId": "architect-routing-boundary",
+      "fixtureProvenance": {
+        "kind": "sealed-architecture-pack",
+        "sources": [
+          "role-policy.json",
+          "routing-policy.json",
+          "model-router contract excerpt"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": false
+      },
+      "expected": {
+        "decision": "preserve deterministic policy-owned selection",
+        "rationale": "No current consumer requires learned ranking or persistence.",
+        "preservedBoundary": [
+          "role policy owns candidate selection",
+          "Pipeline owns workflow depth and role intent"
+        ],
+        "rejected": [
+          "persistent routing database",
+          "learned ranker"
+        ]
+      },
+      "semanticAlternatives": [
+        {
+          "id": "ownership-first-wording",
+          "output": {
+            "decision": "keep the current ownership split",
+            "rationale": "The sealed consumers are already served; extra persistence is unsupported.",
+            "preservedBoundary": [
+              "role-policy deterministic dispatch",
+              "Pipeline role intent"
+            ],
+            "rejected": [
+              "database-backed learned selector"
+            ]
+          }
+        },
+        {
+          "id": "scalar-boundary-wording",
+          "output": {
+            "decision": "preserve the deterministic ownership split",
+            "rationale": "No current consumer requires added persistence or learned selection.",
+            "preservedBoundary": "role policy owns deterministic candidate selection while Pipeline owns workflow depth and role intent",
+            "rejected": "reject the persistent routing database and learned ranker"
+          }
+        }
+      ],
+      "negativeFixtures": [
+        {
+          "id": "adopts-unsupported-machinery",
+          "output": {
+            "decision": "adopt the learned ranker",
+            "rationale": "It may help later.",
+            "preservedBoundary": [
+              "ranker owns selection"
+            ],
+            "rejected": []
+          },
+          "mustFailAssertionIds": [
+            "architect.policy-owned-selection",
+            "architect.rejects-ranker-db"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plan-approved-scope-audit",
+      "revision": 1,
+      "promptRevision": 1,
+      "role": "plan-critic",
+      "taskType": "requirement-and-scope-audit",
+      "objective": "Find approved-requirement omissions and scope creep.",
+      "requiredCapabilities": [
+        "read-repository",
+        "long-context",
+        "structured-output",
+        "independent-family"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-plan-pack",
+      "prompt": "Return one raw JSON object with omissions, scopeCreep, and preservedDecisions. Approved requirements: two cases for every role; transparent named assertions; offline negative fixtures; blinded editorial receipt joined by output digest. Proposed plan: add 18 cases and named assertions; add a hosted LLM judge and routing database; omit negative fixtures and the blinded receipt. Identify exactly the two omitted approved requirements (offline negative fixtures; blinded editorial receipt joined by output digest), identify hosted LLM judge and routing database as scope creep, and preserve the 18-case and named-assertion decisions.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "omissions": "the two disclosed omissions",
+          "scopeCreep": "the two disclosed additions",
+          "preservedDecisions": "the two valid plan decisions"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "plan.scope-envelope",
+          "description": "All three arrays are present and non-empty."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "plan.omissions",
+          "description": "Finds both disclosed omissions."
+        },
+        {
+          "id": "plan.scope-creep",
+          "description": "Finds both disclosed scope additions."
+        },
+        {
+          "id": "plan.preserved-decisions",
+          "description": "Preserves both valid decisions."
+        },
+        {
+          "id": "plan.no-invented-issues",
+          "description": "Does not invent other issues."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "plan-approved-scope",
+          "description": "The closed omission/scope/preservation sets are exact."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "plan.scope-envelope",
+        "plan.omissions",
+        "plan.scope-creep",
+        "plan.preserved-decisions",
+        "plan.no-invented-issues"
+      ],
+      "validatorId": "plan-approved-scope",
+      "fixtureProvenance": {
+        "kind": "sealed-plan-and-requirements",
+        "sources": [
+          "inline approved requirements",
+          "inline proposed plan"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": false
+      },
+      "expected": {
+        "omissions": [
+          "offline negative fixtures",
+          "blinded editorial receipt joined by output digest"
+        ],
+        "scopeCreep": [
+          "hosted LLM judge",
+          "routing database"
+        ],
+        "preservedDecisions": [
+          "18 role-complete cases",
+          "named assertions"
+        ]
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "misses-receipt-and-preservation",
+          "output": {
+            "omissions": [
+              "offline negative fixtures"
+            ],
+            "scopeCreep": [
+              "hosted LLM judge",
+              "routing database"
+            ],
+            "preservedDecisions": []
+          },
+          "mustFailAssertionIds": [
+            "plan.omissions",
+            "plan.preserved-decisions"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "plan-contradiction-repair",
+      "revision": 1,
+      "promptRevision": 1,
+      "role": "plan-critic",
+      "taskType": "internal-contradiction-audit",
+      "objective": "Find an internal contradiction while preserving valid decisions.",
+      "requiredCapabilities": [
+        "read-repository",
+        "long-context",
+        "structured-output",
+        "independent-family"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-plan-pack",
+      "prompt": "Return one raw JSON object with contradiction, correction, and preservedDecisions. Plan statements: (1) all fixture validation is offline; (2) expected outputs will be scored by the local shell runner; (3) negative fixtures will call a hosted provider to confirm failure; (4) role inventory is derived from role-policy.json. Identify statement 3 as contradicting statement 1, correct it so negative fixtures use the local runner with no provider call, and preserve statements 2 and 4. Do not reject valid decisions.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "contradiction": "statement 3 versus statement 1",
+          "correction": "local runner and no provider call",
+          "preservedDecisions": "statements 2 and 4"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "plan.contradiction-envelope",
+          "description": "All fields are present."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "plan.contradiction-found",
+          "description": "Finds the disclosed statement 3/statement 1 contradiction."
+        },
+        {
+          "id": "plan.local-correction",
+          "description": "Corrects it to local offline validation."
+        },
+        {
+          "id": "plan.valid-decisions-preserved",
+          "description": "Preserves statements 2 and 4."
+        },
+        {
+          "id": "plan.no-provider-call",
+          "description": "Explicitly avoids a provider call."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "plan-contradiction",
+          "description": "The contradiction, correction, and preserved decisions agree."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "plan.contradiction-envelope",
+        "plan.contradiction-found",
+        "plan.local-correction",
+        "plan.valid-decisions-preserved",
+        "plan.no-provider-call"
+      ],
+      "validatorId": "plan-contradiction",
+      "fixtureProvenance": {
+        "kind": "sealed-plan",
+        "sources": [
+          "inline numbered statements"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": false
+      },
+      "expected": {
+        "contradiction": "statement 3 contradicts statement 1",
+        "correction": "score negative fixtures with the local runner and make no provider call",
+        "preservedDecisions": [
+          "statement 2 local expected-output scoring",
+          "statement 4 role-policy-derived inventory"
+        ]
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "rejects-valid-inventory",
+          "output": {
+            "contradiction": "statement 3 contradicts statement 1",
+            "correction": "use the local runner with no provider call",
+            "preservedDecisions": [
+              "statement 2 only"
+            ]
+          },
+          "mustFailAssertionIds": [
+            "plan.valid-decisions-preserved"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "builder-multifile-repair",
+      "revision": 1,
+      "promptRevision": 1,
+      "role": "builder-deep",
+      "taskType": "coherent-multi-file-repair",
+      "objective": "Produce a coherent multi-file repository repair artifact.",
+      "requiredCapabilities": [
+        "read-repository",
+        "write-repository",
+        "long-context",
+        "structured-output"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-repository-artifacts",
+      "prompt": "Return one raw JSON object with files and validation. Sealed artifacts: policy.json is {\"roles\":[\"architect\",\"builder\"]}; suite.json is {\"coveredRoles\":[\"architect\"]}; test.expectedRoleCount is 2. Repair only suite.json and test.json so suite.json coveredRoles is [\"architect\",\"builder\"] and test.json is {\"expectedRoleCount\":2,\"expectedCaseCount\":4}. files must contain exactly those two paths with complete JSON content. validation must be {\"command\":\"./tools/test-role-fixture.sh\",\"outcome\":\"passed\"}. Do not modify policy.json.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "files": "exactly suite.json and test.json complete artifacts",
+          "validation": "the disclosed command and passed outcome"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "builder.multifile-envelope",
+          "description": "Two files and validation are returned."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "builder.suite-artifact",
+          "description": "Repairs suite.json completely."
+        },
+        {
+          "id": "builder.test-artifact",
+          "description": "Repairs test.json completely."
+        },
+        {
+          "id": "builder.owned-paths",
+          "description": "Changes only the two owned paths."
+        },
+        {
+          "id": "builder.validation-result",
+          "description": "Reports the disclosed passing validation."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "builder-multifile-coherence",
+          "description": "Role and count invariants agree across both complete artifacts."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "builder.multifile-envelope",
+        "builder.suite-artifact",
+        "builder.test-artifact",
+        "builder.owned-paths",
+        "builder.validation-result"
+      ],
+      "validatorId": "builder-multifile-coherence",
+      "fixtureProvenance": {
+        "kind": "sealed-repository-artifacts",
+        "sources": [
+          "inline policy.json",
+          "inline suite.json",
+          "inline test expectation"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": true
+      },
+      "expected": {
+        "files": [
+          {
+            "path": "suite.json",
+            "content": {
+              "coveredRoles": [
+                "architect",
+                "builder"
+              ]
+            }
+          },
+          {
+            "path": "test.json",
+            "content": {
+              "expectedRoleCount": 2,
+              "expectedCaseCount": 4
+            }
+          }
+        ],
+        "validation": {
+          "command": "./tools/test-role-fixture.sh",
+          "outcome": "passed"
+        }
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "cross-file-count-drift",
+          "output": {
+            "files": [
+              {
+                "path": "suite.json",
+                "content": {
+                  "coveredRoles": [
+                    "architect",
+                    "builder"
+                  ]
+                }
+              },
+              {
+                "path": "test.json",
+                "content": {
+                  "expectedRoleCount": 2,
+                  "expectedCaseCount": 3
+                }
+              }
+            ],
+            "validation": {
+              "command": "./tools/test-role-fixture.sh",
+              "outcome": "passed"
+            }
+          },
+          "mustFailAssertionIds": [
+            "builder.test-artifact"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "builder-validation-feedback-repair",
+      "revision": 1,
+      "promptRevision": 1,
+      "role": "builder-deep",
+      "taskType": "deterministic-feedback-repair",
+      "objective": "Respond to deterministic validation feedback with the minimal correction.",
+      "requiredCapabilities": [
+        "read-repository",
+        "write-repository",
+        "long-context",
+        "structured-output"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-repository-artifact-and-feedback",
+      "prompt": "Return one raw JSON object with targetPath, correctedContent, changedKeys, and validation. Sealed artifact case.json is {\"revision\":1,\"role\":\"review-deep\",\"workload\":\"security\",\"enabled\":true}. Deterministic feedback: workload-invalid-for-role; review-deep judgment cases require workload quality. Make the minimal correction: targetPath case.json, change only workload to quality, changedKeys exactly [\"workload\"], and validation {\"code\":\"ok\",\"outcome\":\"passed\"}.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "targetPath": "case.json",
+          "correctedContent": "complete minimally corrected artifact",
+          "changedKeys": "[workload]",
+          "validation": "code ok and outcome passed"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "builder.feedback-envelope",
+          "description": "All fields are present."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "builder.feedback-target",
+          "description": "Targets case.json."
+        },
+        {
+          "id": "builder.minimal-correction",
+          "description": "Changes only workload to quality."
+        },
+        {
+          "id": "builder.changed-keys",
+          "description": "Reports only workload."
+        },
+        {
+          "id": "builder.feedback-validation",
+          "description": "Reports the disclosed passed validation."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "builder-validation-repair",
+          "description": "The complete corrected artifact differs only at workload and passes feedback."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "builder.feedback-envelope",
+        "builder.feedback-target",
+        "builder.minimal-correction",
+        "builder.changed-keys",
+        "builder.feedback-validation"
+      ],
+      "validatorId": "builder-validation-repair",
+      "fixtureProvenance": {
+        "kind": "sealed-repository-artifact-and-validator-feedback",
+        "sources": [
+          "inline case.json",
+          "inline deterministic feedback"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": true
+      },
+      "expected": {
+        "targetPath": "case.json",
+        "correctedContent": {
+          "revision": 1,
+          "role": "review-deep",
+          "workload": "quality",
+          "enabled": true
+        },
+        "changedKeys": [
+          "workload"
+        ],
+        "validation": {
+          "code": "ok",
+          "outcome": "passed"
+        }
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "over-correction",
+          "output": {
+            "targetPath": "case.json",
+            "correctedContent": {
+              "revision": 2,
+              "role": "review-deep",
+              "workload": "quality",
+              "enabled": true
+            },
+            "changedKeys": [
+              "revision",
+              "workload"
+            ],
+            "validation": {
+              "code": "ok",
+              "outcome": "passed"
+            }
+          },
+          "mustFailAssertionIds": [
+            "builder.minimal-correction",
+            "builder.changed-keys"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "review-false-positive-control",
+      "revision": 1,
+      "promptRevision": 1,
+      "role": "review-fast",
+      "taskType": "true-false-positive-control",
+      "objective": "Reject seeded false positives while retaining real findings.",
+      "requiredCapabilities": [
+        "read-repository",
+        "structured-output"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-diff",
+      "prompt": "Return one raw JSON object with retained, rejected, and deferred. Closed candidates: TP-1 writes a success receipt before validation completes (real P2); TP-2 accepts an unknown assertion ID and silently skips it (real P1); FP-1 uses jq for local JSON validation (false positive); FP-2 has no browser test for a shell-only offline runner (false positive). retained must contain TP-1/P2 and TP-2/P1; rejected must contain FP-1 and FP-2; deferred must be false. No other IDs are allowed.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "retained": "the two real {id,severity} findings",
+          "rejected": "the two false-positive IDs",
+          "deferred": "false"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "review.control-envelope",
+          "description": "Two retained and two rejected controls are returned."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "review.true-positive-recall",
+          "description": "Retains both real findings."
+        },
+        {
+          "id": "review.severity-control",
+          "description": "Assigns P2 and P1 as disclosed."
+        },
+        {
+          "id": "review.false-positive-control",
+          "description": "Rejects both seeded false positives."
+        },
+        {
+          "id": "review.control-zero-deferral",
+          "description": "Defers nothing."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "review-control-set",
+          "description": "Closed retained/rejected sets contain no invented IDs."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "review.control-envelope",
+        "review.true-positive-recall",
+        "review.severity-control",
+        "review.false-positive-control",
+        "review.control-zero-deferral"
+      ],
+      "validatorId": "review-control-set",
+      "fixtureProvenance": {
+        "kind": "sealed-diff-controls",
+        "sources": [
+          "inline true-positive and false-positive controls"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": false
+      },
+      "expected": {
+        "retained": [
+          {
+            "id": "TP-1",
+            "severity": "P2"
+          },
+          {
+            "id": "TP-2",
+            "severity": "P1"
+          }
+        ],
+        "rejected": [
+          "FP-1",
+          "FP-2"
+        ],
+        "deferred": false
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "keeps-false-positive",
+          "output": {
+            "retained": [
+              {
+                "id": "TP-1",
+                "severity": "P2"
+              },
+              {
+                "id": "TP-2",
+                "severity": "P1"
+              },
+              {
+                "id": "FP-2",
+                "severity": "P3"
+              }
+            ],
+            "rejected": [
+              "FP-1"
+            ],
+            "deferred": false
+          },
+          "mustFailAssertionIds": [
+            "review.false-positive-control"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "review-cross-file-invariant",
+      "revision": 1,
+      "promptRevision": 1,
+      "role": "review-deep",
+      "taskType": "cross-file-invariant-review",
+      "objective": "Trace a cross-file invariant defect.",
+      "requiredCapabilities": [
+        "read-repository",
+        "long-context",
+        "structured-output"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-diff",
+      "prompt": "Return one raw JSON object with findings, rejected, and deferred. Sealed diff: role-policy.json adds role research-fast; suite.json still enumerates only architect and builder-fast; inventory-test.sh compares suite roles to role-policy keys. Candidate INV-1 says the suite inventory now fails because research-fast has no case (real P1). Candidate FP-ENUM says role-policy must duplicate the suite list (false positive because role-policy is authority). Retain INV-1/P1 with trace [\"role-policy.json\",\"suite.json\",\"inventory-test.sh\"], reject FP-ENUM, and set deferred false.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "findings": "INV-1/P1 with the disclosed three-file trace",
+          "rejected": "FP-ENUM",
+          "deferred": "false"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "review.invariant-envelope",
+          "description": "Finding, rejected control, and deferral are present."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "review.invariant-defect",
+          "description": "Retains INV-1/P1."
+        },
+        {
+          "id": "review.invariant-trace",
+          "description": "Traces all three disclosed files."
+        },
+        {
+          "id": "review.invariant-fp-control",
+          "description": "Rejects FP-ENUM."
+        },
+        {
+          "id": "review.invariant-zero-deferral",
+          "description": "Defers nothing."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "review-invariant-set",
+          "description": "The invariant trace and false-positive control are complete."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "review.invariant-envelope",
+        "review.invariant-defect",
+        "review.invariant-trace",
+        "review.invariant-fp-control",
+        "review.invariant-zero-deferral"
+      ],
+      "validatorId": "review-invariant-set",
+      "fixtureProvenance": {
+        "kind": "sealed-cross-file-diff",
+        "sources": [
+          "inline role-policy.json diff",
+          "inline suite.json diff",
+          "inline test behavior"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": false
+      },
+      "expected": {
+        "findings": [
+          {
+            "id": "INV-1",
+            "severity": "P1",
+            "trace": [
+              "role-policy.json",
+              "suite.json",
+              "inventory-test.sh"
+            ]
+          }
+        ],
+        "rejected": [
+          "FP-ENUM"
+        ],
+        "deferred": false
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "misses-test-trace",
+          "output": {
+            "findings": [
+              {
+                "id": "INV-1",
+                "severity": "P1",
+                "trace": [
+                  "role-policy.json",
+                  "suite.json"
+                ]
+              }
+            ],
+            "rejected": [
+              "FP-ENUM"
+            ],
+            "deferred": false
+          },
+          "mustFailAssertionIds": [
+            "review.invariant-trace"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "review-validation-claims",
+      "revision": 1,
+      "promptRevision": 1,
+      "role": "review-deep",
+      "taskType": "evidence-backed-validation-review",
+      "objective": "Verify or reject validation claims in a realistic diff.",
+      "requiredCapabilities": [
+        "read-repository",
+        "long-context",
+        "structured-output"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-diff-and-command-receipts",
+      "prompt": "Return one raw JSON object with verifiedClaims, rejectedClaims, findings, and deferred. Sealed diff adds case IDs A and B. Receipts: jq inventory check exited 0 and reports A,B; shell test exited 1 with 'unknown validator B'. Claims: C1 inventory passes; C2 full suite passes. Verify C1, reject C2, retain finding VAL-1/P1 because validator B is unknown, and set deferred false. No other claims or findings are allowed.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "verifiedClaims": "[C1]",
+          "rejectedClaims": "[C2]",
+          "findings": "VAL-1/P1",
+          "deferred": "false"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "review.claim-envelope",
+          "description": "Claims, finding, and deferral are present."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "review.verified-claim",
+          "description": "Verifies C1 only."
+        },
+        {
+          "id": "review.rejected-claim",
+          "description": "Rejects C2."
+        },
+        {
+          "id": "review.validation-finding",
+          "description": "Retains VAL-1/P1."
+        },
+        {
+          "id": "review.claim-zero-deferral",
+          "description": "Defers nothing."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "review-validation-claims",
+          "description": "Claims agree with the sealed exit statuses and no IDs are invented."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "review.claim-envelope",
+        "review.verified-claim",
+        "review.rejected-claim",
+        "review.validation-finding",
+        "review.claim-zero-deferral"
+      ],
+      "validatorId": "review-validation-claims",
+      "fixtureProvenance": {
+        "kind": "sealed-diff-and-command-receipts",
+        "sources": [
+          "inline diff",
+          "inline jq receipt",
+          "inline shell-test receipt"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": true
+      },
+      "expected": {
+        "verifiedClaims": [
+          "C1"
+        ],
+        "rejectedClaims": [
+          "C2"
+        ],
+        "findings": [
+          {
+            "id": "VAL-1",
+            "severity": "P1"
+          }
+        ],
+        "deferred": false
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "claims-failed-suite-passed",
+          "output": {
+            "verifiedClaims": [
+              "C1",
+              "C2"
+            ],
+            "rejectedClaims": [],
+            "findings": [],
+            "deferred": false
+          },
+          "mustFailAssertionIds": [
+            "review.rejected-claim",
+            "review.validation-finding"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "security-auth-boundary",
+      "revision": 1,
+      "promptRevision": 1,
+      "role": "security-review",
+      "taskType": "reachable-authorization-review",
+      "objective": "Find a reachable authorization boundary defect under the small-group threat model.",
+      "requiredCapabilities": [
+        "read-repository",
+        "long-context",
+        "structured-output",
+        "independent-family"
+      ],
+      "workload": "security",
+      "executionMode": "single-turn-sealed-diff-and-threat-model",
+      "prompt": "Return one raw JSON object with findings, rejected, and deferred. Threat model: two developers, installs of 4-50 authenticated users, hidden from search; real auth and authorization boundaries remain hard; generic internet-scale speculation is not a finding. Sealed handler diff authenticates a member, reads projectId from the URL, and deletes that project without checking membership in that project. Candidate AUTHZ-1 is a reachable cross-project deletion defect (P1). Candidate OWASP-1 requests a WAF because the route is on the internet (out-of-scope speculation). Retain AUTHZ-1/P1 with boundary 'project membership before delete', reject OWASP-1, deferred false.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "findings": "AUTHZ-1/P1 with disclosed boundary",
+          "rejected": "OWASP-1",
+          "deferred": "false"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "security.auth-envelope",
+          "description": "Finding, rejection, and deferral are present."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "security.reachable-authz",
+          "description": "Retains AUTHZ-1/P1."
+        },
+        {
+          "id": "security.authz-boundary",
+          "description": "Names project membership before delete."
+        },
+        {
+          "id": "security.auth-fp-control",
+          "description": "Rejects OWASP-1."
+        },
+        {
+          "id": "security.auth-zero-deferral",
+          "description": "Defers nothing."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "security-auth-boundary",
+          "description": "Only the reachable current authorization defect is retained."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "security.auth-envelope",
+        "security.reachable-authz",
+        "security.authz-boundary",
+        "security.auth-fp-control",
+        "security.auth-zero-deferral"
+      ],
+      "validatorId": "security-auth-boundary",
+      "fixtureProvenance": {
+        "kind": "sealed-handler-diff-and-threat-model",
+        "sources": [
+          "deployment-context.md excerpt",
+          "inline handler diff"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": false
+      },
+      "expected": {
+        "findings": [
+          {
+            "id": "AUTHZ-1",
+            "severity": "P1",
+            "boundary": "project membership before delete"
+          }
+        ],
+        "rejected": [
+          "OWASP-1"
+        ],
+        "deferred": false
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "generic-hardening-only",
+          "output": {
+            "findings": [
+              {
+                "id": "OWASP-1",
+                "severity": "P2",
+                "boundary": "add a WAF"
+              }
+            ],
+            "rejected": [
+              "AUTHZ-1"
+            ],
+            "deferred": false
+          },
+          "mustFailAssertionIds": [
+            "security.reachable-authz",
+            "security.auth-fp-control"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "security-release-integrity",
+      "revision": 1,
+      "promptRevision": 1,
+      "role": "security-review",
+      "taskType": "release-integrity-review",
+      "objective": "Find reachable release/update-integrity harm while rejecting generic speculation.",
+      "requiredCapabilities": [
+        "read-repository",
+        "long-context",
+        "structured-output",
+        "independent-family"
+      ],
+      "workload": "security",
+      "executionMode": "single-turn-sealed-release-diff-and-threat-model",
+      "prompt": "Return one raw JSON object with findings, rejected, and deferred. Threat model: two developers and small authenticated installs; release/update integrity is a hard boundary, but enterprise defence-in-depth without a reachable defect is not. Sealed release diff downloads plugin.tar, reads expected SHA-256 from the same unsigned response, compares them, and installs on match. Candidate REL-1 says an attacker controlling the response can replace both archive and digest, causing arbitrary update installation (P1). Candidate SIEM-1 demands a SIEM for every install with no current consumer (false positive). Retain REL-1/P1 with repairBoundary 'digest from independently authenticated release metadata', reject SIEM-1, deferred false.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "findings": "REL-1/P1 with disclosed repair boundary",
+          "rejected": "SIEM-1",
+          "deferred": "false"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "security.release-envelope",
+          "description": "Finding, rejection, and deferral are present."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "security.release-defect",
+          "description": "Retains REL-1/P1."
+        },
+        {
+          "id": "security.release-boundary",
+          "description": "Requires independently authenticated metadata."
+        },
+        {
+          "id": "security.release-fp-control",
+          "description": "Rejects SIEM-1."
+        },
+        {
+          "id": "security.release-zero-deferral",
+          "description": "Defers nothing."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "security-release-integrity",
+          "description": "Only the reachable update-integrity defect is retained."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "security.release-envelope",
+        "security.release-defect",
+        "security.release-boundary",
+        "security.release-fp-control",
+        "security.release-zero-deferral"
+      ],
+      "validatorId": "security-release-integrity",
+      "fixtureProvenance": {
+        "kind": "sealed-release-diff-and-threat-model",
+        "sources": [
+          "deployment-context.md excerpt",
+          "inline update flow"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": false
+      },
+      "expected": {
+        "findings": [
+          {
+            "id": "REL-1",
+            "severity": "P1",
+            "repairBoundary": "digest from independently authenticated release metadata"
+          }
+        ],
+        "rejected": [
+          "SIEM-1"
+        ],
+        "deferred": false
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "enterprise-speculation",
+          "output": {
+            "findings": [
+              {
+                "id": "SIEM-1",
+                "severity": "P2",
+                "repairBoundary": "central monitoring"
+              }
+            ],
+            "rejected": [
+              "REL-1"
+            ],
+            "deferred": false
+          },
+          "mustFailAssertionIds": [
+            "security.release-defect",
+            "security.release-fp-control"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "research-claim-source-map",
+      "revision": 1,
+      "promptRevision": 1,
+      "role": "research-fast",
+      "taskType": "sealed-source-synthesis",
+      "objective": "Synthesize a sealed local source pack with claim/source mapping.",
+      "requiredCapabilities": [
+        "read-repository",
+        "long-context",
+        "structured-output"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-local-source-pack",
+      "prompt": "Return one raw JSON object with claims and excludedSources. Use only this sealed pack: S1 role-policy.json says there are nine role keys; S2 routing-policy.json says Pipeline owns workflow depth and role intent; S3 deployment-context.md says installs serve roughly 4-50 users. Return exactly claims C1 'Depot policy has nine roles' sourced only to S1, C2 'Pipeline owns workflow depth and role intent' sourced only to S2, and C3 'Install size is roughly 4-50 users' sourced only to S3. Each claim has id, text, sourceIds, and certainty 'supported'. excludedSources must be empty. Do not cite outside sources.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "claims": "exactly C1-C3 with disclosed text/source/certainty",
+          "excludedSources": "empty array"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "research.map-envelope",
+          "description": "Three claims and excludedSources are returned."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "research.claim-accuracy",
+          "description": "All claim texts match the pack."
+        },
+        {
+          "id": "research.source-mapping",
+          "description": "Each claim maps only to its supporting source."
+        },
+        {
+          "id": "research.certainty",
+          "description": "All three are supported."
+        },
+        {
+          "id": "research.sealed-only",
+          "description": "No outside source is used."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "research-source-map",
+          "description": "The closed claim/source mapping is exact."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "research.map-envelope",
+        "research.claim-accuracy",
+        "research.source-mapping",
+        "research.certainty",
+        "research.sealed-only"
+      ],
+      "validatorId": "research-source-map",
+      "fixtureProvenance": {
+        "kind": "sealed-local-source-pack",
+        "sources": [
+          "S1 role-policy.json excerpt",
+          "S2 routing-policy.json excerpt",
+          "S3 deployment-context.md excerpt"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": false
+      },
+      "expected": {
+        "claims": [
+          {
+            "id": "C1",
+            "text": "Depot policy has nine roles",
+            "sourceIds": [
+              "S1"
+            ],
+            "certainty": "supported"
+          },
+          {
+            "id": "C2",
+            "text": "Pipeline owns workflow depth and role intent",
+            "sourceIds": [
+              "S2"
+            ],
+            "certainty": "supported"
+          },
+          {
+            "id": "C3",
+            "text": "Install size is roughly 4-50 users",
+            "sourceIds": [
+              "S3"
+            ],
+            "certainty": "supported"
+          }
+        ],
+        "excludedSources": []
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "cross-cites-claim",
+          "output": {
+            "claims": [
+              {
+                "id": "C1",
+                "text": "Depot policy has nine roles",
+                "sourceIds": [
+                  "S2"
+                ],
+                "certainty": "supported"
+              },
+              {
+                "id": "C2",
+                "text": "Pipeline owns workflow depth and role intent",
+                "sourceIds": [
+                  "S2"
+                ],
+                "certainty": "supported"
+              },
+              {
+                "id": "C3",
+                "text": "Install size is roughly 4-50 users",
+                "sourceIds": [
+                  "S3"
+                ],
+                "certainty": "supported"
+              }
+            ],
+            "excludedSources": []
+          },
+          "mustFailAssertionIds": [
+            "research.source-mapping"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "research-conflicting-evidence",
+      "revision": 1,
+      "promptRevision": 1,
+      "role": "research-fast",
+      "taskType": "conflicting-evidence-reconciliation",
+      "objective": "Reconcile conflicting sealed evidence and label uncertainty.",
+      "requiredCapabilities": [
+        "read-repository",
+        "long-context",
+        "structured-output"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-local-source-pack",
+      "prompt": "Return one raw JSON object with conclusion, supportingSourceIds, conflictingSourceIds, certainty, and excludedSources. Sealed pack: S1 current role-policy.json has nine role keys; S2 an older planning note says eight roles; S3 git metadata marks S1 current and S2 superseded. Conclude that current policy defines nine roles; supportingSourceIds must be [\"S1\",\"S3\"]; conflictingSourceIds must be [\"S2\"]; certainty must be 'high-with-superseded-conflict'; excludedSources must be empty. Use no outside evidence.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "conclusion": "current policy defines nine roles",
+          "supportingSourceIds": "[S1,S3]",
+          "conflictingSourceIds": "[S2]",
+          "certainty": "high-with-superseded-conflict",
+          "excludedSources": "empty"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "research.conflict-envelope",
+          "description": "All reconciliation fields are present."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "research.current-conclusion",
+          "description": "Uses the current nine-role policy."
+        },
+        {
+          "id": "research.conflict-mapping",
+          "description": "Maps S1/S3 as support and S2 as conflict."
+        },
+        {
+          "id": "research.uncertainty-label",
+          "description": "Uses the disclosed uncertainty label."
+        },
+        {
+          "id": "research.conflict-sealed-only",
+          "description": "Uses no outside source."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "research-conflict",
+          "description": "The conclusion and conflict provenance agree."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "research.conflict-envelope",
+        "research.current-conclusion",
+        "research.conflict-mapping",
+        "research.uncertainty-label",
+        "research.conflict-sealed-only"
+      ],
+      "validatorId": "research-conflict",
+      "fixtureProvenance": {
+        "kind": "sealed-conflicting-local-source-pack",
+        "sources": [
+          "S1 current policy excerpt",
+          "S2 superseded note",
+          "S3 local metadata"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": false
+      },
+      "expected": {
+        "conclusion": "Current policy defines nine roles.",
+        "supportingSourceIds": [
+          "S1",
+          "S3"
+        ],
+        "conflictingSourceIds": [
+          "S2"
+        ],
+        "certainty": "high-with-superseded-conflict",
+        "excludedSources": []
+      },
+      "semanticAlternatives": [
+        {
+          "id": "equivalent-conclusion-wording",
+          "output": {
+            "conclusion": "There are nine roles in the current policy.",
+            "supportingSourceIds": [
+              "S1",
+              "S3"
+            ],
+            "conflictingSourceIds": [
+              "S2"
+            ],
+            "certainty": "high-with-superseded-conflict",
+            "excludedSources": []
+          }
+        }
+      ],
+      "negativeFixtures": [
+        {
+          "id": "hides-conflict",
+          "output": {
+            "conclusion": "Current policy defines nine roles.",
+            "supportingSourceIds": [
+              "S1"
+            ],
+            "conflictingSourceIds": [],
+            "certainty": "certain",
+            "excludedSources": []
+          },
+          "mustFailAssertionIds": [
+            "research.conflict-mapping",
+            "research.uncertainty-label"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "editorial-member-update",
+      "revision": 2,
+      "promptRevision": 1,
+      "role": "editorial",
+      "taskType": "factual-audience-rewrite",
+      "objective": "Rewrite a factual update for a named audience without inventing facts.",
+      "requiredCapabilities": [
+        "long-context",
+        "structured-output"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-copy",
+      "prompt": "Return one raw JSON object with audience, copy, preservedFacts, and inventedFacts. Audience must be 'Assembly cooperative members'. Source facts: the pilot begins September 15; it includes 12 members; feedback is collected in two facilitated sessions; no price or launch commitment exists. Write 45-70 words in copy, use plain language, preserve all four facts, make inventedFacts an empty array, and do not use the words revolutionary, seamless, leverage, or game-changing. preservedFacts must contain exactly [\"September 15\",\"12 members\",\"two facilitated sessions\",\"no price or launch commitment\"].",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "audience": "Assembly cooperative members",
+          "copy": "45-70 words with forbidden words absent",
+          "preservedFacts": "the four exact disclosed fact labels",
+          "inventedFacts": "empty array"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "editorial.member-envelope",
+          "description": "All editorial fields are present."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "editorial.member-facts",
+          "description": "Preserves all four facts."
+        },
+        {
+          "id": "editorial.member-audience",
+          "description": "Names the disclosed audience."
+        },
+        {
+          "id": "editorial.member-no-invention",
+          "description": "Invents no facts."
+        },
+        {
+          "id": "editorial.member-constraints",
+          "description": "Meets length and forbidden-word constraints."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "editorial-member-facts",
+          "description": "Deterministically checks audience, fact labels, copy facts, length, and forbidden words."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "editorial.member-envelope",
+        "editorial.member-facts",
+        "editorial.member-audience",
+        "editorial.member-no-invention",
+        "editorial.member-constraints"
+      ],
+      "validatorId": "editorial-member-facts",
+      "fixtureProvenance": {
+        "kind": "sealed-source-copy",
+        "sources": [
+          "inline pilot facts and audience constraints"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": false
+      },
+      "humanRubricRequired": true,
+      "humanRubric": {
+        "rubricRevision": 1,
+        "criteria": [
+          {
+            "id": "member-clarity",
+            "description": "Clear to cooperative members.",
+            "scoreMin": 1,
+            "scoreMax": 5
+          },
+          {
+            "id": "member-voice",
+            "description": "Natural, respectful member-facing voice.",
+            "scoreMin": 1,
+            "scoreMax": 5
+          }
+        ]
+      },
+      "expected": {
+        "audience": "Assembly cooperative members",
+        "copy": "The pilot begins September 15 with 12 members. We will collect feedback in two facilitated sessions so participants can describe what works and what needs attention. This pilot does not include a price or launch commitment; it is a focused chance for members to test the work and share grounded feedback.",
+        "preservedFacts": [
+          "September 15",
+          "12 members",
+          "two facilitated sessions",
+          "no price or launch commitment"
+        ],
+        "inventedFacts": []
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "invented-price",
+          "output": {
+            "audience": "Assembly cooperative members",
+            "copy": "The pilot begins September 15 with 12 members. Two facilitated sessions will collect feedback. The confirmed launch price is ten dollars, and everyone can expect a polished experience when the pilot concludes for this cooperative group later in the fall.",
+            "preservedFacts": [
+              "September 15",
+              "12 members",
+              "two facilitated sessions",
+              "no price or launch commitment"
+            ],
+            "inventedFacts": [
+              "confirmed launch price"
+            ]
+          },
+          "mustFailAssertionIds": [
+            "editorial.member-no-invention"
+          ]
+        },
+        {
+          "id": "metadata-hides-positive-commitment",
+          "output": {
+            "audience": "Assembly cooperative members",
+            "copy": "The pilot begins September 15 with 12 members, and feedback will be collected in two facilitated sessions. There is no doubt that a price has been approved and a launch commitment exists for this member program. Participants can use the sessions to discuss the confirmed release plan and prepare for the scheduled public launch together.",
+            "preservedFacts": [
+              "September 15",
+              "12 members",
+              "two facilitated sessions",
+              "no price or launch commitment"
+            ],
+            "inventedFacts": []
+          },
+          "mustFailAssertionIds": [
+            "editorial.member-facts"
+          ]
+        }
+      ]
+    },
+    {
+      "id": "editorial-release-note",
+      "revision": 2,
+      "promptRevision": 1,
+      "role": "editorial",
+      "taskType": "structure-and-tone-edit",
+      "objective": "Improve structure and tone while preserving claims and avoiding invented facts.",
+      "requiredCapabilities": [
+        "long-context",
+        "structured-output"
+      ],
+      "workload": "quality",
+      "executionMode": "single-turn-sealed-copy",
+      "prompt": "Return one raw JSON object with headline, summary, bullets, preservedClaims, and inventedFacts. Source claims: v2 adds 18 sealed cases; all nine policy roles have two cases; fixture tests are offline; routing behavior is unchanged. headline must be 4-9 words. summary must be 18-35 words. bullets must contain exactly three strings: one about role breadth, one about offline fixture tests, and one about unchanged routing. preservedClaims must contain exactly [\"18 sealed cases\",\"nine roles with two cases each\",\"offline fixture tests\",\"routing unchanged\"]. inventedFacts must be empty. Tone must be factual; do not use best, breakthrough, revolutionary, or guaranteed.",
+      "outputContract": {
+        "format": "one raw JSON object",
+        "fields": {
+          "headline": "4-9 words",
+          "summary": "18-35 words",
+          "bullets": "exactly three strings covering the disclosed topics",
+          "preservedClaims": "the four exact disclosed claim labels",
+          "inventedFacts": "empty"
+        }
+      },
+      "mandatoryAssertions": [
+        {
+          "id": "strict-json-object",
+          "description": "Raw output is one JSON object."
+        },
+        {
+          "id": "normalized-json-object",
+          "description": "Normalized output is one JSON object."
+        },
+        {
+          "id": "editorial.release-envelope",
+          "description": "All release-note fields are present."
+        }
+      ],
+      "semanticCriteria": [
+        {
+          "id": "editorial.release-claims",
+          "description": "Preserves all four claims."
+        },
+        {
+          "id": "editorial.release-structure",
+          "description": "Meets headline, summary, and bullet structure."
+        },
+        {
+          "id": "editorial.release-no-invention",
+          "description": "Invents no facts."
+        },
+        {
+          "id": "editorial.release-tone",
+          "description": "Avoids the disclosed hype words."
+        }
+      ],
+      "validatorCriteria": [
+        {
+          "id": "editorial-release-structure",
+          "description": "Deterministically checks claims, structure, topics, and tone constraints."
+        }
+      ],
+      "disclosedAssertions": [
+        "strict-json-object",
+        "normalized-json-object",
+        "editorial.release-envelope",
+        "editorial.release-claims",
+        "editorial.release-structure",
+        "editorial.release-no-invention",
+        "editorial.release-tone"
+      ],
+      "validatorId": "editorial-release-structure",
+      "fixtureProvenance": {
+        "kind": "sealed-source-copy",
+        "sources": [
+          "inline v2 release claims and structure constraints"
+        ],
+        "liveAccess": false
+      },
+      "applicability": {
+        "toolUse": false,
+        "browser": false,
+        "multiTurn": false,
+        "repositoryValidation": false
+      },
+      "humanRubricRequired": true,
+      "humanRubric": {
+        "rubricRevision": 1,
+        "criteria": [
+          {
+            "id": "release-clarity",
+            "description": "Release information is easy to scan.",
+            "scoreMin": 1,
+            "scoreMax": 5
+          },
+          {
+            "id": "release-tone",
+            "description": "Tone is factual and proportionate.",
+            "scoreMin": 1,
+            "scoreMax": 5
+          }
+        ]
+      },
+      "expected": {
+        "headline": "Depot Role Benchmark Version Two",
+        "summary": "The updated benchmark broadens role coverage with sealed, offline evidence while leaving model routing behavior unchanged for current Depot evaluation work.",
+        "bullets": [
+          "Eighteen sealed cases cover all nine roles with two cases each.",
+          "Fixture tests run entirely offline.",
+          "The corpus update does not change routing behavior."
+        ],
+        "preservedClaims": [
+          "18 sealed cases",
+          "nine roles with two cases each",
+          "offline fixture tests",
+          "routing unchanged"
+        ],
+        "inventedFacts": []
+      },
+      "semanticAlternatives": [],
+      "negativeFixtures": [
+        {
+          "id": "hype-and-routing-change",
+          "output": {
+            "headline": "A Revolutionary Depot Breakthrough",
+            "summary": "The best benchmark now guarantees improved routing decisions through a new corpus that changes how candidates are selected for every role.",
+            "bullets": [
+              "Eighteen cases cover roles.",
+              "Tests are offline.",
+              "Routing is now smarter."
+            ],
+            "preservedClaims": [
+              "18 sealed cases",
+              "nine roles with two cases each",
+              "offline fixture tests"
+            ],
+            "inventedFacts": [
+              "improved routing decisions"
+            ]
+          },
+          "mustFailAssertionIds": [
+            "editorial.release-claims",
+            "editorial.release-no-invention",
+            "editorial.release-tone"
+          ]
+        },
+        {
+          "id": "metadata-hides-routing-change",
+          "output": {
+            "headline": "Depot Role Corpus Update Details",
+            "summary": "The updated corpus records broader sealed evaluation coverage and offline fixture checks while documenting the operational effects for current Depot benchmark participants.",
+            "bullets": [
+              "Eighteen sealed cases cover all nine roles with two cases each.",
+              "Fixture tests run entirely offline.",
+              "Routing is not unchanged; candidate selection now changes."
+            ],
+            "preservedClaims": [
+              "18 sealed cases",
+              "nine roles with two cases each",
+              "offline fixture tests",
+              "routing unchanged"
+            ],
+            "inventedFacts": []
+          },
+          "mustFailAssertionIds": [
+            "editorial.release-claims"
+          ]
+        },
+        {
+          "id": "metadata-with-irrelevant-bullets",
+          "output": {
+            "headline": "Depot Role Corpus Update Details",
+            "summary": "The updated corpus records broader sealed evaluation coverage and offline fixture checks while documenting the operational effects for current Depot benchmark participants.",
+            "bullets": [
+              "Teams receive a concise benchmark overview.",
+              "The documentation uses a consistent structure.",
+              "Readers can scan the update quickly."
+            ],
+            "preservedClaims": [
+              "18 sealed cases",
+              "nine roles with two cases each",
+              "offline fixture tests",
+              "routing unchanged"
+            ],
+            "inventedFacts": []
+          },
+          "mustFailAssertionIds": [
+            "editorial.release-claims"
+          ]
+        }
+      ]
     }
-  ]
+  ],
+  "bindings": {
+    "suiteRevision": 1,
+    "suiteDigest": "sha256:0fa85f4a8012ec10cf9ea28c717ee430dc448a874a3d50389bce9b73d12d8528",
+    "normalizerRevision": 1,
+    "normalizerDigest": "sha256:cea619866aeb37714efaaba1d4a699d3d5ef3042630377554f6bfb36de81db5a",
+    "cases": {
+      "pipeline-legacy-translation": {
+        "caseRevision": 2,
+        "caseDigest": "sha256:2624b6fae3c1be0e36da58b35bbfcc882f969dfd1e9b43cb8a46d9c4407f2e57",
+        "promptRevision": 2,
+        "promptDigest": "sha256:7433b91d42736c7973830ad9ee508e97655aecba51c9721362425813fd344222",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:99aa2cdf2abd2d0cfdff867b2eb715ca1f66b20186f3cb146f4475c453510b3a"
+      },
+      "review-zero-deferral": {
+        "caseRevision": 2,
+        "caseDigest": "sha256:ed9a010abf11bd55e660b331fd4cbd93c9305650c57637143ee4b913d7da1ecf",
+        "promptRevision": 2,
+        "promptDigest": "sha256:fe2340b70ad2dae1533882e0c0d051847974ba3d27047e59d844dd54cc1e3aba",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:9e021f404b918c353c10ecdef8b2d0f518165431d6c10d24da1f4b1acf49a41f"
+      },
+      "assembly-next-chunk": {
+        "caseRevision": 2,
+        "caseDigest": "sha256:cdb191c714f0fbe47a8bfb5ade2a98bf151e047a6f429e339ef1413b9e9cff14",
+        "promptRevision": 2,
+        "promptDigest": "sha256:ced4c87391b03f5d9615f36520753ebd1187a5830d83d65a14581aaf5ab298fe",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:8570ecffbc46a51a55c464a3281517de678cde45ad08761c92cf879d9b81e528"
+      },
+      "mechanical-owned-edit": {
+        "caseRevision": 2,
+        "caseDigest": "sha256:1a2a4bcbad2c75abb380765557eae3ecbac7cd8ec1b13e6d266789644593a40c",
+        "promptRevision": 2,
+        "promptDigest": "sha256:05441fcde5413b936c4f4f8669789578fae9ae65b167782b23f49970377e210a",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:98714cfb8df4e5c9e56317de405a4080759857111ec7ca403ba6eea5e641f4a5"
+      },
+      "architect-routing-tradeoff": {
+        "caseRevision": 2,
+        "caseDigest": "sha256:4ebdcf0d3b439fab4d25127449afe91bbd9d81cb4b56008d453093f2d7d3c847",
+        "promptRevision": 2,
+        "promptDigest": "sha256:1fcf5446bf990823f08704a9a4d075ef3e27bc98a574e2e37e5754ec9e6e6fd3",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:9e5e453877fe4181bcd4cb86c866534ac7f476e4c99701b80c0183fb24ade5a1"
+      },
+      "plan-approved-scope-audit": {
+        "caseRevision": 1,
+        "caseDigest": "sha256:566809401871ebb3207b8463266581e872410a7a1c93879bfa2d9708632fd29d",
+        "promptRevision": 1,
+        "promptDigest": "sha256:383f9dc79c72169dbb62efac896b152dad4506114270b7d308631a7e6fa9b12f",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:03e9e0fcca7e37caaf2ae005a75440975f04d26edf3e0d2fb221d5f0e5e65435"
+      },
+      "plan-contradiction-repair": {
+        "caseRevision": 1,
+        "caseDigest": "sha256:5daafc4e8f73202e74c5c3af0f6986a4cb2675d9b5d728f5ca36abd10f5072c1",
+        "promptRevision": 1,
+        "promptDigest": "sha256:e8d8f2d5a092c8874bea498fab50ba72be96f34ca5f6dede6e5bd734a390e184",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:7b221e18f0134f4179164b52914137c329be56cfc90c1b3ad8b2e35b4a559278"
+      },
+      "builder-multifile-repair": {
+        "caseRevision": 1,
+        "caseDigest": "sha256:3a1b74b06e475e82f81bb1a2173b862805a1fbbfac802b218b236615f4146198",
+        "promptRevision": 1,
+        "promptDigest": "sha256:fec8bdda4db2be2e6082343ffcba9251f40a3cabb204c429a03b3365683648a6",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:2658fe4dcb9f1b038f12343e6332ed0fb9273af1c37a15740382b61d54f222fd"
+      },
+      "builder-validation-feedback-repair": {
+        "caseRevision": 1,
+        "caseDigest": "sha256:afdfe409ed8a140a694a57aa25276902be509f265348c2137347b2c722677310",
+        "promptRevision": 1,
+        "promptDigest": "sha256:ccdc10df5c54d7ca5a9f6228ad57a933cf69229e9770400c4a9d2a282307e7ee",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:192e0201708e49b064d3254b02342ab11d020be9e39a071188daba63bd20cbde"
+      },
+      "review-false-positive-control": {
+        "caseRevision": 1,
+        "caseDigest": "sha256:b5cd57147229ceb02685ecfd114d6c482a598ffcf0ed630781295258149829ea",
+        "promptRevision": 1,
+        "promptDigest": "sha256:78a5d75773feda0cd0509160e436a07fae6a930c595d82b3bad04fde91abdbf6",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:c1a349e448f16d086ac50deb6fcd990c8050326f4f32ea444177c91fffc0be03"
+      },
+      "review-cross-file-invariant": {
+        "caseRevision": 1,
+        "caseDigest": "sha256:c2c8cb23c693d0541b9aa2b2be55064f5a7e5a54e30338a8825d9fc0095f8303",
+        "promptRevision": 1,
+        "promptDigest": "sha256:df191d1c381c98c26cdf944faa8891d35b1d3f29ff06feeea8ef74f6a57a4e21",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:dfb20f3692ab2778aa1fb8eb31972de42be8483a2a397b257d05fe7a8f437f8c"
+      },
+      "review-validation-claims": {
+        "caseRevision": 1,
+        "caseDigest": "sha256:4585cad36efe1e6d24a67e09cb5de2787cf294d417b1f7e8da30c8598dd340bc",
+        "promptRevision": 1,
+        "promptDigest": "sha256:80c7a8ae36db883451024be8f10cd1852656626cdcbc7310767efdfab4e616f1",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:c0f72e0e2519c38c54cd7c7146f6e891e34f6ad87f4b637a77509167d8cae1ef"
+      },
+      "security-auth-boundary": {
+        "caseRevision": 1,
+        "caseDigest": "sha256:a0a79e26334af26b90404b29561165652a4870e5ded5db27d6dd7210405deb56",
+        "promptRevision": 1,
+        "promptDigest": "sha256:2f001d0339751cf7bcf27807e89c0d818344d135c8ed7c38044a6f2ce0da708c",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:951078fcb46f757207d68c50d6fdb14d63a8de82a3451d88b17a8196320fe38c"
+      },
+      "security-release-integrity": {
+        "caseRevision": 1,
+        "caseDigest": "sha256:940b211aec55489683597db3749811a34025e97b8319f4af4aa0cc0e810417fb",
+        "promptRevision": 1,
+        "promptDigest": "sha256:d210bbdb7e1b015c163e7ea3afeafc0439b25161f8f112661988fcca8cbe5ffa",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:d242f522e2b9eb0b6495a8a759c73397754ccd4d4958e9889f6e4fcd0855440b"
+      },
+      "research-claim-source-map": {
+        "caseRevision": 1,
+        "caseDigest": "sha256:8a91fb1cfff6fc0607e26f5af9aa1e69fd08c0699de75ec9981885bd3495f5d6",
+        "promptRevision": 1,
+        "promptDigest": "sha256:5d215c6c908d15141897e9b03afca21546fc3f8a674869f91c6f3611411fa3c3",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:05be48d8a2054930730636f4e23b93f3448ec152ccb6805b6b33bd8dabbf34a9"
+      },
+      "research-conflicting-evidence": {
+        "caseRevision": 1,
+        "caseDigest": "sha256:d616e2d0dbf04fc47ef7f036bd7a0fd37bce3205b405cf330e0d31f1b47c1cc9",
+        "promptRevision": 1,
+        "promptDigest": "sha256:7010bbec72092c85c33ff04d4b45f8a1881482dd49a3a2334afad646eaf9bea9",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:b0c15aa4a754222435aa717eeef00c2da3c3f44757bb3ff8360e627a2658d051"
+      },
+      "editorial-member-update": {
+        "caseRevision": 2,
+        "caseDigest": "sha256:c12a56c68702105d6ba07c3745dd14f8d668611f7264c49e2233954d64f378b2",
+        "promptRevision": 1,
+        "promptDigest": "sha256:987922ced4995abd1d5884982a0e4057d4ad5a427eaff96bef30e4d9556c8976",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:01c1706266659794688782fbd309dc46044445311a2ab778dcc8e77f38ec5208"
+      },
+      "editorial-release-note": {
+        "caseRevision": 2,
+        "caseDigest": "sha256:2bbcf4d733a3d72d6f916bc8d3ef0265de24b23a7b2e03bd50210a8d06bcc241",
+        "promptRevision": 1,
+        "promptDigest": "sha256:013d8654e4ba9a5c31b6f9ed2959ad1ceac3241001d10c37472543638c55483d",
+        "scorerRevision": 1,
+        "scorerDigest": "sha256:62bd0a45ae06e56fa1a6a40693f46a6168c24d2493a81e14ce6db5e9297cb3e2"
+      }
+    }
+  }
 }
