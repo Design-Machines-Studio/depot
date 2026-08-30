@@ -476,6 +476,10 @@ require_line_mutation_sensitive "$orchestrator" \
   "chunk, finding, and execution level. Run it repeatedly on the integrated" \
   "native cadence avoids repeated full runs"
 require_line_mutation_sensitive "$orchestrator" \
+  'On the profile path, the full non-race lane runs against the first tree where all sibling chunks actually coexist. A documentation or unrelated metadata-only change does not invalidate a code lane unless `.dm/verification.json` explicitly includes that path. A failed required profile level lane blocks dependent levels. Record the profile-path result:' \
+  'On every path, the full non-race lane runs against the first tree where all sibling chunks actually coexist. A documentation or unrelated metadata-only change does not invalidate a code lane unless `.dm/verification.json` explicitly includes that path. A failed required level lane blocks dependent levels. Record:' \
+  "execution-level full lane remains profile-only"
+require_line_mutation_sensitive "$orchestrator" \
   "   relevance is uncertain, rerun the canonical native command once and bind the" \
   "relevance is uncertain, reuse stale evidence without proof." \
   "native repair cadence binds relevant or uncertain reruns to the new SHA"

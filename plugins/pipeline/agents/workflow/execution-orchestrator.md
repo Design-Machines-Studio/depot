@@ -736,7 +736,7 @@ Apply `repo-cleanup-contract.md`. Never suppress git exit status. Load `plugins/
 
 After every chunk in the current execution level has completed Step 3j and its merge disposition is authoritative, check out `<featureBranch>`. On the profile path, invoke the repository planner exactly once with boundary `execution_level`, supplying the cumulative changed paths for that level, not one invocation per chunk. On the repository-native path, do not run the canonical native command at this boundary; retain the focused evidence already collected.
 
-The full non-race lane runs against the first tree where all sibling chunks actually coexist. A documentation or unrelated metadata-only change does not invalidate a code lane unless `.dm/verification.json` explicitly includes that path. A failed required level lane blocks dependent levels. Record:
+On the profile path, the full non-race lane runs against the first tree where all sibling chunks actually coexist. A documentation or unrelated metadata-only change does not invalidate a code lane unless `.dm/verification.json` explicitly includes that path. A failed required profile level lane blocks dependent levels. Record the profile-path result:
 
 ```text
 LEVEL_VERIFICATION: <level> | passed: <N> | failed: <N>
