@@ -622,12 +622,14 @@ by another repository out of the diff; report them as `Noted, not fixed`.
 
 [FULL PROMPT CONTENT INLINED HERE]
 
-For a chunk carrying `prototypeReference`, include its relevant bounded
-`prototypeParity` packet here. Require exact prototype source inspection before
-editing, existing target/Live Wires component search, post-edit source
-comparison, matched prototype/target browser comparison, and named intentional
-differences. Generic UI benchmarks remain secondary to covered prototype
-decisions.
+When the manifest carries a validated top-level `prototypeReference` with
+`status: counterpart` and this chunk carries a non-empty `prototypeParity`
+array, include that reference and only this chunk's bounded parity packet here.
+Require exact prototype source inspection before editing, existing target/Live
+Wires component search, post-edit source comparison, matched prototype/target
+browser comparison, and named intentional differences. Generic UI benchmarks
+remain secondary to covered prototype decisions. A validated
+`status: no_counterpart` reference carries no chunk parity packet.
 
 When done:
 1. Verify all acceptance criteria are met

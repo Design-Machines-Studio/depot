@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 #
-# validate-workflow-contracts.sh -- Guard the two prose contracts that pipeline
-# and dm-review depend on but that nothing else enforces:
+# validate-workflow-contracts.sh -- Guard the prose contracts that pipeline and
+# dm-review depend on but that nothing else enforces:
 #
-#   1. Repository cleanup contract -- worktree/branch registry, safe-to-delete
+#   1. Prototype authority contract -- source-first resolution, bounded parity,
+#      complementary source/browser proof, and proportional findings.
+#   2. Repository cleanup contract -- worktree/branch registry, safe-to-delete
 #      decision table, feature-branch protection, honest inventory reporting.
-#   2. Datastar-first contract -- Datastar/Datastar Pro before hand-rolled JS,
+#   3. Datastar-first contract -- Datastar/Datastar Pro before hand-rolled JS,
 #      plus the bundle-presence rule that keeps agents from emitting inert
 #      Pro attributes.
 #
@@ -2031,4 +2033,4 @@ if [ "$failures" -ne 0 ]; then
   exit 1
 fi
 
-printf "OK    Workflow contracts intact (repository cleanup, two-gate Pipeline planning/alignment, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, routing invariants, configured-key OpenRouter authorization)\n"
+printf "OK    Workflow contracts intact (prototype authority, repository cleanup, two-gate Pipeline planning/alignment, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, routing invariants, configured-key OpenRouter authorization)\n"

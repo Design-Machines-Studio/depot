@@ -78,15 +78,81 @@ this field or weaken its browser/persona evidence.
 
 ## Optional Declared Prototype Context
 
-When a declared prototype covers a rendered chunk, the manifest carries the
-compact `prototypeReference` resolved during assessment and the chunk's
-relevant `prototypeParity` collection. They retain canonical repository + exact
-commit, authority source, relevant prototype/target files and route-state-
-viewport pairs, concise structural/class/copy/action decisions, evidence
-status, and intentional differences. They never embed complete templates or
-create a durable registry. Conflicting references block UI implementation;
-source-proven absence records `no prototype counterpart` and uses existing
-production patterns.
+When a prototype is declared, the manifest carries exactly one top-level
+`prototypeReference`. A counterpart-covered rendered chunk carries its own
+non-empty `prototypeParity` array; `prototypeReference` is forbidden inside a
+chunk and `prototypeParity` is forbidden at the top level. Both objects are
+closed shapes validated by `validate-role-manifest.sh`.
+
+```json
+{
+  "prototypeReference": {
+    "status": "counterpart",
+    "canonicalRepository": "Design-Machines-Studio/assembly",
+    "commit": "0123456789abcdef0123456789abcdef01234567",
+    "authoritySource": "current PR",
+    "prototypeSourceFiles": ["prototype/templates/positions.html"],
+    "targetSourceFiles": ["internal/positions/index.templ"],
+    "matchedCases": [
+      {
+        "prototypeRoute": "/prototype/positions",
+        "targetRoute": "/positions",
+        "state": "default",
+        "viewports": [375, 1440]
+      }
+    ],
+    "intentionalDifferences": ["Production keeps its authenticated shell."]
+  },
+  "chunks": [
+    {
+      "id": "01-positions-ui",
+      "renderedSurface": "required",
+      "prototypeParity": [
+        {
+          "surface": "positions index",
+          "prototypeSourcePaths": ["prototype/templates/positions.html"],
+          "targetSourcePaths": ["internal/positions/index.templ"],
+          "prototypeRoute": "/prototype/positions",
+          "targetRoute": "/positions",
+          "state": "default",
+          "viewports": [375, 1440],
+          "sourceDecisions": {
+            "structure": ["Heading precedes the position list."],
+            "classes": ["cluster cluster--spread"],
+            "copy": ["Positions"],
+            "actions": ["Create position is the first action."]
+          },
+          "sourceEvidenceStatus": "complete",
+          "renderedEvidenceStatus": "pending",
+          "intentionalDifferences": ["Production keeps its authenticated shell."]
+        }
+      ]
+    }
+  ]
+}
+```
+
+| Field | Contract |
+|---|---|
+| `prototypeReference.status` | Required enum: `counterpart` or `no_counterpart`. |
+| `canonicalRepository` | Required non-empty canonical remote identity, never a workstation path. |
+| `commit` | Required exact 40-character lowercase Git commit. |
+| `authoritySource` | Required non-empty source of the declaration. |
+| `prototypeSourceFiles` | Required non-empty unique list of inspected prototype paths. |
+| `targetSourceFiles` | Unique target paths; non-empty for `counterpart`. |
+| `matchedCases` | Closed route/state/viewport objects; non-empty for `counterpart` and empty for `no_counterpart`. |
+| `intentionalDifferences` | Unique concise approved differences; may be empty. |
+| `chunks[].prototypeParity` | Closed affected-surface items. Allowed only on `renderedSurface: required` chunks when status is `counterpart`; every route/state/viewport tuple and source path must agree with the top-level reference. |
+
+Each parity item requires non-empty prototype and target source paths, matched
+routes/state/viewports, closed `sourceDecisions` arrays for `structure`,
+`classes`, `copy`, and `actions`, `sourceEvidenceStatus` and
+`renderedEvidenceStatus` from `pending|complete|unavailable`, plus a unique
+intentional-differences list. A `counterpart` reference requires at least one
+chunk parity item. A source-proven `no_counterpart` reference requires empty
+target files and matched cases and forbids chunk parity. When no prototype was
+declared, omit both fields. These compact objects never embed complete
+templates or create a durable registry.
 
 ## Role fields
 

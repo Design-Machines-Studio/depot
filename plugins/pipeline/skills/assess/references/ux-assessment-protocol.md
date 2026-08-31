@@ -18,7 +18,11 @@ Check for a running dev server:
 1. Try common ports: 8080, 3000, 4000, 5173, 1313
 2. Check for `docker compose` services
 3. Look for `Procfile`, `Makefile`, or scripts that start dev servers
-4. If no server found, skip UX assessment with note
+4. If no server is found and a declared prototype counterpart or another
+   approved requirement makes rendered evidence mandatory, preserve completed
+   source evidence and return `human_help_required` naming the unavailable
+   prototype or target render. Otherwise skip UX assessment with a note for
+   genuinely non-rendered scope.
 
 ## Step 1: Navigate to Affected Area
 

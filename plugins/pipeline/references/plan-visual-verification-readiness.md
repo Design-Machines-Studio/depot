@@ -19,6 +19,10 @@ plan scope (Lean) enforce visual quality:
   carry its repository/commit, source paths, matched cases, parity map, and
   intentional differences. With no prototype, cite a local design spec, the
   `brainstorm.html` `visualDecisions` island, or approved visual requirements.
+- [ ] When required rendered work has neither a prototype counterpart nor a
+  local design spec, emit the explicit P2 heuristic-only coverage warning;
+  approved visual requirements may define acceptance criteria but do not prove
+  a source design baseline.
 - [ ] Carry at least 2 visual acceptance criteria describing visual IMPRESSIONS, not just structural class names: "Block and Abstain buttons are visually smaller and lighter than the main position buttons" is an impression; "Button uses `button--outline-danger` class" is structural. Both are needed; impressions catch the gap between "correct class" and "correct visual effect."
 - [ ] Give each visual criterion a browser-verifiable test (screenshot comparison or getComputedStyle extraction): "Button has font-size < 1rem per getComputedStyle" is verifiable; "Code is clean" is not.
 - [ ] **[Full only]** Chunks modifying the same visual area (sidebar, form, card) carry aligned criteria -- not "prominent headings" in one and "subdued headings" in another.
