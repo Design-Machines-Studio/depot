@@ -378,7 +378,13 @@ Skipping Y agents:
 
 ### Phase 3.25: Design Spec Discovery
 
-If the change includes `.templ`, `.twig`, `.html`, or `.css`, load `${CLAUDE_SKILL_DIR}/references/design-spec-discovery.md` and inject any found spec as `## Design Spec Context`.
+If the change includes `.templ`, `.twig`, `.html`, or `.css`, load
+`${CLAUDE_SKILL_DIR}/references/design-spec-discovery.md`. Prefer caller-provided
+Pipeline prototype context; otherwise resolve exact declarations from the
+current PR/Issue, root instructions, or active plan. Read external prototype
+source once at the host and inject the bounded parity packet plus matched
+browser evidence into applicable UI lanes. Use local specs/brainstorms and then
+general heuristics only as fallbacks.
 
 ### Phase 3.5: Input Guardrails
 

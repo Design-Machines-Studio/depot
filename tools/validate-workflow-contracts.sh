@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 #
-# validate-workflow-contracts.sh -- Guard the two prose contracts that pipeline
-# and dm-review depend on but that nothing else enforces:
+# validate-workflow-contracts.sh -- Guard the prose contracts that pipeline and
+# dm-review depend on but that nothing else enforces:
 #
-#   1. Repository cleanup contract -- worktree/branch registry, safe-to-delete
+#   1. Prototype authority contract -- source-first resolution, bounded parity,
+#      complementary source/browser proof, and proportional findings.
+#   2. Repository cleanup contract -- worktree/branch registry, safe-to-delete
 #      decision table, feature-branch protection, honest inventory reporting.
-#   2. Datastar-first contract -- Datastar/Datastar Pro before hand-rolled JS,
+#   3. Datastar-first contract -- Datastar/Datastar Pro before hand-rolled JS,
 #      plus the bundle-presence rule that keeps agents from emitting inert
 #      Pro attributes.
 #
@@ -15,6 +17,14 @@
 # Wired into tools/validate-composition.sh (section "Workflow contracts").
 
 set -euo pipefail
+
+prototype_parity_only=false
+if [ "${1:-}" = "--prototype-parity" ]; then
+  prototype_parity_only=true
+elif [ "$#" -gt 0 ]; then
+  printf "usage: %s [--prototype-parity]\n" "$0" >&2
+  exit 2
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -197,12 +207,14 @@ assembly_test_runner="$REPO_ROOT/plugins/assembly/agents/workflow/go-test-runner
 assembly_go_tests="$REPO_ROOT/plugins/assembly/agents/workflow/go-test-runner.md"
 assembly_verification_profile="$REPO_ROOT/plugins/assembly/references/repository-verification-profile.example.json"
 assembly_development="$REPO_ROOT/plugins/assembly/skills/development/SKILL.md"
+assembly_pages="$REPO_ROOT/plugins/assembly/skills/development/pages.md"
 assembly_nats_reviewer="$REPO_ROOT/plugins/assembly/agents/review/nats-reviewer.md"
 assembly_nats_skill="$REPO_ROOT/plugins/assembly/skills/nats-jetstream/SKILL.md"
 assembly_workflows="$REPO_ROOT/plugins/assembly/skills/development/workflows.md"
 promptcraft="$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
 promptcraft_contract="$REPO_ROOT/plugins/pipeline/references/promptcraft-behavioral-contract.md"
 assess_skill="$REPO_ROOT/plugins/pipeline/skills/assess/SKILL.md"
+ux_protocol="$REPO_ROOT/plugins/pipeline/skills/assess/references/ux-assessment-protocol.md"
 research_skill="$REPO_ROOT/plugins/pipeline/skills/research/SKILL.md"
 prompt_template="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/prompt-template.md"
 assessment_template="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/templates/sections/assessment.html"
@@ -214,6 +226,16 @@ security_mapping="$REPO_ROOT/plugins/dm-review/skills/review/references/severity
 simplicity="$REPO_ROOT/plugins/dm-review/agents/review/code-simplicity-reviewer.md"
 postmortem_schema="$REPO_ROOT/plugins/pipeline/references/run-postmortem-schema.md"
 manifest_schema="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/manifest-schema.md"
+prototype_authority="$REPO_ROOT/plugins/pipeline/references/prototype-authority.md"
+visual_verification="$REPO_ROOT/plugins/pipeline/references/visual-verification-protocol.md"
+phase7_visual="$REPO_ROOT/plugins/pipeline/references/phase7-visual-verification.md"
+design_spec_discovery="$REPO_ROOT/plugins/dm-review/skills/review/references/design-spec-discovery.md"
+reviewer_prompt="$REPO_ROOT/plugins/dm-review/skills/review/references/reviewer-prompt-template.md"
+visual_finding_rules="$REPO_ROOT/plugins/dm-review/skills/review/references/visual-finding-rules.md"
+ui_readiness="$REPO_ROOT/plugins/dm-review/skills/review/references/ui-review-readiness.md"
+ui_standards="$REPO_ROOT/plugins/dm-review/agents/review/ui-standards-reviewer.md"
+ux_quality="$REPO_ROOT/plugins/dm-review/agents/review/ux-quality-reviewer.md"
+visual_browser="$REPO_ROOT/plugins/dm-review/agents/review/visual-browser-tester.md"
 verification_contract="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md"
 behavioral_schema="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/behavioral-verification-contract-schema.json"
 quality_pulse_command="$REPO_ROOT/plugins/dm-review/commands/dm-review-quality-pulse.md"
@@ -222,6 +244,65 @@ quality_pulse_profile="$REPO_ROOT/plugins/dm-review/skills/quality-pulse/referen
 quality_pulse_output="$REPO_ROOT/plugins/dm-review/skills/quality-pulse/references/output-contract.md"
 quality_pulse_trust="$REPO_ROOT/plugins/dm-review/skills/quality-pulse/references/trust-boundary.md"
 quality_pulse_degradation="$REPO_ROOT/plugins/dm-review/skills/quality-pulse/references/graceful-degradation.md"
+
+printf "Prototype authority contract:\n"
+require_text "$prototype_authority" "Resolve once, source first" "prototype identity and exact commit resolve before UI work"
+require_text "$prototype_authority" "Conflicting or unresolved repository, commit, route, or" "conflicting and unresolved prototype references stop UI work"
+require_text "$prototype_authority" "no prototype counterpart" "source-proven missing counterparts fall back without invention"
+require_text "$prototype_authority" "source parity" "parity map distinguishes source evidence"
+require_text "$prototype_authority" "rendered parity" "parity map distinguishes rendered evidence"
+require_text "$prototype_authority" "intentional divergence" "parity map preserves approved production differences"
+require_text "$prototype_authority" "T3 Code" "prototype browser proof prefers T3 collaborative preview"
+require_text "$ux_protocol" "In T3 Code, use the collaborative" "assessment protocol selects T3 collaborative preview first"
+require_text "$prototype_authority" "a target-only" "prototype render cannot be replaced by target-only evidence"
+require_text "$prototype_authority" "screenshots cannot prove source hierarchy" "browser and source evidence are complementary"
+require_text "$prototype_authority" "Theme variables and exact colors may" "theme parity avoids exact-color policing"
+require_text "$prototype_authority" "Severity is proportional, never automatic" "prototype mismatches use proportional severity"
+require_text "$prototype_authority" "must be rechecked before clean completion" "all supported P1/P2/P3 remain zero-deferral"
+require_text "$assess_skill" "prototype-authority.md" "assessment loads prototype authority conditionally"
+require_text "$assess_skill" "Read the exact prototype templates/components" "assessment is source-first"
+require_text "$assess_skill" "Conflicting or unresolved repository" "assessment stops on unresolved prototype references"
+require_text "$assess_skill" "Missing Playwright alone is not blocking when T3 preview works" "assessment degradation accepts the preferred T3 transport"
+require_text "$assess_skill" 'prototypeReference' "assessment retains compact prototype identity"
+require_text "$assess_skill" 'prototypeParity' "assessment retains affected-surface parity map"
+require_text "$promptcraft" "exact short structural excerpts" "promptcraft retains bounded structure rather than whole mockups"
+require_text "$promptcraft" 'source files under `Files to Read`' "promptcraft carries exact prototype source into execution"
+require_text "$prompt_template" "Generic SaaS heuristics cannot redesign" "builder prompts subordinate heuristics to settled prototype design"
+require_text "$prompt_template" "Source comparison confirms" "builder prompts require post-edit source comparison"
+require_text "$prompt_template" "Browser comparison covers prototype and target" "builder prompts require matched rendered comparison"
+require_text "$manifest_schema" "Optional Declared Prototype Context" "manifest documents compact optional prototype projection"
+require_text "$visual_verification" "Prototype source comparison" "chunk verification checks source after editing"
+require_text "$visual_verification" "do not make every mismatch P1" "Pipeline removes blanket parity P1"
+require_text "$visual_verification" "A page-load failure takes the severity supported" "verification receipt preserves proportional severity"
+require_text "$phase7_visual" "source-only nor screenshot-only evidence completes prototype parity" "caller verifies both evidence types"
+require_text "$design_spec_discovery" "Prefer caller-provided Pipeline" "dm-review reuses Pipeline prototype context first"
+require_text "$design_spec_discovery" "current native PR/Issue, root instructions" "dm-review discovers exact declarations without Pipeline context"
+require_text "$design_spec_discovery" "external templates/components once at the host" "dm-review host owns external prototype source read"
+require_text "$design_spec_discovery" "heuristics are secondary and cannot recommend different copy" "dm-review benchmarks cannot redesign settled prototype surfaces"
+require_text "$reviewer_prompt" 'prototype_parity_packet' "applicable UI lanes receive bounded prototype context"
+require_text "$visual_finding_rules" "Classify prototype/spec mismatches by observable impact" "dm-review uses proportional parity severity"
+require_text "$ui_readiness" '"One target" applies per readiness state' "existing readiness gate compares exact prototype and target serially"
+require_text "$ui_standards" "Do not judge or replace its copy" "UI standards reviewer preserves settled prototype decisions"
+require_text "$ux_quality" "Generic benchmarks cannot replace covered" "UX reviewer preserves settled prototype decisions"
+require_text "$visual_browser" "never apply blanket P1" "visual browser reviewer uses proportional parity severity"
+require_text "$assembly_development" "Prototype design authority for Baseplate and Fixtures" "Assembly guidance declares prototype design authority"
+require_text "$assembly_development" "search existing production and Live Wires components" "Assembly checks components before invention"
+require_text "$assembly_pages" "Fallback examples only" "generic Assembly page examples cannot override prototype counterparts"
+if [ -e "$REPO_ROOT/.dm/prototype.json" ]; then
+  printf "  FAIL  prototype contract adds no repository registry\n"
+  failures=1
+else
+  printf "  OK    prototype contract adds no repository registry\n"
+fi
+
+if [ "$prototype_parity_only" = true ]; then
+  if [ "$failures" -ne 0 ]; then
+    printf "FIX  restore the missing prototype-authority anchors\n"
+    exit 1
+  fi
+  printf "OK    Prototype authority contract intact\n"
+  exit 0
+fi
 
 printf "Repository cleanup contract:\n"
 
@@ -708,7 +789,7 @@ require_text "$review_skill" "references/selective-lane-allowlist.md" "review re
 require_text "$selective_allowlist" "never relax this equality check to a subset check" "allowlist contract requires exact selected_full_set equality"
 require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.17.0"' "dm-review requires the exact-owned cleanup kernel release"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.74.0"' "pipeline requires the exact-owned dm-review release"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.75.0"' "pipeline requires the exact-owned dm-review release"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'family-independent second-opinion review' "dm-review manifest describes family-independent perspective resolution"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'Full mode only.' "migration-validator registry limits the lane to full mode"
@@ -1952,4 +2033,4 @@ if [ "$failures" -ne 0 ]; then
   exit 1
 fi
 
-printf "OK    Workflow contracts intact (repository cleanup, two-gate Pipeline planning/alignment, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, routing invariants, configured-key OpenRouter authorization)\n"
+printf "OK    Workflow contracts intact (prototype authority, repository cleanup, two-gate Pipeline planning/alignment, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, routing invariants, configured-key OpenRouter authorization)\n"

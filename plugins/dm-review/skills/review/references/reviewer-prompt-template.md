@@ -73,5 +73,9 @@ relevant to design/CSS/typography/layout/accessibility/UX uncertainty.
 ## Rendered UI lanes
 
 For selected rendered-UI lanes only, append `## Visual Finding Rules` from
-`visual-finding-rules.md`; append discovered `design_spec_context` after caller
-context, otherwise evaluate general heuristics. Non-UI lanes never receive either.
+`visual-finding-rules.md`; append the host-resolved bounded
+`prototype_parity_packet`, matched browser evidence, and discovered
+`design_spec_context` after caller context. A prototype-covered surface uses
+that packet as primary and must check source structure/components/classes/copy
+as well as rendered appearance. Otherwise evaluate local specs or general
+heuristics. Non-UI lanes never receive these contexts.

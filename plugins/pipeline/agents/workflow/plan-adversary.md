@@ -187,6 +187,13 @@ its rendered-surface audit, visual-criteria bar, and Visual Diff Protocol. If
 nothing in scope renders, do not load it -- but confirm the plan says so with a
 non-empty `not_applicable` rationale. Mixed or uncertain scope is `required`.
 
+When a declared prototype covers the surface, verify the plan loads
+`prototype-authority.md`, reads exact source before target evaluation, carries
+the bounded parity map and intentional differences, and requires matched
+source plus browser proof. Reject a vaguely similar page as a speculative
+counterpart and reject generic benchmark redesign of settled prototype copy,
+components, hierarchy, or control placement.
+
 ## Targeted Criteria Review
 
 Do not produce a separate contract or add criteria to every chunk. Add a

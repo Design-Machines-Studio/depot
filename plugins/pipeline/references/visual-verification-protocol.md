@@ -5,7 +5,9 @@ Loaded at orchestrator Step 3h only for a chunk with
 
 #### Step 1: Design Spec Discovery
 
-Before taking screenshots, check for design specifications:
+Before taking screenshots, load `prototype-authority.md` when the chunk carries
+a declared prototype counterpart. Its exact source and bounded parity map are
+the primary baseline. Then check for additional local design specifications:
 
 1. `plans/<feature-slug>/brainstorm.html` -- pipeline brainstorm output (read the `visualDecisions` island with `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/extract-json-island.sh`)
 2. `docs/superpowers/specs/*.md` -- formal design specs (use most recent)
@@ -20,7 +22,7 @@ If found, read the spec and extract visual decisions relevant to this chunk's fi
 
 Store these as the **chunk's visual baseline** for evaluation in steps 4 and 5.
 
-#### Step 2: Page-Level Screenshots
+#### Step 2: Matched Page-Level Evidence
 
 1. Detect the dev server URL (try `http://localhost:8080`, `http://localhost:3000`, project-specific URLs)
 2. Navigate to each route affected by this chunk's `filesToModify` list
@@ -28,6 +30,13 @@ Store these as the **chunk's visual baseline** for evaluation in steps 4 and 5.
 4. Verify the page loads without errors (check `browser_console_messages` for errors)
 5. For interactive elements (forms, buttons, modals), click/hover to verify they respond
 6. If the project declares UX personas/tasks, execute every selected case from the verification profile at its declared engine and viewport. Do not fabricate personas or silently sample only two.
+
+For a declared counterpart, navigate prototype and target at the same
+meaningful routes, states, and viewports. Capture affected screenshots,
+accessibility/DOM snapshots, targeted hierarchy, actual class lists, visible
+copy/action order, and only the computed layout/spacing values needed to explain
+a mismatch. Use T3 collaborative preview first in T3 Code. A target-only
+screenshot, curl, or `looks close` is incomplete prototype evidence.
 
 #### Step 3: Element-Level Screenshots
 
@@ -50,7 +59,9 @@ Visual Spec Check:
 - Spec: "Natural-width buttons, not full-width" -> MATCH / MISMATCH (actual: [describe])
 ```
 
-Spec deviations are P1 findings -- the implementation does not match the approved design. Add them to the review fix queue.
+Classify prototype/spec deviations by observable impact per
+`prototype-authority.md`; do not make every mismatch P1. Add every supported
+P1/P2/P3 to the review fix queue.
 
 #### Step 5: Visual Evaluation Against Acceptance Criteria
 
@@ -87,7 +98,12 @@ When the chunk's acceptance criteria include a parity requirement ("visually ide
    PARITY MISMATCH: font-weight -- reference: 400, target: 700
    PARITY MISMATCH: background-color -- reference: rgb(240,248,240), target: rgb(220,240,220)
    ```
-4. **Severity:** Parity mismatches are **P1 findings** when the user explicitly requested visual identity. These are not optional polish.
+4. **Severity:** Use proportional observable impact: P1 for blocked primary
+   work, misleading authorization/governance consequences, inaccessible
+   essential controls, or explicitly critical parity; P2 for meaningful
+   structural/component/copy/placement/responsive/interaction drift; P3 for
+   minor spacing, alignment, metadata, or presentation drift. Severity never
+   permits deferral.
 5. **Unavailable evaluation:** If `browser_evaluate` cannot run, preserve the failed attempt and run the same primary-quit, fresh-primary, different-browser recovery ladder. If still unavailable, emit blocked `human_help_required`, ask the user for help, and stop. Never skip or defer a required parity diff.
 
 **Baseline comparison:** If `plans/<feature-slug>/baselines/` exists (created by the assess phase), also compare post-implementation screenshots against the baseline:
@@ -95,6 +111,20 @@ When the chunk's acceptance criteria include a parity requirement ("visually ide
 1. Take a new screenshot of the same route/viewport as each baseline file
 2. Note visual differences between baseline and current state
 3. Expected differences (the feature being built) are fine; unexpected regressions are P2 findings
+
+#### Step 5c: Prototype source comparison (when applicable)
+
+Re-read the affected prototype and target source after editing. Compare the
+bounded parity map's semantic/wrapper hierarchy, significant components, exact
+Live Wires class strings, literal copy/metadata, and action order. Record named
+intentional divergences for functionality, authorization, accessibility,
+public APIs, production data, and host/Fixture composition. A matching
+screenshot cannot complete this step, just as matching source cannot complete
+the browser step.
+
+If the prototype render is temporarily unavailable after the recovery ladder,
+preserve completed source work but return `human_help_required` for rendered
+parity. Do not substitute target-only evidence or claim completion.
 
 #### Step 6: Verification Receipt
 
@@ -104,7 +134,14 @@ After completing all checks, output this structured receipt:
 BROWSER_VERIFIED: [chunk-id] | screenshots: [N] | element_screenshots: [N] | spec_checks: [N passed]/[N total] | visual_criteria: [N passed]/[N total] | issues: [list or "none"]
 ```
 
-Report all findings as P1 (spec deviation, page doesn't load), P2 (visual criterion failure, console errors, broken interactions), or P3 (observable minor visual defect). Add every retained finding to the review fix queue. Reject taste-only preferences that lack an observable defect.
+Classify every finding by observable impact under `prototype-authority.md`: P1
+only for a blocked primary task, misleading authorization/governance
+consequence, inaccessible essential control, or explicitly critical parity; P2
+for meaningful structure, component, copy, placement, responsive, or
+interaction failure; P3 for minor spacing, alignment, metadata, class, or
+presentation drift. A page-load failure takes the severity supported by its
+actual task impact. Add every retained P1/P2/P3 to the review fix queue and
+reject taste-only preferences without an observable defect.
 
 For required browser-tooling failure, first persist safe attempt evidence, then quit the primary browser process/engine session (closing a tab is insufficient), launch a fresh primary profile with a changed session identity and retry once, then recheck the target and try a genuinely different configured engine. If restart or alternate launch cannot be proved, record that explicitly. Exhaustion ends `human_help_required` with all attempts and exact missing case IDs; it is never skipped, approved, empty coverage, or curl-verified. Product/application assertion failures are terminal findings and do not trigger browser restart. Curl and reachability are diagnostics only and never satisfy `BROWSER_VERIFIED`.
 
@@ -127,4 +164,3 @@ recovered alternate-engine pass remains degraded recovery evidence, not
 first-pass clean.
 
 Mark `[chunk-id] 8. Run visual verification` complete only with complete required evidence. Otherwise mark it `blocked: human_help_required` and stop for user help; never mark it skipped or deferred.
-

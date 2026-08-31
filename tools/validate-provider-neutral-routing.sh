@@ -147,6 +147,26 @@ done < <(find "$ROOT/plugins/pipeline/agents" "$ROOT/plugins/dm-review/agents" "
 # New Pipeline manifests accept roles and reject model/provider keys.
 jq -n '{feature:"fixture",workflowClass:"feature",decisionProfile:{uncertainty:"medium",consequence:"medium",rationale:"Bounded fixture."},renderedSurface:"not_applicable",baseBranch:"main",featureBranch:"feat/fixture",branchMode:"create",expectedFeatureHead:null,finalReviewMode:"full",finalReviewRationale:"Full review for fixture.",chunks:[{id:"a",level:0,title:"Fixture",prompt:"prompts/a.md",kind:"docs",renderedSurface:"not_applicable",renderedSurfaceRationale:"Unserved documentation.",executorRole:"builder-fast",executorCapabilities:["read-repository","write-repository","structured-output"],executorEffort:"medium",filesToModify:["docs/a.md"],dependsOn:[],companionSkills:[],estimatedComplexity:"low"}]}' > "$TMP/valid.json"
 "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/valid.json" || fail 'valid role manifest rejected'
+jq '.renderedSurface="required" |
+  .prototypeReference={status:"counterpart",canonicalRepository:"Design-Machines-Studio/assembly",commit:"0123456789abcdef0123456789abcdef01234567",authoritySource:"current PR",prototypeSourceFiles:["prototype/a.html"],targetSourceFiles:["templates/a.templ"],matchedCases:[{prototypeRoute:"/prototype/a",targetRoute:"/a",state:"default",viewports:[375,1440]}],intentionalDifferences:[]} |
+  .chunks[0].kind="ui" |
+  .chunks[0].renderedSurface="required" |
+  .chunks[0].renderedSurfaceRationale="Declared prototype counterpart." |
+  .chunks[0].prototypeParity=[{surface:"fixture",prototypeSourcePaths:["prototype/a.html"],targetSourcePaths:["templates/a.templ"],prototypeRoute:"/prototype/a",targetRoute:"/a",state:"default",viewports:[375,1440],sourceDecisions:{structure:["Heading precedes content."],classes:["stack"],copy:["Fixture"],actions:["Save is primary."]},sourceEvidenceStatus:"complete",renderedEvidenceStatus:"pending",intentionalDifferences:[]}]' \
+  "$TMP/valid.json" > "$TMP/valid-prototype.json"
+"$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/valid-prototype.json" || fail 'valid prototype manifest rejected'
+jq '.prototypeReference={}' "$TMP/valid.json" > "$TMP/invalid.json"
+if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'malformed prototype reference accepted'; fi
+jq '.chunks[0].prototypeReference=.prototypeReference | del(.prototypeReference)' "$TMP/valid-prototype.json" > "$TMP/invalid.json"
+if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'chunk-level prototype reference accepted'; fi
+jq 'del(.chunks[0].prototypeParity)' "$TMP/valid-prototype.json" > "$TMP/invalid.json"
+if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'prototype counterpart without chunk parity accepted'; fi
+jq '.chunks[0].prototypeParity[0].targetRoute="/different"' "$TMP/valid-prototype.json" > "$TMP/invalid.json"
+if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'conflicting prototype route accepted'; fi
+jq '.prototypeReference.status="no_counterpart" | .prototypeReference.targetSourceFiles=[] | .prototypeReference.matchedCases=[] | del(.chunks[0].prototypeParity)' "$TMP/valid-prototype.json" > "$TMP/valid-no-counterpart.json"
+"$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/valid-no-counterpart.json" || fail 'source-proven no-counterpart manifest rejected'
+jq '.chunks[0].prototypeParity=[]' "$TMP/valid-no-counterpart.json" > "$TMP/invalid.json"
+if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'no-counterpart manifest with chunk parity accepted'; fi
 jq '.chunks[0].provider="example"' "$TMP/valid.json" > "$TMP/invalid.json"
 if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'provider-bearing manifest accepted'; fi
 for field in feature workflowClass decisionProfile renderedSurface baseBranch featureBranch branchMode expectedFeatureHead finalReviewMode finalReviewRationale; do

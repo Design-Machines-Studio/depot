@@ -84,7 +84,13 @@ Examine both for obvious rendering problems: blank or partially loaded pages, mi
 
 The dispatch skill injects `## Visual Finding Rules` (spec-primary evaluation, the missing-spec P2 process finding, and the mandatory citation format) plus any `## Design Spec Context`. Follow them; do not restate them. The citation requirement applies to every non-spec phase here too -- responsive, interaction states, CSS compliance.
 
-Your lens is the **rendering level**, complementing the ux-quality-reviewer's design-quality lens: extract the spec's component variants, visual hierarchy, spacing choices, color treatments, and described outcomes; take an element-level `browser_take_screenshot` (CSS selector or coordinates) for each decision that maps to a visible element; state explicitly what you see; flag deviations P1. This catches cases where CSS inheritance, layout context, or scheme color differences produce a different visual result than the code suggests.
+Your lens is the **rendering level**, complementing the ux-quality-reviewer's
+design-quality lens. For a prototype packet, use host evidence captured at
+matching routes, states, and viewports and compare targeted hierarchy, actual
+classes, literal copy/action order, and computed layout/spacing alongside the
+source checklist. Exact colors/theme variables may differ when the structural
+scheme is equivalent. State explicitly what you see and classify deviations
+proportionally under the injected Visual Finding Rules; never apply blanket P1.
 
 Every retained visual P1/P2/P3 finding keeps complete evidence and provenance,
 enters the fix queue, and blocks `CLEAN` until verified. See
@@ -225,7 +231,12 @@ return JSON.stringify({ fontSize: s.fontSize, fontWeight: s.fontWeight, color: s
   padding: s.padding, margin: s.margin, backgroundColor: s.backgroundColor, border: s.border });
 ```
 
-Any mismatch across routes is **P1**. Cite both URLs and the differing properties. A shared component that renders differently per route is not a polish issue -- it is the component failing to be shared.
+Classify mismatches across routes by observable impact: P1 only for blocked
+primary work, misleading authorization/governance consequences, inaccessible
+essential controls, or explicitly critical parity; P2 for meaningful
+structure/interaction drift; P3 for minor spacing/alignment/presentation
+drift. Cite both URLs and the differing properties. Every supported severity
+must still be fixed and rechecked before clean completion.
 
 ---
 

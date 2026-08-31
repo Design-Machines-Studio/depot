@@ -54,7 +54,11 @@ Read `${CLAUDE_PLUGIN_ROOT}/plugins/dm-review/skills/review/references/ui-design
 
 The dispatch skill injects `## Visual Finding Rules` (spec-primary evaluation, the missing-spec P2 process finding, and the mandatory citation format) plus any `## Design Spec Context`. Follow them; do not restate them.
 
-Your lens on a spec is **SaaS benchmark standards**: judge each approved decision against how Stripe, Linear, or Notion would ship it. Spec compliance is evaluated before SaaS benchmarking, and spec deviations outrank general benchmark violations.
+When a prototype parity packet covers the surface, its settled product choices
+are primary. Do not judge or replace its copy, components, hierarchy, or action
+placement by asking what Stripe, Linear, or Notion would ship. Use SaaS
+benchmarks only for uncovered choices and objective usability, accessibility,
+responsiveness, interaction, or broken-state defects.
 
 ## Live Wires Compliance
 
@@ -90,7 +94,14 @@ Registered names: `animate`, `custom-validity`, `match-media`, `on-raf`, `on-res
 
 If no bundle is vendored (CDN or asset-pipeline build), say so, downgrade to P2, and name the check the author should run. Do not guess. Do not raise either finding against Live Wires CSS, the Datastar bundle itself, or build tooling.
 
-## Phase 1: Component Quality Audit
+## Phase 1: Prototype/Spec Compliance, then Component Quality
+
+For a prototype-covered surface, compare the host-supplied source and matched
+browser packet first: semantic/wrapper hierarchy, significant component calls,
+actual Live Wires class strings, literal copy/metadata/action order, and
+rendered composition at the same states/viewports. Honor named production
+differences. Classify mismatches proportionally under the injected Visual
+Finding Rules; never apply a blanket P1.
 
 Navigate to each affected page and evaluate components against SaaS standards:
 
