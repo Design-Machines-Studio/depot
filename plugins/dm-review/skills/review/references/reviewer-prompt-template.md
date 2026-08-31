@@ -70,12 +70,15 @@ retain nonblocking `Memory capture: failed -- <safe reason>` evidence, never a
 finding or incomplete review. Use `mcp__rag__rag_search` only when callable and
 relevant to design/CSS/typography/layout/accessibility/UX uncertainty.
 
-## Rendered UI lanes
+## UI analysis lanes
 
-For selected rendered-UI lanes only, append `## Visual Finding Rules` from
+For selected UI analysis lanes only, append `## Visual Finding Rules` from
 `visual-finding-rules.md`; append the host-resolved bounded
-`prototype_parity_packet`, matched browser evidence, and discovered
-`design_spec_context` after caller context. A prototype-covered surface uses
-that packet as primary and must check source structure/components/classes/copy
-as well as rendered appearance. Otherwise evaluate local specs or general
-heuristics. Non-UI lanes never receive these contexts.
+`prototype_parity_packet`, changed target source, and discovered
+`design_spec_context` after caller context. Append the one matched browser
+packet only when readiness or exact-head reuse validated it. Label every lane
+`source-only`, `source+rendered`, or `rendered` and require its output to stay
+inside that evidence class. A prototype-covered surface uses the source packet
+as primary for structure/components/classes/copy; only validated browser
+evidence permits rendered appearance, spacing, responsive, focus, interaction,
+or visual-parity conclusions. Non-UI lanes never receive these contexts.

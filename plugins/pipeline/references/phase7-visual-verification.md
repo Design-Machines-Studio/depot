@@ -23,11 +23,13 @@ to the requirements cross-check.
    - `.superpowers/brainstorm/` (HTML mockups)
    - If none exist, use the original prompt's visual requirements as the baseline.
 
-2. **Screenshot every affected page.** Navigate to each route that was touched
-   by any chunk. For prototype counterparts, compare prototype and target at
-   the same states and viewports and include targeted DOM/class/copy/layout
-   evidence. Take a desktop (1440px) screenshot of each. If the design spec or
-   original prompt mentions mobile, also take 375px screenshots.
+2. **Screenshot every selected affected case.** Navigate to each affected
+   route/state case selected for the integrated change at its selected
+   viewport. For prototype counterparts, compare prototype and target at the
+   same states and viewports and include targeted DOM/class/copy/layout
+   evidence. Add at most one desktop or mobile baseline case when it can expose
+   a realistic adjacent regression; do not expand supported dimensions into a
+   full matrix.
 
 3. **Compare to design spec.** For each visual decision in the design spec (or each visual requirement in the original prompt), evaluate the rendered page. State explicitly what you see.
 
@@ -52,6 +54,11 @@ Design spec: [path or "none -- using original prompt requirements"]
 ```
 
 If gaps are found, present them as part of the delivery. Do not present the branch as "ready" with undisclosed visual gaps.
+
+When `final-review-browser-evidence.md` already produced an accepted packet for
+this exact integrated head and selected cases, reuse its bounded observations
+here. Capture only caller checks absent from that packet; never rediscover a
+packet or recapture the same evidence solely for this phase.
 
 **Evidence Requirement:** Every "Verified" item in the visual verification report MUST include concrete evidence:
 

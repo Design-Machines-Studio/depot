@@ -651,6 +651,16 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  printf "\n${BOLD}dm-review source/rendered UI contract:${RESET}\n"
+  if ! "$SCRIPT_DIR/test-dm-review-ui-contract.sh"; then
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}Pipeline browser evidence handoff:${RESET}\n"
+  if ! "$SCRIPT_DIR/test-pipeline-browser-evidence.sh"; then
+    any_failed=1
+  fi
+
   printf "\n${BOLD}Provider-neutral model router:${RESET}\n"
   if ! "$SCRIPT_DIR/validate-openrouter-cascade.sh"; then
     any_failed=1

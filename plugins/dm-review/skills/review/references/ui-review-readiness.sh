@@ -13,7 +13,7 @@
 #   ui-review-readiness.sh confirm-browser --repository-root ROOT \
 #     --state-file FILE --browser-evidence-file FILE
 #   ui-review-readiness.sh settle --repository-root ROOT --state-file FILE \
-#     --participant-result-file FILE
+#     --analysis-result-file FILE
 #   ui-review-readiness.sh cleanup --repository-root ROOT --state-file FILE
 set -uo pipefail
 
@@ -26,7 +26,7 @@ ACTION="${1:-}"
 REPOSITORY_ROOT=""
 STATE_FILE=""
 BROWSER_EVIDENCE_FILE=""
-PARTICIPANT_RESULT_FILE=""
+ANALYSIS_RESULT_FILE=""
 TARGET_URL_INPUT=""
 TARGET_SOURCE_INPUT=""
 VISUAL_REQUIRED=false
@@ -41,7 +41,7 @@ while [ "$#" -gt 0 ]; do
     --repository-root) [ "$#" -ge 2 ] || usage; REPOSITORY_ROOT="$2"; shift 2 ;;
     --state-file) [ "$#" -ge 2 ] || usage; STATE_FILE="$2"; shift 2 ;;
     --browser-evidence-file) [ "$#" -ge 2 ] || usage; BROWSER_EVIDENCE_FILE="$2"; shift 2 ;;
-    --participant-result-file) [ "$#" -ge 2 ] || usage; PARTICIPANT_RESULT_FILE="$2"; shift 2 ;;
+    --analysis-result-file|--participant-result-file) [ "$#" -ge 2 ] || usage; ANALYSIS_RESULT_FILE="$2"; shift 2 ;;
     --target-url) [ "$#" -ge 2 ] || usage; TARGET_URL_INPUT="$2"; shift 2 ;;
     --target-source) [ "$#" -ge 2 ] || usage; TARGET_SOURCE_INPUT="$2"; shift 2 ;;
     --visual-required) [ "$#" -ge 2 ] || usage; VISUAL_REQUIRED="$2"; shift 2 ;;
@@ -64,6 +64,22 @@ emit_closed() {
   jq -cn --arg reason "$reason" --arg next_action "$next_action" \
     '{state:"closed",dispatchAllowed:false,reason:$reason,nextAction:$next_action,
       reviewDisposition:"REVIEW INCOMPLETE"}'
+}
+
+emit_rendered_gap() {
+  local reason="$1" next_action="$2" required="$VISUAL_REQUIRED"
+  if [ -f "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ]; then
+    required="$(jq -r '.visualRequired // false' "$STATE_FILE" 2>/dev/null)"
+  fi
+  if [ "$required" = true ]; then
+    emit_closed "$reason" "$next_action"
+    exit 76
+  fi
+  jq -cn --arg reason "$reason" \
+    '{state:"not_available",dispatchAllowed:false,reason:$reason,
+      coverageDisposition:"NOT RUN",reviewDisposition:"completed",createdResources:0,
+      nextAction:"none; restore rendered readiness only when browser coverage is needed"}'
+  exit 0
 }
 
 valid_selected_target_url() {
@@ -233,16 +249,22 @@ fi
 if [ "$ACTION" = settle ]; then
   validate_state &&
     jq -e '.stage == "ready" and .dispatchAllowed == true' "$STATE_FILE" >/dev/null 2>&1 || usage
-  [ -f "$PARTICIPANT_RESULT_FILE" ] && [ ! -L "$PARTICIPANT_RESULT_FILE" ] || usage
-  disposition="$(jq -r '.disposition // "invalid"' "$PARTICIPANT_RESULT_FILE" 2>/dev/null)"
-  participant_valid=false
+  [ -f "$ANALYSIS_RESULT_FILE" ] && [ ! -L "$ANALYSIS_RESULT_FILE" ] || usage
+  analysis_valid=false
   if jq -e '
-    type == "object" and .role == "review-deep" and
-    (.capabilities | type) == "array" and
-    (.capabilities | index("browser") | not) and
-    (.disposition == "completed" or .disposition == "unavailable") and
-    ((.disposition != "completed") or (.evidenceSource == "live" and .transportStub == false))
-  ' "$PARTICIPANT_RESULT_FILE" >/dev/null 2>&1; then participant_valid=true; fi
+    type == "object" and
+    (keys | sort) == (["evidenceSource","lanes","transportStub"] | sort) and
+    .evidenceSource == "live" and .transportStub == false and
+    (.lanes |
+      type == "array" and length > 0 and length <= 3 and
+      length == (map(.lane) | unique | length) and all(.[];
+        type == "object" and
+        (keys | sort) == (["capabilities","disposition","lane","role"] | sort) and
+        (.lane == "visual-browser-tester" or .lane == "ux-quality-reviewer" or .lane == "ui-standards-reviewer") and
+        .role == "review-deep" and
+        (.capabilities | type) == "array" and (.capabilities | index("browser") | not) and
+        (.disposition == "completed" or .disposition == "unavailable")))
+  ' "$ANALYSIS_RESULT_FILE" >/dev/null 2>&1; then analysis_valid=true; fi
   # Consume the ready state before cleanup so a repeated settle can never
   # complete against stale browser evidence. Explicit cleanup remains valid
   # if the registered cleanup command subsequently fails.
@@ -253,8 +275,8 @@ if [ "$ACTION" = settle ]; then
     emit_closed resource_cleanup_failed 'run the registered UI cleanup command and inspect only the recorded review resource'
     exit 76
   fi
-  if [ "$participant_valid" != true ] || [ "$disposition" != completed ]; then
-    emit_closed model_participant_unavailable 'restore an eligible provider-neutral review participant and rerun the required UI lane'
+  if [ "$analysis_valid" != true ] || ! jq -e 'all(.lanes[]; .disposition == "completed")' "$ANALYSIS_RESULT_FILE" >/dev/null 2>&1; then
+    emit_closed model_participant_unavailable 'restore the unavailable provider-neutral UI analysis participant and reuse the same browser packet'
     exit 76
   fi
   jq -cn '{state:"completed",dispatchAllowed:false,reason:"available",
@@ -272,8 +294,12 @@ close_registered_state() {
     exit 76
   fi
   update_state closed false false || exit 76
-  emit_closed "$reason" "$next_action"
-  exit 76
+  case "$reason" in
+    visual_target_unavailable|dev_server_unavailable|browser_transport_unavailable)
+      emit_rendered_gap "$reason" "$next_action"
+      ;;
+    *) emit_closed "$reason" "$next_action"; exit 76 ;;
+  esac
 }
 
 cleanup_on_unexpected_exit() {
@@ -299,12 +325,10 @@ if [ "$ACTION" = prepare ]; then
   fi
   if ! validate_declaration "$DECLARATION"; then
     if [ -e "$DECLARATION" ]; then
-      emit_closed dev_server_unavailable 'repair the optional tracked .dm/ui-review.json declaration or supply an explicit target'
-      exit 76
+      emit_rendered_gap dev_server_unavailable 'repair the optional tracked .dm/ui-review.json declaration or supply an explicit target'
     fi
     if [ "$VISUAL_REQUIRED" = true ]; then
-      emit_closed visual_target_unavailable 'supply an explicit URL, attach an automation-capable T3 preview, or add the optional tracked declaration'
-      exit 76
+      emit_rendered_gap visual_target_unavailable 'supply an explicit URL, attach an automation-capable T3 preview, or add the optional tracked declaration'
     fi
     jq -cn '{state:"not_available",dispatchAllowed:false,reason:"visual_target_unavailable",
       coverageDisposition:"NOT RUN",reviewDisposition:"completed",createdResources:0,
@@ -314,8 +338,7 @@ if [ "$ACTION" = prepare ]; then
   TARGET_URL="$(jq -r '.targetUrl' "$DECLARATION")"
   load_argv "$DECLARATION" '.readiness.argv' || usage
   validate_repo_executable "${UI_ARGV[0]}" || {
-    emit_closed dev_server_unavailable 'repair the tracked repository-owned readiness command and rerun'
-    exit 76
+    emit_rendered_gap dev_server_unavailable 'repair the tracked repository-owned readiness command and rerun'
   }
   READINESS_ARGV=("${UI_ARGV[@]}")
   READINESS_ARGV_JSON="$(jq -c '.readiness.argv' "$DECLARATION")"
@@ -335,24 +358,20 @@ if [ "$ACTION" = prepare ]; then
       "$READINESS_ATTEMPTS" "$READINESS_TIMEOUT" '[]' 0 declaration "$VISUAL_REQUIRED" || exit 76
   else
     if [ "$(jq -r '.start == null' "$DECLARATION")" = true ]; then
-      emit_closed dev_server_unavailable 'run the repository-declared application consumer and rerun'
-      exit 76
+      emit_rendered_gap dev_server_unavailable 'run the repository-declared application consumer and rerun'
     fi
     if [ "$(jq -r '.start.resourceKind' "$DECLARATION")" = compose ]; then
-      emit_closed dev_server_unavailable 'start the exact declared Compose consumer through the dm-review Docker creation contract, then rerun readiness'
-      exit 76
+      emit_rendered_gap dev_server_unavailable 'start the exact declared Compose consumer through the dm-review Docker creation contract, then rerun readiness'
     fi
     load_argv "$DECLARATION" '.start.cleanupArgv' || usage
     validate_repo_executable "${UI_ARGV[0]}" || {
-      emit_closed dev_server_unavailable 'repair the tracked repository-owned cleanup command and rerun'
-      exit 76
+      emit_rendered_gap dev_server_unavailable 'repair the tracked repository-owned cleanup command and rerun'
     }
     CLEANUP_ARGV_JSON="$(jq -c '.start.cleanupArgv' "$DECLARATION")"
     START_TIMEOUT="$(jq -r '.start.timeoutSeconds' "$DECLARATION")"
     load_argv "$DECLARATION" '.start.argv' || usage
     validate_repo_executable "${UI_ARGV[0]}" || {
-      emit_closed dev_server_unavailable 'repair the tracked repository-owned start command and rerun'
-      exit 76
+      emit_rendered_gap dev_server_unavailable 'repair the tracked repository-owned start command and rerun'
     }
     CREATED=true
     write_state "$TARGET_URL" app_ready false true true "$READINESS_ARGV_JSON" \

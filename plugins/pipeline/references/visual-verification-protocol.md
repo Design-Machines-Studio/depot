@@ -24,12 +24,18 @@ Store these as the **chunk's visual baseline** for evaluation in steps 4 and 5.
 
 #### Step 2: Matched Page-Level Evidence
 
-1. Detect the dev server URL (try `http://localhost:8080`, `http://localhost:3000`, project-specific URLs)
-2. Navigate to each route affected by this chunk's `filesToModify` list
-3. Take a full-page screenshot at desktop viewport (1440px)
+1. Use the exact host-selected or repository-declared target; never scan
+   localhost, infer a port, or invent a start command.
+2. Navigate the cases selected from this chunk's affected rendered files,
+   routes, prototype parity, and acceptance criteria.
+3. Take a full-page screenshot at each selected case viewport. Add at most one
+   explicitly justified baseline case when needed for an adjacent regression.
 4. Verify the page loads without errors (check `browser_console_messages` for errors)
 5. For interactive elements (forms, buttons, modals), click/hover to verify they respond
-6. If the project declares UX personas/tasks, execute every selected case from the verification profile at its declared engine and viewport. Do not fabricate personas or silently sample only two.
+6. If the project declares UX personas/tasks, execute every selected case from
+   the verification profile at its declared engine and viewport. Supported
+   dimensions do not create a full matrix. Do not fabricate personas or
+   silently sample only two.
 
 For a declared counterpart, navigate prototype and target at the same
 meaningful routes, states, and viewports. Capture affected screenshots,
@@ -133,6 +139,15 @@ After completing all checks, output this structured receipt:
 ```text
 BROWSER_VERIFIED: [chunk-id] | screenshots: [N] | element_screenshots: [N] | spec_checks: [N passed]/[N total] | visual_criteria: [N passed]/[N total] | issues: [list or "none"]
 ```
+
+Also retain the bounded screenshot/snapshot references and compact
+DOM/class/copy/action, layout/computed-style, console, and accessibility
+observations in this Pipeline run's ignored evidence root. Do not retain
+cookies, credentials, private endpoints, browser storage, complete HTML, or
+unbounded logs. Chunk evidence remains bound to its chunk commit. Only the
+integrated-head capture described by `final-review-browser-evidence.md` may be
+packaged and passed to the final dm-review; never choose a chunk artifact by
+timestamp or latest-file guessing.
 
 Classify every finding by observable impact under `prototype-authority.md`: P1
 only for a blocked primary task, misleading authorization/governance

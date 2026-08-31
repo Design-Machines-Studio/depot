@@ -65,30 +65,41 @@ same bundle. For each selected lane:
 
 ### Proportional UI prerequisite
 
-Before any selected UI lane is dispatched, load `ui-review-readiness.md` and
-run its ordered application/browser gate once. Prefer an explicit invocation
-URL, then an attached automation-capable T3 preview, then optional tracked
+Before any selected UI lane is dispatched, load `ui-case-selection.md` and
+`ui-review-readiness.md`. Select the affected case set once, then run the
+ordered application/browser gate once. Prefer an explicit invocation URL, then
+an attached automation-capable T3 preview, then optional tracked
 `.dm/ui-review.json`. A declared Compose consumer uses
 the existing review Docker creation/cleanup contracts; an exact declared
 process uses `ui-review-readiness.sh`. Verify reachability independently, then
 prove actual local browser navigation independently.
 
 Current routed transports do not receive the host's local interactive browser.
-Keep browser interaction host-owned and materialize one bounded set of screenshots,
-accessibility snapshots, console summaries, route/viewport case IDs,
-interaction observations, and computed-style evidence. Share that evidence
-with every applicable provider-neutral UI analysis role above. Never request `browser` or generic
+Keep browser interaction host-owned and materialize one bounded set of
+screenshots, accessibility snapshots, console summaries, selected
+route/viewport case IDs, interaction observations, and computed-style evidence.
+Share the same evidence reference with every applicable provider-neutral UI
+analysis role above and run each lane once. Never request `browser` or generic
 `tool-use`, and never treat OpenRouter web search as local navigation.
 
-If an ordinary review has no rendered target, dispatch no UI participant and
-emit one aggregated nonblocking coverage note. Keep the review incomplete only
-when rendered evidence was explicitly required. In that case use exactly one
+If an ordinary review has no rendered target, dispatch UI-standards and UX
+analysis in `source-only` mode, do not dispatch visual-browser, and emit one
+aggregated nonblocking coverage note. Keep the review incomplete only when
+rendered evidence was explicitly required. In that case use exactly one
 `visual_target_unavailable`, `dev_server_unavailable`, or
-`browser_transport_unavailable` result plus one next action. If both
-are ready but role dispatch is unavailable, settle as
-`model_participant_unavailable`. Prerequisite failures are coverage gaps, not
-code findings. Settle and clean only resources registered by this review;
-pre-existing resources remain untouched.
+`browser_transport_unavailable` result plus one next action while the two
+source-capable lanes still run. If a requested analysis role is unavailable,
+settle that cause as `model_participant_unavailable` distinctly. Prerequisite
+failures are coverage gaps, not code findings. Settle the aggregate UI result
+once and clean only resources registered by this review; pre-existing resources
+remain untouched.
+
+An enclosing Pipeline may pass one explicit exact-head browser packet path.
+Validate it with `browser-evidence-packet.sh`; do not discover a latest packet.
+Only an exact repository/prototype commit, dirty state, selected-case, artifact
+hash, and successful completion match replaces current host capture. On
+rejection, attempt the ordinary readiness path and never report rendered
+success from the rejected packet.
 
 The terminal report owner supplies this exact private directory and its
 `terminal-receipt-index.json`. After a parallel fan-out joins, extend the index

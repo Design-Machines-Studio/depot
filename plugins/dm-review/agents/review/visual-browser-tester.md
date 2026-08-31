@@ -42,7 +42,8 @@ permission to rediscover or silently skip the target.
 
 The host owns `plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md`, browser recovery, and lifecycle receipts. Validate that the supplied bounded evidence identifies the completed attempt and recovery receipt; do not perform recovery yourself.
 
-If the alternate engine fails or cannot launch, **stop the review and tell the user**:
+If the host packet records that recovery could not complete, stop analysis and
+return one rendered coverage gap to the consolidator:
 
 ```
 BROWSER TESTING BLOCKED -- Could not connect to any browser.
@@ -51,32 +52,35 @@ Outcome: human_help_required
 Attempt evidence: [safe references]
 Missing cases: [exact persona/scenario/route/engine/viewport IDs]
 
-Please:
-- Check that Playwright or Chrome for Claude is running
-- Try restarting the browser manually
-- Re-run the review after fixing browser connectivity
+Next action: [the one missing target, start, transport, or evidence prerequisite]
 ```
 
-**Never silently skip browser testing.** Curl may diagnose reachability but cannot satisfy browser proof or change this outcome to skipped/approved.
+Do not ask the operator for separate attachments or reruns per UI lane. Curl
+may diagnose reachability but cannot satisfy browser proof or change this
+outcome to skipped/approved.
 
-## URL Discovery
+## Selected cases
 
-Map changed files to testable page URLs:
-
-- **Go+Templ+Datastar** -- read handlers (usually `internal/handlers/` or `cmd/*/main.go`) for route registrations: `.Handle("/proposals", ...)` or `.HandleFunc("/proposals", ...)` -> `/proposals`; `.Handle("/members/{id}", ...)` -> `/members/1` (a real path if discoverable); a changed `.templ` in `internal/views/proposals/` -> `/proposals`.
-- **Craft CMS** -- Twig path to entry type URL: `templates/news/_entry.twig` -> `/news/[any-slug]` (first live entry); `templates/pages/_landing.twig` -> `/[any-landing-page-slug]`; `templates/_layouts/base.twig` -> `/`; `templates/index.twig` -> `/`.
-- **Static HTML / Live Wires** -- direct: `public/index.html` -> `/`; `public/components/buttons.html` -> `/components/buttons.html`; CSS changes -> all HTML pages in the project.
-- **Fallback** -- if route mapping fails, test the base URL `/` plus any URLs given by the user or orchestrator.
+The host supplies the exact case IDs selected under `ui-case-selection.md`.
+Analyze only those route/state/persona/engine/viewport cases. Do not widen CSS
+changes to every page, expand supported viewports into a Cartesian product, or
+invent a base-route fallback. A full declared matrix appears here only when the
+selection carries an explicit full-matrix reason.
 
 ---
 
 ## Testing Protocol
 
-Run these phases sequentially for each discovered URL.
+Analyze the supplied host observations sequentially for each selected case.
+Every `browser_*` name below specifies evidence the host capture must contain;
+it is not a tool call for this participant.
 
 ### Phase A: Baseline Capture
 
-Per URL: `browser_navigate`; `browser_wait_for` until content is visible (a main heading or known element); `browser_console_messages` at level "error" to record JS errors; `browser_take_screenshot` with `fullPage: true` at the default viewport; `browser_snapshot` for the full accessibility tree.
+Per selected case, require evidence of `browser_navigate`; `browser_wait_for`
+until content is visible (a main heading or known element);
+`browser_console_messages` at level "error"; `browser_take_screenshot` with
+`fullPage: true`; and `browser_snapshot` for the accessibility tree.
 
 Examine both for obvious rendering problems: blank or partially loaded pages, missing images (broken image icons), overlapping text or elements, unstyled content (flash-of-unstyled-content indicators).
 
@@ -99,7 +103,10 @@ escalation rules.
 
 ### Phase B: Responsive Testing
 
-When CSS or layout-affecting templates changed, `browser_resize` and `browser_take_screenshot` (`fullPage: true`) at each viewport:
+When CSS or layout-affecting templates changed, inspect `browser_resize` and
+`browser_take_screenshot` (`fullPage: true`) evidence at each viewport selected
+for the current cases. These are available reference dimensions, not an
+automatic matrix:
 
 | Breakpoint | Width | Height |
 |-----------|-------|--------|
@@ -108,7 +115,7 @@ When CSS or layout-affecting templates changed, `browser_resize` and `browser_ta
 | Desktop (small) | 1024 | 768 |
 | Desktop (large) | 1440 | 900 |
 
-At each breakpoint check horizontal overflow with `browser_evaluate`:
+At each selected breakpoint check horizontal overflow with `browser_evaluate`:
 
 ```javascript
 document.documentElement.scrollWidth > document.documentElement.clientWidth
@@ -278,8 +285,8 @@ the bounded host evidence. Missing observations remain explicit coverage gaps.
 ## Rules
 
 1. Verify the supplied readiness and browser evidence bind the declared target before analysis; missing cases stay `NOT-COVERED:` and never become product findings.
-2. Test every discovered URL, not just the homepage.
-3. Screenshot all four breakpoints for every URL when CSS changes are involved.
+2. Test every selected case, not just the homepage.
+3. Screenshot only its selected viewports; a declared full matrix remains complete.
 4. Find interactive elements via the accessibility snapshot -- never hardcode CSS selectors.
 5. Test keyboard navigation before mouse interaction -- keyboard-unreachable elements are P1.
 6. Report the exact URL, breakpoint, and element for every finding.
