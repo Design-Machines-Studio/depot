@@ -1,11 +1,15 @@
 # Workflow Kernel
 
 Workflow Kernel is Depot's neutral, dependency-free mechanics plugin for
-durable workflow state, replay, shadow comparison, verification evidence, and
-owned-resource cleanup. Pipeline and dm-review depend on it, while the kernel
+durable workflow state, replay, shadow comparison, verification evidence,
+bounded cross-harness observation indexes, and owned-resource cleanup. Pipeline and dm-review depend on it, while the kernel
 depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
+Version 0.19.0 adds `observation-index-v1`, a strict observation-only sidecar
+over explicitly named, digest-bound run evidence. Pipeline and dm-review use the
+same harness-neutral envelope; missing facts remain unavailable, cost remains
+measured/imputed/unavailable, and large artifacts remain bounded references.
 Version 0.18.1 repairs that reconciliation's exact raw-receipt digest boundary
 for schema-owned colon-bearing identifiers without weakening durable-string,
 URI, redaction, or semantic eligibility checks. Version 0.18.0 adds one
@@ -58,7 +62,7 @@ quality-pulse, behavioral-contract, validation-retry, and review-contribution
 consumers require `>=0.5.0`; exact-ref repository-verification consumers require
 `>=0.14.0`; ordinary run-cost-summary consumers require `>=0.8.0`;
 matrix-backed run-cost-summary
-consumers require `>=0.13.0`. The
+consumers require `>=0.13.0`; observation-index consumers require `>=0.19.0`. The
 launcher verifies Python 3.12+, sets the module path, and execs the CLI. Never
 discover the runtime from the downstream project, `PATH`, or a symlink escape.
 The full consumer-facing contract is `references/runtime-resolution.md`; in
@@ -109,6 +113,21 @@ safe templates; replace placeholders only with run-owned paths and exact IDs.
 
 `init` defaults to `shadow`. Never initialize a production run in another mode
 unless a separately approved promotion has made that authority available.
+
+### Cross-harness observation index
+
+Compose a typed input from canonical receipts, then emit the bounded sidecar:
+
+```sh
+"$WORKFLOW_KERNEL" emit-observation-index --input observation-index-input.json --output observation-index.json
+```
+
+The command validates `observation-index-v1`, calculates its canonical digest,
+creates a new regular output exclusively, and refuses unknown versions, stale
+outputs, unsafe references, unbound provenance, credential-shaped public text,
+ambiguous model fallback, and dishonest cost claims. It never parses
+transcripts or changes workflow authority. The complete field map and producer
+rules are in `references/observation-index-contract.md`.
 
 ### Shadow observation and comparison
 

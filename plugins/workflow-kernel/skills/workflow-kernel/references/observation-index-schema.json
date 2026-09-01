@@ -30,7 +30,10 @@
       "type": "string", "minLength": 1, "maxLength": 4096,
       "description": "A validator-confirmed run-relative artifact path or content identifier; URLs, absolute paths, dot segments, queries, fragments, credentials, and control characters are rejected by the Python validator."
     },
-    "timestamp": {"type": "string", "minLength": 20, "maxLength": 64},
+    "timestamp": {
+      "type": "string", "minLength": 20, "maxLength": 64,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
     "media_type": {
       "type": "string", "minLength": 3, "maxLength": 255,
       "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}$"
@@ -75,12 +78,22 @@
       }
     },
     "reference_fact": {"oneOf": [{"$ref": "#/$defs/available_reference"}, {"$ref": "#/$defs/unavailable"}]},
+    "available_identifier": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "value", "provenance"],
+      "properties": {
+        "availability": {"const": "available"},
+        "value": {"$ref": "#/$defs/identifier"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "identifier_fact": {"oneOf": [{"$ref": "#/$defs/available_identifier"}, {"$ref": "#/$defs/unavailable"}]},
     "available_integer": {
       "type": "object", "additionalProperties": false,
       "required": ["availability", "value", "provenance"],
       "properties": {
         "availability": {"const": "available"},
-        "value": {"type": "integer", "minimum": 0},
+        "value": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
         "provenance": {"$ref": "#/$defs/provenance"}
       }
     },
@@ -90,7 +103,7 @@
       "required": ["availability", "value", "provenance"],
       "properties": {
         "availability": {"const": "available"},
-        "value": {"type": "number", "minimum": 0},
+        "value": {"type": "number", "minimum": 0, "maximum": 9007199254740991},
         "provenance": {"$ref": "#/$defs/provenance"}
       }
     },
@@ -126,10 +139,10 @@
         "reference": {"$ref": "#/$defs/reference"},
         "digest": {"$ref": "#/$defs/digest"},
         "media_type": {"$ref": "#/$defs/media_type"},
-        "size_bytes": {"type": "integer", "minimum": 0},
+        "size_bytes": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
         "source_timestamp": {"$ref": "#/$defs/timestamp"},
         "observed_at": {"$ref": "#/$defs/timestamp"},
-        "maximum_age_seconds": {"type": ["integer", "null"], "minimum": 0},
+        "maximum_age_seconds": {"type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740991},
         "freshness": {"enum": ["fresh", "stale", "unknown"]},
         "freshness_reason": {"type": ["string", "null"], "enum": [null, "age_exceeded", "not_reported", "clock_unknown"]}
       }
@@ -139,7 +152,7 @@
       "required": ["run_id", "session_id", "attempt_ids", "workflow_node_ids", "action_ids"],
       "properties": {
         "run_id": {"$ref": "#/$defs/identifier"},
-        "session_id": {"$ref": "#/$defs/text_fact"},
+        "session_id": {"$ref": "#/$defs/identifier_fact"},
         "attempt_ids": {"$ref": "#/$defs/identifier_list_fact"},
         "workflow_node_ids": {"$ref": "#/$defs/identifier_list_fact"},
         "action_ids": {"$ref": "#/$defs/identifier_list_fact"}
@@ -215,7 +228,7 @@
           "required": ["status", "value_usd", "measurement_reference", "provenance"],
           "properties": {
             "status": {"const": "measured"},
-            "value_usd": {"type": "number", "minimum": 0},
+            "value_usd": {"type": "number", "minimum": 0, "maximum": 9007199254740991},
             "measurement_reference": {"$ref": "#/$defs/reference"},
             "provenance": {"$ref": "#/$defs/provenance"}
           }
@@ -225,8 +238,8 @@
           "required": ["status", "value_usd", "matrix_snapshot", "matrix_digest", "basis", "provenance"],
           "properties": {
             "status": {"const": "imputed"},
-            "value_usd": {"type": "number", "minimum": 0},
-            "matrix_snapshot": {"type": "string", "format": "date"},
+            "value_usd": {"type": "number", "minimum": 0, "maximum": 9007199254740991},
+            "matrix_snapshot": {"type": "string", "format": "date", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
             "matrix_digest": {"$ref": "#/$defs/digest"},
             "basis": {"$ref": "#/$defs/identifier"},
             "provenance": {"$ref": "#/$defs/provenance"}
@@ -262,7 +275,7 @@
         {
           "type": "object", "additionalProperties": false,
           "required": ["availability", "reference", "digest", "media_type", "size_bytes"],
-          "properties": {"availability": {"const": "available"}, "reference": {"$ref": "#/$defs/reference"}, "digest": {"$ref": "#/$defs/digest"}, "media_type": {"$ref": "#/$defs/media_type"}, "size_bytes": {"type": "integer", "minimum": 0}}
+          "properties": {"availability": {"const": "available"}, "reference": {"$ref": "#/$defs/reference"}, "digest": {"$ref": "#/$defs/digest"}, "media_type": {"$ref": "#/$defs/media_type"}, "size_bytes": {"type": "integer", "minimum": 0, "maximum": 9007199254740991}}
         },
         {
           "type": "object", "additionalProperties": false,
@@ -274,7 +287,7 @@
     "artifact": {
       "type": "object", "additionalProperties": false,
       "required": ["handle", "reference", "digest", "media_type", "size_bytes", "preview"],
-      "properties": {"handle": {"$ref": "#/$defs/identifier"}, "reference": {"$ref": "#/$defs/reference"}, "digest": {"$ref": "#/$defs/digest"}, "media_type": {"$ref": "#/$defs/media_type"}, "size_bytes": {"type": "integer", "minimum": 0}, "preview": {"$ref": "#/$defs/preview"}}
+      "properties": {"handle": {"$ref": "#/$defs/identifier"}, "reference": {"$ref": "#/$defs/reference"}, "digest": {"$ref": "#/$defs/digest"}, "media_type": {"$ref": "#/$defs/media_type"}, "size_bytes": {"type": "integer", "minimum": 0, "maximum": 9007199254740991}, "preview": {"$ref": "#/$defs/preview"}}
     },
     "artifacts_fact": {
       "oneOf": [
@@ -289,7 +302,7 @@
     "candidate": {
       "type": "object", "additionalProperties": false,
       "required": ["candidate_id", "parent_ids", "score", "disposition", "provenance"],
-      "properties": {"candidate_id": {"$ref": "#/$defs/identifier"}, "parent_ids": {"type": "array", "maxItems": 1024, "uniqueItems": true, "items": {"$ref": "#/$defs/identifier"}}, "score": {"$ref": "#/$defs/number_fact"}, "disposition": {"enum": ["accepted", "rejected"]}, "provenance": {"$ref": "#/$defs/provenance"}}
+      "properties": {"candidate_id": {"$ref": "#/$defs/identifier"}, "parent_ids": {"type": "array", "maxItems": 1024, "uniqueItems": true, "items": {"$ref": "#/$defs/identifier"}}, "score": {"$ref": "#/$defs/unavailable"}, "disposition": {"enum": ["accepted", "rejected"]}, "provenance": {"$ref": "#/$defs/provenance"}}
     },
     "candidates_fact": {"oneOf": [{"type": "object", "additionalProperties": false, "required": ["availability", "value", "provenance"], "properties": {"availability": {"const": "available"}, "value": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/candidate"}}, "provenance": {"$ref": "#/$defs/provenance"}}}, {"$ref": "#/$defs/unavailable"}]},
     "observations": {

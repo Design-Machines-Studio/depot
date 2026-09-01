@@ -53,9 +53,11 @@ typed gaps in the final column.
 ## Cost honesty
 
 - `measured` requires a finite non-negative USD value, an authoritative
-  measurement reference, and bound provenance.
+  measurement reference, and provenance bound to the same declared `cost`
+  source.
 - `imputed` requires a finite non-negative USD value, ISO matrix snapshot date,
-  canonical matrix digest, bounded basis code, and bound provenance.
+  canonical matrix digest bound to a declared `cost` source, bounded basis
+  code, and bound provenance.
 - `unavailable` requires `value_usd: null` and one closed reason. It cannot
   carry measurement or imputation fields.
 
@@ -65,6 +67,11 @@ The canonical document is at most 256 KiB. Sources, plugins, model routes,
 artifacts, candidates, IDs, strings, media types, timestamps, references, and
 nested objects have explicit limits in the schema and validator. Unknown keys
 and versions fail closed.
+
+All integer and decimal observations are at most `9007199254740991`, preserving
+exact integer interchange across JSON consumers. Timestamps use RFC 3339 with
+seconds and an explicit timezone; matrix snapshots use exact calendar dates.
+High-confidence credential shapes are rejected from every public text value.
 
 References are run-relative paths or content identifiers accepted by Workflow
 Kernel reference normalization. Absolute paths, dot segments, query strings,
@@ -80,6 +87,10 @@ validator recomputes whether the elapsed time agrees. `fresh` has no reason;
 `stale` requires `age_exceeded`. Unknown freshness has no maximum age and uses
 `not_reported` or `clock_unknown`. The index reports this evidence but does not
 invent a global freshness threshold.
+
+Candidate lineage and accepted/rejected disposition are public in v1. Candidate
+score remains explicitly unavailable because no current cross-harness consumer
+owns comparable scoring semantics.
 
 ## Digest
 

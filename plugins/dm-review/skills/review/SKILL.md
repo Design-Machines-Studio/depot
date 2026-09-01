@@ -126,17 +126,21 @@ contributions, candidates, token counters, or cost unavailable. Raw findings,
 reviewer output, transcripts, provider payloads, and artifact content remain
 reference-bound.
 
-Invoke the shared command exactly once:
+Remove only the prior registered `.claude/ux-review/observation-index.json`
+through the existing artifact lifecycle first. If its exact ownership cannot
+be proved or removal fails, record `write-conflict` and never treat it as
+current evidence. Then invoke the shared command exactly once:
 
 ```text
-"$WORKFLOW_KERNEL" emit-observation-index --input <exact-run-root>/review/observation-index-input.json --output <exact-run-root>/review/observation-index.json
+"$WORKFLOW_KERNEL" emit-observation-index --input <exact-run-root>/review/observation-index-input.json --output .claude/ux-review/observation-index.json
 ```
 
-Record the accepted path plus canonical digest, or one closed unavailable
+Record the durable accepted path plus canonical digest in `run-receipt.md` and
+the complete report, or one closed unavailable
 reason (`invalid-or-unsafe-input`, `runtime-unavailable`, `write-conflict`, or
-`emission-failed`). This observation cannot change findings, coverage,
-recommendation, cleanup, or completion, and an existing output is stale rather
-than proof for the current invocation.
+`emission-failed`). Phase 8 preserves the accepted index beside `report.md` and
+removes its private input with the exact-owned root. This observation cannot
+change findings, coverage, recommendation, cleanup, or completion.
 
 If this review creates any Docker/Compose resource, load `${CLAUDE_SKILL_DIR}/references/review-docker-create.md` and follow it exactly.
 
@@ -646,7 +650,8 @@ dirty worktree. Install this same Phase 8 sequence on every exit path.
 Never delete the feature branch under review. There is no condition under which a code review deletes the branch it was asked to review.
 
 For a standalone owner, preserve the already-generated JSON and Markdown beside
-`run-cost-summary.json` while cleaning its private receipts. For an enclosing
+`run-cost-summary.json` while cleaning its private receipts. In every mode,
+preserve the accepted `.claude/ux-review/observation-index.json` companion. For an enclosing
 owner, defer only that owner's exact private router directory and index; the
 enclosing workflow removes them after its one terminal render.
 

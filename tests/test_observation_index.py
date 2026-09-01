@@ -190,11 +190,78 @@ class ObservationIndexTests(unittest.TestCase):
             "cost", {"status": "unavailable", "value_usd": 1.0, "reason": "not_reported"},
         ))
 
+    def test_rejects_cost_evidence_not_bound_to_declared_cost_sources(self):
+        self.assert_invalid(lambda value: value["observations"]["cost"].__setitem__(
+            "measurement_reference", "receipts/not-declared.json",
+        ))
+
+        def unbound_matrix(value):
+            value["observations"]["cost"] = {
+                "status": "imputed", "value_usd": 0.25,
+                "matrix_snapshot": "2026-09-01", "matrix_digest": "sha256:" + "d" * 64,
+                "basis": "api-equivalent", "provenance": provenance(DIGEST_C),
+            }
+        self.assert_invalid(unbound_matrix)
+
     def test_rejects_model_fallback_ambiguity(self):
         def mutate(value):
             route = value["observations"]["models"]["value"][0]
             route["fallback_reason"] = unavailable()
         self.assert_invalid(mutate)
+
+        def mutate_partial(value):
+            route = value["observations"]["models"]["value"][0]
+            route["served_model"] = unavailable()
+            route["fallback_reason"] = unavailable()
+        self.assert_invalid(mutate_partial)
+
+    def test_rejects_candidate_score_without_consumer_semantics(self):
+        self.assert_invalid(lambda value: value["observations"]["candidates"]["value"][0].__setitem__(
+            "score", available(0.9),
+        ))
+
+    def test_rejects_future_fact_provenance(self):
+        self.assert_invalid(lambda value: value["observations"]["objective"]["provenance"].__setitem__(
+            "observed_at", "2099-01-01T00:00:00Z",
+        ))
+
+    def test_rejects_credential_shaped_public_text_without_echoing_it(self):
+        value = sample_index()
+        secret = "api_key=sk-test-observation-credential"
+        value["observations"]["objective"]["value"] = secret
+        value["digest"] = observation_index_digest(value)
+        with self.assertRaises(ValueError) as raised:
+            validate_observation_index(value)
+        self.assertNotIn(secret, str(raised.exception))
+
+    def test_rejects_numbers_beyond_json_safe_precision(self):
+        self.assert_invalid(lambda value: value["observations"]["usage"]["input_tokens"].__setitem__(
+            "value", 9_007_199_254_740_992,
+        ))
+        self.assert_invalid(lambda value: value["observations"]["cost"].__setitem__(
+            "value_usd", 1e308,
+        ))
+
+    def test_schema_and_runtime_share_identifier_and_date_languages(self):
+        schema_path = (
+            Path(__file__).parents[1] / "plugins" / "workflow-kernel" / "skills" /
+            "workflow-kernel" / "references" / "observation-index-schema.json"
+        )
+        schema = json.loads(schema_path.read_text(encoding="utf-8"))
+        self.assertEqual(schema["$defs"]["run"]["properties"]["session_id"]["$ref"], "#/$defs/identifier_fact")
+        self.assertIn("pattern", schema["$defs"]["timestamp"])
+        self.assertIn("pattern", schema["$defs"]["cost"]["oneOf"][1]["properties"]["matrix_snapshot"])
+
+        self.assert_invalid(lambda value: value["run"]["session_id"].__setitem__("value", "session with spaces"))
+        self.assert_invalid(lambda value: value.__setitem__("emitted_at", "2026-09-01T00:00Z"))
+
+        def week_date(value):
+            value["observations"]["cost"] = {
+                "status": "imputed", "value_usd": 0.25,
+                "matrix_snapshot": "2026-W36-1", "matrix_digest": DIGEST_C,
+                "basis": "api-equivalent", "provenance": provenance(DIGEST_C),
+            }
+        self.assert_invalid(week_date)
 
     def test_rejects_unbounded_or_embedded_artifact_data(self):
         self.assert_invalid(lambda value: value["observations"]["artifacts"]["value"][0].__setitem__("content", "raw"))

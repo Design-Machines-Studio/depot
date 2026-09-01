@@ -64,16 +64,21 @@ transcripts, provider payloads, or artifact bytes. For partial reviews, bind
 the valid sources that exist and mark absent lane/browser/contribution,
 candidate, token, or cost facts unavailable rather than zero-filling them.
 
-Invoke exactly once:
+Remove only the prior registered `.claude/ux-review/observation-index.json`
+through dm-review's existing artifact lifecycle before invoking. A failure to
+prove or remove that exact prior companion is `write-conflict`; never read it
+as evidence for the current review. Then invoke exactly once:
 
 ```text
-"$WORKFLOW_KERNEL" emit-observation-index --input <exact-run-root>/review/observation-index-input.json --output <exact-run-root>/review/observation-index.json
+"$WORKFLOW_KERNEL" emit-observation-index --input <exact-run-root>/review/observation-index-input.json --output .claude/ux-review/observation-index.json
 ```
 
-Append the accepted path and canonical digest to `run-receipt.md`, or one
+Append the durable accepted path and canonical digest to `run-receipt.md` and
+the complete report, or one
 closed `observation-index: unavailable (invalid-or-unsafe-input|runtime-unavailable|write-conflict|emission-failed)`
-line. The failure cannot alter findings, coverage, merge recommendation,
-cleanup authority, or terminal model reporting, and stale output is refused.
+line. Phase 8 preserves the accepted index beside `report.md` while removing
+its private input with the exact-owned root. Failure cannot alter findings,
+coverage, merge recommendation, cleanup authority, or terminal model reporting.
 
 Inline Python source is forbidden. `bind-prediction` atomically seals the pre-action source, translated events, event digest, and request context, appending its exact authority to the canonical lifecycle ledger before `run.started`; observation and direct comparison require that binding plus the matching artifact and never create or mutate either. Keep the source input, request, authoritative receipts, `review-shadow-observation.json`, and `review-shadow-prediction.json` through comparison; delete raw prediction inputs afterward while preserving the compact report. Missing prediction evidence fails closed and preserves the review result; a parity gap cannot convert `CLEAN`, `APPROVE WITH FIXES`, `BLOCKS MERGE`, or `REVIEW INCOMPLETE` -- it is proposal-only evidence. Never auto-delete `.workflow-kernel/repository-scope.json`; after fresh exact-scope Docker inventory proves zero exact-run objects, success removes the terminal run state and disposable root. Failure/interruption may retain only one bounded diagnostic root and must report its exact path, reason, contents, and cleanup command.
 

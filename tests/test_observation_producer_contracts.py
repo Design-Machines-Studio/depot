@@ -45,7 +45,7 @@ class ObservationProducerContractTests(unittest.TestCase):
         command = (
             '"$WORKFLOW_KERNEL" emit-observation-index --input '
             '<exact-run-root>/review/observation-index-input.json --output '
-            '<exact-run-root>/review/observation-index.json'
+            '.claude/ux-review/observation-index.json'
         )
         for path in (REVIEW_COMMAND, REVIEW_SKILL):
             with self.subTest(path=path):
@@ -58,6 +58,13 @@ class ObservationProducerContractTests(unittest.TestCase):
                 self.assertIn("unavailable", text)
                 self.assertIn("raw finding", text.lower())
                 self.assertIn("reference-bound", text.lower())
+                self.assertIn("existing artifact lifecycle", text)
+                self.assertIn("Phase 8 preserves", text)
+
+    def test_dm_review_output_format_links_durable_observation_companion(self):
+        output_format = ROOT / "plugins" / "dm-review" / "skills" / "review" / "references" / "output-format.md"
+        text = self.text(output_format)
+        self.assertIn("Observation index: .claude/ux-review/observation-index.json", text)
 
     def test_complete_and_partial_producer_fixtures_validate(self):
         for name in (

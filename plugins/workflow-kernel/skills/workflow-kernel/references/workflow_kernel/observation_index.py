@@ -9,7 +9,7 @@ import math
 import re
 from typing import Callable, Mapping
 
-from .redaction import normalize_evidence_reference
+from .redaction import contains_high_confidence_secret, normalize_evidence_reference
 
 
 OBSERVATION_INDEX_SCHEMA_VERSION = 1
@@ -22,9 +22,15 @@ MAX_MODELS = 256
 MAX_ARTIFACTS = 256
 MAX_CANDIDATES = 256
 MAX_TEXT = 4_096
+MAX_SAFE_NUMBER = 9_007_199_254_740_991
 
 _DIGEST = re.compile(r"sha256:[0-9a-f]{64}\Z")
 _IDENTIFIER = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}\Z")
+_TIMESTAMP = re.compile(
+    r"[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}"
+    r"(?:\.[0-9]+)?(?:Z|[+-][0-9]{2}:[0-9]{2})\Z"
+)
+_DATE = re.compile(r"[0-9]{4}-[0-9]{2}-[0-9]{2}\Z")
 _MEDIA_TYPE = re.compile(
     r"[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}/"
     r"[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}\Z"
@@ -80,6 +86,8 @@ def _text(value: object, label: str, *, identifier: bool = False) -> str:
         raise ValueError(label + " is invalid")
     if any(ord(character) < 32 or ord(character) == 127 for character in value):
         raise ValueError(label + " contains control characters")
+    if contains_high_confidence_secret(value):
+        raise ValueError(label + " contains credential-shaped content")
     if identifier and _IDENTIFIER.fullmatch(value) is None:
         raise ValueError(label + " is not a bounded identifier")
     return value
@@ -93,6 +101,8 @@ def _digest(value: object, label: str = "digest") -> str:
 
 def _timestamp(value: object, label: str) -> datetime:
     text = _text(value, label)
+    if _TIMESTAMP.fullmatch(text) is None:
+        raise ValueError(label + " is invalid")
     try:
         parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
     except ValueError:
@@ -114,17 +124,17 @@ def _safe_reference(value: object, label: str) -> str:
 
 
 def _nonnegative_int(value: object, label: str) -> int:
-    if type(value) is not int or value < 0:
-        raise ValueError(label + " must be a non-negative integer")
+    if type(value) is not int or value < 0 or value > MAX_SAFE_NUMBER:
+        raise ValueError(label + " must be a bounded non-negative integer")
     return value
 
 
 def _nonnegative_number(value: object, label: str) -> float | int:
     if (
         type(value) not in (int, float) or type(value) is bool
-        or value < 0 or not math.isfinite(value)
+        or value < 0 or value > MAX_SAFE_NUMBER or not math.isfinite(value)
     ):
-        raise ValueError(label + " must be a finite non-negative number")
+        raise ValueError(label + " must be a bounded finite non-negative number")
     return value
 
 
@@ -133,6 +143,19 @@ def _provenance(value: object, source_digests: frozenset[str], label: str) -> No
     if _digest(provenance["source_digest"], label + " source digest") not in source_digests:
         raise ValueError(label + " provenance source is not bound")
     _timestamp(provenance["observed_at"], label + " observed_at")
+
+
+def _validate_provenance_times(value: object, emitted_at: datetime) -> None:
+    if type(value) is dict:
+        if set(value) == _PROVENANCE_FIELDS:
+            observed_at = _timestamp(value["observed_at"], "fact provenance observed_at")
+            if observed_at > emitted_at:
+                raise ValueError("fact provenance observation cannot be after index emission")
+        for child in value.values():
+            _validate_provenance_times(child, emitted_at)
+    elif type(value) is list:
+        for child in value:
+            _validate_provenance_times(child, emitted_at)
 
 
 def _fact(
@@ -205,14 +228,15 @@ def _source(value: object) -> dict:
         raise ValueError("source freshness is unknown")
     reason = source["freshness_reason"]
     if source["freshness"] == "fresh":
-        if type(maximum_age) is not int or maximum_age < 0 or reason is not None:
+        if reason is not None:
             raise ValueError("fresh source requires a maximum age and no reason")
+        _nonnegative_int(maximum_age, "source maximum_age_seconds")
         if (observed_time - source_time).total_seconds() > maximum_age:
             raise ValueError("fresh source exceeds its declared maximum age")
     elif source["freshness"] == "stale":
+        _nonnegative_int(maximum_age, "source maximum_age_seconds")
         if (
-            type(maximum_age) is not int or maximum_age < 0
-            or reason != "age_exceeded"
+            reason != "age_exceeded"
             or (observed_time - source_time).total_seconds() <= maximum_age
         ):
             raise ValueError("stale source contradicts its declared maximum age")
@@ -258,11 +282,12 @@ def _model_list(value: object, label: str, sources: frozenset[str]) -> list:
         _model_fact(model["provider"], sources, prefix + " provider")
         _model_fact(model["routing_rationale"], sources, prefix + " routing_rationale")
         fallback = _model_fact(model["fallback_reason"], sources, prefix + " fallback_reason")
-        if None not in (requested, attempted, served):
-            changed = requested != attempted or attempted != served
+        available_route = [part for part in (requested, attempted, served) if part is not None]
+        if len(available_route) >= 2:
+            changed = len(set(available_route)) > 1
             if changed and fallback is None:
                 raise ValueError("model fallback requires an available reason")
-            if not changed and fallback is not None:
+            if len(available_route) == 3 and not changed and fallback is not None:
                 raise ValueError("unchanged model route cannot claim fallback")
     return value
 
@@ -343,10 +368,6 @@ def _supervision(value: object, label: str) -> dict:
     return record
 
 
-def _score(value: object, sources: frozenset[str], label: str) -> None:
-    _fact(value, sources, label, _nonnegative_number)
-
-
 def _candidate_list(value: object, label: str, sources: frozenset[str]) -> list:
     if type(value) is not list or len(value) > MAX_CANDIDATES:
         raise ValueError(label + " must be a bounded list")
@@ -359,14 +380,15 @@ def _candidate_list(value: object, label: str, sources: frozenset[str]) -> list:
             raise ValueError("candidate ids must be unique")
         ids.add(candidate_id)
         _identifier_list(candidate["parent_ids"], "candidate parent_ids")
-        _score(candidate["score"], sources, "candidate score")
+        if _fact(candidate["score"], sources, "candidate score", _nonnegative_number) is not None:
+            raise ValueError("candidate score is unavailable in observation-index-v1")
         if candidate["disposition"] not in _DISPOSITIONS:
             raise ValueError("candidate disposition is unknown")
         _provenance(candidate["provenance"], sources, "candidate")
     return value
 
 
-def _cost(value: object, sources: frozenset[str]) -> None:
+def _cost(value: object, sources_by_digest: Mapping[str, dict]) -> None:
     if type(value) is not dict:
         raise ValueError("cost must be an object")
     status = value.get("status")
@@ -377,8 +399,12 @@ def _cost(value: object, sources: frozenset[str]) -> None:
             "measured cost",
         )
         _nonnegative_number(cost["value_usd"], "measured cost value")
-        _safe_reference(cost["measurement_reference"], "measurement reference")
-        _provenance(cost["provenance"], sources, "measured cost")
+        reference = _safe_reference(cost["measurement_reference"], "measurement reference")
+        provenance_digest = cost["provenance"].get("source_digest") if type(cost["provenance"]) is dict else None
+        _provenance(cost["provenance"], frozenset(sources_by_digest), "measured cost")
+        source = sources_by_digest[provenance_digest]
+        if source["role"] != "cost" or source["reference"] != reference:
+            raise ValueError("measured cost reference is not bound to its cost source")
         return
     if status == "imputed":
         cost = _exact(
@@ -390,15 +416,17 @@ def _cost(value: object, sources: frozenset[str]) -> None:
             "imputed cost",
         )
         _nonnegative_number(cost["value_usd"], "imputed cost value")
-        if type(cost["matrix_snapshot"]) is not str:
+        if type(cost["matrix_snapshot"]) is not str or _DATE.fullmatch(cost["matrix_snapshot"]) is None:
             raise ValueError("matrix snapshot is invalid")
         try:
             date.fromisoformat(cost["matrix_snapshot"])
         except ValueError:
             raise ValueError("matrix snapshot is invalid") from None
-        _digest(cost["matrix_digest"], "matrix digest")
+        matrix_digest = _digest(cost["matrix_digest"], "matrix digest")
+        if matrix_digest not in sources_by_digest or sources_by_digest[matrix_digest]["role"] != "cost":
+            raise ValueError("imputation matrix is not bound to a cost source")
         _text(cost["basis"], "imputation basis", identifier=True)
-        _provenance(cost["provenance"], sources, "imputed cost")
+        _provenance(cost["provenance"], frozenset(sources_by_digest), "imputed cost")
         return
     if status == "unavailable":
         cost = _exact(value, frozenset({"status", "value_usd", "reason"}), "unavailable cost")
@@ -471,6 +499,7 @@ def validate_observation_index(index: Mapping[str, object]) -> None:
     if len(set(digests)) != len(digests) or len(set(references)) != len(references):
         raise ValueError("source bindings are ambiguous")
     source_digests = frozenset(digests)
+    sources_by_digest = {source["digest"]: source for source in sources}
     producer_sources = [source for source in sources if source["role"] == "producer"]
     if len(producer_sources) != 1:
         raise ValueError("exactly one producer source is required")
@@ -512,7 +541,7 @@ def validate_observation_index(index: Mapping[str, object]) -> None:
         usage["duration_seconds"], source_digests, "usage duration_seconds",
         _nonnegative_number,
     )
-    _cost(observations["cost"], source_digests)
+    _cost(observations["cost"], sources_by_digest)
     _fact(observations["verifier"], source_digests, "verifier", _verifier)
     _fact(observations["artifacts"], source_digests, "artifacts", _artifact_list)
     _fact(observations["recovery"], source_digests, "recovery", _recovery)
@@ -522,6 +551,8 @@ def validate_observation_index(index: Mapping[str, object]) -> None:
         lambda value, label: _candidate_list(value, label, source_digests),
     )
     _fact(observations["next_action"], source_digests, "next_action", _string)
+
+    _validate_provenance_times(index, emitted_at)
 
     _digest(index["digest"], "observation index digest")
     if index["digest"] != observation_index_digest(index):
