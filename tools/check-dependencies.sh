@@ -263,8 +263,8 @@ elif kernel.get("pluginDependencies", {}) or kernel.get("optionalPluginDependenc
 
 consumer_floors = {
     "assembly": ">=0.17.0",
-    "pipeline": ">=0.18.1",
-    "dm-review": ">=0.17.0",
+    "pipeline": ">=0.19.0",
+    "dm-review": ">=0.19.0",
 }
 
 for consumer, expected in consumer_floors.items():
@@ -275,8 +275,8 @@ for consumer, expected in consumer_floors.items():
 
 pipeline = manifests.get("pipeline")
 dm_review_floor = None if pipeline is None else pipeline.get("pluginDependencies", {}).get("dm-review")
-if dm_review_floor != ">=1.76.0":
-    errors.append("pipeline must require dm-review >=1.76.0")
+if dm_review_floor != ">=1.77.0":
+    errors.append("pipeline must require dm-review >=1.77.0")
 
 if errors:
     for error in errors:
