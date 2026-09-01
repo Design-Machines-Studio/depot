@@ -1090,8 +1090,22 @@ Only after the complete final authoritative cleanup/terminal receipt exists, app
 "$WORKFLOW_KERNEL" metrics --events plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/metrics.json
 ```
 
-Observation-only. After compact projection, delete eligible shadow Tier 2 and
-consumed terminal inputs regardless of semantic category. Never auto-delete `.workflow-kernel/repository-scope.json`. Preserve the compact shadow category
+Retain the manifest, terminal receipt, lifecycle artifacts, cumulative
+authoritative receipts, attempt records, metrics, verification,
+reconciliation, installed-bundle resolution, contribution references, and
+private router/provider reference receipts until the caller completes the
+terminal observation index. Return one `Observation index source handoff:`
+line naming those exact paths and whether each exists; do not copy their
+contents into the handoff. The Pipeline caller materializes
+`plans/<feature-slug>/observation-index-input.json` after its cost-summary
+attempt, binds explicit `producer.name: pipeline` and source `role: producer`,
+and invokes the same Workflow Kernel `emit-observation-index` command used by
+dm-review. Observation-index failure is recorded as unavailable and never
+changes authoritative completion, review, cleanup, or merge evidence.
+
+Observation-only. After compact projection and the caller's observation-index
+source handoff, delete eligible shadow Tier 2 inputs only when they are not
+still required for terminal index binding. Never auto-delete `.workflow-kernel/repository-scope.json`. Preserve the compact shadow category
 in the receipt rather than the raw terminal state tree. Record disposition in
 the final summary without rewriting the cleanup receipt.
 
