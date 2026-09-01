@@ -3,10 +3,17 @@
 Callers pass a run-private receipt registry plus opaque private receipt IDs,
 never family names. model-router reads the private evidence and excludes every implementing family, returning only an anonymous participant and pass/fail
 disposition. Mixed implementation passes all contributing receipt IDs. A
-verified human-authored diff instead uses the explicit `--human-authored`
-origin flag; it never fabricates a model receipt. That claim applies only while
-the exact reviewed state has no model-authored contribution. Any model repair
-invalidates it and requires the repair's live receipt in the run-private
-registry; unavailable repair provenance keeps the lane incomplete. A missing
-receipt, ambiguous origin, or exhausted independent role likewise keeps the
-lane incomplete; dm-review cannot weaken or reinterpret the result.
+verified human-authored diff may use the explicit `--human-authored` origin
+flag. When receipts are unavailable, pass the model-router-owned exact-diff
+origin record described in `implementation-origin.md`; dm-review never maps or
+receives families. That claim applies only while exact HEAD and diff remain
+unchanged. Any model repair invalidates a human-authored record and contributes
+its receipt or known host origin to replacement evidence.
+
+Unknown origin is one coverage cause, never one failure per candidate. It is a
+transparent nonblocking limitation for an ordinary trusted first-party diff.
+For a bounded sensitive or high-consequence diff it keeps the affected required
+lanes incomplete with one actionable origin question. After origin is supplied
+against unchanged HEAD, reuse completed exact-head evidence and rerun only
+those lanes. An exhausted independent role remains incomplete; dm-review cannot
+weaken or reinterpret a known family exclusion.

@@ -34,7 +34,7 @@ task still requests `tool-use` and therefore excludes prompt-only transports.
 
 Resolve one coherent model-router bundle with Workflow Kernel and require
 `skills/model-router/references/role-dispatch.sh`, the request schema, and role
-policy at minimum version `0.4.0`. When this invocation owns terminal reporting,
+policy at minimum version `0.6.0`. When this invocation owns terminal reporting,
 require `skills/model-router/references/render-terminal-report.sh` from that
 same bundle. For each selected lane:
 
@@ -55,12 +55,16 @@ same bundle. For each selected lane:
    `<exact-run-root>/receipts/private/router/`, named by its opaque receipt ID.
    For independent lanes, pass that directory with
    `--independence-receipt-dir` and append each opaque implementing receipt ID
-   with `--independence-receipt-id`; dm-review never receives family names. For
-   a verified human-authored diff with no model-authored contribution, pass
-   `--human-authored` instead. Any subsequent model repair invalidates that
-   claim; register its live implementer receipt and use receipt IDs alone. If
-   repair provenance is unavailable, the independent lane remains unavailable.
-   The two origin forms are mutually exclusive.
+   with `--independence-receipt-id`; dm-review never receives family names.
+   When receipts do not exist, create the private exact-diff record defined by
+   `implementation-origin.md` and pass `--origin-file`; model-router alone maps
+   host origins to families. For a verified human-authored diff with no
+   model-authored contribution, the legacy `--human-authored` form remains
+   valid. Any subsequent model repair invalidates that claim; register its live
+   implementer receipt or replace the record with the complete mixed-known
+   origin. If required sensitive coverage still has unknown origin, keep the
+   affected lanes incomplete and ask the single plain-language origin question.
+   The receipt, record, and legacy flag forms are mutually exclusive.
 6. Launch selected lanes in parallel when the host supports it.
 
 ### Proportional UI prerequisite

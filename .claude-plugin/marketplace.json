@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Design Machines' AI plugin marketplace",
-    "version": "1.12.0"
+    "version": "1.13.0"
   },
   "plugins": [
     {
@@ -69,7 +69,7 @@
     {
       "name": "project-manager",
       "source": "./plugins/project-manager",
-      "version": "1.12.0",
+      "version": "1.13.0",
       "author": {
         "name": "Design Machines"
       },
@@ -283,7 +283,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.76.0",
+      "version": "1.77.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -361,7 +361,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.63.0",
+      "version": "1.64.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -388,7 +388,7 @@
     {
       "name": "model-router",
       "source": "./plugins/model-router",
-      "version": "0.5.0",
+      "version": "0.6.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

@@ -31,7 +31,7 @@ assert jq -e '.recommendedStart.cost.label == "included subscription" and .recom
 "$RECOMMEND" --role review-fast --capability read-repository \
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/review.json"
-assert jq -e '.recommendedStart.model == "deepseek/deepseek-v4-flash-0731" and .recommendedStart.harness == "OpenRouter" and .recommendedStart.cost.label == "metered API"' "$TMP/review.json"
+assert jq -e '.recommendedStart.model == "gpt-5.6-luna" and .recommendedStart.harness == "Codex" and .recommendedStart.cost.label == "included subscription"' "$TMP/review.json"
 
 jq '.openrouter.state="unavailable"' "$TMP/healthy.json" > "$TMP/no-openrouter.json"
 "$RECOMMEND" --role review-fast --capability read-repository \
@@ -54,12 +54,13 @@ jq '.roles["review-fast"] |= reverse' "$POLICY" > "$TMP/reordered-policy.json"
   --capability read-repository --capability structured-output --effort medium \
   --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" --format json \
   > "$TMP/reordered.json"
-assert jq -e '.recommendedStart.model == "gpt-5.6-luna"' "$TMP/reordered.json"
+assert jq -e '.recommendedStart.model == "z-ai/glm-5.3-flash" and .recommendedStart.harness == "OpenRouter"' "$TMP/reordered.json"
 
 jq '(.models[] | select(.slug == "deepseek/deepseek-v4-flash-0731")).input_usd_per_m=9.99 | (.models[] | select(.slug == "deepseek/deepseek-v4-flash-0731")).output_usd_per_m=8.88' "$MATRIX" > "$TMP/priced-matrix.json"
+jq '.codex.state="unavailable"' "$TMP/healthy.json" > "$TMP/no-codex.json"
 "$RECOMMEND" --role review-fast --capability read-repository \
   --capability structured-output --effort medium --matrix-file "$TMP/priced-matrix.json" \
-  --availability-file "$TMP/healthy.json" --format json > "$TMP/priced.json"
+  --availability-file "$TMP/no-codex.json" --format json > "$TMP/priced.json"
 assert jq -e '.recommendedStart.cost.apiPrice.inputUsdPerM == 9.99 and .recommendedStart.cost.apiPrice.outputUsdPerM == 8.88' "$TMP/priced.json"
 
 jq '.codex={state:"unknown",authMode:"subscription",reason:"rate_limit_mapping_unknown",allowances:{a:{state:"limited"},b:{state:"ok"}}} | .openrouter.state="unavailable"' "$TMP/healthy.json" > "$TMP/unmapped.json"
@@ -80,6 +81,6 @@ assert grep -Fq 'billedCostUsd' "$TERMINAL"
   --availability-file "$TMP/healthy.json" --format markdown > "$TMP/recommended.md"
 assert test "$(grep -c '^Recommended start$' "$TMP/recommended.md")" -eq 1
 assert test "$(grep -c '^- Fallback:' "$TMP/recommended.md")" -eq 1
-assert grep -Fq -- '- Matrix evidence: 2026-08-26' "$TMP/recommended.md"
+assert grep -Fq -- '- Matrix evidence: 2026-08-27' "$TMP/recommended.md"
 
 printf 'assembly-coordinator-recommendation: %d assertions passed\n' "$pass"

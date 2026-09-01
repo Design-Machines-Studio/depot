@@ -507,7 +507,7 @@ model-router bundle:
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
 MODEL_ROUTER_BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle \
-  --plugin model-router --minimum-version 0.4.0 \
+  --plugin model-router --minimum-version 0.6.0 \
   --required-executable skills/model-router/references/role-dispatch.sh \
   --required-executable skills/model-router/references/render-terminal-report.sh \
   --required-asset skills/model-router/references/role-request-schema.json \
@@ -531,6 +531,13 @@ named by opaque receipt ID. Phase 6 passes this directory and every contributing
 implementation/repair receipt ID to independent review lanes. A model repair
 invalidates any earlier `--human-authored` origin claim; missing repair
 provenance keeps the independent lane unavailable.
+
+Maintain one cumulative implementation provenance set for the entire run.
+Append the opaque ID from every successful initial builder, replacement
+builder, validation repair, review repair, and final-review repair receipt.
+Never discard an earlier contributor when a later repair lands, and never ask
+the operator for IDs created by this run. Full CLI and Codex-native execution
+pass the same complete set to final dm-review and affected-lane rechecks.
 
 Maintain `terminal-receipt-index.json` in that directory using model-router's
 `terminal-report-contract.md`. Add every implementation, repair,
@@ -792,6 +799,12 @@ dispatches its two independent core judgment lanes and applicable
 build/UI/domain lanes; it may not collapse to the implementer's self-review. If
 a required lane is unavailable, report the closed role-level gap without
 selecting a substitute.
+
+The implementing ID set here is exactly the cumulative set maintained since
+Step 3d, including every implementation and repair that contributed to the
+final diff. Forward it automatically with the run-private registry. Nested
+review and repair prompts receive no concrete model, provider, family,
+candidate order, or cost.
 
 For `decisionProfile.consequence: high`, this existing final independent seam is the stronger verification depth: require all applicable independent lanes and conditional reviewers to return valid evidence. A missing, declined, dead, or degraded required lane stops `human_help_required`; do not approve from the remaining lane. This escalation does not add a full review to each ordinary chunk and does not relax sensitive-path or browser requirements.
 

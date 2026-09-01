@@ -24,6 +24,22 @@ effective effort, anonymous participant ID, disposition, fallback state, and
 output destination. Concrete receipt fields must never be copied into peer
 prompts or ordinary orchestration summaries.
 
+## Exact-diff implementation origin
+
+When no historical router receipt exists, use `implementation-origin.sh` to
+create one run-private origin record. It binds a digest of repository identity,
+exact base, exact HEAD, exact base-to-working-tree diff digest, origin class,
+contributing families, and declaration source. The only classes are
+`receipted-model-work`, `human-authored`, `codex-host-authored`,
+`claude-host-authored`, `mixed-known`, and `unknown`.
+
+The script derives OpenAI from `codex-host-authored` and Anthropic from
+`claude-host-authored`; callers do not perform that mapping. A record stores no
+concrete model, provider order, prompt, response, token count, cost, credential,
+or repository content. Verification recomputes repository, HEAD, and diff
+digests. Any change rejects the record. Opaque receipts remain preferred for
+receipted work and may contribute privately to a `mixed-known` record.
+
 After every model-dependent decision has settled, the terminal workflow may
 load `terminal-report-contract.md` and pass one exact run-private ordered index
 to `render-terminal-report.sh`. That renderer projects only its closed field

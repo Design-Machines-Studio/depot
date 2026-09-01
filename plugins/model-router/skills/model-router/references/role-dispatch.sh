@@ -18,6 +18,8 @@ RECEIPT_FILE=""
 REPOSITORY_EVIDENCE_FILE=""
 INDEPENDENCE_RECEIPT_DIR=""
 HUMAN_AUTHORED=0
+ORIGIN_FILE=""
+ORIGIN_DECLARED=0
 CONTRACT_DIGEST=""
 CONTRACT_REVISION=""
 CONTRACT_REVISION_JSON=null
@@ -28,7 +30,7 @@ CAPABILITY_COUNT=0
 INDEPENDENCE_RECEIPT_COUNT=0
 
 usage() {
-  printf '%s\n' 'usage: role-dispatch --role ROLE --capability CAP [--capability CAP ...] --effort EFFORT --workflow-kernel PATH --prompt-file PATH --output-file PATH --receipt-file PATH [--repository-evidence-file PATH] [--independence-receipt-dir DIR --independence-receipt-id ID ... | --human-authored] [--contract-digest SHA256 --contract-revision N]' >&2
+  printf '%s\n' 'usage: role-dispatch --role ROLE --capability CAP [--capability CAP ...] --effort EFFORT --workflow-kernel PATH --prompt-file PATH --output-file PATH --receipt-file PATH [--repository-evidence-file PATH] [--independence-receipt-dir DIR --independence-receipt-id ID ... | --origin-file FILE | --human-authored] [--contract-digest SHA256 --contract-revision N]' >&2
   exit 2
 }
 
@@ -44,6 +46,7 @@ while [ "$#" -gt 0 ]; do
     --independence-receipt-dir) [ "$#" -ge 2 ] || usage; INDEPENDENCE_RECEIPT_DIR="$2"; shift 2 ;;
     --independence-receipt-id) [ "$#" -ge 2 ] || usage; INDEPENDENCE_RECEIPT_IDS+=("$2"); INDEPENDENCE_RECEIPT_COUNT=$((INDEPENDENCE_RECEIPT_COUNT + 1)); shift 2 ;;
     --human-authored) HUMAN_AUTHORED=1; shift ;;
+    --origin-file) [ "$#" -ge 2 ] || usage; ORIGIN_FILE="$2"; shift 2 ;;
     --contract-digest) [ "$#" -ge 2 ] || usage; CONTRACT_DIGEST="$2"; shift 2 ;;
     --contract-revision) [ "$#" -ge 2 ] || usage; CONTRACT_REVISION="$2"; shift 2 ;;
     --workflow-kernel) [ "$#" -ge 2 ] || usage; WORKFLOW_KERNEL_LAUNCHER="$2"; shift 2 ;;
@@ -89,13 +92,14 @@ if [ "$CAPABILITY_COUNT" -gt 0 ]; then
   done
 fi
 if printf '%s' "$CAPABILITIES_JSON" | jq -e 'index("independent-family") != null' >/dev/null &&
-   [ "$INDEPENDENCE_RECEIPT_COUNT" -eq 0 ] && [ "$HUMAN_AUTHORED" -ne 1 ]; then
+   [ "$INDEPENDENCE_RECEIPT_COUNT" -eq 0 ] && [ "$HUMAN_AUTHORED" -ne 1 ] && [ -z "$ORIGIN_FILE" ]; then
   printf '%s\n' 'role-dispatch: invalid independent-family request' >&2
   exit 2
 fi
-[ "$HUMAN_AUTHORED" -eq 0 ] || [ "$INDEPENDENCE_RECEIPT_COUNT" -eq 0 ] || usage
+[ "$HUMAN_AUTHORED" -eq 0 ] || { [ "$INDEPENDENCE_RECEIPT_COUNT" -eq 0 ] && [ -z "$ORIGIN_FILE" ]; } || usage
+[ -z "$ORIGIN_FILE" ] || { [ "$INDEPENDENCE_RECEIPT_COUNT" -eq 0 ] && [ "$HUMAN_AUTHORED" -eq 0 ]; } || usage
 if ! printf '%s' "$CAPABILITIES_JSON" | jq -e 'index("independent-family") != null' >/dev/null; then
-  [ "$HUMAN_AUTHORED" -eq 0 ] && [ "$INDEPENDENCE_RECEIPT_COUNT" -eq 0 ] && [ -z "$INDEPENDENCE_RECEIPT_DIR" ] || usage
+  [ "$HUMAN_AUTHORED" -eq 0 ] && [ "$INDEPENDENCE_RECEIPT_COUNT" -eq 0 ] && [ -z "$INDEPENDENCE_RECEIPT_DIR" ] && [ -z "$ORIGIN_FILE" ] || usage
 fi
 if [ "$INDEPENDENCE_RECEIPT_COUNT" -gt 0 ]; then
   [ -n "$INDEPENDENCE_RECEIPT_DIR" ] && [ -d "$INDEPENDENCE_RECEIPT_DIR" ] && [ ! -L "$INDEPENDENCE_RECEIPT_DIR" ] || usage
@@ -134,6 +138,7 @@ MATRIX_SNAPSHOT="$(jq -r '.matrixSnapshot' "$POLICY")"
 THRESHOLD="$(jq -r '.availability.headroomThresholdPct' "$POLICY")"
 EXCLUDED_FAMILIES='[]'
 INDEPENDENCE_IDS_JSON='[]'
+ORIGIN_CLASS="unknown"
 
 if [ "$INDEPENDENCE_RECEIPT_COUNT" -gt 0 ]; then
   for prior_id in "${INDEPENDENCE_RECEIPT_IDS[@]}"; do
@@ -156,6 +161,29 @@ if [ "$INDEPENDENCE_RECEIPT_COUNT" -gt 0 ]; then
     EXCLUDED_FAMILIES="$(printf '%s' "$EXCLUDED_FAMILIES" | jq -c --arg family "$family" '. + [$family] | unique | sort')"
     INDEPENDENCE_IDS_JSON="$(printf '%s' "$INDEPENDENCE_IDS_JSON" | jq -c --arg receipt_id "$prior_id" '. + [$receipt_id] | unique | sort')"
   done
+fi
+
+if [ "$HUMAN_AUTHORED" -eq 1 ]; then
+  ORIGIN_CLASS="human-authored"
+elif [ "$INDEPENDENCE_RECEIPT_COUNT" -gt 0 ]; then
+  ORIGIN_CLASS="receipted-model-work"
+elif [ -n "$ORIGIN_FILE" ]; then
+  [ -r "$ORIGIN_FILE" ] && [ ! -L "$ORIGIN_FILE" ] || usage
+  REPOSITORY_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || usage
+  ORIGIN_VERIFY_ARGS=(verify --repository "$REPOSITORY_ROOT" --file "$ORIGIN_FILE")
+  [ -z "$INDEPENDENCE_RECEIPT_DIR" ] || ORIGIN_VERIFY_ARGS+=(--receipt-dir "$INDEPENDENCE_RECEIPT_DIR")
+  ORIGIN_RESULT="$("$DIR/implementation-origin.sh" "${ORIGIN_VERIFY_ARGS[@]}")" || {
+    printf '%s\n' 'role-dispatch: invalid implementation origin' >&2
+    exit 2
+  }
+  printf '%s' "$ORIGIN_RESULT" | jq -e '.known == true' >/dev/null || {
+    printf '%s\n' 'role-dispatch: unknown implementation origin' >&2
+    exit 2
+  }
+  ORIGIN_CLASS="$(printf '%s' "$ORIGIN_RESULT" | jq -r '.originClass')"
+  ORIGIN_DECLARED=1
+  HUMAN_AUTHORED="$(printf '%s' "$ORIGIN_RESULT" | jq -r 'if .humanAuthored then 1 else 0 end')"
+  EXCLUDED_FAMILIES="$(printf '%s' "$ORIGIN_RESULT" | jq -c '.excludedFamilies')"
 fi
 
 local_profile_path() {
@@ -624,7 +652,7 @@ while IFS= read -r candidate; do
     fallback=false
     fallback_reason=none
     [ "$ATTEMPT_INDEX" -gt 1 ] && { fallback=true; fallback_reason="$LAST_REASON"; }
-    jq -n --arg receipt_id "$RECEIPT_ID" --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg requested_effort "$EFFORT" --arg effective_effort "$EFFECTIVE_EFFORT" --arg model "$model" --arg provider "$provider" --arg transport "$transport" --arg family "$family" --arg billing "$BILLING_MODE" --arg allowance_window "$ALLOWANCE_WINDOW" --arg matrix "$MATRIX_SNAPSHOT" --arg fallback_reason "$fallback_reason" --arg token_provenance "$token_provenance" --arg cost_provenance "$cost_provenance" --arg contract_digest "$CONTRACT_DIGEST" --arg probe_source "$PROBE_SOURCE" --argjson transport_stub "$TRANSPORT_STUB" --argjson contract_revision "$CONTRACT_REVISION_JSON" --argjson requested_candidate "$REQUESTED_CANDIDATE" --argjson capabilities "$CAPABILITIES_JSON" --argjson attempts "$ATTEMPTS" --argjson independence_ids "$INDEPENDENCE_IDS_JSON" --argjson excluded_families "$EXCLUDED_FAMILIES" --argjson fallback "$fallback" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" --argjson duration "$DURATION_SECONDS" --argjson usage "$usage_json" --argjson cost "$cost_json" --argjson commit "$commit_json" --argjson files_changed "$files_changed_json" '{schemaVersion:1,receiptId:$receipt_id,probeSource:$probe_source,transportStub:$transport_stub,requested:{role:$role,capabilities:$capabilities,effort:$requested_effort,independenceReceiptIds:$independence_ids,humanAuthored:$human_authored,candidate:{model:$requested_candidate.model,provider:$requested_candidate.provider,transport:$requested_candidate.transport}},contract_digest:(if $contract_digest == "" then null else $contract_digest end),revision:$contract_revision,participantId:$participant,attempts:$attempts,served:{model:$model,provider:$provider,transport:$transport,family:$family,billingMode:$billing,allowanceWindow:$allowance_window,durationSeconds:$duration,tokens:$usage,tokenProvenance:$token_provenance,billedCostUsd:$cost,costProvenance:$cost_provenance,commit:$commit,filesChanged:$files_changed},effectiveEffort:$effective_effort,effortNormalized:($requested_effort != $effective_effort),fallback:$fallback,fallbackReason:$fallback_reason,matrixSnapshot:$matrix,publication:{output:"pending"},familyIndependence:{required:(($independence_ids|length>0) or $human_authored),humanAuthored:$human_authored,excludedFamilies:$excluded_families,passed:true}}' > "$EMERGENCY_RECEIPT" || exit 76
+    jq -n --arg receipt_id "$RECEIPT_ID" --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg requested_effort "$EFFORT" --arg effective_effort "$EFFECTIVE_EFFORT" --arg model "$model" --arg provider "$provider" --arg transport "$transport" --arg family "$family" --arg billing "$BILLING_MODE" --arg allowance_window "$ALLOWANCE_WINDOW" --arg matrix "$MATRIX_SNAPSHOT" --arg fallback_reason "$fallback_reason" --arg token_provenance "$token_provenance" --arg cost_provenance "$cost_provenance" --arg contract_digest "$CONTRACT_DIGEST" --arg probe_source "$PROBE_SOURCE" --arg origin_class "$ORIGIN_CLASS" --argjson origin_declared "$([ "$ORIGIN_DECLARED" -eq 1 ] && printf true || printf false)" --argjson transport_stub "$TRANSPORT_STUB" --argjson contract_revision "$CONTRACT_REVISION_JSON" --argjson requested_candidate "$REQUESTED_CANDIDATE" --argjson capabilities "$CAPABILITIES_JSON" --argjson attempts "$ATTEMPTS" --argjson independence_ids "$INDEPENDENCE_IDS_JSON" --argjson excluded_families "$EXCLUDED_FAMILIES" --argjson fallback "$fallback" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" --argjson duration "$DURATION_SECONDS" --argjson usage "$usage_json" --argjson cost "$cost_json" --argjson commit "$commit_json" --argjson files_changed "$files_changed_json" '{schemaVersion:1,receiptId:$receipt_id,probeSource:$probe_source,transportStub:$transport_stub,requested:{role:$role,capabilities:$capabilities,effort:$requested_effort,independenceReceiptIds:$independence_ids,humanAuthored:$human_authored,originClass:$origin_class,candidate:{model:$requested_candidate.model,provider:$requested_candidate.provider,transport:$requested_candidate.transport}},contract_digest:(if $contract_digest == "" then null else $contract_digest end),revision:$contract_revision,participantId:$participant,attempts:$attempts,served:{model:$model,provider:$provider,transport:$transport,family:$family,billingMode:$billing,allowanceWindow:$allowance_window,durationSeconds:$duration,tokens:$usage,tokenProvenance:$token_provenance,billedCostUsd:$cost,costProvenance:$cost_provenance,commit:$commit,filesChanged:$files_changed},effectiveEffort:$effective_effort,effortNormalized:($requested_effort != $effective_effort),fallback:$fallback,fallbackReason:$fallback_reason,matrixSnapshot:$matrix,publication:{output:"pending"},familyIndependence:{required:(($independence_ids|length>0) or $human_authored or $origin_declared),humanAuthored:$human_authored,originClass:$origin_class,excludedFamilies:$excluded_families,passed:true}}' > "$EMERGENCY_RECEIPT" || exit 76
     cp "$TRANSPORT_OUTPUT" "$PUBLIC_OUTPUT_TMP" 2>/dev/null || publication_failed output-preparation-failed
     jq '.publication.output="published"' "$EMERGENCY_RECEIPT" > "$PUBLIC_RECEIPT_TMP" || publication_failed receipt-preparation-failed
     mv "$PUBLIC_OUTPUT_TMP" "$OUTPUT_FILE" 2>/dev/null || publication_failed output-publication-failed
@@ -662,6 +690,6 @@ while IFS= read -r candidate; do
   LAST_REASON="$reason"
 done <<< "$CANDIDATES"
 
-jq -n --arg receipt_id "$RECEIPT_ID" --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg effort "$EFFORT" --arg matrix "$MATRIX_SNAPSHOT" --arg reason "$LAST_REASON" --arg probe_source "$PROBE_SOURCE" --argjson transport_stub "$TRANSPORT_STUB" --argjson requested_candidate "$REQUESTED_CANDIDATE" --argjson capabilities "$CAPABILITIES_JSON" --argjson attempts "$ATTEMPTS" --argjson independence_ids "$INDEPENDENCE_IDS_JSON" --argjson excluded_families "$EXCLUDED_FAMILIES" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" '{schemaVersion:1,receiptId:$receipt_id,probeSource:$probe_source,transportStub:$transport_stub,requested:{role:$role,capabilities:$capabilities,effort:$effort,independenceReceiptIds:$independence_ids,humanAuthored:$human_authored,candidate:{model:$requested_candidate.model,provider:$requested_candidate.provider,transport:$requested_candidate.transport}},participantId:$participant,attempts:$attempts,served:null,effectiveEffort:$effort,effortNormalized:false,fallback:true,fallbackReason:$reason,matrixSnapshot:$matrix,familyIndependence:{required:(($independence_ids|length>0) or $human_authored),humanAuthored:$human_authored,excludedFamilies:$excluded_families,passed:false}}' > "$RECEIPT_FILE"
+jq -n --arg receipt_id "$RECEIPT_ID" --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg effort "$EFFORT" --arg matrix "$MATRIX_SNAPSHOT" --arg reason "$LAST_REASON" --arg probe_source "$PROBE_SOURCE" --arg origin_class "$ORIGIN_CLASS" --argjson origin_declared "$([ "$ORIGIN_DECLARED" -eq 1 ] && printf true || printf false)" --argjson transport_stub "$TRANSPORT_STUB" --argjson requested_candidate "$REQUESTED_CANDIDATE" --argjson capabilities "$CAPABILITIES_JSON" --argjson attempts "$ATTEMPTS" --argjson independence_ids "$INDEPENDENCE_IDS_JSON" --argjson excluded_families "$EXCLUDED_FAMILIES" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" '{schemaVersion:1,receiptId:$receipt_id,probeSource:$probe_source,transportStub:$transport_stub,requested:{role:$role,capabilities:$capabilities,effort:$effort,independenceReceiptIds:$independence_ids,humanAuthored:$human_authored,originClass:$origin_class,candidate:{model:$requested_candidate.model,provider:$requested_candidate.provider,transport:$requested_candidate.transport}},participantId:$participant,attempts:$attempts,served:null,effectiveEffort:$effort,effortNormalized:false,fallback:true,fallbackReason:$reason,matrixSnapshot:$matrix,familyIndependence:{required:(($independence_ids|length>0) or $human_authored or $origin_declared),humanAuthored:$human_authored,originClass:$origin_class,excludedFamilies:$excluded_families,passed:false}}' > "$RECEIPT_FILE"
 jq -n --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg effort "$EFFORT" --arg probe_source "$PROBE_SOURCE" --argjson transport_stub "$TRANSPORT_STUB" --argjson capabilities "$CAPABILITIES_JSON" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" --argjson excluded_family_count "$(printf '%s' "$EXCLUDED_FAMILIES" | jq 'length')" '{role:$role,capabilities:$capabilities,requestedEffort:$effort,effectiveEffort:$effort,participantId:$participant,disposition:"unavailable",fallback:true,evidenceSource:$probe_source,transportStub:$transport_stub,familyIndependence:{humanAuthored:$human_authored,excludedFamilyCount:$excluded_family_count},output:null}'
 exit 76

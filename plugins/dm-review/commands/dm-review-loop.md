@@ -84,6 +84,17 @@ review, final verification pass, and routed repair receives that same directory
 and `terminalModelReportOwner: dm-review-loop`; nested invocations suppress
 their own reports. Extend the index in deterministic dispatch-start order.
 
+Preserve the initial review's complete implementation receipt IDs or private
+exact-diff origin record across the one repair batch and affected-lane recheck.
+Every model-authored repair adds its live router receipt before recheck. If a
+repair is knowingly authored by the current Codex or Claude host without a
+router receipt, replace the exact-diff record with the truthful mixed-known
+record after the repair; this records the repair execution path and never
+infers who authored the pre-existing branch. A repair invalidates an earlier
+human-authored declaration. Do not ask the operator for receipt IDs created by
+this loop. Keep private provenance until terminal reporting and review
+disposition settle, then remove it through exact-owned cleanup.
+
 ### 2. Review-Fix Loop
 
 ```text
