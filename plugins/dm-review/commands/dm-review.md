@@ -64,19 +64,18 @@ transcripts, provider payloads, or artifact bytes. For partial reviews, bind
 the valid sources that exist and mark absent lane/browser/contribution,
 candidate, token, or cost facts unavailable rather than zero-filling them.
 
-Remove only the prior registered `.claude/ux-review/observation-index.json`
-through dm-review's existing artifact lifecycle before invoking. A failure to
-prove or remove that exact prior companion is `write-conflict`; never read it
-as evidence for the current review. Then invoke exactly once:
+Use the already validated exact-owned run ID in the durable filename, then
+invoke exactly once. Never select an existing file by recency or reuse another
+run's companion:
 
 ```text
-"$WORKFLOW_KERNEL" emit-observation-index --input <exact-run-root>/review/observation-index-input.json --output .claude/ux-review/observation-index.json
+"$WORKFLOW_KERNEL" emit-observation-index --input <exact-run-root>/review/observation-index-input.json --output .claude/ux-review/observation-index-<run-id>.json
 ```
 
 Append the durable accepted path and canonical digest to `run-receipt.md` and
 the complete report, or one
 closed `observation-index: unavailable (invalid-or-unsafe-input|runtime-unavailable|write-conflict|emission-failed)`
-line. Phase 8 preserves the accepted index beside `report.md` while removing
+line. Phase 8 preserves the accepted run-scoped index beside `report.md` while removing
 its private input with the exact-owned root. Failure cannot alter findings,
 coverage, merge recommendation, cleanup authority, or terminal model reporting.
 

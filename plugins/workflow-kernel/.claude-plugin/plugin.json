@@ -20,13 +20,14 @@
       {
         "id": "workflow-kernel",
         "name": "Workflow Kernel",
-        "description": "Inspect, validate, replay, and recover deterministic workflow state; plan tiered repository verification; clean exact-owned run resources; and validate behavioral contracts, contribution receipts, and attempt economics.",
+        "description": "Inspect, validate, replay, and recover deterministic workflow state; emit bounded cross-harness observation indexes; plan tiered repository verification; clean exact-owned run resources; and validate behavioral contracts, contribution receipts, and attempt economics.",
         "triggers": [
           "validate a workflow-kernel run",
           "replay workflow events",
           "inspect workflow-kernel state",
           "diagnose a corrupt run ledger",
           "recover workflow run state",
+          "emit a cross-harness observation index",
           "plan tiered repository verification",
           "clean exact-owned workflow resources"
         ],
@@ -34,6 +35,7 @@
           "workflow",
           "state-machine",
           "event-ledger",
+          "observation-index",
           "recovery"
         ],
         "mcpDependencies": []

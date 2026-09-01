@@ -78,7 +78,7 @@ Common questions mapped to the right skill:
 | the-local | element-branding | element-web, branding, css, theming, matrix | -- | "Element Web appearance", "auth page styling", "logo replacement", "welcome page", "custom CSS not applying", ... |
 | the-local | server-ops | server-ops, docker, matrix, digitalocean, infrastructure | -- | "SSH into server", "docker compose restart", "create Matrix account", "check server logs", "backup database", ... |
 | the-local | synapse-config | synapse, matrix, configuration, email, jinja2 | -- | "homeserver.yaml", "registration token", "email template", "SMTP setup", "Resend config", ... |
-| workflow-kernel | workflow-kernel | workflow, state-machine, event-ledger, recovery | -- | "validate a workflow-kernel run", "replay workflow events", "inspect workflow-kernel state", "diagnose a corrupt run ledger", "recover workflow run state", ... |
+| workflow-kernel | workflow-kernel | workflow, state-machine, event-ledger, observation-index, recovery | -- | "validate a workflow-kernel run", "replay workflow events", "inspect workflow-kernel state", "diagnose a corrupt run ledger", "recover workflow run state", ... |
 
 ## Agents Index
 

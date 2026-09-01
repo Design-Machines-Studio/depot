@@ -126,13 +126,12 @@ contributions, candidates, token counters, or cost unavailable. Raw findings,
 reviewer output, transcripts, provider payloads, and artifact content remain
 reference-bound.
 
-Remove only the prior registered `.claude/ux-review/observation-index.json`
-through the existing artifact lifecycle first. If its exact ownership cannot
-be proved or removal fails, record `write-conflict` and never treat it as
-current evidence. Then invoke the shared command exactly once:
+Use the already validated exact-owned run ID in the durable filename. Never
+select an existing file by recency or reuse another run's companion. Then
+invoke the shared command exactly once:
 
 ```text
-"$WORKFLOW_KERNEL" emit-observation-index --input <exact-run-root>/review/observation-index-input.json --output .claude/ux-review/observation-index.json
+"$WORKFLOW_KERNEL" emit-observation-index --input <exact-run-root>/review/observation-index-input.json --output .claude/ux-review/observation-index-<run-id>.json
 ```
 
 Record the durable accepted path plus canonical digest in `run-receipt.md` and
@@ -651,7 +650,8 @@ Never delete the feature branch under review. There is no condition under which 
 
 For a standalone owner, preserve the already-generated JSON and Markdown beside
 `run-cost-summary.json` while cleaning its private receipts. In every mode,
-preserve the accepted `.claude/ux-review/observation-index.json` companion. For an enclosing
+preserve the accepted `.claude/ux-review/observation-index-<run-id>.json`
+companion. For an enclosing
 owner, defer only that owner's exact private router directory and index; the
 enclosing workflow removes them after its one terminal render.
 
