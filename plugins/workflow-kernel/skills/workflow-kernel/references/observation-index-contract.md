@@ -88,6 +88,10 @@ validator recomputes whether the elapsed time agrees. `fresh` has no reason;
 `not_reported` or `clock_unknown`. The index reports this evidence but does not
 invent a global freshness threshold.
 
+Available-fact provenance falls within the closed interval from its bound
+source's observation time through index emission. A fact cannot claim to have
+been extracted before its source was observed or after the index was emitted.
+
 Candidate lineage and accepted/rejected disposition are public in v1. Candidate
 score remains explicitly unavailable because no current cross-harness consumer
 owns comparable scoring semantics.

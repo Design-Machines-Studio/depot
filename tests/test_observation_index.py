@@ -225,6 +225,11 @@ class ObservationIndexTests(unittest.TestCase):
             "observed_at", "2099-01-01T00:00:00Z",
         ))
 
+    def test_rejects_fact_provenance_before_bound_source_observation(self):
+        self.assert_invalid(lambda value: value["observations"]["objective"]["provenance"].__setitem__(
+            "observed_at", "2000-01-01T00:00:00Z",
+        ))
+
     def test_rejects_credential_shaped_public_text_without_echoing_it(self):
         value = sample_index()
         secret = "api_key=sk-test-observation-credential"

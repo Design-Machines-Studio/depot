@@ -145,17 +145,25 @@ def _provenance(value: object, source_digests: frozenset[str], label: str) -> No
     _timestamp(provenance["observed_at"], label + " observed_at")
 
 
-def _validate_provenance_times(value: object, emitted_at: datetime) -> None:
+def _validate_provenance_times(
+    value: object,
+    sources_by_digest: Mapping[str, dict],
+    emitted_at: datetime,
+) -> None:
     if type(value) is dict:
         if set(value) == _PROVENANCE_FIELDS:
             observed_at = _timestamp(value["observed_at"], "fact provenance observed_at")
-            if observed_at > emitted_at:
-                raise ValueError("fact provenance observation cannot be after index emission")
+            source = sources_by_digest.get(value["source_digest"])
+            if source is None:
+                raise ValueError("fact provenance source is not bound")
+            source_observed_at = _timestamp(source["observed_at"], "source observed_at")
+            if observed_at < source_observed_at or observed_at > emitted_at:
+                raise ValueError("fact provenance observation is outside its source-to-emission interval")
         for child in value.values():
-            _validate_provenance_times(child, emitted_at)
+            _validate_provenance_times(child, sources_by_digest, emitted_at)
     elif type(value) is list:
         for child in value:
-            _validate_provenance_times(child, emitted_at)
+            _validate_provenance_times(child, sources_by_digest, emitted_at)
 
 
 def _fact(
@@ -552,7 +560,7 @@ def validate_observation_index(index: Mapping[str, object]) -> None:
     )
     _fact(observations["next_action"], source_digests, "next_action", _string)
 
-    _validate_provenance_times(index, emitted_at)
+    _validate_provenance_times(index, sources_by_digest, emitted_at)
 
     _digest(index["digest"], "observation index digest")
     if index["digest"] != observation_index_digest(index):
