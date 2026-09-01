@@ -789,7 +789,7 @@ require_text "$review_skill" "references/selective-lane-allowlist.md" "review re
 require_text "$selective_allowlist" "never relax this equality check to a subset check" "allowlist contract requires exact selected_full_set equality"
 require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.17.0"' "dm-review requires the exact-owned cleanup kernel release"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.75.0"' "pipeline requires the exact-owned dm-review release"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.76.0"' "pipeline requires the reusable UI evidence dm-review release"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'family-independent second-opinion review' "dm-review manifest describes family-independent perspective resolution"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'Full mode only.' "migration-validator registry limits the lane to full mode"
@@ -1982,15 +1982,15 @@ else:
         print("FAIL  full-mode dispatch does not name the common prompt contract")
         fail = 1
     # Judge the citation by its paragraph, not its wrapped line: the guard
-    # ("If a rendered UI lane is selected ...") sits above the path itself.
+    # for selected UI analysis lanes sits above the path itself.
     visual_paras = [b for b in re.split(r"\n\s*\n", pc_text)
                     if "visual-finding-rules.md" in b]
-    ui_lane_re = re.compile(r"(if|only when|when|for)\b[^.]*rendered[- ]UI lane", re.I | re.S)
+    ui_lane_re = re.compile(r"(if|only when|when|for)\b[^.]*(rendered[- ]UI|UI analysis) lanes?", re.I | re.S)
     if visual_paras and all(ui_lane_re.search(b) for b in visual_paras) \
             and re.search(r"Non-UI lanes never receive", pc_text):
-        print("OK    visual finding rules are conditional on a rendered UI lane")
+        print("OK    visual finding rules are conditional on UI analysis lanes")
     else:
-        print("FAIL  visual finding rules are not conditional on a rendered UI lane")
+        print("FAIL  visual finding rules are not conditional on UI analysis lanes")
         fail = 1
     for anchor in ["untrusted input", "## Project Context", "## Fix Philosophy",
                    "## Caller-Provided Context",

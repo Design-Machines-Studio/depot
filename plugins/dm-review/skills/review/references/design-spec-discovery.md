@@ -35,12 +35,14 @@ applicable UI lanes -- individual agents do not discover external source.
    - Visual hierarchy decisions (what should be prominent, what should be subdued)
    - Specific visual treatments called out in the approved design
 6. Store the prototype packet (primary when present), local
-   `design_spec_context`, and already matched host browser evidence for
-   injection into rendered UI lanes in Phase 4. Source and browser proof are
-   complementary: screenshots cannot prove source hierarchy/classes/copy, and
-   source cannot prove spacing/composition. Required prototype browser evidence
-   uses matching routes, states, and viewports and cannot be replaced by a
-   target-only screenshot, curl, or `looks close`.
+   `design_spec_context`, and any already matched host browser evidence for
+   injection into applicable UI lanes in Phase 4. UI-standards and UX receive
+   the source packet even when browser evidence is absent; visual-browser does
+   not run without rendered proof. Source and browser proof are complementary:
+   screenshots cannot prove source hierarchy/classes/copy, and source cannot
+   prove spacing/composition. Required prototype browser evidence uses matching
+   routes, states, and viewports and cannot be replaced by a target-only
+   screenshot, curl, or `looks close`.
 7. Report to the user:
 
 ```text
@@ -57,7 +59,7 @@ usability, accessibility, responsiveness, security, and broken-state defects
 remain reviewable. When the prototype render is temporarily unavailable,
 preserve source findings but do not claim rendered parity complete.
 
-This context is injected only into applicable rendered UI lanes
+This context is injected only into applicable UI lanes
 (ux-quality-reviewer, visual-browser-tester, ui-standards-reviewer). Code-only
 agents do not need it.
 

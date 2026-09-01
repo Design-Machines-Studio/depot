@@ -43,6 +43,7 @@ run_prepare() {
   shift
   rm -f "$TMP/$name.state" "$TMP/$name.result"
   "$HELPER" prepare --repository-root "$REPO" --state-file "$TMP/$name.state" \
+    --applicable-lanes-json '["visual-browser-tester","ux-quality-reviewer","ui-standards-reviewer"]' \
     "$@" > "$TMP/$name.result" || rc=$?
   printf '%s\n' "$rc"
 }
@@ -126,7 +127,7 @@ git -C "$REPO" -c user.name=test -c user.email=test@example.invalid commit -qm d
 # Fractional retry/timeout values are rejected before Bash integer loops.
 jq '.readiness.attempts = 1.5' "$REPO/.dm/ui-review.json" > "$TMP/fractional.json"
 cp "$TMP/fractional.json" "$REPO/.dm/ui-review.json"
-fractional_rc="$(run_prepare fractional)"
+fractional_rc="$(run_prepare fractional --visual-required true)"
 assert test "$fractional_rc" -eq 76
 assert jq -e '.reason == "dev_server_unavailable" and .dispatchAllowed == false' "$TMP/fractional.result"
 git -C "$REPO" show HEAD:.dm/ui-review.json > "$REPO/.dm/ui-review.json"
@@ -140,11 +141,12 @@ JSON
 
 # A server started by the review is cleaned immediately when the local browser
 # is unavailable. Remote web search never satisfies the browser gate.
-web_prepare_rc="$(run_prepare remote-web)"
+web_prepare_rc="$(run_prepare remote-web --visual-required true)"
 assert test "$web_prepare_rc" -eq 0
 assert jq -e '.state == "app_ready" and .dispatchAllowed == false and .reason == "browser_evidence_required"' "$TMP/remote-web.result"
 assert test -e "$TEST_SERVER_MARKER"
 "$HELPER" prepare --repository-root "$REPO" --state-file "$TMP/remote-web.state" \
+  --applicable-lanes-json '["visual-browser-tester","ux-quality-reviewer","ui-standards-reviewer"]' \
   > "$TMP/remote-web-reprepare.result"
 assert jq -e '.createdResources == 1 and .dispatchAllowed == false' "$TMP/remote-web-reprepare.result"
 assert jq -e '.createdByReview == true and .cleanupPending == true and .stage == "app_ready"' "$TMP/remote-web.state"
@@ -161,8 +163,8 @@ touch "$TEST_SERVER_MARKER"
 preexisting_prepare_rc="$(run_prepare preexisting)"
 assert test "$preexisting_prepare_rc" -eq 0
 preexisting_rc="$(run_confirm preexisting "$TMP/missing-browser.json")"
-assert test "$preexisting_rc" -eq 76
-assert jq -e '.reason == "browser_transport_unavailable" and .dispatchAllowed == false' "$TMP/preexisting.confirmed"
+assert test "$preexisting_rc" -eq 0
+assert jq -e '.reason == "browser_transport_unavailable" and .dispatchAllowed == false and .coverageDisposition == "NOT RUN" and .reviewDisposition == "completed"' "$TMP/preexisting.confirmed"
 assert test "$(grep -c '^start$' "$TEST_RESOURCE_LOG")" -eq 1
 assert test "$(grep -c '^cleanup$' "$TEST_RESOURCE_LOG")" -eq 1
 assert test -e "$TEST_SERVER_MARKER"
@@ -173,19 +175,59 @@ assert test "$ready_prepare_rc" -eq 0
 ready_rc="$(run_confirm ready "$TMP/browser-ready.json")"
 assert test "$ready_rc" -eq 0
 assert jq -e '.state == "ready" and .dispatchAllowed == true and .browserTransport == "local-interactive"' "$TMP/ready.confirmed"
-cat > "$TMP/participant-completed.json" <<'JSON'
-{"role":"review-deep","capabilities":["read-repository","long-context","structured-output"],"disposition":"completed","evidenceSource":"live","transportStub":false}
+cat > "$TMP/analysis-completed.json" <<'JSON'
+{"evidenceSource":"live","transportStub":false,"lanes":[
+  {"lane":"visual-browser-tester","role":"review-deep","capabilities":["read-repository","long-context","structured-output"],"disposition":"completed"},
+  {"lane":"ux-quality-reviewer","role":"review-deep","capabilities":["read-repository","long-context","structured-output"],"disposition":"completed"},
+  {"lane":"ui-standards-reviewer","role":"review-deep","capabilities":["read-repository","long-context","structured-output"],"disposition":"completed"}
+]}
 JSON
 "$HELPER" settle --repository-root "$REPO" --state-file "$TMP/ready.state" \
-  --participant-result-file "$TMP/participant-completed.json" > "$TMP/ready-settled.json"
+  --analysis-result-file "$TMP/analysis-completed.json" > "$TMP/ready-settled.json"
 assert jq -e '.state == "completed" and .dispatchAllowed == false and .cleanup == "complete"' "$TMP/ready-settled.json"
 assert test -e "$TEST_SERVER_MARKER"
 set +e
 "$HELPER" settle --repository-root "$REPO" --state-file "$TMP/ready.state" \
-  --participant-result-file "$TMP/participant-completed.json" >/dev/null 2>&1
+  --analysis-result-file "$TMP/analysis-completed.json" >/dev/null 2>&1
 repeated_settle_rc=$?
 set -e
 assert test "$repeated_settle_rc" -eq 2
+
+# Settlement is bound to the exact lane set selected before readiness. A
+# submitted subset cannot silently stand in for the three planned lanes.
+missing_lanes_prepare_rc="$(run_prepare missing-lanes)"
+assert test "$missing_lanes_prepare_rc" -eq 0
+missing_lanes_ready_rc="$(run_confirm missing-lanes "$TMP/browser-ready.json")"
+assert test "$missing_lanes_ready_rc" -eq 0
+cat > "$TMP/analysis-missing-lanes.json" <<'JSON'
+{"evidenceSource":"live","transportStub":false,"lanes":[
+  {"lane":"visual-browser-tester","role":"review-deep","capabilities":["read-repository","long-context","structured-output"],"disposition":"completed"}
+]}
+JSON
+set +e
+"$HELPER" settle --repository-root "$REPO" --state-file "$TMP/missing-lanes.state" \
+  --analysis-result-file "$TMP/analysis-missing-lanes.json" > "$TMP/missing-lanes-settled.json"
+missing_lanes_settle_rc=$?
+set -e
+assert test "$missing_lanes_settle_rc" -eq 76
+assert jq -e '.reason == "model_participant_unavailable" and .reviewDisposition == "REVIEW INCOMPLETE"' "$TMP/missing-lanes-settled.json"
+
+# An intentional subset remains valid when prepare binds that exact set and
+# every planned lane completes.
+"$HELPER" prepare --repository-root "$REPO" --state-file "$TMP/subset.state" \
+  --applicable-lanes-json '["ui-standards-reviewer"]' > "$TMP/subset.result"
+assert jq -e '.state == "app_ready" and .dispatchAllowed == false' "$TMP/subset.result"
+"$HELPER" confirm-browser --repository-root "$REPO" --state-file "$TMP/subset.state" \
+  --browser-evidence-file "$TMP/browser-ready.json" > "$TMP/subset.confirmed"
+assert jq -e '.state == "ready" and .dispatchAllowed == true' "$TMP/subset.confirmed"
+cat > "$TMP/analysis-subset.json" <<'JSON'
+{"evidenceSource":"live","transportStub":false,"lanes":[
+  {"lane":"ui-standards-reviewer","role":"review-deep","capabilities":["read-repository","long-context","structured-output"],"disposition":"completed"}
+]}
+JSON
+"$HELPER" settle --repository-root "$REPO" --state-file "$TMP/subset.state" \
+  --analysis-result-file "$TMP/analysis-subset.json" > "$TMP/subset-settled.json"
+assert jq -e '.state == "completed" and .reviewDisposition == "completed"' "$TMP/subset-settled.json"
 
 # Browser evidence can be ready while the analysis participant is unavailable;
 # that cause is distinct, and only the resource created by this run is cleaned.
@@ -195,12 +237,16 @@ assert test "$participant_prepare_rc" -eq 0
 participant_ready_rc="$(run_confirm participant-unavailable "$TMP/browser-ready.json")"
 assert test "$participant_ready_rc" -eq 0
 assert jq -e '.createdResources == 1 and .dispatchAllowed == true' "$TMP/participant-unavailable.confirmed"
-cat > "$TMP/participant-unavailable.json" <<'JSON'
-{"role":"review-deep","capabilities":["read-repository","long-context","structured-output"],"disposition":"unavailable","evidenceSource":"live","transportStub":false}
+cat > "$TMP/analysis-unavailable.json" <<'JSON'
+{"evidenceSource":"live","transportStub":false,"lanes":[
+  {"lane":"visual-browser-tester","role":"review-deep","capabilities":["read-repository","long-context","structured-output"],"disposition":"completed"},
+  {"lane":"ux-quality-reviewer","role":"review-deep","capabilities":["read-repository","long-context","structured-output"],"disposition":"unavailable"},
+  {"lane":"ui-standards-reviewer","role":"review-deep","capabilities":["read-repository","long-context","structured-output"],"disposition":"completed"}
+]}
 JSON
 set +e
 "$HELPER" settle --repository-root "$REPO" --state-file "$TMP/participant-unavailable.state" \
-  --participant-result-file "$TMP/participant-unavailable.json" > "$TMP/participant-unavailable-settled.json"
+  --analysis-result-file "$TMP/analysis-unavailable.json" > "$TMP/participant-unavailable-settled.json"
 settle_rc=$?
 set -e
 assert test "$settle_rc" -eq 76
@@ -217,7 +263,7 @@ cp "$TMP/changed-declaration.json" "$REPO/.dm/ui-review.json"
 completed_ready_rc="$(run_confirm completed-created "$TMP/browser-ready.json")"
 assert test "$completed_ready_rc" -eq 0
 "$HELPER" settle --repository-root "$REPO" --state-file "$TMP/completed-created.state" \
-  --participant-result-file "$TMP/participant-completed.json" > "$TMP/completed-created-settled.json"
+  --analysis-result-file "$TMP/analysis-completed.json" > "$TMP/completed-created-settled.json"
 assert jq -e '.state == "completed" and .cleanup == "complete"' "$TMP/completed-created-settled.json"
 assert test "$(grep -c '^start$' "$TEST_RESOURCE_LOG")" -eq 3
 assert test "$(grep -c '^cleanup$' "$TEST_RESOURCE_LOG")" -eq 3
@@ -231,7 +277,7 @@ assert jq -e '.state == "already_clean" and .removedCount == 0' "$TMP/already-cl
 
 # Missing readiness is aggregated once even when three UI analysis lanes apply,
 # and remote web search never counts as local navigation.
-assert test "$(grep -c 'one aggregated `visual_target_unavailable` coverage note' "$ROOT/plugins/dm-review/skills/review/references/ui-review-readiness.md")" -eq 1
+assert test "$(grep -c 'Do not repeat that note for the three UI lanes.' "$ROOT/plugins/dm-review/skills/review/references/ui-review-readiness.md")" -eq 1
 assert grep -Fq 'OpenRouter web search is remote public-web retrieval.' "$ROOT/plugins/dm-review/skills/review/references/ui-review-readiness.md"
 
 printf 'dm-review-ui-readiness: %d assertions passed\n' "$pass"

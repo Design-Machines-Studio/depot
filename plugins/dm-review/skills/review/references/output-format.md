@@ -193,8 +193,12 @@ For explicitly required rendered coverage, emit exactly one of
 `resource_cleanup_failed`; never include raw tool/provider output, a private
 path, account data, or quota details. These readiness failures are not code
 findings. In an ordinary review with no target, place one aggregated
-`visual_target_unavailable -- NOT RUN` note in the Agent Summary instead; it is
-not an incomplete required gap and is never repeated per UI analysis lane.
+`visual_target_unavailable -- NOT RUN` note in the Agent Summary instead. Every
+already-selected source-capable UI lane still shows a completed `source-only`
+row; an already-selected visual-browser lane shows `NOT RUN`, while unselected
+lanes get no manufactured row. It is not an incomplete required gap and is
+never repeated per UI analysis lane. Never request one attachment or rerun per
+lane; name one missing target/start/evidence prerequisite.
 If none, state `Coverage Gaps: none -- all required lanes completed.`
 
 ---

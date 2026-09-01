@@ -2,7 +2,7 @@
 name: visual-test
 description: Standalone visual browser testing for rendered web pages. Tests responsive layouts, interactive states, and runtime accessibility using Playwright MCP tools. Use with /dm-review-visual, /dm-review-visual <url>, or when the user says "test this visually", "check in the browser", "test responsive", "visual QA", or "check the page".
 disable-model-invocation: true
-argument-hint: "[url]"
+argument-hint: "[url|--states|--a11y|--all]"
 allowed-tools:
   - mcp__plugin_compound-engineering_pw__browser_navigate
   - mcp__plugin_compound-engineering_pw__browser_take_screenshot
@@ -26,10 +26,11 @@ Standalone visual testing that loads pages in a real browser, screenshots at mul
 ## Usage
 
 - `/dm-review-visual` -- use an attached T3 preview or optional tracked
-  `.dm/ui-review.json`, then test all discoverable pages
+  `.dm/ui-review.json`, then test the affected selected cases
 - `/dm-review-visual <url>` -- test a specific URL
 - `/dm-review-visual --states` -- focus on interactive state testing only
 - `/dm-review-visual --a11y` -- focus on runtime accessibility checks only
+- `/dm-review-visual --all` -- run the complete repository-declared matrix
 
 ## Process
 
@@ -61,24 +62,31 @@ silently skip required browser testing, and never treat curl as browser proof.
 **Local target:** Use the exact selected URL. Do not substitute a preferred
 domain or guessed port.
 
-**Page discovery:** After connecting to the dev server, discover testable pages:
+**Case selection:** Load the review skill's `ui-case-selection.md`. Ordinary
+invocations start from changed rendered files/routes, matching prototype and
+acceptance cases, directly affected dimensions, and at most one justified
+baseline. Do not widen supported engine/viewport declarations into a full
+matrix. `--all` is the explicit full-matrix mode.
 
-- **Assembly Baseplate:** Scan `internal/fixtures/*/routes.go` for route registrations (`r.Get`, `r.Post`, `r.Handle`) to build the testable URL list. Each fixture's routes file declares all its HTTP endpoints.
-- Check for a sitemap at `/sitemap.xml`
-- Scan the codebase for route registrations (Go handlers) or template files (Twig, HTML)
-- Use the base URL `/` as the minimum test target
-- If git diff context is available, prioritize pages affected by changed files
+Use only the host-materialized selected cases and their exact resolved routes.
+Do not scan for candidate pages, substitute `/`, or add a homepage/base-route
+fallback. A required changed surface without an exact route remains
+`unresolved-rendered-route` and keeps the visual review incomplete.
 
 ### Phase 2: Visual Testing
 
 Read the visual-browser-tester agent definition from `plugins/dm-review/agents/review/visual-browser-tester.md` and execute its full eight-phase testing protocol (Baseline, Responsive, State Testing, Accessibility Runtime, Live Wires, UX Design, Visual Design Quality, Live Wires CSS Compliance).
 
-Use `${CLAUDE_SKILL_DIR}/references/breakpoints.md` for viewport dimensions and `${CLAUDE_SKILL_DIR}/references/state-testing.md` for the interactive element state matrix.
+Use `${CLAUDE_SKILL_DIR}/references/breakpoints.md` only to interpret the
+explicitly selected viewport IDs; do not add default breakpoints. Use
+`${CLAUDE_SKILL_DIR}/references/state-testing.md` for the interactive element
+state matrix of the selected cases.
 
 **Flag handling:**
 
 - `--states` -- run Phase C (State Testing) only
 - `--a11y` -- run Phase D (Accessibility Runtime) only
+- `--all` -- run all phases for the complete declared case matrix
 - No flag -- run all eight phases
 
 ### Phase 3: Report

@@ -771,6 +771,18 @@ and bind its result, exact command, policy source, and candidate SHA into the
 existing verification evidence. The caller separately collects required native
 CI or independent review evidence bound to the exact candidate head.
 
+When any executed chunk has `renderedSurface: required`, load
+`plugins/pipeline/references/final-review-browser-evidence.md`. On the exact
+integrated candidate head, run one host-owned capture for the selected affected
+browser cases, create the explicit bounded packet in the current ignored
+Pipeline evidence directory, and pass its exact packet and selected-case paths
+to the final dm-review. Do not discover a latest packet. The nested review must
+validate exact repository/prototype commits, dirty state, case equality,
+successful completion, and every artifact hash before reuse. An accepted packet
+prevents a second capture and is shared across all applicable UI analyses; a
+rejected packet falls back to normal readiness and never grants rendered
+success. When no chunk requires a rendered surface, create and pass no packet.
+
 First materialize the cumulative authoritative receipt array through the `all-chunks-complete` boundary and run the first `observe-pipeline` checkpoint. The observation remains shadow evidence and cannot approve the final review.
 
 Verification invariant: preserve family independence required by the selected
@@ -810,6 +822,10 @@ Declared Prototype Context, when applicable:
 MATCHED ROUTE/STATE/VIEWPORT CASES, BOUNDED PARITY CHECKLIST, AND INTENTIONAL
 DIFFERENCES. REQUIRE SOURCE AND RENDERED COMPARISON; TREAT GENERIC HEURISTICS AS
 SECONDARY FOR COVERED DECISIONS.]
+
+Explicit Pipeline Browser Evidence, when applicable:
+[INLINE THE EXACT uiBrowserEvidencePacket AND uiBrowserSelectedCases PATHS
+CREATED FOR THIS INTEGRATED CANDIDATE. DO NOT SEARCH FOR A LATEST PACKET.]
 
 In addition to code quality, check whether the branch advances the approved
 project goal, satisfies every requirement/outcome, and stays within the approved

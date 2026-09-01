@@ -1,10 +1,33 @@
 # Required UI-lane readiness
 
-This contract is consumed only by dm-review's selected rendered UI lanes. It
-prevents participant dispatch when no rendered application or real local
-interactive browser exists. It replaces reviewer-owned localhost scanning,
+This contract is consumed once when any of dm-review's three logical UI lanes
+is selected. It separates source-capable analysis from rendered proof, prevents
+the visual-browser lane from dispatching without a rendered application or
+accepted exact-head evidence, and replaces reviewer-owned localhost scanning,
 generic `tool-use` guesses, and OpenRouter web-search substitution. It is not a
 browser broker, capability negotiation framework, or workflow engine.
+
+## Lane evidence classes
+
+- `ui-standards-reviewer` always runs when triggered. From changed target
+  source, exact prototype source, the bounded parity packet, local design
+  specifications, components, and Live Wires patterns it may assess hierarchy,
+  wrappers, reuse, exact class strings, literal copy/metadata, action order,
+  and named intentional differences. Without browser evidence it is
+  `source-only` and cannot pass spacing, computed style, interaction,
+  responsive behavior, or rendered parity.
+- `ux-quality-reviewer` always runs when triggered. Its labelled `source-only`
+  pass may assess represented task flow, routes/templates, control placement,
+  action order, copy/metadata, source-visible information hierarchy, and
+  prototype/source divergence. It cannot pass rendered usability, focus,
+  computed styles, responsiveness, or visual parity.
+- `visual-browser-tester` requires a live target or an accepted exact-head
+  packet for the selected cases. It is `NOT RUN` when that rendered proof is
+  absent.
+
+Load `ui-case-selection.md` first and materialize one selected case set. Run
+`ui-review-contract.sh plan` after the one readiness/packet decision to project
+the source/rendered disposition without duplicating the gap per lane.
 
 ## Target selection
 
@@ -16,9 +39,12 @@ Select exactly one target in this order:
 4. otherwise no rendered target is available.
 
 Pass invocation and T3 targets to `prepare` with `--target-url` and
-`--target-source explicit|t3-preview`. Do not scan localhost ports, infer a URL
-from file extensions, or guess a start command. The helper validates the URL;
-successful host navigation remains the readiness proof.
+`--target-source explicit|t3-preview`. Every `prepare` call also passes the
+exact nonempty selected UI lane set as `--applicable-lanes-json`; the helper
+binds it into state so settlement cannot omit a planned participant. Do not
+scan localhost ports, infer a URL from file extensions, or guess a start
+command. The helper validates the URL; successful host navigation remains the
+readiness proof.
 
 "One target" applies per readiness state. When a host-resolved prototype
 parity packet supplies both an exact prototype URL and target URL, run this
@@ -65,8 +91,9 @@ consumer is sufficient.
 ## Ordered gate
 
 1. Select the target using the order above. For an explicit URL or attached T3
-   preview, run `ui-review-readiness.sh prepare` with that exact target. For a
-   declaration, check its application readiness independently with `prepare`.
+   preview, run `ui-review-readiness.sh prepare` with that exact target and the
+   exact selected UI lane set. For a declaration, check its application
+   readiness independently with `prepare` and the same lane set.
 2. If a stopped `process` consumer has an exact start procedure, start it and
    register only that created resource. `prepare` returns `app_ready` with
    `dispatchAllowed: false` and leaves that registered process available for
@@ -78,7 +105,7 @@ consumer is sufficient.
    `preview_status`; if no automation-capable preview is attached, call
    `preview_open`, then navigate the exact declared target. A tool name or
    generic `tool-use` is not readiness evidence.
-5. Materialize a private bounded browser evidence file only after successful
+5. Materialize one private bounded browser evidence file only after successful
    local navigation:
 
    ```json
@@ -105,15 +132,38 @@ consumer is sufficient.
    For a declared counterpart, include matched prototype/target route, state,
    viewport, targeted hierarchy, actual classes, visible copy/action order, and
    explanatory layout/spacing values. Exact theme colors are not a parity gate.
-8. Settle the public participant result through `ui-review-readiness.sh
-   settle`, then clean every exact registered process or Compose resource.
+8. Dispatch each applicable analysis lane once with the same packet reference.
+   Settle the aggregate analysis result once through `ui-review-readiness.sh
+   settle`; settlement requires the result lane set to equal the set bound by
+   `prepare`. Then clean every exact registered process or Compose resource.
    Install the same cleanup call on interruption and failure paths.
 
 The private state has a closed `app_ready` -> `ready` -> `settled` lifecycle.
 It snapshots the exact readiness and cleanup argv/timeouts when the process is
 registered; cleanup never reloads a mutable declaration. A failed confirmation
-closes the state after exact cleanup. A settled state cannot be reused for a
-second participant, and repeated cleanup reports zero resources removed.
+closes the state after exact cleanup. The ready state belongs to the
+review-level packet, not one participant; settle consumes it only after the
+applicable UI analyses join. Repeated cleanup reports zero resources removed.
+
+## Explicit Pipeline evidence reuse
+
+An enclosing Pipeline may pass one exact packet path from its owned ignored
+run/evidence directory. Never glob for it, choose a latest file, or infer it
+from timestamps. Validate it with `browser-evidence-packet.sh validate` against
+the current repository identity, exact commit, clean/dirty state, selected
+case-set equality, prototype identity/commit when applicable, successful
+completion, and every artifact hash. The packet schema is closed and bounded;
+it excludes credentials, private endpoints, raw browser storage, complete HTML,
+and unbounded logs.
+
+The packet records dirty state for truthful diagnostics, but reusable evidence
+requires a clean exact head because the bounded packet intentionally carries no
+uncommitted-diff database or second content ledger.
+
+An accepted packet replaces a second host capture for exactly its selected
+cases and feeds the same three applicable UI analyses. A rejection is explicit
+and never grants rendered success: attempt ordinary current target readiness;
+if that also fails, retain the single rendered gap when evidence is required.
 
 OpenRouter web search is remote public-web retrieval. It never satisfies this
 local browser contract. No model-router candidate currently advertises local
@@ -125,19 +175,19 @@ probe that proves local navigation.
 | Reason | Review state | One next action |
 |---|---|---|
 | `visual_target_unavailable` | `NOT RUN` ordinarily; `REVIEW INCOMPLETE` when required | Supply an explicit URL, attach T3 preview, or add the optional declaration when coverage is required. |
-| `dev_server_unavailable` | `REVIEW INCOMPLETE` | Declare or recover the exact repository-owned consumer and rerun. |
-| `browser_transport_unavailable` | `REVIEW INCOMPLETE` | Attach a local interactive browser, navigate the target, and rerun. |
+| `dev_server_unavailable` | `NOT RUN` ordinarily; `REVIEW INCOMPLETE` when required | Declare or recover the exact repository-owned consumer when rendered coverage is required. |
+| `browser_transport_unavailable` | `NOT RUN` ordinarily; `REVIEW INCOMPLETE` when required | Attach a local interactive browser or pass exact matching evidence when rendered coverage is required. |
 | `model_participant_unavailable` | `REVIEW INCOMPLETE` | Restore an eligible provider-neutral analysis participant and rerun the lane. |
 | `resource_cleanup_failed` | `REVIEW INCOMPLETE` | Run only the recorded repository-owned cleanup and inspect that resource. |
 
 These are prerequisite/coverage outcomes, never code-quality findings. When no
-target exists during an ordinary quick or full review, dispatch no UI analysis
-participant and emit one aggregated `visual_target_unavailable` coverage note
-with `NOT RUN`; the review remains otherwise complete. Do not repeat that note
-for visual-browser, UX-quality, and UI-standards lanes.
+target exists during an ordinary quick or full review, run the source-capable
+UI lanes, leave visual-browser `NOT RUN`, and emit one aggregated
+`visual_target_unavailable` coverage note with `NOT RUN`; the review remains
+otherwise complete. Do not repeat that note for the three UI lanes.
 
 Rendered evidence is required only for `/dm-review-visual`, explicit user or
 acceptance-criteria requirements, or a repository verification profile. Call
 `prepare --visual-required true` for those cases. If no target exists, emit one
 honest `REVIEW INCOMPLETE` coverage result and one next action. File extensions
-alone do not make visual infrastructure mandatory.
+and template changes alone do not make visual infrastructure mandatory.

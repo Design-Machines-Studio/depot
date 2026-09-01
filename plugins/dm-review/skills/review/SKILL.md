@@ -252,6 +252,9 @@ DM_REVIEW_REQUIRED_ASSETS=(
   "skills/review/references/host-verification-evidence.md"
   "skills/review/references/ui-review-readiness.md"
   "skills/review/references/ui-review-readiness.sh"
+  "skills/review/references/ui-review-contract.sh"
+  "skills/review/references/ui-case-selection.md"
+  "skills/review/references/browser-evidence-packet.sh"
 )
 ACCESSIBILITY_REQUIRED_ASSETS=()
 LIVE_WIRES_REQUIRED_ASSETS=()
@@ -424,24 +427,40 @@ normal tests/build analysis requests `read-repository` and
 ### Phase 3.9: Proportional UI readiness
 
 When any browser/UI lane is selected, load
-`${CLAUDE_SKILL_DIR}/references/ui-review-readiness.md` and complete its
-application and local-browser gate once before model dispatch. Select an
-explicit invocation URL first, then an already attached automation-capable T3
-preview, then optional tracked `.dm/ui-review.json`. Start only an exact
-declared process or Compose consumer and track only resources this invocation
-created. Never infer readiness from changed file extensions.
+`${CLAUDE_SKILL_DIR}/references/ui-case-selection.md` and
+`${CLAUDE_SKILL_DIR}/references/ui-review-readiness.md`. Run the host
+route-mapping preflight from `ui-case-selection.md`, recording exact
+file-to-route pairs or `unresolved-rendered-route`, then select affected cases
+once and complete one application and local-browser decision before model
+dispatch. Select an explicit invocation URL first, then an already attached
+automation-capable T3 preview, then optional tracked `.dm/ui-review.json`.
+Start only an exact declared process or Compose consumer and track only
+resources this invocation created. Never infer readiness from changed file
+extensions or interpret supported viewport/engine declarations as a full
+matrix requirement.
 
 Verify application reachability and actual local interactive browser
 navigation independently. OpenRouter web search and generic `tool-use` never
 satisfy local browser readiness. Current browser interaction is host-owned;
 collect bounded evidence once and pass the same packet to each mapped
-provider-neutral analysis role without a `browser` capability request. If no
-target exists in an ordinary review, dispatch no UI participant and emit one
-nonblocking visual coverage note; do not repeat it per lane. Keep `REVIEW
-INCOMPLETE` only when rendered evidence was explicitly required by
-`/dm-review-visual`, the user, acceptance criteria, or a verification profile.
-If readiness succeeds but the role is unavailable, report
-`model_participant_unavailable` distinctly.
+provider-neutral analysis role without a `browser` capability request. When
+browser proof is absent, run only the already-selected source-capable UI lanes
+as labelled source-only analysis; never add a lane during fallback, and do not
+dispatch an already-selected visual-browser lane. Emit one shared rendered
+coverage result, never one per lane. Keep `REVIEW INCOMPLETE` only when rendered
+evidence was explicitly required by `/dm-review-visual`, the user, acceptance
+criteria, a `renderedSurface: required` Pipeline chunk, required prototype
+parity, or an explicit verification profile case. Template extensions alone
+never create that requirement. If readiness succeeds but an analysis role is
+unavailable, report `model_participant_unavailable` distinctly.
+
+When Pipeline passes an explicit exact packet path, validate it with
+`browser-evidence-packet.sh` before readiness. Reuse it only for exact matching
+repository/prototype commits, clean/dirty state, selected case set, successful
+completion, and artifact hashes. Never discover a packet by latest file or
+timestamp. On rejection, attempt normal current target readiness; a required
+review with neither valid evidence nor a ready target retains the one rendered
+gap.
 
 ---
 
@@ -519,7 +538,7 @@ Keep the consolidated report body provisional through the remaining phases. Do n
 
 #### Coverage receipt and shadow observation
 
-Emit an authoritative coverage receipt after consolidation with one row per selected lane and per required verification case: role, requested/effective effort, anonymous participant, fallback/reason, completed/degraded/unavailable status, finding count, and evidence reference. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report.
+Emit an authoritative coverage receipt after consolidation with one row per selected lane and per required verification case: role, requested/effective effort, anonymous participant, fallback/reason, completed/degraded/unavailable status, finding count, and evidence reference. A source-only UI-standards or UX-quality row is completed for its declared scope and explicitly excludes rendered claims. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report. One readiness cause produces one browser coverage row, not three lane failures.
 
 The receipt also records whether `review_lane_allowlist` was received and its disposition (`APPLIED`, `DISCARDED`, or `ABSENT`; a discarded input records the exact closed-set reason). It records the exact set of logical lanes actually `DISPATCHED` on this pass and the exact set in the recomputed selected full set that were deliberately `NOT_DISPATCHED` because an applied allowlist omitted them. The caller verifies the restriction against this receipt rather than assuming it was honored. Deliberately not-dispatched lanes under an applied allowlist are distinct from missing or failed required rows and do not by themselves make the review `REVIEW INCOMPLETE`; a dispatched lane that does not complete still does.
 
@@ -623,7 +642,7 @@ invocation.
 
 ## Reference Files
 
-Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `ui-review-readiness.md` (required UI application/browser gate), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (exact worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
+Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `ui-case-selection.md` (affected/full UI case boundary), `ui-review-readiness.md` (shared source/rendered readiness gate), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (exact worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
 
 ## Agent Definition Paths
 

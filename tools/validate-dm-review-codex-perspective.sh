@@ -338,6 +338,8 @@ reject_text "$review_skill" 'Phase 5.5: Simplification Pass' "active simplificat
 reject_text "$review_skill" 'refactor: simplify per dm-review pass' "automatic simplification commit is retired"
 reject_text "$review_skill" 'diff < 100 lines' "quick roster does not scale by diff size"
 require_text "$review_skill" 'Ordinary quick review always selects exactly these two core judgment lanes' "ordinary quick roster has exact core contract"
+require_text "$review_skill" 'never add a lane during fallback' "quick readiness fallback preserves the selected roster"
+reject_text "$review_skill" 'Run UI-standards and UX-quality as labelled source-only analysis when browser proof' "quick readiness fallback does not hard-code the full UI roster"
 require_text "$review_skill" '**pattern-recognition-specialist**' "quick roster includes pattern recognition"
 require_text "$review_skill" '**code-simplicity-reviewer**' "quick roster includes code simplicity"
 require_text "$review_skill" 'Do not add `second-perspective`' "quick roster excludes second perspective"
@@ -393,10 +395,10 @@ for zero_deferral_surface in \
   reject_text "$zero_deferral_surface" 'P3 advisories' "${zero_deferral_surface#$REPO_ROOT/} rejects deferred P3 evidence"
   reject_text "$zero_deferral_surface" 'P3 stays advisory' "${zero_deferral_surface#$REPO_ROOT/} rejects clean-with-P3 policy"
 done
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.75.0"' "canonical dm-review version is 1.75.0"
-require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.75.0"' "generated dm-review version is 1.75.0"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.62.0"' "canonical Pipeline version is 1.62.0"
-require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.75.0"' "generated Pipeline dependency floor is current"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.76.0"' "canonical dm-review version is 1.76.0"
+require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.76.0"' "generated dm-review version is 1.76.0"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.63.0"' "canonical Pipeline version is 1.63.0"
+require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.76.0"' "generated Pipeline dependency floor is current"
 
 printf "Synthesis identity fixtures\n"
 base_id=$(fixture_finding_id \
