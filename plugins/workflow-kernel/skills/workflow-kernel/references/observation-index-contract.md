@@ -75,9 +75,11 @@ transcripts, provider payloads, policy files, plugin contents, and artifact
 bytes never enter the index.
 
 Every source declares a source timestamp, observation timestamp, and a closed
-freshness state. `fresh` has no reason; `stale` and `unknown` require one of
-`age_exceeded`, `not_reported`, or `clock_unknown`. The index reports this
-evidence but does not invent a global freshness threshold.
+freshness state. Fresh and stale sources declare their own maximum age, and the
+validator recomputes whether the elapsed time agrees. `fresh` has no reason;
+`stale` requires `age_exceeded`. Unknown freshness has no maximum age and uses
+`not_reported` or `clock_unknown`. The index reports this evidence but does not
+invent a global freshness threshold.
 
 ## Digest
 

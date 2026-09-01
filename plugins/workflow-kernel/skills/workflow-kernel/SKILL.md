@@ -71,6 +71,14 @@ Pipeline and review observation, review contribution export, comparison,
 metrics, cost summaries, attempt recording, and measurement append paths reject
 duplicate object members and non-finite constants before writing any output.
 
+Use `emit-observation-index --input <typed.json> --output
+<observation-index.json>` to validate and atomically claim one deterministic,
+observation-only cross-harness sidecar. The typed input must name exactly one
+digest-bound producer and bind every available fact to a declared canonical
+source. The command does not parse transcripts or raw provider/review output,
+infer a producer from shared stages, overwrite stale output, or change an
+authoritative run outcome. See `references/observation-index-contract.md`.
+
 For disposable run roots, temporary repositories, caches, raw output, Git
 worktrees/branches, and Docker resources, read
 `references/exact-owned-cleanup.md`. Filesystem paths use the small

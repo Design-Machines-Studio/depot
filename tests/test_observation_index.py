@@ -1,8 +1,15 @@
 import copy
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
 import unittest
 
 from workflow_kernel.observation_index import (
-    observation_index_digest, validate_observation_index,
+    compose_observation_index, observation_index_digest,
+    validate_observation_index,
 )
 
 
@@ -44,21 +51,24 @@ def sample_index():
                 "role": "producer", "reference": "receipts/terminal.json",
                 "digest": DIGEST_A, "media_type": "application/json",
                 "size_bytes": 120, "source_timestamp": STAMP,
-                "observed_at": STAMP, "freshness": "fresh",
+                "observed_at": STAMP, "maximum_age_seconds": 3600,
+                "freshness": "fresh",
                 "freshness_reason": None,
             },
             {
                 "role": "receipts", "reference": "receipts/attempts.jsonl",
                 "digest": DIGEST_B, "media_type": "application/x-ndjson",
                 "size_bytes": 240, "source_timestamp": STAMP,
-                "observed_at": STAMP, "freshness": "fresh",
+                "observed_at": STAMP, "maximum_age_seconds": 3600,
+                "freshness": "fresh",
                 "freshness_reason": None,
             },
             {
                 "role": "cost", "reference": "receipts/cost.json",
                 "digest": DIGEST_C, "media_type": "application/json",
-                "size_bytes": 90, "source_timestamp": STAMP,
-                "observed_at": STAMP, "freshness": "stale",
+                "size_bytes": 90, "source_timestamp": "2026-08-31T00:00:00Z",
+                "observed_at": STAMP, "maximum_age_seconds": 3600,
+                "freshness": "stale",
                 "freshness_reason": "age_exceeded",
             },
         ],
@@ -198,6 +208,59 @@ class ObservationIndexTests(unittest.TestCase):
         value["digest"] = DIGEST_A
         with self.assertRaisesRegex(ValueError, "digest mismatch"):
             validate_observation_index(value)
+
+    def test_freshness_is_recomputed_from_declared_maximum_age(self):
+        self.assert_invalid(lambda value: value["sources"][2].__setitem__("freshness", "fresh"))
+        self.assert_invalid(lambda value: value["sources"][0].__setitem__("maximum_age_seconds", None))
+
+    def test_four_conformance_inputs_compose_and_validate(self):
+        root = Path(__file__).parent / "fixtures" / "observation-index"
+        names = (
+            "pipeline-complete-v1.json", "dm-review-complete-v1.json",
+            "dm-review-partial-v1.json", "generic-unavailable-v1.json",
+        )
+        for name in names:
+            with self.subTest(name=name):
+                raw = json.loads((root / name).read_text(encoding="utf-8"))
+                composed = compose_observation_index(raw)
+                validate_observation_index(composed)
+                self.assertEqual(composed["digest"], observation_index_digest(composed))
+
+    def test_composer_is_byte_deterministic(self):
+        path = Path(__file__).parent / "fixtures" / "observation-index" / "pipeline-complete-v1.json"
+        raw = json.loads(path.read_text(encoding="utf-8"))
+        left = compose_observation_index(raw)
+        right = compose_observation_index(copy.deepcopy(raw))
+        self.assertEqual(left, right)
+
+    def test_emit_cli_claims_new_output_and_refuses_stale_or_symlink(self):
+        fixture = Path(__file__).parent / "fixtures" / "observation-index" / "pipeline-complete-v1.json"
+        environment = dict(os.environ)
+        references = Path(__file__).parents[1] / "plugins" / "workflow-kernel" / "skills" / "workflow-kernel" / "references"
+        environment["PYTHONPATH"] = str(references)
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            first = root / "first.json"
+            second = root / "second.json"
+            command = [sys.executable, "-m", "workflow_kernel", "emit-observation-index", "--input", str(fixture)]
+            one = subprocess.run([*command, "--output", str(first)], env=environment, text=True, capture_output=True, check=False)
+            two = subprocess.run([*command, "--output", str(second)], env=environment, text=True, capture_output=True, check=False)
+            self.assertEqual(one.returncode, 0, one.stderr)
+            self.assertEqual(two.returncode, 0, two.stderr)
+            self.assertEqual(first.read_bytes(), second.read_bytes())
+
+            stale_before = first.read_bytes()
+            stale = subprocess.run([*command, "--output", str(first)], env=environment, text=True, capture_output=True, check=False)
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertEqual(first.read_bytes(), stale_before)
+
+            victim = root / "victim.json"
+            victim.write_text("safe", encoding="utf-8")
+            link = root / "link.json"
+            link.symlink_to(victim)
+            unsafe = subprocess.run([*command, "--output", str(link)], env=environment, text=True, capture_output=True, check=False)
+            self.assertNotEqual(unsafe.returncode, 0)
+            self.assertEqual(victim.read_text(encoding="utf-8"), "safe")
 
 
 if __name__ == "__main__":

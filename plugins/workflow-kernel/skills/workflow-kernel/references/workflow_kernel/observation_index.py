@@ -50,7 +50,8 @@ _PRODUCER_FIELDS = frozenset({
 })
 _SOURCE_FIELDS = frozenset({
     "role", "reference", "digest", "media_type", "size_bytes",
-    "source_timestamp", "observed_at", "freshness", "freshness_reason",
+    "source_timestamp", "observed_at", "maximum_age_seconds", "freshness",
+    "freshness_reason",
 })
 _RUN_FIELDS = frozenset({
     "run_id", "session_id", "attempt_ids", "workflow_node_ids", "action_ids",
@@ -199,14 +200,24 @@ def _source(value: object) -> dict:
     observed_time = _timestamp(source["observed_at"], "source observed_at")
     if source_time > observed_time:
         raise ValueError("source timestamp is after observation")
+    maximum_age = source["maximum_age_seconds"]
     if source["freshness"] not in _FRESHNESS:
         raise ValueError("source freshness is unknown")
     reason = source["freshness_reason"]
     if source["freshness"] == "fresh":
-        if reason is not None:
-            raise ValueError("fresh source cannot have a freshness reason")
-    elif type(reason) is not str or reason not in {"age_exceeded", "not_reported", "clock_unknown"}:
-        raise ValueError("non-fresh source requires a closed reason")
+        if type(maximum_age) is not int or maximum_age < 0 or reason is not None:
+            raise ValueError("fresh source requires a maximum age and no reason")
+        if (observed_time - source_time).total_seconds() > maximum_age:
+            raise ValueError("fresh source exceeds its declared maximum age")
+    elif source["freshness"] == "stale":
+        if (
+            type(maximum_age) is not int or maximum_age < 0
+            or reason != "age_exceeded"
+            or (observed_time - source_time).total_seconds() <= maximum_age
+        ):
+            raise ValueError("stale source contradicts its declared maximum age")
+    elif maximum_age is not None or reason not in {"not_reported", "clock_unknown"}:
+        raise ValueError("unknown freshness requires no maximum age and a closed reason")
     return source
 
 
@@ -417,6 +428,27 @@ def observation_index_digest(index: Mapping[str, object]) -> str:
     ).hexdigest()
 
 
+def compose_observation_index(document: Mapping[str, object]) -> dict:
+    """Copy, digest, and validate one explicitly typed observation document.
+
+    The caller remains responsible for translating its canonical receipts into
+    the shared typed shape. This composer never guesses producer identity,
+    parses transcripts, or reads referenced artifacts.
+    """
+    if type(document) is not dict:
+        raise ValueError("observation index input is not an object")
+    try:
+        candidate = json.loads(json.dumps(
+            document, ensure_ascii=False, allow_nan=False,
+        ))
+    except (TypeError, ValueError, RecursionError):
+        raise ValueError("observation index input is not bounded JSON") from None
+    if candidate.get("digest") is None:
+        candidate["digest"] = observation_index_digest(candidate)
+    validate_observation_index(candidate)
+    return candidate
+
+
 def validate_observation_index(index: Mapping[str, object]) -> None:
     """Validate one complete observation-index-v1 mapping, failing closed."""
     if type(index) is not dict:
@@ -499,5 +531,6 @@ def validate_observation_index(index: Mapping[str, object]) -> None:
 __all__ = [
     "MAX_INDEX_BYTES", "OBSERVATION_INDEX_CONTRACT",
     "OBSERVATION_INDEX_SCHEMA_VERSION", "canonical_observation_index_bytes",
-    "observation_index_digest", "validate_observation_index",
+    "compose_observation_index", "observation_index_digest",
+    "validate_observation_index",
 ]

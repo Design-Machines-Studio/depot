@@ -120,7 +120,7 @@
     },
     "source": {
       "type": "object", "additionalProperties": false,
-      "required": ["role", "reference", "digest", "media_type", "size_bytes", "source_timestamp", "observed_at", "freshness", "freshness_reason"],
+      "required": ["role", "reference", "digest", "media_type", "size_bytes", "source_timestamp", "observed_at", "maximum_age_seconds", "freshness", "freshness_reason"],
       "properties": {
         "role": {"enum": ["producer", "lifecycle", "receipts", "attempts", "metrics", "cost", "verification", "reconciliation", "provenance", "findings", "contributions", "artifact"]},
         "reference": {"$ref": "#/$defs/reference"},
@@ -129,6 +129,7 @@
         "size_bytes": {"type": "integer", "minimum": 0},
         "source_timestamp": {"$ref": "#/$defs/timestamp"},
         "observed_at": {"$ref": "#/$defs/timestamp"},
+        "maximum_age_seconds": {"type": ["integer", "null"], "minimum": 0},
         "freshness": {"enum": ["fresh", "stale", "unknown"]},
         "freshness_reason": {"type": ["string", "null"], "enum": [null, "age_exceeded", "not_reported", "clock_unknown"]}
       }
