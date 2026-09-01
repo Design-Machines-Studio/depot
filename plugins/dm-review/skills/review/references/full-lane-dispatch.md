@@ -82,13 +82,14 @@ Share the same evidence reference with every applicable provider-neutral UI
 analysis role above and run each lane once. Never request `browser` or generic
 `tool-use`, and never treat OpenRouter web search as local navigation.
 
-If an ordinary review has no rendered target, dispatch UI-standards and UX
-analysis in `source-only` mode, do not dispatch visual-browser, and emit one
-aggregated nonblocking coverage note. Keep the review incomplete only when
-rendered evidence was explicitly required. In that case use exactly one
+If an ordinary review has no rendered target, dispatch only its already-selected
+source-capable UI lanes in `source-only` mode, never add a lane during fallback,
+do not dispatch an already-selected visual-browser lane, and emit one aggregated
+nonblocking coverage note. Keep the review incomplete only when rendered
+evidence was explicitly required. In that case use exactly one
 `visual_target_unavailable`, `dev_server_unavailable`, or
-`browser_transport_unavailable` result plus one next action while the two
-source-capable lanes still run. If a requested analysis role is unavailable,
+`browser_transport_unavailable` result plus one next action while every selected
+source-capable lane still runs. If a requested analysis role is unavailable,
 settle that cause as `model_participant_unavailable` distinctly. Prerequisite
 failures are coverage gaps, not code findings. Settle the aggregate UI result
 once and clean only resources registered by this review; pre-existing resources

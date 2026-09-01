@@ -37,10 +37,9 @@ if [ "$ACTION" = plan ]; then
   [ -f "$READINESS_FILE" ] && [ ! -L "$READINESS_FILE" ] || usage
   jq -e '
     type == "object" and
-    (keys | sort) == (["applicableLanes","renderedEvidenceRequired","schemaVersion","templateExtensionsOnly"] | sort) and
+    (keys | sort) == (["applicableLanes","renderedEvidenceRequired","schemaVersion"] | sort) and
     .schemaVersion == 1 and
     (.renderedEvidenceRequired | type) == "boolean" and
-    (.templateExtensionsOnly | type) == "boolean" and
     (.applicableLanes | type == "array" and length > 0 and length <= 3 and length == (unique | length) and
       all(.[]; . == "ui-standards-reviewer" or . == "ux-quality-reviewer" or . == "visual-browser-tester"))
   ' "$REQUEST_FILE" >/dev/null 2>&1 || usage
@@ -53,9 +52,12 @@ if [ "$ACTION" = plan ]; then
   rendered_required="$(jq -r '.renderedEvidenceRequired' "$REQUEST_FILE")"
   applicable_lanes="$(jq -c '.applicableLanes' "$REQUEST_FILE")"
   evidence_ref=""
-  if [ "$readiness_reason" = available ] && [ -n "$EVIDENCE_VALIDATION_FILE" ] &&
+  if [ -n "$EVIDENCE_VALIDATION_FILE" ] &&
      [ -f "$EVIDENCE_VALIDATION_FILE" ] && [ ! -L "$EVIDENCE_VALIDATION_FILE" ]; then
     evidence_ref="$(jq -r 'select(.status == "accepted") | .evidenceRef // empty' "$EVIDENCE_VALIDATION_FILE")"
+  fi
+  if [ -z "$evidence_ref" ] && [ "$readiness_reason" = available ]; then
+    evidence_ref="$(jq -r '.evidenceRef // empty' "$READINESS_FILE")"
   fi
 
   if [ -n "$evidence_ref" ]; then
@@ -100,15 +102,26 @@ if [ "$ACTION" = plan ]; then
 fi
 
 jq -e '
+  . as $r |
   type == "object" and
-  (keys | sort) == (["acceptanceCaseIds","affectedEngines","affectedPersonas","affectedStates","affectedViewports","baselineCaseId","cases","changedRenderedFiles","changedRoutes","fullMatrixRequirement","prototypeParityCaseIds","reviewKind","schemaVersion"] | sort) and
+  (keys | sort) == (["acceptanceCaseIds","affectedEngines","affectedPersonas","affectedStates","affectedViewports","baselineCaseId","cases","changedRenderedFiles","fullMatrixRequirement","prototypeParityCaseIds","renderedEvidenceRequired","renderedRouteMappings","schemaVersion"] | sort) and
   .schemaVersion == 1 and
-  (.reviewKind == "ordinary" or .reviewKind == "full") and
+  (.renderedEvidenceRequired | type) == "boolean" and
   (.fullMatrixRequirement == "none" or .fullMatrixRequirement == "explicit-sweep" or
    .fullMatrixRequirement == "release-profile" or .fullMatrixRequirement == "shared-surface") and
-  ([.changedRenderedFiles,.changedRoutes,.prototypeParityCaseIds,.acceptanceCaseIds,
+  ([.changedRenderedFiles,.prototypeParityCaseIds,.acceptanceCaseIds,
     .affectedPersonas,.affectedStates,.affectedEngines,.affectedViewports] |
     all(.[]; type == "array" and length == (unique | length) and all(.[]; type == "string" and length > 0 and length <= 256))) and
+  (.renderedRouteMappings | type == "array" and
+    length == ($r.changedRenderedFiles | length) and
+    length == (map(.renderedFile) | unique | length) and
+    all(.[];
+      type == "object" and
+      (keys | sort) == (["renderedFile","route","status"] | sort) and
+      (.renderedFile | type == "string" and length > 0 and length <= 256) and
+      (.renderedFile as $file | ($r.changedRenderedFiles | index($file)) != null) and
+      ((.status == "resolved" and (.route | type == "string" and length > 0 and length <= 256)) or
+       (.status == "unresolved" and .route == null)))) and
   (.baselineCaseId == null or (.baselineCaseId | type == "string" and length > 0 and length <= 128)) and
   (.cases | type == "array" and length == (map(.id) | unique | length) and all(.[];
     type == "object" and
@@ -118,23 +131,40 @@ jq -e '
 ' "$REQUEST_FILE" >/dev/null 2>&1 || usage
 
 jq -c '
-  def intersects($a; $b): any($a[]; . as $x | any($b[]; . == $x));
   def allowed($value; $affected): ($affected | length == 0) or ($affected | index($value) != null);
   . as $r |
   ($r.fullMatrixRequirement != "none") as $full |
+  [$r.renderedRouteMappings[] | select(.status == "resolved")] as $resolved |
+  [$r.renderedRouteMappings[] | select(.status == "unresolved") | .renderedFile] as $unresolved |
+  (($r.prototypeParityCaseIds + $r.acceptanceCaseIds) | unique) as $explicit_ids |
+  [$r.cases[].id] as $case_ids |
+  [$explicit_ids[] | . as $id | select(($case_ids | index($id)) == null)] as $missing_explicit |
   [ $r.cases[] |
     . as $case |
     ((($r.prototypeParityCaseIds + $r.acceptanceCaseIds) | index($case.id)) != null) as $explicit |
     select($full or $explicit or
-      (((($r.changedRoutes | index($case.route)) != null) or
-        intersects($case.renderedFiles; $r.changedRenderedFiles) or
+      (((any($resolved[]; . as $mapping |
+          $case.route == $mapping.route or
+          ($case.renderedFiles | index($mapping.renderedFile)) != null)) or
         ($r.baselineCaseId == $case.id)) and
       allowed($case.persona; $r.affectedPersonas) and
       allowed($case.state; $r.affectedStates) and
       allowed($case.engine; $r.affectedEngines) and
       allowed($case.viewport; $r.affectedViewports)))
   ] as $selected |
+  ([
+    if $r.renderedEvidenceRequired and ($unresolved | length) > 0
+      then "unresolved-rendered-route" else empty end,
+    if $r.renderedEvidenceRequired and ($unresolved | length) == 0 and ($selected | length) == 0
+      then "rendered-case-unavailable" else empty end,
+    if $r.renderedEvidenceRequired and ($missing_explicit | length) > 0
+      then "rendered-case-unavailable" else empty end
+  ]) as $incomplete_reasons |
   {schemaVersion:1,selectionMode:(if $full then "full-matrix" else "affected-cases" end),
    fullMatrixReason:(if $full then $r.fullMatrixRequirement else null end),
+   reviewDisposition:(if ($incomplete_reasons | length) > 0 then "REVIEW INCOMPLETE" else "completed" end),
+   incompleteReasons:($incomplete_reasons | unique),
+   missingExplicitCaseIds:($missing_explicit | sort),
+   unresolvedRenderedFiles:($unresolved | sort),
    selectedCaseIds:($selected | map(.id) | sort),cases:($selected | sort_by(.id))}
 ' "$REQUEST_FILE"

@@ -107,18 +107,17 @@ differences. When rendered evidence exists, also compare composition at the
 same selected states/viewports. Classify mismatches proportionally under the
 injected Visual Finding Rules; never apply a blanket P1.
 
-For each affected page represented in source, evaluate the source-observable
-component decisions below. In `source+rendered`, also evaluate their rendered
-behavior from the supplied packet. Items such as focus, hover, timing, and
-responsive collapse remain `NOT-COVERED` in `source-only`:
+For each affected page represented in source, evaluate only the `Source` part of
+each component item in `source-only`. Evaluate the `Rendered` part only in
+`source+rendered` from the supplied packet:
 
-- **Buttons** -- visual weight hierarchy (primary `.button--accent`, secondary `.button`, destructive `.button--red`, ghost); loading states with a spinner on async actions; destructive actions visually differentiated; consistent sizing within each context.
-- **Forms** -- input focus rings visible and using `--color-accent`; validation states via `data-state="error"` with inline messages below fields; labels properly associated and visible (not placeholder-only); required field indicators present; field groups using `.stack stack-compact` for consistent vertical spacing.
-- **Tables and Lists** -- sortable headers with direction indicators; row hover states; selection patterns for bulk actions; pagination or load-more for long lists; actions column right-aligned and consistent.
-- **Cards** -- consistent padding via `.box` variants (not mixed px values); hover elevation where cards are clickable; clear content hierarchy within each card.
-- **Navigation** -- active state via `data-state="active"` with a clear visual indicator; breadcrumbs for depth greater than 2 levels; mobile-friendly collapse pattern.
-- **Modals and Dialogs** -- the `dialog` element with `.imposter-dialog`; functional focus trap; escape-to-close; backdrop present.
-- **Toasts and Notifications** -- appropriate auto-dismiss timing (5s success, persistent errors); undo support for destructive actions; stacking behavior when multiple.
+- **Buttons** -- **Source:** declared primary/secondary/destructive classes, loading-state markup, and semantic destructive differentiation. **Rendered:** visual weight, spinner appearance, and consistent sizing within each context.
+- **Forms** -- **Source:** associated visible labels, required indicators, validation-state markup with inline messages, and declared `.stack stack-compact` groups. **Rendered:** visible `--color-accent` focus rings and consistent group spacing.
+- **Tables and Lists** -- **Source:** sortable-header and direction-indicator markup, bulk-selection controls, and pagination/load-more structure. **Rendered:** row hover behavior and consistent right-aligned action columns.
+- **Cards** -- **Source:** `.box` variants instead of mixed hardcoded padding, clickable-state declarations, and semantic content hierarchy. **Rendered:** consistent padding, hover elevation, and visible hierarchy.
+- **Navigation** -- **Source:** `data-state="active"`, breadcrumbs at declared deep routes, and mobile-collapse structure. **Rendered:** a clear active indicator and functional responsive collapse.
+- **Modals and Dialogs** -- **Source:** `dialog` with `.imposter-dialog`, focus-management and escape-close code, and backdrop markup. **Rendered:** functional focus containment, escape interaction, and visible backdrop.
+- **Toasts and Notifications** -- **Source:** configured success/error durations, undo support, and a multi-toast container. **Rendered:** actual dismissal timing and stacking behavior.
 
 ## Phase 2: Spacing System Audit (`source+rendered` only)
 

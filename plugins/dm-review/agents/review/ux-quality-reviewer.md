@@ -42,10 +42,11 @@ Cite BOTH the theoretical principle (Muller-Brockmann, Gerstner, and the rest) A
 
 The dispatch skill injects `## Visual Finding Rules` (spec-primary evaluation, the missing-spec P2 process finding, and the mandatory citation format) plus any `## Design Spec Context`. Follow them; do not restate them.
 
-Your lens on a spec is **design quality**: for each approved decision, use the
-host-captured element screenshot and judge whether the render carries the
-intended hierarchy, weight, and grouping -- not merely the right class name.
-Never invent a spec.
+Your lens on a spec is **design quality**. In `source-only`, check only
+source-visible hierarchy, components, classes, copy/metadata, and action order.
+In `source+rendered`, also use the host-captured element screenshot to judge
+whether the render carries the intended hierarchy, weight, spacing, and
+grouping. Never invent a spec or infer a rendered result from source.
 
 ## Live Wires Compliance
 
@@ -66,7 +67,11 @@ packet after `ui-review-readiness.md` confirms or accepts it. Do not call or
 search for browser tools. Missing rendered evidence is a coverage gap, not a
 product finding.
 
-## Screenshot Evidence
+## Screenshot Evidence (`source+rendered` only)
+
+Source-only runs do not create a screenshot directory, PNG files, or a
+manifest. The complete setup and artifact contract below applies only in
+`source+rendered` mode.
 
 ### Phase 0: Setup
 
@@ -145,15 +150,18 @@ Cite White: "readers are lazy and in a hurry -- this page doesn't pass the WIIFM
 
 Skip if no `## Design Spec Context` was provided. This runs BEFORE general heuristic evaluation.
 
-For each visual decision, locate the element in host evidence and compare against
-the spec: button variants (correct class AND visual weight), heading hierarchy,
-spacing/grouping, and layout composition. For a prototype packet, also compare
-the supplied source hierarchy, significant components, exact classes, literal
-copy/metadata, and action order. Generic benchmarks cannot replace covered
-prototype decisions. Classify mismatches by observable impact under the
-injected Visual Finding Rules rather than assigning blanket P1. If all
-decisions match, note "Design authority compliance: PASS ([N] decisions
-checked)".
+In `source-only`, compare only source-visible hierarchy, significant
+components, exact classes, literal copy/metadata, and action order. Record
+visual weight, spacing/grouping, and layout composition once under
+`NOT-COVERED`; do not emit a rendered compliance PASS.
+
+In `source+rendered`, locate each covered element in host evidence and compare
+button variants (correct class and visual weight), heading hierarchy,
+spacing/grouping, and layout composition as well as the source-visible
+decisions above. Generic benchmarks cannot replace covered prototype
+decisions. Classify mismatches by observable impact under the injected Visual
+Finding Rules rather than assigning blanket P1. Only this mode may note
+"Design authority compliance: PASS ([N] decisions checked)".
 
 ### Phase 2: Spacing & Alignment Consistency (`source+rendered` only)
 

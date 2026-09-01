@@ -39,9 +39,12 @@ Select exactly one target in this order:
 4. otherwise no rendered target is available.
 
 Pass invocation and T3 targets to `prepare` with `--target-url` and
-`--target-source explicit|t3-preview`. Do not scan localhost ports, infer a URL
-from file extensions, or guess a start command. The helper validates the URL;
-successful host navigation remains the readiness proof.
+`--target-source explicit|t3-preview`. Every `prepare` call also passes the
+exact nonempty selected UI lane set as `--applicable-lanes-json`; the helper
+binds it into state so settlement cannot omit a planned participant. Do not
+scan localhost ports, infer a URL from file extensions, or guess a start
+command. The helper validates the URL; successful host navigation remains the
+readiness proof.
 
 "One target" applies per readiness state. When a host-resolved prototype
 parity packet supplies both an exact prototype URL and target URL, run this
@@ -88,8 +91,9 @@ consumer is sufficient.
 ## Ordered gate
 
 1. Select the target using the order above. For an explicit URL or attached T3
-   preview, run `ui-review-readiness.sh prepare` with that exact target. For a
-   declaration, check its application readiness independently with `prepare`.
+   preview, run `ui-review-readiness.sh prepare` with that exact target and the
+   exact selected UI lane set. For a declaration, check its application
+   readiness independently with `prepare` and the same lane set.
 2. If a stopped `process` consumer has an exact start procedure, start it and
    register only that created resource. `prepare` returns `app_ready` with
    `dispatchAllowed: false` and leaves that registered process available for
@@ -130,7 +134,8 @@ consumer is sufficient.
    explanatory layout/spacing values. Exact theme colors are not a parity gate.
 8. Dispatch each applicable analysis lane once with the same packet reference.
    Settle the aggregate analysis result once through `ui-review-readiness.sh
-   settle`, then clean every exact registered process or Compose resource.
+   settle`; settlement requires the result lane set to equal the set bound by
+   `prepare`. Then clean every exact registered process or Compose resource.
    Install the same cleanup call on interruption and failure paths.
 
 The private state has a closed `app_ready` -> `ready` -> `settled` lifecycle.

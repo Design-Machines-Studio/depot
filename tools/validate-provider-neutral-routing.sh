@@ -74,7 +74,8 @@ grep -Fq 'confirm-browser' "$ui_readiness" &&
   fail 'dm-review lacks the two-phase browser gate or exact cleanup snapshot'
 grep -Fq 'optional tracked `<repository>/.dm/ui-review.json`' "$ui_readiness" ||
   fail 'dm-review still treats UI configuration as mandatory'
-grep -Fq 'one aggregated `visual_target_unavailable` coverage note' "$ui_readiness" ||
+grep -Fq 'emit one aggregated' "$ui_readiness" &&
+  grep -Fq '`visual_target_unavailable` coverage note' "$ui_readiness" ||
   fail 'dm-review duplicates missing visual readiness per lane'
 
 # Pipeline policy may express only role intent and legacy translation.

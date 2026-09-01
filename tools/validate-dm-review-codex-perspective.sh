@@ -338,6 +338,8 @@ reject_text "$review_skill" 'Phase 5.5: Simplification Pass' "active simplificat
 reject_text "$review_skill" 'refactor: simplify per dm-review pass' "automatic simplification commit is retired"
 reject_text "$review_skill" 'diff < 100 lines' "quick roster does not scale by diff size"
 require_text "$review_skill" 'Ordinary quick review always selects exactly these two core judgment lanes' "ordinary quick roster has exact core contract"
+require_text "$review_skill" 'never add a lane during fallback' "quick readiness fallback preserves the selected roster"
+reject_text "$review_skill" 'Run UI-standards and UX-quality as labelled source-only analysis when browser proof' "quick readiness fallback does not hard-code the full UI roster"
 require_text "$review_skill" '**pattern-recognition-specialist**' "quick roster includes pattern recognition"
 require_text "$review_skill" '**code-simplicity-reviewer**' "quick roster includes code simplicity"
 require_text "$review_skill" 'Do not add `second-perspective`' "quick roster excludes second perspective"

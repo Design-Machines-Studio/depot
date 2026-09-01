@@ -11,6 +11,24 @@ the personas, states, engines, and viewports directly affected by those
 surfaces. Add at most one explicitly identified baseline case, and only when it
 can expose a realistic adjacent regression.
 
+### Host route-mapping preflight
+
+The full, quick, and visual review hosts own route mapping before request
+materialization. For each changed rendered file, use only an exact route named
+by a verification profile or case, a prototype/acceptance mapping, or a
+framework route declaration that directly binds that file. Record the resolved
+file-to-route pair in `renderedRouteMappings` with `status: "resolved"`. Keep
+`changedRenderedFiles` as the complete changed-file inventory; the helper
+requires exactly one mapping outcome for every listed file. Do not scan
+localhost, guess a fallback route, or ask a reviewer participant to discover
+it.
+
+When no bounded source resolves a changed rendered file, record
+`status: "unresolved"` and `route: null` for that file. This is the
+`unresolved-rendered-route` outcome. Source-capable review may continue, but
+rendered-required coverage remains incomplete until the host receives an exact
+route.
+
 The presence of `tests/ux/verification.json`, persona/task files, a coverage
 matrix, or supported engine/viewport declarations makes cases discoverable; it
 does not make their Cartesian product mandatory. Task frontmatter and explicit

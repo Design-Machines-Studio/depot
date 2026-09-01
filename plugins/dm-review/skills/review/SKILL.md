@@ -428,8 +428,10 @@ normal tests/build analysis requests `read-repository` and
 
 When any browser/UI lane is selected, load
 `${CLAUDE_SKILL_DIR}/references/ui-case-selection.md` and
-`${CLAUDE_SKILL_DIR}/references/ui-review-readiness.md`. Select affected cases
-once, then complete one application and local-browser decision before model
+`${CLAUDE_SKILL_DIR}/references/ui-review-readiness.md`. Run the host
+route-mapping preflight from `ui-case-selection.md`, recording exact
+file-to-route pairs or `unresolved-rendered-route`, then select affected cases
+once and complete one application and local-browser decision before model
 dispatch. Select an explicit invocation URL first, then an already attached
 automation-capable T3 preview, then optional tracked `.dm/ui-review.json`.
 Start only an exact declared process or Compose consumer and track only
@@ -441,10 +443,11 @@ Verify application reachability and actual local interactive browser
 navigation independently. OpenRouter web search and generic `tool-use` never
 satisfy local browser readiness. Current browser interaction is host-owned;
 collect bounded evidence once and pass the same packet to each mapped
-provider-neutral analysis role without a `browser` capability request. Run
-UI-standards and UX-quality as labelled source-only analysis when browser proof
-is absent; do not dispatch visual-browser. Emit one shared rendered coverage
-result, never one per lane. Keep `REVIEW INCOMPLETE` only when rendered
+provider-neutral analysis role without a `browser` capability request. When
+browser proof is absent, run only the already-selected source-capable UI lanes
+as labelled source-only analysis; never add a lane during fallback, and do not
+dispatch an already-selected visual-browser lane. Emit one shared rendered
+coverage result, never one per lane. Keep `REVIEW INCOMPLETE` only when rendered
 evidence was explicitly required by `/dm-review-visual`, the user, acceptance
 criteria, a `renderedSurface: required` Pipeline chunk, required prototype
 parity, or an explicit verification profile case. Template extensions alone

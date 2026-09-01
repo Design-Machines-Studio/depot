@@ -68,19 +68,19 @@ acceptance cases, directly affected dimensions, and at most one justified
 baseline. Do not widen supported engine/viewport declarations into a full
 matrix. `--all` is the explicit full-matrix mode.
 
-Map changed source to candidate pages without making every candidate required:
-
-- **Assembly Baseplate:** Scan `internal/fixtures/*/routes.go` for route registrations (`r.Get`, `r.Post`, `r.Handle`) to build the testable URL list. Each fixture's routes file declares all its HTTP endpoints.
-- Check for a sitemap at `/sitemap.xml`
-- Scan the codebase for route registrations (Go handlers) or template files (Twig, HTML)
-- Use the base URL `/` as the minimum test target
-- If git diff context is available, select pages affected by changed files
+Use only the host-materialized selected cases and their exact resolved routes.
+Do not scan for candidate pages, substitute `/`, or add a homepage/base-route
+fallback. A required changed surface without an exact route remains
+`unresolved-rendered-route` and keeps the visual review incomplete.
 
 ### Phase 2: Visual Testing
 
 Read the visual-browser-tester agent definition from `plugins/dm-review/agents/review/visual-browser-tester.md` and execute its full eight-phase testing protocol (Baseline, Responsive, State Testing, Accessibility Runtime, Live Wires, UX Design, Visual Design Quality, Live Wires CSS Compliance).
 
-Use `${CLAUDE_SKILL_DIR}/references/breakpoints.md` for viewport dimensions and `${CLAUDE_SKILL_DIR}/references/state-testing.md` for the interactive element state matrix.
+Use `${CLAUDE_SKILL_DIR}/references/breakpoints.md` only to interpret the
+explicitly selected viewport IDs; do not add default breakpoints. Use
+`${CLAUDE_SKILL_DIR}/references/state-testing.md` for the interactive element
+state matrix of the selected cases.
 
 **Flag handling:**
 

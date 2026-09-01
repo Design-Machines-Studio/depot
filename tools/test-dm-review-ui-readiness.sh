@@ -43,6 +43,7 @@ run_prepare() {
   shift
   rm -f "$TMP/$name.state" "$TMP/$name.result"
   "$HELPER" prepare --repository-root "$REPO" --state-file "$TMP/$name.state" \
+    --applicable-lanes-json '["visual-browser-tester","ux-quality-reviewer","ui-standards-reviewer"]' \
     "$@" > "$TMP/$name.result" || rc=$?
   printf '%s\n' "$rc"
 }
@@ -145,6 +146,7 @@ assert test "$web_prepare_rc" -eq 0
 assert jq -e '.state == "app_ready" and .dispatchAllowed == false and .reason == "browser_evidence_required"' "$TMP/remote-web.result"
 assert test -e "$TEST_SERVER_MARKER"
 "$HELPER" prepare --repository-root "$REPO" --state-file "$TMP/remote-web.state" \
+  --applicable-lanes-json '["visual-browser-tester","ux-quality-reviewer","ui-standards-reviewer"]' \
   > "$TMP/remote-web-reprepare.result"
 assert jq -e '.createdResources == 1 and .dispatchAllowed == false' "$TMP/remote-web-reprepare.result"
 assert jq -e '.createdByReview == true and .cleanupPending == true and .stage == "app_ready"' "$TMP/remote-web.state"
@@ -190,6 +192,42 @@ set +e
 repeated_settle_rc=$?
 set -e
 assert test "$repeated_settle_rc" -eq 2
+
+# Settlement is bound to the exact lane set selected before readiness. A
+# submitted subset cannot silently stand in for the three planned lanes.
+missing_lanes_prepare_rc="$(run_prepare missing-lanes)"
+assert test "$missing_lanes_prepare_rc" -eq 0
+missing_lanes_ready_rc="$(run_confirm missing-lanes "$TMP/browser-ready.json")"
+assert test "$missing_lanes_ready_rc" -eq 0
+cat > "$TMP/analysis-missing-lanes.json" <<'JSON'
+{"evidenceSource":"live","transportStub":false,"lanes":[
+  {"lane":"visual-browser-tester","role":"review-deep","capabilities":["read-repository","long-context","structured-output"],"disposition":"completed"}
+]}
+JSON
+set +e
+"$HELPER" settle --repository-root "$REPO" --state-file "$TMP/missing-lanes.state" \
+  --analysis-result-file "$TMP/analysis-missing-lanes.json" > "$TMP/missing-lanes-settled.json"
+missing_lanes_settle_rc=$?
+set -e
+assert test "$missing_lanes_settle_rc" -eq 76
+assert jq -e '.reason == "model_participant_unavailable" and .reviewDisposition == "REVIEW INCOMPLETE"' "$TMP/missing-lanes-settled.json"
+
+# An intentional subset remains valid when prepare binds that exact set and
+# every planned lane completes.
+"$HELPER" prepare --repository-root "$REPO" --state-file "$TMP/subset.state" \
+  --applicable-lanes-json '["ui-standards-reviewer"]' > "$TMP/subset.result"
+assert jq -e '.state == "app_ready" and .dispatchAllowed == false' "$TMP/subset.result"
+"$HELPER" confirm-browser --repository-root "$REPO" --state-file "$TMP/subset.state" \
+  --browser-evidence-file "$TMP/browser-ready.json" > "$TMP/subset.confirmed"
+assert jq -e '.state == "ready" and .dispatchAllowed == true' "$TMP/subset.confirmed"
+cat > "$TMP/analysis-subset.json" <<'JSON'
+{"evidenceSource":"live","transportStub":false,"lanes":[
+  {"lane":"ui-standards-reviewer","role":"review-deep","capabilities":["read-repository","long-context","structured-output"],"disposition":"completed"}
+]}
+JSON
+"$HELPER" settle --repository-root "$REPO" --state-file "$TMP/subset.state" \
+  --analysis-result-file "$TMP/analysis-subset.json" > "$TMP/subset-settled.json"
+assert jq -e '.state == "completed" and .reviewDisposition == "completed"' "$TMP/subset-settled.json"
 
 # Browser evidence can be ready while the analysis participant is unavailable;
 # that cause is distinct, and only the resource created by this run is cleaned.
