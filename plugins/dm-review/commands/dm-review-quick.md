@@ -31,7 +31,7 @@ Compute the trigger set from the diff before dispatching. Log applicable selecte
 
 If the diff touches the bounded security-sensitive path set named by the review
 skill, do not use this ordinary roster as a substitute for security review.
-Escalate to full mode, which retains the independent-family full-diff security
+Escalate to full mode, which retains the mandatory full-diff security
 sign-off, authorized external security lens, and full-only second perspective.
 Do not infer extra security triggers from generic handlers, shell scripts,
 dependency manifests, or configuration files. Quick review is early feedback;

@@ -63,14 +63,8 @@ For each finding:
 
 1. Implement the smallest adequate repair described in the todo file
 2. Follow the Fix Philosophy (see dm-review skill). Do not add unrelated hardening, architecture layers, compatibility machinery, or product scope.
-3. Preserve repair provenance in the enclosing private router registry. Prefer
-   the routed repair receipt. If this command knowingly authors the repair
-   through Codex or Claude without a receipt, record that actual repair origin
-   against the new exact diff; never infer the origin of pre-existing work from
-   the current host. Any model-authored repair invalidates an earlier
-   entirely-human declaration.
-4. Verify the acceptance criteria
-5. Rename the todo file: `pending` -> `done`
+3. Verify the acceptance criteria
+4. Rename the todo file: `pending` -> `done`
 
 ```bash
 mv todos/001-pending-p1-description.md todos/001-done-p1-description.md

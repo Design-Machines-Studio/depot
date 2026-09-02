@@ -14,12 +14,8 @@ exact validated Workflow Kernel launcher for that invocation, prompt file,
 output destination, private receipt destination, an explicit complete
 repository-evidence file for prompt-only repository readers, and opaque prior
 receipt IDs plus their run-private registry when family independence is
-required. When historical receipts do not exist, callers may instead pass one
-private exact-diff record created by `references/implementation-origin.sh`.
-That model-router boundary accepts `human-authored`, `codex-host-authored`,
-`claude-host-authored`, `mixed-known`, or `unknown` and maps host classes to
-families privately. The legacy explicit `--human-authored` flag remains valid;
-never fabricate a model-family receipt. Write roles also carry the bound
+required. Human-authored work uses the explicit `--human-authored` origin flag
+instead of fabricating a model-family receipt. Write roles also carry the bound
 behavioral contract digest and revision. Callers must not select or receive a
 model, provider, family, billing rail, or transport.
 
@@ -32,8 +28,7 @@ The dispatcher:
 
 1. validates the closed request;
 2. probes current machine and operator availability;
-3. excludes every family named by opaque private receipts or a validated
-   exact-diff origin record;
+3. excludes every family named by opaque private receipts;
 4. walks the role's deterministic candidate order;
 5. invokes one transport at a time with argv arrays;
 6. writes model output to the caller-selected output file;

@@ -364,11 +364,9 @@ index handoff for this caller.
 Use the same caller-owned directory and index for the implementation and final-
 review receipts; pass them to the nested review with terminal reporting
 suppressed. The lean implementation still dispatches `builder-fast` or
-`builder-deep` through model-router and stores its live receipt. It passes that
-receipt, plus every routed repair receipt from the same run, to the final
-independent review. Lean mode may use the private exact-head host-origin record
-only when that is the truthful execution path; it never performs unreceipted
-model work and then asks the operator for a receipt ID.
+`builder-deep` through model-router and stores its live receipt for the terminal
+operator report. The final review never receives implementation-origin evidence
+and never filters reviewer eligibility by author or model family.
 
 Wait for execution to complete. Mark ledger item 10 complete.
 

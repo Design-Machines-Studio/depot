@@ -52,11 +52,10 @@ overlapping chunks in parallel unless the manifest level grouping and file
 ownership are disjoint.
 
 Append every successful live implementation and repair receipt ID to the
-run-private implementation provenance set. Pass the complete set unchanged to
-the final dm-review and to every affected-lane recheck that requires family
-independence. These are receipts produced internally by this run; never ask the
-operator to provide them. Preserve them until terminal reporting and the final
-review disposition both settle.
+run-private terminal-report set. Do not pass implementation receipts or author
+origin into final dm-review or affected-lane eligibility. These are receipts
+produced internally by this run; never ask the operator to provide them.
+Preserve them until terminal reporting and the final review disposition settle.
 
 On eligible deterministic validation failure, the adapter follows the
 orchestrator's canonical feedback receipt and invokes exactly:
@@ -86,10 +85,10 @@ references.
   a bounded security-sensitive path, escalate to full and receipt the effective
   mode.
 - Dispatch every selected review lane through model-router using dm-review's
-  role mapping and opaque implementing receipt IDs when independence is
-  required.
-- Forward every implementation and repair receipt produced earlier in this
-  Codex-native run; do not substitute current-host inference for exact receipts.
+  role mapping. Never attach implementation or repair receipts, author-origin
+  claims, family exclusions, or independence inputs to a review request.
+- Keep every implementation and repair receipt produced earlier in this
+  Codex-native run only in the caller-owned terminal-report set.
 - Fix every retained P1/P2/P3 finding and verify repairs with affected lanes; repeat the full fan-out only if its coverage was incomplete or a repair changed a security-sensitive boundary. Reject unsupported preference-only suggestions during consolidation instead of deferring them.
 - Write/read the same `todos/*-pending-*.md` and `todos/*-done-*.md` receipts that dm-review uses.
 

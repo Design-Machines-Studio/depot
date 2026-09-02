@@ -116,7 +116,6 @@ check 'live model-intelligence report uses v2 no-conclusion semantics' sh -c \
 
 check 'provider-neutral drift and leak validator passes' "$ROOT/tools/validate-provider-neutral-routing.sh"
 check 'resolver economics fixtures pass' "$ROOT/tools/test-model-router.sh"
-check 'routing provenance fixtures pass' "$ROOT/tools/test-routing-provenance.sh"
 check 'benchmark evidence contract fixtures pass' "$ROOT/tools/test-benchmark-evidence-contract.sh"
 check 'Depot role benchmark fixtures pass' "$ROOT/tools/test-openrouter-role-benchmark.sh"
 check 'model intelligence and native benchmark tests pass' python3 "$ROOT/tests/test_model_intelligence.py" -v

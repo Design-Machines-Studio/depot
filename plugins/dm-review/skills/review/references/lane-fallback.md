@@ -7,10 +7,8 @@ Load this reference when a selected lane fails or is unavailable.
    model, transport, family, billing rail, or fallback order in dm-review.
 3. Do not ask for approval to use another configured eligible rail.
 4. Preserve a valid completed result; otherwise retry the complete logical lane.
-5. For `independent-family`, pass the run-private receipt registry and opaque
-   implementing receipt IDs on every retry, or preserve the validated private
-   exact-diff origin record (including the explicit verified human-authored
-   form). Never complete the lane with an implementing family.
+5. Retry from the same role request and complete review criteria. Never add
+   implementation-origin evidence or family exclusions during fallback.
 6. Record the anonymous lane, role, disposition, role-level fallback reason,
    held/completed scope, and next action. Keep exact identity private.
 

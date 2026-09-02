@@ -107,8 +107,6 @@ runtime_files=(
   "$ROOT/plugins/dm-review/skills/review/references/agent-registry.md"
   "$ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md"
   "$ROOT/plugins/dm-review/skills/review/references/guardrails.md"
-  "$ROOT/plugins/dm-review/skills/review/references/independent-family-lanes.md"
-  "$ROOT/plugins/dm-review/skills/review/references/implementation-origin.md"
   "$ROOT/plugins/dm-review/skills/review/references/lane-fallback.md"
   "$ROOT/plugins/dm-review/skills/review/references/reviewer-prompt-template.md"
   "$ROOT/plugins/dm-review/skills/review/references/output-format.md"

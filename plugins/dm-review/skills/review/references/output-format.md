@@ -152,12 +152,12 @@ appends the ordered contribution receipts.
 
 The four companions remain machine evidence for the current Workflow Kernel
 contract. Keep them outside prompts and ordinary reports; exact identity fields
-are populated from private router receipts, never exposed to peer agents. Every decision records normalized family provenance: ordinary
-lanes may record the same implementer and reviewer family with a resolution such
-as `ordinary-lane-same-family-review`; required independent lanes must use
-disjoint families, including disjoint members of `mixed(<sorted families>)`, and
-their `reviewer_family` must match the closed family derived from the recorded
-reviewer model. Lane names and reviewer/lane identities are unique, and family
+are populated from private router receipts, never exposed to peer agents. Family
+fields are observation-only economics evidence and never filter dm-review lane
+eligibility. A lane may record the same implementer and reviewer family with a
+resolution such as `ordinary-lane-same-family-review`; `reviewer_family` still
+matches the closed family derived from the recorded reviewer model. Lane names
+and reviewer/lane identities are unique, and family
 values and resolution must exactly match every decision sourced from that lane.
 Every raw finding's `reviewer`/`lane` and `evidence_ref` must resolve to that
 literal lane entry, and the independently parsed union of all raw lane outputs
