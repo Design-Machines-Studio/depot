@@ -231,8 +231,9 @@ Internal deterministic participant routing. 1 internal skill.
 Neutral deterministic workflow and inspection mechanics. 1 internal skill.
 
 - **workflow-kernel** -- Run-state replay/recovery, behavioral contracts,
-  deterministic tiered repository verification, trusted inspection
-  profiles, contained lanes, redaction, canonical output, and compatible trends
+  deterministic tiered repository verification, bounded cross-harness
+  observation indexes, trusted inspection profiles, contained lanes, redaction,
+  canonical output, and compatible trends
 
 ### openrouter
 

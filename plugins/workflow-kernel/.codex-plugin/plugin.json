@@ -1,7 +1,7 @@
 {
   "name": "workflow-kernel",
-  "version": "0.18.3",
-  "description": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, replay, recovery, exact-owned cleanup, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
+  "version": "0.19.0",
+  "description": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, bounded cross-harness observation indexes, replay, recovery, exact-owned cleanup, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -19,13 +19,14 @@
       {
         "id": "workflow-kernel",
         "name": "Workflow Kernel",
-        "description": "Inspect, validate, replay, and recover deterministic workflow state; plan tiered repository verification; clean exact-owned run resources; and validate behavioral contracts, contribution receipts, and attempt economics.",
+        "description": "Inspect, validate, replay, and recover deterministic workflow state; emit bounded cross-harness observation indexes; plan tiered repository verification; clean exact-owned run resources; and validate behavioral contracts, contribution receipts, and attempt economics.",
         "triggers": [
           "validate a workflow-kernel run",
           "replay workflow events",
           "inspect workflow-kernel state",
           "diagnose a corrupt run ledger",
           "recover workflow run state",
+          "emit a cross-harness observation index",
           "plan tiered repository verification",
           "clean exact-owned workflow resources"
         ],
@@ -33,6 +34,7 @@
           "workflow",
           "state-machine",
           "event-ledger",
+          "observation-index",
           "recovery"
         ],
         "mcpDependencies": []
@@ -45,8 +47,8 @@
   "optionalPluginDependencies": {},
   "interface": {
     "displayName": "Workflow Kernel",
-    "shortDescription": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, replay, recovery, exact-",
-    "longDescription": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, replay, recovery, exact-owned cleanup, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
+    "shortDescription": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, bounded cross-harness ob",
+    "longDescription": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, bounded cross-harness observation indexes, replay, recovery, exact-owned cleanup, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
     "developerName": "Design Machines",
     "category": "Productivity",
     "capabilities": [

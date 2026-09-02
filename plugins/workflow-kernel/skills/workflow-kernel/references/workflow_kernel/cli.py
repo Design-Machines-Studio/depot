@@ -1588,6 +1588,33 @@ def command_metrics(args):
     return 0
 
 
+def command_emit_observation_index(args):
+    """Validate and atomically claim one observation-index-v1 sidecar."""
+    from .observation_index import compose_observation_index
+
+    input_path = os.path.abspath(args.input)
+    output_path = os.path.abspath(args.output)
+    same_file = input_path == output_path
+    if not same_file:
+        try:
+            same_file = os.path.samefile(input_path, output_path)
+        except OSError:
+            pass
+    if same_file:
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS, {
+            ErrorDetailKey.REASON_CODE.value: "observation_input_output_conflict",
+        })
+    document = _load_json(args.input, strict=True)
+    index = compose_observation_index(document)
+    _reject_symlinked_components(output_path)
+    _write_json_once(args.output, index)
+    _emit({
+        "emitted": True, "output": str(Path(args.output)),
+        "digest": index["digest"],
+    })
+    return 0
+
+
 def _reject_symlinked_components(path):
     """Refuse a path whose directory chain or final name is a symlink.
 
@@ -3882,6 +3909,14 @@ def parser():
     metrics.add_argument("--events", required=True)
     metrics.add_argument("--output", required=True)
     metrics.set_defaults(handler=command_metrics)
+
+    observation_index = commands.add_parser(
+        "emit-observation-index",
+        help="validate and emit one bounded observation-index-v1 sidecar",
+    )
+    observation_index.add_argument("--input", required=True)
+    observation_index.add_argument("--output", required=True)
+    observation_index.set_defaults(handler=command_emit_observation_index)
 
     run_cost_summary = commands.add_parser(
         "run-cost-summary",

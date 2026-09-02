@@ -230,6 +230,30 @@ if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrou
 
 The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file, writes a schema-bound `run-cost-summary.json` beside that run's `authoritative-receipts.json`, and appends exactly one receipt line -- the artifact path, or `run-cost-summary: skipped (<reason>)` on any internal failure. It is observation-only: it exits 0 for every measurement outcome, never gates or alters a review, lane, or phase outcome, and its absence never fails one. Exit 6 (receipt write failed after acceptance) appends `skipped (receipt-write-failed)` through the status-aware `||` fallback; exit 2 is an invalid invocation and propagates; any other non-zero status appends `skipped (kernel-unresolvable)`, and a failing final append keeps its own status visible. A refused symlinked receipt path still exits 0 and reports on stderr alone -- a non-zero exit would append through the symlink just refused. Receipt paths are fixed per directory, so concurrent runs sharing one directory overwrite each other: use the invocation's exact-owned root or serialize callers that intentionally share a documented deliverable directory. Pass a coherent installed bundle's matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; an unreadable or invalid matrix emits one stderr line, skips imputation, and never fails the emission. Populate events with `record-attempt` as each lane settles -- a standalone `--append-to` translator double-counts the attempt, and `lanes: 0` after a run that executed lanes means this boundary is not wired. Full flags: `cli-measurement-commands.md`; otherwise the flags named here are the complete required set.
 
+Consume the orchestrator's terminal observation source handoff before cleaning
+its private inputs. Materialize `plans/<feature>/observation-index-input.json`
+under Workflow Kernel's `observation-index-contract.md`, with explicit
+`producer.name: pipeline` and `producer.source_digest` bound to the terminal
+receipt source whose `role` is `producer`. Bind the manifest, lifecycle,
+authoritative receipts, attempts, metrics, cost summary, verification,
+reconciliation, installed-bundle resolutions, and private router/provider
+evidence by reference, digest, type, size, provenance, and freshness. Missing
+facts stay unavailable; raw prompts, policies, transcripts, provider payloads,
+and artifact bytes stay out of the document.
+
+Invoke exactly once:
+
+```text
+"$WORKFLOW_KERNEL" emit-observation-index --input plans/<feature>/observation-index-input.json --output plans/<feature>/observation-index-<run-id>.json
+```
+
+Append `observation-index: plans/<feature>/observation-index-<run-id>.json
+(<canonical digest>)` to `receipt.md`, or one closed
+`observation-index: unavailable (invalid-or-unsafe-input|runtime-unavailable|write-conflict|emission-failed)`
+line. Observation failure preserves the authoritative Pipeline outcome and can
+neither make an incomplete run clean nor make a successful run fail. A stale
+output is a refusal, not evidence from this invocation.
+
 `bind-prediction` runs before corresponding authoritative actions, atomically seals the source, translated events, event digest, and RunSpec context, and appends exact binding authority to the canonical lifecycle ledger before `run.started`. `observe-pipeline` runs only after authoritative receipts exist and requires that ordered authority plus bound `pipeline-shadow-prediction.json`; direct comparison rechecks the same authority, and byte-identical predicted and authoritative receipts are valid only with the pre-start binding. It writes a separate `authoritative_observation` and never creates or changes the prediction. Without matching independent prediction evidence, observation and comparison fail closed. Keep the source and bound artifact until comparison completes. Write the compact shadow report and reliability metrics without changing the merge recommendation, cleanup disposition, or provider result. Never auto-delete the repository-lifetime `.workflow-kernel/repository-scope.json`; after fresh exact-scope Docker inventory proves zero exact-run objects, success removes terminal run state and disposable roots. Failure/interruption may retain only one bounded diagnostic root with the four required terminal fields.
 
 Present the compact summary from the orchestrator. If an operator decision is

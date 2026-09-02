@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
-description: Use for workflow-state validation and replay, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.18.3
+description: Use for workflow-state validation and replay, bounded cross-harness observation indexes, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
+version: 0.19.0
 ---
 
 # Workflow Kernel
@@ -71,6 +71,14 @@ Pipeline and review observation, review contribution export, comparison,
 metrics, cost summaries, attempt recording, and measurement append paths reject
 duplicate object members and non-finite constants before writing any output.
 
+Use `emit-observation-index --input <typed.json> --output
+<observation-index.json>` to validate and atomically claim one deterministic,
+observation-only cross-harness sidecar. The typed input must name exactly one
+digest-bound producer and bind every available fact to a declared canonical
+source. The command does not parse transcripts or raw provider/review output,
+infer a producer from shared stages, overwrite stale output, or change an
+authoritative run outcome. See `references/observation-index-contract.md`.
+
 For disposable run roots, temporary repositories, caches, raw output, Git
 worktrees/branches, and Docker resources, read
 `references/exact-owned-cleanup.md`. Filesystem paths use the small
@@ -82,7 +90,9 @@ command.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
-0.18.3 surface treats dm-review family fields as observation-only evidence and
+0.19.0 surface adds the strict bounded `observation-index-v1` contract and
+observation-only `emit-observation-index` command for explicitly bound harness
+producers. The 0.18.3 surface treats dm-review family fields as observation-only evidence and
 permits same-family security and second-perspective contributions. The 0.18.2
 surface preserves exact committed-input binding for initial terminal
 plans while allowing the internal refresh after a successful declared

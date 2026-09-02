@@ -28,6 +28,7 @@ verdict from the complete report. Keep the explanation to one plain sentence.
 
 ### Complete evidence
 `Full report: .claude/ux-review/report.md`.
+`Observation index: .claude/ux-review/observation-index-<run-id>.json` when accepted.
 <If findings exist: `Open findings: N -- <evidence pointer>.`>
 ```
 
@@ -39,7 +40,8 @@ compact, but it follows the same fix queue and convergence path as P1/P2.
 
 Do not repeat private routing tables, agent transcripts, synthesis ledgers, cleanup
 tables, or raw reports in the handoff. Write them to the established durable
-artifact `.claude/ux-review/report.md` before delivery. Coverage gaps, blocked
+artifacts `.claude/ux-review/report.md` and, when accepted, the bounded
+`.claude/ux-review/observation-index-<run-id>.json` companion before delivery. Coverage gaps, blocked
 browser evidence, cleanup truth, finding IDs, and
 exact participant identity remains only in content-free private router receipts.
 

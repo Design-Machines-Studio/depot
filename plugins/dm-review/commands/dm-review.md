@@ -52,6 +52,33 @@ if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrou
 
 The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file, writes a schema-bound `run-cost-summary.json` beside that run's `authoritative-receipts.json`, and appends exactly one receipt line -- the artifact path, or `run-cost-summary: skipped (<reason>)` on any internal failure. It is observation-only: it exits 0 for every measurement outcome, never gates or alters a review, lane, or phase outcome, and its absence never fails one. Exit 6 (receipt write failed after acceptance) appends `skipped (receipt-write-failed)` through the status-aware `||` fallback; exit 2 is an invalid invocation and propagates; any other non-zero status appends `skipped (kernel-unresolvable)`, and a failing final append keeps its own status visible. A refused symlinked receipt path still exits 0 and reports on stderr alone -- a non-zero exit would append through the symlink just refused. Receipt paths are fixed per directory, so concurrent runs sharing one directory overwrite each other: use the invocation's exact-owned root or serialize callers that intentionally share a documented deliverable directory. Pass a coherent installed bundle's matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; an unreadable or invalid matrix emits one stderr line, skips imputation, and never fails the emission. Populate events with `record-attempt` as each lane settles -- a standalone `--append-to` translator double-counts the attempt, and `lanes: 0` after a run that executed lanes means this boundary is not wired. Full flags: `cli-measurement-commands.md`; otherwise the flags named here are the complete required set.
 
+Before private review inputs are cleaned, materialize
+`<exact-run-root>/review/observation-index-input.json` under Workflow Kernel's
+`observation-index-contract.md`. Set `producer.name` to `dm-review` and bind
+`producer.source_digest` to the explicit `role: producer` terminal review
+receipt. Bind request, lifecycle, authoritative receipts, attempts, metrics,
+cost summary, verification, installed-bundle resolutions, and complete finding
+contribution coverage by bounded reference and digest. The sealed raw finding
+inventory and lane outputs remain reference-bound; never embed findings, reviewer output,
+transcripts, provider payloads, or artifact bytes. For partial reviews, bind
+the valid sources that exist and mark absent lane/browser/contribution,
+candidate, token, or cost facts unavailable rather than zero-filling them.
+
+Use the already validated exact-owned run ID in the durable filename, then
+invoke exactly once. Never select an existing file by recency or reuse another
+run's companion:
+
+```text
+"$WORKFLOW_KERNEL" emit-observation-index --input <exact-run-root>/review/observation-index-input.json --output .claude/ux-review/observation-index-<run-id>.json
+```
+
+Append the durable accepted path and canonical digest to `run-receipt.md` and
+the complete report, or one
+closed `observation-index: unavailable (invalid-or-unsafe-input|runtime-unavailable|write-conflict|emission-failed)`
+line. Phase 8 preserves the accepted run-scoped index beside `report.md` while removing
+its private input with the exact-owned root. Failure cannot alter findings,
+coverage, merge recommendation, cleanup authority, or terminal model reporting.
+
 Inline Python source is forbidden. `bind-prediction` atomically seals the pre-action source, translated events, event digest, and request context, appending its exact authority to the canonical lifecycle ledger before `run.started`; observation and direct comparison require that binding plus the matching artifact and never create or mutate either. Keep the source input, request, authoritative receipts, `review-shadow-observation.json`, and `review-shadow-prediction.json` through comparison; delete raw prediction inputs afterward while preserving the compact report. Missing prediction evidence fails closed and preserves the review result; a parity gap cannot convert `CLEAN`, `APPROVE WITH FIXES`, `BLOCKS MERGE`, or `REVIEW INCOMPLETE` -- it is proposal-only evidence. Never auto-delete `.workflow-kernel/repository-scope.json`; after fresh exact-scope Docker inventory proves zero exact-run objects, success removes the terminal run state and disposable root. Failure/interruption may retain only one bounded diagnostic root and must report its exact path, reason, contents, and cleanup command.
 
 Translate a missing explicit `workflowClass` as `feature` with `workflow_class_defaulted=true`; never infer it from findings, diff kinds, or severity. Preserve requested/attempted/implemented-by/fallback/reason evidence for every provider lane.

@@ -113,6 +113,34 @@ if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrou
 
 The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file, writes a schema-bound `run-cost-summary.json` beside that run's `authoritative-receipts.json`, and appends exactly one receipt line -- the artifact path, or `run-cost-summary: skipped (<reason>)` on any internal failure. It is observation-only: it exits 0 for every measurement outcome, never gates or alters a review, lane, or phase outcome, and its absence never fails one. Exit 6 (receipt write failed after acceptance) appends `skipped (receipt-write-failed)` through the status-aware `||` fallback; exit 2 is an invalid invocation and propagates; any other non-zero status appends `skipped (kernel-unresolvable)`, and a failing final append keeps its own status visible. A refused symlinked receipt path still exits 0 and reports on stderr alone -- a non-zero exit would append through the symlink just refused. Receipt paths are fixed per directory, so concurrent runs sharing one directory overwrite each other: use the invocation's exact-owned root or serialize callers that intentionally share a documented deliverable directory. Pass a coherent installed bundle's matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; an unreadable or invalid matrix emits one stderr line, skips imputation, and never fails the emission. Populate events with `record-attempt` as each lane settles -- a standalone `--append-to` translator double-counts the attempt, and `lanes: 0` after a run that executed lanes means this boundary is not wired. Full flags: `cli-measurement-commands.md`; otherwise the flags named here are the complete required set.
 
+At the same terminal boundary and before private receipt cleanup, materialize
+`<exact-run-root>/review/observation-index-input.json` per Workflow Kernel's
+`observation-index-contract.md`. Use explicit `producer.name: dm-review` and
+bind its `source_digest` to the terminal review receipt with `role: producer`.
+Reference the request, lifecycle, authoritative receipts, attempts, metrics,
+cost, verification, installed-bundle resolutions, and canonical finding
+contribution coverage with digests, sizes, media types, provenance, and
+freshness. A complete run binds the contribution coverage receipt. A partial
+run binds only valid existing evidence and marks missing lanes, browser cases,
+contributions, candidates, token counters, or cost unavailable. Raw findings,
+reviewer output, transcripts, provider payloads, and artifact content remain
+reference-bound.
+
+Use the already validated exact-owned run ID in the durable filename. Never
+select an existing file by recency or reuse another run's companion. Then
+invoke the shared command exactly once:
+
+```text
+"$WORKFLOW_KERNEL" emit-observation-index --input <exact-run-root>/review/observation-index-input.json --output .claude/ux-review/observation-index-<run-id>.json
+```
+
+Record the durable accepted path plus canonical digest in `run-receipt.md` and
+the complete report, or one closed unavailable
+reason (`invalid-or-unsafe-input`, `runtime-unavailable`, `write-conflict`, or
+`emission-failed`). Phase 8 preserves the accepted index beside `report.md` and
+removes its private input with the exact-owned root. This observation cannot
+change findings, coverage, recommendation, cleanup, or completion.
+
 If this review creates any Docker/Compose resource, load `${CLAUDE_SKILL_DIR}/references/review-docker-create.md` and follow it exactly.
 
 ## Fix Philosophy
@@ -622,7 +650,9 @@ dirty worktree. Install this same Phase 8 sequence on every exit path.
 Never delete the feature branch under review. There is no condition under which a code review deletes the branch it was asked to review.
 
 For a standalone owner, preserve the already-generated JSON and Markdown beside
-`run-cost-summary.json` while cleaning its private receipts. For an enclosing
+`run-cost-summary.json` while cleaning its private receipts. In every mode,
+preserve the accepted `.claude/ux-review/observation-index-<run-id>.json`
+companion. For an enclosing
 owner, defer only that owner's exact private router directory and index; the
 enclosing workflow removes them after its one terminal render.
 
