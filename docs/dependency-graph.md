@@ -65,7 +65,7 @@ graph LR
 | dm-review | ghostwriter | required | `>=3.7.0` |
 | dm-review | council | required | `>=1.5.0` |
 | dm-review | model-router | required | `>=0.4.0` |
-| dm-review | workflow-kernel | required | `>=0.17.0` |
+| dm-review | workflow-kernel | required | `>=0.18.3` |
 | dm-review | ned | optional | `>=1.4.0` |
 | dm-review | superpowers | optional | `>=1.0.0` |
 | dm-review | airlift | optional | `>=1.0.0` |
@@ -74,8 +74,8 @@ graph LR
 | model-router | openrouter | optional | `>=1.19.0` |
 | model-router | workflow-kernel | optional | `>=0.17.0` |
 | ned | superpowers | optional | `>=1.0.0` |
-| pipeline | dm-review | required | `>=1.76.0` |
-| pipeline | model-router | required | `>=0.4.0` |
+| pipeline | dm-review | required | `>=1.78.0` |
+| pipeline | model-router | required | `>=0.6.0` |
 | pipeline | workflow-kernel | required | `>=0.18.1` |
 | pipeline | ned | optional | `>=1.4.0` |
 | pipeline | design-machines | optional | `>=1.3.0` |
@@ -91,7 +91,7 @@ graph LR
 | project-manager | design-machines | required | `>=1.3.0` |
 | project-manager | ghostwriter | required | `>=3.7.0` |
 | project-manager | council | required | `>=1.5.0` |
-| project-manager | model-router | optional | `>=0.4.0` |
+| project-manager | model-router | optional | `>=0.6.0` |
 | project-scaffolder | live-wires | optional | `>=1.0.0` |
 | project-scaffolder | dm-review | optional | `>=1.0.0` |
 | project-scaffolder | pipeline | optional | `>=1.0.0` |

@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.18.2
+version: 0.18.3
 ---
 
 # Workflow Kernel
@@ -82,7 +82,9 @@ command.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
-0.18.2 surface preserves exact committed-input binding for initial terminal
+0.18.3 surface treats dm-review family fields as observation-only evidence and
+permits same-family security and second-perspective contributions. The 0.18.2
+surface preserves exact committed-input binding for initial terminal
 plans while allowing the internal refresh after a successful declared
 mutating lane to bind newly generated live inputs. The 0.18.1 surface repairs
 the raw-receipt digest boundary for schema-owned colon-bearing identifiers.

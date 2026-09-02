@@ -726,9 +726,6 @@ def _nonnegative_number(value: object, field: str, *, integer: bool) -> object:
 
 
 _MODEL_FAMILY = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
-_INDEPENDENT_REVIEW_LANES = frozenset({
-    "security-auditor-codex-signoff", "second-perspective",
-})
 _NATIVE_MODEL_FAMILIES = (
     ("openai", ("gpt-", "o1", "o3", "o4", "codex")),
     ("anthropic", ("claude-", "opus", "sonnet", "haiku")),
@@ -774,20 +771,17 @@ def reviewer_family_from_model(value: object) -> str:
     raise ValueError("reviewer model has no recognized family")
 
 
-def validate_family_independence(receipt: Mapping[str, object]) -> None:
-    implementers = model_family_members(
-        receipt.get("implementer_family"), "implementer_family",
-    )
+def validate_family_observation(receipt: Mapping[str, object]) -> None:
+    model_family_members(receipt.get("implementer_family"), "implementer_family")
     reviewers = model_family_members(
         receipt.get("reviewer_family"), "reviewer_family",
     )
     required_text(receipt.get("resolution_reason"), "resolution reason")
-    if receipt.get("lane") in _INDEPENDENT_REVIEW_LANES:
-        derived_reviewer = reviewer_family_from_model(receipt.get("model"))
-        if reviewers != frozenset({derived_reviewer}):
-            raise ValueError("reviewer family does not match model")
-        if implementers & reviewers:
-            raise ValueError("independent review family overlap")
+    if receipt.get("model") == "not_reported":
+        return
+    derived_reviewer = reviewer_family_from_model(receipt.get("model"))
+    if reviewers != frozenset({derived_reviewer}):
+        raise ValueError("reviewer family does not match model")
 
 
 def _validate_observation_receipt(
@@ -1026,7 +1020,7 @@ def _validate_observation_receipt(
             "finding_root_cause", "source_severity",
         ):
             required_text(receipt.get(field), field.replace("_", " "))
-        validate_family_independence(receipt)
+        validate_family_observation(receipt)
         canonical_id, normalized_identity = canonical_finding_identity(
             receipt["finding_path"], receipt["finding_anchor"],
             receipt["finding_category"], receipt["finding_root_cause"],

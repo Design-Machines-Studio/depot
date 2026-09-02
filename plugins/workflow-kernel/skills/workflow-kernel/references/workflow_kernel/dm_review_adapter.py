@@ -11,7 +11,7 @@ from typing import Iterable, Mapping, Optional, Tuple
 from ._translation import (
     EXECUTION_MODES, RunSpec, canonical_finding_identity, dual_key,
     normalize_decision_profile, required_text, safe_reference,
-    translate_receipts, validate_family_independence,
+    translate_receipts, validate_family_observation,
 )
 from .model import HostCapabilities, NodeSpec, WorkflowClass
 from .redaction import contains_high_confidence_secret, normalize_durable_string
@@ -393,7 +393,7 @@ def export_finding_contributions(
             "evidence_refs", "finding_count", "raw_output_digest",
         }:
             required_text(lane_receipt[field], field.replace("_", " "))
-        validate_family_independence(lane_receipt)
+        validate_family_observation(lane_receipt)
         if (
             type(lane_receipt["finding_count"]) is not int
             or lane_receipt["finding_count"] < 0

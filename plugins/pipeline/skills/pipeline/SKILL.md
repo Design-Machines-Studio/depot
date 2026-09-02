@@ -378,7 +378,10 @@ index handoff for this caller.
 **Lean mode:** execute the final-gate-approved plan as one bounded implementation pass: inline the approved Key Requirements, compact project goal, relevant non-goals, and ownership boundary into the worker context; run the plan's focused verification and exactly one final dm-review; do not invent a manifest, prompt directory, chunk receipts, or per-chunk ceremony.
 Use the same caller-owned directory and index for the implementation and final-
 review receipts; pass them to the nested review with terminal reporting
-suppressed.
+suppressed. The lean implementation still dispatches `builder-fast` or
+`builder-deep` through model-router and stores its live receipt for the terminal
+operator report. The final review never receives implementation-origin evidence
+and never filters reviewer eligibility by author or model family.
 
 Wait for execution to complete. Mark ledger item 10 complete.
 

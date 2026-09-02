@@ -11,14 +11,16 @@ trap 'rm -rf "$TMP"' EXIT
 
 fail() { printf 'provider-neutral-routing: %s\n' "$1" >&2; exit 1; }
 
-# Closed roles, capabilities, effort, no inactive GLM, focused Kimi use, and
+# Closed roles, capabilities, effort, bounded GLM placement, focused Kimi use, and
 # no invented Codex candidate-to-allowance mapping.
 jq -e '
   (.roles | keys | sort) == (["architect","builder-deep","builder-fast","editorial","plan-critic","research-fast","review-deep","review-fast","security-review"] | sort) and
   (.effort.vocabulary == ["low","medium","high","max"]) and
   all(.roles[]; any(.[]; .transport == "openrouter")) and
   ([.roles[][] | .capabilities[] | select(IN("read-repository","write-repository","tool-use","browser","long-context","structured-output","independent-family") | not)] | length == 0) and
-  ([.roles[][] | .model | select(test("glm";"i"))] | length == 0) and
+  ([.roles | to_entries[] | .key as $role | .value[]
+    | select(.model | test("glm";"i"))
+    | select(.model != "z-ai/glm-5.3-flash" or ($role != "builder-fast" and $role != "review-fast"))] | length == 0) and
   all(.roles[][] | select(.transport == "codex-cli"); has("rateLimitId") | not) and
   ([.roles | to_entries[] | select(.key != "security-review") | .value[] | .model | select(test("kimi";"i"))] | length == 0)
 ' "$POLICY" >/dev/null || fail 'role policy is not closed'
@@ -105,7 +107,6 @@ runtime_files=(
   "$ROOT/plugins/dm-review/skills/review/references/agent-registry.md"
   "$ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md"
   "$ROOT/plugins/dm-review/skills/review/references/guardrails.md"
-  "$ROOT/plugins/dm-review/skills/review/references/independent-family-lanes.md"
   "$ROOT/plugins/dm-review/skills/review/references/lane-fallback.md"
   "$ROOT/plugins/dm-review/skills/review/references/reviewer-prompt-template.md"
   "$ROOT/plugins/dm-review/skills/review/references/output-format.md"

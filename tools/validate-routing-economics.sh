@@ -23,25 +23,28 @@ check 'router schema and threshold are closed' jq -e '
   .effort.vocabulary == ["low","medium","high","max"]' "$POLICY"
 
 check 'builder-fast starts with the bounded fast candidate' jq -e '
-  .roles["builder-fast"][0].model == "deepseek/deepseek-v4-flash-0731" and
-  .roles["builder-fast"][0].transport == "openrouter"' "$POLICY"
+  .roles["builder-fast"][0].model == "gpt-5.6-luna" and
+  .roles["builder-fast"][0].transport == "codex-cli"' "$POLICY"
 
 check 'builder-deep starts on native subscription capacity' jq -e '
   .roles["builder-deep"][0].model == "gpt-5.6-sol" and
   .roles["builder-deep"][0].billing == "included-subscription"' "$POLICY"
 
-check 'architect begins with eligible native Fable then native Sol' jq -e '
-  .roles.architect[0].model == "fable" and
-  .roles.architect[1].model == "gpt-5.6-sol"' "$POLICY"
+check 'architect begins with native Sol subscription capacity' jq -e '
+  .roles.architect[0].model == "gpt-5.6-sol" and
+  .roles.architect[0].transport == "codex-cli"' "$POLICY"
 
-check 'native aliases bind to exact approved served identities' jq -e '
-  all(.roles[][]; if .transport == "claude-cli" then
-    (.servedIdentities | type) == "array" and (.servedIdentities | length) == 1
-    and all(.servedIdentities[]; test("^claude-(fable|opus)-[0-9]+$"))
-  else has("servedIdentities") | not end)' "$POLICY"
+check 'declared native aliases bind to exact approved served identities' jq -e '
+  ([.roles[][] | select(has("servedIdentities"))] | length) > 0 and
+  all(.roles[][]; if has("servedIdentities") then
+    .transport == "claude-cli" and (.servedIdentities | type) == "array" and
+    (.servedIdentities | length) == 1 and
+    all(.servedIdentities[]; test("^claude-(fable|opus)-[0-9]+$"))
+  else true end)' "$POLICY"
 
 check 'security head is isolated from ordinary roles' jq -e '
-  .roles["security-review"][0].model == "moonshotai/kimi-k3" and
+  .roles["security-review"][0].model == "gpt-5.6-terra" and
+  .roles["security-review"][1].model == "moonshotai/kimi-k3" and
   ([.roles | to_entries[] | select(.key != "security-review") | .value[].model | select(test("kimi";"i"))] | length == 0)' "$POLICY"
 
 check 'external max effort normalization is recorded policy' jq -e '

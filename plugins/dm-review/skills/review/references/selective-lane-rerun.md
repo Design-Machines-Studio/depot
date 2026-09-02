@@ -15,7 +15,7 @@ Before either rule may narrow coverage, recompute a non-empty
 in every pending finding's `source_agents` must resolve to exactly one member
 of that set. Unknown owners, aliases, role IDs, and criterion aliases are not
 narrowing signals; each fails open to full coverage with an explicit
-`fallback_reason`. `security-auditor` is the exact independent-family lane ID;
+`fallback_reason`. `security-auditor` is the exact full-diff security lane ID;
 `security-review` is its role and is invalid as an allowlist member.
 An empty computed lane set is never dispatched.
 
@@ -34,7 +34,7 @@ security escalation set. It passes those facts as
 `prior_full_review_complete: true`, and
 `security_boundary_changed: false`; the receiver validates them. If the prior
 full review was incomplete or a repair changes a security-sensitive boundary,
-repeat the full fan-out so independent-family full-diff security sign-off,
+repeat the full fan-out so full-diff security sign-off,
 `second-perspective`, and all applicable conditionals are complete on the new
 tested SHA.
 
