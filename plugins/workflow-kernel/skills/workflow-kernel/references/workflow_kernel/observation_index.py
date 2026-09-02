@@ -435,6 +435,8 @@ def _cost(value: object, sources_by_digest: Mapping[str, dict]) -> None:
             raise ValueError("imputation matrix is not bound to a cost source")
         _text(cost["basis"], "imputation basis", identifier=True)
         _provenance(cost["provenance"], frozenset(sources_by_digest), "imputed cost")
+        if cost["provenance"]["source_digest"] != matrix_digest:
+            raise ValueError("imputed cost provenance is not bound to its matrix")
         return
     if status == "unavailable":
         cost = _exact(value, frozenset({"status", "value_usd", "reason"}), "unavailable cost")

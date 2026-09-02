@@ -244,10 +244,11 @@ and artifact bytes stay out of the document.
 Invoke exactly once:
 
 ```text
-"$WORKFLOW_KERNEL" emit-observation-index --input plans/<feature>/observation-index-input.json --output plans/<feature>/observation-index.json
+"$WORKFLOW_KERNEL" emit-observation-index --input plans/<feature>/observation-index-input.json --output plans/<feature>/observation-index-<run-id>.json
 ```
 
-Append the accepted path and canonical digest to `receipt.md`, or one closed
+Append `observation-index: plans/<feature>/observation-index-<run-id>.json
+(<canonical digest>)` to `receipt.md`, or one closed
 `observation-index: unavailable (invalid-or-unsafe-input|runtime-unavailable|write-conflict|emission-failed)`
 line. Observation failure preserves the authoritative Pipeline outcome and can
 neither make an incomplete run clean nor make a successful run fail. A stale

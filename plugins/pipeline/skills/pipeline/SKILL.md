@@ -156,10 +156,10 @@ content. A missing or skipped source becomes an explicit unavailable fact.
 Then invoke exactly once:
 
 ```text
-"$WORKFLOW_KERNEL" emit-observation-index --input plans/<feature-slug>/observation-index-input.json --output plans/<feature-slug>/observation-index.json
+"$WORKFLOW_KERNEL" emit-observation-index --input plans/<feature-slug>/observation-index-input.json --output plans/<feature-slug>/observation-index-<run-id>.json
 ```
 
-On success, append `observation-index: plans/<feature-slug>/observation-index.json
+On success, append `observation-index: plans/<feature-slug>/observation-index-<run-id>.json
 (<canonical digest>)` to `receipt.md`. On failure, preserve the authoritative
 Pipeline outcome and append exactly one closed line:
 `observation-index: unavailable (invalid-or-unsafe-input|runtime-unavailable|write-conflict|emission-failed)`.

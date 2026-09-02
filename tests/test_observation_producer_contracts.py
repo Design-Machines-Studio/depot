@@ -24,14 +24,24 @@ class ObservationProducerContractTests(unittest.TestCase):
                 text = self.text(path)
                 command = (
                     f'"$WORKFLOW_KERNEL" emit-observation-index --input plans/{slug}/observation-index-input.json '
-                    f'--output plans/{slug}/observation-index.json'
+                    f'--output plans/{slug}/observation-index-<run-id>.json'
                 )
                 self.assertEqual(text.count(command), 1)
+                self.assertIn(
+                    f"observation-index: plans/{slug}/observation-index-<run-id>.json", text)
                 self.assertIn("producer.name", text)
                 self.assertIn("pipeline", text)
                 self.assertIn("role", text)
                 self.assertIn("producer", text)
                 self.assertIn("invalid-or-unsafe-input|runtime-unavailable|write-conflict|emission-failed", text)
+
+    def test_pipeline_run_scoped_outputs_do_not_collide(self):
+        for slug in ("<feature-slug>", "<feature>"):
+            with self.subTest(slug=slug):
+                template = f"plans/{slug}/observation-index-<run-id>.json"
+                first = template.replace("<run-id>", "pipeline-run-1")
+                second = template.replace("<run-id>", "pipeline-run-2")
+                self.assertNotEqual(first, second)
 
     def test_orchestrator_preserves_exact_source_handoff_until_caller_emits(self):
         text = self.text(ORCHESTRATOR)

@@ -1606,6 +1606,7 @@ def command_emit_observation_index(args):
         })
     document = _load_json(args.input, strict=True)
     index = compose_observation_index(document)
+    _reject_symlinked_components(output_path)
     _write_json_once(args.output, index)
     _emit({
         "emitted": True, "output": str(Path(args.output)),

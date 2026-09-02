@@ -203,6 +203,14 @@ class ObservationIndexTests(unittest.TestCase):
             }
         self.assert_invalid(unbound_matrix)
 
+        def mismatched_matrix_provenance(value):
+            value["observations"]["cost"] = {
+                "status": "imputed", "value_usd": 0.25,
+                "matrix_snapshot": "2026-09-01", "matrix_digest": DIGEST_C,
+                "basis": "api-equivalent", "provenance": provenance(DIGEST_B),
+            }
+        self.assert_invalid(mismatched_matrix_provenance)
+
     def test_rejects_model_fallback_ambiguity(self):
         def mutate(value):
             route = value["observations"]["models"]["value"][0]
@@ -333,6 +341,61 @@ class ObservationIndexTests(unittest.TestCase):
             unsafe = subprocess.run([*command, "--output", str(link)], env=environment, text=True, capture_output=True, check=False)
             self.assertNotEqual(unsafe.returncode, 0)
             self.assertEqual(victim.read_text(encoding="utf-8"), "safe")
+
+
+    def test_emit_cli_refuses_symlinked_output_parent(self):
+        fixture = (
+            Path(__file__).parent / "fixtures" / "observation-index" /
+            "pipeline-complete-v1.json"
+        )
+        environment = dict(os.environ)
+        references = (
+            Path(__file__).parents[1] / "plugins" / "workflow-kernel" /
+            "skills" / "workflow-kernel" / "references"
+        )
+        environment["PYTHONPATH"] = str(references)
+        with tempfile.TemporaryDirectory(dir=Path(__file__).parents[1]) as directory:
+            root = Path(directory)
+            target = root / "target"
+            target.mkdir()
+            redirected_parent = root / "redirected"
+            redirected_parent.symlink_to(target, target_is_directory=True)
+            result = subprocess.run([
+                sys.executable, "-m", "workflow_kernel",
+                "emit-observation-index", "--input", str(fixture),
+                "--output", str(redirected_parent / "index.json"),
+            ], env=environment, text=True, capture_output=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertFalse((target / "index.json").exists())
+
+    def test_emit_cli_refuses_identical_input_output_without_mutation(self):
+        fixture = (
+            Path(__file__).parent / "fixtures" / "observation-index" /
+            "pipeline-complete-v1.json"
+        )
+        environment = dict(os.environ)
+        references = (
+            Path(__file__).parents[1] / "plugins" / "workflow-kernel" /
+            "skills" / "workflow-kernel" / "references"
+        )
+        environment["PYTHONPATH"] = str(references)
+        with tempfile.TemporaryDirectory() as directory:
+            input_path = Path(directory) / "input.json"
+            input_path.write_bytes(fixture.read_bytes())
+            before = input_path.read_bytes()
+            result = subprocess.run([
+                sys.executable, "-m", "workflow_kernel",
+                "emit-observation-index", "--input", str(input_path),
+                "--output", str(input_path),
+            ], env=environment, text=True, capture_output=True, check=False)
+            self.assertNotEqual(result.returncode, 0)
+            self.assertEqual(input_path.read_bytes(), before)
+            error = json.loads(result.stderr)["error"]
+            self.assertEqual(error["code"], "invalid_schema")
+            self.assertEqual(
+                error["details"]["reason_code"],
+                "value-sha256:afe55405a8773f315d9d5f42f16fdd90b3bf013210bddaca5ccf53cf82b2a987",
+            )
 
 
 if __name__ == "__main__":
