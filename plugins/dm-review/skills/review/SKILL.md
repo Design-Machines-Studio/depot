@@ -54,7 +54,7 @@ Default to the cheapest tier that fits.
 |------|------|-----------|
 | Per chunk during pipeline execution | `dm-review-quick` | 2 core judgment lanes + applicable UI/build/domain lanes |
 | Pre-merge, once per PR | full `dm-review` | All applicable agents + consolidation + optional memory enrichment when callable |
-| Bulk second opinions / large-diff first pass | fixed lane-to-role mapping | Family-independent security analysis plus style, duplication, pattern, and doc lanes; eligible diff sections only; mandatory full-diff independent-family sign-off |
+| Bulk second opinions / large-diff first pass | fixed lane-to-role mapping | Security analysis plus style, duplication, pattern, and doc lanes; eligible diff sections only; mandatory full-diff security sign-off |
 | Bounded repair review | full + one repair | One repair batch and one affected-lane recheck; repeat broad review only when the original was incomplete or the repair changed a real sensitive boundary |
 
 **Escalation exception:** quick review is an early feedback gate, not the final
@@ -66,7 +66,7 @@ a chunk early only when a changed path matches this bounded set:
 `deploy/**`, `*.env*`, or the Depot credential-transport controls
 `openrouter-wrapper.sh` / `delegation-boundary.sh`. Do not widen this set to all handlers, shell scripts, dependency manifests, or configuration files. A
 matching chunk skips the quick tier and runs the role-selected
-`security-auditor` analysis (eligible file sections) plus the mandatory full-diff independent-family security sign-off. Sections containing actual
+`security-auditor` analysis (eligible file sections) plus the mandatory full-diff security sign-off. Sections containing actual
 secrets are held from external dispatch and completed within the role fallback
 boundary; path names alone never decline disclosure.
 
@@ -201,15 +201,16 @@ Select agents by mode, changed file extensions, and project type; resolve each t
 #### Provider-neutral role dispatch
 
 dm-review selects the complete roster, review criteria, role, required
-capabilities, effort, and whether family independence is required. It never
+capabilities, and effort. It never
 selects or receives a model, provider, transport, family, subscription, billing
 rail, availability judgment, or fallback order.
 
 Load `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md` for the fixed
-lane-to-role mapping and one-shot dispatcher contract. For independent lanes,
-pass the run-private receipt registry plus opaque implementing receipt IDs;
-model-router reads private family evidence and excludes every implementing
-family. A verified human-authored diff uses the explicit origin flag instead.
+lane-to-role mapping and one-shot dispatcher contract. Reviewer eligibility is
+origin-neutral: never request, infer, or pass implementation-origin declarations,
+implementer receipt IDs, family exclusions, `--human-authored`, or `--origin-file`.
+Security and second perspective stay mandatory because of their review criteria,
+not because a participant belongs to a different model family.
 Public lane companions and peer prompts use stable lane names and anonymous
 participants only. Exact identity stays in content-free private receipts.
 
@@ -238,7 +239,7 @@ Do not add `second-perspective`, security, architecture, documentation, or full-
 
 These five review criteria always run as five logical lanes:
 
-1. **security-auditor** -- `security-review`, independent family, full diff, always required
+1. **security-auditor** -- `security-review`, full diff, always required
 2. **architecture-reviewer** -- `review-deep`
 3. **pattern-recognition-specialist** -- `review-deep`
 4. **code-simplicity-reviewer** -- `review-deep`
@@ -253,9 +254,8 @@ disables it, and a disabled lane is receipted in Coverage Gaps. The legacy name
 variable disables the lane.
 
 When enabled, add **second-perspective** as a parallel read-only
-`plan-critic` at high effort in full mode only. Pass every opaque implementing
-receipt ID with the run-private registry, or pass the explicit verified
-human-authored origin, and require `independent-family`. Use
+`plan-critic` at high effort in full mode only. Do not pass implementation
+receipts or request family exclusion. Use
 `dm-review/*/agents/review/codex-perspective.md` as the compatibility-named
 criteria file; its filename does not select a participant. Normalize output to
 P1/P2/P3 and let the consolidator merge every in-scope finding.
@@ -516,8 +516,9 @@ A failed, declined, or unavailable lane must be named. Load `${CLAUDE_SKILL_DIR}
 
 There is no additional authorization or caller-owned fallback rail. When this
 review is Pipeline's final full dm-review, “record the gap and continue” and the
-headless gap-and-continue default are unavailable. Independent lanes pass opaque
-receipt IDs; only private router receipts retain family evidence.
+headless gap-and-continue default are unavailable. Reviewer dispatch never
+receives implementation-origin evidence; private router receipts retain model
+identity only for the terminal operator report.
 
 ### Phase 5: Consolidation
 
@@ -568,7 +569,7 @@ Keep the consolidated report body provisional through the remaining phases. Do n
 
 Emit an authoritative coverage receipt after consolidation with one row per selected lane and per required verification case: role, requested/effective effort, anonymous participant, fallback/reason, completed/degraded/unavailable status, finding count, and evidence reference. A source-only UI-standards or UX-quality row is completed for its declared scope and explicitly excludes rendered claims. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report. One readiness cause produces one browser coverage row, not three lane failures.
 
-The receipt also records whether `review_lane_allowlist` was received and its disposition (`APPLIED`, `DISCARDED`, or `ABSENT`; a discarded input records the exact closed-set reason). It records the exact set of logical lanes actually `DISPATCHED` on this pass and the exact set in the recomputed selected full set that were deliberately `NOT_DISPATCHED` because an applied allowlist omitted them. The caller verifies the restriction against this receipt rather than assuming it was honored. Deliberately not-dispatched lanes under an applied allowlist are distinct from missing or failed required rows and do not by themselves make the review `REVIEW INCOMPLETE`; a dispatched lane that does not complete still does.
+The receipt also records whether `review_lane_allowlist` was received and its disposition (`APPLIED`, `DISCARDED`, or `ABSENT`; a discarded input records the exact closed-set reason). It records the exact set of logical lanes actually `DISPATCHED` on this pass and the exact set in the recomputed selected full set that were deliberately `NOT_DISPATCHED` because an applied allowlist omitted them. The caller verifies the restriction against this receipt rather than assuming it was honored. Deliberately not-dispatched lanes under an applied allowlist are distinct from missing or failed required rows and do not by themselves make the review `REVIEW INCOMPLETE`; a dispatched lane that does not complete still does. Implementation origin is not a coverage field or eligibility condition.
 
 Only after this receipt exists, run `observe-review` when the trusted runtime is available. The earlier `bind-prediction` atomically seals the independent source, translated events, event digest, and RunSpec context as `review-shadow-prediction.json`, then appends binding evidence while the run is still `planned`; the next transition must be `run.started`, and observation/compare reject missing, post-start, reordered, or artifact-mismatched authority. Byte-identical prediction and authoritative sources are valid when this pre-start ordering proves independence. Observation requires the matching artifact and never creates it; source and bound artifact remain through comparison. `.workflow-kernel/repository-scope.json` is repository-lifetime durable and never auto-deleted. After fresh exact-scope Docker inventory proves zero exact-run objects, success removes terminal run state and disposable roots; failure/interruption may retain only one bounded diagnostic root. Adapter failure or semantic parity gap is appended to the compact report without changing consolidation. At the terminal boundary, `compare` and `metrics` report `match`, `explained_host_difference`, `explained_host_economics_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, or `unsafe_to_promote`; economics differences are explicit non-matches and internal diagnostics appear only in `differences`.
 

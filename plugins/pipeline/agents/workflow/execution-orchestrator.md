@@ -110,9 +110,9 @@ deploy/**                   *.env*
 migrations/** containing seed credentials
 ```
 
-These chunks are never focused-only. Full-diff security signoff passes opaque
-implementer receipt IDs with `independent-family`; model-router excludes every
-implementing family. No concrete identity enters a review prompt or report.
+These chunks are never focused-only. Full-diff security signoff is mandatory,
+but author and model-family provenance never filter reviewer eligibility. No
+concrete implementation identity enters a review prompt or report.
 
 ## Host Adapter Parity
 
@@ -507,7 +507,7 @@ model-router bundle:
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
 MODEL_ROUTER_BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle \
-  --plugin model-router --minimum-version 0.4.0 \
+  --plugin model-router --minimum-version 0.6.0 \
   --required-executable skills/model-router/references/role-dispatch.sh \
   --required-executable skills/model-router/references/render-terminal-report.sh \
   --required-asset skills/model-router/references/role-request-schema.json \
@@ -527,10 +527,15 @@ ordered index. For owner `pipeline`, require the caller-supplied mode-`0700`
 private directory and existing ordered index, then extend rather than replace
 them so feedback iterations retain earlier attempts. Every successful
 live implementation or repair stores its content-free router receipt there,
-named by opaque receipt ID. Phase 6 passes this directory and every contributing
-implementation/repair receipt ID to independent review lanes. A model repair
-invalidates any earlier `--human-authored` origin claim; missing repair
-provenance keeps the independent lane unavailable.
+named by opaque receipt ID for terminal reporting. Phase 6 never passes those
+implementation receipts or author-origin claims into reviewer eligibility.
+
+Maintain one cumulative implementation receipt set for the entire run.
+Append the opaque ID from every successful initial builder, replacement
+builder, validation repair, review repair, and final-review repair receipt.
+Never discard an earlier contributor when a later repair lands, and never ask
+the operator for IDs created by this run. The set feeds the terminal model and
+cost report only; final dm-review and affected-lane rechecks do not consume it.
 
 Maintain `terminal-receipt-index.json` in that directory using model-router's
 `terminal-report-contract.md`. Add every implementation, repair,
@@ -785,13 +790,18 @@ success. When no chunk requires a rendered surface, create and pass no packet.
 
 First materialize the cumulative authoritative receipt array through the `all-chunks-complete` boundary and run the first `observe-pipeline` checkpoint. The observation remains shadow evidence and cannot approve the final review.
 
-Verification invariant: preserve family independence required by the selected
-review protocol. Pass opaque implementing receipt IDs with
-`independent-family`; model-router performs the exclusion privately. Quick mode
-dispatches its two independent core judgment lanes and applicable
+Verification invariant: preserve the selected review protocol without using
+implementation origin as an eligibility filter. Quick mode
+dispatches its two method-independent core judgment lanes and applicable
 build/UI/domain lanes; it may not collapse to the implementer's self-review. If
 a required lane is unavailable, report the closed role-level gap without
 selecting a substitute.
+
+The implementation receipt set here is exactly the cumulative set maintained
+since Step 3d, including every implementation and repair that contributed to
+the final diff. Preserve it for terminal reporting, but do not forward it as a
+review eligibility input. Nested review and repair prompts receive no concrete
+model, provider, family, candidate order, or cost.
 
 For `decisionProfile.consequence: high`, this existing final independent seam is the stronger verification depth: require all applicable independent lanes and conditional reviewers to return valid evidence. A missing, declined, dead, or degraded required lane stops `human_help_required`; do not approve from the remaining lane. This escalation does not add a full review to each ordinary chunk and does not relax sensitive-path or browser requirements.
 

@@ -114,7 +114,7 @@ while iteration < max_iterations:
       For every repaired or pending P1/P2/P3 finding, require source_agents is a non-empty list and
         every named owner resolves to exactly one member of selected_full_set.
         An unknown owner, alias, role ID, or criterion alias is a selection
-        error. security-auditor is the exact independent-family lane ID;
+        error. security-auditor is the exact full-diff security lane ID;
         security-review is its role and is not an allowlist member.
       lanes_a = prior_finding_owner_lanes union the validated exact source_agents
                 lane IDs from remaining pending P1/P2/P3 findings

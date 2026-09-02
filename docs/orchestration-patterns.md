@@ -206,7 +206,10 @@ The pipeline plugin combines:
 2. **Multi-Agent Dispatch** -- Research dispatches only applicable agents from its five source roles; adversarial review dispatches 3 perspective agents; execution dispatches subagents per chunk
 3. **Optional Memory-Mediated Coordination** -- The execution orchestrator returns one compact internal observation; a Pipeline caller records it only when ai-memory is callable
 4. **Worktree Isolation** -- Each execution chunk runs in its own worktree, merged back after passing review
-5. **Review-Fix Convergence** -- dm-review-loop runs proportional affected-lane verification after each chunk; P1/P2 are fixed and P3 remains advisory
+5. **Review-Fix Convergence** -- dm-review-loop fixes every retained P1/P2/P3 and runs proportional affected-lane verification after each repair batch
+6. **Origin-neutral review** -- implementation and repair receipts feed terminal
+   operator reporting, while final review eligibility depends only on the role,
+   required capabilities, and review scope
 
 ### Execution model
 

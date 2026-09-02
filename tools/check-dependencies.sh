@@ -275,8 +275,19 @@ for consumer, expected in consumer_floors.items():
 
 pipeline = manifests.get("pipeline")
 dm_review_floor = None if pipeline is None else pipeline.get("pluginDependencies", {}).get("dm-review")
-if dm_review_floor != ">=1.77.0":
-    errors.append("pipeline must require dm-review >=1.77.0")
+if dm_review_floor != ">=1.79.0":
+    errors.append("pipeline must require dm-review >=1.79.0")
+
+router_floors = {
+    "dm-review": ("pluginDependencies", ">=0.4.0"),
+    "pipeline": ("pluginDependencies", ">=0.6.0"),
+    "project-manager": ("optionalPluginDependencies", ">=0.6.0"),
+}
+for consumer, (dependency_kind, expected) in router_floors.items():
+    manifest = manifests.get(consumer)
+    actual = None if manifest is None else manifest.get(dependency_kind, {}).get("model-router")
+    if actual != expected:
+        errors.append(f"{consumer} must require model-router {expected} through {dependency_kind}")
 
 if errors:
     for error in errors:

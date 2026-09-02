@@ -788,10 +788,18 @@ selective_allowlist="$REPO_ROOT/plugins/dm-review/skills/review/references/selec
 require_text "$review_skill" "references/selective-lane-allowlist.md" "review receiver loads the allowlist contract only when the input is present"
 require_text "$selective_allowlist" "never relax this equality check to a subset check" "allowlist contract requires exact selected_full_set equality"
 require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.19.0"' "dm-review requires the exact-owned cleanup kernel release"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.77.0"' "pipeline requires the reusable UI evidence dm-review release"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.19.0"' "dm-review requires origin-neutral family observation support"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.79.0"' "pipeline requires the origin-neutral dm-review release"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"model-router": ">=0.4.0"' "dm-review requires provider-neutral role routing"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"model-router": ">=0.6.0"' "pipeline requires the current routing runtime"
+require_text "$review_skill" 'Implementation origin is not a coverage field or eligibility condition.' "dm-review makes implementation origin ineligible as a review filter"
+require_text "$review_skill" 'never request, infer, or pass implementation-origin declarations' "dm-review never collects implementation origin for lane routing"
+require_text "$orchestrator" 'one cumulative implementation receipt set' "Pipeline keeps implementation receipts for terminal reporting"
+require_text "$pipeline_cmd" 'stores its live receipt for the terminal' "Pipeline lean mode preserves terminal reporting receipts"
+require_text "$codex_native_adapter" 'Do not pass implementation receipts or author' "Codex-native mode keeps receipts out of reviewer eligibility"
+require_absent "$review_loop" 'implementation receipt IDs' "dm-review-loop does not preserve implementation origin for reviewer routing"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'family-independent second-opinion review' "dm-review manifest describes family-independent perspective resolution"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'method-independent second-opinion review' "dm-review manifest describes method-independent perspective resolution"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'Full mode only.' "migration-validator registry limits the lane to full mode"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'quick mode does not add this lane' "migration-validator registry matches the executable quick roster"
 for stale_migration_claim in 'Also dispatched in quick mode' 'dispatched in BOTH modes'; do
@@ -1245,14 +1253,23 @@ require_text "$eval_sweep" "Hard cap: 40 tool calls" \
   "pipeline eval-sweep retains its ledger-oriented hard cap"
 
 # --------------------------------------------------------------------------
-# Group 8: subscription-first and family-independent routing
+# Group 8: subscription-first and origin-neutral review routing
 # --------------------------------------------------------------------------
 
 printf "\nrouting invariants:\n"
 
 require_text "$review_skill" \
-  'Pass every opaque implementing' \
-  "dm-review requires a family-independent second perspective"
+  'never request, infer, or pass implementation-origin declarations' \
+  "dm-review reviewer eligibility is origin-neutral"
+if jq -e '
+  [.reviewRoles.security, .reviewRoles.secondPerspective]
+  | all(.capabilities | index("independent-family") == null)
+' "$routing_policy" >/dev/null; then
+  printf "  OK    Pipeline review roles do not restore family eligibility filtering\n"
+else
+  printf "  FAIL  Pipeline review roles do not restore family eligibility filtering\n"
+  failures=1
+fi
 require_text "$REPO_ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh" \
   "subscription-headroom-unknown" \
   "routing-policy consumers treat unknown subscription headroom conservatively"
@@ -1261,9 +1278,9 @@ if jq -e '
   | ($lane | length >= 2)
     and all($lane[]; (.capabilities | index("independent-family")) != null)
 ' "$REPO_ROOT/plugins/model-router/skills/model-router/references/role-policy.json" >/dev/null; then
-  printf "  OK    security sign-off route is implementer-aware and family-independent\n"
+  printf "  OK    generic security-review route supports optional family exclusion\n"
 else
-  printf "  FAIL  security sign-off route is implementer-aware and family-independent\n"
+  printf "  FAIL  generic security-review route supports optional family exclusion\n"
   failures=1
 fi
 
@@ -1376,10 +1393,10 @@ require_text "$noninteractive_fixtures" 'test_active_surfaces_have_no_approval_m
   "fixtures cover active approval-machinery absence"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md" \
   '`implementer_family`, `reviewer_family`, `resolution_reason`' \
-  "dm-review output contract requires family provenance on contribution decisions"
+  "dm-review output contract retains observation-only family fields"
 require_text "$review_skill" \
-  'only private router receipts retain family evidence' \
-  "dm-review keeps family provenance on the private contribution surface"
+  'private router receipts retain model' \
+  "dm-review keeps model identity on the private terminal-report surface"
 family_surfaces=(
   "$REPO_ROOT/plugins/openrouter/commands/openrouter.md"
   "$REPO_ROOT/plugins/openrouter/skills/openrouter/SKILL.md"
@@ -1411,22 +1428,26 @@ require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallbac
   "dm-review resolves independent-lane fallback at the role boundary"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "fails or is unavailable" \
   "dm-review applies role fallback to failed or unavailable candidates"
-require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "Never complete the lane with an implementing family." \
-  "dm-review forbids same-family partial-coverage completion for the sign-off lane"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "Never add" \
+  "dm-review fallback never adds implementation-origin evidence"
 require_text "$openrouter_agent_runner" "it does not decide whether content is eligible for OpenRouter" \
   "OpenRouter runner gives provider input the native eligibility boundary"
 require_text "$openrouter_agent_runner" "Credentials, private keys, tokens, authenticated endpoints" \
   "OpenRouter runner preserves credential-shaped review sections"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "anonymous lane, role" \
   "dm-review attributes independent fallback anonymously"
-require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/independent-family-lanes.md" "excludes every implementing family" \
-  "dm-review bounds independent-family fallback without a same-family retry"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
   "REVIEW INCOMPLETE" \
   "graceful degradation keeps sign-off exhaustion review-incomplete"
-require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
+require_absent "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
   "Independent-family role exhausted" \
-  "graceful degradation uses the provider-neutral second-perspective lane"
+  "graceful degradation does not encode family filtering"
+require_absent "$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/_translation.py" \
+  "independent review family overlap" \
+  "Workflow Kernel does not reject same-family dm-review lanes"
+require_text "$REPO_ROOT/tests/test_dm_review_adapter.py" \
+  "overlap_is_observation_only" \
+  "Workflow Kernel fixtures accept same-family observation evidence"
 require_absent "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
   "| Codex perspective |" \
   "graceful degradation removes the retired Codex-only perspective lane"

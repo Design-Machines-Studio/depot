@@ -1,6 +1,6 @@
 {
   "name": "dm-review",
-  "version": "1.77.0",
+  "version": "1.79.0",
   "description": "Code review orchestrator with evidence-backed severity, minimum-adequate repairs, zero-deferral convergence, full security and browser coverage, and stable finding receipts",
   "author": {
     "name": "Design Machines",
@@ -241,7 +241,7 @@
         "id": "codex-perspective",
         "name": "Second Perspective Reviewer",
         "category": "review",
-        "description": "Runs a read-only family-independent second-opinion review and normalizes findings to P1/P2/P3",
+        "description": "Runs a read-only method-independent second-opinion review and normalizes findings to P1/P2/P3",
         "tags": [
           "codex",
           "second-opinion",

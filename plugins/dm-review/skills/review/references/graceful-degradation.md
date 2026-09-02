@@ -7,7 +7,7 @@ mapped role through model-router.
 |---|---|---|
 | Role fallback succeeds | Keep output and role-level fallback reason | Completed (fallback) |
 | Structurally invalid external evidence | Retry the same role with another eligible candidate | Completed (fallback) or REVIEW INCOMPLETE |
-| Independent-family role exhausted | Do not use an implementing family | REVIEW INCOMPLETE |
+| Required review role exhausted | Preserve the named lane and exact role-level cause | REVIEW INCOMPLETE |
 | Required build/browser lane unavailable | Preserve exact failed requirement | REVIEW INCOMPLETE or blocked |
 | Optional enrichment unavailable | Omit silently unless attempted and failed | Core review unaffected |
 

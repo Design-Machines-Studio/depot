@@ -2,6 +2,20 @@
 # Read-only human-facing recommendation projection. Never dispatches a model.
 set -euo pipefail
 
+# Preserve native CLI discovery from the caller before constraining helper
+# lookup. Only absolute executable paths cross into the private live probe.
+resolve_native_cli() {
+  local candidate="$1" command_name="$2"
+  if [ -z "$candidate" ]; then
+    candidate="$(command -v "$command_name" 2>/dev/null || true)"
+  fi
+  case "$candidate" in
+    /*) [ -x "$candidate" ] && printf '%s\n' "$candidate" ;;
+  esac
+}
+
+ROUTER_CODEX_CLI="$(resolve_native_cli "${MODEL_ROUTER_CODEX_CLI_PATH:-}" codex)"
+ROUTER_CLAUDE_CLI="$(resolve_native_cli "${MODEL_ROUTER_CLAUDE_CLI_PATH:-}" claude)"
 PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export PATH
 
@@ -55,7 +69,10 @@ if [ -n "$AVAILABILITY_FILE" ]; then
 else
   case "$WORKFLOW_KERNEL_LAUNCHER" in /*/workflow-kernel-launcher.sh) ;; *) usage ;; esac
   [ -f "$WORKFLOW_KERNEL_LAUNCHER" ] && [ -x "$WORKFLOW_KERNEL_LAUNCHER" ] && [ ! -L "$WORKFLOW_KERNEL_LAUNCHER" ] || usage
-  AVAILABILITY="$(WORKFLOW_KERNEL="$WORKFLOW_KERNEL_LAUNCHER" "$DIR/availability-probe.sh")" || AVAILABILITY='{}'
+  AVAILABILITY="$(WORKFLOW_KERNEL="$WORKFLOW_KERNEL_LAUNCHER" \
+    MODEL_ROUTER_CODEX_CLI_PATH="$ROUTER_CODEX_CLI" \
+    MODEL_ROUTER_CLAUDE_CLI_PATH="$ROUTER_CLAUDE_CLI" \
+    "$DIR/availability-probe.sh")" || AVAILABILITY='{}'
 fi
 
 candidate_status() {

@@ -3,20 +3,20 @@
 This reference is the authoritative full-mode lane dispatcher. dm-review owns
 the roster and review criteria; model-router owns every concrete participant,
 availability, billing, family, transport, fallback, and payload invocation.
-For every lane that requires separation from implementation, load
-`independent-family-lanes.md` and pass only its opaque receipt identifiers.
+All review lanes are origin-neutral: author or implementer identity never
+filters candidate eligibility.
 
 ## Fixed role mapping
 
 | Lane | Role | Capabilities | Effort |
 |---|---|---|---|
-| security auditor | `security-review` | `read-repository`, `long-context`, `structured-output`, `independent-family` | `high` |
+| security auditor | `security-review` | `read-repository`, `long-context`, `structured-output` | `high` |
 | architecture | `review-deep` | `read-repository`, `long-context`, `structured-output` | `high` |
 | patterns | `review-deep` | `read-repository`, `structured-output` | `high` |
 | simplicity | `review-deep` | `read-repository`, `structured-output` | `high` |
 | documentation | `review-fast` | `read-repository`, `structured-output` | `medium` |
 | tests/build analysis | `review-fast` | `read-repository`, `structured-output` | `medium` |
-| second perspective | `plan-critic` | `read-repository`, `long-context`, `structured-output`, `independent-family` | `high` |
+| second perspective | `plan-critic` | `read-repository`, `long-context`, `structured-output` | `high` |
 | triggered domain lane | `review-deep` | explicit required capabilities only | `high` |
 | triggered UI analysis lane | `review-deep` | `read-repository`, `long-context`, `structured-output` | `high` |
 
@@ -51,16 +51,10 @@ same bundle. For each selected lane:
 4. Build `role-dispatch` argv as an array from the table above and pass the
    invocation's exact validated launcher as `--workflow-kernel
    "$WORKFLOW_KERNEL"`.
-5. Store every live implementation and repair receipt under
-   `<exact-run-root>/receipts/private/router/`, named by its opaque receipt ID.
-   For independent lanes, pass that directory with
-   `--independence-receipt-dir` and append each opaque implementing receipt ID
-   with `--independence-receipt-id`; dm-review never receives family names. For
-   a verified human-authored diff with no model-authored contribution, pass
-   `--human-authored` instead. Any subsequent model repair invalidates that
-   claim; register its live implementer receipt and use receipt IDs alone. If
-   repair provenance is unavailable, the independent lane remains unavailable.
-   The two origin forms are mutually exclusive.
+5. Do not pass implementation or repair receipts, an independence receipt
+   registry, `--human-authored`, or `--origin-file` to dm-review lanes. The
+   router may record the selected review participant in its private receipt for
+   terminal metrics, but authorship never changes the candidate set.
 6. Launch selected lanes in parallel when the host supports it.
 
 ### Proportional UI prerequisite
@@ -158,13 +152,12 @@ error sends that lane the full diff with `slice_status: slice_failed`.
 Uncertainty always widens input; a lane is never dispatched against an
 unverifiable slice or skipped because its slice is empty.
 
-## Security independence
+## Security coverage
 
-The full-diff security lane is always required and passes every implementing
-receipt ID. A supplementary eligible-section security result may coexist, but
-cannot replace the independent full-diff lane. Missing private family evidence,
-no eligible independent family, or incomplete held-section coverage keeps the
-review incomplete. Never fall back to an implementing family.
+The full-diff security lane is always required. A supplementary eligible-section
+security result may coexist, but cannot replace the full-diff lane. Missing or
+incomplete held-section coverage keeps the review incomplete; implementation
+origin and model family never do.
 
 ## Receipts
 

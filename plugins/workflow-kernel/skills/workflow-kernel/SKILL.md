@@ -92,7 +92,9 @@ Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
 0.19.0 surface adds the strict bounded `observation-index-v1` contract and
 observation-only `emit-observation-index` command for explicitly bound harness
-producers. The 0.18.2 surface preserves exact committed-input binding for initial terminal
+producers. The 0.18.3 surface treats dm-review family fields as observation-only evidence and
+permits same-family security and second-perspective contributions. The 0.18.2
+surface preserves exact committed-input binding for initial terminal
 plans while allowing the internal refresh after a successful declared
 mutating lane to bind newly generated live inputs. The 0.18.1 surface repairs
 the raw-receipt digest boundary for schema-owned colon-bearing identifiers.
