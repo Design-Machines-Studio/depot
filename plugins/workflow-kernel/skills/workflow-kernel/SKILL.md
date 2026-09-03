@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, bounded cross-harness observation indexes, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.19.0
+version: 0.19.1
 ---
 
 # Workflow Kernel
@@ -90,6 +90,10 @@ command.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
+0.19.1 surface keeps schema-1 repository scope IDs stable across device-number
+changes while preserving canonical path/inode and live descriptor checks; new
+run receipts use the current descriptor devices and the scope file is not
+rewritten. The
 0.19.0 surface adds the strict bounded `observation-index-v1` contract and
 observation-only `emit-observation-index` command for explicitly bound harness
 producers. The 0.18.3 surface treats dm-review family fields as observation-only evidence and

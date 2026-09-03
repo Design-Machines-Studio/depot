@@ -88,11 +88,15 @@ run's companion:
 ```
 
 Append the durable accepted path and canonical digest to `run-receipt.md` and
-the complete report, or one
-closed `observation-index: unavailable (invalid-or-unsafe-input|runtime-unavailable|write-conflict|emission-failed)`
-line. Phase 8 preserves the accepted run-scoped index beside `report.md` while removing
-its private input with the exact-owned root. Failure cannot alter findings,
-coverage, merge recommendation, cleanup authority, or terminal model reporting.
+the complete report. On failure, append exactly one closed
+`observation-index: unavailable (invalid-or-unsafe-input|runtime-unavailable|write-conflict|emission-failed)`
+line to `run-receipt.md` only. Do not repeat it per lane or phase, add it to the
+complete report, or include it in the normal compact chat handoff. Surface the
+closed reason only when the user requests observability diagnostics or when the
+index itself is the required deliverable. Phase 8 preserves the accepted
+run-scoped index beside `report.md` while removing its private input with the
+exact-owned root. Failure cannot alter findings, coverage, merge recommendation,
+cleanup authority, or terminal model reporting.
 
 Inline Python source is forbidden. `bind-prediction` atomically seals the pre-action source, translated events, event digest, and request context, appending its exact authority to the canonical lifecycle ledger before `run.started`; observation and direct comparison require that binding plus the matching artifact and never create or mutate either. Keep the source input, request, authoritative receipts, `review-shadow-observation.json`, and `review-shadow-prediction.json` through comparison; delete raw prediction inputs afterward while preserving the compact report. Missing prediction evidence fails closed and preserves the review result; a parity gap cannot convert `CLEAN`, `APPROVE WITH FIXES`, `BLOCKS MERGE`, or `REVIEW INCOMPLETE` -- it is proposal-only evidence. Never auto-delete `.workflow-kernel/repository-scope.json`; after fresh exact-scope Docker inventory proves zero exact-run objects, success removes the terminal run state and disposable root. Failure/interruption may retain only one bounded diagnostic root and must report its exact path, reason, contents, and cleanup command.
 

@@ -33,11 +33,15 @@ explicitly unmanaged.
 
 The scope identity lives in `.workflow-kernel/repository-scope.json`. It is
 created once from cryptographically random bytes and binds the real repository
-root and canonical lease root by absolute path, device, and inode. The kernel
-derives the nearest Git repository from each state directory; callers cannot
-select a lease root or scope ID. Worktree `.git` files are supported, while
-symlinked boundaries, cross-repository state, and changed scope metadata fail
-closed. Docker creation plans copy this exact scope ID into every managed
+root and canonical lease root by absolute path and inode. Its schema-1 device
+values are creation-time diagnostics because device numbers are local to a
+mount namespace and may change after a remount or namespace transition. The
+kernel preserves those stored values without rewriting the record and uses
+fresh pinned-descriptor device values for each invocation. It derives the
+nearest Git repository from each state directory; callers cannot select a lease
+root or scope ID. Worktree `.git` files are supported, while symlinked
+boundaries, cross-repository state, changed paths or inodes, and malformed scope
+metadata fail closed. Docker creation plans copy this exact scope ID into every managed
 object. Managed inventory applies both the positive managed label and exact
 repository-scope label at the Docker query boundary, so identical run or node
 IDs in another repository never enter this repository's cleanup inventory.

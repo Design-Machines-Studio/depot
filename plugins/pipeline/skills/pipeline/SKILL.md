@@ -161,10 +161,14 @@ Then invoke exactly once:
 
 On success, append `observation-index: plans/<feature-slug>/observation-index-<run-id>.json
 (<canonical digest>)` to `receipt.md`. On failure, preserve the authoritative
-Pipeline outcome and append exactly one closed line:
+Pipeline outcome and append exactly one closed line to that durable receipt:
 `observation-index: unavailable (invalid-or-unsafe-input|runtime-unavailable|write-conflict|emission-failed)`.
 Never translate observation failure into Pipeline failure, success, parity,
-cleanup authority, or publication proof, and never accept a stale output file.
+cleanup authority, publication proof, or merge recommendation, and never accept
+a stale output file. Do not repeat the failure per lane or phase, in the final
+report, or in the normal compact chat handoff. Surface the receipt's closed
+reason only when the user requests observability diagnostics or when the index
+itself is the requested deliverable.
 
 `bind-prediction` seals the prediction before `run.started`; observation cannot change the prediction. Exit `5` is a visible parity gap, not a pipeline failure. Never auto-delete `.workflow-kernel/repository-scope.json`.
 

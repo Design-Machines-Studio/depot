@@ -32,6 +32,13 @@ verdict from the complete report. Keep the explanation to one plain sentence.
 <If findings exist: `Open findings: N -- <evidence pointer>.`>
 ```
 
+When observation-index emission fails, keep its one closed reason only in the
+durable run receipt. Omit that observation-only failure from this normal compact
+handoff and from the complete report. Surface it only when the user requests
+observability diagnostics or when the index itself is the required deliverable.
+It never changes findings, the review verdict, cleanup, or the merge
+recommendation.
+
 When there are at most eight retained findings across all severities, list each
 exactly once. When there are more than eight, list the highest-impact eight,
 state `N additional findings` with the exact remaining count, and point to the

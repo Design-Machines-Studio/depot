@@ -1110,8 +1110,11 @@ contents into the handoff. The Pipeline caller materializes
 `plans/<feature-slug>/observation-index-input.json` after its cost-summary
 attempt, binds explicit `producer.name: pipeline` and source `role: producer`,
 and invokes the same Workflow Kernel `emit-observation-index` command used by
-dm-review. Observation-index failure is recorded as unavailable and never
-changes authoritative completion, review, cleanup, or merge evidence.
+dm-review. Observation-index failure is recorded once as unavailable in the
+durable receipt and never changes authoritative completion, review, cleanup,
+or merge evidence. Do not repeat it per lane or phase or include it in the
+normal compact chat handoff; disclose the closed reason only for requested
+observability diagnostics or when the index is the required deliverable.
 
 Observation-only. After compact projection and the caller's observation-index
 source handoff, delete eligible shadow Tier 2 inputs only when they are not

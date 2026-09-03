@@ -22,6 +22,7 @@ class ObservationProducerContractTests(unittest.TestCase):
         for path, slug in ((PIPELINE_COMMAND, "<feature-slug>"), (PIPELINE_RUN, "<feature>")):
             with self.subTest(path=path):
                 text = self.text(path)
+                normalized = " ".join(text.split())
                 command = (
                     f'"$WORKFLOW_KERNEL" emit-observation-index --input plans/{slug}/observation-index-input.json '
                     f'--output plans/{slug}/observation-index-<run-id>.json'
@@ -34,6 +35,10 @@ class ObservationProducerContractTests(unittest.TestCase):
                 self.assertIn("role", text)
                 self.assertIn("producer", text)
                 self.assertIn("invalid-or-unsafe-input|runtime-unavailable|write-conflict|emission-failed", text)
+                self.assertIn("durable receipt", normalized)
+                self.assertIn("normal compact chat handoff", normalized)
+                self.assertIn("observability diagnostics", normalized)
+                self.assertIn("per lane or phase", normalized)
 
     def test_pipeline_run_scoped_outputs_do_not_collide(self):
         for slug in ("<feature-slug>", "<feature>"):
@@ -45,11 +50,14 @@ class ObservationProducerContractTests(unittest.TestCase):
 
     def test_orchestrator_preserves_exact_source_handoff_until_caller_emits(self):
         text = self.text(ORCHESTRATOR)
+        normalized = " ".join(text.split())
         self.assertIn("Observation index source handoff:", text)
         self.assertIn("after its cost-summary", text)
         self.assertIn("producer.name: pipeline", text)
         self.assertIn("source `role: producer`", text)
-        self.assertIn("never\nchanges authoritative completion", text)
+        self.assertIn("never changes authoritative completion", normalized)
+        self.assertIn("recorded once as unavailable in the durable receipt", normalized)
+        self.assertIn("normal compact chat handoff", normalized)
 
     def test_dm_review_uses_same_envelope_for_complete_and_partial_runs(self):
         command = (
@@ -60,6 +68,7 @@ class ObservationProducerContractTests(unittest.TestCase):
         for path in (REVIEW_COMMAND, REVIEW_SKILL):
             with self.subTest(path=path):
                 text = self.text(path)
+                normalized = " ".join(text.split())
                 self.assertEqual(text.count(command), 1)
                 self.assertIn("producer.name", text)
                 self.assertIn("dm-review", text)
@@ -69,12 +78,19 @@ class ObservationProducerContractTests(unittest.TestCase):
                 self.assertIn("raw finding", text.lower())
                 self.assertIn("reference-bound", text.lower())
                 self.assertIn("validated exact-owned run ID", text)
-                self.assertIn("Phase 8 preserves", text)
+                self.assertIn("Phase 8 preserves", normalized)
+                self.assertIn("run-receipt.md` only", normalized)
+                self.assertIn("normal compact chat handoff", normalized)
+                self.assertIn("observability diagnostics", normalized)
+                self.assertIn("per lane or phase", normalized)
 
     def test_dm_review_output_format_links_durable_observation_companion(self):
         output_format = ROOT / "plugins" / "dm-review" / "skills" / "review" / "references" / "output-format.md"
         text = self.text(output_format)
+        normalized = " ".join(text.split())
         self.assertIn("Observation index: .claude/ux-review/observation-index-<run-id>.json", text)
+        self.assertIn("one closed reason only in the durable run receipt", normalized)
+        self.assertIn("normal compact handoff", normalized)
 
     def test_dm_review_run_scoped_outputs_do_not_collide(self):
         template = ".claude/ux-review/observation-index-<run-id>.json"

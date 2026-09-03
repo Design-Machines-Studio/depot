@@ -250,9 +250,14 @@ Invoke exactly once:
 Append `observation-index: plans/<feature>/observation-index-<run-id>.json
 (<canonical digest>)` to `receipt.md`, or one closed
 `observation-index: unavailable (invalid-or-unsafe-input|runtime-unavailable|write-conflict|emission-failed)`
-line. Observation failure preserves the authoritative Pipeline outcome and can
-neither make an incomplete run clean nor make a successful run fail. A stale
-output is a refusal, not evidence from this invocation.
+line to that durable receipt. Observation failure preserves the authoritative
+Pipeline outcome and can neither make an incomplete run clean nor make a
+successful run fail, change cleanup, or alter the merge recommendation. Record
+the failure once for the run, not per lane or phase. Omit it from the normal
+compact chat handoff and final report; surface the closed reason only when the
+user requests observability diagnostics or when the index itself is the
+requested deliverable. A stale output is a refusal, not evidence from this
+invocation.
 
 `bind-prediction` runs before corresponding authoritative actions, atomically seals the source, translated events, event digest, and RunSpec context, and appends exact binding authority to the canonical lifecycle ledger before `run.started`. `observe-pipeline` runs only after authoritative receipts exist and requires that ordered authority plus bound `pipeline-shadow-prediction.json`; direct comparison rechecks the same authority, and byte-identical predicted and authoritative receipts are valid only with the pre-start binding. It writes a separate `authoritative_observation` and never creates or changes the prediction. Without matching independent prediction evidence, observation and comparison fail closed. Keep the source and bound artifact until comparison completes. Write the compact shadow report and reliability metrics without changing the merge recommendation, cleanup disposition, or provider result. Never auto-delete the repository-lifetime `.workflow-kernel/repository-scope.json`; after fresh exact-scope Docker inventory proves zero exact-run objects, success removes terminal run state and disposable roots. Failure/interruption may retain only one bounded diagnostic root with the four required terminal fields.
 
