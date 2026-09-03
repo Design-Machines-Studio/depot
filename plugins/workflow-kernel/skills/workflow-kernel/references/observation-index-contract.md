@@ -39,6 +39,11 @@ typed gaps in the final column.
 
 - The index is observation-only. It never changes run state, stages, routing,
   verification, review disposition, recovery, or publication decisions.
+- A producer records one closed emission failure in its durable run receipt.
+  It does not repeat the failure per lane or phase or include it in the normal
+  compact chat handoff. The closed reason is surfaced only for requested
+  observability diagnostics or when the index is itself the required
+  deliverable.
 - `WorkflowEvent`, `RunState`, Pipeline and dm-review stages, attempt receipts,
   `run-cost-summary-v1`, verification contracts, and reconciliation receipts
   retain their current meanings and byte formats.

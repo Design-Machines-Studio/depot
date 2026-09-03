@@ -135,11 +135,15 @@ invoke the shared command exactly once:
 ```
 
 Record the durable accepted path plus canonical digest in `run-receipt.md` and
-the complete report, or one closed unavailable
-reason (`invalid-or-unsafe-input`, `runtime-unavailable`, `write-conflict`, or
-`emission-failed`). Phase 8 preserves the accepted index beside `report.md` and
-removes its private input with the exact-owned root. This observation cannot
-change findings, coverage, recommendation, cleanup, or completion.
+the complete report. On failure, record exactly one closed unavailable reason
+(`invalid-or-unsafe-input`, `runtime-unavailable`, `write-conflict`, or
+`emission-failed`) in `run-receipt.md` only. Do not repeat it per lane or phase,
+add it to the complete report, or include it in the normal compact chat
+handoff. Surface the closed reason only when the user requests observability
+diagnostics or when the index itself is the required deliverable. Phase 8
+preserves the accepted index beside `report.md` and removes its private input
+with the exact-owned root. This observation cannot change findings, coverage,
+recommendation, cleanup, completion, or the merge recommendation.
 
 If this review creates any Docker/Compose resource, load `${CLAUDE_SKILL_DIR}/references/review-docker-create.md` and follow it exactly.
 

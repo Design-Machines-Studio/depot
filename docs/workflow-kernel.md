@@ -6,7 +6,10 @@ bounded cross-harness observation indexes, and owned-resource cleanup. Pipeline 
 depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
-Version 0.19.0 adds `observation-index-v1`, a strict observation-only sidecar
+Version 0.19.1 keeps schema-1 repository scope IDs usable across filesystem
+device renumbering: stored device values are historical diagnostics, while
+canonical paths and inodes remain durable identity and every invocation uses
+fresh descriptor device values. Version 0.19.0 adds `observation-index-v1`, a strict observation-only sidecar
 over explicitly named, digest-bound run evidence. Pipeline and dm-review use the
 same harness-neutral envelope; missing facts remain unavailable, cost remains
 measured/imputed/unavailable, and large artifacts remain bounded references.
@@ -69,6 +72,12 @@ The full consumer-facing contract is `references/runtime-resolution.md`; in
 the templates below, `"$WORKFLOW_KERNEL"` is the resolved launcher path.
 
 Each repository owns a random, durable `.workflow-kernel/repository-scope.json`.
+Its schema-1 device fields record creation-time diagnostics and need not match
+after a remount or mount-namespace transition. The loader does not rewrite the
+record: it preserves the random scope ID, requires the exact canonical
+repository and lease-root paths and inodes, and retains all live pinned-
+descriptor, link, Git-boundary, and repository-containment checks. Current
+descriptor devices, never the historical stored values, enter new run receipts.
 Each run uses `.workflow-kernel/runs/<run-id>/` and includes:
 
 - `events.jsonl`: append-only, sequence-checked event ledger;

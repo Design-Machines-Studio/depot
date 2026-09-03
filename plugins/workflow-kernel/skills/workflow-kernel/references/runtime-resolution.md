@@ -102,9 +102,11 @@ contains the asset, it emits the kernel's structured
 - Initialize each run at `.workflow-kernel/runs/<run-id>`; the kernel derives
   the nearest real Git repository from the state directory and binds the
   canonical `.workflow-kernel` root to an immutable random scope ID plus
-  repository/root device and inode. No caller-selected lease root is
-  accepted. Symlink, cross-repository, scope-metadata, and run-directory
-  mismatches fail closed.
+  repository/root path and inode. Stored schema-1 device values are historical
+  diagnostics; current descriptor devices are used for the invocation and new
+  receipts. No caller-selected lease root is accepted. Symlink,
+  cross-repository, scope-metadata path/inode, and run-directory mismatches fail
+  closed.
 - If the launcher, runtime, or any shadow prediction/observation/comparison/
   metrics step is unavailable or incompatible, preserve the authoritative
   Markdown result and record `shadow unavailable` with a safe reason.
