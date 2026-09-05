@@ -616,7 +616,7 @@ class ModelIntelligenceTest(unittest.TestCase):
         ).hexdigest()
         accepted_result = self.v2_result(
             case_id="editorial-member-update",
-            model="fable",
+            model="opus",
             transport="claude-cli",
             observed_at="2026-08-29T02:00:00Z",
             endpoint_provider="anthropic",
@@ -641,17 +641,17 @@ class ModelIntelligenceTest(unittest.TestCase):
         )
         missing = self.v2_result(
             case_id="editorial-release-note",
-            model="fable",
+            model="opus",
             transport="claude-cli",
             observed_at="2026-08-29T02:01:00Z",
             endpoint_provider="anthropic",
         )
         self.write_attempt(benchmark_root, "missing", missing, output={"headline": "release"})
         rejected = dict(accepted_human)
-        rejected["candidate"] = "fable"
+        rejected["candidate"] = "opus"
         rejected_result = self.v2_result(
             case_id="editorial-member-update",
-            model="fable",
+            model="opus",
             transport="claude-cli",
             observed_at="2026-08-29T02:02:00Z",
             endpoint_provider="anthropic",
@@ -735,11 +735,11 @@ class ModelIntelligenceTest(unittest.TestCase):
             observed_at="2026-08-29T04:12:00Z",
         )
         authority_variants.append(("wrong-transport", wrong_transport, None))
-        missing_capability = self.v2_result(
+        newly_capable_research = self.v2_result(
             case_id="research-claim-source-map", model="gpt-5.6-luna", transport="codex-cli",
             observed_at="2026-08-29T04:13:00Z",
         )
-        authority_variants.append(("missing-capability", missing_capability, None))
+        self.write_attempt(benchmark_root, "newly-capable-research", newly_capable_research)
         receipt_mismatch = self.v2_result(
             case_id="review-zero-deferral", model=model, transport="openrouter",
             observed_at="2026-08-29T04:14:00Z",
@@ -767,16 +767,17 @@ class ModelIntelligenceTest(unittest.TestCase):
         self.assertEqual(fallback_group["comparable_attempts"], 1)
         self.assertEqual(fallback_group["validated_attempts"], 1)
         self.assertEqual(fallback_group["operational_retries"], {"identity": 4})
-        self.assertEqual(len(rollup["incompatible_v2"]), 5)
+        self.assertEqual(len(rollup["incompatible_v2"]), 4)
         self.assertTrue(all(item["model_conclusion"] is None for item in rollup["incompatible_v2"]))
         wrong_role_row = next(item for item in rollup["incompatible_v2"] if item["path"].endswith("wrong-role"))
         self.assertEqual(wrong_role_row["role"], "review-fast")
         review_role = next(role for role in rollup["roles"] if role["role"] == "review-fast")
         self.assertEqual(review_role["operational_retries"]["harness"], 4)
         research_role = next(role for role in rollup["roles"] if role["role"] == "research-fast")
-        self.assertEqual(research_role["operational_retries"], {"harness": 1})
+        self.assertEqual(research_role["validated_attempts"], 1)
+        self.assertEqual(research_role["operational_retries"], {})
         self.assertEqual(review_role["retained_attempts"], 9)
-        self.assertEqual(rollup["views"]["reliability"]["operational_retry_counts"]["harness"], 5)
+        self.assertEqual(rollup["views"]["reliability"]["operational_retry_counts"]["harness"], 4)
         self.assertEqual(rollup["views"]["reliability"]["retained_attempts"], 10)
 
     def test_native_served_identity_must_match_the_policy_alias_mapping(self) -> None:
@@ -1018,30 +1019,30 @@ class ModelIntelligenceTest(unittest.TestCase):
             }
 
         no_artifact = self.v2_result(
-            case_id="editorial-member-update", model="fable", transport="claude-cli",
+            case_id="editorial-member-update", model="opus", transport="claude-cli",
             observed_at="2026-08-29T07:00:00Z",
         )
         no_artifact["normalizedOutputArtifactSha256"] = "a" * 64
         self.write_attempt(benchmark_root, "no-artifact", no_artifact, human=rubric("a" * 64))
         bad_rubric = self.v2_result(
-            case_id="editorial-member-update", model="fable", transport="claude-cli",
+            case_id="editorial-member-update", model="opus", transport="claude-cli",
             observed_at="2026-08-29T07:01:00Z",
         )
         self.write_attempt(benchmark_root, "bad-rubric", bad_rubric, output=artifact, human=rubric("SHA256:" + digest.upper()))
         bad_result = self.v2_result(
-            case_id="editorial-member-update", model="fable", transport="claude-cli",
+            case_id="editorial-member-update", model="opus", transport="claude-cli",
             observed_at="2026-08-29T07:02:00Z",
         )
         bad_result["normalizedOutputArtifactSha256"] = "sha256:" + "b" * 64
         self.write_attempt(benchmark_root, "bad-result", bad_result, output=artifact, human=rubric(digest))
         invalid_result = self.v2_result(
-            case_id="editorial-member-update", model="fable", transport="claude-cli",
+            case_id="editorial-member-update", model="opus", transport="claude-cli",
             observed_at="2026-08-29T07:02:30Z",
         )
         invalid_result["normalizedOutputArtifactSha256"] = "SHA256:" + digest.upper()
         self.write_attempt(benchmark_root, "invalid-result", invalid_result, output=artifact, human=rubric(digest))
         accepted = self.v2_result(
-            case_id="editorial-member-update", model="fable", transport="claude-cli",
+            case_id="editorial-member-update", model="opus", transport="claude-cli",
             observed_at="2026-08-29T07:03:00Z",
         )
         accepted["normalizedOutputArtifactSha256"] = "sha256:" + digest
@@ -1187,7 +1188,7 @@ class ModelIntelligenceTest(unittest.TestCase):
             evidence_state="incompatible",
         )
         write_validation(
-            "fault", role="architect", candidate="fable", transport="claude-cli",
+            "fault", role="architect", candidate="opus", transport="claude-cli",
             comparable=False, conclusion=None, benchmark_fault=True,
             evidence_state="benchmark-faulted",
         )
@@ -1425,6 +1426,41 @@ printf '%s\n' '{event}'
         self.assertEqual(scored["requestedIdentity"], "opus")
         self.assertEqual(scored["servedIdentity"], "claude-opus-5")
 
+    def test_claude_allowed_identity_closes_missing_fallback_fields(self) -> None:
+        expected = {
+            "nextChunk": "role-complete benchmark corpus and deterministic scorer",
+            "executorRole": "builder-fast",
+            "executorCapabilities": ["read-repository", "write-repository", "structured-output"],
+            "rejectedComplexity": ["Issue #86 Floor observation schemas", "daemon", "generic workflow engine"],
+        }
+        telemetry = {
+            "result": json.dumps(expected, separators=(",", ":")),
+            "response": {"model": "claude-opus-5", "provider": "anthropic"},
+            "modelUsage": {
+                "claude-opus-5": {"outputTokens": 40, "provider": "anthropic"},
+                "claude-haiku-4-5": {"outputTokens": 2, "provider": "anthropic"},
+            },
+        }
+        stub = self.claude_stub("claude-no-fallback-fields-stub", telemetry)
+        result_dir = self.root / "claude-no-fallback-fields-result"
+        result = self.run_native(
+            case="assembly-next-chunk",
+            transport="claude-cli",
+            model="opus",
+            result_dir=result_dir,
+            stub=stub,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertFalse(receipt["fallbackUsed"])
+        self.assertEqual(receipt["fallbackProvenance"], "response-model-match")
+        self.assertEqual(receipt["attemptedModel"], "claude-opus-5")
+        self.assertEqual(receipt["attemptedModels"], ["claude-opus-5"])
+        self.assertEqual(receipt["attemptProvenance"], "response_model")
+        scored = json.loads((result_dir / "result.json").read_text())
+        self.assertTrue(scored["comparable"])
+        self.assertTrue(scored["overallSuccess"])
+
     def test_claude_usage_identity_requires_every_output_counter(self) -> None:
         telemetry = {
             "result": "{}",
@@ -1559,15 +1595,16 @@ printf '%s\n' '{event}'
             receipt["responseModelProvenance"],
             "modelUsage-unique-max-output-tokens",
         )
-        self.assertIsNone(receipt["fallbackUsed"])
-        self.assertEqual(receipt["fallbackProvenance"], "not_available")
+        self.assertFalse(receipt["fallbackUsed"])
+        self.assertEqual(receipt["fallbackProvenance"], "response-model-match")
         scored = json.loads((result_dir / "result.json").read_text())
         self.assertEqual(
             scored["identityStatus"]["provenance"],
             "modelUsage-unique-max-output-tokens",
         )
-        self.assertFalse(scored["comparable"])
-        self.assertEqual(scored["failureClass"], "unknown-served-identity")
+        self.assertTrue(scored["comparable"])
+        self.assertTrue(scored["overallSuccess"])
+        self.assertEqual(scored["failureClass"], "none")
         self.assertEqual((result_dir / "output.json").read_text(), json.dumps(raw_response) + "\n")
         self.assertEqual(json.loads((result_dir / "native-events.json").read_text()), telemetry)
 
@@ -1743,7 +1780,7 @@ printf '%s\n' '{event}'
         }
         claude_base = {
             "result": output,
-            "response": {"model": "fable", "provider": "anthropic"},
+            "response": {"model": "opus", "provider": "anthropic"},
             "fallbackUsed": False,
             "usage": {"input_tokens": 2},
         }
@@ -1787,22 +1824,22 @@ printf '%s\n' '{event}'
             (
                 "claude-counter",
                 "claude-cli",
-                "fable",
+                "opus",
                 {**claude_base, "usage": {"input_tokens": "2"}},
             ),
             (
                 "claude-model-usage-counter",
                 "claude-cli",
-                "fable",
+                "opus",
                 {
                     **claude_base,
-                    "modelUsage": {"fable": {"outputTokens": "2"}},
+                    "modelUsage": {"opus": {"outputTokens": "2"}},
                 },
             ),
             (
                 "claude-identity",
                 "claude-cli",
-                "fable",
+                "opus",
                 {
                     **claude_base,
                     "response": {"model": 5, "provider": "anthropic"},
@@ -1811,25 +1848,25 @@ printf '%s\n' '{event}'
             (
                 "claude-provider",
                 "claude-cli",
-                "fable",
+                "opus",
                 {**claude_base, "provider": []},
             ),
             (
                 "claude-fallback",
                 "claude-cli",
-                "fable",
+                "opus",
                 {**claude_base, "fallbackUsed": 0},
             ),
             (
                 "claude-usage",
                 "claude-cli",
-                "fable",
+                "opus",
                 {**claude_base, "usage": "missing"},
             ),
             (
                 "claude-attempts",
                 "claude-cli",
-                "fable",
+                "opus",
                 {**claude_base, "attemptedModels": [5]},
             ),
         ]
@@ -1868,7 +1905,7 @@ printf '%s\n' '{event}'
         response = "```json\n{}\n```"
         telemetry = {
             "result": response,
-            "model": "fable",
+            "model": "opus",
             "provider": "anthropic",
             "fallbackUsed": False,
             "usage": {"input_tokens": 2, "output_tokens": 3},
@@ -1878,7 +1915,7 @@ printf '%s\n' '{event}'
         result = self.run_native(
             case="assembly-next-chunk",
             transport="claude-cli",
-            model="fable",
+            model="opus",
             result_dir=result_dir,
             stub=stub,
         )
