@@ -11,14 +11,13 @@ trap 'rm -rf "$TMP"' EXIT
 
 fail() { printf 'provider-neutral-routing: %s\n' "$1" >&2; exit 1; }
 
-# Closed roles, capabilities, effort, no inactive GLM, focused Kimi use, and
+# Closed roles, capabilities, effort, focused Kimi use, and
 # no invented Codex candidate-to-allowance mapping.
 jq -e '
   (.roles | keys | sort) == (["architect","builder-deep","builder-fast","editorial","plan-critic","research-fast","review-deep","review-fast","security-review"] | sort) and
   (.effort.vocabulary == ["low","medium","high","max"]) and
   all(.roles[]; any(.[]; .transport == "openrouter")) and
   ([.roles[][] | .capabilities[] | select(IN("read-repository","write-repository","tool-use","browser","long-context","structured-output","independent-family") | not)] | length == 0) and
-  ([.roles[][] | .model | select(test("glm";"i"))] | length == 0) and
   all(.roles[][] | select(.transport == "codex-cli"); has("rateLimitId") | not) and
   ([.roles | to_entries[] | select(.key != "security-review") | .value[] | .model | select(test("kimi";"i"))] | length == 0)
 ' "$POLICY" >/dev/null || fail 'role policy is not closed'

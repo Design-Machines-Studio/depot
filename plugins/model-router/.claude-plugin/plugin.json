@@ -1,7 +1,7 @@
 {
   "name": "model-router",
   "description": "Internal deterministic role resolver and one-shot dispatcher for provider-neutral model work",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
