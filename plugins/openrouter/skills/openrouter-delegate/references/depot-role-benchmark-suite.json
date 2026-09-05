@@ -820,8 +820,8 @@
     },
     {
       "id": "plan-contradiction-repair",
-      "revision": 1,
-      "promptRevision": 1,
+      "revision": 2,
+      "promptRevision": 2,
       "role": "plan-critic",
       "taskType": "internal-contradiction-audit",
       "objective": "Find an internal contradiction while preserving valid decisions.",
@@ -833,13 +833,13 @@
       ],
       "workload": "quality",
       "executionMode": "single-turn-sealed-plan-pack",
-      "prompt": "Return one raw JSON object with contradiction, correction, and preservedDecisions. Plan statements: (1) all fixture validation is offline; (2) expected outputs will be scored by the local shell runner; (3) negative fixtures will call a hosted provider to confirm failure; (4) role inventory is derived from role-policy.json. Identify statement 3 as contradicting statement 1, correct it so negative fixtures use the local runner with no provider call, and preserve statements 2 and 4. Do not reject valid decisions.",
+      "prompt": "Return one raw JSON object with exactly three fields: contradiction (one string), correction (one string), and preservedDecisions (an array of strings). Do not nest objects inside these fields. Plan statements: (1) all fixture validation is offline; (2) expected outputs will be scored by the local shell runner; (3) negative fixtures will call a hosted provider to confirm failure; (4) role inventory is derived from role-policy.json. Identify statement 3 as contradicting statement 1, correct it so negative fixtures use the local runner with no provider call, and preserve statements 2 and 4. Do not reject valid decisions.",
       "outputContract": {
         "format": "one raw JSON object",
         "fields": {
-          "contradiction": "statement 3 versus statement 1",
-          "correction": "local runner and no provider call",
-          "preservedDecisions": "statements 2 and 4"
+          "contradiction": "string: statement 3 versus statement 1",
+          "correction": "string: local runner and no provider call",
+          "preservedDecisions": "array of strings: statements 2 and 4"
         }
       },
       "mandatoryAssertions": [
@@ -2467,7 +2467,7 @@
   ],
   "bindings": {
     "suiteRevision": 1,
-    "suiteDigest": "sha256:0fa85f4a8012ec10cf9ea28c717ee430dc448a874a3d50389bce9b73d12d8528",
+    "suiteDigest": "sha256:cfaf012c9a0e90b66aed0c5ae3f07150e7480d316b0b350aa96b59015294c6a5",
     "normalizerRevision": 1,
     "normalizerDigest": "sha256:cea619866aeb37714efaaba1d4a699d3d5ef3042630377554f6bfb36de81db5a",
     "cases": {
@@ -2520,10 +2520,10 @@
         "scorerDigest": "sha256:03e9e0fcca7e37caaf2ae005a75440975f04d26edf3e0d2fb221d5f0e5e65435"
       },
       "plan-contradiction-repair": {
-        "caseRevision": 1,
-        "caseDigest": "sha256:5daafc4e8f73202e74c5c3af0f6986a4cb2675d9b5d728f5ca36abd10f5072c1",
-        "promptRevision": 1,
-        "promptDigest": "sha256:e8d8f2d5a092c8874bea498fab50ba72be96f34ca5f6dede6e5bd734a390e184",
+        "caseRevision": 2,
+        "caseDigest": "sha256:0de7feffccdfe207af2c1a0e736a32b52ceca7db0bb11042ecd7965511e1ea18",
+        "promptRevision": 2,
+        "promptDigest": "sha256:31cdbd17a24d977f680633a71a0b911cf028b7df331c0df3a99e685ef701d5e6",
         "scorerRevision": 1,
         "scorerDigest": "sha256:7b221e18f0134f4179164b52914137c329be56cfc90c1b3ad8b2e35b4a559278"
       },
