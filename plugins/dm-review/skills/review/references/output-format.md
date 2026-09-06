@@ -28,8 +28,16 @@ verdict from the complete report. Keep the explanation to one plain sentence.
 
 ### Complete evidence
 `Full report: .claude/ux-review/report.md`.
+`Observation index: .claude/ux-review/observation-index-<run-id>.json` when accepted.
 <If findings exist: `Open findings: N -- <evidence pointer>.`>
 ```
+
+When observation-index emission fails, keep its one closed reason only in the
+durable run receipt. Omit that observation-only failure from this normal compact
+handoff and from the complete report. Surface it only when the user requests
+observability diagnostics or when the index itself is the required deliverable.
+It never changes findings, the review verdict, cleanup, or the merge
+recommendation.
 
 When there are at most eight retained findings across all severities, list each
 exactly once. When there are more than eight, list the highest-impact eight,
@@ -39,7 +47,8 @@ compact, but it follows the same fix queue and convergence path as P1/P2.
 
 Do not repeat private routing tables, agent transcripts, synthesis ledgers, cleanup
 tables, or raw reports in the handoff. Write them to the established durable
-artifact `.claude/ux-review/report.md` before delivery. Coverage gaps, blocked
+artifacts `.claude/ux-review/report.md` and, when accepted, the bounded
+`.claude/ux-review/observation-index-<run-id>.json` companion before delivery. Coverage gaps, blocked
 browser evidence, cleanup truth, finding IDs, and
 exact participant identity remains only in content-free private router receipts.
 
@@ -152,12 +161,12 @@ appends the ordered contribution receipts.
 
 The four companions remain machine evidence for the current Workflow Kernel
 contract. Keep them outside prompts and ordinary reports; exact identity fields
-are populated from private router receipts, never exposed to peer agents. Every decision records normalized family provenance: ordinary
-lanes may record the same implementer and reviewer family with a resolution such
-as `ordinary-lane-same-family-review`; required independent lanes must use
-disjoint families, including disjoint members of `mixed(<sorted families>)`, and
-their `reviewer_family` must match the closed family derived from the recorded
-reviewer model. Lane names and reviewer/lane identities are unique, and family
+are populated from private router receipts, never exposed to peer agents. Family
+fields are observation-only economics evidence and never filter dm-review lane
+eligibility. A lane may record the same implementer and reviewer family with a
+resolution such as `ordinary-lane-same-family-review`; `reviewer_family` still
+matches the closed family derived from the recorded reviewer model. Lane names
+and reviewer/lane identities are unique, and family
 values and resolution must exactly match every decision sourced from that lane.
 Every raw finding's `reviewer`/`lane` and `evidence_ref` must resolve to that
 literal lane entry, and the independently parsed union of all raw lane outputs
@@ -193,8 +202,12 @@ For explicitly required rendered coverage, emit exactly one of
 `resource_cleanup_failed`; never include raw tool/provider output, a private
 path, account data, or quota details. These readiness failures are not code
 findings. In an ordinary review with no target, place one aggregated
-`visual_target_unavailable -- NOT RUN` note in the Agent Summary instead; it is
-not an incomplete required gap and is never repeated per UI analysis lane.
+`visual_target_unavailable -- NOT RUN` note in the Agent Summary instead. Every
+already-selected source-capable UI lane still shows a completed `source-only`
+row; an already-selected visual-browser lane shows `NOT RUN`, while unselected
+lanes get no manufactured row. It is not an incomplete required gap and is
+never repeated per UI analysis lane. Never request one attachment or rerun per
+lane; name one missing target/start/evidence prerequisite.
 If none, state `Coverage Gaps: none -- all required lanes completed.`
 
 ---

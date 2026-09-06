@@ -124,9 +124,25 @@ during decomposition.
 
 ### Phase 2.5: Visual Reference Extraction
 
-For chunks with `renderedSurface: required`, check for brainstorm outputs that define the approved visual design: read the `visualDecisions` island of `plans/<feature-slug>/brainstorm.html` with `references/templates/extract-json-island.sh`, and check `.superpowers/brainstorm/` for HTML mockups (styling decisions as inline styles). If found, extract a **Visual Reference Summary** -- key styling decisions (component variants, tokens, layout patterns), visual hierarchy, and the specific visual treatments called out in the approved design -- plus the mockup file PATH. Extract decisions, not markup: do NOT embed full HTML mockups in prompts.
+For chunks with `renderedSurface: required`, first read any applicable
+`prototypeReference` and `prototypeParity` entries from the assessment/plan
+island. Load `plugins/pipeline/references/prototype-authority.md` when a declared
+counterpart exists. Then check for brainstorm outputs that define additional
+approved visual design: read the `visualDecisions` island of
+`plans/<feature-slug>/brainstorm.html` with
+`references/templates/extract-json-island.sh`, and check
+`.superpowers/brainstorm/` for HTML mockups (styling decisions as inline
+styles).
 
-This summary feeds each rendered-surface chunk's prompt as a `## Visual References` section and shapes `### Visual Acceptance Criteria`.
+Extract a **Visual Reference Summary** plus paths. Do not paste complete
+mockups or whole templates, but retain the exact short structural excerpts,
+component calls, Live Wires class strings, literal copy, metadata phrasing, and
+action order needed to prevent drift. For every chunk with a counterpart,
+carry the canonical prototype repository and exact commit, relevant prototype
+source files under `Files to Read`, prototype/target route-state-viewports,
+intentional differences, and both source and browser acceptance criteria.
+This summary feeds each rendered-surface chunk's prompt as a
+`## Visual References` section and shapes `### Visual Acceptance Criteria`.
 
 ### Phase 3: Overlap Analysis
 
@@ -177,6 +193,15 @@ Applies only when the chunk is an Assembly mutation, or actually alters authenti
 ### Phase 3i: Visual Acceptance Criteria Gate
 
 Applies only to chunks with `renderedSurface: required`; load `plugins/pipeline/references/promptcraft-applicability-gates.md` for the rendered-impression bar and the shared-component Visual Parity Criterion. A chunk marked `not_applicable` must not fabricate rendered impressions.
+
+When a prototype counterpart applies, acceptance criteria also require the
+builder to inspect prototype source before editing; search existing target and
+Live Wires components before creating one; preserve settled hierarchy,
+wrappers, classes, copy, action order, and control placement unless a named
+approved requirement requires divergence; compare source after editing; compare
+matched renders; and record intentional production differences rather than
+silently redesigning. Matching screenshots never waive source comparison, and
+matching classes never waive browser comparison.
 
 ### Phase 3j: UX Task Selection Gate
 
@@ -249,6 +274,11 @@ Missing, ambiguous, malformed, multiple, or conflicting plan data blocks
 generation and returns to the user gate.
 
 Each chunk object in the manifest MUST include `kind`, `renderedSurface`, `renderedSurfaceRationale`, `executorRole`, `executorCapabilities`, and `executorEffort` fields (classified independently in Phase 1, step 7). An approved deviation carries the closed `routingOverride` object described in Phase 1. The manifest encodes chunk ordering and dependencies, parallel groups, overlap analysis results, feature branch naming, branch creation or exact-head reuse semantics, execution metadata, and the approved workflow-class, decision-profile, final-review-mode, and rendered-surface controls.
+
+When prototype authority applies, copy the compact optional
+`prototypeReference` and only each chunk's relevant `prototypeParity` entries
+into the manifest. These are projections of the existing assessment/plan data
+island, not a new registry or evidence store.
 
 ### Phase 6: Requirements Coverage Check
 

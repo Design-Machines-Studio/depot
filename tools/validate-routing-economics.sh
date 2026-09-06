@@ -22,27 +22,27 @@ check 'router schema and threshold are closed' jq -e '
   .schemaVersion == 1 and .availability.headroomThresholdPct == 8 and
   .effort.vocabulary == ["low","medium","high","max"]' "$POLICY"
 
-check 'builder-fast starts on native subscription capacity then the bounded fast candidate' jq -e '
+check 'builder-fast starts with the bounded fast candidate' jq -e '
   .roles["builder-fast"][0].model == "gpt-5.6-luna" and
-  .roles["builder-fast"][0].billing == "included-subscription" and
-  .roles["builder-fast"][1].model == "deepseek/deepseek-v4-flash-0731" and
-  .roles["builder-fast"][1].transport == "openrouter"' "$POLICY"
+  .roles["builder-fast"][0].transport == "codex-cli"' "$POLICY"
 
 check 'builder-deep starts on native subscription capacity' jq -e '
   .roles["builder-deep"][0].model == "gpt-5.6-sol" and
   .roles["builder-deep"][0].billing == "included-subscription"' "$POLICY"
 
-check 'architect begins with native Sol then native Opus' jq -e '
+check 'architect begins with native Sol subscription capacity' jq -e '
   .roles.architect[0].model == "gpt-5.6-sol" and
-  .roles.architect[1].model == "opus"' "$POLICY"
+  .roles.architect[0].transport == "codex-cli"' "$POLICY"
 
-check 'native aliases bind to exact approved served identities' jq -e '
-  all(.roles[][]; if .transport == "claude-cli" then
-    (.servedIdentities | type) == "array" and (.servedIdentities | length) == 1
-    and all(.servedIdentities[]; test("^claude-(fable|opus)-[0-9]+$"))
-  else has("servedIdentities") | not end)' "$POLICY"
+check 'declared native aliases bind to exact approved served identities' jq -e '
+  ([.roles[][] | select(has("servedIdentities"))] | length) > 0 and
+  all(.roles[][]; if has("servedIdentities") then
+    .transport == "claude-cli" and (.servedIdentities | type) == "array" and
+    (.servedIdentities | length) == 1 and
+    all(.servedIdentities[]; test("^claude-(fable|opus)-[0-9]+$"))
+  else true end)' "$POLICY"
 
-check 'security head is native Terra and Kimi is isolated from ordinary roles' jq -e '
+check 'security head is isolated from ordinary roles' jq -e '
   .roles["security-review"][0].model == "gpt-5.6-terra" and
   .roles["security-review"][1].model == "moonshotai/kimi-k3" and
   ([.roles | to_entries[] | select(.key != "security-review") | .value[].model | select(test("kimi";"i"))] | length == 0)' "$POLICY"

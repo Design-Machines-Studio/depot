@@ -388,6 +388,7 @@ class MetricsTests(unittest.TestCase):
              "authoritative_receipt": "receipts/source-b.json", "source_finding_id": "source-b",
              "finding_disposition": "merged", "decision_reason_code": "exact-duplicate",
              "reviewer": "architecture", "provider": "anthropic", "model": "claude-opus",
+             "reviewer_family": "anthropic",
              "evidence_ref": "raw/architecture.json"},
         ]
         report = MetricsAggregator().aggregate(translate_review_receipts(receipts))

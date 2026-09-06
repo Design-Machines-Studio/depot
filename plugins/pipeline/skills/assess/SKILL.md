@@ -71,6 +71,15 @@ Produce a file list of 5-20 key files to examine. Prioritize:
 - Configuration
 - Tests
 
+For rendered work, resolve declared prototype authority before target UX
+evaluation. Load `plugins/pipeline/references/prototype-authority.md` when its
+conditional trigger applies. Read the exact prototype templates/components
+first and produce only the affected-surface `prototypeReference` and
+`prototypeParity` map defined there. Conflicting or unresolved repository,
+commit, route, or authority declarations stop UI implementation with
+`human_help_required`; a source-proven missing counterpart is recorded and
+falls back to existing production patterns.
+
 ### Phase 2: Parallel Assessment
 
 Launch two agents simultaneously:
@@ -121,10 +130,16 @@ Run discovery whenever the feature is UI/integration work. Execute browser proof
 when a dev server is detected or a URL is provided. Read
 `references/ux-assessment-protocol.md` for the full protocol. In summary:
 
-- Use Playwright MCP tools to navigate and screenshot the affected area
+- In T3 Code, use collaborative preview first; otherwise use configured
+  Playwright MCP tools and the existing recovery fallback
 - Evaluate: visual hierarchy, spacing, typography, interaction states, responsiveness
 - Apply the same UX principles as dm-review's ux-quality-reviewer
 - Check at 3 viewports: mobile (375px), tablet (768px), desktop (1440px)
+
+When a declared counterpart exists, capture prototype and target evidence at
+matching routes, states, and viewports. Source inspection and browser evidence
+are complementary; neither a target-only screenshot nor matching class names
+completes parity. Use T3 collaborative preview first when running in T3 Code.
 
 Produce a **Current UX Report** covering:
 - Screenshots at each viewport
@@ -178,7 +193,7 @@ Intake and Project Alignment, rewrites the `keyRequirements` island with the
 approved scope, and makes that cache authoritative. Before then the island is
 provisional even though the file exists.
 
-The brief is written as **HTML with a JSON data island**, not markdown -- assemble `templates/base.html` + `templates/sections/assessment.html` per `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/README.md`. The content outline below maps to the section's slots; the `keyRequirements`, `testPersonas`, `recentLessons`, and `baselineScreenshots` arrays also populate the `#pipeline-data` island so later phases read them with `extract-json-island.sh` instead of grepping prose.
+The brief is written as **HTML with a JSON data island**, not markdown -- assemble `templates/base.html` + `templates/sections/assessment.html` per `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/README.md`. The content outline below maps to the section's slots; the `keyRequirements`, `testPersonas`, `recentLessons`, and `baselineScreenshots` arrays also populate the `#pipeline-data` island so later phases read them with `extract-json-island.sh` instead of grepping prose. When prototype authority applies, add the compact optional `prototypeReference` object and affected-surface `prototypeParity` collection from `prototype-authority.md`; do not add a separate artifact or durable schema.
 
 ```markdown
 # Assessment: [Area Name]
@@ -210,6 +225,11 @@ The brief is written as **HTML with a JSON data island**, not markdown -- assemb
 ## UX State
 [From UX Assessment agent; use "Skipped" only for no UI/integration surface.
 For an unavailable required target, record blocked `human_help_required`.]
+
+## Prototype Parity
+[Source-first parity map for affected counterparts, including matched browser
+evidence and intentional differences; otherwise "No prototype counterpart"
+with inspected evidence, or "No declared prototype".]
 
 ## Test Personas
 [From Fixture Discovery, or "No dev-mode auth bypass detected."]
@@ -253,9 +273,11 @@ pause. If running standalone via `/pipeline-assess`, present it and stop.
 
 ## Graceful Degradation
 
-- No Playwright MCP: discovery may continue, but required UI/integration browser
-  coverage is blocked. Follow the shared recovery ladder and return
-  `human_help_required`; never mark required proof skipped or curl-verified.
+- No browser transport: when neither T3 collaborative preview in T3 Code nor a
+  configured fallback browser is available after the shared recovery ladder,
+  discovery may continue but required UI/integration browser coverage is
+  blocked. Return `human_help_required`; never mark required proof skipped or
+  curl-verified. Missing Playwright alone is not blocking when T3 preview works.
 - Optional personal sources: detect them only from callable-tool inventory or
   tool search. If ai-memory is not callable, omit the lookup and any mention of
   its absence; repository history still supplies the project-history evidence.

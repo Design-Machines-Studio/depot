@@ -1,10 +1,15 @@
 # UX Assessment Protocol
 
-Browser-based evaluation of current UX state using Playwright MCP tools. Evaluates what exists now, not what changed.
+Browser-based evaluation of current UX state. In T3 Code, use the collaborative
+preview first; otherwise use the configured browser tools and existing recovery
+fallbacks. Evaluate what exists now, not what changed.
 
 ## Prerequisites
 
-- Playwright MCP tools available (primary: `mcp__plugin_compound-engineering_pw__browser_*`, fallback: `mcp__plugin_playwright_playwright__browser_*`)
+- T3 collaborative preview available in T3 Code, or configured Playwright MCP
+  tools elsewhere (primary:
+  `mcp__plugin_compound-engineering_pw__browser_*`, fallback:
+  `mcp__plugin_playwright_playwright__browser_*`)
 - Dev server running and accessible
 
 ### Dev Server Detection
@@ -13,13 +18,23 @@ Check for a running dev server:
 1. Try common ports: 8080, 3000, 4000, 5173, 1313
 2. Check for `docker compose` services
 3. Look for `Procfile`, `Makefile`, or scripts that start dev servers
-4. If no server found, skip UX assessment with note
+4. If no server is found and a declared prototype counterpart or another
+   approved requirement makes rendered evidence mandatory, preserve completed
+   source evidence and return `human_help_required` naming the unavailable
+   prototype or target render. Otherwise skip UX assessment with a note for
+   genuinely non-rendered scope.
 
 ## Step 1: Navigate to Affected Area
 
 1. Open the relevant page(s) in the browser
 2. If the area has multiple pages, prioritize: index/list page, detail/show page, form/create page
 3. Wait for full page load (no pending network requests)
+
+When the assessment carries a declared prototype counterpart, load
+`plugins/pipeline/references/prototype-authority.md`. Navigate prototype and
+target route/state pairs at the same viewports after the exact prototype source
+has been inspected. Record unavailable prototype rendering separately from
+target availability; never substitute a target-only capture.
 
 ## Step 2: Viewport Screenshots
 
@@ -33,6 +48,11 @@ For each viewport, take a full-page screenshot and note:
 - Does the layout adapt properly?
 - Is content readable at this size?
 - Are touch targets adequate on mobile (min 44x44px)?
+
+For a matched counterpart, also capture the affected element hierarchy, actual
+class lists, visible copy/action order, and only the computed layout/spacing
+properties needed to explain a mismatch. Exact colors and CSS variables may
+differ when the project theme intentionally differs.
 
 ## Step 3: Visual Hierarchy Assessment
 

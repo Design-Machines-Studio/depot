@@ -1,7 +1,7 @@
 {
   "name": "dm-review",
   "description": "Code review orchestrator with evidence-backed severity, minimum-adequate repairs, zero-deferral convergence, full security and browser coverage, and stable finding receipts",
-  "version": "1.74.0",
+  "version": "1.79.1",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.io"
@@ -12,7 +12,7 @@
     "ghostwriter": ">=3.7.0",
     "council": ">=1.5.0",
     "model-router": ">=0.4.0",
-    "workflow-kernel": ">=0.17.0"
+    "workflow-kernel": ">=0.19.1"
   },
   "optionalPluginDependencies": {
     "ned": ">=1.4.0",
@@ -213,7 +213,7 @@
         "id": "ux-quality-reviewer",
         "name": "UX Quality Reviewer",
         "category": "review",
-        "description": "Reviews rendered pages for UX/UI quality -- hierarchy, spacing, states, navigation, typography, and interaction polish",
+        "description": "Reviews route/template source and shared rendered evidence for UX quality, with an honest source-only mode when browser evidence is unavailable",
         "tags": [
           "ux",
           "design-quality",
@@ -225,7 +225,7 @@
         "id": "ui-standards-reviewer",
         "name": "UI Standards Reviewer",
         "category": "review",
-        "description": "Evaluates rendered UI against modern SaaS standards (Stripe, Notion, Linear quality). Checks component quality, spacing tokens, state completeness, visual polish, and Live Wires compliance. Also runs in quick mode for UI files.",
+        "description": "Evaluates UI source and shared rendered evidence against prototype, Live Wires, component, and modern SaaS standards, including bounded source-only review",
         "tags": [
           "ui",
           "design-standards",
@@ -252,7 +252,7 @@
         "id": "codex-perspective",
         "name": "Second Perspective Reviewer",
         "category": "review",
-        "description": "Runs a read-only family-independent second-opinion review and normalizes findings to P1/P2/P3",
+        "description": "Runs a read-only method-independent second-opinion review and normalizes findings to P1/P2/P3",
         "tags": [
           "codex",
           "second-opinion",

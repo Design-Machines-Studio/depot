@@ -86,7 +86,7 @@ fi
 DISPATCHER="$DIR/../../model-router/skills/model-router/references/role-dispatch.sh"
 if [ ! -x "$DISPATCHER" ]; then
   BUNDLE_JSON="$("$WORKFLOW_KERNEL_LAUNCHER" resolve-plugin-bundle \
-    --plugin model-router --minimum-version 0.4.0 \
+    --plugin model-router --minimum-version 0.6.0 \
     --required-executable skills/model-router/references/role-dispatch.sh \
     --required-asset skills/model-router/references/role-request-schema.json \
     --required-asset skills/model-router/references/role-policy.json 2>/dev/null)" || BUNDLE_JSON=""

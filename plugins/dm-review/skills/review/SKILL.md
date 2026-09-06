@@ -54,7 +54,7 @@ Default to the cheapest tier that fits.
 |------|------|-----------|
 | Per chunk during pipeline execution | `dm-review-quick` | 2 core judgment lanes + applicable UI/build/domain lanes |
 | Pre-merge, once per PR | full `dm-review` | All applicable agents + consolidation + optional memory enrichment when callable |
-| Bulk second opinions / large-diff first pass | fixed lane-to-role mapping | Family-independent security analysis plus style, duplication, pattern, and doc lanes; eligible diff sections only; mandatory full-diff independent-family sign-off |
+| Bulk second opinions / large-diff first pass | fixed lane-to-role mapping | Security analysis plus style, duplication, pattern, and doc lanes; eligible diff sections only; mandatory full-diff security sign-off |
 | Bounded repair review | full + one repair | One repair batch and one affected-lane recheck; repeat broad review only when the original was incomplete or the repair changed a real sensitive boundary |
 
 **Escalation exception:** quick review is an early feedback gate, not the final
@@ -66,7 +66,7 @@ a chunk early only when a changed path matches this bounded set:
 `deploy/**`, `*.env*`, or the Depot credential-transport controls
 `openrouter-wrapper.sh` / `delegation-boundary.sh`. Do not widen this set to all handlers, shell scripts, dependency manifests, or configuration files. A
 matching chunk skips the quick tier and runs the role-selected
-`security-auditor` analysis (eligible file sections) plus the mandatory full-diff independent-family security sign-off. Sections containing actual
+`security-auditor` analysis (eligible file sections) plus the mandatory full-diff security sign-off. Sections containing actual
 secrets are held from external dispatch and completed within the role fallback
 boundary; path names alone never decline disclosure.
 
@@ -112,6 +112,38 @@ if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrou
 ```
 
 The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file, writes a schema-bound `run-cost-summary.json` beside that run's `authoritative-receipts.json`, and appends exactly one receipt line -- the artifact path, or `run-cost-summary: skipped (<reason>)` on any internal failure. It is observation-only: it exits 0 for every measurement outcome, never gates or alters a review, lane, or phase outcome, and its absence never fails one. Exit 6 (receipt write failed after acceptance) appends `skipped (receipt-write-failed)` through the status-aware `||` fallback; exit 2 is an invalid invocation and propagates; any other non-zero status appends `skipped (kernel-unresolvable)`, and a failing final append keeps its own status visible. A refused symlinked receipt path still exits 0 and reports on stderr alone -- a non-zero exit would append through the symlink just refused. Receipt paths are fixed per directory, so concurrent runs sharing one directory overwrite each other: use the invocation's exact-owned root or serialize callers that intentionally share a documented deliverable directory. Pass a coherent installed bundle's matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; an unreadable or invalid matrix emits one stderr line, skips imputation, and never fails the emission. Populate events with `record-attempt` as each lane settles -- a standalone `--append-to` translator double-counts the attempt, and `lanes: 0` after a run that executed lanes means this boundary is not wired. Full flags: `cli-measurement-commands.md`; otherwise the flags named here are the complete required set.
+
+At the same terminal boundary and before private receipt cleanup, materialize
+`<exact-run-root>/review/observation-index-input.json` per Workflow Kernel's
+`observation-index-contract.md`. Use explicit `producer.name: dm-review` and
+bind its `source_digest` to the terminal review receipt with `role: producer`.
+Reference the request, lifecycle, authoritative receipts, attempts, metrics,
+cost, verification, installed-bundle resolutions, and canonical finding
+contribution coverage with digests, sizes, media types, provenance, and
+freshness. A complete run binds the contribution coverage receipt. A partial
+run binds only valid existing evidence and marks missing lanes, browser cases,
+contributions, candidates, token counters, or cost unavailable. Raw findings,
+reviewer output, transcripts, provider payloads, and artifact content remain
+reference-bound.
+
+Use the already validated exact-owned run ID in the durable filename. Never
+select an existing file by recency or reuse another run's companion. Then
+invoke the shared command exactly once:
+
+```text
+"$WORKFLOW_KERNEL" emit-observation-index --input <exact-run-root>/review/observation-index-input.json --output .claude/ux-review/observation-index-<run-id>.json
+```
+
+Record the durable accepted path plus canonical digest in `run-receipt.md` and
+the complete report. On failure, record exactly one closed unavailable reason
+(`invalid-or-unsafe-input`, `runtime-unavailable`, `write-conflict`, or
+`emission-failed`) in `run-receipt.md` only. Do not repeat it per lane or phase,
+add it to the complete report, or include it in the normal compact chat
+handoff. Surface the closed reason only when the user requests observability
+diagnostics or when the index itself is the required deliverable. Phase 8
+preserves the accepted index beside `report.md` and removes its private input
+with the exact-owned root. This observation cannot change findings, coverage,
+recommendation, cleanup, completion, or the merge recommendation.
 
 If this review creates any Docker/Compose resource, load `${CLAUDE_SKILL_DIR}/references/review-docker-create.md` and follow it exactly.
 
@@ -173,15 +205,16 @@ Select agents by mode, changed file extensions, and project type; resolve each t
 #### Provider-neutral role dispatch
 
 dm-review selects the complete roster, review criteria, role, required
-capabilities, effort, and whether family independence is required. It never
+capabilities, and effort. It never
 selects or receives a model, provider, transport, family, subscription, billing
 rail, availability judgment, or fallback order.
 
 Load `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md` for the fixed
-lane-to-role mapping and one-shot dispatcher contract. For independent lanes,
-pass the run-private receipt registry plus opaque implementing receipt IDs;
-model-router reads private family evidence and excludes every implementing
-family. A verified human-authored diff uses the explicit origin flag instead.
+lane-to-role mapping and one-shot dispatcher contract. Reviewer eligibility is
+origin-neutral: never request, infer, or pass implementation-origin declarations,
+implementer receipt IDs, family exclusions, `--human-authored`, or `--origin-file`.
+Security and second perspective stay mandatory because of their review criteria,
+not because a participant belongs to a different model family.
 Public lane companions and peer prompts use stable lane names and anonymous
 participants only. Exact identity stays in content-free private receipts.
 
@@ -210,7 +243,7 @@ Do not add `second-perspective`, security, architecture, documentation, or full-
 
 These five review criteria always run as five logical lanes:
 
-1. **security-auditor** -- `security-review`, independent family, full diff, always required
+1. **security-auditor** -- `security-review`, full diff, always required
 2. **architecture-reviewer** -- `review-deep`
 3. **pattern-recognition-specialist** -- `review-deep`
 4. **code-simplicity-reviewer** -- `review-deep`
@@ -225,9 +258,8 @@ disables it, and a disabled lane is receipted in Coverage Gaps. The legacy name
 variable disables the lane.
 
 When enabled, add **second-perspective** as a parallel read-only
-`plan-critic` at high effort in full mode only. Pass every opaque implementing
-receipt ID with the run-private registry, or pass the explicit verified
-human-authored origin, and require `independent-family`. Use
+`plan-critic` at high effort in full mode only. Do not pass implementation
+receipts or request family exclusion. Use
 `dm-review/*/agents/review/codex-perspective.md` as the compatibility-named
 criteria file; its filename does not select a participant. Normalize output to
 P1/P2/P3 and let the consolidator merge every in-scope finding.
@@ -252,6 +284,9 @@ DM_REVIEW_REQUIRED_ASSETS=(
   "skills/review/references/host-verification-evidence.md"
   "skills/review/references/ui-review-readiness.md"
   "skills/review/references/ui-review-readiness.sh"
+  "skills/review/references/ui-review-contract.sh"
+  "skills/review/references/ui-case-selection.md"
+  "skills/review/references/browser-evidence-packet.sh"
 )
 ACCESSIBILITY_REQUIRED_ASSETS=()
 LIVE_WIRES_REQUIRED_ASSETS=()
@@ -378,7 +413,13 @@ Skipping Y agents:
 
 ### Phase 3.25: Design Spec Discovery
 
-If the change includes `.templ`, `.twig`, `.html`, or `.css`, load `${CLAUDE_SKILL_DIR}/references/design-spec-discovery.md` and inject any found spec as `## Design Spec Context`.
+If the change includes `.templ`, `.twig`, `.html`, or `.css`, load
+`${CLAUDE_SKILL_DIR}/references/design-spec-discovery.md`. Prefer caller-provided
+Pipeline prototype context; otherwise resolve exact declarations from the
+current PR/Issue, root instructions, or active plan. Read external prototype
+source once at the host and inject the bounded parity packet plus matched
+browser evidence into applicable UI lanes. Use local specs/brainstorms and then
+general heuristics only as fallbacks.
 
 ### Phase 3.5: Input Guardrails
 
@@ -418,24 +459,40 @@ normal tests/build analysis requests `read-repository` and
 ### Phase 3.9: Proportional UI readiness
 
 When any browser/UI lane is selected, load
-`${CLAUDE_SKILL_DIR}/references/ui-review-readiness.md` and complete its
-application and local-browser gate once before model dispatch. Select an
-explicit invocation URL first, then an already attached automation-capable T3
-preview, then optional tracked `.dm/ui-review.json`. Start only an exact
-declared process or Compose consumer and track only resources this invocation
-created. Never infer readiness from changed file extensions.
+`${CLAUDE_SKILL_DIR}/references/ui-case-selection.md` and
+`${CLAUDE_SKILL_DIR}/references/ui-review-readiness.md`. Run the host
+route-mapping preflight from `ui-case-selection.md`, recording exact
+file-to-route pairs or `unresolved-rendered-route`, then select affected cases
+once and complete one application and local-browser decision before model
+dispatch. Select an explicit invocation URL first, then an already attached
+automation-capable T3 preview, then optional tracked `.dm/ui-review.json`.
+Start only an exact declared process or Compose consumer and track only
+resources this invocation created. Never infer readiness from changed file
+extensions or interpret supported viewport/engine declarations as a full
+matrix requirement.
 
 Verify application reachability and actual local interactive browser
 navigation independently. OpenRouter web search and generic `tool-use` never
 satisfy local browser readiness. Current browser interaction is host-owned;
 collect bounded evidence once and pass the same packet to each mapped
-provider-neutral analysis role without a `browser` capability request. If no
-target exists in an ordinary review, dispatch no UI participant and emit one
-nonblocking visual coverage note; do not repeat it per lane. Keep `REVIEW
-INCOMPLETE` only when rendered evidence was explicitly required by
-`/dm-review-visual`, the user, acceptance criteria, or a verification profile.
-If readiness succeeds but the role is unavailable, report
-`model_participant_unavailable` distinctly.
+provider-neutral analysis role without a `browser` capability request. When
+browser proof is absent, run only the already-selected source-capable UI lanes
+as labelled source-only analysis; never add a lane during fallback, and do not
+dispatch an already-selected visual-browser lane. Emit one shared rendered
+coverage result, never one per lane. Keep `REVIEW INCOMPLETE` only when rendered
+evidence was explicitly required by `/dm-review-visual`, the user, acceptance
+criteria, a `renderedSurface: required` Pipeline chunk, required prototype
+parity, or an explicit verification profile case. Template extensions alone
+never create that requirement. If readiness succeeds but an analysis role is
+unavailable, report `model_participant_unavailable` distinctly.
+
+When Pipeline passes an explicit exact packet path, validate it with
+`browser-evidence-packet.sh` before readiness. Reuse it only for exact matching
+repository/prototype commits, clean/dirty state, selected case set, successful
+completion, and artifact hashes. Never discover a packet by latest file or
+timestamp. On rejection, attempt normal current target readiness; a required
+review with neither valid evidence nor a ready target retains the one rendered
+gap.
 
 ---
 
@@ -463,8 +520,9 @@ A failed, declined, or unavailable lane must be named. Load `${CLAUDE_SKILL_DIR}
 
 There is no additional authorization or caller-owned fallback rail. When this
 review is Pipeline's final full dm-review, “record the gap and continue” and the
-headless gap-and-continue default are unavailable. Independent lanes pass opaque
-receipt IDs; only private router receipts retain family evidence.
+headless gap-and-continue default are unavailable. Reviewer dispatch never
+receives implementation-origin evidence; private router receipts retain model
+identity only for the terminal operator report.
 
 ### Phase 5: Consolidation
 
@@ -513,9 +571,9 @@ Keep the consolidated report body provisional through the remaining phases. Do n
 
 #### Coverage receipt and shadow observation
 
-Emit an authoritative coverage receipt after consolidation with one row per selected lane and per required verification case: role, requested/effective effort, anonymous participant, fallback/reason, completed/degraded/unavailable status, finding count, and evidence reference. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report.
+Emit an authoritative coverage receipt after consolidation with one row per selected lane and per required verification case: role, requested/effective effort, anonymous participant, fallback/reason, completed/degraded/unavailable status, finding count, and evidence reference. A source-only UI-standards or UX-quality row is completed for its declared scope and explicitly excludes rendered claims. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report. One readiness cause produces one browser coverage row, not three lane failures.
 
-The receipt also records whether `review_lane_allowlist` was received and its disposition (`APPLIED`, `DISCARDED`, or `ABSENT`; a discarded input records the exact closed-set reason). It records the exact set of logical lanes actually `DISPATCHED` on this pass and the exact set in the recomputed selected full set that were deliberately `NOT_DISPATCHED` because an applied allowlist omitted them. The caller verifies the restriction against this receipt rather than assuming it was honored. Deliberately not-dispatched lanes under an applied allowlist are distinct from missing or failed required rows and do not by themselves make the review `REVIEW INCOMPLETE`; a dispatched lane that does not complete still does.
+The receipt also records whether `review_lane_allowlist` was received and its disposition (`APPLIED`, `DISCARDED`, or `ABSENT`; a discarded input records the exact closed-set reason). It records the exact set of logical lanes actually `DISPATCHED` on this pass and the exact set in the recomputed selected full set that were deliberately `NOT_DISPATCHED` because an applied allowlist omitted them. The caller verifies the restriction against this receipt rather than assuming it was honored. Deliberately not-dispatched lanes under an applied allowlist are distinct from missing or failed required rows and do not by themselves make the review `REVIEW INCOMPLETE`; a dispatched lane that does not complete still does. Implementation origin is not a coverage field or eligibility condition.
 
 Only after this receipt exists, run `observe-review` when the trusted runtime is available. The earlier `bind-prediction` atomically seals the independent source, translated events, event digest, and RunSpec context as `review-shadow-prediction.json`, then appends binding evidence while the run is still `planned`; the next transition must be `run.started`, and observation/compare reject missing, post-start, reordered, or artifact-mismatched authority. Byte-identical prediction and authoritative sources are valid when this pre-start ordering proves independence. Observation requires the matching artifact and never creates it; source and bound artifact remain through comparison. `.workflow-kernel/repository-scope.json` is repository-lifetime durable and never auto-deleted. After fresh exact-scope Docker inventory proves zero exact-run objects, success removes terminal run state and disposable roots; failure/interruption may retain only one bounded diagnostic root. Adapter failure or semantic parity gap is appended to the compact report without changing consolidation. At the terminal boundary, `compare` and `metrics` report `match`, `explained_host_difference`, `explained_host_economics_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, or `unsafe_to_promote`; economics differences are explicit non-matches and internal diagnostics appear only in `differences`.
 
@@ -596,7 +654,9 @@ dirty worktree. Install this same Phase 8 sequence on every exit path.
 Never delete the feature branch under review. There is no condition under which a code review deletes the branch it was asked to review.
 
 For a standalone owner, preserve the already-generated JSON and Markdown beside
-`run-cost-summary.json` while cleaning its private receipts. For an enclosing
+`run-cost-summary.json` while cleaning its private receipts. In every mode,
+preserve the accepted `.claude/ux-review/observation-index-<run-id>.json`
+companion. For an enclosing
 owner, defer only that owner's exact private router directory and index; the
 enclosing workflow removes them after its one terminal render.
 
@@ -617,7 +677,7 @@ invocation.
 
 ## Reference Files
 
-Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `ui-review-readiness.md` (required UI application/browser gate), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (exact worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
+Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `ui-case-selection.md` (affected/full UI case boundary), `ui-review-readiness.md` (shared source/rendered readiness gate), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (exact worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
 
 ## Agent Definition Paths
 

@@ -51,6 +51,12 @@ Wait for the role result before validating that chunk. Do not dispatch
 overlapping chunks in parallel unless the manifest level grouping and file
 ownership are disjoint.
 
+Append every successful live implementation and repair receipt ID to the
+run-private terminal-report set. Do not pass implementation receipts or author
+origin into final dm-review or affected-lane eligibility. These are receipts
+produced internally by this run; never ask the operator to provide them.
+Preserve them until terminal reporting and the final review disposition settle.
+
 On eligible deterministic validation failure, the adapter follows the
 orchestrator's canonical feedback receipt and invokes exactly:
 
@@ -79,16 +85,22 @@ references.
   a bounded security-sensitive path, escalate to full and receipt the effective
   mode.
 - Dispatch every selected review lane through model-router using dm-review's
-  role mapping and opaque implementing receipt IDs when independence is
-  required.
+  role mapping. Never attach implementation or repair receipts, author-origin
+  claims, family exclusions, or independence inputs to a review request.
+- Keep every implementation and repair receipt produced earlier in this
+  Codex-native run only in the caller-owned terminal-report set.
 - Fix every retained P1/P2/P3 finding and verify repairs with affected lanes; repeat the full fan-out only if its coverage was incomplete or a repair changed a security-sensitive boundary. Reject unsupported preference-only suggestions during consolidation instead of deferring them.
 - Write/read the same `todos/*-pending-*.md` and `todos/*-done-*.md` receipts that dm-review uses.
 
 Do not report "Skill tool unavailable" in Codex when this adapter can run. That message is only valid if the session lacks both nested skill invocation and enough local access to execute the dm-review inline protocol.
 
-**Repository verification adapter:** Resolve Workflow Kernel `>=0.15.0` once
-and use its `plan-verification` and `run-verification` subcommands whenever the
-target repository supplies `.dm/verification.json`.
+**Repository verification adapter:** First distinguish an absent profile from a
+declared profile. Resolve Workflow Kernel `>=0.15.0` once and use its
+`plan-verification` and `run-verification` subcommands whenever the target
+repository declares `.dm/verification.json` or an equivalent profile. A valid
+profile remains authoritative for planning, cadence, and evidence. A malformed
+or unsafe declaration stops with `human_help_required`, preserving the exact
+validation evidence; never fall back.
 
 - `chunk`: doctor, fast, and changed-package/dependent checks only.
 - `revision_batch`: apply the complete finding set from one review pass, then
@@ -99,9 +111,34 @@ target repository supplies `.dm/verification.json`.
   race/security/container/harness lanes explicitly.
 
 Do not execute a full or race suite after each chunk or each individual finding
-fix. For an
-Assembly target without `.dm/verification.json`, stop for project
-configuration rather than restoring hardcoded Go/Docker commands.
+fix. With no profile, apply the same repository-native policy as the Claude
+orchestrator regardless of repository type. Applicable root instructions must
+designate exactly one canonical full repository-owned verification entrypoint
+and may delegate to the other root instruction file. Separately scoped focused
+or pre-push commands do not conflict with that designation; different canonical
+full designations do conflict and block. The canonical entrypoint's directly
+named checked-in target or script must exist and must not depend on missing
+repository configuration. Otherwise stop narrowly with `human_help_required`
+and preserve the failed policy evidence. Never invent raw Go, Docker, package,
+build-tag, race, service, remote-CI, or other commands, and never synthesize or
+commit `.dm/verification.json`.
+
+Contract specimen: root `AGENTS.md` designates `make verify` as canonical full
+verification and names `make conformance` as narrower and `make survivor` as
+pre-push; root `CLAUDE.md` delegates to `AGENTS.md`; checked-in `Makefile` owns
+`verify:`, `conformance:`, and `survivor:`. The narrower commands do not conflict,
+so with no missing configuration repository-native verification is available.
+
+When the native policy passes, record `verificationPlanner: unavailable` and
+preserve the exact command and root policy-source path in existing verification
+evidence where supported; add no schema. Per chunk and review batch, run only
+focused checks explicitly approved by the prompt. Do not run the canonical
+native command per chunk, finding, or execution level. Run it exactly once on
+the integrated candidate before final review. After a repair batch, rerun it
+once and bind it to the new SHA when relevant verification inputs changed or
+relevance is uncertain. After an irrelevant repair, prior canonical-command
+evidence may be carried forward only with bounded diff proof that no relevant
+verification input changed since its tested SHA.
 
 **Repository cleanup is host-independent.** The adapter runs the same cleanup
 contract at the same points (Step 0e registry init, Step 3j per chunk, Step 5b

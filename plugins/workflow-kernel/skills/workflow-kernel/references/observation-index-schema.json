@@ -1,0 +1,328 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://designmachines.ca/schemas/workflow-kernel/observation-index-v1.json",
+  "title": "Workflow Kernel observation index v1",
+  "description": "A bounded, observation-only index over canonical development-run evidence.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema_version", "contract", "producer", "run", "sources", "observations", "emitted_at", "digest"],
+  "properties": {
+    "schema_version": {"const": 1},
+    "contract": {"const": "observation-index-v1"},
+    "producer": {"$ref": "#/$defs/producer"},
+    "run": {"$ref": "#/$defs/run"},
+    "sources": {
+      "type": "array", "minItems": 1, "maxItems": 64,
+      "items": {"$ref": "#/$defs/source"}
+    },
+    "observations": {"$ref": "#/$defs/observations"},
+    "emitted_at": {"$ref": "#/$defs/timestamp"},
+    "digest": {"$ref": "#/$defs/digest"}
+  },
+  "$defs": {
+    "text": {"type": "string", "minLength": 1, "maxLength": 4096},
+    "identifier": {
+      "type": "string", "minLength": 1, "maxLength": 256,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:/-]{0,255}$"
+    },
+    "digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "reference": {
+      "type": "string", "minLength": 1, "maxLength": 4096,
+      "description": "A validator-confirmed run-relative artifact path or content identifier; URLs, absolute paths, dot segments, queries, fragments, credentials, and control characters are rejected by the Python validator."
+    },
+    "timestamp": {
+      "type": "string", "minLength": 20, "maxLength": 64,
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}(\\.[0-9]+)?(Z|[+-][0-9]{2}:[0-9]{2})$"
+    },
+    "media_type": {
+      "type": "string", "minLength": 3, "maxLength": 255,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}/[A-Za-z0-9][A-Za-z0-9!#$&^_.+-]{0,126}$"
+    },
+    "unavailable_reason": {
+      "enum": ["not_reported", "not_applicable", "unsupported_by_harness", "source_missing", "source_stale", "consumer_not_defined"]
+    },
+    "provenance": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_digest", "observed_at"],
+      "properties": {
+        "source_digest": {"$ref": "#/$defs/digest"},
+        "observed_at": {"$ref": "#/$defs/timestamp"}
+      }
+    },
+    "unavailable": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "value", "reason"],
+      "properties": {
+        "availability": {"const": "unavailable"},
+        "value": {"type": "null"},
+        "reason": {"$ref": "#/$defs/unavailable_reason"}
+      }
+    },
+    "available_text": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "value", "provenance"],
+      "properties": {
+        "availability": {"const": "available"},
+        "value": {"$ref": "#/$defs/text"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "text_fact": {"oneOf": [{"$ref": "#/$defs/available_text"}, {"$ref": "#/$defs/unavailable"}]},
+    "available_reference": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "value", "provenance"],
+      "properties": {
+        "availability": {"const": "available"},
+        "value": {"$ref": "#/$defs/reference"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "reference_fact": {"oneOf": [{"$ref": "#/$defs/available_reference"}, {"$ref": "#/$defs/unavailable"}]},
+    "available_identifier": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "value", "provenance"],
+      "properties": {
+        "availability": {"const": "available"},
+        "value": {"$ref": "#/$defs/identifier"},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "identifier_fact": {"oneOf": [{"$ref": "#/$defs/available_identifier"}, {"$ref": "#/$defs/unavailable"}]},
+    "available_integer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "value", "provenance"],
+      "properties": {
+        "availability": {"const": "available"},
+        "value": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "integer_fact": {"oneOf": [{"$ref": "#/$defs/available_integer"}, {"$ref": "#/$defs/unavailable"}]},
+    "available_number": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "value", "provenance"],
+      "properties": {
+        "availability": {"const": "available"},
+        "value": {"type": "number", "minimum": 0, "maximum": 9007199254740991},
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "number_fact": {"oneOf": [{"$ref": "#/$defs/available_number"}, {"$ref": "#/$defs/unavailable"}]},
+    "available_identifier_list": {
+      "type": "object", "additionalProperties": false,
+      "required": ["availability", "value", "provenance"],
+      "properties": {
+        "availability": {"const": "available"},
+        "value": {
+          "type": "array", "maxItems": 1024, "uniqueItems": true,
+          "items": {"$ref": "#/$defs/identifier"}
+        },
+        "provenance": {"$ref": "#/$defs/provenance"}
+      }
+    },
+    "identifier_list_fact": {"oneOf": [{"$ref": "#/$defs/available_identifier_list"}, {"$ref": "#/$defs/unavailable"}]},
+    "producer": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "version", "execution_profile", "source_digest"],
+      "properties": {
+        "name": {"$ref": "#/$defs/identifier"},
+        "version": {"$ref": "#/$defs/identifier"},
+        "execution_profile": {"$ref": "#/$defs/identifier"},
+        "source_digest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "source": {
+      "type": "object", "additionalProperties": false,
+      "required": ["role", "reference", "digest", "media_type", "size_bytes", "source_timestamp", "observed_at", "maximum_age_seconds", "freshness", "freshness_reason"],
+      "properties": {
+        "role": {"enum": ["producer", "lifecycle", "receipts", "attempts", "metrics", "cost", "verification", "reconciliation", "provenance", "findings", "contributions", "artifact"]},
+        "reference": {"$ref": "#/$defs/reference"},
+        "digest": {"$ref": "#/$defs/digest"},
+        "media_type": {"$ref": "#/$defs/media_type"},
+        "size_bytes": {"type": "integer", "minimum": 0, "maximum": 9007199254740991},
+        "source_timestamp": {"$ref": "#/$defs/timestamp"},
+        "observed_at": {"$ref": "#/$defs/timestamp"},
+        "maximum_age_seconds": {"type": ["integer", "null"], "minimum": 0, "maximum": 9007199254740991},
+        "freshness": {"enum": ["fresh", "stale", "unknown"]},
+        "freshness_reason": {"type": ["string", "null"], "enum": [null, "age_exceeded", "not_reported", "clock_unknown"]}
+      }
+    },
+    "run": {
+      "type": "object", "additionalProperties": false,
+      "required": ["run_id", "session_id", "attempt_ids", "workflow_node_ids", "action_ids"],
+      "properties": {
+        "run_id": {"$ref": "#/$defs/identifier"},
+        "session_id": {"$ref": "#/$defs/identifier_fact"},
+        "attempt_ids": {"$ref": "#/$defs/identifier_list_fact"},
+        "workflow_node_ids": {"$ref": "#/$defs/identifier_list_fact"},
+        "action_ids": {"$ref": "#/$defs/identifier_list_fact"}
+      }
+    },
+    "plugin": {
+      "type": "object", "additionalProperties": false,
+      "required": ["name", "version", "digest"],
+      "properties": {
+        "name": {"$ref": "#/$defs/identifier"},
+        "version": {"$ref": "#/$defs/identifier"},
+        "digest": {"$ref": "#/$defs/digest"}
+      }
+    },
+    "plugins_fact": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["availability", "value", "provenance"],
+          "properties": {
+            "availability": {"const": "available"},
+            "value": {"type": "array", "maxItems": 64, "items": {"$ref": "#/$defs/plugin"}},
+            "provenance": {"$ref": "#/$defs/provenance"}
+          }
+        },
+        {"$ref": "#/$defs/unavailable"}
+      ]
+    },
+    "model_route": {
+      "type": "object", "additionalProperties": false,
+      "required": ["requested_model", "attempted_model", "served_model", "provider", "routing_rationale", "fallback_reason"],
+      "properties": {
+        "requested_model": {"$ref": "#/$defs/text_fact"},
+        "attempted_model": {"$ref": "#/$defs/text_fact"},
+        "served_model": {"$ref": "#/$defs/text_fact"},
+        "provider": {"$ref": "#/$defs/text_fact"},
+        "routing_rationale": {"$ref": "#/$defs/text_fact"},
+        "fallback_reason": {"$ref": "#/$defs/text_fact"}
+      }
+    },
+    "models_fact": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["availability", "value", "provenance"],
+          "properties": {
+            "availability": {"const": "available"},
+            "value": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/model_route"}},
+            "provenance": {"$ref": "#/$defs/provenance"}
+          }
+        },
+        {"$ref": "#/$defs/unavailable"}
+      ]
+    },
+    "usage": {
+      "type": "object", "additionalProperties": false,
+      "required": ["input_tokens", "output_tokens", "cache_read_tokens", "cache_write_tokens", "reasoning_tokens", "duration_seconds", "model_call_count", "tool_call_count"],
+      "properties": {
+        "input_tokens": {"$ref": "#/$defs/integer_fact"},
+        "output_tokens": {"$ref": "#/$defs/integer_fact"},
+        "cache_read_tokens": {"$ref": "#/$defs/integer_fact"},
+        "cache_write_tokens": {"$ref": "#/$defs/integer_fact"},
+        "reasoning_tokens": {"$ref": "#/$defs/integer_fact"},
+        "duration_seconds": {"$ref": "#/$defs/number_fact"},
+        "model_call_count": {"$ref": "#/$defs/integer_fact"},
+        "tool_call_count": {"$ref": "#/$defs/integer_fact"}
+      }
+    },
+    "cost": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["status", "value_usd", "measurement_reference", "provenance"],
+          "properties": {
+            "status": {"const": "measured"},
+            "value_usd": {"type": "number", "minimum": 0, "maximum": 9007199254740991},
+            "measurement_reference": {"$ref": "#/$defs/reference"},
+            "provenance": {"$ref": "#/$defs/provenance"}
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["status", "value_usd", "matrix_snapshot", "matrix_digest", "basis", "provenance"],
+          "properties": {
+            "status": {"const": "imputed"},
+            "value_usd": {"type": "number", "minimum": 0, "maximum": 9007199254740991},
+            "matrix_snapshot": {"type": "string", "format": "date", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+            "matrix_digest": {"$ref": "#/$defs/digest"},
+            "basis": {"$ref": "#/$defs/identifier"},
+            "provenance": {"$ref": "#/$defs/provenance"}
+          }
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["status", "value_usd", "reason"],
+          "properties": {
+            "status": {"const": "unavailable"},
+            "value_usd": {"type": "null"},
+            "reason": {"$ref": "#/$defs/unavailable_reason"}
+          }
+        }
+      ]
+    },
+    "verifier": {
+      "type": "object", "additionalProperties": false,
+      "required": ["result", "evidence_references"],
+      "properties": {
+        "result": {"enum": ["passed", "failed", "inconclusive"]},
+        "evidence_references": {"type": "array", "minItems": 1, "maxItems": 64, "uniqueItems": true, "items": {"$ref": "#/$defs/reference"}}
+      }
+    },
+    "verifier_fact": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["availability", "value", "provenance"], "properties": {"availability": {"const": "available"}, "value": {"$ref": "#/$defs/verifier"}, "provenance": {"$ref": "#/$defs/provenance"}}},
+        {"$ref": "#/$defs/unavailable"}
+      ]
+    },
+    "preview": {
+      "oneOf": [
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["availability", "reference", "digest", "media_type", "size_bytes"],
+          "properties": {"availability": {"const": "available"}, "reference": {"$ref": "#/$defs/reference"}, "digest": {"$ref": "#/$defs/digest"}, "media_type": {"$ref": "#/$defs/media_type"}, "size_bytes": {"type": "integer", "minimum": 0, "maximum": 9007199254740991}}
+        },
+        {
+          "type": "object", "additionalProperties": false,
+          "required": ["availability", "reference", "reason"],
+          "properties": {"availability": {"const": "unavailable"}, "reference": {"type": "null"}, "reason": {"$ref": "#/$defs/unavailable_reason"}}
+        }
+      ]
+    },
+    "artifact": {
+      "type": "object", "additionalProperties": false,
+      "required": ["handle", "reference", "digest", "media_type", "size_bytes", "preview"],
+      "properties": {"handle": {"$ref": "#/$defs/identifier"}, "reference": {"$ref": "#/$defs/reference"}, "digest": {"$ref": "#/$defs/digest"}, "media_type": {"$ref": "#/$defs/media_type"}, "size_bytes": {"type": "integer", "minimum": 0, "maximum": 9007199254740991}, "preview": {"$ref": "#/$defs/preview"}}
+    },
+    "artifacts_fact": {
+      "oneOf": [
+        {"type": "object", "additionalProperties": false, "required": ["availability", "value", "provenance"], "properties": {"availability": {"const": "available"}, "value": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/artifact"}}, "provenance": {"$ref": "#/$defs/provenance"}}},
+        {"$ref": "#/$defs/unavailable"}
+      ]
+    },
+    "recovery": {"type": "object", "additionalProperties": false, "required": ["failure_signature", "recovery_decision"], "properties": {"failure_signature": {"$ref": "#/$defs/digest"}, "recovery_decision": {"$ref": "#/$defs/identifier"}}},
+    "recovery_fact": {"oneOf": [{"type": "object", "additionalProperties": false, "required": ["availability", "value", "provenance"], "properties": {"availability": {"const": "available"}, "value": {"$ref": "#/$defs/recovery"}, "provenance": {"$ref": "#/$defs/provenance"}}}, {"$ref": "#/$defs/unavailable"}]},
+    "supervision": {"type": "object", "additionalProperties": false, "required": ["stagnation", "intervention"], "properties": {"stagnation": {"type": "boolean"}, "intervention": {"$ref": "#/$defs/identifier"}}},
+    "supervision_fact": {"oneOf": [{"type": "object", "additionalProperties": false, "required": ["availability", "value", "provenance"], "properties": {"availability": {"const": "available"}, "value": {"$ref": "#/$defs/supervision"}, "provenance": {"$ref": "#/$defs/provenance"}}}, {"$ref": "#/$defs/unavailable"}]},
+    "candidate": {
+      "type": "object", "additionalProperties": false,
+      "required": ["candidate_id", "parent_ids", "score", "disposition", "provenance"],
+      "properties": {"candidate_id": {"$ref": "#/$defs/identifier"}, "parent_ids": {"type": "array", "maxItems": 1024, "uniqueItems": true, "items": {"$ref": "#/$defs/identifier"}}, "score": {"$ref": "#/$defs/unavailable"}, "disposition": {"enum": ["accepted", "rejected"]}, "provenance": {"$ref": "#/$defs/provenance"}}
+    },
+    "candidates_fact": {"oneOf": [{"type": "object", "additionalProperties": false, "required": ["availability", "value", "provenance"], "properties": {"availability": {"const": "available"}, "value": {"type": "array", "maxItems": 256, "items": {"$ref": "#/$defs/candidate"}}, "provenance": {"$ref": "#/$defs/provenance"}}}, {"$ref": "#/$defs/unavailable"}]},
+    "observations": {
+      "type": "object", "additionalProperties": false,
+      "required": ["plugins", "objective", "budget", "completion_contract", "models", "usage", "cost", "verifier", "artifacts", "recovery", "supervision", "candidates", "next_action"],
+      "properties": {
+        "plugins": {"$ref": "#/$defs/plugins_fact"},
+        "objective": {"$ref": "#/$defs/text_fact"},
+        "budget": {"$ref": "#/$defs/reference_fact"},
+        "completion_contract": {"$ref": "#/$defs/reference_fact"},
+        "models": {"$ref": "#/$defs/models_fact"},
+        "usage": {"$ref": "#/$defs/usage"},
+        "cost": {"$ref": "#/$defs/cost"},
+        "verifier": {"$ref": "#/$defs/verifier_fact"},
+        "artifacts": {"$ref": "#/$defs/artifacts_fact"},
+        "recovery": {"$ref": "#/$defs/recovery_fact"},
+        "supervision": {"$ref": "#/$defs/supervision_fact"},
+        "candidates": {"$ref": "#/$defs/candidates_fact"},
+        "next_action": {"$ref": "#/$defs/text_fact"}
+      }
+    }
+  }
+}

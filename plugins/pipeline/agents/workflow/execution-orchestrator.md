@@ -110,9 +110,9 @@ deploy/**                   *.env*
 migrations/** containing seed credentials
 ```
 
-These chunks are never focused-only. Full-diff security signoff passes opaque
-implementer receipt IDs with `independent-family`; model-router excludes every
-implementing family. No concrete identity enters a review prompt or report.
+These chunks are never focused-only. Full-diff security signoff is mandatory,
+but author and model-family provenance never filter reviewer eligibility. No
+concrete implementation identity enters a review prompt or report.
 
 ## Host Adapter Parity
 
@@ -377,17 +377,49 @@ In `sequential-on-branch` mode:
 
 ### 1d: Repository Verification Planner
 
-When the repository carries a verification profile (`.dm/verification.json` or
-an equivalent declaration), load
+First distinguish an absent profile from a declared profile. When the repository
+declares a verification profile (`.dm/verification.json` or an equivalent
+declaration), load
 `plugins/pipeline/references/execution-verification-planner.md` and run its
-planning contract. With no profile, apply the no-profile rule (mirror the Codex
-adapter, do not fork it): an Assembly target (Go+Templ+Datastar) without
-`.dm/verification.json` fails closed -- stop with `human_help_required` for
-project verification configuration rather than restoring hardcoded Go/Docker
-commands. A non-Assembly repository with no profile runs repository-native
-verification and records `verificationPlanner: unavailable`; do not load the
-planner. Never substitute hardcoded Docker, Go package, service, or build-tag
-commands for a declared profile.
+planning contract. A valid profile remains authoritative for planning, cadence,
+and evidence. A malformed or unsafe declared profile stops with
+`human_help_required` and preserves the exact validation evidence; never fall
+back to repository-native verification.
+
+With no profile, apply one host-neutral repository-native policy; repository
+type, including Assembly, does not change it. Applicable root repository
+instructions must designate exactly one canonical full repository-owned
+verification entrypoint. A root instruction may delegate to the other root
+instruction file. Separately scoped focused or pre-push commands do not conflict
+with that canonical designation; different canonical full designations in
+applicable instructions do conflict and block. Confirm that the canonical
+entrypoint's directly named checked-in target or script exists and that it does
+not depend on missing repository configuration. When all checks pass, record
+`verificationPlanner: unavailable` and preserve the exact command and root
+policy-source path in the existing verification evidence where supported; do
+not invent a new receipt field.
+
+If the canonical designation is missing, ambiguous, or conflicting, or its
+entrypoint names a nonexistent target or script or depends on missing repository
+configuration, stop narrowly with `human_help_required` and preserve the failed
+policy evidence. Never invent raw Go, Docker, package, build-tag, race, service,
+remote-CI, or other commands. Never synthesize or commit
+`.dm/verification.json`.
+
+Contract specimen: root `AGENTS.md` designates `make verify` as canonical full
+verification and names `make conformance` as narrower and `make survivor` as
+pre-push; root `CLAUDE.md` delegates to `AGENTS.md`; checked-in `Makefile` owns
+`verify:`, `conformance:`, and `survivor:`. The narrower commands do not conflict,
+so with no missing configuration repository-native verification is available.
+
+On the repository-native path, per-chunk and review checks are focused checks
+explicitly approved by the prompt. Do not run the canonical native command per
+chunk, finding, or execution level. Run it exactly once on the integrated
+candidate before final review. After a repair batch, rerun it once only when
+relevant verification inputs changed; uncertainty counts as relevant and
+permits one rerun. After an irrelevant repair, carry prior canonical-command
+evidence forward only with bounded diff proof that no relevant verification
+input changed since its tested SHA.
 
 ## Step 2: Execute by Level
 
@@ -475,7 +507,7 @@ model-router bundle:
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
 MODEL_ROUTER_BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle \
-  --plugin model-router --minimum-version 0.4.0 \
+  --plugin model-router --minimum-version 0.6.0 \
   --required-executable skills/model-router/references/role-dispatch.sh \
   --required-executable skills/model-router/references/render-terminal-report.sh \
   --required-asset skills/model-router/references/role-request-schema.json \
@@ -495,10 +527,15 @@ ordered index. For owner `pipeline`, require the caller-supplied mode-`0700`
 private directory and existing ordered index, then extend rather than replace
 them so feedback iterations retain earlier attempts. Every successful
 live implementation or repair stores its content-free router receipt there,
-named by opaque receipt ID. Phase 6 passes this directory and every contributing
-implementation/repair receipt ID to independent review lanes. A model repair
-invalidates any earlier `--human-authored` origin claim; missing repair
-provenance keeps the independent lane unavailable.
+named by opaque receipt ID for terminal reporting. Phase 6 never passes those
+implementation receipts or author-origin claims into reviewer eligibility.
+
+Maintain one cumulative implementation receipt set for the entire run.
+Append the opaque ID from every successful initial builder, replacement
+builder, validation repair, review repair, and final-review repair receipt.
+Never discard an earlier contributor when a later repair lands, and never ask
+the operator for IDs created by this run. The set feeds the terminal model and
+cost report only; final dm-review and affected-lane rechecks do not consume it.
 
 Maintain `terminal-receipt-index.json` in that directory using model-router's
 `terminal-report-contract.md`. Add every implementation, repair,
@@ -590,6 +627,15 @@ by another repository out of the diff; report them as `Noted, not fixed`.
 
 [FULL PROMPT CONTENT INLINED HERE]
 
+When the manifest carries a validated top-level `prototypeReference` with
+`status: counterpart` and this chunk carries a non-empty `prototypeParity`
+array, include that reference and only this chunk's bounded parity packet here.
+Require exact prototype source inspection before editing, existing target/Live
+Wires component search, post-edit source comparison, matched prototype/target
+browser comparison, and named intentional differences. Generic UI benchmarks
+remain secondary to covered prototype decisions. A validated
+`status: no_counterpart` reference carries no chunk parity packet.
+
 When done:
 1. Verify all acceptance criteria are met
 2. State which approved Key Requirements and project outcome this chunk addresses
@@ -612,7 +658,7 @@ Verify before proceeding:
 
 1. **Completion check:** the subagent reported completion (not an error or question).
 2. **Commit check:** `git log <featureBranch>..<chunk-branch> --oneline` MUST show at least one commit.
-3. **Focused verification:** on profile-aware repositories, invoke `plan-verification` for boundary `chunk` using the exact chunk diff, then `run-verification`; do not run a repository-wide or race suite here. On the compatibility path, run only the repository's narrow documented check and record that no executable planner/cache authority was available.
+3. **Focused verification:** on profile-aware repositories, invoke `plan-verification` for boundary `chunk` using the exact chunk diff, then `run-verification`; do not run a repository-wide or race suite here. On the repository-native path, run only focused checks explicitly approved by the chunk prompt. Do not run the canonical native command here. Record `verificationPlanner: unavailable` plus the exact command and policy source in existing verification evidence where supported.
 4. **Role receipt check:** the public result contains the requested role,
    anonymous participant, closed disposition, requested/effective effort, and
    fallback state. The private receipt exists and is content-free; do not copy
@@ -650,7 +696,7 @@ For `renderedSurface: required`, run Datastar/markup static checks and one brows
 
 **Per-chunk review uses role dispatch.** dm-review is reserved for Step 4. Every per-chunk review receives the approved requirements and compact alignment context, never concrete participant identity. Flag as P1/P2/P3: work outside approved scope; conflict with project constraints; unnecessary architecture; changes owned by another repository; or correct work that misses the chunk's approved outcome. Reject adjacent useful work that does not repair an observable defect in the approved scope.
 
-**UI and Logic:** Request `review-deep` at high effort. If findings: collect the complete set; apply all accepted fixes as one revision batch; do not test after each individual edit; invoke planner once with `revision_batch`; re-run the affected role once. Max 2 iterations.
+**UI and Logic:** Request `review-deep` at high effort. If findings: collect the complete set; apply all accepted fixes as one revision batch; do not test after each individual edit; on the profile path invoke the planner once with `revision_batch`; on the repository-native path run only affected focused checks from the approved prompt. Re-run the affected role once. Max 2 iterations.
 
 **Integration:** Same, then verify cross-chunk wiring (routes, imports, connections).
 
@@ -679,6 +725,12 @@ with `--phase "execute"`. Mark `[chunk-id] 7. Run evaluation gate` complete.
 
 When `renderedSurface: required`, load `plugins/pipeline/references/visual-verification-protocol.md` and run it. Do not emit `BROWSER_VERIFIED`, fabricate empty evidence, or skip the recovery ladder. Curl never satisfies required browser proof. Exhaustion is `human_help_required` with `stage: browser_recovery`. `not_declared` is valid only when declarations are absent; incomplete declarations block.
 
+When the chunk carries a prototype counterpart, also load
+`plugins/pipeline/references/prototype-authority.md`. Do not merge the chunk as
+rendered-parity complete until both post-edit source comparison and matched
+prototype/target browser evidence settle. A temporarily unavailable prototype
+render preserves source work but blocks the rendered-parity claim.
+
 ### 3i: Merge Back
 
 Before merging, search for `EVAL_GATE_PASSED: [chunk-id] |`. If absent: STOP, run Step 3g, then merge.
@@ -702,9 +754,9 @@ Apply `repo-cleanup-contract.md`. Never suppress git exit status. Load `plugins/
 
 ### 3k: Verify the Integrated Execution Level
 
-After every chunk in the current execution level has completed Step 3j and its merge disposition is authoritative, check out `<featureBranch>` and invoke the repository planner exactly once with boundary `execution_level`, supplying the cumulative changed paths for that level, not one invocation per chunk.
+After every chunk in the current execution level has completed Step 3j and its merge disposition is authoritative, check out `<featureBranch>`. On the profile path, invoke the repository planner exactly once with boundary `execution_level`, supplying the cumulative changed paths for that level, not one invocation per chunk. On the repository-native path, do not run the canonical native command at this boundary; retain the focused evidence already collected.
 
-The full non-race lane runs against the first tree where all sibling chunks actually coexist. A documentation or unrelated metadata-only change does not invalidate a code lane unless `.dm/verification.json` explicitly includes that path. A failed required level lane blocks dependent levels. Record:
+On the profile path, the full non-race lane runs against the first tree where all sibling chunks actually coexist. A documentation or unrelated metadata-only change does not invalidate a code lane unless `.dm/verification.json` explicitly includes that path. A failed required profile level lane blocks dependent levels. Record the profile-path result:
 
 ```text
 LEVEL_VERIFICATION: <level> | passed: <N> | failed: <N>
@@ -714,17 +766,42 @@ LEVEL_VERIFICATION: <level> | passed: <N> | failed: <N>
 
 **THIS STEP IS MANDATORY.** After ALL chunks are merged, run exactly the validated final dm-review mode. `full` runs the full fan-out. `quick` runs the installed dm-review-quick protocol only when consequence is not high and the final diff has no bounded security-sensitive path; otherwise escalate to full.
 
-Before dispatching the review, invoke the repository planner with boundary `merge_candidate` on the exact feature-branch tree and run the selected lanes. It materializes every required remote race/security/container/harness lane as `remote_pending`, `blocked`, or `unavailable`; the kernel does not import remote results. The caller separately collects required native CI or independent review evidence bound to the exact candidate head.
+Before dispatching the review, verify the exact integrated feature-branch tree.
+On the profile path, invoke the repository planner with boundary
+`merge_candidate` and run its selected lanes. It materializes every required
+remote race/security/container/harness lane as `remote_pending`, `blocked`, or
+`unavailable`; the kernel does not import remote results. On the
+repository-native path, run the one canonical native command exactly once here
+and bind its result, exact command, policy source, and candidate SHA into the
+existing verification evidence. The caller separately collects required native
+CI or independent review evidence bound to the exact candidate head.
+
+When any executed chunk has `renderedSurface: required`, load
+`plugins/pipeline/references/final-review-browser-evidence.md`. On the exact
+integrated candidate head, run one host-owned capture for the selected affected
+browser cases, create the explicit bounded packet in the current ignored
+Pipeline evidence directory, and pass its exact packet and selected-case paths
+to the final dm-review. Do not discover a latest packet. The nested review must
+validate exact repository/prototype commits, dirty state, case equality,
+successful completion, and every artifact hash before reuse. An accepted packet
+prevents a second capture and is shared across all applicable UI analyses; a
+rejected packet falls back to normal readiness and never grants rendered
+success. When no chunk requires a rendered surface, create and pass no packet.
 
 First materialize the cumulative authoritative receipt array through the `all-chunks-complete` boundary and run the first `observe-pipeline` checkpoint. The observation remains shadow evidence and cannot approve the final review.
 
-Verification invariant: preserve family independence required by the selected
-review protocol. Pass opaque implementing receipt IDs with
-`independent-family`; model-router performs the exclusion privately. Quick mode
-dispatches its two independent core judgment lanes and applicable
+Verification invariant: preserve the selected review protocol without using
+implementation origin as an eligibility filter. Quick mode
+dispatches its two method-independent core judgment lanes and applicable
 build/UI/domain lanes; it may not collapse to the implementer's self-review. If
 a required lane is unavailable, report the closed role-level gap without
 selecting a substitute.
+
+The implementation receipt set here is exactly the cumulative set maintained
+since Step 3d, including every implementation and repair that contributed to
+the final diff. Preserve it for terminal reporting, but do not forward it as a
+review eligibility input. Nested review and repair prompts receive no concrete
+model, provider, family, candidate order, or cost.
 
 For `decisionProfile.consequence: high`, this existing final independent seam is the stronger verification depth: require all applicable independent lanes and conditional reviewers to return valid evidence. A missing, declined, dead, or degraded required lane stops `human_help_required`; do not approve from the remaining lane. This escalation does not add a full review to each ordinary chunk and does not relax sensitive-path or browser requirements.
 
@@ -750,6 +827,16 @@ Key Requirements from the assessment `keyRequirements` island:
 Compact Project Alignment from the approved assessment:
 [INLINE CURRENT PROJECT GOAL, RELEVANT CONSTRAINTS/NON-GOALS, AND OWNERSHIP]
 
+Declared Prototype Context, when applicable:
+[INLINE THE CANONICAL REPOSITORY + EXACT COMMIT, RELEVANT SOURCE PATHS,
+MATCHED ROUTE/STATE/VIEWPORT CASES, BOUNDED PARITY CHECKLIST, AND INTENTIONAL
+DIFFERENCES. REQUIRE SOURCE AND RENDERED COMPARISON; TREAT GENERIC HEURISTICS AS
+SECONDARY FOR COVERED DECISIONS.]
+
+Explicit Pipeline Browser Evidence, when applicable:
+[INLINE THE EXACT uiBrowserEvidencePacket AND uiBrowserSelectedCases PATHS
+CREATED FOR THIS INTEGRATED CANDIDATE. DO NOT SEARCH FOR A LATEST PACKET.]
+
 In addition to code quality, check whether the branch advances the approved
 project goal, satisfies every requirement/outcome, and stays within the approved
 ownership and non-goals. Flag a missing, contradicted, or unnecessarily expanded
@@ -762,7 +849,12 @@ If P1/P2/P3 issues are found:
 
 1. Collect the complete finding set and fix it as one revision batch.
 2. Stage with `git add -A -- <dir>`, verify `git diff --cached --stat`, commit with `git commit -F <file>`.
-3. Invoke `revision_batch` once, then `merge_candidate` once. Do not test after every finding edit.
+3. On the profile path, invoke `revision_batch` once, then `merge_candidate`
+   once. On the repository-native path, an irrelevant repair may carry forward
+   prior canonical-command evidence only with bounded diff proof that no
+   relevant verification input changed. If a relevant input changed or
+   relevance is uncertain, rerun the canonical native command once and bind the
+   result to the new candidate SHA. Do not test after every finding edit.
 4. Re-run only the affected lanes on the exact newly tested SHA. Repeat the whole selected roster only when prior coverage was incomplete; if a repair changes a security-sensitive boundary, escalate to or repeat full mode.
 5. Stop when no P1/P2/P3 remain and every required lane and repository/browser/remote gate is complete.
 
@@ -780,7 +872,13 @@ After the final review, fire airlift per `plugins/pipeline/references/airlift-ch
 - `BLOCKED PENDING CALLER VERIFICATION` -- any required browser case has a `human_help_required` receipt or lacks complete passing browser evidence. Do NOT say "merge is safe" or "ready to merge".
 - `BLOCKED PENDING REMOTE VERIFICATION` -- any non-browser lane with `required: true` is `remote_pending`, `failed`, `blocked`, or `unavailable`. Caller verifies native CI or review evidence at the exact candidate head.
 
-Before emitting any merge recommendation, require passing local `merge_candidate` results from the current invocation against `.dm/verification.json`. Never substitute hardcoded Docker, Go package, service, or build-tag commands.
+Before emitting any merge recommendation, require passing local
+`merge_candidate` results from the current invocation on the profile path, or
+on the repository-native path either passing canonical-command evidence at the
+current candidate SHA or carried-forward passing evidence plus bounded diff
+proof that no relevant verification input changed since its tested SHA. Never
+substitute hardcoded Docker, Go package, service, build-tag, race, remote-CI, or
+other commands.
 
 **Doc-sync check:** if the feature introduced new patterns, modules, or conventions, verify `CLAUDE.md` and `README.md` reflect them; flag missing updates as P2.
 
@@ -1002,8 +1100,25 @@ Only after the complete final authoritative cleanup/terminal receipt exists, app
 "$WORKFLOW_KERNEL" metrics --events plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/metrics.json
 ```
 
-Observation-only. After compact projection, delete eligible shadow Tier 2 and
-consumed terminal inputs regardless of semantic category. Never auto-delete `.workflow-kernel/repository-scope.json`. Preserve the compact shadow category
+Retain the manifest, terminal receipt, lifecycle artifacts, cumulative
+authoritative receipts, attempt records, metrics, verification,
+reconciliation, installed-bundle resolution, contribution references, and
+private router/provider reference receipts until the caller completes the
+terminal observation index. Return one `Observation index source handoff:`
+line naming those exact paths and whether each exists; do not copy their
+contents into the handoff. The Pipeline caller materializes
+`plans/<feature-slug>/observation-index-input.json` after its cost-summary
+attempt, binds explicit `producer.name: pipeline` and source `role: producer`,
+and invokes the same Workflow Kernel `emit-observation-index` command used by
+dm-review. Observation-index failure is recorded once as unavailable in the
+durable receipt and never changes authoritative completion, review, cleanup,
+or merge evidence. Do not repeat it per lane or phase or include it in the
+normal compact chat handoff; disclose the closed reason only for requested
+observability diagnostics or when the index is the required deliverable.
+
+Observation-only. After compact projection and the caller's observation-index
+source handoff, delete eligible shadow Tier 2 inputs only when they are not
+still required for terminal index binding. Never auto-delete `.workflow-kernel/repository-scope.json`. Preserve the compact shadow category
 in the receipt rather than the raw terminal state tree. Record disposition in
 the final summary without rewriting the cleanup receipt.
 

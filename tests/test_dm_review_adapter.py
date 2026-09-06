@@ -17,21 +17,21 @@ FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
 
 
 class DmReviewAdapterTests(unittest.TestCase):
-    def independent_export_documents(
+    def family_export_documents(
         self, reviewer_family="z-ai", model="z-ai/glm-5.2",
     ):
         request = ReviewRequest(
-            "review-independent", ("security-auditor-codex-signoff",),
+            "review-family-observation", ("second-perspective",),
         )
         decision = {
-            "source_finding_id": "source-independent",
+            "source_finding_id": "source-family-observation",
             "finding_path": "internal/review.py",
-            "finding_anchor": "review.independent",
-            "finding_category": "family independence",
-            "finding_root_cause": "reviewer family overlaps implementer family",
+            "finding_anchor": "review.family-observation",
+            "finding_category": "review observation",
+            "finding_root_cause": "review participant evidence recorded",
             "finding_disposition": "retained", "agreement": "unique",
             "decision_reason_code": "retained-unique",
-            "reviewer": "security", "lane": "security-auditor-codex-signoff",
+            "reviewer": "perspective", "lane": "second-perspective",
             "requested_provider": "openrouter", "attempted_provider": "openrouter",
             "implemented_by": "openrouter", "provider": "openrouter",
             "model": model, "source_severity": "P1",
@@ -39,7 +39,7 @@ class DmReviewAdapterTests(unittest.TestCase):
             "occurred_at": "2026-08-10T01:00:00Z",
             "implementer_family": "mixed(moonshotai,openai)",
             "reviewer_family": reviewer_family,
-            "resolution_reason": "subscription-headroom-independent-family",
+            "resolution_reason": "different-family-review-observation",
         }
         raw = {key: decision[key] for key in {
             "source_finding_id", "reviewer", "lane", "source_severity",
@@ -544,8 +544,8 @@ class DmReviewAdapterTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "incomplete finding contribution coverage"):
             require_complete_contribution_coverage(incomplete)
 
-    def test_independent_lane_family_provenance_is_closed_and_disjoint(self):
-        request, documents, references = self.independent_export_documents()
+    def test_family_provenance_is_closed_and_overlap_is_observation_only(self):
+        request, documents, references = self.family_export_documents()
         exported = export_finding_contributions(
             request, documents["decisions"], documents["raw_findings"],
             documents["lane_receipts"], documents["raw_lane_outputs"], (),
@@ -555,21 +555,22 @@ class DmReviewAdapterTests(unittest.TestCase):
         self.assertEqual(exported[0]["reviewer_family"], "z-ai")
         self.assertEqual(
             exported[0]["resolution_reason"],
-            "subscription-headroom-independent-family",
+            "different-family-review-observation",
         )
 
-        request, documents, references = self.independent_export_documents(
+        request, documents, references = self.family_export_documents(
             "openai", "openai/gpt-5.6",
         )
-        with self.assertRaisesRegex(ValueError, "independent review family overlap"):
-            export_finding_contributions(
-                request, documents["decisions"], documents["raw_findings"],
-                documents["lane_receipts"], documents["raw_lane_outputs"], (),
-                references,
-            )
+        exported = export_finding_contributions(
+            request, documents["decisions"], documents["raw_findings"],
+            documents["lane_receipts"], documents["raw_lane_outputs"], (),
+            references,
+        )
+        self.assertEqual(exported[0]["implementer_family"], "mixed(moonshotai,openai)")
+        self.assertEqual(exported[0]["reviewer_family"], "openai")
 
-    def test_independent_lane_rejects_reviewer_family_not_derived_from_model(self):
-        request, documents, references = self.independent_export_documents(
+    def test_family_observation_rejects_reviewer_family_not_derived_from_model(self):
+        request, documents, references = self.family_export_documents(
             "anthropic", "moonshotai/kimi-k3",
         )
         with self.assertRaisesRegex(ValueError, "reviewer family does not match model"):

@@ -20,13 +20,13 @@
     "forbiddenKeys": ["executor", "model", "provider", "transport", "billingMode", "family"]
   },
   "reviewRoles": {
-    "security": {"role": "security-review", "capabilities": ["read-repository", "long-context", "structured-output", "independent-family"], "effort": "high"},
+    "security": {"role": "security-review", "capabilities": ["read-repository", "long-context", "structured-output"], "effort": "high"},
     "architecture": {"role": "review-deep", "capabilities": ["read-repository", "long-context", "structured-output"], "effort": "high"},
     "pattern": {"role": "review-deep", "capabilities": ["read-repository", "structured-output"], "effort": "high"},
     "simplicity": {"role": "review-deep", "capabilities": ["read-repository", "structured-output"], "effort": "high"},
     "documentation": {"role": "review-fast", "capabilities": ["read-repository", "structured-output"], "effort": "medium"},
     "tests": {"role": "review-fast", "capabilities": ["read-repository", "tool-use", "structured-output"], "effort": "medium"},
-    "secondPerspective": {"role": "plan-critic", "capabilities": ["read-repository", "long-context", "structured-output", "independent-family"], "effort": "high"}
+    "secondPerspective": {"role": "plan-critic", "capabilities": ["read-repository", "long-context", "structured-output"], "effort": "high"}
   },
   "decisionLeverage": {
     "scope": "workflow-depth-only",

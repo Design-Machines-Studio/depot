@@ -6,11 +6,11 @@ Resolve them from coherent installed bundles as described in `SKILL.md`.
 | Agent | Role | Default effort | What it reviews |
 |---|---|---|---|
 | code-simplicity-reviewer | `review-deep` | high | Complexity, redundancy, dead code, over-engineering |
-| security-auditor | `security-review` + `independent-family` | high | Reachable credential, authorization, data-loss, and release-integrity boundaries |
+| security-auditor | `security-review` | high | Reachable credential, authorization, data-loss, and release-integrity boundaries |
 | pattern-recognition-specialist | `review-deep` | high | Anti-patterns, conventions, duplication, magic values |
 | architecture-reviewer | `review-deep` | high | Component boundaries, coupling, layering, current consumers |
 | doc-sync-reviewer | `review-fast` | medium | Documentation and reference synchronization |
-| second-perspective | `plan-critic` + `independent-family` | high | Independent full-mode judgment |
+| second-perspective | `plan-critic` | high | Independent full-mode judgment |
 | test/build/domain/UI agents | `review-fast` or `review-deep` | medium/high | Triggered criteria named in `SKILL.md` |
 
 Quick mode selects patterns and simplicity plus triggered UI/build/domain lanes.

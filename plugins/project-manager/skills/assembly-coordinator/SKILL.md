@@ -143,7 +143,7 @@ routing override. Its role request is resolved later by model-router.
 
 Whenever this coordinator produces an implementation or review copy-paste
 prompt, resolve one coherent model-router bundle through Workflow Kernel at
-minimum version `0.4.0`, requiring
+minimum version `0.6.0`, requiring
 `skills/model-router/references/operator-recommendation.sh`, `role-policy.json`,
 and `availability-probe.sh`. Resolve the current OpenRouter
 `model-matrix.json` through Workflow Kernel without changing it. Invoke the
@@ -172,6 +172,14 @@ explicit unknown availability label. Native marginal cost is `included
 subscription`; its separately labeled API-equivalent estimate remains planning
 evidence, never billed subscription spend. OpenRouter prices come from the
 fresh checked-in matrix. Return one primary and one fallback, not a menu.
+
+The renderer and runtime dispatcher consume the same live host evidence
+semantics. Native CLI paths are resolved from the coordinator caller before the
+renderer constrains helper lookup, then passed privately to the availability
+probe. Runtime dispatch remains authoritative and may fall back after an actual
+attempt. This top-level recommendation does not claim that nested implementation
+or independent-review lanes use the same participant; each nested role is
+resolved separately under current policy, availability, and provenance.
 
 The block is for the human operator and primary executor only. Never copy it,
 concrete model identities, candidate order, availability comparison, or costs

@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
 #
-# validate-workflow-contracts.sh -- Guard the two prose contracts that pipeline
-# and dm-review depend on but that nothing else enforces:
+# validate-workflow-contracts.sh -- Guard the prose contracts that pipeline and
+# dm-review depend on but that nothing else enforces:
 #
-#   1. Repository cleanup contract -- worktree/branch registry, safe-to-delete
+#   1. Prototype authority contract -- source-first resolution, bounded parity,
+#      complementary source/browser proof, and proportional findings.
+#   2. Repository cleanup contract -- worktree/branch registry, safe-to-delete
 #      decision table, feature-branch protection, honest inventory reporting.
-#   2. Datastar-first contract -- Datastar/Datastar Pro before hand-rolled JS,
+#   3. Datastar-first contract -- Datastar/Datastar Pro before hand-rolled JS,
 #      plus the bundle-presence rule that keeps agents from emitting inert
 #      Pro attributes.
 #
@@ -15,6 +17,14 @@
 # Wired into tools/validate-composition.sh (section "Workflow contracts").
 
 set -euo pipefail
+
+prototype_parity_only=false
+if [ "${1:-}" = "--prototype-parity" ]; then
+  prototype_parity_only=true
+elif [ "$#" -gt 0 ]; then
+  printf "usage: %s [--prototype-parity]\n" "$0" >&2
+  exit 2
+fi
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -197,12 +207,14 @@ assembly_test_runner="$REPO_ROOT/plugins/assembly/agents/workflow/go-test-runner
 assembly_go_tests="$REPO_ROOT/plugins/assembly/agents/workflow/go-test-runner.md"
 assembly_verification_profile="$REPO_ROOT/plugins/assembly/references/repository-verification-profile.example.json"
 assembly_development="$REPO_ROOT/plugins/assembly/skills/development/SKILL.md"
+assembly_pages="$REPO_ROOT/plugins/assembly/skills/development/pages.md"
 assembly_nats_reviewer="$REPO_ROOT/plugins/assembly/agents/review/nats-reviewer.md"
 assembly_nats_skill="$REPO_ROOT/plugins/assembly/skills/nats-jetstream/SKILL.md"
 assembly_workflows="$REPO_ROOT/plugins/assembly/skills/development/workflows.md"
 promptcraft="$REPO_ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
 promptcraft_contract="$REPO_ROOT/plugins/pipeline/references/promptcraft-behavioral-contract.md"
 assess_skill="$REPO_ROOT/plugins/pipeline/skills/assess/SKILL.md"
+ux_protocol="$REPO_ROOT/plugins/pipeline/skills/assess/references/ux-assessment-protocol.md"
 research_skill="$REPO_ROOT/plugins/pipeline/skills/research/SKILL.md"
 prompt_template="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/prompt-template.md"
 assessment_template="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/templates/sections/assessment.html"
@@ -214,6 +226,16 @@ security_mapping="$REPO_ROOT/plugins/dm-review/skills/review/references/severity
 simplicity="$REPO_ROOT/plugins/dm-review/agents/review/code-simplicity-reviewer.md"
 postmortem_schema="$REPO_ROOT/plugins/pipeline/references/run-postmortem-schema.md"
 manifest_schema="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/manifest-schema.md"
+prototype_authority="$REPO_ROOT/plugins/pipeline/references/prototype-authority.md"
+visual_verification="$REPO_ROOT/plugins/pipeline/references/visual-verification-protocol.md"
+phase7_visual="$REPO_ROOT/plugins/pipeline/references/phase7-visual-verification.md"
+design_spec_discovery="$REPO_ROOT/plugins/dm-review/skills/review/references/design-spec-discovery.md"
+reviewer_prompt="$REPO_ROOT/plugins/dm-review/skills/review/references/reviewer-prompt-template.md"
+visual_finding_rules="$REPO_ROOT/plugins/dm-review/skills/review/references/visual-finding-rules.md"
+ui_readiness="$REPO_ROOT/plugins/dm-review/skills/review/references/ui-review-readiness.md"
+ui_standards="$REPO_ROOT/plugins/dm-review/agents/review/ui-standards-reviewer.md"
+ux_quality="$REPO_ROOT/plugins/dm-review/agents/review/ux-quality-reviewer.md"
+visual_browser="$REPO_ROOT/plugins/dm-review/agents/review/visual-browser-tester.md"
 verification_contract="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/verification-contract.md"
 behavioral_schema="$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/behavioral-verification-contract-schema.json"
 quality_pulse_command="$REPO_ROOT/plugins/dm-review/commands/dm-review-quality-pulse.md"
@@ -222,6 +244,65 @@ quality_pulse_profile="$REPO_ROOT/plugins/dm-review/skills/quality-pulse/referen
 quality_pulse_output="$REPO_ROOT/plugins/dm-review/skills/quality-pulse/references/output-contract.md"
 quality_pulse_trust="$REPO_ROOT/plugins/dm-review/skills/quality-pulse/references/trust-boundary.md"
 quality_pulse_degradation="$REPO_ROOT/plugins/dm-review/skills/quality-pulse/references/graceful-degradation.md"
+
+printf "Prototype authority contract:\n"
+require_text "$prototype_authority" "Resolve once, source first" "prototype identity and exact commit resolve before UI work"
+require_text "$prototype_authority" "Conflicting or unresolved repository, commit, route, or" "conflicting and unresolved prototype references stop UI work"
+require_text "$prototype_authority" "no prototype counterpart" "source-proven missing counterparts fall back without invention"
+require_text "$prototype_authority" "source parity" "parity map distinguishes source evidence"
+require_text "$prototype_authority" "rendered parity" "parity map distinguishes rendered evidence"
+require_text "$prototype_authority" "intentional divergence" "parity map preserves approved production differences"
+require_text "$prototype_authority" "T3 Code" "prototype browser proof prefers T3 collaborative preview"
+require_text "$ux_protocol" "In T3 Code, use the collaborative" "assessment protocol selects T3 collaborative preview first"
+require_text "$prototype_authority" "a target-only" "prototype render cannot be replaced by target-only evidence"
+require_text "$prototype_authority" "screenshots cannot prove source hierarchy" "browser and source evidence are complementary"
+require_text "$prototype_authority" "Theme variables and exact colors may" "theme parity avoids exact-color policing"
+require_text "$prototype_authority" "Severity is proportional, never automatic" "prototype mismatches use proportional severity"
+require_text "$prototype_authority" "must be rechecked before clean completion" "all supported P1/P2/P3 remain zero-deferral"
+require_text "$assess_skill" "prototype-authority.md" "assessment loads prototype authority conditionally"
+require_text "$assess_skill" "Read the exact prototype templates/components" "assessment is source-first"
+require_text "$assess_skill" "Conflicting or unresolved repository" "assessment stops on unresolved prototype references"
+require_text "$assess_skill" "Missing Playwright alone is not blocking when T3 preview works" "assessment degradation accepts the preferred T3 transport"
+require_text "$assess_skill" 'prototypeReference' "assessment retains compact prototype identity"
+require_text "$assess_skill" 'prototypeParity' "assessment retains affected-surface parity map"
+require_text "$promptcraft" "exact short structural excerpts" "promptcraft retains bounded structure rather than whole mockups"
+require_text "$promptcraft" 'source files under `Files to Read`' "promptcraft carries exact prototype source into execution"
+require_text "$prompt_template" "Generic SaaS heuristics cannot redesign" "builder prompts subordinate heuristics to settled prototype design"
+require_text "$prompt_template" "Source comparison confirms" "builder prompts require post-edit source comparison"
+require_text "$prompt_template" "Browser comparison covers prototype and target" "builder prompts require matched rendered comparison"
+require_text "$manifest_schema" "Optional Declared Prototype Context" "manifest documents compact optional prototype projection"
+require_text "$visual_verification" "Prototype source comparison" "chunk verification checks source after editing"
+require_text "$visual_verification" "do not make every mismatch P1" "Pipeline removes blanket parity P1"
+require_text "$visual_verification" "A page-load failure takes the severity supported" "verification receipt preserves proportional severity"
+require_text "$phase7_visual" "source-only nor screenshot-only evidence completes prototype parity" "caller verifies both evidence types"
+require_text "$design_spec_discovery" "Prefer caller-provided Pipeline" "dm-review reuses Pipeline prototype context first"
+require_text "$design_spec_discovery" "current native PR/Issue, root instructions" "dm-review discovers exact declarations without Pipeline context"
+require_text "$design_spec_discovery" "external templates/components once at the host" "dm-review host owns external prototype source read"
+require_text "$design_spec_discovery" "heuristics are secondary and cannot recommend different copy" "dm-review benchmarks cannot redesign settled prototype surfaces"
+require_text "$reviewer_prompt" 'prototype_parity_packet' "applicable UI lanes receive bounded prototype context"
+require_text "$visual_finding_rules" "Classify prototype/spec mismatches by observable impact" "dm-review uses proportional parity severity"
+require_text "$ui_readiness" '"One target" applies per readiness state' "existing readiness gate compares exact prototype and target serially"
+require_text "$ui_standards" "Do not judge or replace its copy" "UI standards reviewer preserves settled prototype decisions"
+require_text "$ux_quality" "Generic benchmarks cannot replace covered" "UX reviewer preserves settled prototype decisions"
+require_text "$visual_browser" "never apply blanket P1" "visual browser reviewer uses proportional parity severity"
+require_text "$assembly_development" "Prototype design authority for Baseplate and Fixtures" "Assembly guidance declares prototype design authority"
+require_text "$assembly_development" "search existing production and Live Wires components" "Assembly checks components before invention"
+require_text "$assembly_pages" "Fallback examples only" "generic Assembly page examples cannot override prototype counterparts"
+if [ -e "$REPO_ROOT/.dm/prototype.json" ]; then
+  printf "  FAIL  prototype contract adds no repository registry\n"
+  failures=1
+else
+  printf "  OK    prototype contract adds no repository registry\n"
+fi
+
+if [ "$prototype_parity_only" = true ]; then
+  if [ "$failures" -ne 0 ]; then
+    printf "FIX  restore the missing prototype-authority anchors\n"
+    exit 1
+  fi
+  printf "OK    Prototype authority contract intact\n"
+  exit 0
+fi
 
 printf "Repository cleanup contract:\n"
 
@@ -426,6 +507,108 @@ require_text "$assembly_sec_checks" "Public/Private URL Boundary" "security-audi
 require_text "$assembly_sec_checks" "Update / Release Preflight" "security-auditor checks update/release preflight"
 require_text "$assembly_sec_checks" "Responder-side share transport" "security-auditor reviews the federation responder side"
 
+printf "\nRepository-native verification contract:\n"
+
+# These exact-line checks mutate each normative anchor before accepting it. A
+# broad keyword match would stay green when one side of the decision gate was
+# weakened, which is the regression this contract is intended to prevent.
+require_line_mutation_sensitive "$orchestrator" \
+  "planning contract. A valid profile remains authoritative for planning, cadence," \
+  "planning contract. A valid profile may be bypassed." \
+  "valid profile remains authoritative"
+require_line_mutation_sensitive "$orchestrator" \
+  '`human_help_required` and preserves the exact validation evidence; never fall' \
+  '`human_help_required` and may discard validation evidence.' \
+  "malformed profile blocks with exact evidence"
+require_line_mutation_sensitive "$orchestrator" \
+  "type, including Assembly, does not change it. Applicable root repository" \
+  "type, including Assembly, selects a different policy." \
+  "no-profile policy is repository-type neutral"
+require_line_mutation_sensitive "$orchestrator" \
+  "instructions must designate exactly one canonical full repository-owned" \
+  "instructions may imply several full repository-owned commands." \
+  "root policy designates one canonical full entrypoint"
+require_line_mutation_sensitive "$orchestrator" \
+  "instruction file. Separately scoped focused or pre-push commands do not conflict" \
+  "instruction file. Every focused or pre-push command conflicts" \
+  "narrower commands do not conflict with the canonical designation"
+require_line_mutation_sensitive "$orchestrator" \
+  "entrypoint's directly named checked-in target or script exists and that it does" \
+  "named target or script need not exist." \
+  "native target exists and has its repository configuration"
+require_line_mutation_sensitive "$orchestrator" \
+  '`verificationPlanner: unavailable` and preserve the exact command and root' \
+  '`verificationPlanner: available` and omit command provenance.' \
+  "native evidence retains planner state command and policy source"
+require_line_mutation_sensitive "$orchestrator" \
+  "entrypoint names a nonexistent target or script or depends on missing repository" \
+  "entrypoint may name a nonexistent target or script." \
+  "invalid native policy blocks narrowly"
+require_line_mutation_sensitive "$orchestrator" \
+  "policy evidence. Never invent raw Go, Docker, package, build-tag, race, service," \
+  "Invent missing verification commands when convenient." \
+  "native policy forbids invented commands"
+require_line_mutation_sensitive "$orchestrator" \
+  'remote-CI, or other commands. Never synthesize or commit' \
+  'Synthesize `.dm/verification.json` when absent.' \
+  "native policy does not synthesize a profile"
+require_line_mutation_sensitive "$orchestrator" \
+  "chunk, finding, or execution level. Run it exactly once on the integrated" \
+  "chunk, finding, and execution level. Run it repeatedly on the integrated" \
+  "native cadence avoids repeated full runs"
+require_line_mutation_sensitive "$orchestrator" \
+  'On the profile path, the full non-race lane runs against the first tree where all sibling chunks actually coexist. A documentation or unrelated metadata-only change does not invalidate a code lane unless `.dm/verification.json` explicitly includes that path. A failed required profile level lane blocks dependent levels. Record the profile-path result:' \
+  'On every path, the full non-race lane runs against the first tree where all sibling chunks actually coexist. A documentation or unrelated metadata-only change does not invalidate a code lane unless `.dm/verification.json` explicitly includes that path. A failed required level lane blocks dependent levels. Record:' \
+  "execution-level full lane remains profile-only"
+require_line_mutation_sensitive "$orchestrator" \
+  "   relevance is uncertain, rerun the canonical native command once and bind the" \
+  "relevance is uncertain, reuse stale evidence without proof." \
+  "native repair cadence binds relevant or uncertain reruns to the new SHA"
+require_line_mutation_sensitive "$orchestrator" \
+  "Contract specimen: root \`AGENTS.md\` designates \`make verify\` as canonical full" \
+  "Contract specimen: root instructions do not name a command." \
+  "Governance specimen designates make verify canonical"
+require_line_mutation_sensitive "$orchestrator" \
+  "verification and names \`make conformance\` as narrower and \`make survivor\` as" \
+  "verification and treats every narrower command as conflicting." \
+  "Governance specimen preserves narrower and pre-push commands"
+require_line_mutation_sensitive "$orchestrator" \
+  "current candidate SHA or carried-forward passing evidence plus bounded diff" \
+  "any prior candidate SHA without additional evidence" \
+  "native merge gate accepts current-SHA or proof-bound carry-forward evidence"
+
+require_line_mutation_sensitive "$codex_native_parity" \
+  "fix. With no profile, apply the same repository-native policy as the Claude" \
+  "fix. With no profile, apply a Codex-specific repository-native policy." \
+  "Claude and Codex native policies remain equivalent"
+require_line_mutation_sensitive "$codex_native_parity" \
+  "evidence may be carried forward only with bounded diff proof that no relevant" \
+  "evidence may be carried forward without proof." \
+  "Codex preserves proof-bound evidence carry-forward"
+require_absent "$orchestrator" "an Assembly target (Go+Templ+Datastar) without" \
+  "orchestrator removes unconditional Assembly-profile refusal"
+require_absent "$codex_native_parity" 'Assembly target without `.dm/verification.json`' \
+  "Codex adapter removes unconditional Assembly-profile refusal"
+
+# The profile-aware cadence is deliberately unchanged while the native path is
+# introduced beside it.
+require_line_mutation_sensitive "$verification_planner" \
+  '| `chunk` | Worker completed one chunk | Doctor, fast, focused |' \
+  '| `chunk` | Worker completed one chunk | Full suite |' \
+  "profile chunk cadence remains focused"
+require_line_mutation_sensitive "$verification_planner" \
+  '| `revision_batch` | All fixes from one review pass are applied | Affected doctor, fast, focused |' \
+  '| `revision_batch` | Each finding is applied | Full suite |' \
+  "profile revision cadence remains batch-scoped"
+require_line_mutation_sensitive "$verification_planner" \
+  '| `execution_level` | Every chunk in one dependency level is merged | Integrated full non-race once |' \
+  '| `execution_level` | Every chunk is merged | Repeated full suite |' \
+  "profile execution-level cadence remains integrated once"
+require_line_mutation_sensitive "$verification_planner" \
+  '| `merge_candidate` | All levels are merged and before final review | Fresh exact-candidate run; remote lanes explicit |' \
+  '| `merge_candidate` | Before every chunk | Cached candidate run |' \
+  "profile merge-candidate cadence remains fresh"
+
 printf "\nAssembly release invocation-authority contract:\n"
 for release_surface in "$assembly_release" "$assembly_release_skill"; do
   release_rel="${release_surface#$REPO_ROOT/}"
@@ -605,10 +788,18 @@ selective_allowlist="$REPO_ROOT/plugins/dm-review/skills/review/references/selec
 require_text "$review_skill" "references/selective-lane-allowlist.md" "review receiver loads the allowlist contract only when the input is present"
 require_text "$selective_allowlist" "never relax this equality check to a subset check" "allowlist contract requires exact selected_full_set equality"
 require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.17.0"' "dm-review requires the exact-owned cleanup kernel release"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.74.0"' "pipeline requires the exact-owned dm-review release"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.19.1"' "dm-review requires portable repository-scope observation support"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.79.1"' "pipeline requires the quiet observation-index reporting contract"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"model-router": ">=0.4.0"' "dm-review requires provider-neutral role routing"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"model-router": ">=0.6.0"' "pipeline requires the current routing runtime"
+require_text "$review_skill" 'Implementation origin is not a coverage field or eligibility condition.' "dm-review makes implementation origin ineligible as a review filter"
+require_text "$review_skill" 'never request, infer, or pass implementation-origin declarations' "dm-review never collects implementation origin for lane routing"
+require_text "$orchestrator" 'one cumulative implementation receipt set' "Pipeline keeps implementation receipts for terminal reporting"
+require_text "$pipeline_cmd" 'stores its live receipt for the terminal' "Pipeline lean mode preserves terminal reporting receipts"
+require_text "$codex_native_adapter" 'Do not pass implementation receipts or author' "Codex-native mode keeps receipts out of reviewer eligibility"
+require_absent "$review_loop" 'implementation receipt IDs' "dm-review-loop does not preserve implementation origin for reviewer routing"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"name": "Second Perspective Reviewer"' "dm-review manifest names the provider-neutral perspective lane"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'family-independent second-opinion review' "dm-review manifest describes family-independent perspective resolution"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" 'method-independent second-opinion review' "dm-review manifest describes method-independent perspective resolution"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'Full mode only.' "migration-validator registry limits the lane to full mode"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/agent-registry.md" 'quick mode does not add this lane' "migration-validator registry matches the executable quick roster"
 for stale_migration_claim in 'Also dispatched in quick mode' 'dispatched in BOTH modes'; do
@@ -1062,14 +1253,23 @@ require_text "$eval_sweep" "Hard cap: 40 tool calls" \
   "pipeline eval-sweep retains its ledger-oriented hard cap"
 
 # --------------------------------------------------------------------------
-# Group 8: subscription-first and family-independent routing
+# Group 8: subscription-first and origin-neutral review routing
 # --------------------------------------------------------------------------
 
 printf "\nrouting invariants:\n"
 
 require_text "$review_skill" \
-  'Pass every opaque implementing' \
-  "dm-review requires a family-independent second perspective"
+  'never request, infer, or pass implementation-origin declarations' \
+  "dm-review reviewer eligibility is origin-neutral"
+if jq -e '
+  [.reviewRoles.security, .reviewRoles.secondPerspective]
+  | all(.capabilities | index("independent-family") == null)
+' "$routing_policy" >/dev/null; then
+  printf "  OK    Pipeline review roles do not restore family eligibility filtering\n"
+else
+  printf "  FAIL  Pipeline review roles do not restore family eligibility filtering\n"
+  failures=1
+fi
 require_text "$REPO_ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh" \
   "subscription-headroom-unknown" \
   "routing-policy consumers treat unknown subscription headroom conservatively"
@@ -1078,9 +1278,9 @@ if jq -e '
   | ($lane | length >= 2)
     and all($lane[]; (.capabilities | index("independent-family")) != null)
 ' "$REPO_ROOT/plugins/model-router/skills/model-router/references/role-policy.json" >/dev/null; then
-  printf "  OK    security sign-off route is implementer-aware and family-independent\n"
+  printf "  OK    generic security-review route supports optional family exclusion\n"
 else
-  printf "  FAIL  security sign-off route is implementer-aware and family-independent\n"
+  printf "  FAIL  generic security-review route supports optional family exclusion\n"
   failures=1
 fi
 
@@ -1193,10 +1393,10 @@ require_text "$noninteractive_fixtures" 'test_active_surfaces_have_no_approval_m
   "fixtures cover active approval-machinery absence"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md" \
   '`implementer_family`, `reviewer_family`, `resolution_reason`' \
-  "dm-review output contract requires family provenance on contribution decisions"
+  "dm-review output contract retains observation-only family fields"
 require_text "$review_skill" \
-  'only private router receipts retain family evidence' \
-  "dm-review keeps family provenance on the private contribution surface"
+  'private router receipts retain model' \
+  "dm-review keeps model identity on the private terminal-report surface"
 family_surfaces=(
   "$REPO_ROOT/plugins/openrouter/commands/openrouter.md"
   "$REPO_ROOT/plugins/openrouter/skills/openrouter/SKILL.md"
@@ -1228,22 +1428,26 @@ require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallbac
   "dm-review resolves independent-lane fallback at the role boundary"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "fails or is unavailable" \
   "dm-review applies role fallback to failed or unavailable candidates"
-require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "Never complete the lane with an implementing family." \
-  "dm-review forbids same-family partial-coverage completion for the sign-off lane"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "Never add" \
+  "dm-review fallback never adds implementation-origin evidence"
 require_text "$openrouter_agent_runner" "it does not decide whether content is eligible for OpenRouter" \
   "OpenRouter runner gives provider input the native eligibility boundary"
 require_text "$openrouter_agent_runner" "Credentials, private keys, tokens, authenticated endpoints" \
   "OpenRouter runner preserves credential-shaped review sections"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/lane-fallback.md" "anonymous lane, role" \
   "dm-review attributes independent fallback anonymously"
-require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/independent-family-lanes.md" "excludes every implementing family" \
-  "dm-review bounds independent-family fallback without a same-family retry"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
   "REVIEW INCOMPLETE" \
   "graceful degradation keeps sign-off exhaustion review-incomplete"
-require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
+require_absent "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
   "Independent-family role exhausted" \
-  "graceful degradation uses the provider-neutral second-perspective lane"
+  "graceful degradation does not encode family filtering"
+require_absent "$REPO_ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow_kernel/_translation.py" \
+  "independent review family overlap" \
+  "Workflow Kernel does not reject same-family dm-review lanes"
+require_text "$REPO_ROOT/tests/test_dm_review_adapter.py" \
+  "overlap_is_observation_only" \
+  "Workflow Kernel fixtures accept same-family observation evidence"
 require_absent "$REPO_ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md" \
   "| Codex perspective |" \
   "graceful degradation removes the retired Codex-only perspective lane"
@@ -1799,15 +2003,15 @@ else:
         print("FAIL  full-mode dispatch does not name the common prompt contract")
         fail = 1
     # Judge the citation by its paragraph, not its wrapped line: the guard
-    # ("If a rendered UI lane is selected ...") sits above the path itself.
+    # for selected UI analysis lanes sits above the path itself.
     visual_paras = [b for b in re.split(r"\n\s*\n", pc_text)
                     if "visual-finding-rules.md" in b]
-    ui_lane_re = re.compile(r"(if|only when|when|for)\b[^.]*rendered[- ]UI lane", re.I | re.S)
+    ui_lane_re = re.compile(r"(if|only when|when|for)\b[^.]*(rendered[- ]UI|UI analysis) lanes?", re.I | re.S)
     if visual_paras and all(ui_lane_re.search(b) for b in visual_paras) \
             and re.search(r"Non-UI lanes never receive", pc_text):
-        print("OK    visual finding rules are conditional on a rendered UI lane")
+        print("OK    visual finding rules are conditional on UI analysis lanes")
     else:
-        print("FAIL  visual finding rules are not conditional on a rendered UI lane")
+        print("FAIL  visual finding rules are not conditional on UI analysis lanes")
         fail = 1
     for anchor in ["untrusted input", "## Project Context", "## Fix Philosophy",
                    "## Caller-Provided Context",
@@ -1850,4 +2054,4 @@ if [ "$failures" -ne 0 ]; then
   exit 1
 fi
 
-printf "OK    Workflow contracts intact (repository cleanup, two-gate Pipeline planning/alignment, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, routing invariants, configured-key OpenRouter authorization)\n"
+printf "OK    Workflow contracts intact (prototype authority, repository cleanup, two-gate Pipeline planning/alignment, Datastar-first, Baseplate gates, workflow kernel, pipeline performance, cost-summary emission, routing invariants, configured-key OpenRouter authorization)\n"

@@ -1,7 +1,7 @@
 ---
 name: dm-review-visual
 description: Run visual browser testing on rendered pages -- responsive layouts, interactive states, and accessibility
-argument-hint: "[optional: URL to test, --states, or --a11y]"
+argument-hint: "[optional: URL to test, --states, --a11y, or --all]"
 ---
 
 # Visual Browser Testing
@@ -24,6 +24,7 @@ the policy.
    - URL: test that specific URL
    - `--states`: focus on interactive state testing
    - `--a11y`: focus on runtime accessibility checks
+   - `--all`: run the complete repository-declared browser matrix
 3. Output the visual testing report
 
 This command always requires rendered evidence. Run the shared readiness gate
@@ -36,7 +37,15 @@ Materialize the validated standalone review request, including its explicit/defa
 "$WORKFLOW_KERNEL" bind-prediction --type review --request <exact-run-root>/review/request.json --prediction-receipts <exact-run-root>/review/independent-prediction-receipts.json --state-dir <exact-run-root>/review
 ```
 
-Use the complete project verification profile selected from configuration and `tests/ux/` task frontmatter: persona, scenario, concrete route, configured engine, viewport, authentication state, and expected evaluation. `not_declared` applies only when declarations are absent; a present but incomplete declaration or unresolved route binding is blocking. Execute the selected case set rather than a fixed persona sample.
+Load `ui-case-selection.md`. By default select affected routes, prototype cases,
+acceptance cases, directly affected dimensions, and at most one justified
+baseline. `--all` selects the complete repository-declared matrix. Use the
+project verification profile from configuration and `tests/ux/` task
+frontmatter: persona, scenario, concrete route, configured engine, viewport,
+authentication state, and expected evaluation. `not_declared` applies only
+when declarations are absent; a present but incomplete declaration or
+unresolved route binding is blocking. Supported viewport/engine lists alone do
+not require every combination.
 
 On any missing required browser tool, dev server, authentication fixture, route binding, or verification profile prerequisite, preserve safe initial-attempt evidence, quit the primary browser process/engine session, launch a demonstrably fresh primary profile and retry once, then try a genuinely different configured engine. Record unavailable recovery actions rather than omitting them. If recovery cannot complete, emit blocked `human_help_required` with every attempt and exact missing case IDs, explicitly ask the user to restore the missing prerequisite, and stop. Never skip, defer, degrade, approve, or proceed without the required browser evidence. Curl and reachability are diagnostic only and never satisfy browser evidence. Application/assertion failures are findings and do not trigger browser restart.
 

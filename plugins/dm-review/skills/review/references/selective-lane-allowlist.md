@@ -15,7 +15,7 @@ caller's declared `selected_full_set` -- same members, no more and no fewer,
 regardless of order -- and the caller's `lanes` is a non-empty subset of that
 set containing only unique exact logical lane IDs. Duplicates, aliases,
 unknown IDs, role IDs, and criterion aliases are invalid. `security-auditor`
-is the one exact independent-family logical lane; `security-review` is its role
+is the exact full-diff security logical lane; `security-review` is its role
 and is not a lane ID.
 Exact equality for `selected_full_set` is mandatory: it proves the caller and
 receiver agree on the full roster at this moment. If the diff changed between
@@ -33,7 +33,7 @@ malformed proof discards the allowlist and runs the full roster.
 
 Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder. Use only this closed reason set, applying the first matching reason in the order listed: `selective_input_absent` when no input was received; `selective_input_malformed` when the input is not an object with string-array `selected_full_set` and `lanes` members; `selected_full_set_mismatch` when the declared and recomputed full sets are unequal; `selective_lanes_empty` when `lanes` is empty; `selective_lanes_duplicated` when `lanes` contains duplicates; `selective_lanes_ambiguous_or_aliased` when `lanes` contains an alias or a criterion-level ID; `selective_lanes_not_subset` when `lanes` contains an unknown ID or a lane outside the recomputed selected full set; and `selective_lanes_omit_required_lane` when `lanes` omits a mandatory lane that the unfiltered review would require. The coverage receipt returns this exact reason, never a generic invalid-input reason.
 
-The independent-family security sign-off, `security-auditor`, is
+The full-diff security sign-off, `security-auditor`, is
 mandatory for the initial full review, incomplete full-review recovery, and
 security-boundary repairs. It may be omitted only by the proven affected-lane
 repair case above. Otherwise, if the recomputed selected full set requires it

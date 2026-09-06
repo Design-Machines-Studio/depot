@@ -47,7 +47,7 @@ MODEL_ROUTER_TEST_MODE=1 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability" \
     --capability read-repository --capability structured-output \
     --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
     --output-file "$TMP/out" --receipt-file "$TMP/receipt" >/dev/null
-assert grep -Fxq openrouter "$TMP/transport.log"
+assert grep -Fxq codex-cli "$TMP/transport.log"
 assert jq -e '.requested.capabilities == ["read-repository","structured-output"]' "$TMP/receipt"
 
 rm -f "$TMP/out" "$TMP/receipt" "$TMP/transport.log"

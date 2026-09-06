@@ -419,6 +419,115 @@ class RuntimeCliTests(unittest.TestCase):
             self.assertEqual(artifact["run_spec"]["workflow_class"], "feature")
             self.assertEqual(artifact["event_count"], 11)
 
+    def test_device_renumbered_schema_one_scope_keeps_old_and_new_runs_usable(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            run_id = "portable-run"
+            self.init_lifecycle(root, run_id)
+            run_dir = root / ".workflow-kernel" / "runs" / run_id
+            scope_path = root / ".workflow-kernel" / "repository-scope.json"
+            stored = json.loads(scope_path.read_text(encoding="utf-8"))
+            scope_id = stored["scope_id"]
+            stored["repo_root"]["device"] += 1000
+            stored["lease_root"]["device"] += 1000
+            scope_path.write_text(json.dumps(stored, sort_keys=True), encoding="utf-8")
+            scope_before = scope_path.read_bytes()
+
+            manifest = root / "manifest.json"
+            manifest.write_text(json.dumps({
+                "feature": run_id, "workflowClass": "feature",
+                "executionMode": "codex_native",
+                "chunks": [{"id": "chunk-a", "dependsOn": []}],
+                "executionPlan": {"levels": [{
+                    "level": 0, "strategy": "sequential", "chunks": ["chunk-a"],
+                }]},
+            }), encoding="utf-8")
+            prediction = root / "prediction.json"
+            predicted = json.loads((FIXTURES / "pipeline-codex.json").read_text())
+            predicted[0]["run_id"] = run_id
+            predicted[0]["prediction_basis"] = "pre-action"
+            for receipt in predicted[1:]:
+                receipt["run_id"] = run_id
+            prediction.write_text(json.dumps(predicted), encoding="utf-8")
+
+            bound = self.run_cli(
+                "bind-prediction", "--type", "pipeline", "--manifest", manifest,
+                "--prediction-receipts", prediction, "--state-dir", root,
+            )
+            self.assertEqual(bound.returncode, 0, bound.stderr)
+            self.start_lifecycle(root, run_id)
+            validated = self.run_cli("validate", run_dir)
+            self.assertEqual(validated.returncode, 0, validated.stderr)
+
+            observed = self.run_cli(
+                "observe-pipeline", "--manifest", manifest,
+                "--receipts", prediction, "--state-dir", root,
+            )
+            self.assertEqual(observed.returncode, 0, observed.stderr)
+            comparison = root / "shadow-report.json"
+            compared = self.run_cli(
+                "compare", "--state-dir", root,
+                "--authoritative-receipts", prediction, "--output", comparison,
+            )
+            self.assertEqual(compared.returncode, 0, compared.stderr)
+            self.assertTrue(json.loads(comparison.read_text())["semantic_match"])
+
+            new_run_id = "portable-new-run"
+            initialized = self.run_cli(
+                "init", root / ".workflow-kernel" / "runs" / new_run_id,
+                "--run-id", new_run_id, "--mode", "shadow",
+                "--occurred-at", "2026-07-15T00:10:00Z",
+            )
+            self.assertEqual(initialized.returncode, 0, initialized.stderr)
+            new_event = json.loads((
+                root / ".workflow-kernel" / "runs" / new_run_id / "events.jsonl"
+            ).read_text().splitlines()[0])
+            self.assertEqual(new_event["payload"]["repository_scope_id"], scope_id)
+            self.assertEqual(new_event["payload"]["repository_root_device"], root.stat().st_dev)
+            self.assertEqual(
+                new_event["payload"]["lease_root_device"],
+                (root / ".workflow-kernel").stat().st_dev,
+            )
+
+            argv = root / "argv.json"
+            argv.write_text(json.dumps(["docker", "run", "alpine"]), encoding="utf-8")
+            creation_path = root / "creation-plan.json"
+            planned = self.run_cli(
+                "plan-create", "--state-dir", run_dir, "--run-id", run_id,
+                "--node-id", "chunk-a", "--lifecycle", "chunk",
+                "--cleanup-policy", "stop-remove", "--argv-json", argv,
+                "--output", creation_path,
+            )
+            self.assertEqual(planned.returncode, 0, planned.stderr)
+            creation = json.loads(creation_path.read_text())
+            self.assertEqual(
+                creation["labels"]["com.designmachines.depot.repository-scope-id"],
+                scope_id,
+            )
+            cleanup_path = root / "cleanup-plan.json"
+            cleanup = self.run_cli(
+                "plan-cleanup", "--state-dir", run_dir, "--run-id", run_id,
+                "--node-id", "chunk-a", "--output", cleanup_path,
+            )
+            self.assertEqual(cleanup.returncode, 0, cleanup.stderr)
+            self.assertEqual(
+                json.loads(cleanup_path.read_text())["scope"]["repository_scope_id"],
+                scope_id,
+            )
+
+            index_fixture = (
+                Path(__file__).parent / "fixtures" / "observation-index" /
+                "pipeline-complete-v1.json"
+            )
+            index_path = root / "observation-index.json"
+            emitted = self.run_cli(
+                "emit-observation-index", "--input", index_fixture,
+                "--output", index_path,
+            )
+            self.assertEqual(emitted.returncode, 0, emitted.stderr)
+            self.assertTrue(index_path.is_file())
+            self.assertEqual(scope_path.read_bytes(), scope_before)
+
     def test_legacy_browser_reconciliation_writer_and_processing_paths_are_atomic(self):
         from workflow_kernel.cost_summary import validate_run_cost_summary
 

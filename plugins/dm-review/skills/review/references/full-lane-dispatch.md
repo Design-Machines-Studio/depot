@@ -3,20 +3,20 @@
 This reference is the authoritative full-mode lane dispatcher. dm-review owns
 the roster and review criteria; model-router owns every concrete participant,
 availability, billing, family, transport, fallback, and payload invocation.
-For every lane that requires separation from implementation, load
-`independent-family-lanes.md` and pass only its opaque receipt identifiers.
+All review lanes are origin-neutral: author or implementer identity never
+filters candidate eligibility.
 
 ## Fixed role mapping
 
 | Lane | Role | Capabilities | Effort |
 |---|---|---|---|
-| security auditor | `security-review` | `read-repository`, `long-context`, `structured-output`, `independent-family` | `high` |
+| security auditor | `security-review` | `read-repository`, `long-context`, `structured-output` | `high` |
 | architecture | `review-deep` | `read-repository`, `long-context`, `structured-output` | `high` |
 | patterns | `review-deep` | `read-repository`, `structured-output` | `high` |
 | simplicity | `review-deep` | `read-repository`, `structured-output` | `high` |
 | documentation | `review-fast` | `read-repository`, `structured-output` | `medium` |
 | tests/build analysis | `review-fast` | `read-repository`, `structured-output` | `medium` |
-| second perspective | `plan-critic` | `read-repository`, `long-context`, `structured-output`, `independent-family` | `high` |
+| second perspective | `plan-critic` | `read-repository`, `long-context`, `structured-output` | `high` |
 | triggered domain lane | `review-deep` | explicit required capabilities only | `high` |
 | triggered UI analysis lane | `review-deep` | `read-repository`, `long-context`, `structured-output` | `high` |
 
@@ -51,44 +51,50 @@ same bundle. For each selected lane:
 4. Build `role-dispatch` argv as an array from the table above and pass the
    invocation's exact validated launcher as `--workflow-kernel
    "$WORKFLOW_KERNEL"`.
-5. Store every live implementation and repair receipt under
-   `<exact-run-root>/receipts/private/router/`, named by its opaque receipt ID.
-   For independent lanes, pass that directory with
-   `--independence-receipt-dir` and append each opaque implementing receipt ID
-   with `--independence-receipt-id`; dm-review never receives family names. For
-   a verified human-authored diff with no model-authored contribution, pass
-   `--human-authored` instead. Any subsequent model repair invalidates that
-   claim; register its live implementer receipt and use receipt IDs alone. If
-   repair provenance is unavailable, the independent lane remains unavailable.
-   The two origin forms are mutually exclusive.
+5. Do not pass implementation or repair receipts, an independence receipt
+   registry, `--human-authored`, or `--origin-file` to dm-review lanes. The
+   router may record the selected review participant in its private receipt for
+   terminal metrics, but authorship never changes the candidate set.
 6. Launch selected lanes in parallel when the host supports it.
 
 ### Proportional UI prerequisite
 
-Before any selected UI lane is dispatched, load `ui-review-readiness.md` and
-run its ordered application/browser gate once. Prefer an explicit invocation
-URL, then an attached automation-capable T3 preview, then optional tracked
+Before any selected UI lane is dispatched, load `ui-case-selection.md` and
+`ui-review-readiness.md`. Select the affected case set once, then run the
+ordered application/browser gate once. Prefer an explicit invocation URL, then
+an attached automation-capable T3 preview, then optional tracked
 `.dm/ui-review.json`. A declared Compose consumer uses
 the existing review Docker creation/cleanup contracts; an exact declared
 process uses `ui-review-readiness.sh`. Verify reachability independently, then
 prove actual local browser navigation independently.
 
 Current routed transports do not receive the host's local interactive browser.
-Keep browser interaction host-owned and materialize one bounded set of screenshots,
-accessibility snapshots, console summaries, route/viewport case IDs,
-interaction observations, and computed-style evidence. Share that evidence
-with every applicable provider-neutral UI analysis role above. Never request `browser` or generic
+Keep browser interaction host-owned and materialize one bounded set of
+screenshots, accessibility snapshots, console summaries, selected
+route/viewport case IDs, interaction observations, and computed-style evidence.
+Share the same evidence reference with every applicable provider-neutral UI
+analysis role above and run each lane once. Never request `browser` or generic
 `tool-use`, and never treat OpenRouter web search as local navigation.
 
-If an ordinary review has no rendered target, dispatch no UI participant and
-emit one aggregated nonblocking coverage note. Keep the review incomplete only
-when rendered evidence was explicitly required. In that case use exactly one
+If an ordinary review has no rendered target, dispatch only its already-selected
+source-capable UI lanes in `source-only` mode, never add a lane during fallback,
+do not dispatch an already-selected visual-browser lane, and emit one aggregated
+nonblocking coverage note. Keep the review incomplete only when rendered
+evidence was explicitly required. In that case use exactly one
 `visual_target_unavailable`, `dev_server_unavailable`, or
-`browser_transport_unavailable` result plus one next action. If both
-are ready but role dispatch is unavailable, settle as
-`model_participant_unavailable`. Prerequisite failures are coverage gaps, not
-code findings. Settle and clean only resources registered by this review;
-pre-existing resources remain untouched.
+`browser_transport_unavailable` result plus one next action while every selected
+source-capable lane still runs. If a requested analysis role is unavailable,
+settle that cause as `model_participant_unavailable` distinctly. Prerequisite
+failures are coverage gaps, not code findings. Settle the aggregate UI result
+once and clean only resources registered by this review; pre-existing resources
+remain untouched.
+
+An enclosing Pipeline may pass one explicit exact-head browser packet path.
+Validate it with `browser-evidence-packet.sh`; do not discover a latest packet.
+Only an exact repository/prototype commit, dirty state, selected-case, artifact
+hash, and successful completion match replaces current host capture. On
+rejection, attempt the ordinary readiness path and never report rendered
+success from the rejected packet.
 
 The terminal report owner supplies this exact private directory and its
 `terminal-receipt-index.json`. After a parallel fan-out joins, extend the index
@@ -146,13 +152,12 @@ error sends that lane the full diff with `slice_status: slice_failed`.
 Uncertainty always widens input; a lane is never dispatched against an
 unverifiable slice or skipped because its slice is empty.
 
-## Security independence
+## Security coverage
 
-The full-diff security lane is always required and passes every implementing
-receipt ID. A supplementary eligible-section security result may coexist, but
-cannot replace the independent full-diff lane. Missing private family evidence,
-no eligible independent family, or incomplete held-section coverage keeps the
-review incomplete. Never fall back to an implementing family.
+The full-diff security lane is always required. A supplementary eligible-section
+security result may coexist, but cannot replace the full-diff lane. Missing or
+incomplete held-section coverage keeps the review incomplete; implementation
+origin and model family never do.
 
 ## Receipts
 

@@ -11,13 +11,16 @@ trap 'rm -rf "$TMP"' EXIT
 
 fail() { printf 'provider-neutral-routing: %s\n' "$1" >&2; exit 1; }
 
-# Closed roles, capabilities, effort, focused Kimi use, and
+# Closed roles, capabilities, effort, bounded GLM placement, focused Kimi use, and
 # no invented Codex candidate-to-allowance mapping.
 jq -e '
   (.roles | keys | sort) == (["architect","builder-deep","builder-fast","editorial","plan-critic","research-fast","review-deep","review-fast","security-review"] | sort) and
   (.effort.vocabulary == ["low","medium","high","max"]) and
   all(.roles[]; any(.[]; .transport == "openrouter")) and
   ([.roles[][] | .capabilities[] | select(IN("read-repository","write-repository","tool-use","browser","long-context","structured-output","independent-family") | not)] | length == 0) and
+  ([.roles | to_entries[] | .key as $role | .value[]
+    | select(.model | test("glm";"i"))
+    | select(.model != "z-ai/glm-5.3-flash" or ($role != "builder-fast" and $role != "review-fast"))] | length == 0) and
   all(.roles[][] | select(.transport == "codex-cli"); has("rateLimitId") | not) and
   ([.roles | to_entries[] | select(.key != "security-review") | .value[] | .model | select(test("kimi";"i"))] | length == 0)
 ' "$POLICY" >/dev/null || fail 'role policy is not closed'
@@ -73,7 +76,8 @@ grep -Fq 'confirm-browser' "$ui_readiness" &&
   fail 'dm-review lacks the two-phase browser gate or exact cleanup snapshot'
 grep -Fq 'optional tracked `<repository>/.dm/ui-review.json`' "$ui_readiness" ||
   fail 'dm-review still treats UI configuration as mandatory'
-grep -Fq 'one aggregated `visual_target_unavailable` coverage note' "$ui_readiness" ||
+grep -Fq 'emit one aggregated' "$ui_readiness" &&
+  grep -Fq '`visual_target_unavailable` coverage note' "$ui_readiness" ||
   fail 'dm-review duplicates missing visual readiness per lane'
 
 # Pipeline policy may express only role intent and legacy translation.
@@ -103,7 +107,6 @@ runtime_files=(
   "$ROOT/plugins/dm-review/skills/review/references/agent-registry.md"
   "$ROOT/plugins/dm-review/skills/review/references/graceful-degradation.md"
   "$ROOT/plugins/dm-review/skills/review/references/guardrails.md"
-  "$ROOT/plugins/dm-review/skills/review/references/independent-family-lanes.md"
   "$ROOT/plugins/dm-review/skills/review/references/lane-fallback.md"
   "$ROOT/plugins/dm-review/skills/review/references/reviewer-prompt-template.md"
   "$ROOT/plugins/dm-review/skills/review/references/output-format.md"
@@ -146,6 +149,26 @@ done < <(find "$ROOT/plugins/pipeline/agents" "$ROOT/plugins/dm-review/agents" "
 # New Pipeline manifests accept roles and reject model/provider keys.
 jq -n '{feature:"fixture",workflowClass:"feature",decisionProfile:{uncertainty:"medium",consequence:"medium",rationale:"Bounded fixture."},renderedSurface:"not_applicable",baseBranch:"main",featureBranch:"feat/fixture",branchMode:"create",expectedFeatureHead:null,finalReviewMode:"full",finalReviewRationale:"Full review for fixture.",chunks:[{id:"a",level:0,title:"Fixture",prompt:"prompts/a.md",kind:"docs",renderedSurface:"not_applicable",renderedSurfaceRationale:"Unserved documentation.",executorRole:"builder-fast",executorCapabilities:["read-repository","write-repository","structured-output"],executorEffort:"medium",filesToModify:["docs/a.md"],dependsOn:[],companionSkills:[],estimatedComplexity:"low"}]}' > "$TMP/valid.json"
 "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/valid.json" || fail 'valid role manifest rejected'
+jq '.renderedSurface="required" |
+  .prototypeReference={status:"counterpart",canonicalRepository:"Design-Machines-Studio/assembly",commit:"0123456789abcdef0123456789abcdef01234567",authoritySource:"current PR",prototypeSourceFiles:["prototype/a.html"],targetSourceFiles:["templates/a.templ"],matchedCases:[{prototypeRoute:"/prototype/a",targetRoute:"/a",state:"default",viewports:[375,1440]}],intentionalDifferences:[]} |
+  .chunks[0].kind="ui" |
+  .chunks[0].renderedSurface="required" |
+  .chunks[0].renderedSurfaceRationale="Declared prototype counterpart." |
+  .chunks[0].prototypeParity=[{surface:"fixture",prototypeSourcePaths:["prototype/a.html"],targetSourcePaths:["templates/a.templ"],prototypeRoute:"/prototype/a",targetRoute:"/a",state:"default",viewports:[375,1440],sourceDecisions:{structure:["Heading precedes content."],classes:["stack"],copy:["Fixture"],actions:["Save is primary."]},sourceEvidenceStatus:"complete",renderedEvidenceStatus:"pending",intentionalDifferences:[]}]' \
+  "$TMP/valid.json" > "$TMP/valid-prototype.json"
+"$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/valid-prototype.json" || fail 'valid prototype manifest rejected'
+jq '.prototypeReference={}' "$TMP/valid.json" > "$TMP/invalid.json"
+if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'malformed prototype reference accepted'; fi
+jq '.chunks[0].prototypeReference=.prototypeReference | del(.prototypeReference)' "$TMP/valid-prototype.json" > "$TMP/invalid.json"
+if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'chunk-level prototype reference accepted'; fi
+jq 'del(.chunks[0].prototypeParity)' "$TMP/valid-prototype.json" > "$TMP/invalid.json"
+if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'prototype counterpart without chunk parity accepted'; fi
+jq '.chunks[0].prototypeParity[0].targetRoute="/different"' "$TMP/valid-prototype.json" > "$TMP/invalid.json"
+if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'conflicting prototype route accepted'; fi
+jq '.prototypeReference.status="no_counterpart" | .prototypeReference.targetSourceFiles=[] | .prototypeReference.matchedCases=[] | del(.chunks[0].prototypeParity)' "$TMP/valid-prototype.json" > "$TMP/valid-no-counterpart.json"
+"$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/valid-no-counterpart.json" || fail 'source-proven no-counterpart manifest rejected'
+jq '.chunks[0].prototypeParity=[]' "$TMP/valid-no-counterpart.json" > "$TMP/invalid.json"
+if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'no-counterpart manifest with chunk parity accepted'; fi
 jq '.chunks[0].provider="example"' "$TMP/valid.json" > "$TMP/invalid.json"
 if "$ROOT/plugins/pipeline/references/validate-role-manifest.sh" "$TMP/invalid.json"; then fail 'provider-bearing manifest accepted'; fi
 for field in feature workflowClass decisionProfile renderedSurface baseBranch featureBranch branchMode expectedFeatureHead finalReviewMode finalReviewRationale; do

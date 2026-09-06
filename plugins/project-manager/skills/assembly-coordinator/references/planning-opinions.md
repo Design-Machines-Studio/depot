@@ -27,7 +27,7 @@ output. Do not run debate, rebuttal, convergence, or a third opinion.
 
 Resolve one coherent installed model-router bundle through Workflow Kernel and
 bind its `role-dispatch.sh`, request schema, policy, and terminal renderer at
-minimum model-router version `0.4.0`. Materialize Plan A and Plan B prompts
+minimum model-router version `0.6.0`. Materialize Plan A and Plan B prompts
 separately, use the same immutable evidence packet as each request's
 `--repository-evidence-file`, and allocate fresh private output and receipt
 paths in one mode-`0700` run-private directory. Create

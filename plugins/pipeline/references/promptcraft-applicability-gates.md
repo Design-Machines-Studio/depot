@@ -28,12 +28,16 @@ For each Assembly mutation chunk, consult `assembly:development`'s Mutation Appl
 
 Every chunk with `renderedSurface: required` must include at least 2 visual acceptance criteria describing rendered impressions, not just structural class names, in a `### Visual Acceptance Criteria` subsection. "Uses `.button--accent` class" is structural; "Primary action button is visually dominant over secondary actions" is visual; both types are required. A chunk marked `not_applicable` must not fabricate rendered impressions.
 
-**Shared-component parity:** when one Templ component renders on two or more routes -- a shared editor, form, or dialog -- the chunk must carry a **Visual Parity Criterion** even when the prompt never says "visually identical": sharing a component is itself the parity claim, and a route-specific wrapper or stale override quietly breaks it. Detect by grepping the plan's `filesToModify` for a component invoked from more than one page package; for each, add these two **P1** criteria:
+**Shared-component parity:** when one Templ component renders on two or more routes -- a shared editor, form, or dialog -- the chunk must carry a **Visual Parity Criterion** even when the prompt never says "visually identical": sharing a component is itself the parity claim, and a route-specific wrapper or stale override quietly breaks it. Detect by grepping the plan's `filesToModify` for a component invoked from more than one page package; for each, add these two criteria:
 
 1. `Screenshot of <component> at /route-a and /route-b at the same viewport shows identical rendering.`
 2. `getComputedStyle on <selector> matches across both routes for: font-size, font-weight, color, padding, margin, background-color, border.`
 
-A shared component that renders differently per route is the component failing to be shared, not polish.
+Classify a supported mismatch by observable impact: P1 only for blocked primary
+work, misleading authorization/governance consequences, inaccessible essential
+controls, or explicitly critical parity; P2 for meaningful structural or
+interaction drift; P3 for minor spacing/alignment/presentation drift. Every
+supported severity remains mandatory before clean completion.
 
 ## Phase 3m: Fixture SDK Conformance Gate
 

@@ -559,18 +559,7 @@ mv "$TMP/availability.next" "$TMP/availability.json"
 run_role local-failure builder-deep high --capability read-repository --capability long-context
 assert jq -e '.served.model == "x-ai/grok-4.6" and .fallbackReason == "transport-unavailable"' "$TMP/local-failure.receipt"
 
-# Exhaust the native Codex rail in the current availability file so the
-# ordinary native Claude tail is reached without an approval prompt.
-exhaust_codex() {
-  jq '.codex.state="limited"
-    | .codex.fiveHourRemainingPct=0
-    | .codex.weeklyRemainingPct=0
-    | .codex.windows.five_hour.remaining_pct=0
-    | .codex.windows.weekly.remaining_pct=0' "$TMP/availability.json" > "$TMP/availability.next"
-  mv "$TMP/availability.next" "$TMP/availability.json"
-}
-
-# Two eligible operators receive identical native-first behavior from one policy.
+# Two eligible operators receive identical subscription-first behavior from one policy.
 fixture healthy
 run_role architect-a architect max --capability read-repository --capability structured-output
 assert jq -e '.served.model == "gpt-5.6-sol" and .served.billingMode == "included-subscription"' "$TMP/architect-a.receipt"
@@ -578,74 +567,89 @@ fixture second-eligible-operator
 run_role architect-b architect max --capability read-repository --capability structured-output
 assert jq -e '.served.model == "gpt-5.6-sol" and .served.billingMode == "included-subscription"' "$TMP/architect-b.receipt"
 
-# Exhausted Codex descends to the native Claude tail without an approval prompt.
-fixture healthy
-exhaust_codex
+# Claude allowance states remain distinct when the subscription-first Codex
+# candidate is unavailable.
+fixture fable-exhausted
+jq '.codex.state="limited" | .codex.fiveHourRemainingPct=0 | .codex.weeklyRemainingPct=0' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role fable-fallback architect high --capability read-repository --capability structured-output
+assert jq -e '.served.model == "qwen/qwen3.8-max" and .served.transport == "openrouter" and .fallback == true' "$TMP/fable-fallback.receipt"
+# An eligible Claude subscription follows the unavailable native Codex rail.
+jq '.codex.state="exhausted"
+  | .codex.windows.five_hour.remaining_pct=0
+  | .codex.windows.weekly.remaining_pct=0
+  | .claude.state="ok"
+  | .claude.fiveHourRemainingPct=80
+  | .claude.weeklyRemainingPct=70' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
 run_role opus-fallback architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "opus" and .served.transport == "claude-cli" and .fallback == true' "$TMP/opus-fallback.receipt"
-# Retired-alias exhaustion telemetry does not suppress a distinct Claude model.
-fixture fable-exhausted
-jq '.claude.fiveHourRemainingPct=80 | .claude.weeklyRemainingPct=70' "$TMP/availability.json" > "$TMP/availability.next"
-mv "$TMP/availability.next" "$TMP/availability.json"
-exhaust_codex
-run_role alias-fallback architect high --capability read-repository --capability structured-output
-assert jq -e '.served.model == "opus" and .served.transport == "claude-cli" and .fallback == true' "$TMP/alias-fallback.receipt"
-# Exhausted Claude descends past the native tail to OpenRouter.
-fixture fable-exhausted
-exhaust_codex
-run_role claude-exhausted architect high --capability read-repository --capability structured-output
-assert jq -e '.served.model == "qwen/qwen3.8-max" and .served.transport == "openrouter" and .fallback == true' "$TMP/claude-exhausted.receipt"
-
-# Initially unobservable Claude telemetry is bounded, not excluded.
 fixture fable-initial-telemetry-absent
-exhaust_codex
-run_role claude-bounded architect high --capability read-repository --capability structured-output
-assert jq -e '.served.model == "opus" and .served.billingMode == "subscription-headroom-unknown"' "$TMP/claude-bounded.receipt"
+jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role fable-bounded architect high --capability read-repository --capability structured-output
+assert jq -e '.served.model == "opus" and .served.billingMode == "subscription-headroom-unknown"' "$TMP/fable-bounded.receipt"
 fixture claude-pro
-exhaust_codex
+jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
 run_role pro-bounded architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "opus" and .served.billingMode == "subscription-headroom-unknown"' "$TMP/pro-bounded.receipt"
 fixture claude-unrecognized-subscription
-exhaust_codex
+jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
 run_role future-bounded architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "opus" and .served.billingMode == "subscription-headroom-unknown"' "$TMP/future-bounded.receipt"
 fixture fable-agent-sdk-capacity
-exhaust_codex
-run_role claude-sdk architect high --capability read-repository --capability structured-output
-assert jq -e '.served.model == "opus" and .served.billingMode == "included-subscription" and .served.allowanceWindow == "agent-sdk"' "$TMP/claude-sdk.receipt"
+jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role fable-sdk architect high --capability read-repository --capability structured-output
+assert jq -e '.served.model == "opus" and .served.billingMode == "included-subscription" and .served.allowanceWindow == "agent-sdk"' "$TMP/fable-sdk.receipt"
 
 # Credits, unauthenticated, and API-key states never masquerade as included use.
 fixture credits-disabled
-exhaust_codex
+jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
 run_role credits-off architect high --capability read-repository --capability structured-output
-assert jq -e '.served.model != "opus" and .served.transport == "openrouter"' "$TMP/credits-off.receipt"
+assert jq -e '.served.model == "qwen/qwen3.8-max" and .served.transport == "openrouter"' "$TMP/credits-off.receipt"
 fixture credits-enabled
-exhaust_codex
+jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
 run_role credits-on architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "opus" and .served.billingMode == "paid-credits"' "$TMP/credits-on.receipt"
 fixture claude-api-key
-exhaust_codex
+jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
 run_role api-key architect high --capability read-repository --capability structured-output
-assert jq -e '.served.model != "opus" and .served.transport == "openrouter"' "$TMP/api-key.receipt"
+assert jq -e '.served.model == "qwen/qwen3.8-max" and .served.transport == "openrouter"' "$TMP/api-key.receipt"
 fixture claude-unauthenticated
-exhaust_codex
+jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
 run_role unauth architect high --capability read-repository --capability structured-output
-assert jq -e '.served.model != "opus" and .served.transport == "openrouter"' "$TMP/unauth.receipt"
+assert jq -e '.served.model == "qwen/qwen3.8-max" and .served.transport == "openrouter"' "$TMP/unauth.receipt"
 
 # Security head identity stays private.
 fixture healthy
 run_role security security-review high --capability read-repository --capability structured-output
-assert jq -e '.served.model == "gpt-5.6-terra"' "$TMP/security.receipt"
-assert sh -c "! grep -Eq 'kimi|moonshot|openrouter|deepseek|gpt-5|fable|opus|qwen|grok' '$TMP/security.public'"
+assert jq -e '.served.model == "gpt-5.6-terra" and .served.transport == "codex-cli"' "$TMP/security.receipt"
+assert sh -c "! grep -Eq 'kimi|moonshot|openrouter|deepseek|gpt-5|fable|qwen|grok' '$TMP/security.public'"
 
-# Independent roles retain native subscription tails when OpenRouter is unavailable.
+# Human-authored work excludes no family, so subscription-first remains the
+# head even when OpenRouter is unavailable.
 jq '.openrouter.state="unknown"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
-exhaust_codex
 run_role native-independent plan-critic high --capability read-repository --capability independent-family --human-authored
-assert jq -e '.served.model == "opus" and .served.transport == "claude-cli"' "$TMP/native-independent.receipt"
+assert jq -e '.served.model == "gpt-5.6-terra" and .served.transport == "codex-cli"' "$TMP/native-independent.receipt"
 run_role native-security security-review high --capability read-repository --capability independent-family --human-authored
-assert jq -e '.served.model == "opus" and .served.transport == "claude-cli"' "$TMP/native-security.receipt"
+assert jq -e '.served.model == "gpt-5.6-terra" and .served.transport == "codex-cli"' "$TMP/native-security.receipt"
+
+# Ordinary security and critic reviews need no historical origin receipts.
+fixture healthy
+run_role security-without-origin security-review high --capability read-repository --capability long-context --capability structured-output
+assert jq -e '.served != null and .familyIndependence.required == false and .requested.humanAuthored == false and .requested.independenceReceiptIds == []' "$TMP/security-without-origin.receipt"
+assert jq -e '.disposition == "completed" and (.capabilities | index("independent-family") == null)' "$TMP/security-without-origin.public"
+run_role critic-without-origin plan-critic high --capability read-repository --capability long-context --capability structured-output
+assert jq -e '.served != null and .familyIndependence.required == false and .requested.humanAuthored == false and .requested.independenceReceiptIds == []' "$TMP/critic-without-origin.receipt"
+assert jq -e '.disposition == "completed" and (.capabilities | index("independent-family") == null)' "$TMP/critic-without-origin.public"
 
 # Opaque receipts exclude every implementing family.
 fixture healthy

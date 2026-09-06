@@ -338,6 +338,8 @@ reject_text "$review_skill" 'Phase 5.5: Simplification Pass' "active simplificat
 reject_text "$review_skill" 'refactor: simplify per dm-review pass' "automatic simplification commit is retired"
 reject_text "$review_skill" 'diff < 100 lines' "quick roster does not scale by diff size"
 require_text "$review_skill" 'Ordinary quick review always selects exactly these two core judgment lanes' "ordinary quick roster has exact core contract"
+require_text "$review_skill" 'never add a lane during fallback' "quick readiness fallback preserves the selected roster"
+reject_text "$review_skill" 'Run UI-standards and UX-quality as labelled source-only analysis when browser proof' "quick readiness fallback does not hard-code the full UI roster"
 require_text "$review_skill" '**pattern-recognition-specialist**' "quick roster includes pattern recognition"
 require_text "$review_skill" '**code-simplicity-reviewer**' "quick roster includes code simplicity"
 require_text "$review_skill" 'Do not add `second-perspective`' "quick roster excludes second perspective"
@@ -352,7 +354,7 @@ assert_fixture false "dependency manifest stays on quick review" security_path_r
 assert_fixture true "proven ordinary repair may omit repeated security sign-off" full_allowlist_can_omit_security affected_lane_repair true false
 assert_fixture false "security-boundary repair cannot omit security sign-off" full_allowlist_can_omit_security affected_lane_repair true true
 assert_fixture false "missing full baseline cannot omit security sign-off" full_allowlist_can_omit_security affected_lane_repair false false
-require_text "$review_skill" 'mandatory full-diff independent-family security sign-off' "full review retains independent security sign-off"
+require_text "$review_skill" 'mandatory full-diff security sign-off' "full review retains mandatory security sign-off"
 require_text "$review_skill" '`plan-critic` at high effort in full mode only' "full review retains second perspective"
 require_text "$quick_command" 'Ordinary quick review always selects exactly:' "canonical quick command has exact two-core contract"
 require_text "$generated_quick" 'Ordinary quick review always selects exactly:' "generated quick alias has exact two-core contract"
@@ -393,10 +395,10 @@ for zero_deferral_surface in \
   reject_text "$zero_deferral_surface" 'P3 advisories' "${zero_deferral_surface#$REPO_ROOT/} rejects deferred P3 evidence"
   reject_text "$zero_deferral_surface" 'P3 stays advisory' "${zero_deferral_surface#$REPO_ROOT/} rejects clean-with-P3 policy"
 done
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.74.0"' "canonical dm-review version is 1.74.0"
-require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.74.0"' "generated dm-review version is 1.74.0"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.61.1"' "canonical Pipeline version is 1.61.1"
-require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.74.0"' "generated Pipeline dependency floor is current"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.79.1"' "canonical dm-review version is 1.79.1"
+require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.79.1"' "generated dm-review version is 1.79.1"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.66.1"' "canonical Pipeline version is 1.66.1"
+require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.79.1"' "generated Pipeline dependency floor is current"
 
 printf "Synthesis identity fixtures\n"
 base_id=$(fixture_finding_id \

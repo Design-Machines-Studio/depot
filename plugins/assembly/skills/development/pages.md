@@ -2,6 +2,14 @@
 
 Page templates for Assembly. Each page type has a consistent structure.
 
+> **Fallback examples only.** For Baseplate or Fixture work with a
+> corresponding surface in the canonical Assembly prototype, inspect that
+> surface at its exact commit first. Its source and matched render override the
+> generic hierarchy, classes, components, copy, and control placement shown
+> below. Preserve and name required production differences for functionality,
+> authorization, accessibility, public APIs, data, CSRF, and host/Fixture
+> composition. Check existing components before creating one.
+
 ## Page Types
 
 | Type | Template | Purpose |

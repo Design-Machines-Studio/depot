@@ -163,6 +163,18 @@ def _document(scope: RepositoryScope) -> dict[str, object]:
     }
 
 
+def _valid_stored_identity(value: object) -> bool:
+    return (
+        type(value) is dict
+        and set(value) == {"path", "device", "inode"}
+        and type(value.get("path")) is str
+        and type(value.get("device")) is int
+        and value["device"] >= 0
+        and type(value.get("inode")) is int
+        and value["inode"] > 0
+    )
+
+
 def _open_lease_directory(
     repository: PinnedDirectory, repo_root: Path, *, create: bool,
 ) -> PinnedDirectory:
@@ -261,22 +273,26 @@ def repository_scope(state_dir, *, create: bool = False) -> RepositoryScope:
                 expected_keys = {
                     "schema_version", "scope_id", "repo_root", "lease_root",
                 }
-                identity_keys = {"path", "device", "inode"}
                 if (
                     type(value) is not dict or set(value) != expected_keys
-                    or value.get("schema_version") != 1
-                    or _SCOPE_ID.fullmatch(value.get("scope_id", "")) is None
-                    or type(value.get("repo_root")) is not dict
-                    or type(value.get("lease_root")) is not dict
-                    or set(value["repo_root"]) != identity_keys
-                    or set(value["lease_root"]) != identity_keys
+                    or type(value.get("schema_version")) is not int
+                    or value["schema_version"] != 1
+                    or type(value.get("scope_id")) is not str
+                    or _SCOPE_ID.fullmatch(value["scope_id"]) is None
+                    or not _valid_stored_identity(value.get("repo_root"))
+                    or not _valid_stored_identity(value.get("lease_root"))
                 ):
                     raise ValueError("invalid repository scope identity")
                 scope = RepositoryScope(
                     repo_root, lease.path, value["scope_id"],
                     repo_dev, repo_ino, lease_dev, lease_ino,
                 )
-                if value != _document(scope):
+                if (
+                    value["repo_root"]["path"] != str(scope.repo_root)
+                    or value["repo_root"]["inode"] != scope.repo_inode
+                    or value["lease_root"]["path"] != str(scope.lease_root)
+                    or value["lease_root"]["inode"] != scope.lease_inode
+                ):
                     raise ValueError("repository scope identity mismatch")
                 lease.revalidate()
                 repository.revalidate()

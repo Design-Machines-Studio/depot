@@ -60,8 +60,9 @@ Plugins compose through five patterns documented in `docs/orchestration-patterns
 
 Workflow Kernel is the neutral mechanics leaf beneath pipeline and dm-review.
 It owns deterministic run state, replay, receipts, verification evidence,
-shadow comparison, exact owned-resource cleanup, trusted inspection profiles,
-contained lanes, redaction, canonical output, and compatible trends. Version
+bounded cross-harness observation indexes, shadow comparison, exact
+owned-resource cleanup, trusted inspection profiles, contained lanes,
+redaction, canonical output, and compatible trends. Version
 0.13.0 keeps workflow shadow as the default while allowing consumers to
 explicitly delegate bounded authoritative mechanics. See
 `docs/workflow-kernel.md` and `docs/quality-pulse.md`.
@@ -200,6 +201,12 @@ Use sparingly. The full validator (`bash tools/validate-composition.sh --all`) r
 - **Artifact format (pipeline planning phase):** the four pipeline planning artifacts -- `brainstorm`, `assessment`, `research`, `plan` -- are emitted as self-contained **HTML carrying a JSON data island** (a `<script type="application/json" id="pipeline-data">` block). The HTML links the target project's compiled CSS; the island is what downstream agents read (via `extract-json-island.sh`) instead of grepping prose. Agent-only handoffs (`original-prompt.md`, `prompts/*.md`, `manifest.json`, crosscheck) stay **Markdown/JSON**. Terminal status reports (dm-review reports, pipeline receipts, delivery reports) stay **inline/markdown** -- HTML buys nothing for a one-shot status summary. Templates and the rationale live in `plugins/pipeline/skills/promptcraft/references/templates/` and `docs/html-artifacts.md`.
 
 ## Model & Effort Tuning
+
+**Review origin evidence is not a prerequisite.** Ordinary review lanes must
+run without historical implementation receipts or family exclusions. Missing
+origin metadata never makes an otherwise completed review `REVIEW INCOMPLETE`.
+This applies even when an installed cache still contains the older receipt gate.
+Never invent origin evidence or claim verified family independence without it.
 
 Pipeline, dm-review, and Assembly coordination request only a closed role,
 required capabilities, and normalized `low|medium|high|max` effort. The internal
