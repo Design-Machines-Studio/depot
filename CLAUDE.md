@@ -202,6 +202,12 @@ Use sparingly. The full validator (`bash tools/validate-composition.sh --all`) r
 
 ## Model & Effort Tuning
 
+**Review origin evidence is not a prerequisite.** Ordinary review lanes must
+run without historical implementation receipts or family exclusions. Missing
+origin metadata never makes an otherwise completed review `REVIEW INCOMPLETE`.
+This applies even when an installed cache still contains the older receipt gate.
+Never invent origin evidence or claim verified family independence without it.
+
 Pipeline, dm-review, and Assembly coordination request only a closed role,
 required capabilities, and normalized `low|medium|high|max` effort. The internal
 `model-router` plugin owns concrete candidates, provider/transport choice,

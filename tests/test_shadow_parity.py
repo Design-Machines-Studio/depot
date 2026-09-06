@@ -285,7 +285,7 @@ class ShadowParityTests(unittest.TestCase):
             {"source_finding_id": "source-b"},
             {"finding_disposition": "merged", "decision_reason_code": "exact-duplicate"},
             {"agreement": "disputed", "decision_reason_code": "retained-disagreement"},
-            {"provider": "anthropic"}, {"model": "claude-opus"}, {"attempt": 2},
+            {"provider": "anthropic"}, {"model": "gpt-5.6-terra"}, {"attempt": 2},
             {"reviewer": "architecture"}, {"evidence_ref": "raw/other.json"},
             {"node_id": "review-lane-security"},
         )

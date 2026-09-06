@@ -377,7 +377,7 @@ reject "$RUNNER" --run --case pipeline-legacy-translation \
   --model deepseek/deepseek-v4-flash-0731 --role-policy "$ROLE_POLICY" \
   --result-dir "$TMP/live-non-empty"
 reject "$RUNNER" --run --case pipeline-legacy-translation \
-  --model z-ai/glm-5.3-flash --role-policy "$ROLE_POLICY" \
+  --model google/gemini-3.7-flash --role-policy "$ROLE_POLICY" \
   --result-dir "$TMP/live-ineligible"
 assert test ! -e "$TMP/wrapper-called"
 assert test -f "$TMP/live-non-empty/retained.json"

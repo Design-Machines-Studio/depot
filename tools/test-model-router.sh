@@ -642,6 +642,15 @@ assert jq -e '.served.model == "gpt-5.6-terra" and .served.transport == "codex-c
 run_role native-security security-review high --capability read-repository --capability independent-family --human-authored
 assert jq -e '.served.model == "gpt-5.6-terra" and .served.transport == "codex-cli"' "$TMP/native-security.receipt"
 
+# Ordinary security and critic reviews need no historical origin receipts.
+fixture healthy
+run_role security-without-origin security-review high --capability read-repository --capability long-context --capability structured-output
+assert jq -e '.served != null and .familyIndependence.required == false and .requested.humanAuthored == false and .requested.independenceReceiptIds == []' "$TMP/security-without-origin.receipt"
+assert jq -e '.disposition == "completed" and (.capabilities | index("independent-family") == null)' "$TMP/security-without-origin.public"
+run_role critic-without-origin plan-critic high --capability read-repository --capability long-context --capability structured-output
+assert jq -e '.served != null and .familyIndependence.required == false and .requested.humanAuthored == false and .requested.independenceReceiptIds == []' "$TMP/critic-without-origin.receipt"
+assert jq -e '.disposition == "completed" and (.capabilities | index("independent-family") == null)' "$TMP/critic-without-origin.public"
+
 # Opaque receipts exclude every implementing family.
 fixture healthy
 run_role implementer builder-deep high --capability read-repository

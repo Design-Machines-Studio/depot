@@ -312,7 +312,8 @@ else
          cache_read_tokens:($usage.cache_read_input_tokens // null),
          cache_creation_tokens:($usage.cache_creation_input_tokens // null),cost:null}
     ' "$RAW")"
-    fallback_json="$(jq -c --arg requested "$MODEL" --argjson identity "$identity_json" '
+    fallback_json="$(jq -c --arg requested "$MODEL" --argjson identity "$identity_json" \
+      --argjson candidate "$candidate_json" '
       . as $root
       | [$root.fallbackUsed?,$root.fallback_used?] | map(select(type == "boolean")) | unique as $values
       | [($root.attemptedModels // empty),($root.attempted_models // empty)] | flatten as $attempts
@@ -325,11 +326,18 @@ else
               or ($identity.identity != null
                 and (($attempts | index($identity.identity)) == null
                   or ($attempts | last) != $identity.identity))))) as $contradictory
-      | {used:(if $contradictory then null elif ($values | length) == 1 then $values[0] else null end),
+      | (($values | length) == 0 and ($attempts | length) == 0
+          and $identity.identity != null
+          and (([$requested] + ($candidate.servedIdentities // [])) | index($identity.identity)) != null) as $direct_identity
+      | {used:(if $contradictory then null
+          elif ($values | length) == 1 then $values[0]
+          elif $direct_identity then false else null end),
          provenance:(if $contradictory then "contradictory-response-fields"
-           elif ($values | length) == 1 then "response" else "not_available" end),
+           elif ($values | length) == 1 then "response"
+           elif $direct_identity then "response-model-match" else "not_available" end),
          ambiguous:$contradictory,reportedValues:$values,
-         attemptedModel:($attempts | last // null),attemptedModels:$attempts}
+         attemptedModel:(if $direct_identity then $identity.identity else ($attempts | last // null) end),
+         attemptedModels:(if $direct_identity then [$identity.identity] else $attempts end)}
     ' "$RAW")"
     provider_json="$(jq -c --argjson identity "$identity_json" '
       . as $root
