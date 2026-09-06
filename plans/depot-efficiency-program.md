@@ -1,140 +1,150 @@
 # Depot Efficiency Program -- Phase Index
 
-## Active coordination (refreshed 2026-08-21)
+## Active coordination (refreshed 2026-09-07)
 
-Shared cross-repository projection: [Assembly Coordination, Project
-1](https://github.com/orgs/Design-Machines-Studio/projects/1). GitHub Issues
-and pull requests own live status, review, checks, dependencies, and
-assignees. This file owns Depot's reusable tooling sequence and a compact
-external handoff only; it does not duplicate Baseplate's production roadmap.
+**Next: UI-READY-03 -- dm-review discovery of documented repository browser
+targets.** [Complete execution prompt](prompts/ui-ready-03-repository-target-discovery.md).
+This is a prepared, unclaimed implementation chunk, not a completed fix.
 
-Depot trusted baseline is the current `main` branch; live PR and Issue status remains GitHub-authoritative.
-The current priority order is:
+Repository: `Design-Machines-Studio/depot`. Refreshed `origin/main`:
+`76267e0e10845e1f9ea4a5eb533b6ca9628b12be`. Authenticated GitHub reports no
+open Depot Issues or PRs. The existing [Assembly Coordination Project
+1](https://github.com/orgs/Design-Machines-Studio/projects/1) has 262 items;
+all represented Depot items are Done. No Project fields or native items were
+changed by this refresh. Import only active work that advances Assembly.
 
-1. **P2 -- finish the external Fixture release handoff.** Baseplate and Jig own
-   that product work. Depot supplies the already-landed proportional workflow,
-   release command, routing, and review support without duplicating their plan.
-2. **Depot improvements are evidence-gated.** Use the updated plugins on real
-   Assembly work and open another Depot chunk only for a concrete recurring
-   failure, measurable cost regression, or missing current consumer need.
-3. **Housekeeping is pull-based.** Expand the Agent Plugins canary or add another
-   workflow abstraction only after a live consumer or failed run proves the need.
+The primary checkout remains `bench/gpt-6-astra-screen` at
+`6ab616fd5e3bd5c7f2e11ed44677413f0d8de759`: modified CLAUDE.md, 169 deleted
+tracked todos, and one untracked nested benchmark checkout. All were preserved.
+The 24 other pre-existing registered worktrees were clean; recent relevant
+heads match merged PRs #116, #118, #120, #121, #123, and #125. Historical
+benchmark/pulse worktrees do not establish current implementation ownership.
+This coordination refresh uses its own `docs/depot-planning-20260907` worktree.
+Do not edit or remove another session's files or worktrees.
 
-Harness-lessons closeout is complete: PR #78 / Issue #77 delivered HL-01 and
-PR #80 / Issue #79 delivered HL-02. dm-review 1.68.0 and OpenRouter 1.17.0 are
-released and installed in both harnesses. The four-path context aggregate is
-87,087 words against the 136,393 baseline, a 36.1% reduction. No additional
-Harness Lessons implementation is authorized without evidence from real
-Assembly runs.
+### Current source and delivery evidence
 
-### Single next Depot action
-
-**No active Depot implementation. Return to the external Fixture handoff and
-use the current plugins on real Assembly work.** No further Harness Lessons
-implementation is authorized without evidence from those runs.
-
-Issue #81 / PR #82 completed the final repository-tool repair at `79c0d5b`.
-Trusted-main Workflow Kernel validation and release preflight pass with ignored
-local plan receipts present. Treat absent personal `ai-memory` or RAG services
-as a silent optional skip unless the user explicitly invokes a personal
-workflow.
-
-R2 is closed **DONE / NO CODE**. Current `plan-verification` and
-`run-verification` already put repository proof before model review, keep passing
-raw output out of prompts, and provide bounded failure evidence for repair.
-Each selected boundary now runs fresh and returns only bounded current-invocation
-results. No measured workload justifies adding the authored caller-supplied
-`mechanical_globs` policy, so the old untracked R2 prompts are historical inputs,
-not executable work.
-
-The historical harness-lessons phase had one reachable residual: caller-side
-capture of the compact Pipeline run observation. PR #63 landed that repair at
-`8637552`. Lane claims remain parked because current worktree isolation and
-exact-head reuse leave no recurring collision; run budgets are solved/obsolete
-under the existing planning limits and soft checkpoints; authorization friction
-is solved/superseded by PRs #46 and #47. Codify recommendations remain
-proposal-only.
-
-### Ordered Depot queue
-
-| Order | Work | State | Promotion evidence |
+| Area | Current version/state | Active problem / consumer impact | Evidence and next decision |
 |---|---|---|---|
-| 0 | PR 33 release closeout | **DONE** | three remote annotated tags peel to `48fc393`; PR 33's proven-merged refs/worktree removed |
-| 1 | [#35](https://github.com/Design-Machines-Studio/depot/issues/35) / PR 37 proportional dm-review | **DONE** | merged at `372f2c9`; exact-head policy checks and release preflight passed; three release tags remain to cut |
-| 2 | R2 pre-gates and evidence reuse | **DONE / NO CODE** | merged verification ordering, bounded receipts, and exact reuse cover the residual; no observed mechanical-glob class warrants another policy layer |
-| 3 | [#39](https://github.com/Design-Machines-Studio/depot/issues/39) / PR 40 R3a Linux portability proof | **DONE** | production-tag build passed on NED; no service was installed |
-| 4 | PR 44 production-root contract repair | **CLOSED / OBSOLETE** | closed unmerged; its lone unique commit touched only the retired Workflow Authority tree, and its local/remote branch and worktree were removed |
-| 5 | Proportional scope, threat model, and review convergence | **DONE** | PR #52 exact head `f843d89` merged as `ed59991`; supported repairs converge proportionally |
-| 6 | Clear Publish Preview operator output | **DONE** | PR #51 exact head `6da69ba` landed through `3c2a276`; the playbook returns explicit publication status |
-| 7 | Clear human output for voice-check, dm-review, and Pipeline | **DONE** | PR #53 merged as `ecc8533`; three release tags and both installed harness caches are current |
-| 8 | [#28](https://github.com/Design-Machines-Studio/depot/issues/28) / [PR #55](https://github.com/Design-Machines-Studio/depot/pull/55) runtime cache-resolution repair and cheap-path canary | **DONE** | exact head `d462e8f` merged as `5afc8de`; Depot now has no open Issues |
-| 9 | [#54](https://github.com/Design-Machines-Studio/depot/issues/54) / PR #57 reusable Assembly planning-coordinator skill | **DONE** | merged at `844fc1b`; live Project 1 records the native issue Done |
-| 10 | `/assembly-release` | **DONE** | PR #62 merged as `0e10409` |
-| 11 | Minimal worker/advisor routing adjustment | HOLD / REASSESS | canary shows a concrete routing miss; otherwise current matrix stands |
-| 12 | Baseplate verifier -> canonical Jig Fixture handoff | EXTERNAL / P2 | producer checks and consumer proof clear in their owning repositories; roadmap remains external |
-| 13 | R4 rejected OpenRouter attempt evidence | **DONE** | PR #58 landed the evidenced residual at `9e5ee92` |
-| 14 | R5 Agent Plugins interop canary | **DONE** | Issue #64 / PR #65 landed one generated `craft-developer` skills-discovery canary; live-client proof remains unavailable |
-| 15 | Harness lane claims | PARK / EVIDENCE-GATED | a recurring concurrent-writer collision survives worktree isolation and exact-head reuse |
-| 16 | Workflow Authority install, integration, and Darwin port | **REMOVED** | reintroduction requires a new owner decision backed by a demonstrated threat or operational need |
-| 17 | Bounded OpenRouter worker context | **DONE** | PR #59 merged at `367f9d8` |
-| 18 | Safe credential-reference handling | **DONE** | PR #60 merged at `730d2db` |
-| 19 | Terminal-stream failure classification | **DONE** | PR #61 merged at `662fcd5` |
-| 20 | Harness run budgets | **SOLVED / OBSOLETE** | existing 8/6 planning limits, scope freeze, exploration checkpoint, and long-run soft continuation cover the evidenced need |
-| 21 | Caller-side Pipeline memory capture | **DONE** | PR #63 merged at `8637552` |
-| 22 | Harness authorization friction | **SOLVED / SUPERSEDED** | PRs #46 and #47 removed per-call approval and Workflow Authority |
-| 23 | Pipeline two-gate planning and project alignment | **DONE** | Issue #66 / PR #67 merged at `9a2d3cf` |
-| 24 | Content-safe OpenRouter HTTP failure reasons | **DONE** | Issue #68 / PR #69 merged at `40b6e00`; `openrouter-v1.14.5` and both installed harness caches are current |
-| 25 | [#73](https://github.com/Design-Machines-Studio/depot/issues/73) / [PR #74](https://github.com/Design-Machines-Studio/depot/pull/74) OpenRouter matrix and active routing repair | **DONE** | merged as `534dae3`; dm-review 1.68.0 and OpenRouter 1.17.0 released and installed in both harnesses |
-| 26 | Codex-first Pipeline/dm-review context diet | **DONE / EVIDENCE-GATED** | four-path aggregate is 87,087 words against the 136,393 baseline, a 36.1% reduction; no further implementation without real Assembly-run evidence |
-| 27 | [#77](https://github.com/Design-Machines-Studio/depot/issues/77) / [PR #78](https://github.com/Design-Machines-Studio/depot/pull/78) HL-01 bounded review evidence | **DONE** | merged and released |
-| 28 | [#79](https://github.com/Design-Machines-Studio/depot/issues/79) / [PR #80](https://github.com/Design-Machines-Studio/depot/pull/80) HL-02 shared reviewer contract | **DONE** | merged and released |
-| 29 | [#81](https://github.com/Design-Machines-Studio/depot/issues/81) / [PR #82](https://github.com/Design-Machines-Studio/depot/pull/82) tracked-ledger validation repair | **DONE** | merged as `79c0d5b`; ignored local plan receipts no longer poison trusted validation |
+| Pipeline | 1.66.1 | Final review inherits the target-discovery gap | #116 repository-native proof, #118 prototype authority, #120 packet reuse, #123 routing provenance, #125 scope portability merged; reuse shared dm-review contract |
+| dm-review | 1.79.1 | Documented Fixture targets can be reported absent before any start attempt | Reproduced exit 76 against Governance; UI-READY-03 is next |
+| model-router | 0.6.1 | No newly reproduced ordinary routing blocker | #123 host discovery/provenance and #126 ordinary review compatibility merged; preserve anonymous role requests |
+| OpenRouter | 1.20.1 | No newly reproduced transport blocker | #113 canary bridge and #126 benchmark identity repair merged; matrix evidence dated 2026-08-27 |
+| Workflow Kernel | 0.19.1 | No newly reproduced scope blocker | #121 observation index and #125 device portability merged; no new state layer needed |
+| project-manager | 1.13.0 | This planning index lagged live state | #123 coordinator recommendation behavior is installed; planning-only repair here |
+| Assembly plugin | 3.16.0 | Consumer launchers/runbooks remain consumer-owned | Prototype authority and reusable development/release skills are installed; no plugin change selected |
+| release/sync | Seven listed versions tagged | Publication alone does not prove a consumer browser journey | Remote tag refs verified; every tracked plugin file matches both local harness caches |
+| measurement | Terminal reporting and benchmark bridge implemented | R1 comparable review-loop reduction proof remains unavailable | Keep the existing metric obligation; collect real comparable evidence after the blocking discovery repair |
 
-The Fixture-development handoff is now the active external P2 lane. No
-additional Depot harness code is authorized absent fresh evidence. DONE, HOLD,
-EXTERNAL, LATER, FUTURE, PARK, and PREPARED are not execution prompts.
+The current Pipeline, dm-review, model-router, OpenRouter, and Workflow Kernel
+annotated tags peel to PR #126 head
+`6ab616fd5e3bd5c7f2e11ed44677413f0d8de759`; that head merged as current main.
+project-manager 1.13.0 peels to #123 head `e7bac3439ae643facb27fe2ba3f70b3b5e3d7923`;
+Assembly 3.16.0 peels to `0c86ca4d163f5089f6378807be676146dd84c677`.
+Claude and Codex cache copies of all seven plugin trees match current main.
+No release, tag, or installation was changed in this planning session.
 
-### Cross-repository handoff
+Do not describe hosted CI as green: #120, #123, #125, and #126 expose only
+Codesmith SKIPPED, with no formal submitted reviews. Their PR bodies retain
+local verification evidence. Current main has zero check runs and no commit
+statuses; classic branch protection is absent and the branch-rules endpoint
+returns an empty array. No required hosted validation check is configured.
+PR #126 reports repaired benchmark fixtures and a passing full Kernel gate;
+this refresh separately runs the repository composition validator on clean main.
 
-| Owner | Native item and exact state | Clearing event | Next actor / collision |
-|---|---|---|---|
-| Baseplate Fixture verifier | [PR #662](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/662) exact head `af2411a` merged as `9306074`; [Issue #659](https://github.com/Design-Machines-Studio/assembly-baseplate/issues/659) remains open in Review | trusted consumer proof closes the native issue | Baseplate and Jig owners act; no Depot collision. |
-| Canonical Jig | [PR #11](https://github.com/Design-Machines-Studio/assembly-fixture-jig/pull/11) exact head `a37cfb4` merged as `2c27506`; [Issue #8](https://github.com/Design-Machines-Studio/assembly-fixture-jig/issues/8) remains open in Review | trusted exact-head Baseplate conformance and consumer evidence close the native issue | Jig owner acts; no Depot collision. |
-| Private Fixture releases | [PR #680](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/680) merged as `1087c40`; PR #681 remains open at `c0e7d0d`, conflicts with main, and substantially overlaps the landed outcome | owner confirms whether #681 has unique work, then closes or rebases it | Baseplate owner decision first; high collision with #682 across composer docs, code, tests, and task files. |
-| Private Baseplate release assets | [PR #682](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/682) is draft and mergeable at `b4d172b`; all hosted checks are skipped | finish scope decisions, move out of draft, and obtain exact-head checks/review | Existing Baseplate session owns it; do not start a duplicate branch. |
+Planning validation: `./tools/validate-composition.sh --all` passed on the
+current-main plugin source with only this planning diff. UI readiness passed
+68 assertions, UI contract 30, and Pipeline browser evidence 12. Generated
+surfaces, dependencies, Kernel behavior, routing, and index checks passed.
+This is fresh local proof against trusted-main source, not hosted CI or a
+completed consumer browser journey.
 
-Depot has no open Issue or PR. Issue #81 is represented in Project 1 as Done /
-P1 / Tooling. No free-form Project note is needed.
+### Why this chunk, and its ownership boundary
 
-### Operating doctrine
+Current `ui-review-readiness.md` stops after an invocation URL, attached T3
+preview, or optional `.dm/ui-review.json`; accepted exact Pipeline packets can
+replace capture. The helper does not inspect normal repository declarations.
+The installed 1.79.1 helper returned `visual_target_unavailable`, exit 76, against
+local Governance `8e4a0a8d943399a90ab92c810b5acdaa4bcd9c04`, whose AGENTS.md
+names `http://127.0.0.1:8097` and `make dev ACTION=<action>`. No state or resource
+was created. This is direct prerequisite-failure proof, not a completed browser
+canary or an assertion that the recorded server is running.
 
-- Assembly means small self-hosted Go applications for 4-50-person co-ops,
-  maintained by a two-person team. YAGNI, pragmatic DRY, ergonomics, runtime
-  performance, elapsed time, and token cost are design constraints.
-- Codex is Travis's daily driver and the primary acceptance environment for
-  workflow changes. Keep one canonical shared workflow surface, generate Codex
-  aliases from it, and verify actual Sol/Terra/Luna behavior rather than adding
-  parallel Codex-only copies. Prefer concise goals, hard constraints, success
-  criteria, and on-demand references over repeated step-by-step prose.
-- Kimi K3 is review-only, especially focused security. DeepSeek V4 Flash 0731
-  leads bounded execution. Grok 4.6 handles independent review escalation, and GLM-5.2 remains outside active routing. Native Fable 5 or Codex 5.6 provides one
-  proportional supervisor checkpoint rather than duplicating the worker's implementation.
-- A deliberately configured OpenRouter key is authorization on a trusted
-  developer workstation. Do not add a second human-approval ceremony. Keep
-  obvious-secret refusal automatic and use provider-side key limits for spend.
-- Workflow Authority has been removed. Do not reintroduce a provider broker or
-  make one a prerequisite for Pipeline or dm-review without a new owner decision
-  backed by a demonstrated threat or operational need.
-- R2 is closed rather than run as authored. The old R4 report proposal is
-  retired in favor of the evidenced receipt-retention residual. R5's single
-  skills-discovery canary is complete; any fleet rollout or MCP portability work
-  waits for live-client evidence. Old prompts remain historical inputs until
-  explicitly refreshed and marked NEXT.
+Current remote consumers confirm that this is not merely an old checkout:
 
-The historical program below is retained as provenance. Its old `Next`,
-`PENDING`, and entry-gate labels do not override the active queue above.
-In particular, every broker go-live, broker-probe, FIDO, systemd, and Darwin
-prompt below is superseded and must not be dispatched from this index.
+- Governance `d1f341dc051cdfd1bb4bbe55764dbb0d8f8ed32d` retains the URL and
+  Make development actions in AGENTS.md, plus declared desktop/mobile viewports.
+- Jig `50f0d47c275928953dcaa81ee15d68e05cf0a0ae` has Make development actions
+  delegating to Baseplate and a browser handoff. Both Fixture repositories lack
+  `.dm/ui-review.json` and have no open PRs at this refresh.
+- Baseplate `53238bdcce5c85076f68d5f0644cb876bf785fa3` owns its documented
+  smoke target and [generic Fixture development guide](https://github.com/Design-Machines-Studio/assembly-baseplate/blob/53238bdcce5c85076f68d5f0644cb876bf785fa3/docs/operations/fixture-development.md).
+
+Depot owns bounded host discovery, prerequisite classification, exact-head
+proof, and reuse of existing resource cleanup. Jig owns the canonical Fixture
+authoring declaration/handoff; production Fixtures own concrete targets,
+personas, and cases; Baseplate owns its launcher and lifecycle. UI-READY-03
+must not add a general runbook parser, schema, broker, service, or copied
+consumer policy. Its live canary uses an isolated exact-head Fixture composition
+and desktop/mobile evidence. Prepare the missing Jig handoff; do not implement
+consumer changes in the Depot branch. Safe new parallel lanes: **None**.
+
+The former external handoff snapshot is retired: Baseplate #659 and Jig #8 are
+closed; Baseplate #681 closed unmerged; #682 merged as
+`e1f60f32712816abee2df3572c4b8f2cc56abe3b`. Current consumer roadmaps and
+active PRs remain in their owning repositories and Project 1.
+
+### Remaining plan disposition
+
+| Plan or commitment | Classification | Evidence / promotion condition |
+|---|---|---|
+| UI-READY-03 | ACTIVE / PREPARED | One bounded dm-review branch; no Issue/PR yet; fresh reproduction above |
+| R0 measurement backbone | SOURCE COMPLETE; aggregate acceptance UNCERTAIN | Receipts and later instrumentation exist; the original three comparable real-run acceptance tally is not established by this refresh |
+| R1 review burn cuts | SOURCE COMPLETE; measurement BLOCKED ON COMPARABLE EVIDENCE | Existing [unusable-baseline notice](../docs/cost-baselines/2026-08-08-r1-review-burn-cuts.unusable.md) requires a real full/selective loop pair; do not substitute implementation bytes or the context-diet percentage |
+| R2 pre-gates/evidence reuse | COMPLETED / NO CODE | Existing verification ordering and bounded exact reuse cover the residual; old mechanical-glob policy is not authorized |
+| R3 broker/Darwin/FIDO program | SUPERSEDED / REMOVED | #46 and #47 made configured-key execution non-interactive and removed Workflow Authority; no sunset or broker installation remains due |
+| R4 old report proposal | SUPERSEDED; evidenced residual COMPLETE | #58 retained rejected attempt evidence; #92 added terminal model/cost reports; do not resurrect a separate report framework |
+| R5 interoperability | BOUNDED SOURCE COMPLETE; live-client proof BLOCKED / unavailable | #65 shipped one craft-developer discovery canary; no fleet rollout without an actual client |
+| Harness Lessons 01/02 context work | COMPLETED | #78 and #80 landed; recorded four-path context reduction 36.1%, not R1 review-loop proof |
+| Old harness-lessons lane claims | PARKED / EVIDENCE-GATED | No current recurring writer collision survives existing worktree isolation |
+| Old harness-lessons run budgets / authorization | SUPERSEDED | Existing soft checkpoints and #46/#47 cover the need |
+| Old harness-lessons memory capture / codify auto-apply | CAPTURE COMPLETE / AUTO-APPLY REJECTED | #63 landed caller capture; recommendations stay proposal-only; personal systems are optional |
+| Factory-throughput, routing-simplicity, phase-triage and depot-main-planner local kits | SUPERSEDED AS EXECUTION SEQUENCES | Ignore old concrete model portfolios, broker dependencies, permissive P3 rules, and stale READY labels |
+| Adaptive fusion, initial Kernel, Airlift, chain verification, Assembly release, prototype authority | COMPLETED SOURCE / historical plans | Current plugin capabilities and merged work supersede their prepared prompts; do not rerun the original kits |
+| Broad mechanical hardening, old Baseplate-hardening, audience/scaffolder kits, benchmark leftovers | UNCERTAIN RESIDUALS / NOT AUTHORIZED | Partial capability overlap and old local plans are leads only; a current consumer failure must justify a new bounded residual |
+
+Ignored plans and receipts in the primary checkout were read without modifying
+or force-adding them. Other registered Depot worktrees reported no untracked
+planning files or dirty changes. The old primary `plans/depot-main-planner.md`
+and `plans/factory-throughput/prompts/README.md` remain historical, untracked
+inputs; this tracked index supersedes their queue and model advice.
+
+### Operating constraints
+
+Use the user priority order: remove current development blockers, then reduce
+time/tokens/cost, improve truthful routing and ergonomics, and complete remaining
+R-series evidence before unrelated enhancements. The target remains two
+maintainers and small self-hosted co-ops of 4-50 users. Every abstraction must
+name its current consumer, prevented failure, and replaced complexity.
+
+Request only role, capabilities, and normalized effort from model-router.
+Resolve a fresh human recommendation at dispatch; concrete identities stay out
+of participant prompts. The existing Astra planning session is available;
+nested CLI uncertainty does not disprove parent-session subscription access.
+All retained P1/P2/P3 findings must be fixed before merge. Do not manufacture
+findings, reopen converged review, or require a full Pipeline for a narrow fix.
+Personal memory/Notion systems are silently optional and unused here.
+
+A source merge, release tag, cache copy, and real consumer run are separate
+claims. Record local proof, exact-head CI (or its absence), trusted-main proof,
+publication, both caches, and actual consumer proof separately. No new tags,
+merges, or synchronization are authorized by this planning refresh.
+
+## Historical program (2026-08-07; not executable)
+
+The following original phase program is retained only as provenance. Its
+PENDING/Next labels, fixed models, broker installation steps, and sunset date
+do not override the current disposition above. Never dispatch it as written.
 
 Approved plan: `~/.claude/plans/mission-you-are-curious-neumann.md` (2026-08-07).
 This file is the run-time index for orchestrators. Each phase directory carries
