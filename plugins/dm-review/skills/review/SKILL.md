@@ -467,10 +467,17 @@ file-to-route pairs or `unresolved-rendered-route`, then select affected cases
 once and complete one application and local-browser decision before model
 dispatch. Select an explicit invocation URL first, then an already attached
 automation-capable T3 preview, then optional tracked `.dm/ui-review.json`.
-Start only an exact declared process or Compose consumer and track only
-resources this invocation created. Never infer readiness from changed file
-extensions or interpret supported viewport/engine declarations as a full
-matrix requirement.
+Start a stopped raw process only through the structured `.dm/ui-review.json`
+helper path, which snapshots and supervises cleanup. Start a repository-
+discovered Compose consumer only through Workflow Kernel's Docker creation
+contract, and track only resources this invocation created. Pass the already
+resolved trusted Workflow Kernel launcher and the host-owned expected registry
+run/node IDs separately to every readiness-helper action that consumes Compose
+evidence. For every post-prepare action that consumes repository-declaration
+state, also pass the host-retained expected ownership mode; never let mutable
+state select or downgrade its validator, expected identity, or cleanup duty. Never infer
+readiness from changed file extensions or interpret supported viewport/engine
+declarations as a full matrix requirement.
 
 If those sources and accepted exact-head packet reuse supply no usable
 evidence, load

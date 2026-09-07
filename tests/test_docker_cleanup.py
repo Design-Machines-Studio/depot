@@ -590,7 +590,10 @@ class DockerLifecycleTests(unittest.TestCase):
     def test_registered_inventory_inspects_exact_ids_and_proves_absence(self):
         value, _ = self.register()
         inspect = ("docker", "container", "inspect", value.resource_id)
-        runner = FakeRunner((CommandResult(inspect, 1, "", "Error: No such object: ctr-1"),))
+        runner = FakeRunner((CommandResult(
+            inspect, 1, "[]\n",
+            "Error response from daemon: No such container: ctr-1\n",
+        ),))
         adapter = DockerAdapter(
             runner, now=lambda: NOW, lease_reader=self.leases,
             repository_scope_id=SCOPE_ID,
@@ -600,6 +603,20 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual(((ResourceKind.CONTAINER, "ctr-1"),), inventory.absent)
         plan = adapter.plan_chunk_cleanup(self.registry, inventory, "run-1", "node-1")
         self.assertEqual(CleanupDisposition.MISSING, plan.dispositions[0].disposition)
+
+    def test_current_docker_network_not_found_shape_proves_exact_absence(self):
+        from workflow_kernel.resources import _is_exact_not_found
+
+        result = CommandResult(
+            ("docker", "network", "inspect", "net-1"), 1, "[]\n",
+            "Error response from daemon: network net-1 not found\n",
+        )
+        self.assertTrue(_is_exact_not_found(
+            ResourceKind.NETWORK, "net-1", result,
+        ))
+        self.assertFalse(_is_exact_not_found(
+            ResourceKind.NETWORK, "other-net", result,
+        ))
 
     def test_malformed_network_inspect_containers_type_blocks_cleanup(self):
         list_argv = ("docker", "network", "ls", "--filter", "label=com.designmachines.depot.managed=true", "--filter", "label=com.designmachines.depot.repository-scope-id=" + SCOPE_ID, "--format", "{{.ID}}")

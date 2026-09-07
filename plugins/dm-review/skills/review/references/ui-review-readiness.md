@@ -49,7 +49,7 @@ evidence and pass it with `--target-source repository-declaration
 input. The helper does not discover or interpret the declaration. It validates
 the evidence against the physical checkout, commit, clean/dirty state, tracked
 bounded source lines, target URL provenance, attempted argv/output, and
-pre-existing or review-created process ownership. Every `prepare` call also passes the
+pre-existing or Workflow-Kernel-registered Compose ownership. Every `prepare` call also passes the
 exact nonempty selected UI lane set as `--applicable-lanes-json`; the helper
 binds it into state so settlement cannot omit a planned participant. Do not
 scan localhost ports, infer a URL from file extensions, or guess a start
@@ -57,12 +57,26 @@ command. The helper validates the strict URL/declaration inputs it owns;
 successful host navigation remains the readiness proof. Repository author-loop
 discovery remains host-interpreted and records
 `targetSource: repository-declaration` in the existing readiness evidence;
-never relabel its URL as explicit or user-supplied. A review-created process
-includes its recorded repository-owned cleanup argv and timeout so the helper
-can snapshot and execute only that cleanup. Repository-discovered Compose
-resources stay under the existing Workflow Kernel Docker registry.
+never relabel its URL as explicit or user-supplied. Repository discovery does
+not start raw processes; stopped processes use the structured declaration path
+below, where the helper snapshots cleanup before supervising startup.
+Repository-discovered Compose resources stay under the existing Workflow
+Kernel Docker registry and carry only a safe registry reference plus exact
+registry run/node IDs in private readiness evidence.
+For every helper action that consumes that Compose evidence, the host must also
+pass `--workflow-kernel <trusted-launcher>`,
+`--expected-registry-run-id <host-run-id>`, and
+`--expected-registry-node-id <host-node-id>`. Resolve the launcher through the
+normal trusted plugin-asset boundary; do not derive it from the evidence or let
+the helper search caches. The expected IDs come from the host-owned creation
+step and must exactly match the evidence.
+For every post-prepare action that consumes repository-declaration state, also
+pass the independently retained `--expected-resource-ownership pre-existing`
+or `--expected-resource-ownership review-created-compose`. The helper rejects
+state whose ownership differs, so mutable private state cannot downgrade a
+review-created Compose resource and bypass registry validation or cleanup.
 The helper keeps redacted command tails only in private readiness state, emits
-only their argv/exit summary, and binds a checkout-content fingerprint so a
+only attempt kind/exit summaries, and binds a checkout-content fingerprint so a
 dirty tree cannot change while remaining merely labelled `dirty`.
 Repository-derived URLs likewise remain private; public helper output carries
 only `targetRef: private-readiness-state`. Dirty initialized submodules are an
@@ -117,19 +131,23 @@ consumer is sufficient.
    preview, run `ui-review-readiness.sh prepare` with that exact target and the
    exact selected UI lane set. For a declaration, check its application
    readiness independently with `prepare` and the same lane set.
-2. If a stopped `process` consumer has an exact start procedure, start it and
-   register only that created resource. `prepare` returns `app_ready` with
-   `dispatchAllowed: false` and leaves that registered process available for
-   host browser navigation. A pre-existing ready consumer is never registered
-   or stopped.
+2. A pre-existing ready process is never registered or stopped. If a process
+   is stopped, require the structured `.dm/ui-review.json` path; its `prepare`
+   action snapshots cleanup authority before it supervises startup and returns
+   `app_ready` with `dispatchAllowed: false`. Do not execute a raw process start
+   from the host-interpreted fallback.
 3. For declared Compose, follow the existing Docker creation contract, then
    rerun the independent readiness check.
 4. If the preceding sources and accepted packet reuse supply no usable
    evidence, load `repository-browser-target-discovery.md`. Inspect only its
    closed source set, retain exact source-line and command/URL provenance, and
    use the documented application/checkout identity and ownership-safe author
-   loop. Materialize the bounded source/attempt/output and ownership result in
-   the repository evidence file. No declaration yields
+   loop. Directly named Make targets are valid for status/readiness and for a
+   Compose command executed through the Docker creation contract; they are not
+   raw process-start authority. Materialize the bounded source/attempt/output,
+   ownership, safe Compose registry reference, and exact registry run/node IDs
+   in the repository evidence file. Pass the separately retained trusted
+   launcher and host-selected expected IDs to `prepare`. No declaration yields
    `visual_target_unavailable`; an actual declared command failure yields
    `dev_server_unavailable` with that evidence and does not proceed to
    `prepare` as a ready target.
@@ -152,9 +170,17 @@ consumer is sufficient.
    ```
 
 7. Run `ui-review-readiness.sh confirm-browser` with that evidence and the
-   exact state file created by `prepare`. It rechecks the registered target and
-   consumes the browser proof. Only `dispatchAllowed: true` permits a
-   participant call.
+   exact state file created by `prepare`. For review-created Compose, pass the
+   same trusted launcher, expected IDs, and expected ownership again. For a
+   pre-existing repository target, pass its expected ownership as well. The
+   helper asks Workflow
+Kernel to strictly replay the existing registry, verify active Docker
+ownership for the exact repository scope/run/node, require the registry state
+directory's physical Git root to equal the selected repository root, and return
+only a bounded validation result. It then consumes the browser proof. A ready
+review-created Compose result preserves the explicit registry-cleanup handoff.
+Only
+   `dispatchAllowed: true` permits a participant call.
 8. Keep browser interaction host-owned. Collect screenshots, accessibility
    snapshots, console summary, route/viewport IDs, interaction observations,
    and computed-style results once. Give the same bounded evidence packet to
@@ -167,8 +193,17 @@ consumer is sufficient.
 9. Dispatch each applicable analysis lane once with the same packet reference.
    Settle the aggregate analysis result once through `ui-review-readiness.sh
    settle`; settlement requires the result lane set to equal the set bound by
-   `prepare`. Then clean every exact registered process or Compose resource.
+   `prepare`. Pass the same trusted registry arguments to `settle` and
+   `cleanup` for review-created Compose, and pass the retained expected
+   ownership for every repository-declaration target. Then clean every exact registered
+   process or Compose resource.
    Install the same cleanup call on interruption and failure paths.
+
+For a repository-discovered Compose target, helper cleanup returns
+`registry_cleanup_required` and does not claim the resource is pre-existing or
+already clean. The host must then run the exact Workflow Kernel Docker cleanup
+plan referenced by the private readiness state. Only that registry authority
+may report the resource removed.
 
 The private state has a closed `app_ready` -> `ready` -> `settled` lifecycle.
 It snapshots the exact readiness and cleanup argv/timeouts when the process is

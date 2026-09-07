@@ -1390,6 +1390,38 @@ def _valid_ownership_labels(
     return True
 
 
+def valid_registered_docker_record(
+    record: ResourceRecord, repository_scope_id: str,
+    creation_time_skew: timedelta = timedelta(minutes=5),
+) -> bool:
+    """Validate registry metadata as exact Workflow Kernel Docker ownership."""
+    if (
+        type(record) is not ResourceRecord
+        or record.kind not in KIND_ORDER
+        or type(repository_scope_id) is not str
+        or re.fullmatch(r"[0-9a-f]{64}", repository_scope_id) is None
+        or not isinstance(creation_time_skew, timedelta)
+        or creation_time_skew.total_seconds() < 0
+    ):
+        return False
+    labels = dict(record.labels)
+    if (
+        set(labels) != set(REQUIRED_LABELS)
+        or not _valid_ownership_labels(labels, repository_scope_id)
+        or labels[RUN_LABEL] != record.run_id
+        or labels[NODE_LABEL] != record.node_id
+        or labels[LIFECYCLE_LABEL] != record.lifecycle
+        or labels[POLICY_LABEL] != record.cleanup_policy
+    ):
+        return False
+    try:
+        return abs(
+            record.created_at - _parse_timestamp(labels[CREATED_LABEL])
+        ) <= creation_time_skew
+    except Exception:
+        return False
+
+
 def _registry_labels_agree(
     record: ResourceRecord, resource: DockerResource, creation_time_skew: timedelta,
     repository_scope_id: str,

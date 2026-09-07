@@ -105,6 +105,160 @@ class RuntimeCliTests(unittest.TestCase):
         }))
         return lease_root
 
+    def test_validate_resource_registry_is_strict_scoped_and_read_only(self):
+        from workflow_kernel.resources import ResourceKind, ResourceRecord, ResourceRegistry
+
+        with tempfile.TemporaryDirectory() as directory:
+            repo = Path(directory) / "repo"
+            lease_root = self.init_repository_scope(repo)
+            state_dir = lease_root / "registry-check"
+            state_dir.mkdir()
+            now = datetime(2026, 9, 7, tzinfo=timezone.utc)
+            labels = {
+                "com.designmachines.depot.managed": "true",
+                "com.designmachines.depot.run-id": "review-run",
+                "com.designmachines.depot.node-id": "compose-node",
+                "com.designmachines.depot.created-at": "2026-09-07T00:00:00Z",
+                "com.designmachines.depot.lifecycle": "run",
+                "com.designmachines.depot.cleanup-policy": "stop-remove",
+                "com.designmachines.depot.repository-scope-id": SCOPE_ID,
+            }
+            registry = ResourceRegistry(state_dir / "resources.jsonl")
+            registry.register(ResourceRecord(
+                "container-1", ResourceKind.CONTAINER, "review-run",
+                "compose-node", "run", "stop-remove", now, (), labels,
+            ))
+            registry.register(ResourceRecord(
+                "network-1", ResourceKind.NETWORK, "review-run",
+                "compose-node", "run", "stop-remove", now, (), labels,
+            ))
+            registry.register(ResourceRecord(
+                "volume-1", ResourceKind.VOLUME, "review-run",
+                "compose-node", "run", "stop-remove", now, (), labels,
+            ))
+            before = registry.path.read_bytes()
+            valid = self.run_cli(
+                "validate-resource-registry", "--state-dir", state_dir,
+                "--run-id", "review-run", "--node-id", "compose-node",
+            )
+            self.assertEqual(valid.returncode, 0, valid.stderr)
+            self.assertEqual(json.loads(valid.stdout), {
+                "schema_version": 1,
+                "kind": "resource-registry-validation",
+                "valid": True,
+                "active_resource_count": 3,
+            })
+            self.assertEqual(before, registry.path.read_bytes())
+
+            for run_id, node_id in (
+                ("wrong-run", "compose-node"),
+                ("review-run", "wrong-node"),
+            ):
+                rejected = self.run_cli(
+                    "validate-resource-registry", "--state-dir", state_dir,
+                    "--run-id", run_id, "--node-id", node_id,
+                )
+                self.assertNotEqual(rejected.returncode, 0)
+                self.assertEqual("", rejected.stdout)
+
+            retired_dir = state_dir / "retired"
+            retired_dir.mkdir()
+            retired_registry = ResourceRegistry(retired_dir / "resources.jsonl")
+            retired_registry.register(ResourceRecord(
+                "retired-container", ResourceKind.CONTAINER, "review-run",
+                "compose-node", "run", "stop-remove", now, (), labels,
+            ))
+            retired = json.loads(
+                retired_registry.path.read_text().splitlines()[0]
+            )
+            resource = retired["resource"]
+            disposition = {
+                "resource_id": resource["resource_id"],
+                "kind": resource["kind"], "run_id": resource["run_id"],
+                "node_id": resource["node_id"],
+                "lifecycle": resource["lifecycle"], "disposition": "removed",
+                "action": "remove_exact_id", "reason": "confirmed_removed",
+                "command": ["docker", "rm", resource["resource_id"]],
+                "evidence": [],
+            }
+            with retired_registry.path.open("a", encoding="utf-8") as handle:
+                handle.write(json.dumps({
+                    "event": "transaction",
+                    "transaction_id": "sha256:" + "b" * 64,
+                    "events": [{"event": "disposition", "disposition": disposition}],
+                }, sort_keys=True) + "\n")
+            retired_result = self.run_cli(
+                "validate-resource-registry", "--state-dir", retired_dir,
+                "--run-id", "review-run", "--node-id", "compose-node",
+            )
+            self.assertNotEqual(retired_result.returncode, 0)
+
+            wrong_scope = state_dir / "wrong-scope"
+            wrong_scope.mkdir()
+            wrong_registry = ResourceRegistry(wrong_scope / "resources.jsonl")
+            wrong_registry.register(ResourceRecord(
+                "container-valid", ResourceKind.CONTAINER, "review-run",
+                "compose-node", "run", "stop-remove", now, (), labels,
+            ))
+            wrong_registry.register(ResourceRecord(
+                "network-invalid", ResourceKind.NETWORK, "review-run",
+                "compose-node", "run", "stop-remove", now, (), {
+                    **labels,
+                    "com.designmachines.depot.repository-scope-id": "c" * 64,
+                },
+            ))
+            rejected_scope = self.run_cli(
+                "validate-resource-registry", "--state-dir", wrong_scope,
+                "--run-id", "review-run", "--node-id", "compose-node",
+            )
+            self.assertNotEqual(rejected_scope.returncode, 0)
+
+            label_mismatches = {
+                "run": ("com.designmachines.depot.run-id", "other-run"),
+                "node": ("com.designmachines.depot.node-id", "other-node"),
+                "lifecycle": (
+                    "com.designmachines.depot.lifecycle", "chunk",
+                ),
+                "policy": (
+                    "com.designmachines.depot.cleanup-policy", "retain",
+                ),
+            }
+            for name, (label_name, mismatch) in label_mismatches.items():
+                mismatch_dir = state_dir / ("mismatched-" + name)
+                mismatch_dir.mkdir()
+                mismatch_registry = ResourceRegistry(
+                    mismatch_dir / "resources.jsonl",
+                )
+                mismatch_registry.register(ResourceRecord(
+                    "container-" + name, ResourceKind.CONTAINER,
+                    "review-run", "compose-node", "run", "stop-remove",
+                    now, (), {**labels, label_name: mismatch},
+                ))
+                mismatch_result = self.run_cli(
+                    "validate-resource-registry", "--state-dir", mismatch_dir,
+                    "--run-id", "review-run", "--node-id", "compose-node",
+                )
+                self.assertNotEqual(mismatch_result.returncode, 0)
+                self.assertEqual("", mismatch_result.stdout)
+
+            empty = state_dir / "empty"
+            empty.mkdir()
+            (empty / "resources.jsonl").write_bytes(b"")
+            empty_result = self.run_cli(
+                "validate-resource-registry", "--state-dir", empty,
+                "--run-id", "review-run", "--node-id", "compose-node",
+            )
+            self.assertNotEqual(empty_result.returncode, 0)
+
+            linked = state_dir / "linked"
+            linked.mkdir()
+            (linked / "resources.jsonl").symlink_to(registry.path)
+            linked_result = self.run_cli(
+                "validate-resource-registry", "--state-dir", linked,
+                "--run-id", "review-run", "--node-id", "compose-node",
+            )
+            self.assertNotEqual(linked_result.returncode, 0)
+
     def test_export_review_contributions_is_launcher_owned_and_cardinality_checked(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -1729,6 +1883,67 @@ class RuntimeCliTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 with reader.inactive_guard("old-run"):
                     self.fail("planned run must remain active")
+
+    def test_cleanup_inventory_witness_ignores_only_volatile_command_evidence(self):
+        from workflow_kernel.adapters.docker import DockerInventory, DockerResource
+        from workflow_kernel.cli import _inventory_resource_witness_dict
+        from workflow_kernel.resources import CommandResult, ResourceKind
+
+        now = datetime.now(timezone.utc).replace(microsecond=0)
+        labels = {
+            "com.designmachines.depot.managed": "true",
+            "com.designmachines.depot.run-id": "review-run",
+            "com.designmachines.depot.node-id": "compose-node",
+        }
+        resource = DockerResource(
+            "ctr-1", ResourceKind.CONTAINER, labels, now, running=True,
+        )
+        network = DockerResource(
+            "net-1", ResourceKind.NETWORK, labels, now, in_use=True,
+        )
+        planned = DockerInventory(
+            (resource, network),
+            queried=(
+                (ResourceKind.CONTAINER, "ctr-1"),
+                (ResourceKind.NETWORK, "net-1"),
+            ),
+            source="registered_exact",
+            evidence=(CommandResult(
+                ("docker", "container", "inspect", "ctr-1"), 0,
+                '[{"State":{"Health":{"Log":["first"]}}}]', "",
+            ),),
+        )
+        current = DockerInventory(
+            (resource,), queried=((ResourceKind.CONTAINER, "ctr-1"),),
+            source="registered_exact", evidence=(CommandResult(
+                ("docker", "container", "inspect", "ctr-1"), 0,
+                '[{"State":{"Health":{"Log":["later"]}}}]', "",
+            ),),
+        )
+        self.assertEqual(
+            _inventory_resource_witness_dict(
+                planned, ResourceKind.CONTAINER, "ctr-1",
+            ),
+            _inventory_resource_witness_dict(
+                current, ResourceKind.CONTAINER, "ctr-1",
+            ),
+        )
+
+        stopped = DockerResource(
+            "ctr-1", ResourceKind.CONTAINER, labels, now, running=False,
+        )
+        self.assertNotEqual(
+            _inventory_resource_witness_dict(
+                planned, ResourceKind.CONTAINER, "ctr-1",
+            ),
+            _inventory_resource_witness_dict(
+                DockerInventory(
+                    (stopped,), queried=((ResourceKind.CONTAINER, "ctr-1"),),
+                    source="registered_exact",
+                ),
+                ResourceKind.CONTAINER, "ctr-1",
+            ),
+        )
 
     def test_canonical_run_init_is_reachable_from_shared_lease_root(self):
         from workflow_kernel.adapters.docker import DockerAdapter, DockerInventory

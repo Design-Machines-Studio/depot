@@ -232,8 +232,9 @@ Neutral deterministic workflow and inspection mechanics. 1 internal skill.
 
 - **workflow-kernel** -- Run-state replay/recovery, behavioral contracts,
   deterministic tiered repository verification, bounded cross-harness
-  observation indexes, trusted inspection profiles, contained lanes, redaction,
-  canonical output, and compatible trends
+  observation indexes, strict existing Docker resource-registry validation,
+  trusted inspection profiles, contained lanes, redaction, canonical output,
+  and compatible trends
 
 ### openrouter
 

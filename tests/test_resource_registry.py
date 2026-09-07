@@ -18,6 +18,7 @@ from workflow_kernel.resources import (
     ResourceKind,
     ResourceRecord,
     ResourceRegistry,
+    _RegistryTransaction,
     cleanup_proof_digest,
 )
 from workflow_kernel.redaction import freeze_json
@@ -84,6 +85,93 @@ def append_terminal_transaction(path, outcome):
 
 
 class ResourceRegistryTests(unittest.TestCase):
+    def test_strict_existing_replay_rejects_noncanonical_json_without_repair(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            missing = root / "missing.jsonl"
+            with self.assertRaises(InvalidSchemaError):
+                ResourceRegistry(missing, strict_existing=True)
+            self.assertFalse(missing.exists())
+            self.assertFalse(missing.with_name("missing.jsonl.lock").exists())
+
+            invalid_documents = (
+                b"",
+                b'{"event":"registered"}',
+                b'{"event":"registered","event":"registered"}\n',
+                b'{"event":"registered","resource":NaN}\n',
+                b'{"event":"transaction","transaction_id":"sha256:'
+                + b'a' * 64 + b'","events":[]}\n',
+                b'\n',
+            )
+            for index, encoded in enumerate(invalid_documents):
+                path = root / f"invalid-{index}.jsonl"
+                path.write_bytes(encoded)
+                before = path.read_bytes()
+                with self.assertRaises(InvalidSchemaError):
+                    ResourceRegistry(path, strict_existing=True)
+                self.assertEqual(before, path.read_bytes())
+
+            truncated_path = root / "truncated-valid.jsonl"
+            ResourceRegistry(truncated_path).register(record())
+            truncated_path.write_bytes(truncated_path.read_bytes()[:-1])
+            truncated_before = truncated_path.read_bytes()
+            with self.assertRaises(InvalidSchemaError):
+                ResourceRegistry(truncated_path, strict_existing=True)
+            self.assertEqual(truncated_before, truncated_path.read_bytes())
+
+            path = root / "valid.jsonl"
+            writer = ResourceRegistry(path)
+            writer.register(record())
+            before = path.read_bytes()
+            lock_path = path.with_name("valid.jsonl.lock")
+            lock_path.unlink()
+            root.chmod(0o555)
+            try:
+                strict = ResourceRegistry(path, strict_existing=True)
+                self.assertEqual(
+                    (record(),), strict.resources_for("run-1", "node-1"),
+                )
+            finally:
+                root.chmod(0o755)
+            self.assertEqual(before, path.read_bytes())
+            self.assertFalse(lock_path.exists())
+
+            original_read = _RegistryTransaction.read
+            changed = False
+
+            def concurrent_append(transaction):
+                nonlocal changed
+                encoded = original_read(transaction)
+                if not changed:
+                    changed = True
+                    with path.open("ab") as handle:
+                        handle.write(b'{"event":"not-a-registration"}\n')
+                return encoded
+
+            with mock.patch(
+                "workflow_kernel.resources._RegistryTransaction.read",
+                side_effect=concurrent_append,
+                autospec=True,
+            ), self.assertRaises(InvalidSchemaError) as caught:
+                ResourceRegistry(path, strict_existing=True)
+            self.assertEqual(
+                detail_digest("resource_registry_changed_during_validation"),
+                caught.exception.details["reason_code"],
+            )
+
+            stable_path = root / "stable-context.jsonl"
+            ResourceRegistry(stable_path).register(record())
+            strict = ResourceRegistry(stable_path, strict_existing=True)
+            with self.assertRaises(InvalidSchemaError) as caught:
+                with strict.stable_resources_for("run-1", "node-1") as records:
+                    self.assertEqual((record(),), records)
+                    with stable_path.open("ab") as handle:
+                        handle.write(b'{"event":"not-a-registration"}\n')
+            self.assertEqual(
+                detail_digest("resource_registry_changed_during_validation"),
+                caught.exception.details["reason_code"],
+            )
+
     def test_global_exact_lookup_reloads_before_returning_owner(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "resources.jsonl"

@@ -63,6 +63,14 @@ target must already be running. A missing application, checkout binding,
 status identity, start command, or cleanup/ownership declaration is an
 incomplete declaration, not permission to guess.
 
+The host-interpreted pass may execute a directly named Make target when it is
+the exact status/readiness command or when it delegates a Compose consumer to
+Workflow Kernel's Docker creation contract. It does not start an unregistered
+raw process. A stopped process target requires the structured
+`.dm/ui-review.json` declaration so `ui-review-readiness.sh` can snapshot
+cleanup authority before it supervises the start; otherwise report
+`dev_server_unavailable` without attempting the process start.
+
 ## Host execution and evidence
 
 Record discovery in dm-review's existing private readiness evidence. Do not
@@ -78,23 +86,29 @@ create a second durable report or a new checked-in configuration file. Retain:
   HEAD`, and clean/dirty checkout state;
 - the exact target URL and whether it came from declaration text, status
   output, or start/rebuild output; and
-- `pre-existing` or the existing resource-registry reference for every
-  relevant process/Compose resource.
+- `pre-existing` ownership for a reused target, or `review-created-compose`
+  plus the existing Workflow Kernel resource-registry reference and exact
+  registry run/node IDs for a Compose resource created by this review.
 
-For a ready process target, project those fields into the helper's closed
+For a ready repository target, project those fields into the helper's closed
 `--repository-evidence-file`: application, physical checkout root, exact commit
 and checkout state, one to eight bounded tracked source ranges, up to six exact
 attempt records (`kind`, argv, exit, and redacted 8,192-byte output tail), URL
-and provenance, ownership, and cleanup argv/timeout when review-created. The
+and provenance, ownership, and the registry reference only when it is a
+review-created Compose target. The
 helper embeds that object in its existing readiness state and rechecks checkout
 identity plus a helper-computed content fingerprint before browser
 confirmation. Command output tails stay private; the helper's public result
-contains only source ranges, argv/exit summaries, provenance, and ownership.
+contains only source ranges, attempt kind/exit summaries, provenance, and
+ownership. Attempt argv remains private because arguments may carry credentials
+even when the command output is redacted.
 The repository-derived target URL also stays in private readiness/browser
 evidence because a valid local URL may still carry sensitive path or query
 material. Public helper results use `targetRef: private-readiness-state`.
-Compose ownership remains in the existing Workflow Kernel registry; do not
-duplicate it in this process input.
+Compose ownership remains authoritative in the existing Workflow Kernel
+registry. The evidence carries only its safe run-relative registry reference
+and exact run/node IDs; it does not duplicate registry contents or process
+cleanup argv.
 
 Redaction happens before the host writes the private evidence. Remove request
 authorization, bearer material, cookies, API keys, passwords, client secrets,
@@ -109,9 +123,11 @@ are rejected: the parent repository's dirty marker cannot bind changing nested
 content without a second snapshot contract.
 
 Source lines are evidence locators, not executable authority. Preserve argv as
-an array and execute it directly from the selected checkout; never turn
-declaration prose into `sh -c`. Redact credentials and private endpoint
-material using the existing evidence rules.
+an array. Execute status/readiness argv directly from the selected checkout;
+route Compose start/rebuild argv through `review-docker-create.md`, and do not
+execute raw-process starts in this pass. Never turn declaration prose into
+`sh -c`. Redact credentials and private endpoint material using the existing
+evidence rules.
 
 Run a documented status/readiness command first when one exists. A zero exit
 is not enough by itself: interpret its bounded output and declaration to bind
@@ -119,11 +135,17 @@ the affected application, selected checkout, source commit, checkout state,
 and target identity. Reachability or `curl` alone proves none of those.
 
 If the declared target is stopped or unsuitable for the exact head, reuse a
-suitable exact-head target only when the identity fields agree. Otherwise
-attempt the one documented start/rebuild procedure from the selected checkout.
-Accept a syntactically valid HTTP(S) URL printed by that exact procedure or its
-documented follow-up status command; record `start-output` or `status-output`
-URL provenance. Do not replace it with an example port from the runbook.
+suitable exact-head target only when the identity fields agree. Otherwise, a
+declared Compose consumer may start only through `review-docker-create.md`:
+materialize the exact declared argv in the Workflow Kernel plan, execute only
+the returned label-instrumented creation argv/override, record its observed
+before/after inventory, and retain the resulting `resources.jsonl` registry
+reference. A stopped raw-process target is not started by this pass; report
+`dev_server_unavailable` and require the structured `.dm/ui-review.json`
+declaration. Accept a syntactically valid HTTP(S) URL printed by the authorized
+Compose creation procedure or its documented follow-up status command; record
+`start-output` or `status-output` URL provenance. Do not replace it with an
+example port from the runbook.
 
 Before browser navigation, confirm again that:
 
@@ -141,11 +163,25 @@ attempt into `dev_server_unavailable`.
 ## Ownership and cleanup
 
 Inventory before creation. A suitable target that was already running is
-`pre-existing`: do not register, rebuild, stop, or clean it. Before attempting
-a process start, record its exact declared cleanup argv in the review-owned
-state so interruption can use that immutable snapshot. For Docker/Compose,
-load `review-docker-create.md` before execution; use its labelled creation plan
-and registry, then `review-docker-cleanup.md` on every terminal path. An
+`pre-existing`: do not register, rebuild, stop, or clean it. This
+host-interpreted pass never starts a raw process; a stopped process needs the
+structured `.dm/ui-review.json` path, whose helper records cleanup before the
+start and supervises interruption. For Docker/Compose, load
+`review-docker-create.md` before execution; use its labelled creation plan and
+registry, retain only `resources.jsonl` (relative to the review state
+directory) or `review/resources.jsonl` (relative to the exact run root) in
+readiness evidence, then run `review-docker-cleanup.md` on every terminal path.
+The readiness helper loads the complete referenced file through Workflow
+Kernel's trusted launcher and requires a registered Docker resource with the
+complete, record-matching Workflow Kernel ownership label set and a labelled
+creation time within Workflow Kernel's five-minute record skew before accepting
+`review-created-compose`. Pass the launcher plus the host-retained expected
+registry run/node IDs separately to every readiness-helper action; neither the
+launcher nor the expected identity is discovered from the evidence. Workflow
+Kernel strictly replays the exact existing registry, binds its repository scope,
+requires that scope's physical Git root to be the selected checkout, and emits
+only a bounded validation result. The helper repeats that validation
+before browser confirmation and before emitting any cleanup handoff. An
 incomplete or ambiguous ownership declaration blocks the attempt.
 
 Success, command failure, browser failure, analysis failure, and

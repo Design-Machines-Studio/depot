@@ -2910,6 +2910,37 @@ def _inventory_dict(value):
     }
 
 
+def _inventory_resource_witness_dict(value, kind, resource_id):
+    """Return stable Docker state for one cleanup action's exact resource."""
+    projection = _inventory_dict(value)
+    # dm-review hands repository Compose cleanup back to this command. Docker
+    # inspect can rotate health-history stdout between planning and execution,
+    # while the parsed exact-ID resource state remains unchanged. The command
+    # performs its own fresh inspect and uses that live resource for the guarded
+    # action, so comparing private command transcripts here would make a safe
+    # handoff impossible without adding consumer-owned registry parsing.
+    identity = [kind.value, resource_id]
+    resources = [
+        item for item in projection["resources"]
+        if item["kind"] == kind.value and item["resource_id"] == resource_id
+    ]
+    if (
+        len(resources) != 1
+        or (
+            projection["source"] == "registered_exact"
+            and identity not in projection["queried"]
+        )
+        or identity in projection["absent"]
+    ):
+        raise ValueError("cleanup resource absent from inventory witness")
+    return {
+        "schema_version": 1,
+        "kind": "docker-resource-witness",
+        "resource": resources[0],
+        "source": projection["source"],
+    }
+
+
 def _cleanup_plan(value):
     from .resources import (
         CleanupAction, CleanupDisposition, CleanupPlan, CleanupScope,
@@ -3402,7 +3433,11 @@ def command_execute_cleanup_step(args):
                     args.node_statuses,
                 )
             witness = _inventory(_load_json(args.inventory))
-            if _inventory_dict(witness) != _inventory_dict(current):
+            if _inventory_resource_witness_dict(
+                witness, action.kind, action.resource_id,
+            ) != _inventory_resource_witness_dict(
+                current, action.kind, action.resource_id,
+            ):
                 raise ValueError("cleanup inventory witness mismatch")
             resource = next((
                 item for item in current.resources
@@ -3448,6 +3483,41 @@ def command_record_cleanup(args):
     )
     _emit(receipt.to_dict())
     return _cleanup_receipt_status(receipt)
+
+
+def command_validate_resource_registry(args):
+    """Validate exact active Docker ownership without exposing registry content."""
+    from .adapters.docker import valid_registered_docker_record
+    from .resources import ResourceKind, ResourceRegistry
+
+    state_dir = Path(args.state_dir)
+    scope = _repository_scope(state_dir)
+    registry = ResourceRegistry(
+        state_dir / "resources.jsonl", strict_existing=True,
+    )
+    docker_kinds = {
+        ResourceKind.CONTAINER, ResourceKind.NETWORK, ResourceKind.VOLUME,
+    }
+    with registry.stable_resources_for(args.run_id, args.node_id) as active:
+        records = tuple(
+            record for record in active if record.kind in docker_kinds
+        )
+        if not records or not all(
+            valid_registered_docker_record(record, scope.scope_id)
+            for record in records
+        ):
+            raise InvalidSchemaError(ErrorMessage.OPERATION_FAILED, {
+                ErrorDetailKey.REASON_CODE.value:
+                    "resource_registry_validation_failed",
+            })
+        active_resource_count = len(records)
+    _emit({
+        "schema_version": 1,
+        "kind": "resource-registry-validation",
+        "valid": True,
+        "active_resource_count": active_resource_count,
+    })
+    return 0
 
 
 def _inspection_json(path):
@@ -4213,6 +4283,21 @@ def parser():
     record_cleanup.add_argument("--plan", required=True)
     record_cleanup.add_argument("--outcomes", "--results", dest="outcomes", required=True)
     record_cleanup.set_defaults(handler=command_record_cleanup)
+
+    validate_resource_registry = commands.add_parser(
+        "validate-resource-registry",
+        help="validate exact active Workflow Kernel Docker ownership",
+        description=(
+            "Strictly replay an existing registry and validate nonempty active "
+            "Docker records for the exact repository scope, run, and node."
+        ),
+    )
+    validate_resource_registry.add_argument("--state-dir", required=True)
+    validate_resource_registry.add_argument("--run-id", required=True)
+    validate_resource_registry.add_argument("--node-id", required=True)
+    validate_resource_registry.set_defaults(
+        handler=command_validate_resource_registry,
+    )
 
     reconcile = commands.add_parser("plan-reconcile", help="plan terminal registered-resource reconciliation")
     reconcile.add_argument("--state-dir", required=True)

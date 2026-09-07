@@ -68,6 +68,19 @@ def _valid_timestamp(value: object) -> bool:
     return type(value) is datetime and value.tzinfo is not None and value.utcoffset() is not None
 
 
+def _strict_json_object(pairs):
+    value = {}
+    for key, item in pairs:
+        if key in value:
+            raise ValueError("duplicate JSON object key")
+        value[key] = item
+    return value
+
+
+def _reject_json_constant(value):
+    raise ValueError("non-finite JSON number: " + value)
+
+
 @dataclass(frozen=True)
 class CommandResult:
     argv: Tuple[str, ...]
@@ -96,7 +109,11 @@ def _is_exact_not_found(
     kind: "ResourceKind", resource_id: str, result: CommandResult,
 ) -> bool:
     """Exact-ID absence policy: validation, not I/O, so it lives in core."""
-    if result.argv != _inspect_argv(kind, resource_id) or result.exit_code != 1 or result.stdout:
+    if (
+        result.argv != _inspect_argv(kind, resource_id)
+        or result.exit_code != 1
+        or result.stdout not in {"", "[]\n"}
+    ):
         return False
     noun = "container" if kind is ResourceKind.CONTAINER else kind.value
     messages = {
@@ -104,6 +121,10 @@ def _is_exact_not_found(
         "Error: No such " + noun + ": " + resource_id,
         "Error response from daemon: No such " + noun + ": " + resource_id,
     }
+    if kind is ResourceKind.NETWORK:
+        messages.add(
+            "Error response from daemon: network " + resource_id + " not found"
+        )
     return result.stderr.strip() in messages
 
 
@@ -823,7 +844,7 @@ class _RegistryTransaction:
     __slots__ = ("lock", "directory", "descriptor", "path")
 
     def __init__(
-        self, lock: LockHandle, directory: PinnedDirectory,
+        self, lock: Optional[LockHandle], directory: PinnedDirectory,
         descriptor: int, path: Path,
     ):
         self.lock = lock
@@ -832,7 +853,8 @@ class _RegistryTransaction:
         self.path = path
 
     def revalidate(self) -> None:
-        self.lock.revalidate()
+        if self.lock is not None:
+            self.lock.revalidate()
         self.directory.revalidate()
         self.directory.require_identity(self.descriptor, self.path.name)
 
@@ -849,6 +871,13 @@ class _RegistryTransaction:
             offset += len(chunk)
         self.revalidate()
         return b"".join(chunks)
+
+    def stable_metadata(self) -> tuple[int, int, int]:
+        """Snapshot fields that change for every supported journal mutation."""
+        self.revalidate()
+        status = os.fstat(self.descriptor)
+        self.revalidate()
+        return status.st_size, status.st_mtime_ns, status.st_ctime_ns
 
     def append(self, encoded: bytes) -> None:
         self.revalidate()
@@ -880,11 +909,18 @@ class ResourceRegistry:
     def __init__(
         self, path: Path | str, *, now: Optional[Callable[[], datetime]] = None,
         authority_ttl: timedelta = timedelta(minutes=1),
+        strict_existing: bool = False,
     ):
         if not isinstance(authority_ttl, timedelta) or authority_ttl.total_seconds() <= 0:
             raise invalid_policy("invalid_execution_authority_ttl")
+        if type(strict_existing) is not bool:
+            raise invalid_policy("invalid_resource_registry_mode")
         lexical = Path(path)
-        lexical.parent.mkdir(parents=True, exist_ok=True)
+        if strict_existing:
+            if not lexical.parent.is_dir():
+                raise invalid_policy("resource_registry_path_or_lock_unsafe")
+        else:
+            lexical.parent.mkdir(parents=True, exist_ok=True)
         self._binding = bind_durable_path(lexical)
         self.path = self._binding.path
         self._lock_binding = bind_durable_path(self.path.with_name(self.path.name + ".lock"))
@@ -896,6 +932,7 @@ class ResourceRegistry:
         self._current_transaction: Optional[_RegistryTransaction] = None
         self._now = now or (lambda: datetime.now(timezone.utc))
         self.authority_ttl = authority_ttl
+        self._strict_existing = strict_existing
         with self._exclusive_lock():
             self._reload_unlocked()
 
@@ -907,11 +944,14 @@ class ResourceRegistry:
         primary = None
         try:
             self._binding.revalidate_parent()
-            self._lock_binding.revalidate_parent()
-            handle = LockHandle.acquire_bound(self._lock_binding)
+            if not self._strict_existing:
+                self._lock_binding.revalidate_parent()
+                handle = LockHandle.acquire_bound(self._lock_binding)
             directory = self._binding.pin_parent()
             descriptor = directory.open_regular(
-                self.path.name, os.O_APPEND | os.O_CREAT | os.O_RDWR,
+                self.path.name,
+                os.O_RDONLY if self._strict_existing
+                else os.O_APPEND | os.O_CREAT | os.O_RDWR,
             )
             transaction = _RegistryTransaction(handle, directory, descriptor, self.path)
             transaction.revalidate()
@@ -990,7 +1030,27 @@ class ResourceRegistry:
         self._consumed_authorities = set()
         try:
             transaction = self._require_transaction()
+            strict_metadata = (
+                transaction.stable_metadata()
+                if self._strict_existing else None
+            )
             raw = transaction.read()
+            if self._strict_existing:
+                if not raw or not raw.endswith(b"\n"):
+                    raise invalid_policy("invalid_resource_registry")
+                complete_lines = raw[:-1].split(b"\n")
+                if any(not encoded_line for encoded_line in complete_lines):
+                    raise invalid_policy("invalid_resource_registry")
+                for encoded_line in complete_lines:
+                    event = json.loads(
+                        encoded_line.decode("utf-8"),
+                        object_pairs_hook=_strict_json_object,
+                        parse_constant=_reject_json_constant,
+                    )
+                    self._apply_registry_event(event)
+                if transaction.stable_metadata() != strict_metadata:
+                    raise invalid_policy("resource_registry_changed_during_validation")
+                return
             complete_lines = raw.split(b"\n")
             if raw and not raw.endswith(b"\n"):
                 complete_lines = complete_lines[:-1]
@@ -1117,6 +1177,38 @@ class ResourceRegistry:
                 values,
                 key=lambda value: (value.created_at, value.kind.value, value.resource_id),
             ))
+
+    @contextmanager
+    def stable_resources_for(
+        self, scope: CleanupScope | str, node_id: Optional[str] = None,
+    ):
+        """Yield active records and reject journal changes before context exit."""
+        if not self._strict_existing:
+            raise invalid_policy("strict_resource_registry_required")
+        with self._exclusive_lock():
+            self._reload_unlocked()
+            transaction = self._require_transaction()
+            stable_metadata = transaction.stable_metadata()
+            if isinstance(scope, CleanupScope):
+                run_id, node_id = scope.run_id, scope.node_id
+            else:
+                run_id = scope
+            values = tuple(sorted(
+                (
+                    value for key, value in self._records.items()
+                    if value.run_id == run_id
+                    and (node_id is None or value.node_id == node_id)
+                    and not self._is_retired(key)
+                ),
+                key=lambda value: (
+                    value.created_at, value.kind.value, value.resource_id,
+                ),
+            ))
+            yield values
+            if transaction.stable_metadata() != stable_metadata:
+                raise invalid_policy(
+                    "resource_registry_changed_during_validation",
+                )
 
     def resource_state_for_exact(
         self, kind: ResourceKind, resource_id: str,
