@@ -9,6 +9,7 @@
 # Usage:
 #   ui-review-readiness.sh prepare --repository-root ROOT --state-file FILE
 #     [--target-url URL --target-source explicit|t3-preview]
+#     [--target-source repository-declaration --repository-evidence-file FILE]
 #     --applicable-lanes-json JSON
 #     [--visual-required true|false]
 #   ui-review-readiness.sh confirm-browser --repository-root ROOT \
@@ -30,6 +31,7 @@ BROWSER_EVIDENCE_FILE=""
 ANALYSIS_RESULT_FILE=""
 TARGET_URL_INPUT=""
 TARGET_SOURCE_INPUT=""
+REPOSITORY_EVIDENCE_FILE=""
 VISUAL_REQUIRED=false
 APPLICABLE_LANES_JSON=""
 
@@ -46,6 +48,7 @@ while [ "$#" -gt 0 ]; do
     --analysis-result-file|--participant-result-file) [ "$#" -ge 2 ] || usage; ANALYSIS_RESULT_FILE="$2"; shift 2 ;;
     --target-url) [ "$#" -ge 2 ] || usage; TARGET_URL_INPUT="$2"; shift 2 ;;
     --target-source) [ "$#" -ge 2 ] || usage; TARGET_SOURCE_INPUT="$2"; shift 2 ;;
+    --repository-evidence-file) [ "$#" -ge 2 ] || usage; REPOSITORY_EVIDENCE_FILE="$2"; shift 2 ;;
     --visual-required) [ "$#" -ge 2 ] || usage; VISUAL_REQUIRED="$2"; shift 2 ;;
     --applicable-lanes-json) [ "$#" -ge 2 ] || usage; APPLICABLE_LANES_JSON="$2"; shift 2 ;;
     *) usage ;;
@@ -61,6 +64,7 @@ git -C "$REPOSITORY_ROOT" rev-parse --show-toplevel >/dev/null 2>&1 || usage
 case "$VISUAL_REQUIRED" in true|false) ;; *) usage ;; esac
 [ -z "$TARGET_URL_INPUT" ] || [ "$ACTION" = prepare ] || usage
 [ -z "$TARGET_SOURCE_INPUT" ] || [ "$ACTION" = prepare ] || usage
+[ -z "$REPOSITORY_EVIDENCE_FILE" ] || [ "$ACTION" = prepare ] || usage
 if [ "$ACTION" = prepare ]; then
   printf '%s' "$APPLICABLE_LANES_JSON" | jq -e '
     type == "array" and length > 0 and length <= 3 and length == (unique | length) and
@@ -99,6 +103,39 @@ valid_selected_target_url() {
   ' >/dev/null 2>&1
 }
 
+hash_file() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum "$1" | awk '{print $1}'
+  else shasum -a 256 "$1" | awk '{print $1}'
+  fi
+}
+
+checkout_fingerprint() {
+  local snapshot path digest
+  snapshot="$(mktemp "${TMPDIR:-/tmp}/dm-review-ui-checkout.XXXXXX")" || return 1
+  git -C "$REPOSITORY_ROOT" status --porcelain=v1 -z --untracked-files=all > "$snapshot" || {
+    rm -f "$snapshot"; return 1;
+  }
+  git -C "$REPOSITORY_ROOT" diff --binary --no-ext-diff HEAD -- >> "$snapshot" || {
+    rm -f "$snapshot"; return 1;
+  }
+  while IFS= read -r -d '' path; do
+    printf '\0%s\0' "$path" >> "$snapshot"
+    if [ -f "$REPOSITORY_ROOT/$path" ] && [ ! -L "$REPOSITORY_ROOT/$path" ]; then
+      digest="$(git -C "$REPOSITORY_ROOT" hash-object --no-filters -- "$path")" || {
+        rm -f "$snapshot"; return 1;
+      }
+      printf '%s\0' "$digest" >> "$snapshot"
+    elif [ -L "$REPOSITORY_ROOT/$path" ]; then
+      printf 'symlink:%s\0' "$(readlink "$REPOSITORY_ROOT/$path")" >> "$snapshot"
+    else
+      printf 'unsupported\0' >> "$snapshot"
+    fi
+  done < <(git -C "$REPOSITORY_ROOT" ls-files --others --exclude-standard -z)
+  digest="$(hash_file "$snapshot")" || { rm -f "$snapshot"; return 1; }
+  rm -f "$snapshot"
+  printf '%s\n' "$digest"
+}
+
 load_argv() {
   local source="$1" query="$2" arg
   UI_ARGV=()
@@ -115,6 +152,88 @@ validate_repo_executable() {
   physical="$(cd "$(dirname "$REPOSITORY_ROOT/${relative#./}")" && pwd -P)/$(basename "$relative")"
   case "$physical" in "$REPOSITORY_ROOT"/*) ;; *) return 1 ;; esac
   git -C "$REPOSITORY_ROOT" ls-files --error-unmatch -- "${relative#./}" >/dev/null 2>&1
+}
+
+REPOSITORY_EVIDENCE_REASON=""
+validate_repository_evidence() {
+  local evidence="$1" current_commit current_state source_path line_end line_count source_physical
+  REPOSITORY_EVIDENCE_REASON="repository_evidence_invalid"
+  [ -f "$evidence" ] && [ ! -L "$evidence" ] || return 1
+  jq -e '
+    type == "object" and
+    (keys | sort) == (["application","attempts","checkoutRoot","checkoutState","cleanupArgv","cleanupTimeoutSeconds","repositoryCommit","resourceOwnership","schemaVersion","sources","status","targetSource","targetUrl","targetUrlProvenance"] | sort) and
+    .schemaVersion == 1 and .status == "ready" and
+    .targetSource == "repository-declaration" and
+    (.application | type == "string" and length > 0 and length <= 128) and
+    (.checkoutRoot | type == "string" and length > 0 and length <= 4096) and
+    (.repositoryCommit | type == "string" and test("^[0-9a-f]{40}$")) and
+    (.checkoutState == "clean" or .checkoutState == "dirty") and
+    (.sources | type == "array" and length > 0 and length <= 8 and all(.[];
+      type == "object" and (keys | sort) == (["lineEnd","lineStart","path"] | sort) and
+      (.path | type == "string" and test("^[A-Za-z0-9._/-]{1,255}$") and (contains("..") | not)) and
+      (.lineStart | type == "number" and floor == . and . >= 1) and
+      (.lineEnd | type == "number" and floor == . and . >= 1) and
+      .lineEnd >= .lineStart and (.lineEnd - .lineStart) <= 80)) and
+    (.attempts | type == "array" and length <= 6 and all(.[];
+      type == "object" and (keys | sort) == (["argv","exitStatus","kind","outputTail"] | sort) and
+      (.kind == "status" or .kind == "readiness" or .kind == "start" or .kind == "rebuild") and
+      (.argv | type == "array" and length > 0 and length <= 32 and all(.[]; type == "string" and length > 0 and length <= 4096)) and
+      (.exitStatus | type == "number" and floor == . and . >= 0 and . <= 255) and
+      (.outputTail | type == "string" and length <= 8192 and
+        (test("(?i)(authorization:|bearer[[:space:]]|cookie:|set-cookie:|x-api-key:|password=|secret=|client[_-]?secret=|api[_-]?key=|access[_-]?token=|private[_-]?key=|https?://[^[:space:]/:@]+:[^[:space:]@]+@)") | not)))) and
+    (([.attempts[].outputTail | length] | add // 0) <= 24576) and
+    (.targetUrl | type == "string") and
+    (.targetUrlProvenance == "declaration-text" or .targetUrlProvenance == "status-output" or .targetUrlProvenance == "start-output" or .targetUrlProvenance == "rebuild-output") and
+    (.resourceOwnership == "pre-existing" or .resourceOwnership == "review-created-process") and
+    (.cleanupArgv | type == "array" and length <= 32 and all(.[]; type == "string" and length > 0 and length <= 4096)) and
+    (.cleanupTimeoutSeconds | type == "number" and floor == . and . >= 0 and . <= 300) and
+    (if .resourceOwnership == "pre-existing" then
+      .cleanupArgv == [] and .cleanupTimeoutSeconds == 0
+     else
+      (.cleanupArgv | length) > 0 and .cleanupTimeoutSeconds >= 1
+     end)
+  ' "$evidence" >/dev/null 2>&1 || return 1
+  [ "$(jq -r '.checkoutRoot' "$evidence")" = "$REPOSITORY_ROOT" ] || {
+    REPOSITORY_EVIDENCE_REASON="checkout_root_mismatch"; return 1;
+  }
+  current_commit="$(git -C "$REPOSITORY_ROOT" rev-parse HEAD)" || return 1
+  [ "$(jq -r '.repositoryCommit' "$evidence")" = "$current_commit" ] || {
+    REPOSITORY_EVIDENCE_REASON="repository_commit_mismatch"; return 1;
+  }
+  if ! git -C "$REPOSITORY_ROOT" submodule foreach --recursive --quiet '
+    test -z "$(git status --porcelain=v1 --untracked-files=all)"
+  ' >/dev/null 2>&1; then
+    REPOSITORY_EVIDENCE_REASON="dirty_submodule_unsupported"; return 1
+  fi
+  current_state=clean
+  [ -z "$(git -C "$REPOSITORY_ROOT" status --porcelain)" ] || current_state=dirty
+  [ "$(jq -r '.checkoutState' "$evidence")" = "$current_state" ] || {
+    REPOSITORY_EVIDENCE_REASON="checkout_state_mismatch"; return 1;
+  }
+  valid_selected_target_url "$(jq -r '.targetUrl' "$evidence")" || {
+    REPOSITORY_EVIDENCE_REASON="target_url_invalid"; return 1;
+  }
+  while IFS=$'\t' read -r source_path line_end; do
+    [ -f "$REPOSITORY_ROOT/$source_path" ] && [ ! -L "$REPOSITORY_ROOT/$source_path" ] &&
+      git -C "$REPOSITORY_ROOT" ls-files --error-unmatch -- "$source_path" >/dev/null 2>&1 || {
+        REPOSITORY_EVIDENCE_REASON="source_untracked_or_unavailable"; return 1;
+      }
+    source_physical="$(cd "$(dirname "$REPOSITORY_ROOT/$source_path")" && pwd -P)/$(basename "$source_path")" || return 1
+    case "$source_physical" in "$REPOSITORY_ROOT"/*) ;; *)
+      REPOSITORY_EVIDENCE_REASON="source_path_unsafe"; return 1 ;;
+    esac
+    line_count="$(awk 'END { print NR }' "$source_physical")" || return 1
+    [ "$line_end" -le "$line_count" ] || {
+      REPOSITORY_EVIDENCE_REASON="source_line_out_of_range"; return 1;
+    }
+  done < <(jq -r '.sources[] | [.path, .lineEnd] | @tsv' "$evidence")
+  if [ "$(jq -r '.resourceOwnership' "$evidence")" = review-created-process ]; then
+    load_argv "$evidence" '.cleanupArgv' || return 1
+    validate_repo_executable "${UI_ARGV[0]}" || {
+      REPOSITORY_EVIDENCE_REASON="cleanup_command_unsafe"; return 1;
+    }
+  fi
+  REPOSITORY_EVIDENCE_REASON=""
 }
 
 run_bounded_argv() {
@@ -173,7 +292,7 @@ write_state() {
   local target_url="$1" stage="$2" dispatch_allowed="$3" created="$4" cleanup_pending="$5"
   local readiness_argv="$6" readiness_attempts="$7" readiness_timeout="$8"
   local cleanup_argv="$9" cleanup_timeout="${10}" target_source="${11:-declaration}" visual_required="${12:-false}"
-  local applicable_lanes="${13}" tmp
+  local applicable_lanes="${13}" repository_evidence="${14:-null}" checkout_digest="${15:-null}" tmp
   tmp="$(mktemp "$(dirname "$STATE_FILE")/.ui-review-state.XXXXXX")" || return 1
   jq -cn --arg target_url "$target_url" --arg stage "$stage" \
     --argjson dispatch_allowed "$dispatch_allowed" --argjson created "$created" \
@@ -181,13 +300,15 @@ write_state() {
     --argjson readiness_attempts "$readiness_attempts" --argjson readiness_timeout "$readiness_timeout" \
     --argjson cleanup_argv "$cleanup_argv" --argjson cleanup_timeout "$cleanup_timeout" \
     --arg target_source "$target_source" --argjson visual_required "$visual_required" \
-    --argjson applicable_lanes "$applicable_lanes" \
+    --argjson applicable_lanes "$applicable_lanes" --argjson repository_evidence "$repository_evidence" \
+    --argjson checkout_digest "$checkout_digest" \
     '{schemaVersion:1,targetUrl:$target_url,stage:$stage,dispatchAllowed:$dispatch_allowed,
       targetSource:$target_source,visualRequired:$visual_required,applicableLanes:$applicable_lanes,
       createdByReview:$created,cleanupPending:$cleanup_pending,
       readinessArgv:$readiness_argv,readinessAttempts:$readiness_attempts,
       readinessTimeoutSeconds:$readiness_timeout,cleanupArgv:$cleanup_argv,
-      cleanupTimeoutSeconds:$cleanup_timeout}' > "$tmp" || { rm -f "$tmp"; return 1; }
+      cleanupTimeoutSeconds:$cleanup_timeout,repositoryEvidence:$repository_evidence,
+      repositoryCheckoutFingerprint:$checkout_digest}' > "$tmp" || { rm -f "$tmp"; return 1; }
   mv "$tmp" "$STATE_FILE"
 }
 
@@ -195,9 +316,10 @@ validate_state() {
   [ -f "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ] || return 1
   jq -e '
     type == "object" and
-    (keys | sort) == (["applicableLanes","cleanupArgv","cleanupPending","cleanupTimeoutSeconds","createdByReview","dispatchAllowed","readinessArgv","readinessAttempts","readinessTimeoutSeconds","schemaVersion","stage","targetSource","targetUrl","visualRequired"] | sort) and
+    (keys | sort) == (["applicableLanes","cleanupArgv","cleanupPending","cleanupTimeoutSeconds","createdByReview","dispatchAllowed","readinessArgv","readinessAttempts","readinessTimeoutSeconds","repositoryCheckoutFingerprint","repositoryEvidence","schemaVersion","stage","targetSource","targetUrl","visualRequired"] | sort) and
     .schemaVersion == 1 and (.targetUrl | type) == "string" and
-    (.targetSource == "explicit" or .targetSource == "t3-preview" or .targetSource == "declaration") and
+    (.targetSource == "explicit" or .targetSource == "t3-preview" or
+     .targetSource == "repository-declaration" or .targetSource == "declaration") and
     (.visualRequired | type) == "boolean" and
     (.applicableLanes | type == "array" and length > 0 and length <= 3 and length == (unique | length) and
       all(.[]; . == "visual-browser-tester" or . == "ux-quality-reviewer" or . == "ui-standards-reviewer")) and
@@ -211,7 +333,17 @@ validate_state() {
     (.readinessTimeoutSeconds | type) == "number" and (.readinessTimeoutSeconds | floor) == .readinessTimeoutSeconds and .readinessTimeoutSeconds >= 1 and .readinessTimeoutSeconds <= 60 and
     (.cleanupArgv | type) == "array" and all(.cleanupArgv[]; type == "string" and length > 0 and length <= 4096) and
     (.cleanupTimeoutSeconds | type) == "number" and (.cleanupTimeoutSeconds | floor) == .cleanupTimeoutSeconds and .cleanupTimeoutSeconds >= 0 and .cleanupTimeoutSeconds <= 300 and
-    (if .createdByReview then (.cleanupArgv | length) > 0 and .cleanupTimeoutSeconds >= 1 else true end)
+    (if .createdByReview then (.cleanupArgv | length) > 0 and .cleanupTimeoutSeconds >= 1 else true end) and
+    (if .targetSource == "repository-declaration" then
+      (.repositoryEvidence | type == "object") and
+      .repositoryEvidence.targetSource == "repository-declaration" and
+      .repositoryEvidence.status == "ready" and
+      .repositoryEvidence.targetUrl == .targetUrl and
+      ((.repositoryEvidence.resourceOwnership == "review-created-process") == .createdByReview) and
+      .repositoryEvidence.cleanupArgv == .cleanupArgv and
+      .repositoryEvidence.cleanupTimeoutSeconds == .cleanupTimeoutSeconds and
+      (.repositoryCheckoutFingerprint | type == "string" and test("^[0-9a-f]{64}$"))
+     else .repositoryEvidence == null and .repositoryCheckoutFingerprint == null end)
   ' "$STATE_FILE" >/dev/null 2>&1
 }
 
@@ -328,16 +460,56 @@ cleanup_on_unexpected_exit() {
 }
 
 if [ "$ACTION" = prepare ]; then
+  if [ "$TARGET_SOURCE_INPUT" = repository-declaration ]; then
+    [ -z "$TARGET_URL_INPUT" ] && [ -n "$REPOSITORY_EVIDENCE_FILE" ] || usage
+    if ! validate_repository_evidence "$REPOSITORY_EVIDENCE_FILE"; then
+      emit_rendered_gap dev_server_unavailable "repair the repository target evidence prerequisite: $REPOSITORY_EVIDENCE_REASON"
+    fi
+    [ ! -e "$STATE_FILE" ] || usage
+    TARGET_URL="$(jq -r '.targetUrl' "$REPOSITORY_EVIDENCE_FILE")"
+    REPOSITORY_EVIDENCE_JSON="$(jq -c . "$REPOSITORY_EVIDENCE_FILE")"
+    CHECKOUT_FINGERPRINT="$(checkout_fingerprint)" || exit 76
+    CHECKOUT_FINGERPRINT_JSON="$(printf '%s' "$CHECKOUT_FINGERPRINT" | jq -R .)" || exit 76
+    CLEANUP_ARGV_JSON="$(jq -c '.cleanupArgv' "$REPOSITORY_EVIDENCE_FILE")"
+    CLEANUP_TIMEOUT="$(jq -r '.cleanupTimeoutSeconds' "$REPOSITORY_EVIDENCE_FILE")"
+    CREATED=false
+    CLEANUP_PENDING=false
+    if [ "$(jq -r '.resourceOwnership' "$REPOSITORY_EVIDENCE_FILE")" = review-created-process ]; then
+      CREATED=true
+      CLEANUP_PENDING=true
+    fi
+    write_state "$TARGET_URL" app_ready false "$CREATED" "$CLEANUP_PENDING" '[]' 1 1 \
+      "$CLEANUP_ARGV_JSON" "$CLEANUP_TIMEOUT" repository-declaration "$VISUAL_REQUIRED" \
+      "$APPLICABLE_LANES_JSON" "$REPOSITORY_EVIDENCE_JSON" "$CHECKOUT_FINGERPRINT_JSON" || exit 76
+    jq -cn --argjson created "$CREATED" \
+      --arg application "$(jq -r '.application' "$REPOSITORY_EVIDENCE_FILE")" \
+      --arg repository_commit "$(jq -r '.repositoryCommit' "$REPOSITORY_EVIDENCE_FILE")" \
+      --arg checkout_state "$(jq -r '.checkoutState' "$REPOSITORY_EVIDENCE_FILE")" \
+      --arg provenance "$(jq -r '.targetUrlProvenance' "$REPOSITORY_EVIDENCE_FILE")" \
+      --arg ownership "$(jq -r '.resourceOwnership' "$REPOSITORY_EVIDENCE_FILE")" \
+      --argjson sources "$(jq -c '.sources' "$REPOSITORY_EVIDENCE_FILE")" \
+      --argjson attempts "$(jq -c '[.attempts[] | {kind,argv,exitStatus}]' "$REPOSITORY_EVIDENCE_FILE")" \
+      '{state:"app_ready",dispatchAllowed:false,reason:"browser_evidence_required",
+        targetRef:"private-readiness-state",targetSource:"repository-declaration",
+        repositoryEvidence:{application:$application,repositoryCommit:$repository_commit,
+          checkoutState:$checkout_state,sources:$sources,attempts:$attempts,
+          targetUrlProvenance:$provenance,resourceOwnership:$ownership,
+          privateOutputTails:"readiness-state-only"},
+        createdResources:(if $created then 1 else 0 end),
+        nextAction:"navigate the repository-declared target with the host local browser, then run confirm-browser"}'
+    exit 0
+  fi
+  [ -z "$REPOSITORY_EVIDENCE_FILE" ] || usage
   if [ -n "$TARGET_URL_INPUT" ]; then
     case "$TARGET_SOURCE_INPUT" in explicit|t3-preview) ;; *) usage ;; esac
     valid_selected_target_url "$TARGET_URL_INPUT" || usage
     [ ! -e "$STATE_FILE" ] || usage
     write_state "$TARGET_URL_INPUT" app_ready false false false '[]' 1 1 '[]' 0 \
-      "$TARGET_SOURCE_INPUT" "$VISUAL_REQUIRED" "$APPLICABLE_LANES_JSON" || exit 76
+      "$TARGET_SOURCE_INPUT" "$VISUAL_REQUIRED" "$APPLICABLE_LANES_JSON" null || exit 76
     jq -cn --arg target_url "$TARGET_URL_INPUT" --arg source "$TARGET_SOURCE_INPUT" \
       '{state:"app_ready",dispatchAllowed:false,reason:"browser_evidence_required",
         targetUrl:$target_url,targetSource:$source,createdResources:0,
-        nextAction:"navigate the invocation-selected target with the host local browser, then run confirm-browser"}'
+        nextAction:"navigate the selected target with the host local browser, then run confirm-browser"}'
     exit 0
   fi
   if ! validate_declaration "$DECLARATION"; then
@@ -374,7 +546,7 @@ if [ "$ACTION" = prepare ]; then
     CREATED="$(jq -r '.createdByReview' "$STATE_FILE")"
   elif run_bounded_argv "$READINESS_TIMEOUT" "${READINESS_ARGV[@]}"; then
     write_state "$TARGET_URL" app_ready false false false "$READINESS_ARGV_JSON" \
-      "$READINESS_ATTEMPTS" "$READINESS_TIMEOUT" '[]' 0 declaration "$VISUAL_REQUIRED" "$APPLICABLE_LANES_JSON" || exit 76
+      "$READINESS_ATTEMPTS" "$READINESS_TIMEOUT" '[]' 0 declaration "$VISUAL_REQUIRED" "$APPLICABLE_LANES_JSON" null || exit 76
   else
     if [ "$(jq -r '.start == null' "$DECLARATION")" = true ]; then
       emit_rendered_gap dev_server_unavailable 'run the repository-declared application consumer and rerun'
@@ -394,7 +566,7 @@ if [ "$ACTION" = prepare ]; then
     }
     CREATED=true
     write_state "$TARGET_URL" app_ready false true true "$READINESS_ARGV_JSON" \
-      "$READINESS_ATTEMPTS" "$READINESS_TIMEOUT" "$CLEANUP_ARGV_JSON" "$START_TIMEOUT" declaration "$VISUAL_REQUIRED" "$APPLICABLE_LANES_JSON" || exit 76
+      "$READINESS_ATTEMPTS" "$READINESS_TIMEOUT" "$CLEANUP_ARGV_JSON" "$START_TIMEOUT" declaration "$VISUAL_REQUIRED" "$APPLICABLE_LANES_JSON" null || exit 76
     trap cleanup_on_unexpected_exit EXIT
     trap 'exit 130' HUP INT TERM
     if ! run_bounded_argv "$START_TIMEOUT" "${UI_ARGV[@]}"; then
@@ -436,6 +608,18 @@ if [ "$(jq -r '.targetSource' "$STATE_FILE")" = declaration ]; then
     close_registered_state dev_server_unavailable 'inspect the registered application readiness command and rerun'
   fi
 fi
+if [ "$(jq -r '.targetSource' "$STATE_FILE")" = repository-declaration ]; then
+  [ "$(jq -r '.repositoryEvidence.checkoutRoot' "$STATE_FILE")" = "$REPOSITORY_ROOT" ] ||
+    close_registered_state dev_server_unavailable 'restore the repository-declared checkout identity and rerun discovery'
+  [ "$(jq -r '.repositoryEvidence.repositoryCommit' "$STATE_FILE")" = "$(git -C "$REPOSITORY_ROOT" rev-parse HEAD)" ] ||
+    close_registered_state dev_server_unavailable 'rerun repository target discovery for the current source commit'
+  CURRENT_STATE=clean
+  [ -z "$(git -C "$REPOSITORY_ROOT" status --porcelain)" ] || CURRENT_STATE=dirty
+  [ "$(jq -r '.repositoryEvidence.checkoutState' "$STATE_FILE")" = "$CURRENT_STATE" ] ||
+    close_registered_state dev_server_unavailable 'rerun repository target discovery for the current checkout state'
+  [ "$(jq -r '.repositoryCheckoutFingerprint' "$STATE_FILE")" = "$(checkout_fingerprint)" ] ||
+    close_registered_state dev_server_unavailable 'rerun repository target discovery after checkout content changed'
+fi
 if [ ! -f "$BROWSER_EVIDENCE_FILE" ] || [ -L "$BROWSER_EVIDENCE_FILE" ] ||
    ! jq -e --arg target_url "$TARGET_URL" '
      type == "object" and
@@ -451,8 +635,16 @@ update_state ready true || exit 76
 trap - EXIT HUP INT TERM
 CREATED="$(jq -r '.createdByReview' "$STATE_FILE")"
 EVIDENCE_REF="$(jq -r '.evidenceRef' "$BROWSER_EVIDENCE_FILE")"
-jq -cn --arg target_url "$TARGET_URL" --arg evidence_ref "$EVIDENCE_REF" --argjson created "$CREATED" \
-  '{state:"ready",dispatchAllowed:true,reason:"available",targetUrl:$target_url,
-    browserTransport:"local-interactive",browserEvidence:"bounded-host-evidence",evidenceRef:$evidence_ref,
-    createdResources:(if $created then 1 else 0 end),
-    nextAction:"dispatch provider-neutral UI analysis without browser capability"}'
+if [ "$(jq -r '.targetSource' "$STATE_FILE")" = repository-declaration ]; then
+  jq -cn --arg evidence_ref "$EVIDENCE_REF" --argjson created "$CREATED" \
+    '{state:"ready",dispatchAllowed:true,reason:"available",targetRef:"private-readiness-state",
+      browserTransport:"local-interactive",browserEvidence:"bounded-host-evidence",evidenceRef:$evidence_ref,
+      createdResources:(if $created then 1 else 0 end),
+      nextAction:"dispatch provider-neutral UI analysis without browser capability"}'
+else
+  jq -cn --arg target_url "$TARGET_URL" --arg evidence_ref "$EVIDENCE_REF" --argjson created "$CREATED" \
+    '{state:"ready",dispatchAllowed:true,reason:"available",targetUrl:$target_url,
+      browserTransport:"local-interactive",browserEvidence:"bounded-host-evidence",evidenceRef:$evidence_ref,
+      createdResources:(if $created then 1 else 0 end),
+      nextAction:"dispatch provider-neutral UI analysis without browser capability"}'
+fi

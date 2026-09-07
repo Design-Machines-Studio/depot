@@ -651,6 +651,11 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  printf "\n${BOLD}dm-review repository browser-target discovery:${RESET}\n"
+  if ! "$SCRIPT_DIR/test-dm-review-repository-target-discovery.sh"; then
+    any_failed=1
+  fi
+
   printf "\n${BOLD}dm-review source/rendered UI contract:${RESET}\n"
   if ! "$SCRIPT_DIR/test-dm-review-ui-contract.sh"; then
     any_failed=1

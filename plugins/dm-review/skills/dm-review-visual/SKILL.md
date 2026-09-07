@@ -35,7 +35,9 @@ the policy.
 1. Load the visual-test skill from `plugins/dm-review/skills/visual-test/SKILL.md`
 2. Execute with the provided argument:
    - No argument: use an attached automation-capable T3 preview or optional
-     tracked `.dm/ui-review.json`; never scan localhost ports
+     tracked `.dm/ui-review.json`, then the shared bounded repository
+     author-loop discovery when neither supplies usable evidence; never scan
+     localhost ports
    - URL: test that specific URL
    - `--states`: focus on interactive state testing
    - `--a11y`: focus on runtime accessibility checks
