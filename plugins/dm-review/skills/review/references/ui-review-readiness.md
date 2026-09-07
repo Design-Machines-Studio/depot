@@ -36,15 +36,38 @@ Select exactly one target in this order:
 1. an explicit URL supplied by the current invocation;
 2. an already attached, automation-capable T3 preview and its current URL;
 3. the optional tracked `<repository>/.dm/ui-review.json` declaration;
-4. otherwise no rendered target is available.
+4. an accepted exact-head browser packet explicitly passed by an enclosing
+   Pipeline; then
+5. the bounded repository author-loop discovery in
+   `repository-browser-target-discovery.md`.
 
 Pass invocation and T3 targets to `prepare` with `--target-url` and
-`--target-source explicit|t3-preview`. Every `prepare` call also passes the
+`--target-source explicit|t3-preview`. After the host validates and attempts a
+bounded repository declaration, materialize its existing private readiness
+evidence and pass it with `--target-source repository-declaration
+--repository-evidence-file <path>`; do not repeat its URL as an invocation
+input. The helper does not discover or interpret the declaration. It validates
+the evidence against the physical checkout, commit, clean/dirty state, tracked
+bounded source lines, target URL provenance, attempted argv/output, and
+pre-existing or review-created process ownership. Every `prepare` call also passes the
 exact nonempty selected UI lane set as `--applicable-lanes-json`; the helper
 binds it into state so settlement cannot omit a planned participant. Do not
 scan localhost ports, infer a URL from file extensions, or guess a start
-command. The helper validates the URL; successful host navigation remains the
-readiness proof.
+command. The helper validates the strict URL/declaration inputs it owns;
+successful host navigation remains the readiness proof. Repository author-loop
+discovery remains host-interpreted and records
+`targetSource: repository-declaration` in the existing readiness evidence;
+never relabel its URL as explicit or user-supplied. A review-created process
+includes its recorded repository-owned cleanup argv and timeout so the helper
+can snapshot and execute only that cleanup. Repository-discovered Compose
+resources stay under the existing Workflow Kernel Docker registry.
+The helper keeps redacted command tails only in private readiness state, emits
+only their argv/exit summary, and binds a checkout-content fingerprint so a
+dirty tree cannot change while remaining merely labelled `dirty`.
+Repository-derived URLs likewise remain private; public helper output carries
+only `targetRef: private-readiness-state`. Dirty initialized submodules are an
+honest `dev_server_unavailable` prerequisite because the root fingerprint does
+not bind their nested content.
 
 "One target" applies per readiness state. When a host-resolved prototype
 parity packet supplies both an exact prototype URL and target URL, run this
@@ -101,11 +124,20 @@ consumer is sufficient.
    or stopped.
 3. For declared Compose, follow the existing Docker creation contract, then
    rerun the independent readiness check.
-4. On the host, inspect actual callable browser tools. In T3 Code, call
+4. If the preceding sources and accepted packet reuse supply no usable
+   evidence, load `repository-browser-target-discovery.md`. Inspect only its
+   closed source set, retain exact source-line and command/URL provenance, and
+   use the documented application/checkout identity and ownership-safe author
+   loop. Materialize the bounded source/attempt/output and ownership result in
+   the repository evidence file. No declaration yields
+   `visual_target_unavailable`; an actual declared command failure yields
+   `dev_server_unavailable` with that evidence and does not proceed to
+   `prepare` as a ready target.
+5. On the host, inspect actual callable browser tools. In T3 Code, call
    `preview_status`; if no automation-capable preview is attached, call
    `preview_open`, then navigate the exact declared target. A tool name or
    generic `tool-use` is not readiness evidence.
-5. Materialize one private bounded browser evidence file only after successful
+6. Materialize one private bounded browser evidence file only after successful
    local navigation:
 
    ```json
@@ -119,11 +151,11 @@ consumer is sufficient.
    }
    ```
 
-6. Run `ui-review-readiness.sh confirm-browser` with that evidence and the
+7. Run `ui-review-readiness.sh confirm-browser` with that evidence and the
    exact state file created by `prepare`. It rechecks the registered target and
    consumes the browser proof. Only `dispatchAllowed: true` permits a
    participant call.
-7. Keep browser interaction host-owned. Collect screenshots, accessibility
+8. Keep browser interaction host-owned. Collect screenshots, accessibility
    snapshots, console summary, route/viewport IDs, interaction observations,
    and computed-style results once. Give the same bounded evidence packet to
    each applicable UI analysis role. Request
@@ -132,7 +164,7 @@ consumer is sufficient.
    For a declared counterpart, include matched prototype/target route, state,
    viewport, targeted hierarchy, actual classes, visible copy/action order, and
    explanatory layout/spacing values. Exact theme colors are not a parity gate.
-8. Dispatch each applicable analysis lane once with the same packet reference.
+9. Dispatch each applicable analysis lane once with the same packet reference.
    Settle the aggregate analysis result once through `ui-review-readiness.sh
    settle`; settlement requires the result lane set to equal the set bound by
    `prepare`. Then clean every exact registered process or Compose resource.
@@ -175,7 +207,7 @@ probe that proves local navigation.
 | Reason | Review state | One next action |
 |---|---|---|
 | `visual_target_unavailable` | `NOT RUN` ordinarily; `REVIEW INCOMPLETE` when required | Supply an explicit URL, attach T3 preview, or add the optional declaration when coverage is required. |
-| `dev_server_unavailable` | `NOT RUN` ordinarily; `REVIEW INCOMPLETE` when required | Declare or recover the exact repository-owned consumer when rendered coverage is required. |
+| `dev_server_unavailable` | `NOT RUN` ordinarily; `REVIEW INCOMPLETE` when required | Repair the exact failed or incomplete repository-owned author-loop prerequisite when rendered coverage is required. |
 | `browser_transport_unavailable` | `NOT RUN` ordinarily; `REVIEW INCOMPLETE` when required | Attach a local interactive browser or pass exact matching evidence when rendered coverage is required. |
 | `model_participant_unavailable` | `REVIEW INCOMPLETE` | Restore an eligible provider-neutral analysis participant and rerun the lane. |
 | `resource_cleanup_failed` | `REVIEW INCOMPLETE` | Run only the recorded repository-owned cleanup and inspect that resource. |

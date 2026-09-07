@@ -31,7 +31,13 @@ cat > "$REPO/tools/ui-review-wrong-stop" <<'STUB'
 printf '%s\n' wrong-cleanup >> "$TEST_RESOURCE_LOG"
 STUB
 chmod +x "$REPO"/tools/ui-review-*
-git -C "$REPO" add tools
+cat > "$REPO/AGENTS.md" <<'EOF'
+# UI development
+
+Application: fixture-ui in this checkout. Use ./tools/ui-review-ready for
+status. The owned process cleanup is ./tools/ui-review-stop.
+EOF
+git -C "$REPO" add AGENTS.md tools
 git -C "$REPO" -c user.name=test -c user.email=test@example.invalid commit -qm fixture
 
 export TEST_SERVER_MARKER="$TMP/server-ready"
@@ -97,6 +103,129 @@ assert test "$remote_ready_rc" -eq 0
 assert jq -e '.state == "ready" and .dispatchAllowed == true' "$TMP/remote-explicit.confirmed"
 "$HELPER" cleanup --repository-root "$REPO" --state-file "$TMP/remote-explicit.state" > "$TMP/remote-explicit-cleanup.json"
 assert jq -e '.state == "already_clean" and .removedCount == 0' "$TMP/remote-explicit-cleanup.json"
+
+cat > "$TMP/browser-repository.json" <<'JSON'
+{"schemaVersion":1,"status":"ready","transportClass":"local-interactive","localNavigation":"confirmed","targetUrl":"http://127.0.0.1:49173/review","evidenceRef":"review/browser/repository.json"}
+JSON
+
+# Host interpretation remains distinct from helper discovery. The helper
+# consumes the bounded ready evidence and preserves exact provenance.
+jq -cn --arg checkout "$(cd "$REPO" && pwd -P)" \
+  --arg head "$(git -C "$REPO" rev-parse HEAD)" \
+  '{schemaVersion:1,status:"ready",targetSource:"repository-declaration",
+    application:"fixture-ui",checkoutRoot:$checkout,repositoryCommit:$head,checkoutState:"clean",
+    sources:[{path:"AGENTS.md",lineStart:1,lineEnd:4}],
+    attempts:[{kind:"status",argv:["./tools/ui-review-ready"],exitStatus:0,outputTail:"fixture-ui ready"}],
+    targetUrl:"http://127.0.0.1:49173/review",targetUrlProvenance:"status-output",
+    resourceOwnership:"pre-existing",cleanupArgv:[],cleanupTimeoutSeconds:0}' \
+  > "$TMP/repository-evidence.json"
+repository_prepare_rc="$(run_prepare repository-declaration --target-source repository-declaration --repository-evidence-file "$TMP/repository-evidence.json")"
+assert test "$repository_prepare_rc" -eq 0
+assert jq -e '.targetSource == "repository-declaration" and .targetRef == "private-readiness-state" and
+  (has("targetUrl") | not) and .createdResources == 0 and
+  .repositoryEvidence.sources == [{path:"AGENTS.md",lineStart:1,lineEnd:4}] and
+  .repositoryEvidence.attempts[0].argv == ["./tools/ui-review-ready"] and
+  (.repositoryEvidence.attempts[0] | has("outputTail") | not) and
+  .repositoryEvidence.resourceOwnership == "pre-existing"' "$TMP/repository-declaration.result"
+repository_ready_rc="$(run_confirm repository-declaration "$TMP/browser-repository.json")"
+assert test "$repository_ready_rc" -eq 0
+assert jq -e '.state == "ready" and .dispatchAllowed == true and
+  .targetRef == "private-readiness-state" and (has("targetUrl") | not)' "$TMP/repository-declaration.confirmed"
+"$HELPER" cleanup --repository-root "$REPO" --state-file "$TMP/repository-declaration.state" > "$TMP/repository-declaration-cleanup.json"
+assert jq -e '.state == "already_clean" and .removedCount == 0' "$TMP/repository-declaration-cleanup.json"
+
+# Stale repository evidence is rejected before navigation and cannot silently
+# fall back to a guessed target.
+jq '.repositoryCommit = "0000000000000000000000000000000000000000"' \
+  "$TMP/repository-evidence.json" > "$TMP/repository-evidence-stale.json"
+stale_repository_rc="$(run_prepare stale-repository --target-source repository-declaration \
+  --repository-evidence-file "$TMP/repository-evidence-stale.json" --visual-required true)"
+assert test "$stale_repository_rc" -eq 76
+assert jq -e '.reason == "dev_server_unavailable" and
+  (.nextAction | contains("repository_commit_mismatch"))' "$TMP/stale-repository.result"
+
+jq '.sources[0].lineEnd = 50' "$TMP/repository-evidence.json" \
+  > "$TMP/repository-evidence-unbounded-line.json"
+unbounded_source_rc="$(run_prepare unbounded-source --target-source repository-declaration \
+  --repository-evidence-file "$TMP/repository-evidence-unbounded-line.json" --visual-required true)"
+assert test "$unbounded_source_rc" -eq 76
+assert jq -e '.reason == "dev_server_unavailable" and
+  (.nextAction | contains("source_line_out_of_range"))' "$TMP/unbounded-source.result"
+
+jq '.attempts[0].outputTail = "set-cookie: session=not-for-public-output"' \
+  "$TMP/repository-evidence.json" > "$TMP/repository-evidence-secret.json"
+secret_output_rc="$(run_prepare secret-output --target-source repository-declaration \
+  --repository-evidence-file "$TMP/repository-evidence-secret.json" --visual-required true)"
+assert test "$secret_output_rc" -eq 76
+assert jq -e '.reason == "dev_server_unavailable" and
+  (.nextAction | contains("repository_evidence_invalid"))' "$TMP/secret-output.result"
+
+jq '.attempts = [range(0;4) |
+  {kind:"status",argv:["./tools/ui-review-ready"],exitStatus:0,outputTail:("x" * 7000)}]' \
+  "$TMP/repository-evidence.json" > "$TMP/repository-evidence-aggregate.json"
+aggregate_output_rc="$(run_prepare aggregate-output --target-source repository-declaration \
+  --repository-evidence-file "$TMP/repository-evidence-aggregate.json" --visual-required true)"
+assert test "$aggregate_output_rc" -eq 76
+assert jq -e '.reason == "dev_server_unavailable" and
+  (.nextAction | contains("repository_evidence_invalid"))' "$TMP/aggregate-output.result"
+
+# Dirty source is bound by content, not merely by the word "dirty".
+printf '%s\n' '# dirty snapshot one' >> "$REPO/AGENTS.md"
+jq '.checkoutState = "dirty" | .sources[0].lineEnd = 5' \
+  "$TMP/repository-evidence.json" > "$TMP/repository-evidence-dirty.json"
+dirty_repository_rc="$(run_prepare dirty-repository --target-source repository-declaration \
+  --repository-evidence-file "$TMP/repository-evidence-dirty.json" --visual-required true)"
+assert test "$dirty_repository_rc" -eq 0
+printf '%s\n' '# dirty snapshot two' >> "$REPO/AGENTS.md"
+dirty_repository_browser_rc="$(run_confirm dirty-repository "$TMP/browser-repository.json")"
+assert test "$dirty_repository_browser_rc" -eq 76
+assert jq -e '.reason == "dev_server_unavailable" and
+  (.nextAction | contains("checkout content changed"))' "$TMP/dirty-repository.confirmed"
+git -C "$REPO" show HEAD:AGENTS.md > "$REPO/AGENTS.md"
+
+# A review-created discovered process keeps its immutable cleanup in readiness
+# state. Browser failure cleans that process exactly once.
+touch "$TEST_SERVER_MARKER"
+: > "$TEST_RESOURCE_LOG"
+jq '.resourceOwnership = "review-created-process" |
+  .cleanupArgv = ["./tools/ui-review-stop"] | .cleanupTimeoutSeconds = 2 |
+  .attempts += [{kind:"start",argv:["./tools/ui-review-start"],exitStatus:0,outputTail:"http://127.0.0.1:49173/review"}] |
+  .targetUrlProvenance = "start-output"' \
+  "$TMP/repository-evidence.json" > "$TMP/repository-created-evidence.json"
+created_repository_rc="$(run_prepare repository-created --target-source repository-declaration \
+  --repository-evidence-file "$TMP/repository-created-evidence.json" --visual-required true)"
+assert test "$created_repository_rc" -eq 0
+assert jq -e '.createdByReview == true and .cleanupPending == true and
+  .repositoryEvidence.resourceOwnership == "review-created-process" and
+  .cleanupArgv == ["./tools/ui-review-stop"]' "$TMP/repository-created.state"
+created_repository_browser_rc="$(run_confirm repository-created "$TMP/missing-browser.json")"
+assert test "$created_repository_browser_rc" -eq 76
+assert jq -e '.reason == "browser_transport_unavailable"' "$TMP/repository-created.confirmed"
+assert test "$(grep -c '^cleanup$' "$TEST_RESOURCE_LOG")" -eq 1
+assert test ! -e "$TEST_SERVER_MARKER"
+: > "$TEST_RESOURCE_LOG"
+
+# Dirty initialized submodules are rejected because the root dirty marker does
+# not bind their changing content.
+SUBMODULE="$TMP/source-submodule"
+mkdir -p "$SUBMODULE"
+git -C "$SUBMODULE" init -q
+printf '%s\n' initial > "$SUBMODULE/source.txt"
+git -C "$SUBMODULE" add source.txt
+git -C "$SUBMODULE" -c user.name=test -c user.email=test@example.invalid commit -qm initial
+git -C "$REPO" -c protocol.file.allow=always submodule add -q "$SUBMODULE" vendor/source
+git -C "$REPO" add .gitmodules vendor/source
+git -C "$REPO" -c user.name=test -c user.email=test@example.invalid commit -qm submodule
+printf '%s\n' changed >> "$REPO/vendor/source/source.txt"
+jq --arg head "$(git -C "$REPO" rev-parse HEAD)" \
+  '.repositoryCommit = $head | .checkoutState = "dirty"' \
+  "$TMP/repository-evidence.json" > "$TMP/repository-evidence-dirty-submodule.json"
+dirty_submodule_rc="$(run_prepare dirty-submodule --target-source repository-declaration \
+  --repository-evidence-file "$TMP/repository-evidence-dirty-submodule.json" --visual-required true)"
+assert test "$dirty_submodule_rc" -eq 76
+assert jq -e '.reason == "dev_server_unavailable" and
+  (.nextAction | contains("dirty_submodule_unsupported"))' "$TMP/dirty-submodule.result"
+git -C "$REPO/vendor/source" show HEAD:source.txt > "$REPO/vendor/source/source.txt"
 
 # Invocation targets still require a real authority/hostname.
 hostless_rc="$(run_prepare hostless-explicit --target-url 'https://?' --target-source explicit 2> "$TMP/hostless-explicit.stderr")"

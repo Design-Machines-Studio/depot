@@ -26,7 +26,8 @@ Standalone visual testing that loads pages in a real browser, screenshots at mul
 ## Usage
 
 - `/dm-review-visual` -- use an attached T3 preview or optional tracked
-  `.dm/ui-review.json`, then test the affected selected cases
+  `.dm/ui-review.json`, then bounded repository author-loop discovery, and test
+  the affected selected cases
 - `/dm-review-visual <url>` -- test a specific URL
 - `/dm-review-visual --states` -- focus on interactive state testing only
 - `/dm-review-visual --a11y` -- focus on runtime accessibility checks only
@@ -41,8 +42,10 @@ Standalone visual testing that loads pages in a real browser, screenshots at mul
 **If no URL provided:** first use an already attached, automation-capable T3
 preview and its exact current URL. Otherwise use optional tracked
 `.dm/ui-review.json` through the shared `ui-review-readiness.md` start/readiness
-contract. Do not scan localhost ports, infer a target from the project type, or
-guess a mutating start command.
+contract. If neither supplies usable evidence, load the review skill's
+`repository-browser-target-discovery.md` and run its host-interpreted bounded
+pass before declaring the target unavailable. Do not scan localhost ports,
+infer a target from the project type, or guess a mutating start command.
 
 This command explicitly requires rendered evidence. Run the shared helper with
 `--visual-required true`. If neither source exists or navigation cannot be
