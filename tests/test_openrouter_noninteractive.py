@@ -17,6 +17,7 @@ import unittest
 REPO = Path(__file__).resolve().parents[1]
 OPENROUTER = REPO / "plugins/openrouter"
 PIPELINE_EXEC = REPO / "plugins/model-router/skills/model-router/references/openrouter-write-adapter.sh"
+ROUTER = REPO / "plugins/model-router/skills/model-router/references/role-dispatch.sh"
 KERNEL = REPO / "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"
 BOUNDARY = OPENROUTER / "skills/openrouter-delegate/references/delegation-boundary.sh"
 POLICY = OPENROUTER / "skills/openrouter-delegate/references/delegation-security-policy.json"
@@ -376,16 +377,18 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.root = Path(self.tmp.name)
         self.home = self.root / "home"
-        installed = self.home / ".codex/plugins/cache/depot/openrouter/1.14.0"
+        installed = self.home / ".codex/plugins/cache/depot/openrouter/1.20.2"
         installed.parent.mkdir(parents=True)
         shutil.copytree(OPENROUTER, installed)
         self.installed = installed
-        self.kernel = self.root / "workflow-kernel"
+        self.kernel = self.root / "workflow-kernel-launcher.sh"
         self.kernel.write_text(
             "#!/usr/bin/env bash\n"
             "case \"${1:-}\" in\n"
             "  resolve-plugin-bundle) printf '%s\\n' "
-            "'{\"selected_root\":\"~/.codex/plugins/cache/depot/openrouter/1.14.0\"}' ;;\n"
+            "'{\"selected_root\":\"~/.codex/plugins/cache/depot/openrouter/1.20.2\","
+            "\"version\":\"1.20.2\",\"cache_class\":\"codex\","
+            "\"reason\":\"active-host\"}' ;;\n"
             "  *) exit 4 ;;\n"
             "esac\n"
         )
@@ -399,8 +402,8 @@ class OpenRouterNonInteractiveTest(unittest.TestCase):
         env.update({"HOME": str(self.home), "OPENROUTER_API_KEY": self.api_key,
                     "OPENROUTER_BASE": self.base, "WORKFLOW_KERNEL": str(self.kernel),
                     "OPENROUTER_BUNDLE_RESOLVED": "1",
-                    "OPENROUTER_BUNDLE_REF": "~/.codex/plugins/cache/depot/openrouter/1.14.0",
-                    "OPENROUTER_BUNDLE_VERSION": "1.14.0",
+                    "OPENROUTER_BUNDLE_REF": "~/.codex/plugins/cache/depot/openrouter/1.20.2",
+                    "OPENROUTER_BUNDLE_VERSION": "1.20.2",
                     "OPENROUTER_BUNDLE_CACHE_CLASS": "codex",
                     "OPENROUTER_BUNDLE_REASON": "available",
                     "MODEL_ROUTER_CONTRACT_DIGEST": "sha256:" + "a" * 64,
@@ -571,6 +574,106 @@ env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="{system}" OPENROUTER_WORKLOAD=d
         serialized = json.dumps(receipt).lower()
         for forbidden in ("review harmless", "fixture response", "api_key", "secret"):
             self.assertNotIn(forbidden, serialized)
+
+        self.assertNotIn("reasoning", FixtureHandler.requests[-1])
+        self.assertEqual(receipt["reasoningEffort"], {
+            "requested": None,
+            "transmitted": None,
+            "status": "default-unknown",
+            "evidence": "unavailable",
+            "modelReasoningMeasurement": None,
+        })
+
+    def router_availability(self) -> Path:
+        availability = self.root / "router-availability.json"
+        availability.write_text(json.dumps({
+            "codex": {"state": "unavailable"},
+            "claude": {"state": "unavailable"},
+            "openrouter": {"state": "ok"},
+        }))
+        return availability
+
+    def run_router_read(self, effort: str) -> tuple[subprocess.CompletedProcess[str], Path]:
+        prompt = self.root / f"read-{effort}.prompt"
+        evidence = self.root / f"read-{effort}.evidence"
+        output = self.root / f"read-{effort}.output"
+        receipt = self.root / f"read-{effort}.receipt.json"
+        prompt.write_text("Analyze the bounded repository evidence.")
+        evidence.write_text("Exact fixture evidence.")
+        result = subprocess.run([
+            str(ROUTER), "--workflow-kernel", str(self.kernel),
+            "--role", "architect", "--effort", effort,
+            "--capability", "read-repository",
+            "--capability", "long-context",
+            "--capability", "structured-output",
+            "--prompt-file", str(prompt),
+            "--repository-evidence-file", str(evidence),
+            "--output-file", str(output), "--receipt-file", str(receipt),
+        ], cwd=REPO, text=True, capture_output=True, env={
+            **self.env(),
+            "MODEL_ROUTER_TEST_MODE": "1",
+            "MODEL_ROUTER_AVAILABILITY_FILE": str(self.router_availability()),
+            "MODEL_ROUTER_INVOKE_FIXTURE_TRANSPORTS": "1",
+        })
+        return result, receipt
+
+    def run_router_write(self, effort: str) -> tuple[subprocess.CompletedProcess[str], Path]:
+        repo = self.init_repo(f"write-effort-{effort}")
+        prompt = self.root / f"write-{effort}.prompt"
+        evidence = self.root / f"write-{effort}.evidence"
+        output = self.root / f"write-{effort}.output"
+        receipt = self.root / f"write-{effort}.receipt.json"
+        prompt.write_text("Change the sole allowed line.")
+        evidence.write_text("The bounded adapter supplies exact committed file evidence.")
+        FixtureHandler.response_text = (
+            "diff --git a/allowed.txt b/allowed.txt\n"
+            "--- a/allowed.txt\n+++ b/allowed.txt\n"
+            "@@ -1 +1 @@\n-before\n+after"
+        )
+        result = subprocess.run([
+            str(ROUTER), "--workflow-kernel", str(self.kernel),
+            "--role", "builder-deep", "--effort", effort,
+            "--capability", "read-repository",
+            "--capability", "write-repository",
+            "--capability", "long-context",
+            "--capability", "structured-output",
+            "--prompt-file", str(prompt),
+            "--repository-evidence-file", str(evidence),
+            "--output-file", str(output), "--receipt-file", str(receipt),
+            "--contract-digest", "sha256:" + "a" * 64,
+            "--contract-revision", "1",
+        ], cwd=repo, text=True, capture_output=True, env={
+            **self.env(),
+            "MODEL_ROUTER_TEST_MODE": "1",
+            "OPENROUTER_EXEC_ALLOWED_PATHS": "allowed.txt",
+            "MODEL_ROUTER_AVAILABILITY_FILE": str(self.router_availability()),
+            "MODEL_ROUTER_INVOKE_FIXTURE_TRANSPORTS": "1",
+        })
+        return result, receipt
+
+    def test_router_transmits_normalized_effort_on_read_and_write_paths(self) -> None:
+        expected = {"low": "low", "medium": "medium", "high": "high", "max": "high"}
+        for path_name, invoke in (("read", self.run_router_read),
+                                  ("bounded-write", self.run_router_write)):
+            for requested, transmitted in expected.items():
+                with self.subTest(path=path_name, requested=requested):
+                    result, receipt_path = invoke(requested)
+                    receipt_debug = receipt_path.read_text() if receipt_path.exists() else "missing receipt"
+                    self.assertEqual(
+                        result.returncode, 0,
+                        result.stderr + "\n" + result.stdout + "\n" + receipt_debug,
+                    )
+                    payload = FixtureHandler.requests[-1]
+                    self.assertEqual(payload["reasoning"], {"effort": transmitted})
+                    receipt = json.loads(receipt_path.read_text())
+                    self.assertEqual(receipt["requested"]["effort"], requested)
+                    self.assertEqual(receipt["normalizedEffort"], transmitted)
+                    self.assertEqual(receipt["transmittedEffort"], transmitted)
+                    self.assertEqual(receipt["effortTransmission"], {
+                        "status": "transmitted",
+                        "evidence": "request-envelope",
+                        "modelReasoningMeasurement": None,
+                    })
 
     def test_review_runner_contacts_loopback_once_with_credential_shaped_section(self) -> None:
         safe_path = "internal/auth/session.go"

@@ -3,7 +3,7 @@
   "receiptId": "dispatch-000000000000000000000001",
   "requested": {"role": "builder-fast", "effort": "high"},
   "attempts": [
-    {"model": "fictional/lattice-flash", "provider": "openrouter", "transport": "openrouter", "billingMode": "api", "outcome": "served", "durationSeconds": 12}
+    {"model": "fictional/lattice-flash", "provider": "openrouter", "transport": "openrouter", "billingMode": "api", "requestedEffort": "high", "normalizedEffort": "high", "transmittedEffort": "high", "effortStatus": "transmitted", "effortEvidence": "request-envelope", "outcome": "served", "durationSeconds": 12}
   ],
   "served": {
     "model": "fictional/lattice-flash",
@@ -16,7 +16,10 @@
     "billedCostUsd": 0.019,
     "costProvenance": "provider-receipt"
   },
+  "normalizedEffort": "high",
   "effectiveEffort": "high",
+  "transmittedEffort": "high",
+  "effortTransmission": {"status": "transmitted", "evidence": "request-envelope", "modelReasoningMeasurement": null},
   "fallback": false,
   "matrixSnapshot": "openrouter:2026-08-25"
 }

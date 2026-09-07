@@ -63,7 +63,7 @@ for relative in "${consumers[@]}"; do
       plugins/dm-review/skills/review/SKILL.md) openrouter_floor="1.18.0" ;;
       plugins/openrouter/commands/openrouter.md|plugins/openrouter/skills/openrouter/SKILL.md|plugins/openrouter/skills/openrouter-delegate/SKILL.md|plugins/openrouter/skills/openrouter-delegate/references/invocation-protocol.md) openrouter_floor="1.14.0" ;;
       plugins/airlift/*) openrouter_floor="1.14.0" ;;
-      plugins/model-router/*) openrouter_floor="1.19.0" ;;
+      plugins/model-router/*) openrouter_floor="1.20.2" ;;
       plugins/pipeline/*) openrouter_floor="1.19.0" ;;
       plugins/openrouter/*) openrouter_floor="1.8.0" ;;
       *) openrouter_floor="1.7.0" ;;

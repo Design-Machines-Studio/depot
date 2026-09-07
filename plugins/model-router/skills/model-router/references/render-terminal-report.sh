@@ -127,6 +127,12 @@ if ! jq -S -s \
     . as $value
     | if type == "string" and (["low","medium","high","max"] | index($value) != null)
       then . else "unavailable" end;
+  def confirmed_effort($value; $status; $evidence):
+    if $status == "transmitted" and
+       (["native-cli-argument","native-cli-config","request-envelope"] | index($evidence) != null)
+    then ($value | safe_effort)
+    else "unavailable"
+    end;
   def safe_transport:
     . as $value
     | if type == "string" and (["codex-cli","claude-cli","openrouter"] | index($value) != null)
@@ -176,11 +182,18 @@ if ! jq -S -s \
           $served_entries[0].value.provider == $served.provider and
           $served_entries[0].value.transport == $served.transport
        then $served_entries[0].key else null end) as $served_index
+    | confirmed_effort(
+        $receipt.transmittedEffort;
+        $receipt.effortTransmission.status;
+        $receipt.effortTransmission.evidence
+      ) as $transmitted_effort
     | {
         receiptId:$receipt.receiptId,
         role:($receipt.requested.role | safe_role),
         requestedEffort:($receipt.requested.effort | safe_effort),
-        effectiveEffort:($receipt.effectiveEffort | safe_effort),
+        normalizedEffort:($receipt.normalizedEffort | safe_effort),
+        effectiveEffort:$transmitted_effort,
+        transmittedEffort:$transmitted_effort,
         matrixSnapshot:($receipt.matrixSnapshot | safe_slug),
         fallback:$receipt.fallback,
         billingMode:((if $served_index == null then "unavailable" else $served.billingMode end) | safe_billing),
@@ -195,6 +208,12 @@ if ! jq -S -s \
               model:($entry.value.model | safe_slug),
               provider:($entry.value.provider | safe_slug),
               transport:($entry.value.transport | safe_transport),
+              requestedEffort:(($entry.value.requestedEffort // $receipt.requested.effort) | safe_effort),
+              transmittedEffort:confirmed_effort(
+                $entry.value.transmittedEffort;
+                $entry.value.effortStatus;
+                $entry.value.effortEvidence
+              ),
               billingMode:((if $was_served then $served.billingMode else $entry.value.billingMode end) | safe_billing),
               duration:(if $was_served then duration($served.durationSeconds) else duration($entry.value.durationSeconds) end),
               tokens:(if $was_served then tokens($served) else {input:null,output:null,total:null,status:"unavailable",provenance:"unavailable"} end),
@@ -257,14 +276,14 @@ if ! jq -r '
     .calls[] as $call
     | $call.attempts[]
     | . as $attempt
-    | "| \($call.role) | \($attempt.model) \(if $attempt.served then "(served)" else "(attempted)" end) | \($attempt.provider) / \($attempt.transport) | \($call.requestedEffort) / \($call.effectiveEffort) | \($attempt.duration | display_duration) | \($attempt.tokens | display_tokens) | \($attempt.billedCost | display_cost($attempt.billingMode)) | \($attempt.result)\(if $attempt.served and $call.fallback then " (fallback)" else "" end) |";
+    | "| \($call.role) | \($attempt.model) \(if $attempt.served then "(served)" else "(attempted)" end) | \($attempt.provider) / \($attempt.transport) | \($attempt.requestedEffort) / \($attempt.transmittedEffort) | \($attempt.duration | display_duration) | \($attempt.tokens | display_tokens) | \($attempt.billedCost | display_cost($attempt.billingMode)) | \($attempt.result)\(if $attempt.served and $call.fallback then " (fallback)" else "" end) |";
   [
     "### Model & Cost Report",
     "",
     "Run: " + (.runStatus | ascii_upcase),
     "Matrix: " + (.matrixSnapshots | matrix_line),
     "",
-    "| Role | Attempted / served model | Rail | Effort requested / effective | Duration | Tokens | Billed cost | Result |",
+    "| Role | Attempted / served model | Rail | Effort requested / transmitted | Duration | Tokens | Billed cost | Result |",
     "|---|---|---|---|---:|---:|---:|---|",
     (attempt_rows),
     "",

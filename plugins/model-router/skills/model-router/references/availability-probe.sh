@@ -367,14 +367,14 @@ openrouter_json() {
       [ -n "${CODEX_SANDBOX:-}${CODEX_HOME:-}" ] && active_host="codex"
       if [ -n "$active_host" ]; then
         bundle_json=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-          --minimum-version 1.19.0 --active-host "$active_host" \
+          --minimum-version 1.20.2 --active-host "$active_host" \
           --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
           --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
           --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
           --required-executable skills/openrouter-delegate/references/delegation-boundary.sh) || bundle_json=""
       else
         bundle_json=$("$WORKFLOW_KERNEL" resolve-plugin-bundle --plugin openrouter \
-          --minimum-version 1.19.0 \
+          --minimum-version 1.20.2 \
           --required-executable skills/openrouter-delegate/references/openrouter-wrapper.sh \
           --required-asset skills/openrouter-delegate/references/openrouter-credential.sh \
           --required-asset skills/openrouter-delegate/references/delegation-security-policy.json \
