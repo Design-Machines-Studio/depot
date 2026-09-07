@@ -2,9 +2,14 @@
 
 ## Active coordination (refreshed 2026-09-07)
 
-**Next: UI-READY-03 -- dm-review discovery of documented repository browser
-targets.** [Complete execution prompt](prompts/ui-ready-03-repository-target-discovery.md).
-This is a prepared, unclaimed implementation chunk, not a completed fix.
+**Next: OR-EFFORT-01 -- truthful OpenRouter effort propagation and reporting.**
+[Complete execution prompt](prompts/or-effort-01-truthful-effort.md).
+The user's subsequent system-wide model/instruction audit found that the router
+reports normalized effort which its OpenRouter transport does not send.
+[Audit, proposed model defaults, budget and bounded sequence](model-and-instruction-optimization-20260907.md).
+UI-READY-03 remains reproduced, prepared and unclaimed; its
+[complete prompt](prompts/ui-ready-03-repository-target-discovery.md) follows the
+effort repair. Neither chunk is implemented by this planning branch.
 
 Repository: `Design-Machines-Studio/depot`. Refreshed `origin/main`:
 `76267e0e10845e1f9ea4a5eb533b6ca9628b12be`. Authenticated GitHub reports no
@@ -27,14 +32,14 @@ Do not edit or remove another session's files or worktrees.
 | Area | Current version/state | Active problem / consumer impact | Evidence and next decision |
 |---|---|---|---|
 | Pipeline | 1.66.1 | Final review inherits the target-discovery gap | #116 repository-native proof, #118 prototype authority, #120 packet reuse, #123 routing provenance, #125 scope portability merged; reuse shared dm-review contract |
-| dm-review | 1.79.1 | Documented Fixture targets can be reported absent before any start attempt | Reproduced exit 76 against Governance; UI-READY-03 is next |
-| model-router | 0.6.1 | No newly reproduced ordinary routing blocker | #123 host discovery/provenance and #126 ordinary review compatibility merged; preserve anonymous role requests |
-| OpenRouter | 1.20.1 | No newly reproduced transport blocker | #113 canary bridge and #126 benchmark identity repair merged; matrix evidence dated 2026-08-27 |
+| dm-review | 1.79.1 | Documented Fixture targets can be reported absent before any start attempt | Reproduced exit 76 against Governance; UI-READY-03 follows the effort repair |
+| model-router | 0.6.1 | Computed effort is recorded but omitted from OpenRouter invocation | OR-EFFORT-01 is next; retain #123/#126 discovery, provenance and ordinary-review behavior |
+| OpenRouter | 1.20.1 | Wrapper wire request contains no reasoning effort setting | Repair with model-router; portfolio/matrix refresh is separate; installed matrix dated 2026-08-27 |
 | Workflow Kernel | 0.19.1 | No newly reproduced scope blocker | #121 observation index and #125 device portability merged; no new state layer needed |
 | project-manager | 1.13.0 | This planning index lagged live state | #123 coordinator recommendation behavior is installed; planning-only repair here |
 | Assembly plugin | 3.16.0 | Consumer launchers/runbooks remain consumer-owned | Prototype authority and reusable development/release skills are installed; no plugin change selected |
 | release/sync | Seven listed versions tagged | Publication alone does not prove a consumer browser journey | Remote tag refs verified; every tracked plugin file matches both local harness caches |
-| measurement | Terminal reporting and benchmark bridge implemented | R1 comparable review-loop reduction proof remains unavailable | Keep the existing metric obligation; collect real comparable evidence after the blocking discovery repair |
+| measurement | Terminal reporting and benchmark bridge implemented | OpenRouter effort is not transmitted; R1 comparable review-loop proof remains unavailable | Repair effort truth first; collect comparable evidence after discovery repair |
 
 The current Pipeline, dm-review, model-router, OpenRouter, and Workflow Kernel
 annotated tags peel to PR #126 head
@@ -59,7 +64,7 @@ surfaces, dependencies, Kernel behavior, routing, and index checks passed.
 This is fresh local proof against trusted-main source, not hosted CI or a
 completed consumer browser journey.
 
-### Why this chunk, and its ownership boundary
+### Retained browser chunk and its ownership boundary
 
 Current `ui-review-readiness.md` stops after an invocation URL, attached T3
 preview, or optional `.dm/ui-review.json`; accepted exact Pipeline packets can
@@ -133,7 +138,9 @@ of participant prompts. The existing Astra planning session is available;
 nested CLI uncertainty does not disprove parent-session subscription access.
 All retained P1/P2/P3 findings must be fixed before merge. Do not manufacture
 findings, reopen converged review, or require a full Pipeline for a narrow fix.
-Personal memory/Notion systems are silently optional and unused here.
+Personal memory/Notion systems are silently optional. They were unused in the
+initial Depot pulse; the subsequent system audit used personal memory only
+after the user's explicit request and did not use Notion.
 
 A source merge, release tag, cache copy, and real consumer run are separate
 claims. Record local proof, exact-head CI (or its absence), trusted-main proof,
