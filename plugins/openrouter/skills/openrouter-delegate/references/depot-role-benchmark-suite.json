@@ -820,7 +820,7 @@
     },
     {
       "id": "plan-contradiction-repair",
-      "revision": 2,
+      "revision": 3,
       "promptRevision": 2,
       "role": "plan-critic",
       "taskType": "internal-contradiction-audit",
@@ -853,7 +853,7 @@
         },
         {
           "id": "plan.contradiction-envelope",
-          "description": "All fields are present."
+          "description": "Exactly the three contracted fields are present."
         }
       ],
       "semanticCriteria": [
@@ -913,6 +913,21 @@
       },
       "semanticAlternatives": [],
       "negativeFixtures": [
+        {
+          "id": "extra-top-level-field",
+          "output": {
+            "contradiction": "statement 3 contradicts statement 1",
+            "correction": "score negative fixtures with the local runner and make no provider call",
+            "preservedDecisions": [
+              "statement 2 local expected-output scoring",
+              "statement 4 role-policy-derived inventory"
+            ],
+            "extra": "not in the contracted fields"
+          },
+          "mustFailAssertionIds": [
+            "plan.contradiction-envelope"
+          ]
+        },
         {
           "id": "rejects-valid-inventory",
           "output": {
@@ -2467,7 +2482,7 @@
   ],
   "bindings": {
     "suiteRevision": 1,
-    "suiteDigest": "sha256:cfaf012c9a0e90b66aed0c5ae3f07150e7480d316b0b350aa96b59015294c6a5",
+    "suiteDigest": "sha256:f13142a07531482fffd2b43105fb2acc50388a9c6c9d2ce5d316ed038577035f",
     "normalizerRevision": 1,
     "normalizerDigest": "sha256:cea619866aeb37714efaaba1d4a699d3d5ef3042630377554f6bfb36de81db5a",
     "cases": {
@@ -2476,144 +2491,144 @@
         "caseDigest": "sha256:2624b6fae3c1be0e36da58b35bbfcc882f969dfd1e9b43cb8a46d9c4407f2e57",
         "promptRevision": 2,
         "promptDigest": "sha256:7433b91d42736c7973830ad9ee508e97655aecba51c9721362425813fd344222",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:99aa2cdf2abd2d0cfdff867b2eb715ca1f66b20186f3cb146f4475c453510b3a"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:cd2b44003ebebd0b6de60181a9ad574f5eb51ac097163d069ea711d03a92ea40"
       },
       "review-zero-deferral": {
         "caseRevision": 2,
         "caseDigest": "sha256:ed9a010abf11bd55e660b331fd4cbd93c9305650c57637143ee4b913d7da1ecf",
         "promptRevision": 2,
         "promptDigest": "sha256:fe2340b70ad2dae1533882e0c0d051847974ba3d27047e59d844dd54cc1e3aba",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:9e021f404b918c353c10ecdef8b2d0f518165431d6c10d24da1f4b1acf49a41f"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:a1e7344ae97b0147d8f5b1e068953178497316554861fcd2d92392b159555e7e"
       },
       "assembly-next-chunk": {
         "caseRevision": 2,
         "caseDigest": "sha256:cdb191c714f0fbe47a8bfb5ade2a98bf151e047a6f429e339ef1413b9e9cff14",
         "promptRevision": 2,
         "promptDigest": "sha256:ced4c87391b03f5d9615f36520753ebd1187a5830d83d65a14581aaf5ab298fe",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:8570ecffbc46a51a55c464a3281517de678cde45ad08761c92cf879d9b81e528"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:5b9b853681933c503e4f9aca848c4e6f28ca60e042697d873c21b61cbf8bddd2"
       },
       "mechanical-owned-edit": {
         "caseRevision": 2,
         "caseDigest": "sha256:1a2a4bcbad2c75abb380765557eae3ecbac7cd8ec1b13e6d266789644593a40c",
         "promptRevision": 2,
         "promptDigest": "sha256:05441fcde5413b936c4f4f8669789578fae9ae65b167782b23f49970377e210a",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:98714cfb8df4e5c9e56317de405a4080759857111ec7ca403ba6eea5e641f4a5"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:a5e87b612329ed26323b43d3aeed065402dbe31e1c29d4b5cd724eb4f1ba7caf"
       },
       "architect-routing-tradeoff": {
         "caseRevision": 2,
         "caseDigest": "sha256:4ebdcf0d3b439fab4d25127449afe91bbd9d81cb4b56008d453093f2d7d3c847",
         "promptRevision": 2,
         "promptDigest": "sha256:1fcf5446bf990823f08704a9a4d075ef3e27bc98a574e2e37e5754ec9e6e6fd3",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:9e5e453877fe4181bcd4cb86c866534ac7f476e4c99701b80c0183fb24ade5a1"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:64d2c8dda9bfd0c7fd643381dc5a7d6f398a666bc7dc8909189fed707f907b7a"
       },
       "plan-approved-scope-audit": {
         "caseRevision": 1,
         "caseDigest": "sha256:566809401871ebb3207b8463266581e872410a7a1c93879bfa2d9708632fd29d",
         "promptRevision": 1,
         "promptDigest": "sha256:383f9dc79c72169dbb62efac896b152dad4506114270b7d308631a7e6fa9b12f",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:03e9e0fcca7e37caaf2ae005a75440975f04d26edf3e0d2fb221d5f0e5e65435"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:78e0ce2278da34671fcd3185bd85be5d4e425b1139c37c17c679f3616fc2142d"
       },
       "plan-contradiction-repair": {
-        "caseRevision": 2,
-        "caseDigest": "sha256:0de7feffccdfe207af2c1a0e736a32b52ceca7db0bb11042ecd7965511e1ea18",
+        "caseRevision": 3,
+        "caseDigest": "sha256:553fe8a223e603829cb4f8fe6356a6c931a5a88391598b43a775b1b6215521f5",
         "promptRevision": 2,
         "promptDigest": "sha256:31cdbd17a24d977f680633a71a0b911cf028b7df331c0df3a99e685ef701d5e6",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:7b221e18f0134f4179164b52914137c329be56cfc90c1b3ad8b2e35b4a559278"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:513177723e4129ac70946df6c5011f9e579e658759c5bbfe72f5ee1532e57089"
       },
       "builder-multifile-repair": {
         "caseRevision": 1,
         "caseDigest": "sha256:3a1b74b06e475e82f81bb1a2173b862805a1fbbfac802b218b236615f4146198",
         "promptRevision": 1,
         "promptDigest": "sha256:fec8bdda4db2be2e6082343ffcba9251f40a3cabb204c429a03b3365683648a6",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:2658fe4dcb9f1b038f12343e6332ed0fb9273af1c37a15740382b61d54f222fd"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:4764422c6a19ad039ea15eb900d62618f1c8fea44d5acad845ad2307adc5e8dd"
       },
       "builder-validation-feedback-repair": {
         "caseRevision": 1,
         "caseDigest": "sha256:afdfe409ed8a140a694a57aa25276902be509f265348c2137347b2c722677310",
         "promptRevision": 1,
         "promptDigest": "sha256:ccdc10df5c54d7ca5a9f6228ad57a933cf69229e9770400c4a9d2a282307e7ee",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:192e0201708e49b064d3254b02342ab11d020be9e39a071188daba63bd20cbde"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:bd40d248e30d51fa23636a4fd63f728c08103b381d6ada886eaefc9cb4af793e"
       },
       "review-false-positive-control": {
         "caseRevision": 1,
         "caseDigest": "sha256:b5cd57147229ceb02685ecfd114d6c482a598ffcf0ed630781295258149829ea",
         "promptRevision": 1,
         "promptDigest": "sha256:78a5d75773feda0cd0509160e436a07fae6a930c595d82b3bad04fde91abdbf6",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:c1a349e448f16d086ac50deb6fcd990c8050326f4f32ea444177c91fffc0be03"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:0d09f5e973d08140207eb767adb315ef683a04009fc24e9891bbea6bbdd9ae87"
       },
       "review-cross-file-invariant": {
         "caseRevision": 1,
         "caseDigest": "sha256:c2c8cb23c693d0541b9aa2b2be55064f5a7e5a54e30338a8825d9fc0095f8303",
         "promptRevision": 1,
         "promptDigest": "sha256:df191d1c381c98c26cdf944faa8891d35b1d3f29ff06feeea8ef74f6a57a4e21",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:dfb20f3692ab2778aa1fb8eb31972de42be8483a2a397b257d05fe7a8f437f8c"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:f85e5b695cc3cf4880a6b61dfb25ac1646269bf328b6c981992bd90ce193757e"
       },
       "review-validation-claims": {
         "caseRevision": 1,
         "caseDigest": "sha256:4585cad36efe1e6d24a67e09cb5de2787cf294d417b1f7e8da30c8598dd340bc",
         "promptRevision": 1,
         "promptDigest": "sha256:80c7a8ae36db883451024be8f10cd1852656626cdcbc7310767efdfab4e616f1",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:c0f72e0e2519c38c54cd7c7146f6e891e34f6ad87f4b637a77509167d8cae1ef"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:a5beeef60525cdae4787a7ccebb283f5afc8fdd9f0fd74284a2460f802873cad"
       },
       "security-auth-boundary": {
         "caseRevision": 1,
         "caseDigest": "sha256:a0a79e26334af26b90404b29561165652a4870e5ded5db27d6dd7210405deb56",
         "promptRevision": 1,
         "promptDigest": "sha256:2f001d0339751cf7bcf27807e89c0d818344d135c8ed7c38044a6f2ce0da708c",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:951078fcb46f757207d68c50d6fdb14d63a8de82a3451d88b17a8196320fe38c"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:bb7b12cd0142a8c91655fb9c904c8a13f52265b70cf51e5396f0b3da0772d1d1"
       },
       "security-release-integrity": {
         "caseRevision": 1,
         "caseDigest": "sha256:940b211aec55489683597db3749811a34025e97b8319f4af4aa0cc0e810417fb",
         "promptRevision": 1,
         "promptDigest": "sha256:d210bbdb7e1b015c163e7ea3afeafc0439b25161f8f112661988fcca8cbe5ffa",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:d242f522e2b9eb0b6495a8a759c73397754ccd4d4958e9889f6e4fcd0855440b"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:484aee273e0ad7caeca8a68b4fc24e78c9306afcd68399216f9b616c1d28e9af"
       },
       "research-claim-source-map": {
         "caseRevision": 1,
         "caseDigest": "sha256:8a91fb1cfff6fc0607e26f5af9aa1e69fd08c0699de75ec9981885bd3495f5d6",
         "promptRevision": 1,
         "promptDigest": "sha256:5d215c6c908d15141897e9b03afca21546fc3f8a674869f91c6f3611411fa3c3",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:05be48d8a2054930730636f4e23b93f3448ec152ccb6805b6b33bd8dabbf34a9"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:1074082522b0780820904b8b177d00e373c44e6ceaf39d4656fc555c4960d4db"
       },
       "research-conflicting-evidence": {
         "caseRevision": 1,
         "caseDigest": "sha256:d616e2d0dbf04fc47ef7f036bd7a0fd37bce3205b405cf330e0d31f1b47c1cc9",
         "promptRevision": 1,
         "promptDigest": "sha256:7010bbec72092c85c33ff04d4b45f8a1881482dd49a3a2334afad646eaf9bea9",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:b0c15aa4a754222435aa717eeef00c2da3c3f44757bb3ff8360e627a2658d051"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:7980aee53eff2a0cc04b417744ba2f9846372f68ca3d3164e7822fe6d7c06fc4"
       },
       "editorial-member-update": {
         "caseRevision": 2,
         "caseDigest": "sha256:c12a56c68702105d6ba07c3745dd14f8d668611f7264c49e2233954d64f378b2",
         "promptRevision": 1,
         "promptDigest": "sha256:987922ced4995abd1d5884982a0e4057d4ad5a427eaff96bef30e4d9556c8976",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:01c1706266659794688782fbd309dc46044445311a2ab778dcc8e77f38ec5208"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:40c3f2d36ad818b00ff86b3478676bb718e67fa5535423f637f049f6ea97c801"
       },
       "editorial-release-note": {
         "caseRevision": 2,
         "caseDigest": "sha256:2bbcf4d733a3d72d6f916bc8d3ef0265de24b23a7b2e03bd50210a8d06bcc241",
         "promptRevision": 1,
         "promptDigest": "sha256:013d8654e4ba9a5c31b6f9ed2959ad1ceac3241001d10c37472543638c55483d",
-        "scorerRevision": 1,
-        "scorerDigest": "sha256:62bd0a45ae06e56fa1a6a40693f46a6168c24d2493a81e14ce6db5e9297cb3e2"
+        "scorerRevision": 2,
+        "scorerDigest": "sha256:dd8281012a1ccf928736bb8decff3081b5c0fcc4cb6b27fadca3d0348111ee64"
       }
     }
   }

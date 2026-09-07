@@ -13,7 +13,7 @@ fresh descriptor device values. Version 0.19.0 adds `observation-index-v1`, a st
 over explicitly named, digest-bound run evidence. Pipeline and dm-review use the
 same harness-neutral envelope; missing facts remain unavailable, cost remains
 measured/imputed/unavailable, and large artifacts remain bounded references.
-Version 0.18.1 repairs that reconciliation's exact raw-receipt digest boundary
+Version 0.18.1 repairs the legacy browser-recovery reconciliation's exact raw-receipt digest boundary
 for schema-owned colon-bearing identifiers without weakening durable-string,
 URI, redaction, or semantic eligibility checks. Version 0.18.0 adds one
 Pipeline-owned, append-only reconciliation for an exact
@@ -65,7 +65,8 @@ quality-pulse, behavioral-contract, validation-retry, and review-contribution
 consumers require `>=0.5.0`; exact-ref repository-verification consumers require
 `>=0.14.0`; ordinary run-cost-summary consumers require `>=0.8.0`;
 matrix-backed run-cost-summary
-consumers require `>=0.13.0`; observation-index consumers require `>=0.19.0`. The
+consumers require `>=0.13.0`; legacy browser-reconciliation writer consumers
+require `>=0.18.1`; observation-index consumers require `>=0.19.0`. The
 launcher verifies Python 3.12+, sets the module path, and execs the CLI. Never
 discover the runtime from the downstream project, `PATH`, or a symlink escape.
 The full consumer-facing contract is `references/runtime-resolution.md`; in
