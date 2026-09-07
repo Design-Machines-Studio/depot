@@ -71,7 +71,7 @@ graph LR
 | dm-review | airlift | optional | `>=1.0.0` |
 | dm-review | openrouter | optional | `>=1.19.0` |
 | ghostwriter | design-machines | optional | `>=1.5.0` |
-| model-router | openrouter | optional | `>=1.19.0` |
+| model-router | openrouter | optional | `>=1.20.2` |
 | model-router | workflow-kernel | optional | `>=0.17.0` |
 | ned | superpowers | optional | `>=1.0.0` |
 | pipeline | dm-review | required | `>=1.79.1` |

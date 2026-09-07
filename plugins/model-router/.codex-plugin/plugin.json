@@ -1,6 +1,6 @@
 {
   "name": "model-router",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Internal deterministic role resolver and one-shot dispatcher for provider-neutral model work",
   "author": {
     "name": "Design Machines",
@@ -36,7 +36,7 @@
     "commands": []
   },
   "optionalPluginDependencies": {
-    "openrouter": ">=1.19.0",
+    "openrouter": ">=1.20.2",
     "workflow-kernel": ">=0.17.0"
   },
   "interface": {

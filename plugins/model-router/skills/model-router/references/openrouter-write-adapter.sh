@@ -11,6 +11,7 @@ TIMEOUT="${OPENROUTER_EXEC_TIMEOUT:-3600}"
 DEFERRED_VERIFY_CMD="${OPENROUTER_EXEC_VERIFY_CMD:-}"
 COMMIT_MSG="${OPENROUTER_EXEC_COMMIT_MSG:-pipeline: implement openrouter chunk}"
 ATTEMPT_RECEIPT=""
+REASONING_EFFORT=""
 MAX_OUTBOUND_PROMPT_BYTES=262144
 
 while [ $# -gt 0 ]; do
@@ -22,9 +23,15 @@ while [ $# -gt 0 ]; do
     --verify-cmd) DEFERRED_VERIFY_CMD="$2"; shift 2;;
     --commit-message) COMMIT_MSG="$2"; shift 2;;
     --attempt-receipt) ATTEMPT_RECEIPT="$2"; shift 2;;
+    --effort) REASONING_EFFORT="$2"; shift 2;;
     *) echo "unknown arg: $1" >&2; exit 2;;
   esac
 done
+
+case "$REASONING_EFFORT" in
+  ""|low|medium|high|max) ;;
+  *) echo "openrouter-exec: invalid effort" >&2; exit 2;;
+esac
 
 for candidate in "$MODEL" "$FALLBACK_MODEL"; do
   [ -z "$candidate" ] && continue
@@ -351,6 +358,7 @@ PROVIDER_STARTED_AT="$(date +%s)"
 set +e
 env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$SYSTEM_FILE" \
   OPENROUTER_WORKLOAD=mechanical OPENROUTER_RECEIPT_FILE="$RECEIPT_FILE" \
+  OPENROUTER_REASONING_EFFORT="$REASONING_EFFORT" \
   bash "$WRAPPER" "$MODEL" - "$TIMEOUT" "$FALLBACK_MODEL" \
   < "$PROMPT_FILE" > "$PATCH_FILE"
 rc=$?
@@ -358,12 +366,22 @@ set -e
 PROVIDER_DURATION_SECONDS=$(( $(date +%s) - PROVIDER_STARTED_AT ))
 
 RECEIPT_VALID=0
-if [ -s "$RECEIPT_FILE" ] && jq -e '
+if [ -s "$RECEIPT_FILE" ] && jq -e --arg effort "$REASONING_EFFORT" '
   .schemaVersion == 2 and
   (.outcome | type == "string" and length > 0) and
   (.invocationId | type == "string" and test("^[0-9a-f]{64}$")) and
   (.requestedModel | type == "string" and length > 0) and
   (.authorization.requestEnvelopeSha256 | test("^[0-9a-f]{64}$")) and
+  (.reasoningEffort | type == "object") and
+  (if $effort == "" then
+     .reasoningEffort == {requested:null,transmitted:null,status:"default-unknown",evidence:"unavailable",modelReasoningMeasurement:null}
+   else
+     .reasoningEffort.requested == $effort and
+     .reasoningEffort.transmitted == $effort and
+     .reasoningEffort.status == "transmitted" and
+     .reasoningEffort.evidence == "request-envelope" and
+     .reasoningEffort.modelReasoningMeasurement == null
+   end) and
   (.usage == null or (.usage | type == "object")) and
   ([(.. | objects) | keys[] |
     select(test("^(prompt|response|content|api_?key|secret)$"; "i"))] | length) == 0
@@ -402,10 +420,20 @@ if [ "$RECEIPT_VALID" != "1" ]; then
   echo "openrouter-exec: wrapper receipt invalid" >&2
   exit 2
 fi
-jq -e '
+jq -e --arg effort "$REASONING_EFFORT" '
   .schemaVersion == 2 and .outcome == "success" and
   .requestedModel != null and .responseModel != null and
   (.authorization.requestEnvelopeSha256 | test("^[0-9a-f]{64}$")) and
+  (.reasoningEffort | type == "object") and
+  (if $effort == "" then
+     .reasoningEffort == {requested:null,transmitted:null,status:"default-unknown",evidence:"unavailable",modelReasoningMeasurement:null}
+   else
+     .reasoningEffort.requested == $effort and
+     .reasoningEffort.transmitted == $effort and
+     .reasoningEffort.status == "transmitted" and
+     .reasoningEffort.evidence == "request-envelope" and
+     .reasoningEffort.modelReasoningMeasurement == null
+   end) and
   (.generationId | type == "string" and length > 0) and
   (.usage == null or (.usage | type == "object")) and
   ([(.. | objects) | keys[] |
@@ -507,6 +535,7 @@ jq -n --arg commit "$(git rev-parse --short HEAD)" --arg files "$FILES_CHANGED" 
   --arg contract_digest "${MODEL_ROUTER_CONTRACT_DIGEST:-}" \
   --argjson contract_revision "${MODEL_ROUTER_CONTRACT_REVISION:-0}" \
   --arg request_digest "$(jq -r '.authorization.requestEnvelopeSha256' "$RECEIPT_FILE")" \
+  --argjson reasoning_effort "$(jq '.reasoningEffort' "$RECEIPT_FILE")" \
   --argjson duration_seconds "$PROVIDER_DURATION_SECONDS" \
   --argjson usage "$(jq '.usage' "$RECEIPT_FILE")" \
   --argjson fallback "$(jq '.fallbackUsed' "$RECEIPT_FILE")" '
@@ -516,6 +545,7 @@ jq -n --arg commit "$(git rev-parse --short HEAD)" --arg files "$FILES_CHANGED" 
    verification:$verification,requestedModel:$requested_model,actualModel:$actual_model,
    servingProvider:(if $provider == "" then null else $provider end),generationId:$generation_id,
    requestEnvelopeSha256:$request_digest,responseModelProvenance:"response",
+   reasoningEffort:$reasoning_effort,
    servingProviderProvenance:$provider_provenance,fallback:$fallback,
    fallbackReason:(if $fallback then "openrouter-native-fallback" else "none" end),
    openrouterBundle:{version:$bundle_version,cacheClass:$bundle_cache_class,reason:$bundle_reason},

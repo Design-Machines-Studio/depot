@@ -35,6 +35,9 @@
 #   OPENROUTER_WEB_SEARCH
 #                       0|1; enables the provider web plugin for a resolver
 #                       request carrying the browser capability (default 0)
+#   OPENROUTER_REASONING_EFFORT
+#                       optional OpenRouter reasoning effort. When omitted, the
+#                       provider/model default remains unknown to this wrapper
 #   OPENROUTER_OVERALL_TIMEOUT
 #                       completion budget when timeout_s is omitted (default 3600)
 #   OPENROUTER_CONNECT_TIMEOUT
@@ -160,6 +163,7 @@ IDLE_TIMEOUT="${OPENROUTER_IDLE_TIMEOUT:-600}"
 CURRENT_RUN_ID="${OPENROUTER_RUN_ID:-}"
 TARGET_AGENT_NAME="${OPENROUTER_TARGET_AGENT_NAME:-}"
 RECEIPT_LANE_ID="${OPENROUTER_LANE_ID:-$TARGET_AGENT_NAME}"
+REASONING_EFFORT="${OPENROUTER_REASONING_EFFORT:-}"
 
 validate_positive_integer() {
   local name="$1" value="$2"
@@ -185,6 +189,10 @@ esac
 case "$WORKLOAD" in
   quality|security|direct|bulk|mechanical) ;;
   *) echo "### RUNNER FAILURE: invalid OPENROUTER_WORKLOAD" >&2; exit 2 ;;
+esac
+case "$REASONING_EFFORT" in
+  ""|none|minimal|low|medium|high|xhigh|max) ;;
+  *) echo "### RUNNER FAILURE: invalid OPENROUTER_REASONING_EFFORT" >&2; exit 2 ;;
 esac
 case "$TARGET_AGENT_NAME" in
   "") ;;
@@ -350,7 +358,8 @@ write_failure_receipt() {
       --arg lane "$RECEIPT_LANE_ID" \
       --argjson web "$([ "$WEB_SEARCH" = "1" ] && echo true || echo false)" \
       --argjson providerfallback "$([ "$ALLOW_FALLBACKS" = "1" ] && echo true || echo false)" \
-      --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" '
+      --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" \
+      --arg reasoning "$REASONING_EFFORT" '
       {
         schemaVersion: 2,
         invocationId: $invocation,
@@ -370,6 +379,13 @@ write_failure_receipt() {
         servingProvider: null,
         servingProviderProvenance: "not_reported_by_completion",
         usage: null,
+        reasoningEffort: {
+          requested: (if $reasoning == "" then null else $reasoning end),
+          transmitted: (if $reasoning == "" then null else $reasoning end),
+          status: (if $reasoning == "" then "default-unknown" else "transmitted" end),
+          evidence: (if $reasoning == "" then "unavailable" else "request-envelope" end),
+          modelReasoningMeasurement: null
+        },
         routing: {
           workload: $workload,
           sort: (if $sort == "" then null else $sort end),
@@ -410,7 +426,8 @@ write_success_receipt() {
       --arg lane "$RECEIPT_LANE_ID" \
       --argjson web "$([ "$WEB_SEARCH" = "1" ] && echo true || echo false)" \
       --argjson providerfallback "$([ "$ALLOW_FALLBACKS" = "1" ] && echo true || echo false)" \
-      --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" '
+      --arg requestdigest "${TRANSMITTED_REQUEST_ENVELOPE_SHA256:-}" \
+      --arg reasoning "$REASONING_EFFORT" '
       {
         schemaVersion: 2,
         invocationId: $invocation,
@@ -439,6 +456,13 @@ write_success_receipt() {
           end
         ),
         usage: (.usage // null),
+        reasoningEffort: {
+          requested: (if $reasoning == "" then null else $reasoning end),
+          transmitted: (if $reasoning == "" then null else $reasoning end),
+          status: (if $reasoning == "" then "default-unknown" else "transmitted" end),
+          evidence: (if $reasoning == "" then "unavailable" else "request-envelope" end),
+          modelReasoningMeasurement: null
+        },
         routing: {
           workload: $workload,
           sort: (if $sort == "" then null else $sort end),
@@ -476,6 +500,7 @@ if [ -n "$FALLBACK" ]; then
     --rawfile system "$SYSTEM_SOURCE_FILE" \
     --rawfile prompt "$PROMPT_SOURCE_FILE" \
     --argjson provider "$provider" \
+    --arg reasoning_effort "$REASONING_EFFORT" \
     --argjson web "$([ "$WEB_SEARCH" = "1" ] && echo true || echo false)" '
     {
       models: [$primary, $fallback],
@@ -487,6 +512,7 @@ if [ -n "$FALLBACK" ]; then
         {role: "user", content: $prompt}
       ]
     }
+    + (if $reasoning_effort != "" then {reasoning:{effort:$reasoning_effort}} else {} end)
     + (if $web then {plugins:[{id:"web"}]} else {} end)' > "$request_file"
 else
   jq -n \
@@ -494,6 +520,7 @@ else
     --rawfile system "$SYSTEM_SOURCE_FILE" \
     --rawfile prompt "$PROMPT_SOURCE_FILE" \
     --argjson provider "$provider" \
+    --arg reasoning_effort "$REASONING_EFFORT" \
     --argjson web "$([ "$WEB_SEARCH" = "1" ] && echo true || echo false)" '
     {
       model: $model,
@@ -505,6 +532,7 @@ else
         {role: "user", content: $prompt}
       ]
     }
+    + (if $reasoning_effort != "" then {reasoning:{effort:$reasoning_effort}} else {} end)
     + (if $web then {plugins:[{id:"web"}]} else {} end)' > "$request_file"
 fi
 
