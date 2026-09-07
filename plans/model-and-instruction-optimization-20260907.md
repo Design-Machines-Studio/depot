@@ -3,12 +3,14 @@
 Planning only. No plugin code, project instructions, personal configuration,
 release tags, installations, or GitHub native items changed in this audit.
 
-**Next Depot chunk: OR-EFFORT-01 — make OpenRouter effort requests and reports
-agree with the request actually sent.**
-[Complete execution prompt](prompts/or-effort-01-truthful-effort.md).
-This is a small prerequisite for economical model tuning. It does not select
-a new portfolio or redesign the harness. UI-READY-03 remains a reproduced,
-prepared development blocker and follows this repair.
+**Next Depot chunk: OR-EFFORT-01 — release closeout of existing PR #127.**
+[Complete execution prompt](prompts/or-effort-01-release-closeout.md).
+Follow-up inspection found the implementation at
+`0332eac31fb35e3d91b6ddffb056604f49716fd2`; the exact-head loopback regression
+and terminal-report tests passed. It is open, with publication, both cache
+updates and installed-consumer proof pending. Do not duplicate implementation.
+UI-READY-03 remains the next code chunk after this delivery. The audit below
+retains the earlier source and filesystem snapshot.
 
 ## Product constraints
 

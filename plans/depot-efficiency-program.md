@@ -2,20 +2,40 @@
 
 ## Active coordination (refreshed 2026-09-07)
 
-**Next: OR-EFFORT-01 -- truthful OpenRouter effort propagation and reporting.**
-[Complete execution prompt](prompts/or-effort-01-truthful-effort.md).
-The user's subsequent system-wide model/instruction audit found that the router
-reports normalized effort which its OpenRouter transport does not send.
+**Next: OR-EFFORT-01 -- close out existing PR #127.**
+[Complete release-closeout prompt](prompts/or-effort-01-release-closeout.md).
+The implementation is open at `0332eac31fb35e3d91b6ddffb056604f49716fd2`,
+branch `fix/openrouter-effort-contract`, in its clean existing worktree. Do not
+rerun the [original implementation prompt](prompts/or-effort-01-truthful-effort.md).
+The coordinator inspected the exact diff and reran the real loopback effort
+regression (four levels, read and bounded-write paths) and terminal report
+suite (37 assertions): both passed. Full composition is reported in the PR;
+hosted Codesmith is SKIPPED and there are no submitted reviews.
+
+PR #126 merged at current main `76267e0e10845e1f9ea4a5eb533b6ca9628b12be`;
+it delivered benchmark identity/review compatibility, not OR-EFFORT-01.
+PR #127 contains model-router 0.6.2 and OpenRouter 1.20.2. Neither new tag
+exists and both harness caches still select 0.6.1/1.20.1. Merge, trusted-main
+proof, publication, cache synchronization and the real installed canary remain
+pending. Project 1 already has #127 at Review/P1/Tooling; no field change needed.
+
+This follow-up found eight registered Depot worktrees after external cleanup.
+The primary still has modified CLAUDE.md and 169 deleted tracked todos; its old
+nested benchmark checkout is no longer present. This planning session performed
+no cleanup. The inventories below retain the earlier audit snapshot.
+
+The user's system-wide model/instruction audit found that the router reports
+normalized effort which the released OpenRouter transport does not send.
 [Audit, proposed model defaults, budget and bounded sequence](model-and-instruction-optimization-20260907.md).
 UI-READY-03 remains reproduced, prepared and unclaimed; its
 [complete prompt](prompts/ui-ready-03-repository-target-discovery.md) follows the
-effort repair. Neither chunk is implemented by this planning branch.
+effort repair's delivery. Neither chunk is implemented by this planning branch.
 
 Repository: `Design-Machines-Studio/depot`. Refreshed `origin/main`:
 `76267e0e10845e1f9ea4a5eb533b6ca9628b12be`. Authenticated GitHub reports no
-open Depot Issues or PRs. The existing [Assembly Coordination Project
-1](https://github.com/orgs/Design-Machines-Studio/projects/1) has 262 items;
-all represented Depot items are Done. No Project fields or native items were
+open Depot Issues and one open PR (#127). The existing [Assembly Coordination Project
+1](https://github.com/orgs/Design-Machines-Studio/projects/1) has 265 items;
+#127 is Review/P1/Tooling. No Project fields or native items were
 changed by this refresh. Import only active work that advances Assembly.
 
 The primary checkout remains `bench/gpt-6-astra-screen` at
