@@ -9,6 +9,11 @@ disable-model-invocation: true
 This internal skill owns cross-transport role resolution. It is a local policy
 bundle and one-shot dispatcher, not a service.
 
+For human-facing session setup and calibration, read
+`references/driver-worker-guidance.md`. It separates the operator's main driver
+from routed workers. Never copy its concrete identities into participant
+packets; explicit role effort and transport normalization remain separate.
+
 Callers provide only a role, required capabilities, normalized effort, the
 exact validated Workflow Kernel launcher for that invocation, prompt file,
 output destination, private receipt destination, an explicit complete

@@ -202,6 +202,13 @@ Use sparingly. The full validator (`bash tools/validate-composition.sh --all`) r
 
 ## Model & Effort Tuning
 
+For Codex operator sessions, default to GPT-6 Astra Low; use Medium for demanding
+work and High or above only for a named difficult problem. Bounded workers have
+separate roles and effort. The human-facing calibration and optional context
+tradeoffs live in
+`plugins/model-router/skills/model-router/references/driver-worker-guidance.md`.
+This does not change Claude host settings or select identities in agent cards.
+
 **Review origin evidence is not a prerequisite.** Ordinary review lanes must
 run without historical implementation receipts or family exclusions. Missing
 origin metadata never makes an otherwise completed review `REVIEW INCOMPLETE`.

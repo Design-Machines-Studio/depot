@@ -5,9 +5,9 @@
     "docs": {"executorRole": "builder-fast", "executorCapabilities": ["read-repository", "write-repository", "structured-output"], "executorEffort": "low"},
     "config": {"executorRole": "builder-fast", "executorCapabilities": ["read-repository", "write-repository", "structured-output"], "executorEffort": "medium"},
     "mechanical-logic": {"executorRole": "builder-fast", "executorCapabilities": ["read-repository", "write-repository", "structured-output"], "executorEffort": "medium"},
-    "logic": {"executorRole": "builder-deep", "executorCapabilities": ["read-repository", "write-repository", "long-context", "structured-output"], "executorEffort": "high"},
-    "ui": {"executorRole": "builder-deep", "executorCapabilities": ["read-repository", "write-repository", "structured-output"], "executorEffort": "high"},
-    "integration": {"executorRole": "builder-deep", "executorCapabilities": ["read-repository", "write-repository", "long-context", "structured-output"], "executorEffort": "high"}
+    "logic": {"executorRole": "builder-deep", "executorCapabilities": ["read-repository", "write-repository", "long-context", "structured-output"], "executorEffort": "medium"},
+    "ui": {"executorRole": "builder-deep", "executorCapabilities": ["read-repository", "write-repository", "structured-output"], "executorEffort": "medium"},
+    "integration": {"executorRole": "builder-deep", "executorCapabilities": ["read-repository", "write-repository", "long-context", "structured-output"], "executorEffort": "medium"}
   },
   "legacyExecutorTranslation": {
     "openrouter": {"executorRole": "builder-fast", "executorCapabilities": ["read-repository", "write-repository", "structured-output"], "executorEffort": "medium"},
