@@ -1,5 +1,10 @@
 # UI-READY-03: discover documented repository browser targets
 
+> SOURCE MERGED as PR #128 on 2026-09-07. Do not rerun this implementation prompt.
+> Delivery remains incomplete; an uncommitted follow-up occupies its worktree.
+> Use the [complete continuation prompt](ui-ready-03-merged-followup.md) after
+> confirming session ownership.
+
 Work in `Design-Machines-Studio/depot` from `/home/ned/ai/depot`.
 Exact planning base: `e3518a1ebef4f299fe9ca009957f15c2f10c1388`.
 

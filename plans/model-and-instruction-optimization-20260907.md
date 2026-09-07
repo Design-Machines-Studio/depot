@@ -3,16 +3,18 @@
 Planning only. No plugin code, project instructions, personal configuration,
 release tags, installations, or GitHub native items changed in this audit.
 
-**Next Depot chunk: UI-READY-03 — documented browser target discovery.**
-[Complete execution prompt](prompts/ui-ready-03-repository-target-discovery.md).
-OR-EFFORT-01 is complete at published consumer-proof level: #127 merged as
-`e3518a1ebef4f299fe9ca009957f15c2f10c1388`, its tree matches verified head
-`0332eac31fb35e3d91b6ddffb056604f49716fd2`, both plugin tags and harness caches
-are verified, and the installed Baseplate analysis canary measured $0.00521858.
-The canary did not execute Assembly tests. Project 1 is already Done/P1/Tooling;
-no changes were needed. See the [phase index](depot-efficiency-program.md) for
-current source, consumer heads and delivery evidence. The detailed audit below
-retains its original filesystem/model evidence; it is not a new live inventory.
+**Next Depot chunk: finish the existing UI-READY-03 repair and consumer proof.**
+[Complete continuation prompt](prompts/ui-ready-03-merged-followup.md).
+PR #128 merged at `bda7cab9ddc97b1bf8746da05ce275584d281031`; its exact source
+passes focused tests, but general review and successful desktop/mobile proof are
+missing. No release tag exists; Codex has 1.80.0 and Claude retains 1.79.1.
+The original worktree contains an uncommitted Compose/Kernel follow-up. Preserve
+its owner and finish this lane before promoting MODEL-PORTFOLIO-01.
+
+OR-EFFORT-01 remains complete at published consumer-proof level. See the
+[phase index](depot-efficiency-program.md) for current delivery and ownership
+evidence. The detailed audit below retains its original filesystem/model
+snapshot; it is not a fresh live inventory.
 
 ## Product constraints
 

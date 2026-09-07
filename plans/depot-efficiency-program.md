@@ -1,118 +1,116 @@
 # Depot Efficiency Program -- Phase Index
 
-## Active coordination (refreshed 2026-09-07 after PR #127 publication)
+## Active coordination (2026-09-07, after PR #128 merge)
 
-**Next: UI-READY-03 — discover documented repository browser targets.**
-[Complete execution prompt](prompts/ui-ready-03-repository-target-discovery.md).
-One bounded dm-review branch, currently unclaimed. The installed router's
-read-only recommendation is Sol / Codex / high, with Terra / Codex / high as
-its one fallback; matrix evidence is dated 2026-08-27. Resolve again at dispatch.
-Concrete identities belong in the human recommendation, not participant packets.
+**Next: finish the existing UI-READY-03 repair and consumer proof.**
+[Complete continuation prompt](prompts/ui-ready-03-merged-followup.md).
+Do not start another discovery implementation or promote the portfolio chunk.
+A follow-up already exists in the original UI-READY worktree. Its session
+ownership is pending confirmation; treat it as active and leave it untouched.
 
-**OR-EFFORT-01 is complete at published consumer-proof level.**
-[PR #127](https://github.com/Design-Machines-Studio/depot/pull/127) was verified
-at `0332eac31fb35e3d91b6ddffb056604f49716fd2` and squash-merged as
-`e3518a1ebef4f299fe9ca009957f15c2f10c1388`. Both trees are
-`39728d04270bb09efb117c99b02989189040ddf2`. Exact-head and trusted-main full
-composition passed in the release evidence; hosted Codesmith was SKIPPED.
-The coordinator previously reran the real loopback effort regression and
-terminal-report suite at the PR head. No retained repair remains.
+### Exact source and delivery evidence
 
-Annotated tags `model-router-v0.6.2` and `openrouter-v1.20.2` peel to that merged
-commit. Their tag objects are `6b5866a1e594eae5f002592eae28c3a3f264b04c` and
-`d67d91ffdf8d84bb452253d5a696738ebfa1ff6e`. All 29 tracked router files and 24
-tracked OpenRouter files match the released source in both Claude and Codex
-caches. The release run verified coherent active-host resolution in both harnesses.
+Depot `origin/main` is `bda7cab9ddc97b1bf8746da05ce275584d281031`.
+[PR #128](https://github.com/Design-Machines-Studio/depot/pull/128) merged from
+`f37d790c4155e8417db043b080e1084dc41da758`; both trees are
+`407045a5cb01121635987a00394f91a5f05f03fb`. No open Depot Issue or PR exists.
+Hosted Codesmith is SKIPPED, with no submitted GitHub review. The PR records
+passing full composition; this coordinator reran the exact committed discovery
+suite (54 assertions) and readiness suite (92 assertions), both passing.
 
-The installed canary analyzed Baseplate
-`2fd96359e1c9e239d0eef0ced80f046c08a24432`, correctly identified
-`go-full-non-race`, and did not claim to run its tests. One native architect call
-and one metered plan-critic call served with high effort transmitted; the paid
-call used 1,718 tokens, 17 seconds and $0.00521858, with no fallback. Native
-usage/cost and model-internal reasoning measurements remain unavailable.
-[Release evidence](https://github.com/Design-Machines-Studio/depot/pull/127#issuecomment-5564362456).
-The old effort implementation and release prompts are completed history.
+Merged code adds bounded host discovery, repository evidence and checkout
+binding. It does not prove the successful Docker/Compose-to-browser path:
+its helper accepts `pre-existing` or `review-created-process` evidence, while
+current Fixture author loops are Docker-only. The local follow-up adds the
+Compose ownership handoff. Inspect that candidate separately from merged code;
+its working files are not PR #128 evidence.
 
-Repository: `Design-Machines-Studio/depot`. Current `origin/main`:
-`e3518a1ebef4f299fe9ca009957f15c2f10c1388`. Authenticated GitHub reports no
-open Depot Issues or PRs. Existing Assembly Coordination Project 1 item
-`PVTI_lADODlpzCc4BgGQJzg5tfjc` is already Done / P1 / Tooling. Project fields
-changed by this refresh: **None**. No native item lifecycle was changed.
+The PR reports two attempted consumer starts. Governance's documented Baseplate
+alpha.16 lacked generated page packages; Baseplate main's smoke container exited
+before readiness. These establish attempted startup/failure reporting, not
+successful desktop/mobile review. The general-review role was unavailable.
+A security review and recheck served, but neither replaces the missing general
+review or live canary. Check the documented Baseplate `make templ-generate`
+prerequisite before diagnosing a product defect or changing Fixture dependencies.
 
-The primary remains `bench/gpt-6-astra-screen` at
-`6ab616fd5e3bd5c7f2e11ed44677413f0d8de759`, with modified CLAUDE.md and 169
-deleted tracked todos. Nine Depot worktrees are registered: the primary,
-this planning worktree, the completed effort implementation and release
-worktrees, and five historical pulse/benchmark/review worktrees. No current
-UI-READY implementation owner was found. All existing user work is preserved;
-this session performs no cleanup. The clean planning branch incorporates current
-main before this documentation repair.
+`dm-review-v1.80.0` does not exist remotely. Codex's installed 1.80.0 matches all
+80 tracked files of merged source; Claude remains on 1.79.1. This is partial cache
+installation, not a published dual-harness release. Strongest overall delivery:
+**merged source with local tests and failed-start evidence; successful consumer
+proof, converged general review, publication and both-cache synchronization
+remain outstanding**.
 
-### Current source and delivery evidence
+OR-EFFORT-01 remains complete at published consumer-proof level: #127 merge
+`e3518a1ebef4f299fe9ca009957f15c2f10c1388`, published model-router 0.6.2 and
+OpenRouter 1.20.2, both caches and installed Baseplate analysis canary. Its
+measured paid call was $0.00521858; no Assembly test execution was claimed.
+Do not rerun the completed effort prompts.
 
 | Area | Current version/state | Active problem | Evidence | Consumer impact | Next decision |
 |---|---|---|---|---|---|
-| Pipeline | 1.66.1 | Final browser review inherits target-discovery gap | #120 packet reuse plus shared readiness contract | Documented Fixture targets may be missed | Consume dm-review's shared repair |
-| dm-review | 1.79.1 | Stops before checking repository runbooks | Required prepare returned exit 76; unchanged selector on current main | Required desktop/mobile cases do not run | UI-READY-03 next |
-| model-router | 0.6.2, published/installed/proven | Portfolio freshness remains a later improvement | #127 wire regression and installed canary | Effort transmission is now truthful | Preserve repair; portfolio pass after UI |
-| OpenRouter | 1.20.2, published/installed/proven | Matrix/price freshness and proactive offload remain | Matrix dated 2026-08-27; #127 consumer cost measured | Usage relief works within bounded paid calls | Later portfolio/budget policy pass |
-| Workflow Kernel | 0.19.1 | No new reproduced blocker | Existing deterministic verification/observation contracts | Reuse available state and evidence | No new service or state layer |
-| project-manager | 1.13.0 | Planning snapshot needed release follow-up | Live GitHub and installed recommendation | Next prompt now starts from delivered source | Planning-only repair here |
-| Assembly plugin | 3.16.0 | Instruction size/prototype split are later work | System instruction audit | Consumer lifecycle remains repository-owned | No Assembly plugin bump in UI chunk |
-| release/sync | #127 reached published consumer proof | UI repair still needs its own proof sequence | Tags, identical caches, installed analysis canary | Prior canary proves routing, not browser behavior | Prepare UI release; do not publish here |
-| measurement | Effort receipts repaired | R0/R1 comparable aggregate evidence remains incomplete | Source and single-run receipts exist | No defensible review-loop saving percentage yet | Retain evidence commitment |
+| Pipeline | 1.66.1 | Successful final-browser path still unproven | Shared dm-review contract | Fixture review cannot yet claim rendered completion | Finish existing UI lane |
+| dm-review | 1.80.0 merged; 28-file local follow-up spans related surfaces | Compose handoff and complete consumer proof | Exact helper only accepts process/pre-existing evidence; local repair adds Compose | Documented Docker author loop is the current consumer | Reconcile and finish existing repair |
+| model-router | 0.6.2 published/proven | General review unavailable in #128 run | Existing attempt receipts | Missing review is not a clean pass | Retry one bounded role through current routing |
+| OpenRouter | 1.20.2 published/proven | Portfolio freshness remains later | Matrix evidence 2026-08-27 | Bounded paid offload is available under budget | No routing change in this chunk |
+| Workflow Kernel | 0.19.1 main; 0.20.0 local candidate | Existing local repair adds registry validation for readiness | Uncommitted CLI/runtime/tests in UI worktree | Compose cleanup must retain exact ownership | Retain only demonstrated integration need |
+| project-manager | 1.13.0 | Planning needed post-merge correction | Live GitHub/source/cache checks | Prevent duplicate execution | Planning-only maintenance |
+| Assembly plugin | 3.16.0 | No plugin blocker selected | Consumer launchers remain repository-owned | Use documented generation and author loop | No Assembly plugin change |
+| release/sync | No dm-review 1.80.0 tag; caches differ | Incomplete delivery and active source follow-up | Remote refs and tracked cache byte comparison | Installed behavior differs between harnesses | Repair/prove before release closeout |
+| measurement | Existing receipts | R0/R1 aggregate acceptance still incomplete | Single-run tests/cost evidence are not aggregate savings | No supported review-loop saving percentage | Retain original evidence commitments |
 
-No required hosted validation gate was configured at the prior authenticated
-rules/protection inspection. Do not describe skipped Codesmith as green CI or
-turn this into a new CI platform project. The release evidence records passing
-full composition at the exact candidate and trusted-main source. This planning
-repair also passed `./tools/validate-composition.sh --all` after incorporating
-that main; local links, prompt fields, provider-neutral routing and
-`git diff --check` passed. No plugin, tool or test file differs from main.
+### Ownership and consumer boundary
 
-### Browser chunk and its ownership boundary
+The protected primary remains `bench/gpt-6-astra-screen` at
+`6ab616fd5e3bd5c7f2e11ed44677413f0d8de759`, with modified CLAUDE.md and 169
+tracked deletions. Ten Depot worktrees are registered: primary, this planning
+worktree, UI-READY, completed OR-EFFORT implementation/release, and five historical
+pulse/benchmark/review worktrees. This session modifies only its planning branch.
 
-Current `ui-review-readiness.md` selects an invocation URL, attached T3 preview,
-or optional `.dm/ui-review.json`; accepted exact Pipeline packets can replace
-capture. The host and helper do not first inspect normal repository declarations.
-The installed 1.79.1 helper returned `visual_target_unavailable`, exit 76, against
-local Governance `8e4a0a8d943399a90ab92c810b5acdaa4bcd9c04`, whose AGENTS.md
-names a loopback development URL and `make dev ACTION=<action>`. No state or
-resource was created. This is prerequisite-failure proof, not a browser canary.
+The original UI worktree is
+`/home/ned/ai/depot-worktrees/ui-ready-03-repository-target-discovery`, branch
+`fix/ui-ready-03-repository-target-discovery`, HEAD `f37d790c4155e8417db043b080e1084dc41da758`.
+At inspection it has 28 modified files, including dm-review's helper/contracts,
+Workflow Kernel registry/runtime/CLI, validators and generated metadata. No new
+PR exposes that work. Do not overwrite, copy or adopt it while its owner is active.
+A stopped owner must hand off an exact snapshot before a fresh branch adopts it.
 
-Fresh authenticated consumer source confirms the declarations remain:
+Fresh consumer heads: Baseplate `40dc3cb8d189bc1cdce9a8189822920e4596a03f`,
+Governance `4777a292bd4ea52b74bbbc0c82be1524ca0f0299`, Jig
+`50f0d47c275928953dcaa81ee15d68e05cf0a0ae`. Governance PR #42 is active at
+`16035740e0723e7b5e59d7629aa121557a4524f7`; Baseplate PR #856 and planning
+PR #847 are also active. Do not edit their product or instruction surfaces.
+Use an isolated compatible declared composition; Governance retains its
+`v0.1.1-alpha.16` constraint (`7fa3f108604a2e604e4dc99af5fb96d90b5ae307`).
+Jig owns its portable browser declaration and concrete Fixture cases remain
+consumer-owned. A consumer startup defect requires a precise owner handoff,
+not a Depot product patch or silently changed dependency.
 
-- Governance `4777a292bd4ea52b74bbbc0c82be1524ca0f0299`: AGENTS.md describes
-  the Docker-only Make author loop, Baseplate delegation and loopback URL;
-  `tests/ux/verification.json` exists. No `.dm/ui-review.json` or open PR.
-- Jig `50f0d47c275928953dcaa81ee15d68e05cf0a0ae`: Make development actions,
-  documented unique instances and Baseplate launcher delegation. No
-  `.dm/ui-review.json` or open PR.
-- Baseplate `a8d8d39400475a8e3fe195e29c8d64638e9814df`: owns `make smoke-server`
-  and the generic `docs/operations/fixture-development.md` lifecycle. Product
-  PR #852, planning PR #847 and dependency PRs remain consumer-owned. Do not
-  hardcode a port or edit those branches to make the Depot canary convenient.
+Project 1 item `PVTI_lADODlpzCc4BgGQJzg5uhhk` is Done / P1 / Tooling. Keep it
+as the merged PR's source projection; do not claim that it proves UI-READY's full
+delivery. Represent a later repair PR separately when it actually exists.
+Project changes: **None**. Safe parallel lanes: **None**.
 
-Depot owns bounded host discovery, prerequisite classification, exact source
-proof, and reuse of existing cleanup. Jig owns the portable Fixture authoring
-handoff; production Fixtures own targets, personas and cases; Baseplate owns its
-launcher. UI-READY-03 adds no general parser, schema, browser broker, service or
-copied release policy. Prove a documented isolated Governance/Jig composition
-at desktop and mobile; separately cover Baseplate smoke declaration discovery.
-Prepare Jig's missing declaration handoff without implementing a consumer change
-in the Depot branch. Safe new parallel lanes: **None**.
+The [model/instruction optimization sequence](model-and-instruction-optimization-20260907.md)
+remains intact after this delivery. Historical evidence below remains classified;
+no new R-series, model tournament or harness platform scope is authorized.
 
-The [model/instruction audit and later bounded sequence](model-and-instruction-optimization-20260907.md)
-remain in force. UI-READY-03 comes before MODEL-PORTFOLIO-01, then generator and
-consumer instructions, targeted skill reductions, and evidence-driven harness
-work. Old consumer roadmap snapshots below are historical, not ownership authority.
+Planning validation: `./tools/validate-composition.sh --all` passed after this
+branch incorporated current main. Planning links, prompt fields, provider-neutral
+routing and `git diff --check` passed. No plugin, tool or test differs from main;
+this proof does not cover the other worktree's uncommitted candidate.
+Release preflight remains blocked by the preserved #128 remote branch carrying
+the same untagged 1.80.0 version as merged main. Its plugin tree is identical to
+the merged source, and this branch adds only planning documents relative to main.
+The user-authorized documentation push does not publish that plugin; no tag,
+merge or cache synchronization is performed. Do not report release preflight
+as passed or remove another session's branch to silence it.
 
 ### Remaining plan disposition
 
 | Plan or commitment | Classification | Evidence / promotion condition |
 |---|---|---|
 | OR-EFFORT-01 | COMPLETED / PUBLISHED CONSUMER PROOF | #127 merged, both tags/caches verified, installed Baseplate analysis canary; no test-execution claim |
-| UI-READY-03 | ACTIVE / PREPARED | One bounded dm-review branch; no Issue/PR yet; fresh reproduction above |
+| UI-READY-03 | MERGED SOURCE / ACTIVE FOLLOW-UP / CONSUMER PROOF INCOMPLETE | #128 merged; original worktree has uncommitted Compose/Kernel repair; no tag, general review and successful browser canary outstanding |
 | R0 measurement backbone | SOURCE COMPLETE; aggregate acceptance UNCERTAIN | Receipts and later instrumentation exist; the original three comparable real-run acceptance tally is not established by this refresh |
 | R1 review burn cuts | SOURCE COMPLETE; measurement BLOCKED ON COMPARABLE EVIDENCE | Existing [unusable-baseline notice](../docs/cost-baselines/2026-08-08-r1-review-burn-cuts.unusable.md) requires a real full/selective loop pair; do not substitute implementation bytes or the context-diet percentage |
 | R2 pre-gates/evidence reuse | COMPLETED / NO CODE | Existing verification ordering and bounded exact reuse cover the residual; old mechanical-glob policy is not authorized |
