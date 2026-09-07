@@ -112,6 +112,10 @@ protocol below before invoking it.
   to the request order for the fallback model.
 - `OPENROUTER_ALLOW_FALLBACKS` (`0|1`, default `1`): whether routing may fall
   through to other eligible providers.
+- `OPENROUTER_REASONING_EFFORT` (optional): sends the supported OpenRouter
+  `reasoning.effort` request setting. Accepted values are
+  `none|minimal|low|medium|high|xhigh|max`. When omitted, the wrapper sends no
+  effort field and records the provider/model default as unknown.
 - `OPENROUTER_OVERALL_TIMEOUT` (default `3600`): overall streamed completion
   budget when the positional timeout is omitted.
 - `OPENROUTER_CONNECT_TIMEOUT` (default `30`): TCP/TLS connection timeout.
@@ -207,12 +211,24 @@ POST https://openrouter.ai/api/v1/chat/completions
   },
   "stream": true,
   "stream_options": {"include_usage": true},
+  "reasoning": {"effort": "high"},
   "messages": [
     {"role": "system", "content": "..."},
     {"role": "user", "content": "..."}
   ]
 }
 ```
+
+OpenRouter advertises model-specific effort levels in its model catalog and
+maps unsupported levels to the nearest supported level. Automated router calls
+therefore apply the router policy's normalized effort and keep
+`provider.require_parameters=true`; a provider that cannot accept the required
+parameter is ineligible rather than silently degrading. Wrapper receipts
+separate the requested setting, the value proven in the transmitted request
+envelope, and the unavailable model-internal reasoning measurement. Direct
+calls that omit effort remain compatible and report `default-unknown`.
+See OpenRouter's current [reasoning-token request
+contract](https://openrouter.ai/docs/guides/best-practices/reasoning-tokens).
 
 ## Exit Codes & Error Handling
 

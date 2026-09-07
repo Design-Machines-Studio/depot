@@ -4,6 +4,13 @@ This contract is the only point where concrete router identity may leave a
 private receipt. It runs for the human operator only, after the invocation has
 a closed terminal status and every model-dependent decision has settled.
 
+The effort columns distinguish the normalized effort requested by the caller
+from the setting proven transmitted to the selected transport. Missing legacy
+evidence, fixture-only evidence, skipped attempts, and omitted provider
+settings render as `unavailable`; the renderer never recovers a transmitted
+value from historical `effectiveEffort` alone. Transmission proves the request
+setting, not the model's internal reasoning process.
+
 ## Terminal ownership
 
 Exactly one workflow owns reporting for an invocation:

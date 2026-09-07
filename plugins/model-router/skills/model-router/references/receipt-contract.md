@@ -1,8 +1,9 @@
 # Private dispatch receipt
 
 The dispatcher writes schema version 1, content-free JSON. The private surface
-contains request role and effort, anonymous participant ID, requested and
-effective effort, attempted candidates, served model/provider/transport,
+contains request role and effort, anonymous participant ID, requested,
+transport-normalized, and transmitted effort, attempted candidates, served
+model/provider/transport,
 billing mode, duration, token and cost provenance, fallback reason, matrix
 snapshot, and family-independence result. It contains no prompt or model output.
 Availability/fallback reasons are limited to router-authored content-safe codes,
@@ -15,14 +16,23 @@ including `rate_limit_probe_no_response`, `rate_limit_response_malformed`,
 `provider_model_unavailable`, `organization_monthly_budget_exceeded`,
 `insufficient_credits`, `rate_limited`, `unknown_provider_failure`,
 `browser_transport_unavailable`, and
-`model_participant_unavailable`. They
+`model_participant_unavailable`, and
+`provider_effort_evidence_unavailable`. They
 never contain raw CLI/provider output, account identity, quota balances,
 credentials, prompts, or private paths.
 
-The ordinary caller sees only role, normalized capabilities, requested and
-effective effort, anonymous participant ID, disposition, fallback state, and
-output destination. Concrete receipt fields must never be copied into peer
-prompts or ordinary orchestration summaries.
+The ordinary caller sees only role, normalized capabilities, requested,
+transport-normalized, and transmitted effort, the closed transmission status,
+anonymous participant ID, disposition, fallback state, and output destination.
+`effectiveEffort` is retained as a compatibility alias for a confirmed
+`transmittedEffort`; it is null when transmission is unavailable. A transport
+stub is fixture-only evidence and cannot confirm provider transmission.
+Historical receipts without `effortTransmission` remain readable, but the
+terminal renderer reports their transmitted effort as `unavailable` rather
+than inferring it from the old `effectiveEffort` field. A transmitted setting
+records request-envelope or native-CLI evidence only; it is never a measurement
+of the model's internal reasoning process. Concrete receipt fields must never
+be copied into peer prompts or ordinary orchestration summaries.
 
 After every model-dependent decision has settled, the terminal workflow may
 load `terminal-report-contract.md` and pass one exact run-private ordered index
