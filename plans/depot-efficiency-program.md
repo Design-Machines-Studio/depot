@@ -1,128 +1,117 @@
 # Depot Efficiency Program -- Phase Index
 
-## Active coordination (refreshed 2026-09-07)
+## Active coordination (refreshed 2026-09-07 after PR #127 publication)
 
-**Next: OR-EFFORT-01 -- close out existing PR #127.**
-[Complete release-closeout prompt](prompts/or-effort-01-release-closeout.md).
-The implementation is open at `0332eac31fb35e3d91b6ddffb056604f49716fd2`,
-branch `fix/openrouter-effort-contract`, in its clean existing worktree. Do not
-rerun the [original implementation prompt](prompts/or-effort-01-truthful-effort.md).
-The coordinator inspected the exact diff and reran the real loopback effort
-regression (four levels, read and bounded-write paths) and terminal report
-suite (37 assertions): both passed. Full composition is reported in the PR;
-hosted Codesmith is SKIPPED and there are no submitted reviews.
+**Next: UI-READY-03 — discover documented repository browser targets.**
+[Complete execution prompt](prompts/ui-ready-03-repository-target-discovery.md).
+One bounded dm-review branch, currently unclaimed. The installed router's
+read-only recommendation is Sol / Codex / high, with Terra / Codex / high as
+its one fallback; matrix evidence is dated 2026-08-27. Resolve again at dispatch.
+Concrete identities belong in the human recommendation, not participant packets.
 
-PR #126 merged at current main `76267e0e10845e1f9ea4a5eb533b6ca9628b12be`;
-it delivered benchmark identity/review compatibility, not OR-EFFORT-01.
-PR #127 contains model-router 0.6.2 and OpenRouter 1.20.2. Neither new tag
-exists and both harness caches still select 0.6.1/1.20.1. Merge, trusted-main
-proof, publication, cache synchronization and the real installed canary remain
-pending. Project 1 already has #127 at Review/P1/Tooling; no field change needed.
+**OR-EFFORT-01 is complete at published consumer-proof level.**
+[PR #127](https://github.com/Design-Machines-Studio/depot/pull/127) was verified
+at `0332eac31fb35e3d91b6ddffb056604f49716fd2` and squash-merged as
+`e3518a1ebef4f299fe9ca009957f15c2f10c1388`. Both trees are
+`39728d04270bb09efb117c99b02989189040ddf2`. Exact-head and trusted-main full
+composition passed in the release evidence; hosted Codesmith was SKIPPED.
+The coordinator previously reran the real loopback effort regression and
+terminal-report suite at the PR head. No retained repair remains.
 
-This follow-up found eight registered Depot worktrees after external cleanup.
-The primary still has modified CLAUDE.md and 169 deleted tracked todos; its old
-nested benchmark checkout is no longer present. This planning session performed
-no cleanup. The inventories below retain the earlier audit snapshot.
+Annotated tags `model-router-v0.6.2` and `openrouter-v1.20.2` peel to that merged
+commit. Their tag objects are `6b5866a1e594eae5f002592eae28c3a3f264b04c` and
+`d67d91ffdf8d84bb452253d5a696738ebfa1ff6e`. All 29 tracked router files and 24
+tracked OpenRouter files match the released source in both Claude and Codex
+caches. The release run verified coherent active-host resolution in both harnesses.
 
-The user's system-wide model/instruction audit found that the router reports
-normalized effort which the released OpenRouter transport does not send.
-[Audit, proposed model defaults, budget and bounded sequence](model-and-instruction-optimization-20260907.md).
-UI-READY-03 remains reproduced, prepared and unclaimed; its
-[complete prompt](prompts/ui-ready-03-repository-target-discovery.md) follows the
-effort repair's delivery. Neither chunk is implemented by this planning branch.
+The installed canary analyzed Baseplate
+`2fd96359e1c9e239d0eef0ced80f046c08a24432`, correctly identified
+`go-full-non-race`, and did not claim to run its tests. One native architect call
+and one metered plan-critic call served with high effort transmitted; the paid
+call used 1,718 tokens, 17 seconds and $0.00521858, with no fallback. Native
+usage/cost and model-internal reasoning measurements remain unavailable.
+[Release evidence](https://github.com/Design-Machines-Studio/depot/pull/127#issuecomment-5564362456).
+The old effort implementation and release prompts are completed history.
 
-Repository: `Design-Machines-Studio/depot`. Refreshed `origin/main`:
-`76267e0e10845e1f9ea4a5eb533b6ca9628b12be`. Authenticated GitHub reports no
-open Depot Issues and one open PR (#127). The existing [Assembly Coordination Project
-1](https://github.com/orgs/Design-Machines-Studio/projects/1) has 265 items;
-#127 is Review/P1/Tooling. No Project fields or native items were
-changed by this refresh. Import only active work that advances Assembly.
+Repository: `Design-Machines-Studio/depot`. Current `origin/main`:
+`e3518a1ebef4f299fe9ca009957f15c2f10c1388`. Authenticated GitHub reports no
+open Depot Issues or PRs. Existing Assembly Coordination Project 1 item
+`PVTI_lADODlpzCc4BgGQJzg5tfjc` is already Done / P1 / Tooling. Project fields
+changed by this refresh: **None**. No native item lifecycle was changed.
 
-The primary checkout remains `bench/gpt-6-astra-screen` at
-`6ab616fd5e3bd5c7f2e11ed44677413f0d8de759`: modified CLAUDE.md, 169 deleted
-tracked todos, and one untracked nested benchmark checkout. All were preserved.
-The 24 other pre-existing registered worktrees were clean; recent relevant
-heads match merged PRs #116, #118, #120, #121, #123, and #125. Historical
-benchmark/pulse worktrees do not establish current implementation ownership.
-This coordination refresh uses its own `docs/depot-planning-20260907` worktree.
-Do not edit or remove another session's files or worktrees.
+The primary remains `bench/gpt-6-astra-screen` at
+`6ab616fd5e3bd5c7f2e11ed44677413f0d8de759`, with modified CLAUDE.md and 169
+deleted tracked todos. Nine Depot worktrees are registered: the primary,
+this planning worktree, the completed effort implementation and release
+worktrees, and five historical pulse/benchmark/review worktrees. No current
+UI-READY implementation owner was found. All existing user work is preserved;
+this session performs no cleanup. The clean planning branch incorporates current
+main before this documentation repair.
 
 ### Current source and delivery evidence
 
-| Area | Current version/state | Active problem / consumer impact | Evidence and next decision |
-|---|---|---|---|
-| Pipeline | 1.66.1 | Final review inherits the target-discovery gap | #116 repository-native proof, #118 prototype authority, #120 packet reuse, #123 routing provenance, #125 scope portability merged; reuse shared dm-review contract |
-| dm-review | 1.79.1 | Documented Fixture targets can be reported absent before any start attempt | Reproduced exit 76 against Governance; UI-READY-03 follows the effort repair |
-| model-router | 0.6.1 | Computed effort is recorded but omitted from OpenRouter invocation | OR-EFFORT-01 is next; retain #123/#126 discovery, provenance and ordinary-review behavior |
-| OpenRouter | 1.20.1 | Wrapper wire request contains no reasoning effort setting | Repair with model-router; portfolio/matrix refresh is separate; installed matrix dated 2026-08-27 |
-| Workflow Kernel | 0.19.1 | No newly reproduced scope blocker | #121 observation index and #125 device portability merged; no new state layer needed |
-| project-manager | 1.13.0 | This planning index lagged live state | #123 coordinator recommendation behavior is installed; planning-only repair here |
-| Assembly plugin | 3.16.0 | Consumer launchers/runbooks remain consumer-owned | Prototype authority and reusable development/release skills are installed; no plugin change selected |
-| release/sync | Seven listed versions tagged | Publication alone does not prove a consumer browser journey | Remote tag refs verified; every tracked plugin file matches both local harness caches |
-| measurement | Terminal reporting and benchmark bridge implemented | OpenRouter effort is not transmitted; R1 comparable review-loop proof remains unavailable | Repair effort truth first; collect comparable evidence after discovery repair |
+| Area | Current version/state | Active problem | Evidence | Consumer impact | Next decision |
+|---|---|---|---|---|---|
+| Pipeline | 1.66.1 | Final browser review inherits target-discovery gap | #120 packet reuse plus shared readiness contract | Documented Fixture targets may be missed | Consume dm-review's shared repair |
+| dm-review | 1.79.1 | Stops before checking repository runbooks | Required prepare returned exit 76; unchanged selector on current main | Required desktop/mobile cases do not run | UI-READY-03 next |
+| model-router | 0.6.2, published/installed/proven | Portfolio freshness remains a later improvement | #127 wire regression and installed canary | Effort transmission is now truthful | Preserve repair; portfolio pass after UI |
+| OpenRouter | 1.20.2, published/installed/proven | Matrix/price freshness and proactive offload remain | Matrix dated 2026-08-27; #127 consumer cost measured | Usage relief works within bounded paid calls | Later portfolio/budget policy pass |
+| Workflow Kernel | 0.19.1 | No new reproduced blocker | Existing deterministic verification/observation contracts | Reuse available state and evidence | No new service or state layer |
+| project-manager | 1.13.0 | Planning snapshot needed release follow-up | Live GitHub and installed recommendation | Next prompt now starts from delivered source | Planning-only repair here |
+| Assembly plugin | 3.16.0 | Instruction size/prototype split are later work | System instruction audit | Consumer lifecycle remains repository-owned | No Assembly plugin bump in UI chunk |
+| release/sync | #127 reached published consumer proof | UI repair still needs its own proof sequence | Tags, identical caches, installed analysis canary | Prior canary proves routing, not browser behavior | Prepare UI release; do not publish here |
+| measurement | Effort receipts repaired | R0/R1 comparable aggregate evidence remains incomplete | Source and single-run receipts exist | No defensible review-loop saving percentage yet | Retain evidence commitment |
 
-The current Pipeline, dm-review, model-router, OpenRouter, and Workflow Kernel
-annotated tags peel to PR #126 head
-`6ab616fd5e3bd5c7f2e11ed44677413f0d8de759`; that head merged as current main.
-project-manager 1.13.0 peels to #123 head `e7bac3439ae643facb27fe2ba3f70b3b5e3d7923`;
-Assembly 3.16.0 peels to `0c86ca4d163f5089f6378807be676146dd84c677`.
-Claude and Codex cache copies of all seven plugin trees match current main.
-No release, tag, or installation was changed in this planning session.
+No required hosted validation gate was configured at the prior authenticated
+rules/protection inspection. Do not describe skipped Codesmith as green CI or
+turn this into a new CI platform project. The release evidence records passing
+full composition at the exact candidate and trusted-main source. This planning
+repair also passed `./tools/validate-composition.sh --all` after incorporating
+that main; local links, prompt fields, provider-neutral routing and
+`git diff --check` passed. No plugin, tool or test file differs from main.
 
-Do not describe hosted CI as green: #120, #123, #125, and #126 expose only
-Codesmith SKIPPED, with no formal submitted reviews. Their PR bodies retain
-local verification evidence. Current main has zero check runs and no commit
-statuses; classic branch protection is absent and the branch-rules endpoint
-returns an empty array. No required hosted validation check is configured.
-PR #126 reports repaired benchmark fixtures and a passing full Kernel gate;
-this refresh separately runs the repository composition validator on clean main.
+### Browser chunk and its ownership boundary
 
-Planning validation: `./tools/validate-composition.sh --all` passed on the
-current-main plugin source with only this planning diff. UI readiness passed
-68 assertions, UI contract 30, and Pipeline browser evidence 12. Generated
-surfaces, dependencies, Kernel behavior, routing, and index checks passed.
-This is fresh local proof against trusted-main source, not hosted CI or a
-completed consumer browser journey.
-
-### Retained browser chunk and its ownership boundary
-
-Current `ui-review-readiness.md` stops after an invocation URL, attached T3
-preview, or optional `.dm/ui-review.json`; accepted exact Pipeline packets can
-replace capture. The helper does not inspect normal repository declarations.
+Current `ui-review-readiness.md` selects an invocation URL, attached T3 preview,
+or optional `.dm/ui-review.json`; accepted exact Pipeline packets can replace
+capture. The host and helper do not first inspect normal repository declarations.
 The installed 1.79.1 helper returned `visual_target_unavailable`, exit 76, against
 local Governance `8e4a0a8d943399a90ab92c810b5acdaa4bcd9c04`, whose AGENTS.md
-names `http://127.0.0.1:8097` and `make dev ACTION=<action>`. No state or resource
-was created. This is direct prerequisite-failure proof, not a completed browser
-canary or an assertion that the recorded server is running.
+names a loopback development URL and `make dev ACTION=<action>`. No state or
+resource was created. This is prerequisite-failure proof, not a browser canary.
 
-Current remote consumers confirm that this is not merely an old checkout:
+Fresh authenticated consumer source confirms the declarations remain:
 
-- Governance `d1f341dc051cdfd1bb4bbe55764dbb0d8f8ed32d` retains the URL and
-  Make development actions in AGENTS.md, plus declared desktop/mobile viewports.
-- Jig `50f0d47c275928953dcaa81ee15d68e05cf0a0ae` has Make development actions
-  delegating to Baseplate and a browser handoff. Both Fixture repositories lack
-  `.dm/ui-review.json` and have no open PRs at this refresh.
-- Baseplate `53238bdcce5c85076f68d5f0644cb876bf785fa3` owns its documented
-  smoke target and [generic Fixture development guide](https://github.com/Design-Machines-Studio/assembly-baseplate/blob/53238bdcce5c85076f68d5f0644cb876bf785fa3/docs/operations/fixture-development.md).
+- Governance `4777a292bd4ea52b74bbbc0c82be1524ca0f0299`: AGENTS.md describes
+  the Docker-only Make author loop, Baseplate delegation and loopback URL;
+  `tests/ux/verification.json` exists. No `.dm/ui-review.json` or open PR.
+- Jig `50f0d47c275928953dcaa81ee15d68e05cf0a0ae`: Make development actions,
+  documented unique instances and Baseplate launcher delegation. No
+  `.dm/ui-review.json` or open PR.
+- Baseplate `a8d8d39400475a8e3fe195e29c8d64638e9814df`: owns `make smoke-server`
+  and the generic `docs/operations/fixture-development.md` lifecycle. Product
+  PR #852, planning PR #847 and dependency PRs remain consumer-owned. Do not
+  hardcode a port or edit those branches to make the Depot canary convenient.
 
-Depot owns bounded host discovery, prerequisite classification, exact-head
-proof, and reuse of existing resource cleanup. Jig owns the canonical Fixture
-authoring declaration/handoff; production Fixtures own concrete targets,
-personas, and cases; Baseplate owns its launcher and lifecycle. UI-READY-03
-must not add a general runbook parser, schema, broker, service, or copied
-consumer policy. Its live canary uses an isolated exact-head Fixture composition
-and desktop/mobile evidence. Prepare the missing Jig handoff; do not implement
-consumer changes in the Depot branch. Safe new parallel lanes: **None**.
+Depot owns bounded host discovery, prerequisite classification, exact source
+proof, and reuse of existing cleanup. Jig owns the portable Fixture authoring
+handoff; production Fixtures own targets, personas and cases; Baseplate owns its
+launcher. UI-READY-03 adds no general parser, schema, browser broker, service or
+copied release policy. Prove a documented isolated Governance/Jig composition
+at desktop and mobile; separately cover Baseplate smoke declaration discovery.
+Prepare Jig's missing declaration handoff without implementing a consumer change
+in the Depot branch. Safe new parallel lanes: **None**.
 
-The former external handoff snapshot is retired: Baseplate #659 and Jig #8 are
-closed; Baseplate #681 closed unmerged; #682 merged as
-`e1f60f32712816abee2df3572c4b8f2cc56abe3b`. Current consumer roadmaps and
-active PRs remain in their owning repositories and Project 1.
+The [model/instruction audit and later bounded sequence](model-and-instruction-optimization-20260907.md)
+remain in force. UI-READY-03 comes before MODEL-PORTFOLIO-01, then generator and
+consumer instructions, targeted skill reductions, and evidence-driven harness
+work. Old consumer roadmap snapshots below are historical, not ownership authority.
 
 ### Remaining plan disposition
 
 | Plan or commitment | Classification | Evidence / promotion condition |
 |---|---|---|
+| OR-EFFORT-01 | COMPLETED / PUBLISHED CONSUMER PROOF | #127 merged, both tags/caches verified, installed Baseplate analysis canary; no test-execution claim |
 | UI-READY-03 | ACTIVE / PREPARED | One bounded dm-review branch; no Issue/PR yet; fresh reproduction above |
 | R0 measurement backbone | SOURCE COMPLETE; aggregate acceptance UNCERTAIN | Receipts and later instrumentation exist; the original three comparable real-run acceptance tally is not established by this refresh |
 | R1 review burn cuts | SOURCE COMPLETE; measurement BLOCKED ON COMPARABLE EVIDENCE | Existing [unusable-baseline notice](../docs/cost-baselines/2026-08-08-r1-review-burn-cuts.unusable.md) requires a real full/selective loop pair; do not substitute implementation bytes or the context-diet percentage |
@@ -138,7 +127,7 @@ active PRs remain in their owning repositories and Project 1.
 | Adaptive fusion, initial Kernel, Airlift, chain verification, Assembly release, prototype authority | COMPLETED SOURCE / historical plans | Current plugin capabilities and merged work supersede their prepared prompts; do not rerun the original kits |
 | Broad mechanical hardening, old Baseplate-hardening, audience/scaffolder kits, benchmark leftovers | UNCERTAIN RESIDUALS / NOT AUTHORIZED | Partial capability overlap and old local plans are leads only; a current consumer failure must justify a new bounded residual |
 
-Ignored plans and receipts in the primary checkout were read without modifying
+Historical inventory from the initial audit: ignored plans and receipts in the primary checkout were read without modifying
 or force-adding them. Other registered Depot worktrees reported no untracked
 planning files or dirty changes. The old primary `plans/depot-main-planner.md`
 and `plans/factory-throughput/prompts/README.md` remain historical, untracked

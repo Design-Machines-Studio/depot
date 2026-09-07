@@ -1,5 +1,9 @@
 # OR-EFFORT-01 — truthful OpenRouter effort
 
+> COMPLETED 2026-09-07: PR #127 is merged, tagged, synchronized and proven by
+> an installed consumer call. Historical prompt; do not rerun.
+> Next: [UI-READY-03](ui-ready-03-repository-target-discovery.md).
+
 ## Recommended start — human only, refreshed 2026-09-07
 
 - Model: GPT-5.6 Sol.

@@ -1,7 +1,7 @@
 # UI-READY-03: discover documented repository browser targets
 
 Work in `Design-Machines-Studio/depot` from `/home/ned/ai/depot`.
-Exact planning base: `76267e0e10845e1f9ea4a5eb533b6ca9628b12be`.
+Exact planning base: `e3518a1ebef4f299fe9ca009957f15c2f10c1388`.
 
 executorRole: builder-deep
 executorCapabilities: [read-repository, write-repository, tool-use, long-context, structured-output]
@@ -21,8 +21,9 @@ exact base before proceeding; stop only for a material scope/ownership conflict.
 
 Preserve the primary checkout and every existing worktree. At planning time the
 primary was `bench/gpt-6-astra-screen` at
-`6ab616fd5e3bd5c7f2e11ed44677413f0d8de759`, with a modified CLAUDE.md,
-169 deleted tracked todos, and an untracked nested benchmark checkout. Do not
+`6ab616fd5e3bd5c7f2e11ed44677413f0d8de759`, with a modified CLAUDE.md and
+169 deleted tracked todos. Nine Depot worktrees are registered, including the
+completed OR-EFFORT implementation and release checkouts. Do not
 stash, reset, clean, switch, rebase, discard files, or remove existing worktrees.
 Create a clean worktree outside it, under `/home/ned/ai/depot-worktrees/`, on a
 new `fix/ui-ready-03-repository-target-discovery` branch from refreshed main.
@@ -39,18 +40,22 @@ Pipeline browser evidence. Its required prepare path exits 76 with
 Planning reproduced that result against the untouched local Governance checkout
 at `8e4a0a8d943399a90ab92c810b5acdaa4bcd9c04`, despite AGENTS.md declaring
 `http://127.0.0.1:8097` and `make dev ACTION=<action>`. Current Governance main
-`d1f341dc051cdfd1bb4bbe55764dbb0d8f8ed32d` retains those declarations.
+`4777a292bd4ea52b74bbbc0c82be1524ca0f0299` retains those declarations.
 Jig main `50f0d47c275928953dcaa81ee15d68e05cf0a0ae` documents `make dev`
 delegating to Baseplate's `scripts/fixture-dev.sh`. Neither declares
 `.dm/ui-review.json`. Baseplate main at planning was
-`53238bdcce5c85076f68d5f0644cb876bf785fa3`; it owns
+`a8d8d39400475a8e3fe195e29c8d64638e9814df`; it owns
 `docs/operations/fixture-development.md`, `make smoke-server`, and the generic
 Fixture lifecycle. Reacquire consumer heads before proof.
 
 PR #120 delivered proportional case selection, source-capable UI analysis, and
 exact packet reuse; its Fixture declaration handoff remains incomplete.
-PRs #123, #125, and #126 delivered later routing/portability repairs. Preserve
-their behavior. No open Depot Issue or PR existed at prompt preparation.
+PRs #123, #125, and #126 delivered later routing/portability repairs. PR #127
+delivered OR-EFFORT-01: model-router 0.6.2 and OpenRouter 1.20.2 are merged,
+tagged, synchronized in both caches, and proven by an installed consumer call.
+Preserve that behavior; do not reopen effort work. No open Depot Issue or PR
+exists at this refresh. Governance and Jig have no open PRs. Baseplate has
+active product, planning and dependency PRs; leave those surfaces to their owners.
 
 ## Smallest intended change
 
@@ -88,6 +93,8 @@ Likely surfaces, not a mandate to edit all:
 
 ## Non-goals
 
+Build for two trusted developers and internally authored Fixtures serving
+5–50-person co-ops. Reuse current contracts; do not add enterprise ceremony.
 No runbook parser, browser broker, service, new general schema/ledger, port scan,
 invented command, model-routing change, broad review redesign, product feature,
 consumer release policy, or R-series implementation. Do not edit Baseplate,
@@ -135,6 +142,10 @@ Review request: executorRole `review-fast`, executorCapabilities
 If command execution or cleanup logic changes, additionally request the bounded
 `security-review` role with the same capabilities and effort. Resolve both
 independently; keep participant identity private.
+Use economical routed delegation when appropriate. Keep total metered calls
+for this chunk below $0.25 and within the user's $50/month target; check available
+usage evidence, and report aggregate monthly headroom as unavailable when it is
+not exposed. Do not change account limits or spend to exhaust an allowance.
 
 ## Versions, publication, and real consumer canary
 
@@ -189,6 +200,6 @@ Return exact base/head, branch, PR URL/checks, changed Project items, findings
 disposition, acceptance evidence, delivery level, and one next action. Include
 `SIMPLICITY-CHECK`, `NOT-COVERED`, and `COMMANDS-RUN` with exits. Require one
 compact terminal model-and-cost report: role, attempted and served participant,
-rail, effort, duration, outcome, measured tokens, measured paid cost,
-subscription calls, fallbacks, and unavailable measurements. Keep unknowns
+rail, requested/transmitted effort, duration, outcome, measured tokens,
+measured paid cost, subscription calls, fallbacks, and unavailable measurements. Keep unknowns
 explicit and subscription API-equivalent estimates separate from billed spend.

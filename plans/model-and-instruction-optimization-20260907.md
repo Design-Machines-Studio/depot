@@ -3,14 +3,16 @@
 Planning only. No plugin code, project instructions, personal configuration,
 release tags, installations, or GitHub native items changed in this audit.
 
-**Next Depot chunk: OR-EFFORT-01 — release closeout of existing PR #127.**
-[Complete execution prompt](prompts/or-effort-01-release-closeout.md).
-Follow-up inspection found the implementation at
-`0332eac31fb35e3d91b6ddffb056604f49716fd2`; the exact-head loopback regression
-and terminal-report tests passed. It is open, with publication, both cache
-updates and installed-consumer proof pending. Do not duplicate implementation.
-UI-READY-03 remains the next code chunk after this delivery. The audit below
-retains the earlier source and filesystem snapshot.
+**Next Depot chunk: UI-READY-03 — documented browser target discovery.**
+[Complete execution prompt](prompts/ui-ready-03-repository-target-discovery.md).
+OR-EFFORT-01 is complete at published consumer-proof level: #127 merged as
+`e3518a1ebef4f299fe9ca009957f15c2f10c1388`, its tree matches verified head
+`0332eac31fb35e3d91b6ddffb056604f49716fd2`, both plugin tags and harness caches
+are verified, and the installed Baseplate analysis canary measured $0.00521858.
+The canary did not execute Assembly tests. Project 1 is already Done/P1/Tooling;
+no changes were needed. See the [phase index](depot-efficiency-program.md) for
+current source, consumer heads and delivery evidence. The detailed audit below
+retains its original filesystem/model evidence; it is not a new live inventory.
 
 ## Product constraints
 
@@ -42,7 +44,7 @@ reachable failure, affected person, and smallest adequate repair. Keep every
 retained P1/P2/P3 finding blocking; reject speculative findings instead of
 expanding the product to satisfy them.
 
-## Evidence and current state
+## Original audit evidence (before PR #127; historical snapshot)
 
 Authenticated Depot main: `76267e0e10845e1f9ea4a5eb533b6ca9628b12be`.
 No open Depot Issues or PRs at this refresh. Primary checkout remains
@@ -120,13 +122,14 @@ Baseplate clones retain their current work untouched.
    describe the current Astra planning session. Proposed local defaults are
    Terra/medium for general coding and explicit Astra/medium planners, with
    Luna/low for clear mechanical tasks. Confirm task quality with small canaries.
-4. **OpenRouter effort reporting exceeds the evidence.**
+4. **OpenRouter effort reporting exceeded the evidence — resolved by #127.**
    `role-dispatch.sh:563` computes effective effort, but both OpenRouter read
    and write invocations omit it. `openrouter-wrapper.sh:470–512` constructs
    messages/provider/stream settings without reasoning effort; router receipts
    nevertheless record effective effort. Fix the transport and report requested,
    transmitted and unavailable evidence honestly. No model-quality claim can
-   substitute for this deterministic repair.
+   substitute for this deterministic repair. The repair is now published and
+   installed; retain this paragraph as the original demonstrated defect.
 5. **Model discovery and billing need freshness, not another routing service.**
    The installed recommendation still projects Sol API-equivalent prices of
    $5/$30 per million tokens from August 12. Current official comparison lists
@@ -212,11 +215,11 @@ do not forbid useful paid OpenAI fallback based on the stale sentence.
 
 ## Bounded sequence and ownership
 
-1. **OR-EFFORT-01 — Depot, model-router + OpenRouter.** Repair transmitted effort
-   and truthful reporting. One branch; no portfolio, monthly-cap service, browser
-   changes or new schema family. Local protocol proof, full composition, then
-   approved release/cache work and a real bounded consumer call.
-2. **UI-READY-03 — Depot, dm-review.** Complete the already prepared documented
+1. **OR-EFFORT-01 — COMPLETE, Depot model-router + OpenRouter.** #127 repaired
+   transmitted effort and truthful reporting. Exact-head/trusted-main full
+   composition, both tags/caches, and the installed bounded consumer call are
+   complete. No portfolio or browser change was included; do not rerun its prompts.
+2. **UI-READY-03 — NEXT, Depot dm-review.** Complete the already prepared documented
    target discovery repair. Preserve “do not guess, but do look,” exact-head
    evidence, T3-first automation and owned cleanup. Jig owns the portable Fixture
    declaration. Use Governance as the real browser canary.

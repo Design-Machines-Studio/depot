@@ -1,5 +1,9 @@
 # OR-EFFORT-01 — PR #127 release closeout
 
+> COMPLETED 2026-09-07: PR #127 is merged, tagged, synchronized and proven by
+> an installed consumer call. Historical prompt; do not rerun.
+> Next: [UI-READY-03](ui-ready-03-repository-target-discovery.md).
+
 Prepared 2026-09-07. Human recommendation: GPT-5.6 Sol, Codex subscription,
 high effort; exactly one fallback GPT-5.6 Terra, Codex subscription, high.
 The installed router reports both attemptable. Matrix evidence: 2026-08-27.
