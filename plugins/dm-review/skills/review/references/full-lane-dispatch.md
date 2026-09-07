@@ -63,7 +63,9 @@ Before any selected UI lane is dispatched, load `ui-case-selection.md` and
 `ui-review-readiness.md`. Select the affected case set once, then run the
 ordered application/browser gate once. Prefer an explicit invocation URL, then
 an attached automation-capable T3 preview, then optional tracked
-`.dm/ui-review.json`. A declared Compose consumer uses
+`.dm/ui-review.json`, then accepted exact-head packet reuse. If none supplies
+usable evidence, load `repository-browser-target-discovery.md` for the one
+bounded host-interpreted author-loop pass. A declared Compose consumer uses
 the existing review Docker creation/cleanup contracts; an exact declared
 process uses `ui-review-readiness.sh`. Verify reachability independently, then
 prove actual local browser navigation independently.
@@ -94,7 +96,8 @@ Validate it with `browser-evidence-packet.sh`; do not discover a latest packet.
 Only an exact repository/prototype commit, dirty state, selected-case, artifact
 hash, and successful completion match replaces current host capture. On
 rejection, attempt the ordinary readiness path and never report rendered
-success from the rejected packet.
+success from the rejected packet. The ordinary path includes bounded
+repository discovery; Pipeline does not create a separate fallback ladder.
 
 The terminal report owner supplies this exact private directory and its
 `terminal-receipt-index.json`. After a parallel fan-out joins, extend the index

@@ -283,6 +283,7 @@ DM_REVIEW_REQUIRED_ASSETS=(
   "skills/review/references/reviewer-output-contract.md"
   "skills/review/references/host-verification-evidence.md"
   "skills/review/references/ui-review-readiness.md"
+  "skills/review/references/repository-browser-target-discovery.md"
   "skills/review/references/ui-review-readiness.sh"
   "skills/review/references/ui-review-contract.sh"
   "skills/review/references/ui-case-selection.md"
@@ -471,6 +472,18 @@ resources this invocation created. Never infer readiness from changed file
 extensions or interpret supported viewport/engine declarations as a full
 matrix requirement.
 
+If those sources and accepted exact-head packet reuse supply no usable
+evidence, load
+`${CLAUDE_SKILL_DIR}/references/repository-browser-target-discovery.md` and run
+its one bounded host-interpreted pass. Inspect only the current root
+instructions, directly named development runbooks, relevant declared Makefile
+and Compose declarations, `tests/ux/verification.json`, and directly named
+browser handoffs. Preserve bounded source lines and exact command/URL
+provenance in the existing readiness evidence. Never guess ports, scan
+localhost, synthesize commands, require a new checked-in declaration when the
+repository already documents an adequate author loop, or label a discovered
+target as user-supplied.
+
 Verify application reachability and actual local interactive browser
 navigation independently. OpenRouter web search and generic `tool-use` never
 satisfy local browser readiness. Current browser interaction is host-owned;
@@ -487,7 +500,7 @@ never create that requirement. If readiness succeeds but an analysis role is
 unavailable, report `model_participant_unavailable` distinctly.
 
 When Pipeline passes an explicit exact packet path, validate it with
-`browser-evidence-packet.sh` before readiness. Reuse it only for exact matching
+`browser-evidence-packet.sh` at the packet-reuse precedence point. Reuse it only for exact matching
 repository/prototype commits, clean/dirty state, selected case set, successful
 completion, and artifact hashes. Never discover a packet by latest file or
 timestamp. On rejection, attempt normal current target readiness; a required
@@ -677,7 +690,7 @@ invocation.
 
 ## Reference Files
 
-Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `ui-case-selection.md` (affected/full UI case boundary), `ui-review-readiness.md` (shared source/rendered readiness gate), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (exact worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
+Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `ui-case-selection.md` (affected/full UI case boundary), `ui-review-readiness.md` (shared source/rendered readiness gate), `repository-browser-target-discovery.md` (bounded host interpretation of repository author loops after ordinary target/evidence sources fail), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (exact worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
 
 ## Agent Definition Paths
 
