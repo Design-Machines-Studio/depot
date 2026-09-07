@@ -3,18 +3,18 @@
 Planning only. No plugin code, project instructions, personal configuration,
 release tags, installations, or GitHub native items changed in this audit.
 
-**Next Depot chunk: finish the existing UI-READY-03 repair and consumer proof.**
-[Complete continuation prompt](prompts/ui-ready-03-merged-followup.md).
-PR #128 merged at `bda7cab9ddc97b1bf8746da05ce275584d281031`; its exact source
-passes focused tests, but general review and successful desktop/mobile proof are
-missing. No release tag exists; Codex has 1.80.0 and Claude retains 1.79.1.
-The original worktree contains an uncommitted Compose/Kernel follow-up. Preserve
-its owner and finish this lane before promoting MODEL-PORTFOLIO-01.
+**September 8 steering: Astra is the primary driver for planning and execution.**
+The [current guide comparison and rollout gaps](astra-alignment-20260908.md)
+supersede the earlier planner-only model framing. The migration has not shipped:
+router/matrix and consumer instruction repairs remain pending.
 
-OR-EFFORT-01 remains complete at published consumer-proof level. See the
-[phase index](depot-efficiency-program.md) for current delivery and ownership
-evidence. The detailed audit below retains its original filesystem/model
-snapshot; it is not a fresh live inventory.
+Immediate Depot work remains the existing UI-READY-03 PR #129 closeout at
+`07c4d5dd6a3efb0b52dc0c4df4bddd42346143dd`. Its body reports the browser canary
+now passes; review and verification gaps remain. Do not rerun its predecessor
+prompt or start a second writer. OR-EFFORT-01 remains complete. See the
+[phase index](depot-efficiency-program.md) for delivery distinctions.
+
+The audit below is the original snapshot, not a fresh live inventory.
 
 ## Product constraints
 
@@ -170,7 +170,7 @@ belong in router policy and human recommendations, never participant prompts.
 
 | Work | Proposed model / rail | Effort and escalation |
 |---|---|---|
-| Per-project planning and synthesis | GPT-6 Astra / Codex subscription | medium; high for ambiguous architecture, migrations, federation or release decisions; reserve max for an explicit hard problem |
+| Primary driver: planning, synthesis and execution | GPT-6 Astra / Codex subscription, selected by the user September 8 | Preserve known effective effort for the migration baseline; test medium/high per task before adopting a cheaper default |
 | Routine implementation with judgment | GPT-5.6 Terra / Codex subscription | medium; escalate to Sol/high after a concrete capability gap |
 | Difficult multi-file implementation or debugging | GPT-5.6 Sol / Codex subscription | high; do not use it for inventories and ordinary formatting |
 | Clear mechanical edits and extraction | GPT-5.6 Luna / Codex, or DeepSeek V4 Flash 0731 / OpenRouter for usage relief | low where supported; verify produced changes deterministically |
@@ -226,7 +226,7 @@ do not forbid useful paid OpenAI fallback based on the stale sentence.
    evidence, T3-first automation and owned cleanup. Jig owns the portable Fixture
    declaration. Use Governance as the real browser canary.
 3. **MODEL-PORTFOLIO-01 — Depot, router + matrix; coordinator only if needed.**
-   Admit Astra as the planning choice, refresh identities/prices, and make cheap
+   Support Astra as the primary driver, refresh identities/prices, and make cheap
    offload proactive for appropriate roles. Keep the operator's provider cap
    outside tracked personal configuration. Run a few representative tasks,
    compare accepted result, repair time, subscription consumption when exposed,

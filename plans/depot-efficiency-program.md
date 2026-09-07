@@ -1,12 +1,24 @@
 # Depot Efficiency Program -- Phase Index
 
-## Active coordination (2026-09-07, after PR #128 merge)
+## Active coordination (2026-09-08)
 
-**Next: finish the existing UI-READY-03 repair and consumer proof.**
-[Complete continuation prompt](prompts/ui-ready-03-merged-followup.md).
-Do not start another discovery implementation or promote the portfolio chunk.
-A follow-up already exists in the original UI-READY worktree. Its session
-ownership is pending confirmation; treat it as active and leave it untouched.
+**Next: close the existing UI-READY-03 PR #129.** It is draft/open at
+`07c4d5dd6a3efb0b52dc0c4df4bddd42346143dd`, with mergeability reported and
+Codesmith skipped. Its body reports the exact-source Jig browser canary now
+passes; routed review and five baseline OpenRouter fixture failures remain
+unresolved. No publication or new cache synchronization is claimed here.
+The original dirty worktree was preserved and the successor now owns the lane;
+do not rerun the [historical continuation prompt](prompts/ui-ready-03-merged-followup.md).
+
+**Astra is now the user-selected primary driver for planning and execution.**
+The [September 8 guide comparison](astra-alignment-20260908.md) records current
+cross-project evidence and the still-unshipped migration. MODEL-PORTFOLIO-01,
+INSTRUCTIONS-01 and SKILLS-01 remain bounded successors; do not collapse all
+workers into Astra or mass-edit old checkouts. The $50/month paid-model target
+remains in force.
+
+The September 7 #128 evidence below is retained as history. Its uncommitted-owner
+snapshot is superseded by #129, not a fresh instruction to adopt that work.
 
 ### Exact source and delivery evidence
 

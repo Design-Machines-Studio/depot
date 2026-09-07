@@ -1,5 +1,9 @@
 # UI-READY-03: finish the existing repair and browser proof
 
+> SUCCESSOR ACTIVE: PR #129 now owns this repair at
+> `07c4d5dd6a3efb0b52dc0c4df4bddd42346143dd`. Do not rerun this transfer prompt.
+> Inspect the current PR and continue only its remaining evidence/review work.
+
 Repository: `Design-Machines-Studio/depot`
 Primary checkout: `/home/ned/ai/depot`
 Exact planning base: `bda7cab9ddc97b1bf8746da05ce275584d281031`
