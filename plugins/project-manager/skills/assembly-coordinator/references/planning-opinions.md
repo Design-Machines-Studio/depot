@@ -14,7 +14,7 @@ rankings, reputational claims, or one participant's output.
 ## Blind requests
 
 1. Request `architect` with `read-repository`, `long-context`, and
-   `structured-output` at `high` effort. Label its returned work `Plan A`.
+   `structured-output` at `medium` effort. Label its returned work `Plan A`.
 2. Request at most one `plan-critic` with `read-repository`, `long-context`,
    `structured-output`, and `independent-family` at `high` effort. Pass the
    architect's opaque private receipt ID, not its family or identity. Label its
@@ -23,11 +23,15 @@ rankings, reputational claims, or one participant's output.
 Send the evidence packet independently. Neither request receives the other's
 output. Do not run debate, rebuttal, convergence, or a third opinion.
 
+The main driver uses its operator-selected session effort independently. Raise
+the architect above medium only for a named difficult architecture, debugging,
+or review problem. Keep the critic's separate role effort and independence checks.
+
 ## Dispatch mechanics
 
 Resolve one coherent installed model-router bundle through Workflow Kernel and
 bind its `role-dispatch.sh`, request schema, policy, and terminal renderer at
-minimum model-router version `0.6.0`. Materialize Plan A and Plan B prompts
+minimum model-router version `0.7.0`. Materialize Plan A and Plan B prompts
 separately, use the same immutable evidence packet as each request's
 `--repository-evidence-file`, and allocate fresh private output and receipt
 paths in one mode-`0700` run-private directory. Create
@@ -36,7 +40,7 @@ actually requested.
 
 Pass the invocation's exact validated launcher to both calls with
 `--workflow-kernel "$WORKFLOW_KERNEL"`. Dispatch Plan A with `--role architect`, the three capabilities above, and
-`--effort high`. Dispatch Plan B with `--role plan-critic`, the four
+`--effort medium`. Dispatch Plan B with `--role plan-critic`, the four
 capabilities above, `--effort high`, `--independence-receipt-dir` set to that
 private directory, and Plan A's opaque `--independence-receipt-id`. Preserve
 only role-level public dispositions in planning output. The private receipts

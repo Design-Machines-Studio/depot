@@ -135,6 +135,12 @@ Every prompt must state:
   configuration, and mechanical work; `builder-deep` for complex logic, UI,
   and integration; and the matching review role for verification. Add browser,
   tool-use, long-context, or structured-output capabilities only when required.
+  For a bounded implementation with settled requirements, exact file ownership,
+  and verifiable acceptance criteria, use `builder-fast` at `high`; reserve
+  `max` for a demonstrated difficulty and keep mechanical tasks lower. Use
+  `builder-deep` at `medium` for demanding design or integration, escalating
+  only when the task warrants it. The main driver retains design decisions,
+  integration, and final review; workers do not inherit its model or effort.
 
 The prompt must not call a direct provider command or contain a concrete
 routing override. Its role request is resolved later by model-router.
@@ -143,7 +149,7 @@ routing override. Its role request is resolved later by model-router.
 
 Whenever this coordinator produces an implementation or review copy-paste
 prompt, resolve one coherent model-router bundle through Workflow Kernel at
-minimum version `0.6.0`, requiring
+minimum version `0.7.0`, requiring
 `skills/model-router/references/operator-recommendation.sh`, `role-policy.json`,
 and `availability-probe.sh`. Resolve the current OpenRouter
 `model-matrix.json` through Workflow Kernel without changing it. Invoke the

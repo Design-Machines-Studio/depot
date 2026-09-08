@@ -51,6 +51,17 @@ A chunk is a logically complete unit (one feature aspect, one migration, one com
    - add `browser`, `tool-use`, `long-context`, or `structured-output` only
      when the chunk actually requires that capability.
 
+   Keep the main driver responsible for design decisions, integration, and
+   final review. A bounded implementation may use `builder-fast` at `high`
+   effort, with `max` reserved for a demonstrated difficulty, when its prompt
+   supplies settled requirements, exact file ownership, and verifiable
+   acceptance criteria. Use the existing `bounded-mechanical-work` override
+   only when that description is true; unresolved design stays `builder-deep`.
+   This is a workflow hypothesis to validate on real chunks, not a benchmark
+   claim. Simple docs and mechanical changes keep their lower policy effort.
+   Do not inherit the driver's model or effort for each worker. Raising effort
+   never adds a review lane or changes required verification.
+
    Planning HTML is an explicit narrow exception to the `.html` UI trigger: a chunk containing only planning Markdown/JSON/YAML plus unserved `plans/**.html` artifacts remains `config` and `builder-fast`. If splitting separates offline planning artifacts from served UI or live-tool work, split it; mixed or uncertain product surfaces classify up: `ui` > `integration` > `logic` > `config`.
 
    Then classify rendered-output applicability independently. Every new chunk

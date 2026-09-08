@@ -12,6 +12,7 @@
   },
   "roles": {
 "architect": [
+      {"model": "gpt-6-astra", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output"]},
       {"model": "gpt-5.6-sol", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output"]},
       {"model": "opus", "servedIdentities": ["claude-opus-5"], "provider": "anthropic", "transport": "claude-cli", "family": "anthropic", "billing": "subscription-or-local-paid-credits", "capabilities": ["read-repository", "long-context", "structured-output"]},
       {"model": "qwen/qwen3.8-max", "provider": "openrouter", "transport": "openrouter", "family": "qwen", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output"]}
@@ -29,6 +30,7 @@
       {"model": "z-ai/glm-5.3-flash", "provider": "openrouter", "transport": "openrouter", "family": "z-ai", "billing": "api", "capabilities": ["read-repository", "write-repository", "structured-output"]}
     ],
     "builder-deep": [
+      {"model": "gpt-6-astra", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "write-repository", "tool-use", "long-context", "structured-output"]},
       {"model": "gpt-5.6-sol", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "write-repository", "tool-use", "long-context", "structured-output"]},
       {"model": "gpt-5.6-terra", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "write-repository", "tool-use", "long-context", "structured-output"]},
       {"model": "deepseek/deepseek-v4-pro-0813", "provider": "openrouter", "transport": "openrouter", "family": "deepseek", "billing": "api", "capabilities": ["read-repository", "write-repository", "long-context", "structured-output"]},

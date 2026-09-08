@@ -27,12 +27,25 @@ check 'builder-fast starts with the bounded fast candidate' jq -e '
   .roles["builder-fast"][0].transport == "codex-cli"' "$POLICY"
 
 check 'builder-deep starts on native subscription capacity' jq -e '
-  .roles["builder-deep"][0].model == "gpt-5.6-sol" and
+  .roles["builder-deep"][0].model == "gpt-6-astra" and
   .roles["builder-deep"][0].billing == "included-subscription"' "$POLICY"
 
-check 'architect begins with native Sol subscription capacity' jq -e '
-  .roles.architect[0].model == "gpt-5.6-sol" and
+check 'architect begins with native Astra subscription capacity' jq -e '
+  .roles.architect[0].model == "gpt-6-astra" and
   .roles.architect[0].transport == "codex-cli"' "$POLICY"
+
+check 'driver policy retains the baseline and distinct specialist workers' jq -e '
+  .roles.architect[1].model == "gpt-5.6-sol" and
+  .roles["builder-deep"][1].model == "gpt-5.6-sol" and
+  .roles["builder-deep"][2].model == "gpt-5.6-terra" and
+  .roles["review-fast"][0].model == "gpt-5.6-luna" and
+  .roles["review-deep"][0].model == "gpt-5.6-terra"' "$POLICY"
+
+check 'demanding execution is medium while mechanical and security defaults stay distinct' jq -e '
+  all(.chunkKinds | to_entries[] | select(.key | IN("logic","ui","integration")); .value.executorEffort == "medium") and
+  .chunkKinds.docs.executorEffort == "low" and
+  .chunkKinds["mechanical-logic"].executorEffort == "medium" and
+  .reviewRoles.security.effort == "high"' "$ROOT/plugins/pipeline/references/routing-policy.json"
 
 check 'declared native aliases bind to exact approved served identities' jq -e '
   ([.roles[][] | select(has("servedIdentities"))] | length) > 0 and
