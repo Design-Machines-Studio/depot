@@ -630,17 +630,18 @@ class RuntimeCliTests(unittest.TestCase):
             invalid_ledger = root / "invalid-receipts.json"
             invalid_ledger.write_text(json.dumps(invalid))
             invalid_outputs = {
-                "observation": root / "invalid-observation.json",
                 "comparison": root / "invalid-comparison.json",
                 "metrics": root / "invalid-metrics.json",
                 "cost": root / "invalid-cost.json",
             }
+            observation_before = observation.read_bytes()
             rejected_observation = self.run_cli(
                 "observe-pipeline", "--manifest", manifest,
                 "--receipts", invalid_ledger,
-                "--state-dir", invalid_outputs["observation"],
+                "--state-dir", root,
             )
             self.assertEqual(rejected_observation.returncode, 2)
+            self.assertEqual(observation.read_bytes(), observation_before)
             rejected_comparison = self.run_cli(
                 "compare", "--state-dir", root,
                 "--authoritative-receipts", invalid_ledger,

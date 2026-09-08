@@ -112,7 +112,7 @@ Assembly governance application development with Go, Templ, and Datastar. 3 skil
 - **templ-scaffolder** (agent) -- Scaffolds new Templ pages, handlers, routes, and SSE endpoints
 - **datastar-sse** (agent) -- Datastar reactivity and SSE endpoint patterns
 - **nats-reviewer** (agent) -- Reviews NATS usage for embedded safety, ScopedEventBus patterns, and event ordering
-- **go-test-runner** (agent) -- Runs profile-selected focused, level, candidate, and authenticated remote verification
+- **go-test-runner** (agent) -- Runs profile-selected focused, level, and candidate verification; reports required remote evidence as pending
 - `/assembly-build` -- Backward-compatible Docker build/test modes plus opt-in tiered repository verification
 
 ### live-wires

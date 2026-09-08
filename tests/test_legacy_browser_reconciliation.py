@@ -76,6 +76,24 @@ class LegacyBrowserReconciliationTests(unittest.TestCase):
         self.assertEqual(events[3].payload["status"], "failed")
         self.assertEqual(events[4].payload["status"], "skipped")
 
+    def test_plain_missing_case_identity_survives_reconciliation(self):
+        original = self.receipts()
+        original[1]["missing_case_ids"] = ["member-proposal-mobile"]
+        reconciled = list(build_legacy_browser_reconciliation(
+            original,
+            target_sequence=1,
+            occurred_at="2026-01-01T00:09:00Z",
+            authoritative_receipt="receipts/legacy-reconciliation.json",
+        ))
+        self.assertEqual(reconciled[:-1], original)
+        events = translate_pipeline_receipts(reconciled)
+        self.assertEqual(
+            list(events[1].payload["missing_case_ids"]),
+            ["member-proposal-mobile"],
+        )
+        self.assertEqual(events[1].payload["status"], "blocked")
+        self.assertEqual(events[-1].payload["status"], "recorded")
+
     def test_unknown_and_retired_stages_remain_rejected(self):
         for stage in (
             "unknown_future_stage",
@@ -351,6 +369,11 @@ class LegacyBrowserReconciliationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             canonical_observation_receipt_digest(cycle)
 
+        list_cycle = []
+        list_cycle.append(list_cycle)
+        with self.assertRaises(ValueError):
+            canonical_observation_receipt_digest({"extra": list_cycle})
+
         with mock.patch.object(_translation, "MAX_PAYLOAD_DEPTH", 1):
             with self.assertRaises(ValueError):
                 canonical_observation_receipt_digest({"outer": {"inner": 1}})
@@ -360,6 +383,8 @@ class LegacyBrowserReconciliationTests(unittest.TestCase):
         with mock.patch.object(_translation, "MAX_STRING_LENGTH", 3):
             with self.assertRaises(ValueError):
                 canonical_observation_receipt_digest({"key": "four"})
+            with self.assertRaises(ValueError):
+                canonical_observation_receipt_digest({"four": "ok"})
         with mock.patch.object(_translation, "MAX_TOTAL_STRING_BYTES", 4):
             with self.assertRaises(ValueError):
                 canonical_observation_receipt_digest({"k": "éé"})
