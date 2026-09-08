@@ -8,13 +8,21 @@ implemented part; the other project changes have not shipped.
 
 **Next bounded development chunk: INSTRUCTIONS-01 — repair shared instruction
 and workflow defaults in Depot.** Fix the generator before rolling its policy
-into consumer repositories. The current routing PR needs review separately;
+into consumer repositories. The routing source is merged; publication and consumer proof remain separate;
 PR #129 retains its own browser/Compose closeout owner. Neither the native price
 refresh nor a model benchmark tournament is a prerequisite for instruction work.
 
+## Execution prompts
+
+Start with [INSTRUCTIONS-01](prompts/assembly-improvements/01-instructions-01.md).
+The [fresh-session prompt pack](prompts/assembly-improvements/README.md) contains
+complete prompts and installed-router model recommendations for each affected
+project, shared skill pass, cost/harness task and optional maintenance operation.
+Bring back each exact PR result before advancing dependent work.
+
 ## Current status and authority
 
-Depot main is `4c1e9590a399406876c5760374edb5a58c3e6be2` after PR #130.
+Depot main is `386b98e26f493cc220047c981cd5c01b1513b24d` after merged PR #131.
 Routing branch `feat/astra-driver-routing` was implemented and locally validated
 at `0b3e84a65a1f85e8a7584f521f46540c102f9703` from main
 `bda7cab9ddc97b1bf8746da05ce275584d281031`. PR #130 advances OpenRouter to
@@ -23,7 +31,7 @@ on the earlier base is not a merged-main or consumer-proof claim.
 
 | Audit gap | Current state | Owning chunk |
 |---|---|---|
-| Astra absent from routing | Implemented on source branch; review/publication/install/consumer proof pending | MODEL-01 closeout |
+| Astra absent from routing | Merged source in PR #131; publication and complete install/consumer proof pending | MODEL-01 closeout |
 | CLI still Luna/maximum | Superseded: current user config reads Astra/high, with 1,000,000/400,000 context overrides; the policy recommends low | CONFIG-01 |
 | Blanket scaffolded chores and approvals | Pending | INSTRUCTIONS-01 |
 | Baseplate root approximately 83 KB | Pending; exceeds the default project-instruction allowance | INSTRUCTIONS-02 |
@@ -69,7 +77,8 @@ the selected chunk when requested; do not issue a bundle of competing prompts.
 
 ### MODEL-01 — finish the existing routing change
 
-Owner: Depot, existing `feat/astra-driver-routing`; do not start a second writer.
+Owner: Depot. Source merged in PR #131; publication uses a fresh worktree at
+the verified merged commit.
 
 
 - model-router 0.7.0: native Astra first for `architect` and `builder-deep`,
@@ -91,8 +100,8 @@ high/max, preserve quota fallback and explicit effort, and keep identities out
 of participant surfaces. Verify generated manifests, dependency floors, routing,
 recommendations, terminal receipts, and full composition. No paid sweep is needed.
 
-Review this exact branch, reconcile current main (including PR #130), and fix
-every retained finding. Before later authorized delivery, verify exact-head CI
+PR #131 merged this source and retained PR #130. Before later authorized
+delivery, inspect its exact source and retained findings, verify exact-head CI
 or state its absence, trusted main, plugin tags, both harness caches and one
 real consumer chunk. No merge, tag or installation refresh is authorized by the
 current planning task. Existing PR #129 remains a separate browser-review lane.

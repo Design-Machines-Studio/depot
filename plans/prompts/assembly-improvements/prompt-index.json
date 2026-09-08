@@ -1,0 +1,316 @@
+{
+  "preparedAt": "2026-09-08",
+  "depotBase": "386b98e26f493cc220047c981cd5c01b1513b24d",
+  "prompts": [
+    {
+      "file": "01-instructions-01.md",
+      "id": "INSTRUCTIONS-01",
+      "repo": "depot",
+      "model": "gpt-5.6-luna",
+      "effort": "high",
+      "kind": "high",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "386b98e26f493cc220047c981cd5c01b1513b24d",
+      "mode": "repo"
+    },
+    {
+      "file": "02-instructions-02.md",
+      "id": "INSTRUCTIONS-02",
+      "repo": "assembly-baseplate",
+      "model": "gpt-5.6-luna",
+      "effort": "high",
+      "kind": "high",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "0a16152fd68a1b11ad69654a0c2c0893c6200f49",
+      "mode": "repo"
+    },
+    {
+      "file": "03-instructions-03.md",
+      "id": "INSTRUCTIONS-03",
+      "repo": "assembly",
+      "model": "gpt-5.6-luna",
+      "effort": "high",
+      "kind": "high",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "4f811431a970cd6b6ac82ed762a707ccc01b9887",
+      "mode": "repo"
+    },
+    {
+      "file": "04-instructions-04.md",
+      "id": "INSTRUCTIONS-04",
+      "repo": "assembly-floor",
+      "model": "gpt-5.6-luna",
+      "effort": "high",
+      "kind": "high",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "561352882d2402ffb2b6889de101f31c22e0ef8b",
+      "mode": "repo"
+    },
+    {
+      "file": "05-instructions-05a.md",
+      "id": "INSTRUCTIONS-05A",
+      "repo": "assembly-fixture-jig",
+      "model": "gpt-5.6-luna",
+      "effort": "low",
+      "kind": "low",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "50f0d47c275928953dcaa81ee15d68e05cf0a0ae",
+      "mode": "repo"
+    },
+    {
+      "file": "06-instructions-05b.md",
+      "id": "INSTRUCTIONS-05B",
+      "repo": "livewires-templ",
+      "model": "gpt-5.6-luna",
+      "effort": "low",
+      "kind": "low",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "84e1e24c81784497b6fb7004e0ed7fa0d763b6ae",
+      "mode": "repo"
+    },
+    {
+      "file": "07-instructions-05c.md",
+      "id": "INSTRUCTIONS-05C",
+      "repo": "assembly-governance",
+      "model": "gpt-5.6-luna",
+      "effort": "high",
+      "kind": "high",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "4777a292bd4ea52b74bbbc0c82be1524ca0f0299",
+      "mode": "repo"
+    },
+    {
+      "file": "08-instructions-06.md",
+      "id": "INSTRUCTIONS-06",
+      "repo": "foreman",
+      "model": "gpt-5.6-luna",
+      "effort": "high",
+      "kind": "high",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "8234aeb73aa76b7f084572f3fcd52ca54acbffdc",
+      "mode": "repo"
+    },
+    {
+      "file": "09-instructions-07.md",
+      "id": "INSTRUCTIONS-07",
+      "repo": "assembly-demo",
+      "model": "gpt-5.6-luna",
+      "effort": "low",
+      "kind": "low",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "c7a54d5f2005edf0e7e4b5d10fdb4eb66286f200",
+      "mode": "repo"
+    },
+    {
+      "file": "10-skills-01.md",
+      "id": "SKILLS-01",
+      "repo": "depot",
+      "model": "gpt-5.6-luna",
+      "effort": "high",
+      "kind": "high",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "386b98e26f493cc220047c981cd5c01b1513b24d",
+      "mode": "repo"
+    },
+    {
+      "file": "11-skills-02.md",
+      "id": "SKILLS-02",
+      "repo": "depot",
+      "model": "gpt-5.6-luna",
+      "effort": "high",
+      "kind": "high",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "386b98e26f493cc220047c981cd5c01b1513b24d",
+      "mode": "repo"
+    },
+    {
+      "file": "12-skills-03.md",
+      "id": "SKILLS-03",
+      "repo": "depot",
+      "model": "gpt-5.6-luna",
+      "effort": "high",
+      "kind": "high",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "386b98e26f493cc220047c981cd5c01b1513b24d",
+      "mode": "repo"
+    },
+    {
+      "file": "13-skills-04.md",
+      "id": "SKILLS-04",
+      "repo": "depot",
+      "model": "gpt-5.6-luna",
+      "effort": "high",
+      "kind": "high",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "386b98e26f493cc220047c981cd5c01b1513b24d",
+      "mode": "repo"
+    },
+    {
+      "file": "14-cost-01.md",
+      "id": "COST-01",
+      "repo": "depot",
+      "model": "gpt-6-astra",
+      "effort": "medium",
+      "kind": "deep",
+      "role": "builder-deep",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output",
+        "long-context"
+      ],
+      "base": "386b98e26f493cc220047c981cd5c01b1513b24d",
+      "mode": "repo"
+    },
+    {
+      "file": "15-harness-01.md",
+      "id": "HARNESS-01",
+      "repo": "foreman",
+      "model": "gpt-6-astra",
+      "effort": "medium",
+      "kind": "deep-tool",
+      "role": "builder-deep",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output",
+        "long-context",
+        "tool-use"
+      ],
+      "base": "8234aeb73aa76b7f084572f3fcd52ca54acbffdc",
+      "mode": "repo"
+    },
+    {
+      "file": "16-cleanup-01.md",
+      "id": "CLEANUP-01",
+      "repo": "depot",
+      "model": "gpt-6-astra",
+      "effort": "low",
+      "kind": "host-low",
+      "role": "builder-deep",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output",
+        "tool-use"
+      ],
+      "base": "386b98e26f493cc220047c981cd5c01b1513b24d",
+      "mode": "inventory"
+    },
+    {
+      "file": "17-config-01.md",
+      "id": "CONFIG-01",
+      "repo": "depot",
+      "model": "gpt-6-astra",
+      "effort": "low",
+      "kind": "host-low",
+      "role": "builder-deep",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output",
+        "tool-use"
+      ],
+      "base": "386b98e26f493cc220047c981cd5c01b1513b24d",
+      "mode": "local"
+    },
+    {
+      "file": "18-release-01.md",
+      "id": "RELEASE-01",
+      "repo": "depot",
+      "model": "gpt-5.6-luna",
+      "effort": "high",
+      "kind": "high",
+      "role": "builder-fast",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output"
+      ],
+      "base": "386b98e26f493cc220047c981cd5c01b1513b24d",
+      "mode": "repo"
+    },
+    {
+      "file": "19-model-01-release.md",
+      "id": "MODEL-01-RELEASE",
+      "repo": "depot",
+      "model": "gpt-6-astra",
+      "effort": "low",
+      "kind": "host-low",
+      "role": "builder-deep",
+      "capabilities": [
+        "read-repository",
+        "write-repository",
+        "structured-output",
+        "tool-use"
+      ],
+      "base": "386b98e26f493cc220047c981cd5c01b1513b24d",
+      "mode": "release"
+    }
+  ]
+}

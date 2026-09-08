@@ -276,6 +276,8 @@ See [docs/orchestration-patterns.md](docs/orchestration-patterns.md) for details
 The [Assembly development improvement plan](plans/astra-routing-and-system-rollout.md)
 tracks routing, project instructions, shared skills, model costs, the Pi harness,
 and workspace cleanup, with owning repositories and completion checks.
+Use the [fresh-session prompts](plans/prompts/assembly-improvements/README.md)
+for complete project tasks and their model recommendations.
 
 ## Validation
 
