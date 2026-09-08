@@ -7,6 +7,15 @@ pitfalls (https://x.com/karpathy/status/2015883857489522876).
 
 This file tells Claude Code how to work in this repository. Read it at the start of every session.
 
+## Workflow and Safety
+
+- Choose the lightest workflow that fits the task. A small documentation, configuration, or bounded content edit needs focused verification, not plan mode, a full pipeline, or an automatic agent roster.
+- Use plan mode when work is multi-step, architectural, cross-cutting, or higher risk and a written sequence clarifies the acceptance criteria.
+- Use focused agents only when their checks apply. Update documentation when behavior, commands, setup, or operating instructions change; record lessons only when a finding is reusable beyond this task.
+- Preserve repository-owned command restrictions and real checks for credentials, authentication/authorization, destructive or data-loss actions, release integrity, and applicable accessibility.
+- Keep ordinary source-branch commits/pushes, release publication, and any post-publication verification separate. Follow the project's documented release checks when publishing; do not treat an unreleased source branch as a published release.
+- When delegating, request only a role, required capabilities, and normalized effort (`low`, `medium`, `high`, or `max`). Keep concrete model and rail recommendations in human-facing operator context; see the [current model-router guidance](https://github.com/Design-Machines-Studio/depot/blob/main/plugins/model-router/skills/model-router/references/driver-worker-guidance.md).
+
 ## How to Work Here
 
 ### 1. Think before coding

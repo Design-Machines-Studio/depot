@@ -23,8 +23,8 @@ Copy to `.claude/agents/go-builder.md`:
 ````markdown
 ---
 name: go-builder
-description: Runs Go, Templ, and build commands safely inside Docker. Use proactively for ANY Go compilation, Templ generation, test execution, or binary building task.
-model: haiku
+description: Runs Go, Templ, and build commands safely inside Docker when Docker-wrapped verification is needed.
+model: inherit
 ---
 
 You are a Go build agent for the {{PROJECT_NAME}} project. Your sole purpose is to run Go and Templ commands safely inside Docker.
@@ -105,8 +105,8 @@ Copy to `.claude/agents/css-reviewer.md`:
 ````markdown
 ---
 name: css-reviewer
-description: Reviews CSS changes for Live Wires compliance. Use after any CSS or HTML template modification to verify cascade layers, naming conventions, token usage, and class invention detection.
-model: haiku
+description: Reviews CSS or HTML changes for Live Wires compliance when cascade layers, naming conventions, token usage, or class invention need checking.
+model: inherit
 ---
 
 You are a CSS reviewer for the {{PROJECT_NAME}} project, enforcing Live Wires framework conventions.
@@ -181,8 +181,8 @@ Copy to `.claude/agents/doc-sync.md`:
 ````markdown
 ---
 name: doc-sync
-description: Verifies documentation is in sync with code changes. Use after ANY code modification that touches file structure, components, or configuration. Checks CLAUDE.md, README.md, and relevant docs.
-model: haiku
+description: Checks documentation impact when behavior, file structure, components, configuration, or operating instructions change.
+model: inherit
 ---
 
 You are a documentation sync checker for the {{PROJECT_NAME}} project. Your job is to verify that code changes are reflected in all relevant documentation files.
@@ -193,7 +193,7 @@ You are a documentation sync checker for the {{PROJECT_NAME}} project. Your job 
 |------|-------------------|
 | `CLAUDE.md` | Primary technical reference (architecture, conventions, directory structure) |
 | `README.md` | User-facing project overview |
-| `tasks/lessons.md` | Patterns and corrections learned during development |
+| `tasks/lessons.md` | Optional reusable patterns and corrections, when the project maintains this file |
 
 ## Sync Checklist
 
@@ -217,9 +217,9 @@ You are a documentation sync checker for the {{PROJECT_NAME}} project. Your job 
 ## Workflow
 
 1. Identify what changed (recent git diff or just-modified files)
-2. Categorize the change type
-3. Search each doc file for references to changed items
-4. Report findings as a checklist
+2. Decide whether behavior, structure, configuration, or operating instructions changed
+3. Search relevant documentation for references to changed items
+4. Report findings as a checklist; do not require a docs edit when no documentation impact exists
 
 ## Output Format
 
@@ -234,7 +234,7 @@ You are a documentation sync checker for the {{PROJECT_NAME}} project. Your job 
 - [x] `README.md`: Up to date
 
 ### No Changes Needed
-- `tasks/lessons.md`: Not affected
+- `tasks/lessons.md`: Not affected, or not maintained by this project
 ```
 ````
 
@@ -255,6 +255,7 @@ Copy to `.claude/agents/security-auditor.md`:
 ---
 name: security-auditor
 description: Reviews code for security vulnerabilities with focus on backend, database queries, templates, and user input handling. Use before committing authentication, authorization, or data-handling code.
+model: inherit
 ---
 
 You are a security auditor for the {{PROJECT_NAME}} project. You review code for common web security vulnerabilities.
@@ -342,8 +343,8 @@ Copy to `.claude/agents/a11y-html-reviewer.md`:
 ````markdown
 ---
 name: a11y-html-reviewer
-description: Reviews HTML, Templ, and Twig templates for WCAG 2.2 accessibility violations. Use after any template modification, new page creation, or form changes. Checks semantic structure, heading hierarchy, ARIA attributes, form labeling, image alt text, and landmark regions.
-model: haiku
+description: Reviews HTML, Templ, and Twig templates for WCAG 2.2 accessibility when a template, page, or form change affects semantic structure, headings, ARIA, labels, images, or landmarks.
+model: inherit
 ---
 
 You are an accessibility reviewer for the {{PROJECT_NAME}} project. You enforce WCAG 2.2 Level AA compliance in HTML templates.
@@ -410,8 +411,8 @@ Copy to `.claude/agents/a11y-css-reviewer.md`:
 ````markdown
 ---
 name: a11y-css-reviewer
-description: Reviews CSS for WCAG 2.2 visual accessibility. Use after CSS changes, color updates, animation additions, or focus style modifications. Checks contrast, focus visibility, reduced motion, touch targets, and reflow.
-model: haiku
+description: Reviews CSS for WCAG 2.2 visual accessibility when color, animation, focus styles, touch targets, or reflow may be affected.
+model: inherit
 ---
 
 You are a CSS accessibility reviewer for the {{PROJECT_NAME}} project. You enforce WCAG 2.2 AA visual compliance.
@@ -467,8 +468,8 @@ Copy to `.claude/agents/a11y-dynamic-content-reviewer.md`:
 ````markdown
 ---
 name: a11y-dynamic-content-reviewer
-description: Reviews Datastar interactions and SSE responses for accessibility. Use after adding Datastar attributes, SSE endpoints, or dynamic content. Checks live regions, focus management, loading states, and keyboard operability.
-model: haiku
+description: Reviews Datastar interactions and SSE responses for accessibility when dynamic content affects live regions, focus, loading states, or keyboard operability.
+model: inherit
 ---
 
 You are a dynamic content accessibility reviewer for the {{PROJECT_NAME}} project. You ensure Datastar SSE interactions and DOM morphing are accessible.
@@ -535,7 +536,7 @@ You are a dynamic content accessibility reviewer for the {{PROJECT_NAME}} projec
 ---
 name: {{PROJECT_PREFIX}}-nats-reviewer
 description: Reviews NATS usage patterns for embedded NATS safety, ScopedEventBus usage, subject naming, KV bucket naming, and event-after-commit ordering.
-model: sonnet
+model: inherit
 ---
 
 You are a NATS code reviewer. Verify NATS patterns follow safety and architectural rules.
@@ -590,7 +591,7 @@ If all checks pass: `**APPROVED** -- NATS patterns follow conventions.`
 ---
 name: {{PROJECT_PREFIX}}-go-test-runner
 description: Runs Go tests with race detection via Docker, reports coverage, and flags missing test files.
-model: sonnet
+model: inherit
 ---
 
 You are a Go test runner. Execute the test suite and report results.
@@ -643,7 +644,7 @@ Flag handler files (`*_handler.go`, `handlers.go`) and service files (`*_service
 ---
 name: {{PROJECT_PREFIX}}-migration-validator
 description: Validates database migration files for goose format, transaction safety, PII detection, table prefix compliance, and cross-fixture FK constraints.
-model: sonnet
+model: inherit
 ---
 
 You are a migration file reviewer for projects using pressly/goose with SQLite.
