@@ -1,0 +1,107 @@
+{
+  "observed": "2026-09-08",
+  "router": "0.7.0",
+  "matrix": "1.20.3",
+  "recommendations": {
+    "high": {
+      "model": "gpt-5.6-luna",
+      "harness": "Codex",
+      "effort": "high",
+      "availability": "attemptable",
+      "why": "Current subscription evidence makes this builder-fast candidate attemptable without attributing an allowance bucket; invocation will settle availability.",
+      "cost": {
+        "label": "included subscription",
+        "apiPrice": null,
+        "apiEquivalent": {
+          "inputUsdPerM": 0.2,
+          "outputUsdPerM": 1.2,
+          "snapshotDate": "2026-08-12",
+          "basis": "API-equivalent planning estimate; never billed subscription spend"
+        }
+      },
+      "fallback": {
+        "model": "deepseek/deepseek-v4-flash-0731",
+        "harness": "OpenRouter",
+        "availability": "available"
+      },
+      "matrixEvidence": "2026-08-27"
+    },
+    "low": {
+      "model": "gpt-5.6-luna",
+      "harness": "Codex",
+      "effort": "low",
+      "availability": "attemptable",
+      "why": "Current subscription evidence makes this builder-fast candidate attemptable without attributing an allowance bucket; invocation will settle availability.",
+      "cost": {
+        "label": "included subscription",
+        "apiPrice": null,
+        "apiEquivalent": {
+          "inputUsdPerM": 0.2,
+          "outputUsdPerM": 1.2,
+          "snapshotDate": "2026-08-12",
+          "basis": "API-equivalent planning estimate; never billed subscription spend"
+        }
+      },
+      "fallback": {
+        "model": "deepseek/deepseek-v4-flash-0731",
+        "harness": "OpenRouter",
+        "availability": "available"
+      },
+      "matrixEvidence": "2026-08-27"
+    },
+    "deep": {
+      "model": "gpt-6-astra",
+      "harness": "Codex",
+      "effort": "medium",
+      "availability": "attemptable",
+      "why": "Current subscription evidence makes this builder-deep candidate attemptable without attributing an allowance bucket; invocation will settle availability.",
+      "cost": {
+        "label": "included subscription",
+        "apiPrice": null,
+        "apiEquivalent": null
+      },
+      "fallback": {
+        "model": "gpt-5.6-sol",
+        "harness": "Codex",
+        "availability": "attemptable"
+      },
+      "matrixEvidence": "2026-08-27"
+    },
+    "host-low": {
+      "model": "gpt-6-astra",
+      "harness": "Codex",
+      "effort": "low",
+      "availability": "attemptable",
+      "why": "Current subscription evidence makes this builder-deep candidate attemptable without attributing an allowance bucket; invocation will settle availability.",
+      "cost": {
+        "label": "included subscription",
+        "apiPrice": null,
+        "apiEquivalent": null
+      },
+      "fallback": {
+        "model": "gpt-5.6-sol",
+        "harness": "Codex",
+        "availability": "attemptable"
+      },
+      "matrixEvidence": "2026-08-27"
+    },
+    "deep-tool": {
+      "model": "gpt-6-astra",
+      "harness": "Codex",
+      "effort": "medium",
+      "availability": "attemptable",
+      "why": "Current subscription evidence makes this builder-deep candidate attemptable without attributing an allowance bucket; invocation will settle availability.",
+      "cost": {
+        "label": "included subscription",
+        "apiPrice": null,
+        "apiEquivalent": null
+      },
+      "fallback": {
+        "model": "gpt-5.6-sol",
+        "harness": "Codex",
+        "availability": "attemptable"
+      },
+      "matrixEvidence": "2026-08-27"
+    }
+  }
+}
