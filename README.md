@@ -271,6 +271,12 @@ Plugins compose through five patterns:
 
 See [docs/orchestration-patterns.md](docs/orchestration-patterns.md) for details.
 
+## Development improvement plan
+
+The [Assembly development improvement plan](plans/astra-routing-and-system-rollout.md)
+tracks routing, project instructions, shared skills, model costs, the Pi harness,
+and workspace cleanup, with owning repositories and completion checks.
+
 ## Validation
 
 ```shell
