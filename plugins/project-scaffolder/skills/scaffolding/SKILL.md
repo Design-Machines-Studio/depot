@@ -101,8 +101,8 @@ CLAUDE.md                    <- routing doc (from project-configs.md)
 tests/
   a11y/
     pages.spec.js            <- frontend projects (from project-configs.md)
-  tasks/
-    todo.md                    <- optional workboard for multi-step tasks
+tasks/
+  todo.md                    <- optional workboard for multi-step tasks
 ```
 
 ### Step 4: Finalize

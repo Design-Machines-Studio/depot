@@ -72,9 +72,13 @@ Prevents Craft and Composer commands from running outside DDEV. Create this file
 
 COMMAND=$(jq -r '.tool_input.command // empty' 2>/dev/null)
 
-# Match bare php craft or composer commands. Commands already using ddev are allowed.
-if printf '%s\n' "$COMMAND" | grep -qE '(^|&&|\|\||;)\s*(php[[:space:]]+craft|composer([[:space:]]|$))' && \
-   ! printf '%s\n' "$COMMAND" | grep -q 'ddev'; then
+# Match each command boundary, including pipelines and subshells. A DDEV
+# invocation does not match; unrelated DDEV text never exempts a host command.
+# Include common wrappers and environment assignments before the executable.
+ENV_OPTION='(-i|--ignore-environment|--|(-u|--unset)[[:space:]]+[A-Za-z_][A-Za-z0-9_]*|--unset=[A-Za-z_][A-Za-z0-9_]*)'
+WRAPPER="(env([[:space:]]+${ENV_OPTION})*|command([[:space:]]+-p)?([[:space:]]+--)?|exec([[:space:]]+--)?)"
+PREFIX="(^|[;&|()])[[:space:]]*(${WRAPPER}[[:space:]]+|[A-Za-z_][A-Za-z0-9_]*=[^[:space:];&|()]+[[:space:]]+)*"
+if printf '%s\n' "$COMMAND" | grep -qE "${PREFIX}(php[[:space:]]+craft|composer)([[:space:];&|()]|$)"; then
   printf '%s\n' "BLOCKED: Craft and Composer commands must run inside DDEV." >&2
   printf '%s\n' "Use: ddev craft <command> or ddev composer <command>" >&2
   exit 2
