@@ -3,22 +3,28 @@
 **Current plan, refreshed 2026-09-08.** This covers the entire instruction,
 model, skill, harness, and workspace audit. It supersedes the sequence in the
 [earlier alignment audit](https://github.com/Design-Machines-Studio/depot/blob/docs/depot-planning-20260907/plans/astra-alignment-20260908.md),
-which remains the detailed source inventory. The routing update is the first
-implemented part; the other project changes have not shipped.
+which remains the detailed source inventory. Routing is source-complete. Later
+project completion must be reconciled from each returned exact PR/result; do not
+rerun a successful task merely because this planning snapshot has not caught up.
 
-**Next bounded development chunk: INSTRUCTIONS-01 — repair shared instruction
-and workflow defaults in Depot.** Fix the generator before rolling its policy
-into consumer repositories. The routing source is merged; publication and consumer proof remain separate;
+**Next Depot implementation chunk: INSTRUCTIONS-01 — repair shared instruction
+and workflow defaults.** Updating the generator prevents future scaffolding from
+reintroducing the old chores. Consumer-local repairs can proceed independently
+using the agreed policy in their execution packet; no new generator artifact
+is required. The routing source is merged; publication and consumer proof remain separate;
 PR #129 retains its own browser/Compose closeout owner. Neither the native price
 refresh nor a model benchmark tournament is a prerequisite for instruction work.
 
 ## Execution prompts
 
-Start with [INSTRUCTIONS-01](prompts/assembly-improvements/01-instructions-01.md).
+Use [INSTRUCTIONS-01](prompts/assembly-improvements/01-instructions-01.md) for
+the Depot generator. A previously blocked consumer session should resume its
+updated project prompt; the old generator-merge gate has been removed.
 The [fresh-session prompt pack](prompts/assembly-improvements/README.md) contains
 complete prompts and installed-router model recommendations for each affected
 project, shared skill pass, cost/harness task and optional maintenance operation.
-Bring back each exact PR result before advancing dependent work.
+Bring back exact PR results for inspection. Stop only for a real dependency or
+file-ownership conflict, not an unrelated instruction or prompt-pack merge.
 
 ## Current status and authority
 
@@ -29,7 +35,10 @@ at `0b3e84a65a1f85e8a7584f521f46540c102f9703` from main
 1.20.3; it must be retained when integrating this branch. Local source validation
 on the earlier base is not a merged-main or consumer-proof claim.
 
-| Audit gap | Current state | Owning chunk |
+The remaining project rows retain the audit snapshot until their returned
+results are inspected; they are not evidence that a successful task must rerun.
+
+| Audit gap | Evidence state | Owning chunk |
 |---|---|---|
 | Astra absent from routing | Merged source in PR #131; publication and complete install/consumer proof pending | MODEL-01 closeout |
 | CLI still Luna/maximum | Superseded: current user config reads Astra/high, with 1,000,000/400,000 context overrides; the policy recommends low | CONFIG-01 |
@@ -72,7 +81,8 @@ files. Demo's thin instructions had no demonstrated defect and need no rewrite.
 ## Execution sequence
 
 Each numbered consumer row is a separate repository branch and PR. A skill pass
-changes one owning plugin at a time. Prepare one complete execution prompt for
+changes one owning plugin at a time. Independent passes need not wait for
+unrelated instruction merges; existing shared-file ownership still applies. Prepare one complete execution prompt for
 the selected chunk when requested; do not issue a bundle of competing prompts.
 
 ### MODEL-01 — finish the existing routing change
@@ -129,7 +139,9 @@ plugin and regenerate its Codex metadata. No consumer product code changes.
 
 ### INSTRUCTIONS-02 through 05 — apply the policy in consumers
 
-Start with Baseplate after the generator policy is reviewed and available.
+Start Baseplate from its current engineering contracts and the agreed policy
+in its complete execution prompt. The generator update is a sequencing
+preference, not a prerequisite for repository-owned instruction edits.
 Aim for roughly 8 KiB or less across root instruction entrypoints where practical;
 verify the actual discovered instruction stack fits the harness allowance. This
 is an editing target, not permission to remove necessary contracts or merely

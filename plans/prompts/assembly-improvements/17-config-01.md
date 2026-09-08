@@ -29,6 +29,8 @@ Optional operator-local task. Run only when you intend to set the saved driver t
 Workspace:
 This is an operator-local configuration task. Use the repository only to read current guidance; do not create a branch/worktree or commit private configuration. Preserve every existing checkout. The context below is a source snapshot, not permission to change unrelated local settings.
 
+This private settings task needs no Project query or new PR. Read the existing guidance through local Git; report unavailable optional coordination without blocking the config task.
+
 Read AGENTS.md, directly referenced instructions, CLAUDE.md, engineering principles, relevant plans/lessons and affected local skills/hooks. Use Assembly Coordinator and Design Machines strategy when available. Follow local RTK rules. Shared skills belong in Depot; local skills belong in their repository. No personal Notion/RAG/memory dependency or cache edits.
 
 Task and non-goals:

@@ -24,10 +24,12 @@ executorCapabilities: ["read-repository", "write-repository", "structured-output
 executorEffort: high
 
 Prerequisite and collision boundary:
-Run first. PR #131 is merged. PR #129 remains separately owned at 07c4d5dd6a3efb0b52dc0c4df4bddd42346143dd; do not edit its dm-review or Workflow Kernel implementation.
+Recommended Depot generator task; independently scoped consumer instruction repairs do not wait for this task. PR #131 is merged. PR #129 remains separately owned at 07c4d5dd6a3efb0b52dc0c4df4bddd42346143dd; do not edit its dm-review or Workflow Kernel implementation.
 
 Workspace:
 Use /home/ned/ai/depot only to inspect Git metadata and fetch origin/main. Record the current exact SHA. If it has advanced from the prepared base, inspect the relevant delta and continue from refreshed main when the same scope remains valid; never revert newer work to the snapshot. Create a clean worktree at an unused path under /home/ned/ai/depot-worktrees and a new branch named docs/instructions-01 (use fix/ for executable changes). Choose a unique suffix if that branch/path already has an owner. Preserve the primary checkout and all existing worktrees: no stash, reset, clean, rebase, branch switch, removal or discarded files. Recheck open PRs and file ownership before writing; do not duplicate active work.
+
+GitHub availability: use authenticated REST if GraphQL or a gh command is rate-limited. A missing Project item or unavailable Project API does not block repository edits, tests, commits, push or a PR. Use Git refs and available repository API evidence; mark unavailable coordination explicitly. If PR creation itself is unavailable, finish safe isolated work and push when Git transport works, then report PR creation pending rather than claiming completion. Do not treat the mere existence of an unrelated PR as a file collision.
 
 Read AGENTS.md, directly referenced instructions, CLAUDE.md, engineering principles, relevant plans/lessons and affected local skills/hooks. Use Assembly Coordinator and Design Machines strategy when available. Follow local RTK rules. Shared skills belong in Depot; local skills belong in their repository. No personal Notion/RAG/memory dependency or cache edits.
 

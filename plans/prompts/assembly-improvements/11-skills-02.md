@@ -24,10 +24,12 @@ executorCapabilities: ["read-repository", "write-repository", "structured-output
 executorEffort: high
 
 Prerequisite and collision boundary:
-Run after INSTRUCTIONS-01 is merged and the relevant consumer authority can be read at a current exact commit. Review the latest preceding result before starting; this is a reserved later prompt, not authorization to run all plugin passes together. Use the completed SKILLS-01 findings; do not duplicate an active Pipeline branch.
+This plugin pass does not depend on the generator or consumer instruction PRs merging. Use the policy in this packet and read the current relevant consumer source contract at an exact commit. Earlier pass results are useful evidence when available, not a merge gate. Check active ownership of the files this pass actually changes; stop only for a genuine collision or a missing required contract, and do not duplicate a completed pass. Use SKILLS-01 findings when available; do not duplicate an active Pipeline branch.
 
 Workspace:
 Use /home/ned/ai/depot only to inspect Git metadata and fetch origin/main. Record the current exact SHA. If it has advanced from the prepared base, inspect the relevant delta and continue from refreshed main when the same scope remains valid; never revert newer work to the snapshot. Create a clean worktree at an unused path under /home/ned/ai/depot-worktrees and a new branch named docs/skills-02 (use fix/ for executable changes). Choose a unique suffix if that branch/path already has an owner. Preserve the primary checkout and all existing worktrees: no stash, reset, clean, rebase, branch switch, removal or discarded files. Recheck open PRs and file ownership before writing; do not duplicate active work.
+
+GitHub availability: use authenticated REST if GraphQL or a gh command is rate-limited. A missing Project item or unavailable Project API does not block repository edits, tests, commits, push or a PR. Use Git refs and available repository API evidence; mark unavailable coordination explicitly. If PR creation itself is unavailable, finish safe isolated work and push when Git transport works, then report PR creation pending rather than claiming completion. Do not treat the mere existence of an unrelated PR as a file collision.
 
 Read AGENTS.md, directly referenced instructions, CLAUDE.md, engineering principles, relevant plans/lessons and affected local skills/hooks. Use Assembly Coordinator and Design Machines strategy when available. Follow local RTK rules. Shared skills belong in Depot; local skills belong in their repository. No personal Notion/RAG/memory dependency or cache edits.
 

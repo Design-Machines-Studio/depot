@@ -24,15 +24,19 @@ executorCapabilities: ["read-repository", "write-repository", "structured-output
 executorEffort: low
 
 Prerequisite and collision boundary:
-Run after INSTRUCTIONS-01 has merged. Fetch Design-Machines-Studio/depot main read-only using /home/ned/ai/depot and inspect the exact merged project-scaffolder source and root guidance through Git, without modifying its primary checkout or relying on stale installed templates. If the prerequisite is absent, complete only the read-only mapping and report the blocker. No Demo PR was open at preparation.
+Ready independently. INSTRUCTIONS-01 is a Depot generator task, not a consumer prerequisite. PR #132 contains these prompts, not the generator implementation. Neither PR needs to merge for this repository-owned repair; no new plugin API, generated artifact, tag or cache installation is required. Apply the agreed policy in this packet and preserve current repository engineering contracts. Read newer Depot source as optional comparison evidence when useful; do not search for a prerequisite merge as a gate. Check actual file ownership before writing. A dirty primary checkout or missing task branch is not a blocker: create the fresh worktree described below. If this task is already implemented, verify and report it rather than repeating it.
+
+Agreed policy for this task: select planning and verification by the actual task and risk, not file count; remove automatic documentation-agent, lesson-update and repeated approval chores; keep personal systems optional; use short shared authority with task-specific references. Preserve real security/release boundaries, all retained P1/P2/P3, repository commands, accessibility, performance, component reuse and applicable prototype/browser evidence. This policy is sufficient to implement the local repair without waiting for a generator change. No Demo PR was open at preparation.
 
 Workspace:
 Use /home/ned/assembly/assembly-demo only to inspect Git metadata and fetch origin/main. Record the current exact SHA. If it has advanced from the prepared base, inspect the relevant delta and continue from refreshed main when the same scope remains valid; never revert newer work to the snapshot. Create a clean worktree at an unused path under /home/ned/assembly/assembly-demo-worktrees and a new branch named docs/instructions-07 (use fix/ for executable changes). Choose a unique suffix if that branch/path already has an owner. Preserve the primary checkout and all existing worktrees: no stash, reset, clean, rebase, branch switch, removal or discarded files. Recheck open PRs and file ownership before writing; do not duplicate active work.
 
+GitHub availability: use authenticated REST if GraphQL or a gh command is rate-limited. A missing Project item or unavailable Project API does not block repository edits, tests, commits, push or a PR. Use Git refs and available repository API evidence; mark unavailable coordination explicitly. If PR creation itself is unavailable, finish safe isolated work and push when Git transport works, then report PR creation pending rather than claiming completion. Do not treat the mere existence of an unrelated PR as a file collision.
+
 Read AGENTS.md, directly referenced instructions, CLAUDE.md, engineering principles, relevant plans/lessons and affected local skills/hooks. Use Assembly Coordinator and Design Machines strategy when available. Follow local RTK rules. Shared skills belong in Depot; local skills belong in their repository. No personal Notion/RAG/memory dependency or cache edits.
 
 Task and non-goals:
-The audit found a thin AGENTS.md and no demonstrated model-specific defect. Verify current tracked instructions and any repository-owned skills/hooks against the reviewed shared policy. Correct only actual contradictions or missing necessary portable authority.
+The audit found a thin AGENTS.md and no demonstrated model-specific defect. Verify current tracked instructions and any repository-owned skills/hooks against the agreed policy in this packet. Correct only actual contradictions or missing necessary portable authority.
 
 Preserve stock factory-install/distribution ownership, configuration and release requirements. Do not add product features, a second roadmap, a new model policy or a duplicate CLAUDE guide solely to mention the new driver. A no-change result is valid.
 

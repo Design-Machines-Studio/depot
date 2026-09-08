@@ -13,53 +13,54 @@ Recommended start
 - Matrix evidence date: 2026-08-27; installed model-router 0.7.0 and OpenRouter matrix 1.20.3, recommendation observed 2026-09-08.
 
 ```text
-Implement only INSTRUCTIONS-02: Shorten Baseplate instructions and local skills.
+Implement INSTRUCTIONS-02: repair Baseplate instructions and local hooks.
 
 Repository: Design-Machines-Studio/assembly-baseplate
 Checkout for discovery: /home/ned/assembly/assembly-baseplate
-Prepared exact base (2026-09-08): 0a16152fd68a1b11ad69654a0c2c0893c6200f49
-Owning plugin: none; repository-owned instructions/workflow
+Prepared exact base: 82c25a8be8e32a00b186d55fb2c430698cefd93b
+Owning plugin: none; this is repository-owned instruction/hook maintenance
 executorRole: builder-fast
 executorCapabilities: ["read-repository", "write-repository", "structured-output"]
 executorEffort: high
 
 Prerequisite and collision boundary:
-Run after INSTRUCTIONS-01 has merged. Fetch Design-Machines-Studio/depot main read-only using /home/ned/ai/depot and inspect the exact merged project-scaffolder source and root guidance through Git, without modifying its primary checkout or relying on stale installed templates. If the prerequisite is absent, complete only the read-only mapping and report the blocker. At preparation only dependency PRs #826/#827/#828 were open; recheck for new owners.
+Ready independently. This complete prompt supersedes the earlier instruction to wait for Depot INSTRUCTIONS-01. That is a generator task, not a Baseplate prerequisite. PR #132 contains prompts, not its implementation. No generator merge, prompt-pack merge, new plugin API, tag or cache update is needed. Apply the agreed policy below using Baseplate's current engineering contracts.
+
+PR #865 is now merged. At refresh, only dependency PRs #826–#828 were open. Recheck actual file ownership; an unrelated PR is not a collision. If this task already has a completed or active PR, inspect it and avoid duplicate work.
 
 Workspace:
-Use /home/ned/assembly/assembly-baseplate only to inspect Git metadata and fetch origin/main. Record the current exact SHA. If it has advanced from the prepared base, inspect the relevant delta and continue from refreshed main when the same scope remains valid; never revert newer work to the snapshot. Create a clean worktree at an unused path under /home/ned/assembly/assembly-baseplate-worktrees and a new branch named docs/instructions-02 (use fix/ for executable changes). Choose a unique suffix if that branch/path already has an owner. Preserve the primary checkout and all existing worktrees: no stash, reset, clean, rebase, branch switch, removal or discarded files. Recheck open PRs and file ownership before writing; do not duplicate active work.
+Fetch origin/main and record its exact current SHA. If newer than the prepared base, inspect the relevant delta and continue from current compatible main; do not revert newer work. Create a clean worktree under /home/ned/assembly/assembly-baseplate-worktrees and an unused fix/instructions-02 branch, adding a unique suffix if needed. A dirty primary checkout or missing task branch is not a blocker. Preserve every existing checkout/worktree: no stash, reset, clean, rebase, branch switch, removal or discarded files.
 
-Read AGENTS.md, directly referenced instructions, CLAUDE.md, engineering principles, relevant plans/lessons and affected local skills/hooks. Use Assembly Coordinator and Design Machines strategy when available. Follow local RTK rules. Shared skills belong in Depot; local skills belong in their repository. No personal Notion/RAG/memory dependency or cache edits.
+Reuse the prior read-only mapping. The AGENTS/CLAUDE/RTK/.claude/.codex source trees are unchanged between the earlier 0a16152f base and this prepared head. Read any changed applicable instructions and references, including engineering principles, testing, Fixture authoring and release authority; do not repeat the entire discovery pass when the evidence is still exact. Use Assembly Coordinator and Design Machines strategy when available. Follow local RTK rules. No personal Notion/RAG/memory dependency.
 
 Task and non-goals:
-The audit found AGENTS.md about 83 KB and CLAUDE.md about 43 KB, with repeated blanket planning, doc-sync and lesson chores. Reconfirm at the current head. Inspect all tracked AGENTS.md/CLAUDE.md scopes, repository-owned .claude/skills, .agents/skills, .codex/skills, hooks/agent definitions and relevant settings, plus docs/reference/engineering-principles.md and declared development/verification/release runbooks.
+Current root sizes are AGENTS.md 82,738 bytes, CLAUDE.md 42,576 and RTK.md 562. The mapping found six hooks per harness, ten Claude agents, ten Codex shims and .claude/settings.json. No repository-local .claude/skills, .agents/skills or .codex/skills were present; verify cheaply rather than inventing new skills.
 
-Make the root instruction surface short and coherent across Codex and Claude. Prefer existing common/topic references, with thin harness entrypoints and task-specific loading. Remove conflicting repeated process obligations and personal-system prerequisites. Apply the reviewed generator policy to affected local skills/hooks as well as the root files. Preserve Go-in-Docker commands, generation, migrations, authorization, federation boundaries, trusted Fixture contracts, performance, Live Wires/component reuse, accessibility, and repository-owned release authority. Do not change product behavior, dependency versions, CI policy, or generated Templ code. Shared plugin defects remain Depot-owned.
+1. Shorten root instructions with one coherent shared authority and task-specific references. Aim for roughly 8 KiB across entrypoints where practical; preserve necessary contracts and keep the actual discovery chain within its harness allowance. Do not solve repetition merely by increasing the instruction limit.
+2. Apply this agreed policy to root guidance and affected local agents/hooks: plan and verify according to task/risk, not file count; remove automatic documentation-agent, lesson-update, file-count commit and repeated approval chores; document meaningful behavior/runbook changes and keep personal systems optional. This policy is sufficient without a generator change.
+3. Fix .codex/hooks.json's six commands hard-coded to a macOS checkout. Use an existing supported repository-relative or runtime-resolved path mechanism, not another developer's absolute path. Preserve the Go-in-Docker guard. Identify canonical sources and regenerate any affected generated Codex shims with the existing mechanism.
+4. Preserve repository-owned Go/Docker/generation commands, authorization, migrations, federation, trusted Fixture contracts, release authority, Live Wires/component reuse, prototype fidelity, accessibility, performance and maintenance.
+
+Build for two trusted developers and self-installed federated co-op intranets of 5–50 people with trusted internal Fixtures. Apply YAGNI and pragmatic DRY. No product behavior, dependencies, CI policy, release files, tasks/lessons.md, generated Templ output, installed plugins or caches should change. Shared plugin defects stay Depot-owned.
 
 Acceptance and focused verification:
-Report before/after root bytes and the actual instruction discovery chain. Aim for roughly 8 KiB across root entrypoints where practical; the discovered stack must fit the harness allowance. No required contract may disappear during shortening. Walk a docs repair, ordinary Go/Templ change and authorization change through the new instructions. Exercise a changed hook/command selector if any; documentation alone does not require unrelated app test lanes.
+Report before/after root bytes and the actual instruction discovery chain. Preserve every necessary contract through the rewrite. Verify local links, canonical/generated consistency and portability. Exercise changed hooks in temporary fixtures: paths resolve in the fresh checkout, ordinary edits avoid repeated chores, and a forbidden bare-Go invocation is still rejected. Test the guard's input/output; do not execute bare Go on the host. Run any other affected repository checks, not unrelated full application lanes.
 
 Consumer canary:
-Demonstrate which instructions and repository verification lane each of the three sample tasks loads. Preserve accurate distinction between an instruction walkthrough and tests actually run.
+Walk a docs repair, ordinary Go/Templ change and authorization change through the new instruction and verification selection. Distinguish that walkthrough from commands actually executed. The prior mapping is reusable evidence, not a post-change test pass.
 
-Working constraints:
-Build for two trusted developers and self-installed, federated co-op intranets of 5–50 people with trusted internal Fixtures. Apply YAGNI, pragmatic DRY, Live Wires/component reuse, accessibility, performance and maintainability. Preserve real authorization, credential, data-loss and release protections. No enterprise infrastructure. The driver retains design/integration/final acceptance; workers get bounded ownership. Route only role/capabilities/effort, with no concrete identities in participant packets or automatic inheritance of driver/max effort.
+Use a direct workflow and reuse still-exact evidence. No automatic full Pipeline/adversarial suite for these edits. Review the actual diff, fix every retained P1/P2/P3 and verify affected behavior. Stop review churn after convergence. Keep real credential, authorization, destructive-action and release boundaries closed. Routine implementation choices are yours.
 
-Use a direct, proportionate workflow and reuse still-exact evidence. No automatic full Pipeline/adversarial suite for instruction edits. Fix every retained P1/P2/P3 and verify affected behavior; stop review churn after convergence. Routine implementation choices are yours; ask only for a real missing decision or authorization.
-
-Economics:
-Refresh installed routing/matrix evidence before dispatch. Prefer eligible subscriptions and useful bounded OpenRouter offload. Paid calls have a $0.25 total ceiling, subject to known remaining monthly budget; $50/month is a goal, not verified headroom. Use deterministic checks where sufficient. Respect real export restrictions; report unavailable lanes and distinguish fixtures from actual calls.
-
-Version and generated surfaces:
-Instruction-only consumer changes normally require no application version bump, release tag or plugin-cache synchronization. Follow the owning repository's actual policy if runtime hooks change. Preserve generated code and vendored/shared plugin content. Run repository-appropriate focused checks; do not run Depot composition for a consumer that contains no Depot plugin change. Hand off a discovered shared-plugin defect to its exact Depot owner instead of patching a cache.
+Routing and economics:
+Keep driver design/integration/final acceptance separate from bounded workers. Refresh installed routing/matrix evidence before delegated work; request only role/capabilities/effort and keep concrete identities out of participant packets. Prefer eligible subscriptions and useful bounded OpenRouter offload. Paid calls have a $0.25 total ceiling subject to known remaining monthly budget; $50/month is a goal, not verified headroom. Respect real export restrictions and report unavailable measurements/lanes honestly.
 
 GitHub and delivery:
-Verify, commit, push and open a proper PR to main with this task ID in its title, final behavior and evidence gaps. If already satisfied, report evidence without an empty commit/PR. Do not mutate native Issues, merge, tag or refresh installations. Changed plugins still need separately authorized publication, both-cache synchronization and real installed consumer proof.
+Use authenticated REST if GraphQL or a gh command is rate-limited. A missing Project item or unavailable Project API does not block edits, tests, commits, push or a PR. Verify, commit, push and open a proper PR to Baseplate main with INSTRUCTIONS-02 in its title. If PR creation itself is unavailable, finish safe isolated work, push when Git transport works and report that publication step pending; never claim it succeeded.
 
-Use only Assembly Coordination Project 1: the relevant created PR is Review / P1 / Tooling, or Blocked with its real dependency. No duplicate backlog. CLEANUP-01 remains an inventory PR only.
+Use only Assembly Coordination Project 1: Review / P1 / Tooling for the relevant PR, or a real blocked dependency. If Project access is unavailable, report the update pending and continue repository work. Do not mutate native Issues, merge, tag or refresh installations. Instruction-only changes require no app version bump or Depot composition run; follow actual repository policy for changed hooks. No plugin publication/cache synchronization is needed for this local repair.
 
-Treat 40 tool calls as an exploration checkpoint; finish authorized repairs, verification, commit, push and PR creation. Keep updates brief.
+Treat 40 tool calls as an exploration checkpoint, not a stop before necessary repairs, checks, commit, push and PR creation. Keep updates brief.
 
 Final report:
-Report result, exact base/head, changes, actual checks, PR/Project state, delivery level and one next action. For routed work, report role, attempted/served participant, rail, effort, duration, outcome, measured tokens/cost, subscription calls, fallbacks and unavailable measurements. Finish with SIMPLICITY-CHECK, NOT-COVERED and COMMANDS-RUN.
+Report exact base/head, changes, checks, root sizes, PR/Project state, evidence gaps and one next action. For actual routed work, report role, attempted/served participant, rail, effort, duration, outcome, measured tokens/cost, subscription calls, fallbacks and unavailable measurements. Finish with SIMPLICITY-CHECK, NOT-COVERED and COMMANDS-RUN.
 ```
