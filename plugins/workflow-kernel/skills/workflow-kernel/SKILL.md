@@ -542,3 +542,16 @@ run by `tools/validate-workflow-kernel.py` as part of
 `./tools/validate-composition.sh --all`; it does not ship into user plugin
 caches, and installed hosts do not self-test. Validate in the depot
 repository before integrating an orchestrator.
+
+
+## Automatic Codex observation metadata
+
+Workflow Kernel 0.21.0 adds an observation-only producer, separate from workflow
+state and observation-index-v1. See [Codex configuration](references/codex-live-observation.md),
+[live contract](references/live-observation-contract.md), and
+[schema](references/live-observation-schema.json). Use the trusted launcher for
+`codex-observation-hook`, `live-observation-validate`, and
+`live-observation-publish`. Resolve a coherent installed bundle containing every
+required asset before configuration. Source development is not installed proof.
+One-time project hook configuration can observe normally started sessions on
+supported launch paths. It does not establish automatic visibility for all runs.
