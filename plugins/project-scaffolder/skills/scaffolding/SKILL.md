@@ -15,21 +15,22 @@ Standardize Claude Code setup across all Design Machines projects. Generate `.cl
 
 | Type | Stack | Docker | Hooks | Agents |
 |------|-------|--------|-------|--------|
-| `go-templ-datastar` | Go + Templ + Datastar + Live Wires | Yes | all 4 + a11y-check | go-builder, css-reviewer, doc-sync, security-auditor, a11y-html-reviewer, a11y-css-reviewer, a11y-dynamic-content-reviewer |
-| `go-library` | Go module (no frontend) | Optional | commit-push, pre-stop, post-edit | doc-sync |
-| `css-framework` | CSS + npm build | No | commit-push, pre-stop, post-edit, a11y-check | css-reviewer, doc-sync, a11y-css-reviewer |
-| `craft-cms` | Craft CMS + DDEV + Twig | DDEV | commit-push, pre-stop, post-edit, block-bare-craft, a11y-check | doc-sync, security-auditor, a11y-html-reviewer, a11y-css-reviewer |
+| `go-templ-datastar` | Go + Templ + Datastar + Live Wires | Yes | Docker safety, contextual reminders, a11y-check | go-builder, css-reviewer, doc-sync, security-auditor, a11y-html-reviewer, a11y-css-reviewer, a11y-dynamic-content-reviewer |
+| `go-library` | Go module (no frontend) | Optional | contextual reminders | doc-sync |
+| `css-framework` | CSS + npm build | No | contextual reminders, a11y-check | css-reviewer, doc-sync, a11y-css-reviewer |
+| `craft-cms` | Craft CMS + DDEV + Twig | DDEV | DDEV safety, contextual reminders, a11y-check | doc-sync, security-auditor, a11y-html-reviewer, a11y-css-reviewer |
 
 ### Hook Inventory
 
 | Hook | Event | Matcher | Default | Purpose |
 |------|-------|---------|---------|---------|
 | `block-bare-go.sh` | PreToolUse | Bash | Go projects | Prevent Go/Templ outside Docker |
-| `commit-push-reminder.sh` | PostToolUse | Edit\|Write | ALL | Nudge commits at 3+ files, push at 2+ commits |
-| `post-edit-context.sh` | PostToolUse | Edit\|Write | ALL | Agent reminders based on file type |
-| `a11y-check.sh` | PostToolUse | Edit\|Write | Frontend projects | A11y agent reminders after template/CSS/JS changes |
+| `block-bare-craft.sh` | PreToolUse | Bash | Craft projects | Prevent Craft/Composer outside DDEV |
+| `commit-push-reminder.sh` | PostToolUse | Edit\|Write | ALL | Once-per-session reminder when changes are ready to commit or push |
+| `post-edit-context.sh` | PostToolUse | Edit\|Write | ALL | Optional, once-per-session context based on file type |
+| `a11y-check.sh` | PostToolUse | Edit\|Write | Frontend projects | Once-per-session reminder when applicable accessibility review is useful |
 | `nats-safety.sh` | PostToolUse | Edit\|Write | `go-templ-datastar` | NATS config safety reminders after editing NATS-related files |
-| `pre-stop-check.sh` | Stop | -- | ALL | Uncommitted work check + agent compliance |
+| `pre-stop-check.sh` | Stop | -- | ALL | Once-per-session uncommitted-work reminder; silent when clean |
 
 ### Agent Inventory
 
@@ -37,7 +38,7 @@ Standardize Claude Code setup across all Design Machines projects. Generate `.cl
 |-------|-----------|---------|
 | `go-builder.md` | Go projects | Docker-safe build, test, generate |
 | `css-reviewer.md` | Live Wires projects | CSS compliance (layers, naming, tokens) |
-| `doc-sync.md` | ALL projects | Documentation freshness after code changes |
+| `doc-sync.md` | ALL projects | Focused documentation-impact review when behavior or operating instructions change |
 | `security-auditor.md` | Backend projects | OWASP review + project-specific concerns |
 | `a11y-html-reviewer.md` | Frontend projects | WCAG HTML/template compliance |
 | `a11y-css-reviewer.md` | Frontend projects | WCAG visual accessibility (contrast, focus, motion) |
@@ -82,6 +83,7 @@ Create the following in the target project:
   settings.json              <- from project-configs.md, based on project type
   hooks/
     block-bare-go.sh         <- Go projects only (from hooks.md)
+    block-bare-craft.sh      <- Craft projects only (from hooks.md)
     commit-push-reminder.sh  <- always (from hooks.md)
     post-edit-context.sh     <- always, customized per type (from hooks.md)
     a11y-check.sh            <- frontend projects (from hooks.md)
@@ -99,16 +101,15 @@ CLAUDE.md                    <- routing doc (from project-configs.md)
 tests/
   a11y/
     pages.spec.js            <- frontend projects (from project-configs.md)
-tasks/
-  todo.md                    <- empty task file
-  lessons.md                 <- empty lessons file
+  tasks/
+    todo.md                    <- optional workboard for multi-step tasks
 ```
 
 ### Step 4: Finalize
 
 1. Replace all `{{PROJECT_PREFIX}}` and `{{PROJECT_NAME}}` placeholders in generated files
 2. For `post-edit-context.sh`: remove sections that don't apply to the project type (marked with comments)
-3. For `pre-stop-check.sh`: set the `AGENTS` array to only include applicable agents
+3. Create `tasks/todo.md` only when a multi-step workboard is useful; do not create a lessons store automatically
 4. Run `chmod +x .claude/hooks/*.sh`
 5. Print a summary of what was generated
 
@@ -119,6 +120,12 @@ Tell the user:
 - Review `settings.json` -- add project-specific permissions to `settings.local.json` if needed
 - Add any project-specific agents to `.claude/agents/`
 - The `post-edit-context.sh` hook can be extended with project-specific file type -> agent mappings
+- Use plan mode and focused agents when task scope or risk warrants them; routine documentation and configuration edits need focused verification only
+- Update documentation when behavior or operating instructions change, and record only reusable lessons if the project maintains a lessons file
+
+### Role requests and model guidance
+
+Generated instructions should stay provider-neutral. When delegation is useful, request a role, required capabilities, and normalized effort (`low`, `medium`, `high`, or `max`); keep concrete model and rail recommendations in the human-facing operator context. See the [current model-router guidance](https://github.com/Design-Machines-Studio/depot/blob/main/plugins/model-router/skills/model-router/references/driver-worker-guidance.md) instead of copying a model portfolio into a project template.
 
 ## Generic CLAUDE.md Starters
 
@@ -149,7 +156,7 @@ Replace all placeholders before writing files. Remove any remaining placeholder 
 
 The `dm-review` depot plugin provides a full code review orchestrator that launches up to 15 parallel agents across accessibility, security, architecture, CSS, voice, and governance domains. It detects project type automatically from marker files (`go.mod`, `craft/`, `.ddev/`, `package.json`) and selects applicable agents -- no per-project configuration needed.
 
-For projects with the depot installed, run `/dm-review` for a full review or `/dm-review quick` for core agents only.
+For projects with the depot installed, use `/dm-review` or `/dm-review quick` when the task's risk and scope call for code or integration review. A documentation-only correction normally needs focused checks, not the full Pipeline or an automatic agent roster.
 
 ## Hook Design Principles
 
@@ -180,8 +187,8 @@ Official and third-party Claude Code plugins that complement this skill:
 
 | File | Contains |
 |------|----------|
-| [${CLAUDE_SKILL_DIR}/references/hooks.md](${CLAUDE_SKILL_DIR}/references/hooks.md) | All 5 hook script templates with full source and customization notes |
+| [${CLAUDE_SKILL_DIR}/references/hooks.md](${CLAUDE_SKILL_DIR}/references/hooks.md) | All hook script templates with full source and customization notes |
 | [${CLAUDE_SKILL_DIR}/references/agents.md](${CLAUDE_SKILL_DIR}/references/agents.md) | Agent definition templates (go-builder, css-reviewer, doc-sync, security-auditor) |
-| [${CLAUDE_SKILL_DIR}/references/project-configs.md](${CLAUDE_SKILL_DIR}/references/project-configs.md) | settings.json templates, CLAUDE.md routing doc templates, tasks file starters -- organized by project type |
+| [${CLAUDE_SKILL_DIR}/references/project-configs.md](${CLAUDE_SKILL_DIR}/references/project-configs.md) | settings.json templates, CLAUDE.md routing doc templates, and optional task-file starters -- organized by project type |
 | [${CLAUDE_SKILL_DIR}/references/claude-md-templates/minimal.md](${CLAUDE_SKILL_DIR}/references/claude-md-templates/minimal.md) | Drop-in CLAUDE.md starter for any stack -- Karpathy's four principles, verbatim, with MIT attribution |
 | [${CLAUDE_SKILL_DIR}/references/claude-md-templates/dm-standard.md](${CLAUDE_SKILL_DIR}/references/claude-md-templates/dm-standard.md) | Drop-in CLAUDE.md starter for DM projects that don't match a project-type template -- paraphrased principles plus DM conventions |

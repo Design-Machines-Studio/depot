@@ -6,10 +6,12 @@ All hook scripts for Claude Code project scaffolding. Each template uses `{{PROJ
 
 - [General Notes](#general-notes) (line 15) -- Exit codes, stdin format, permissions
 - [1. block-bare-go.sh](#1-block-bare-gosh) (line 26) -- Prevents Go commands outside Docker
-- [2. commit-push-reminder.sh](#2-commit-push-remindersh) -- Nudges frequent commits and pushes
-- [3. post-edit-context.sh](#3-post-edit-contextsh) -- Context-aware agent reminders after edits
-- [4. pre-stop-check.sh](#4-pre-stop-checksh) -- Verifies commits and agents before stopping
-- [5. a11y-check.sh](#5-a11y-checksh) -- Accessibility agent reminders for frontend files
+- [2. block-bare-craft.sh](#2-block-bare-craftsh) -- Prevents Craft and Composer commands outside DDEV
+- [3. commit-push-reminder.sh](#3-commit-push-remindersh) -- Once-per-session commit and push reminder
+- [4. post-edit-context.sh](#4-post-edit-contextsh) -- Optional context reminders after edits
+- [5. pre-stop-check.sh](#5-pre-stop-checksh) -- Once-per-session uncommitted-work reminder
+- [6. a11y-check.sh](#6-a11y-checksh) -- Once-per-session accessibility reminder for frontend files
+- [7. nats-safety.sh](#7-nats-safetysh) -- Once-per-session NATS safety reminder
 
 ## General Notes
 
@@ -40,11 +42,11 @@ COMMAND=$(jq -r '.tool_input.command')
 # Allows: docker compose exec app go build, echo "go build" (quoted), comments
 if printf '%s\n' "$COMMAND" | grep -qE '(^|\&\&|\|\||;)\s*(go |templ )' && \
    ! printf '%s\n' "$COMMAND" | grep -q 'docker compose'; then
-  echo "BLOCKED: Go/Templ commands must run inside Docker." >&2
-  echo "" >&2
-  echo "Use: docker compose exec app <command>" >&2
-  echo "Example: docker compose exec app go build -o bin/app ./cmd/api" >&2
-  echo "Example: docker compose exec app templ generate" >&2
+  printf '%s\n' "BLOCKED: Go/Templ commands must run inside Docker." >&2
+  printf '%s\n' "" >&2
+  printf '%s\n' "Use: docker compose exec app <command>" >&2
+  printf '%s\n' "Example: docker compose exec app go build -o bin/app ./cmd/api" >&2
+  printf '%s\n' "Example: docker compose exec app templ generate" >&2
   exit 2
 fi
 
@@ -58,87 +60,88 @@ exit 0
 
 ---
 
-## 2. commit-push-reminder.sh
+## 2. block-bare-craft.sh
 
-**Event:** PostToolUse | **Matcher:** Edit|Write | **Applies to:** ALL projects
+**Event:** PreToolUse | **Matcher:** Bash | **Applies to:** `craft-cms`
 
-Nudges toward frequent commits and pushes. Fires after every file edit.
+Prevents Craft and Composer commands from running outside DDEV. Create this file for Craft projects and register it in `settings.json`.
 
 ```bash
 #!/bin/bash
-# commit-push-reminder.sh -- Nudge toward frequent commits and pushes
-#
-# Checks:
-# 1. Uncommitted file count -> suggest commit at 2+ files, insist at 3+
-# 2. Unpushed commit count -> suggest push at 2+ commits
-#
-# Uses HEAD-keyed markers so nudges reset after each commit.
+# block-bare-craft.sh -- Prevent Craft/Composer commands from running outside DDEV
 
-INPUT=$(cat)
+COMMAND=$(jq -r '.tool_input.command // empty' 2>/dev/null)
 
-HEAD=$(git -C "${CLAUDE_PROJECT_DIR}" rev-parse --short HEAD 2>/dev/null)
-if [ -z "$HEAD" ]; then
-  exit 0
-fi
-
-# Count uncommitted changes (unstaged + staged, deduplicated)
-CHANGED=$(git -C "${CLAUDE_PROJECT_DIR}" diff --name-only 2>/dev/null)
-STAGED=$(git -C "${CLAUDE_PROJECT_DIR}" diff --cached --name-only 2>/dev/null)
-TOTAL=$(printf "%s\n%s" "$CHANGED" "$STAGED" | sort -u | grep -c -v '^$')
-
-# Count unpushed commits (0 if no upstream tracking)
-UNPUSHED=$(git -C "${CLAUDE_PROJECT_DIR}" log @{u}..HEAD --oneline 2>/dev/null | wc -l | tr -d ' ')
-[ -z "$UNPUSHED" ] && UNPUSHED=0
-
-MSG=""
-
-# Strong nudge at 3+ files -- fires every time
-if [ "$TOTAL" -ge 3 ]; then
-  MSG="You have $TOTAL uncommitted file changes. Run /simplify on the changed files, then stop and commit with a focused message. Keep commits to 1-4 files."
-
-# Gentle nudge at 2+ files -- fires once per HEAD (resets after each commit)
-elif [ "$TOTAL" -ge 2 ]; then
-  MARKER="/tmp/{{PROJECT_PREFIX}}-commit-nudge-${HEAD}"
-  if [ ! -f "$MARKER" ]; then
-    touch "$MARKER"
-    MSG="$TOTAL files changed since last commit. Consider running /simplify, then commit before making more changes."
-  fi
-fi
-
-# Push nudge at 2+ unpushed commits -- fires once per count
-if [ "$UNPUSHED" -ge 2 ]; then
-  PUSH_MARKER="/tmp/{{PROJECT_PREFIX}}-push-nudge-${UNPUSHED}"
-  if [ ! -f "$PUSH_MARKER" ]; then
-    touch "$PUSH_MARKER"
-    PUSH_MSG="You have $UNPUSHED unpushed commits -- push to remote."
-    if [ -n "$MSG" ]; then
-      MSG="$MSG $PUSH_MSG"
-    else
-      MSG="$PUSH_MSG"
-    fi
-  fi
-fi
-
-if [ -n "$MSG" ]; then
-  MSG_JSON=$(echo "$MSG" | jq -Rs '.')
-  echo "{\"systemMessage\": $MSG_JSON}"
+# Match bare php craft or composer commands. Commands already using ddev are allowed.
+if printf '%s\n' "$COMMAND" | grep -qE '(^|&&|\|\||;)\s*(php[[:space:]]+craft|composer([[:space:]]|$))' && \
+   ! printf '%s\n' "$COMMAND" | grep -q 'ddev'; then
+  printf '%s\n' "BLOCKED: Craft and Composer commands must run inside DDEV." >&2
+  printf '%s\n' "Use: ddev craft <command> or ddev composer <command>" >&2
+  exit 2
 fi
 
 exit 0
 ```
 
 ### Customization
-- Replace `{{PROJECT_PREFIX}}` with the project's lowercase directory name
-- Adjust thresholds (2/3) if needed -- these match the Assembly defaults
-- The gentle nudge fires once per HEAD (resets after each commit); the strong nudge fires every time
+- For projects with a different DDEV command policy, keep the real repository-owned restriction and adjust only the command pattern.
 
 ---
 
-## 3. post-edit-context.sh
+## 3. commit-push-reminder.sh
+
+**Event:** PostToolUse | **Matcher:** Edit|Write | **Applies to:** ALL projects
+
+Provides one quiet reminder per session when the working tree has changes. It does not count files or commits, and it is silent when there is nothing to act on.
+
+```bash
+#!/bin/bash
+# commit-push-reminder.sh -- Once-per-session reminder for verified changes
+#
+# Emits no output for a clean tree. The session marker prevents repeated nudges.
+
+INPUT=$(cat)
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-}"
+if [ -z "$PROJECT_DIR" ]; then
+  exit 0
+fi
+
+if ! git -C "$PROJECT_DIR" rev-parse --show-toplevel >/dev/null 2>&1; then
+  exit 0
+fi
+
+CHANGES=$(git -C "$PROJECT_DIR" status --short 2>/dev/null)
+if [ -z "$CHANGES" ]; then
+  exit 0
+fi
+
+SESSION_ID=$(printf '%s\n' "$INPUT" | jq -r '.session_id // "nosession"' 2>/dev/null || printf '%s\n' 'nosession')
+SESSION_ID=$(printf '%s' "$SESSION_ID" | tr -c '[:alnum:]_.-' '_')
+STATE_DIR="${TMPDIR:-/tmp}/claude-hook-state"
+MARKER="$STATE_DIR/{{PROJECT_PREFIX}}-${SESSION_ID}-commit-push"
+mkdir -p "$STATE_DIR" 2>/dev/null
+if [ -f "$MARKER" ]; then
+  exit 0
+fi
+touch "$MARKER" 2>/dev/null
+
+MSG="Changes are present. When this coherent change is verified, commit it; push when the branch is ready or sharing and recovery benefit from it."
+MSG_JSON=$(printf '%s\n' "$MSG" | jq -Rs '.')
+printf '{"systemMessage": %s}\n' "$MSG_JSON"
+exit 0
+```
+
+### Customization
+- Replace `{{PROJECT_PREFIX}}` with the project's lowercase directory name.
+- Keep the reminder conditional and once per session. Do not add file-count or commit-count thresholds.
+
+---
+
+## 4. post-edit-context.sh
 
 **Event:** PostToolUse | **Matcher:** Edit|Write | **Applies to:** ALL projects (content varies by type)
 
-Provides context-aware agent reminders after file edits. The template includes all possible blocks -- remove the ones that don't apply to your project type.
+Provides optional context after file edits. The template includes all possible blocks -- remove the ones that don't apply to your project type.
 
 **Silence discipline (required).** This hook fires on a broad matcher (every Edit|Write), so each reminder category fires **once per session** via a marker file under `$TMPDIR/claude-hook-state` keyed on `session_id`, then stays silent. Emitting the same static reminder on every edit only burns context tokens -- the assembly-baseplate project hit exactly this and fixed it the same way (2026-07-04). A hook that reminds on a broad matcher must be silent on the second and later occurrences; output only on first occurrence (or on a genuine violation).
 
@@ -152,7 +155,7 @@ Provides context-aware agent reminders after file edits. The template includes a
 # reminder on every edit only burns context tokens. Silent on every repeat.
 
 INPUT=$(cat)
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+FILE_PATH=$(printf '%s\n' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
 
 if [ -z "$FILE_PATH" ]; then
   exit 0
@@ -166,32 +169,32 @@ MESSAGE=""
 # --- GO PROJECTS: keep for go-templ-datastar, go-library ---
 if printf '%s\n' "$FILE_PATH" | grep -qE '1_tokens/'; then
   CATEGORY="tokens"
-  MESSAGE="Design tokens modified: Reference livewires theming.md for token guidelines. Run css-reviewer to verify compliance."
+  MESSAGE="Design tokens changed: if this changes styling behavior, consult Live Wires theming guidance and use css-reviewer as needed."
 elif printf '%s\n' "$FILE_PATH" | grep -qE 'src/css/|\.css$'; then
   CATEGORY="css"
-  MESSAGE="CSS modified: Consider running the css-reviewer agent to verify Live Wires compliance (cascade layers, naming, tokens)."
+  MESSAGE="CSS changed: use css-reviewer when the change needs a Live Wires review (cascade layers, naming, or tokens)."
 elif printf '%s\n' "$FILE_PATH" | grep -qE '\.templ$'; then
   CATEGORY="templ"
-  MESSAGE="Templ template modified: Run templ generate + go build via the go-builder agent. Check documentation via doc-sync."
+  MESSAGE="Templ changed: use go-builder for generation/build verification when relevant; update docs if behavior or operating instructions changed."
 elif printf '%s\n' "$FILE_PATH" | grep -qE '\.go$'; then
   CATEGORY="go"
-  MESSAGE="Go source modified: Rebuild via the go-builder agent (docker compose exec app go build)."
+  MESSAGE="Go source changed: use go-builder for Docker-wrapped build or test verification when relevant."
 # --- END GO PROJECTS ---
 # --- CRAFT CMS PROJECTS: keep for craft-cms ---
 elif printf '%s\n' "$FILE_PATH" | grep -qE '\.twig$|\.html\.twig$'; then
   CATEGORY="twig"
-  MESSAGE="Twig template modified: Check if documentation needs updating via doc-sync."
+  MESSAGE="Twig template changed: update docs if behavior or operating instructions changed; use doc-sync when impact is unclear."
 elif printf '%s\n' "$FILE_PATH" | grep -qE '\.php$'; then
   CATEGORY="php"
-  MESSAGE="PHP modified: Clear caches if needed (ddev craft clear-caches/all). Run security-auditor for handler/controller changes."
+  MESSAGE="PHP changed: preserve auth and data boundaries; use security-auditor for auth, authorization, credential, input, or data-handling changes."
 # --- END CRAFT CMS PROJECTS ---
 # --- UNIVERSAL: keep for all project types ---
 elif printf '%s\n' "$FILE_PATH" | grep -qE '\.sql$|migrations/'; then
   CATEGORY="sql"
-  MESSAGE="Migration/SQL modified: Run security-auditor to check for injection risks. Update documentation via doc-sync."
+  MESSAGE="Migration/SQL changed: check authorization and data behavior; use security-auditor when the change affects those boundaries and update docs when behavior changes."
 elif printf '%s\n' "$FILE_PATH" | grep -qE '\.(yaml|yml|json|toml)$'; then
   CATEGORY="config"
-  MESSAGE="Config file modified: Check if CLAUDE.md or other documentation needs updating via doc-sync."
+  MESSAGE="Config changed: update CLAUDE.md or other operating documentation when behavior or setup changes; use doc-sync if impact is unclear."
 fi
 # --- END UNIVERSAL ---
 
@@ -200,17 +203,19 @@ if [ -z "$CATEGORY" ]; then
 fi
 
 # Fire each category at most once per session -- silent on every repeat.
-SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // "nosession"')
+SESSION_ID=$(printf '%s\n' "$INPUT" | jq -r '.session_id // "nosession"' 2>/dev/null || printf '%s\n' 'nosession')
+SESSION_ID=$(printf '%s' "$SESSION_ID" | tr -c '[:alnum:]_.-' '_')
 STATE_DIR="${TMPDIR:-/tmp}/claude-hook-state"
 mkdir -p "$STATE_DIR" 2>/dev/null
-MARKER="$STATE_DIR/${SESSION_ID}-postedit-${CATEGORY}"
+MARKER="$STATE_DIR/{{PROJECT_PREFIX}}-${SESSION_ID}-postedit-${CATEGORY}"
 
 if [ -f "$MARKER" ]; then
   exit 0
 fi
 touch "$MARKER" 2>/dev/null
 
-echo "{\"systemMessage\": \"$MESSAGE\"}"
+MSG_JSON=$(printf '%s\n' "$MESSAGE" | jq -Rs '.')
+printf '{"systemMessage": %s}\n' "$MSG_JSON"
 exit 0
 ```
 
@@ -228,145 +233,102 @@ Add project-specific blocks as needed (e.g., governance code detection for Assem
 
 ---
 
-## 4. pre-stop-check.sh
+## 5. pre-stop-check.sh
 
 **Event:** Stop | **Matcher:** -- (fires on all stops) | **Applies to:** ALL projects
 
-Checks for uncommitted work before stopping. Reminds about agent compliance and session end workflow.
+Checks for uncommitted work before stopping. It is silent when the tree is clean and reminds at most once per session.
 
 ```bash
 #!/bin/bash
-# pre-stop-check.sh -- Before stopping, verify work is committed and agents ran
-#
-# Uses a diff-hash marker to prevent infinite loops.
+# pre-stop-check.sh -- Before stopping, remind about uncommitted work
 
 INPUT=$(cat)
-
-# --- CONFIGURE THESE PER PROJECT ---
-# List agents that should be checked based on file types changed
-# Format: "file_pattern:agent_name:description"
-AGENT_CHECKS=(
-  '\.css$:css-reviewer:CSS files changed'
-  '\.(go|templ)$:go-builder:Go/Templ files changed -- verify build succeeded'
-  '(handlers/|middleware/|auth|migrations/):security-auditor:Handler/auth/data code changed'
-  '\.(go|templ|css|js|sql|yaml|yml|html|twig|php)$:doc-sync:Code changed -- verify documentation is fresh'
-)
-# --- END CONFIGURATION ---
-
-# Check for uncommitted changes
-UNSTAGED=$(git -C "${CLAUDE_PROJECT_DIR}" diff --name-only 2>/dev/null)
-STAGED=$(git -C "${CLAUDE_PROJECT_DIR}" diff --cached --name-only 2>/dev/null)
-CHANGES=$(printf "%s\n%s" "$UNSTAGED" "$STAGED" | sort -u | grep -v '^$')
-
-# Check recent commits (changes already committed this session)
-TODAY=$(date +%Y-%m-%d)
-COMMITTED_TODAY=$(git -C "${CLAUDE_PROJECT_DIR}" log --since="$TODAY" --name-only --pretty=format: 2>/dev/null | sort -u | grep -v '^$')
-ALL_CHANGES=$(printf "%s\n%s" "$CHANGES" "$COMMITTED_TODAY" | sort -u | grep -v '^$')
-
-if [ -z "$ALL_CHANGES" ]; then
-  # No changes at all -- just remind about session end
-  TODAY_MARKER="/tmp/{{PROJECT_PREFIX}}-session-${TODAY}"
-  if [ -f "$TODAY_MARKER" ]; then
-    echo "{\"systemMessage\": \"Session end: Append session summary to memory/sessions.md.\"}"
-  fi
+PROJECT_DIR="${CLAUDE_PROJECT_DIR:-}"
+if [ -z "$PROJECT_DIR" ]; then
   exit 0
 fi
 
-# Prevent infinite loops -- hash the changes and check if we already reminded
-find /tmp -name "{{PROJECT_PREFIX}}-stop-review-*" -type f -mmin +60 -delete 2>/dev/null
-DIFF_HASH=$(echo "$ALL_CHANGES" | md5 -q 2>/dev/null || echo "$ALL_CHANGES" | md5sum | cut -d' ' -f1)
-REVIEW_MARKER="/tmp/{{PROJECT_PREFIX}}-stop-review-${DIFF_HASH}"
-
-if [ -f "$REVIEW_MARKER" ]; then
+if ! git -C "$PROJECT_DIR" rev-parse --show-toplevel >/dev/null 2>&1; then
   exit 0
 fi
-touch "$REVIEW_MARKER"
 
-# Build agent reminders from AGENT_CHECKS
-AGENT_REMINDERS=""
-for check in "${AGENT_CHECKS[@]}"; do
-  IFS=':' read -r pattern agent desc <<< "$check"
-  if printf '%s\n' "$ALL_CHANGES" | grep -qE "$pattern"; then
-    AGENT_REMINDERS="${AGENT_REMINDERS}\n- ${agent}: ${desc}"
-  fi
-done
-
-FILE_COUNT=$(echo "$ALL_CHANGES" | wc -l | tr -d ' ')
-MSG="STOP -- ${FILE_COUNT} files changed this session. Before finishing:"
-
-if [ -n "$AGENT_REMINDERS" ]; then
-  MSG="${MSG}\n\nAgents to run (if not already done):${AGENT_REMINDERS}"
+CHANGES=$(git -C "$PROJECT_DIR" status --short 2>/dev/null)
+if [ -z "$CHANGES" ]; then
+  exit 0
 fi
 
-# Simplification reminder
-MSG="${MSG}\n\nRun /simplify on changed files before finishing to catch complexity creep."
-
-# Uncommitted changes warning
-if [ -n "$CHANGES" ]; then
-  UNCOMMITTED_COUNT=$(echo "$CHANGES" | wc -l | tr -d ' ')
-  MSG="${MSG}\n\nWARNING: ${UNCOMMITTED_COUNT} uncommitted files. Commit before stopping."
+SESSION_ID=$(printf '%s\n' "$INPUT" | jq -r '.session_id // "nosession"' 2>/dev/null || printf '%s\n' 'nosession')
+SESSION_ID=$(printf '%s' "$SESSION_ID" | tr -c '[:alnum:]_.-' '_')
+STATE_DIR="${TMPDIR:-/tmp}/claude-hook-state"
+MARKER="$STATE_DIR/{{PROJECT_PREFIX}}-${SESSION_ID}-prestop-uncommitted"
+mkdir -p "$STATE_DIR" 2>/dev/null
+if [ -f "$MARKER" ]; then
+  exit 0
 fi
+touch "$MARKER" 2>/dev/null
 
-# Session end workflow (only if session was started)
-TODAY_MARKER="/tmp/{{PROJECT_PREFIX}}-session-${TODAY}"
-if [ -f "$TODAY_MARKER" ]; then
-  MSG="${MSG}\n\nSession end workflow:"
-  MSG="${MSG}\n- Append session summary to memory/sessions.md"
-fi
-
-MSG_JSON=$(printf "%b" "$MSG" | jq -Rs '.')
-echo "{\"systemMessage\": $MSG_JSON}"
+MSG="Uncommitted changes remain. Before stopping, verify the work is complete and commit it when ready."
+MSG_JSON=$(printf '%s\n' "$MSG" | jq -Rs '.')
+printf '{"systemMessage": %s}\n' "$MSG_JSON"
 
 exit 0
 ```
 
 ### Customization
 
-**AGENT_CHECKS array**: Edit this to match the project's agents. Each entry is `pattern:agent_name:description`.
-
-**By project type:**
-
-- **go-templ-datastar**: All 4 default checks + a11y agents. Add governance/domain-specific checks as needed.
-- **go-library**: Keep go-builder and doc-sync. Remove css-reviewer and a11y agents.
-- **css-framework**: Keep css-reviewer, doc-sync, and a11y-css-reviewer. Remove go-builder and security-auditor.
-- **craft-cms**: Replace go-builder with a craft-builder check (`\.php$:craft-builder:PHP changed`). Keep doc-sync, security-auditor, and a11y agents.
+Replace `{{PROJECT_PREFIX}}` with the project's lowercase directory name. No per-project agent-compliance list is needed. Keep this hook focused on the real uncommitted-work boundary; choose implementation, documentation, security, and accessibility agents from the task and risk.
 
 ---
 
-## 5. a11y-check.sh
+## 6. a11y-check.sh
 
 **Event:** PostToolUse | **Matcher:** Edit|Write | **Applies to:** Frontend projects (go-templ-datastar, css-framework, craft-cms)
 
-Triggers accessibility agent reminders after template, CSS, or JavaScript file modifications.
+Provides an accessibility review reminder after relevant template, CSS, or JavaScript changes. Each category fires once per session and the hook is silent for unrelated files.
 
 ```bash
 #!/bin/bash
-# a11y-check.sh -- Remind about accessibility after frontend file changes
+# a11y-check.sh -- Once-per-session accessibility reminder after frontend changes
 #
-# Returns systemMessage JSON that reminds Claude to run a11y review agents.
+# Returns systemMessage JSON only when an applicable review may help.
 
 INPUT=$(cat)
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // empty')
+FILE_PATH=$(printf '%s\n' "$INPUT" | jq -r '.tool_input.file_path // empty' 2>/dev/null)
 
 if [ -z "$FILE_PATH" ]; then
   exit 0
 fi
 
-# Template files -> HTML accessibility review
+SESSION_ID=$(printf '%s\n' "$INPUT" | jq -r '.session_id // "nosession"' 2>/dev/null || printf '%s\n' 'nosession')
+SESSION_ID=$(printf '%s' "$SESSION_ID" | tr -c '[:alnum:]_.-' '_')
+STATE_DIR="${TMPDIR:-/tmp}/claude-hook-state"
+mkdir -p "$STATE_DIR" 2>/dev/null
+
+remind_once() {
+  CATEGORY="$1"
+  MESSAGE="$2"
+MARKER="$STATE_DIR/{{PROJECT_PREFIX}}-${SESSION_ID}-a11y-${CATEGORY}"
+  if [ -f "$MARKER" ]; then
+    return 0
+  fi
+  touch "$MARKER" 2>/dev/null
+  MSG_JSON=$(printf '%s\n' "$MESSAGE" | jq -Rs '.')
+  printf '{"systemMessage": %s}\n' "$MSG_JSON"
+}
+
 if printf '%s\n' "$FILE_PATH" | grep -qE '\.(templ|twig|html)$'; then
-  echo "{\"systemMessage\": \"Template modified: Run the a11y-html-reviewer agent to check WCAG 2.2 compliance (landmarks, headings, forms, ARIA, alt text).\"}"
+  remind_once "html" "Template changed: use a11y-html-reviewer when the change affects semantics, forms, landmarks, ARIA, or alt text."
   exit 0
 fi
 
-# CSS files -> Visual accessibility review
 if printf '%s\n' "$FILE_PATH" | grep -qE '\.css$'; then
-  echo "{\"systemMessage\": \"CSS modified: Run the a11y-css-reviewer agent to verify contrast, focus visibility, motion safety, and touch targets.\"}"
+  remind_once "css" "CSS changed: use a11y-css-reviewer when the change affects contrast, focus visibility, motion safety, touch targets, or reflow."
   exit 0
 fi
 
-# JavaScript/Datastar files -> Dynamic content review
 if printf '%s\n' "$FILE_PATH" | grep -qE '\.(js|ts)$'; then
-  echo "{\"systemMessage\": \"JavaScript modified: Run the a11y-dynamic-content-reviewer agent to check live regions, focus management, and keyboard operability.\"}"
+  remind_once "dynamic" "JavaScript or Datastar changed: use a11y-dynamic-content-reviewer when the change affects live regions, focus management, or keyboard operability."
   exit 0
 fi
 
@@ -378,7 +340,7 @@ exit 0
 - No placeholders needed -- this hook is universal for frontend projects
 - For go-library projects (no frontend): skip this hook entirely
 - For projects using Datastar heavily, the JS check will fire on Datastar signal files too
-- **Note:** This hook fires alongside `post-edit-context.sh` on `.css` and template files. That's intentional -- post-edit-context reminds about build/CSS agents while this hook reminds about accessibility agents. Both systemMessages are useful.
+- **Note:** This hook may fire alongside `post-edit-context.sh` on `.css` and template files. Both reminders are once per session and optional; use the accessibility reviewer when the change actually affects an accessibility boundary.
 
 ---
 
@@ -392,14 +354,13 @@ Fires when NATS-related Go files are edited. Reminds about DontListen enforcemen
 
 ```bash
 #!/usr/bin/env bash
-# PostToolUse hook: NATS safety reminders
-# Fires after editing Go files related to NATS/events
+# PostToolUse hook: NATS safety reminder
+# Fires once per session after editing Go files related to NATS/events
 
 set -euo pipefail
 
-# Read the tool result from stdin
 INPUT=$(cat)
-FILE_PATH=$(echo "$INPUT" | jq -r '.tool_input.file_path // .tool_input.command // empty' 2>/dev/null || echo "")
+FILE_PATH=$(printf '%s\n' "$INPUT" | jq -r '.tool_input.file_path // .tool_input.command // empty' 2>/dev/null || printf '%s\n' '')
 
 # Only check Go files related to NATS
 if [[ -z "$FILE_PATH" ]] || [[ "$FILE_PATH" != *.go ]]; then
@@ -411,17 +372,19 @@ if ! grep -qE '(nats\.|embeddednats|jetstream|ScopedEventBus|EventBus|KVStore|kv
   exit 0
 fi
 
-# Provide context-aware reminder
-cat <<'REMINDER'
+SESSION_ID=$(printf '%s\n' "$INPUT" | jq -r '.session_id // "nosession"' 2>/dev/null || printf '%s\n' 'nosession')
+SESSION_ID=$(printf '%s' "$SESSION_ID" | tr -c '[:alnum:]_.-' '_')
+STATE_DIR="${TMPDIR:-/tmp}/claude-hook-state"
+MARKER="$STATE_DIR/{{PROJECT_PREFIX}}-${SESSION_ID}-nats"
+mkdir -p "$STATE_DIR" 2>/dev/null
+if [ -f "$MARKER" ]; then
+  exit 0
+fi
+touch "$MARKER" 2>/dev/null
 
-🔒 NATS file changed. Remember:
-- DontListen: true must be set on embedded NATS server (P1 if missing)
-- Events publish AFTER db.WithTx() commit, never inside the transaction
-- Fixtures use ScopedEventBus, not raw nats.Conn
-- Subject pattern: assembly.{scope}.{entity}.{event}
-- Run nats-reviewer agent to validate patterns
-
-REMINDER
+MESSAGE="NATS-related Go file changed: preserve DontListen=true, publish events after db.WithTx() commit, use ScopedEventBus in fixtures, and keep assembly.{scope}.{entity}.{event} subjects. Use nats-reviewer when this change needs a focused check."
+MSG_JSON=$(printf '%s\n' "$MESSAGE" | jq -Rs '.')
+printf '{"systemMessage": %s}\n' "$MSG_JSON"
 
 exit 0
 ```

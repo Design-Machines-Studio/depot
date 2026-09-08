@@ -7,7 +7,7 @@ settings.json, CLAUDE.md, and starter files for each project type. Replace all `
   - go-templ-datastar (line 9), go-library (line 113), css-framework (line 148), craft-cms (line 183)
 - [CLAUDE.md Templates](#claudemd-templates) (line 234)
   - go-templ-datastar (line 236), go-library (line 345), css-framework (line 405), craft-cms (line 477)
-- [Starter Files](#starter-files) -- todo.md, lessons.md, sessions.md
+- [Starter Files](#starter-files) -- optional todo.md, lessons.md, sessions.md
 
 ---
 
@@ -95,7 +95,7 @@ settings.json, CLAUDE.md, and starter files for each project type. Replace all `
 }
 ```
 
-### css-framework (no Docker gate, no session gate)
+### css-framework (no Docker gate)
 
 ```json
 {
@@ -177,7 +177,7 @@ settings.json, CLAUDE.md, and starter files for each project type. Replace all `
 }
 ```
 
-**Note:** `block-bare-craft.sh` is a variant of `block-bare-go.sh` that blocks bare `php craft` and `composer` commands, requiring `ddev craft` and `ddev composer` instead. Create it by adapting the go hook pattern.
+**Note:** `block-bare-craft.sh` is the hook template in `references/hooks.md`. It blocks bare `php craft` and `composer` commands, requiring `ddev craft` and `ddev composer` instead.
 
 ---
 
@@ -199,34 +199,34 @@ This file is the routing document for Claude Code. Critical rules live here; det
 
 ## Workflow Orchestration
 
-### Plan Mode Default
-- Enter plan mode for ANY non-trivial task (3+ steps or architectural decisions)
-- If something goes sideways, STOP and re-plan immediately
+### Workflow Selection
+- Choose the lightest workflow that fits the task. For a small documentation, configuration, or bounded content edit, inspect the affected files, make the change, and run focused checks; plan mode and agents are optional.
+- Use plan mode when a task is multi-step, architectural, cross-cutting, or higher risk and a written sequence clarifies the acceptance criteria.
+- Keep focused agents available as tools. Use the go-builder, CSS, security, documentation, and accessibility agents when their checks apply; none is required after every edit.
+- Update documentation when behavior, commands, configuration, file structure, or operating instructions change. Use doc-sync when the impact is non-obvious, not as a post-edit ritual.
+- Record a lesson only when a finding is reusable beyond this task. Do not create routine lesson entries or a lessons store just to complete a workflow.
+- Preserve repository-owned command restrictions and real checks for credentials, authentication/authorization, destructive or data-loss actions, release integrity, and applicable accessibility.
+- When delegating, request only a role, required capabilities, and normalized effort (`low`, `medium`, `high`, or `max`). Keep concrete model and rail recommendations in operator context; see the [current model-router guidance](https://github.com/Design-Machines-Studio/depot/blob/main/plugins/model-router/skills/model-router/references/driver-worker-guidance.md).
 
-### Agent Delegation
+### Focused Agents
 
 | Agent | Trigger | What it does |
 |-------|---------|-------------|
-| **go-builder** | Any Go/Templ compilation, testing, or generation | Runs commands safely inside Docker |
-| **css-reviewer** | After any CSS or HTML template change | Enforces Live Wires compliance |
-| **doc-sync** | After ANY code change | Checks documentation freshness |
-| **security-auditor** | Before committing auth or data-handling code | Reviews for OWASP vulnerabilities |
+| **go-builder** | Go/Templ compilation, testing, or generation when needed | Runs commands safely inside Docker |
+| **css-reviewer** | CSS or HTML changes that need a Live Wires review | Checks cascade layers, naming, and tokens |
+| **doc-sync** | Behavior, structure, configuration, or operating-instruction changes with unclear documentation impact | Checks relevant documentation |
+| **security-auditor** | Auth, authorization, credentials, input, data handling, or destructive changes | Reviews real security boundaries |
 
-### Self-Improvement Loop
-- After ANY correction: update `tasks/lessons.md`
-- Write rules that prevent the same mistake
-- Review lessons at session start
+Use the applicable accessibility reviewers for frontend changes. Agents are focused tools, not a required roster after every edit.
 
 ### Git Discipline
-- **Commit early and often.** Target 1-4 files per commit.
-- **Push after every 2 commits.**
-- **Feature branches** for work touching 3+ files.
-- **The commit-push-reminder hook insists at 3+ files.** Obey immediately.
+- Commit a coherent, verified change with a focused message; do not use file-count thresholds.
+- Push when the branch is ready or sharing/recovery benefits from it; do not treat an ordinary source-branch push as publication.
+- Use a feature branch or worktree when isolation, collaboration, or task risk warrants it.
 
-### Task Management
-1. Plan first -> `tasks/todo.md`
-2. Track progress: mark items complete as you go
-3. Capture lessons -> `tasks/lessons.md`
+### Work Notes
+- Use `tasks/todo.md` only when a multi-step workboard or handoff is useful.
+- Follow the repository's documented release checks for publication; publication is separate from ordinary source work.
 
 ## Critical Rules
 
@@ -234,7 +234,7 @@ This file is the routing document for Claude Code. Critical rules live here; det
 **NEVER run Go commands directly on the host.** Always `docker compose exec app`. Enforced by `block-bare-go.sh` hook.
 
 ### Documentation Sync
-After code changes, run the `doc-sync` agent. Checks CLAUDE.md, README.md, and related docs.
+When behavior or operating instructions change, update the relevant documentation. Use the `doc-sync` agent when the impact is non-obvious; it is not required after every code change.
 
 ### [ADD PROJECT-SPECIFIC RULES HERE]
 <!-- e.g., naming conventions, module architecture rules, deployment constraints -->
@@ -302,7 +302,7 @@ docker compose up     # Start with hot reload
 
 ## Documentation Sync Checklist
 
-After modifying code, check if updates are needed in:
+When behavior or operating instructions change, check if updates are needed in:
 - [ ] CLAUDE.md (this file)
 - [ ] README.md
 - [ ] Any skill files (flag changes for depot, don't edit directly)
@@ -351,24 +351,31 @@ This file is the routing document for Claude Code.
 
 ## Workflow Orchestration
 
-### Plan Mode Default
-- Enter plan mode for ANY non-trivial task (3+ steps)
+### Workflow Selection
+- Choose the lightest workflow that fits the task. For a small documentation, configuration, or bounded content edit, inspect the affected files, make the change, and run focused checks; plan mode and agents are optional.
+- Use plan mode when a task is multi-step, architectural, cross-cutting, or higher risk and a written sequence clarifies the acceptance criteria.
+- Keep focused agents available as tools. Use the go-builder and documentation agents when their checks apply; none is required after every edit.
+- Update documentation when behavior, commands, configuration, file structure, or operating instructions change. Use doc-sync when the impact is non-obvious, not as a post-edit ritual.
+- Record a lesson only when a finding is reusable beyond this task. Do not create routine lesson entries or a lessons store just to complete a workflow.
+- Preserve repository-owned command restrictions and real checks for credentials, authentication/authorization, destructive or data-loss actions, release integrity, and applicable accessibility.
+- When delegating, request only a role, required capabilities, and normalized effort (`low`, `medium`, `high`, or `max`). Keep concrete model and rail recommendations in operator context; see the [current model-router guidance](https://github.com/Design-Machines-Studio/depot/blob/main/plugins/model-router/skills/model-router/references/driver-worker-guidance.md).
 
-### Agent Delegation
+### Focused Agents
 
 | Agent | Trigger | What it does |
 |-------|---------|-------------|
-| **doc-sync** | After ANY code change | Checks documentation freshness |
+| **doc-sync** | Behavior, structure, configuration, or operating-instruction changes with unclear documentation impact | Checks relevant documentation |
+
+Use the go-builder for Go verification when the project provides a Docker workflow. Agents are focused tools, not a required roster after every edit.
 
 ### Git Discipline
-- Commit early and often. Target 1-4 files per commit.
-- Push after every 2 commits.
-- Feature branches for work touching 3+ files.
+- Commit a coherent, verified change with a focused message; do not use file-count thresholds.
+- Push when the branch is ready or sharing/recovery benefits from it; do not treat an ordinary source-branch push as publication.
+- Use a feature branch or worktree when isolation, collaboration, or task risk warrants it.
 
-### Task Management
-1. Plan first -> `tasks/todo.md`
-2. Track progress: mark items complete as you go
-3. Capture lessons -> `tasks/lessons.md`
+### Work Notes
+- Use `tasks/todo.md` only when a multi-step workboard or handoff is useful.
+- Follow the repository's documented release checks for publication; publication is separate from ordinary source work.
 
 ## Critical Rules
 
@@ -391,7 +398,7 @@ go vet ./...
 
 ## Documentation Sync Checklist
 
-After modifying code, check if updates are needed in:
+When behavior or operating instructions change, check if updates are needed in:
 - [ ] CLAUDE.md (this file)
 - [ ] README.md
 - [ ] Go doc comments
@@ -434,25 +441,32 @@ This file is the routing document for Claude Code.
 
 ## Workflow Orchestration
 
-### Plan Mode Default
-- Enter plan mode for ANY non-trivial task (3+ steps)
+### Workflow Selection
+- Choose the lightest workflow that fits the task. For a small documentation, configuration, or bounded content edit, inspect the affected files, make the change, and run focused checks; plan mode and agents are optional.
+- Use plan mode when a task is multi-step, architectural, cross-cutting, or higher risk and a written sequence clarifies the acceptance criteria.
+- Keep focused agents available as tools. Use the CSS, documentation, and accessibility agents when their checks apply; none is required after every edit.
+- Update documentation when behavior, commands, configuration, file structure, or operating instructions change. Use doc-sync when the impact is non-obvious, not as a post-edit ritual.
+- Record a lesson only when a finding is reusable beyond this task. Do not create routine lesson entries or a lessons store just to complete a workflow.
+- Preserve repository-owned command restrictions and real checks for credentials, authentication/authorization, destructive or data-loss actions, release integrity, and applicable accessibility.
+- When delegating, request only a role, required capabilities, and normalized effort (`low`, `medium`, `high`, or `max`). Keep concrete model and rail recommendations in operator context; see the [current model-router guidance](https://github.com/Design-Machines-Studio/depot/blob/main/plugins/model-router/skills/model-router/references/driver-worker-guidance.md).
 
-### Agent Delegation
+### Focused Agents
 
 | Agent | Trigger | What it does |
 |-------|---------|-------------|
-| **css-reviewer** | After any CSS change | Enforces naming conventions, layers, token usage |
-| **doc-sync** | After ANY code change | Checks documentation freshness |
+| **css-reviewer** | CSS changes that need a Live Wires review | Enforces naming conventions, layers, and token usage |
+| **doc-sync** | Behavior, structure, configuration, or operating-instruction changes with unclear documentation impact | Checks relevant documentation |
+
+Use the accessibility reviewers when a frontend change affects semantics, visual accessibility, or dynamic interaction. Agents are focused tools, not a required roster after every edit.
 
 ### Git Discipline
-- Commit early and often. Target 1-4 files per commit.
-- Push after every 2 commits.
-- Feature branches for work touching 3+ files.
+- Commit a coherent, verified change with a focused message; do not use file-count thresholds.
+- Push when the branch is ready or sharing/recovery benefits from it; do not treat an ordinary source-branch push as publication.
+- Use a feature branch or worktree when isolation, collaboration, or task risk warrants it.
 
-### Task Management
-1. Plan first -> `tasks/todo.md`
-2. Track progress: mark items complete as you go
-3. Capture lessons -> `tasks/lessons.md`
+### Work Notes
+- Use `tasks/todo.md` only when a multi-step workboard or handoff is useful.
+- Follow the repository's documented release checks for publication; publication is separate from ordinary source work.
 
 ## Critical Rules
 
@@ -486,7 +500,7 @@ npm run build  # Production build
 
 ## Documentation Sync Checklist
 
-After modifying code, check if updates are needed in:
+When behavior or operating instructions change, check if updates are needed in:
 - [ ] CLAUDE.md (this file)
 - [ ] README.md
 - [ ] Documentation site pages
@@ -535,25 +549,32 @@ This file is the routing document for Claude Code.
 
 ## Workflow Orchestration
 
-### Plan Mode Default
-- Enter plan mode for ANY non-trivial task (3+ steps)
+### Workflow Selection
+- Choose the lightest workflow that fits the task. For a small documentation, configuration, or bounded content edit, inspect the affected files, make the change, and run focused checks; plan mode and agents are optional.
+- Use plan mode when a task is multi-step, architectural, cross-cutting, or higher risk and a written sequence clarifies the acceptance criteria.
+- Keep focused agents available as tools. Use the documentation, security, and accessibility agents when their checks apply; none is required after every edit.
+- Update documentation when behavior, commands, configuration, file structure, or operating instructions change. Use doc-sync when the impact is non-obvious, not as a post-edit ritual.
+- Record a lesson only when a finding is reusable beyond this task. Do not create routine lesson entries or a lessons store just to complete a workflow.
+- Preserve repository-owned DDEV restrictions and real checks for credentials, authentication/authorization, destructive or data-loss actions, release integrity, and applicable accessibility.
+- When delegating, request only a role, required capabilities, and normalized effort (`low`, `medium`, `high`, or `max`). Keep concrete model and rail recommendations in operator context; see the [current model-router guidance](https://github.com/Design-Machines-Studio/depot/blob/main/plugins/model-router/skills/model-router/references/driver-worker-guidance.md).
 
-### Agent Delegation
+### Focused Agents
 
 | Agent | Trigger | What it does |
 |-------|---------|-------------|
-| **doc-sync** | After ANY code change | Checks documentation freshness |
-| **security-auditor** | Before committing auth or data-handling code | Reviews for vulnerabilities |
+| **doc-sync** | Behavior, structure, configuration, or operating-instruction changes with unclear documentation impact | Checks relevant documentation |
+| **security-auditor** | Auth, authorization, credentials, input, data handling, or destructive changes | Reviews real security boundaries |
+
+Use the accessibility reviewers when a frontend change affects semantics or visual accessibility. Agents are focused tools, not a required roster after every edit.
 
 ### Git Discipline
-- Commit early and often. Target 1-4 files per commit.
-- Push after every 2 commits.
-- Feature branches for work touching 3+ files.
+- Commit a coherent, verified change with a focused message; do not use file-count thresholds.
+- Push when the branch is ready or sharing/recovery benefits from it; do not treat an ordinary source-branch push as publication.
+- Use a feature branch or worktree when isolation, collaboration, or task risk warrants it.
 
-### Task Management
-1. Plan first -> `tasks/todo.md`
-2. Track progress: mark items complete as you go
-3. Capture lessons -> `tasks/lessons.md`
+### Work Notes
+- Use `tasks/todo.md` only when a multi-step workboard or handoff is useful.
+- Follow the repository's documented release checks for publication; publication is separate from ordinary source work.
 
 ## Critical Rules
 
@@ -591,7 +612,7 @@ npm run build
 
 ## Documentation Sync Checklist
 
-After modifying code, check if updates are needed in:
+When behavior or operating instructions change, check if updates are needed in:
 - [ ] CLAUDE.md (this file)
 - [ ] README.md
 - [ ] Template documentation
@@ -644,12 +665,12 @@ Add `.serena` to `.gitignore`. Register the project path in `~/.serena/serena_co
 <!-- Completed tasks (move here when done) -->
 ```
 
-### tasks/lessons.md
+### Optional tasks/lessons.md
 
 ```markdown
 # Lessons Learned
 
-Patterns and corrections from development sessions. Review at session start.
+Optional notes for reusable project-specific patterns and corrections. Create this file only when the project benefits from keeping such findings between sessions; routine corrections do not belong here.
 
 ## Conventions
 <!-- Project conventions discovered during work -->

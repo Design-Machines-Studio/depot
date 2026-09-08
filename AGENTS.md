@@ -89,6 +89,16 @@ When editing cache lookups, always include both roots. Validate with:
 ./tools/check-dependencies.sh            # plugin dependency resolution
 ```
 
+## Verification boundaries
+
+- Documentation-only changes use focused source/template checks, placeholder and link checks, hook fixtures, `git diff --check`, and the relevant generated-surface checks. They do not require the full Pipeline or an automatic agent roster.
+- Changes to plugin source still run `./tools/validate-composition.sh --all` before commit. This is composition proof, not release or installed-consumer proof.
+- Release publication has a separate `./tools/check-release-preflight.sh` gate. An ordinary source-branch commit or push does not require installed caches to equal an unreleased branch; cache synchronization and installed consumer proof follow authorized publication.
+
+## Role requests and model guidance
+
+Shared requests stay provider-neutral: ask for a closed role, required capabilities, and normalized effort. Human-facing model recommendations belong in the current [model-router guidance](plugins/model-router/skills/model-router/references/driver-worker-guidance.md), not in participant prompts or generated agent cards.
+
 ## Editing Rules
 
 1. **Claude manifests are canonical.** Edit `.claude-plugin/plugin.json`, then run `./tools/generate-codex-manifests.py` to sync.
