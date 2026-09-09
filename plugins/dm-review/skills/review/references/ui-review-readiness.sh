@@ -43,6 +43,7 @@ WORKFLOW_KERNEL_INPUT=""
 EXPECTED_REGISTRY_RUN_ID=""
 EXPECTED_REGISTRY_NODE_ID=""
 EXPECTED_RESOURCE_OWNERSHIP=""
+PREPARE_COMPOSE_CLEANUP_PENDING=false
 
 usage() {
   printf '%s\n' 'ui-review-readiness: invalid invocation' >&2
@@ -89,6 +90,11 @@ if [ -n "$WORKFLOW_KERNEL_INPUT$EXPECTED_REGISTRY_RUN_ID$EXPECTED_REGISTRY_NODE_
   [ "$(cd "$(dirname "$WORKFLOW_KERNEL_INPUT")" && pwd -P)/$(basename "$WORKFLOW_KERNEL_INPUT")" = "$WORKFLOW_KERNEL_INPUT" ] || usage
   printf '%s' "$EXPECTED_REGISTRY_RUN_ID" | jq -eR 'test("^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$")' >/dev/null 2>&1 || usage
   printf '%s' "$EXPECTED_REGISTRY_NODE_ID" | jq -eR 'test("^[A-Za-z0-9][A-Za-z0-9._-]{0,255}$")' >/dev/null 2>&1 || usage
+  # Host-selected registry context survives rejected evidence. It is a cleanup
+  # obligation, not proof that any object is owned or safe to remove.
+  if [ "$ACTION" = prepare ] && [ "$TARGET_SOURCE_INPUT" = repository-declaration ]; then
+    PREPARE_COMPOSE_CLEANUP_PENDING=true
+  fi
 fi
 if [ "$ACTION" = prepare ]; then
   printf '%s' "$APPLICABLE_LANES_JSON" | jq -e '
@@ -101,12 +107,15 @@ fi
 
 emit_closed() {
   local reason="$1" next_action="$2" compose=false
-  if [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
+  if [ "$PREPARE_COMPOSE_CLEANUP_PENDING" = true ] || [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
     compose=true
   elif [ -z "$EXPECTED_RESOURCE_OWNERSHIP" ] && [ -f "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ]; then
     compose="$(jq -r '.targetSource == "repository-declaration" and .repositoryEvidence.resourceOwnership == "review-created-compose"' "$STATE_FILE" 2>/dev/null)"
   fi
   case "$compose" in true|false) ;; *) compose=false ;; esac
+  if [ "$PREPARE_COMPOSE_CLEANUP_PENDING" = true ]; then
+    next_action="$next_action; reconcile the exact host-registered Workflow Kernel Docker resources after restoring registry authority"
+  fi
   jq -cn --arg reason "$reason" --arg next_action "$next_action" --argjson compose "$compose" \
     '{state:"closed",dispatchAllowed:false,reason:$reason,nextAction:$next_action,
       reviewDisposition:"REVIEW INCOMPLETE"} +
@@ -123,19 +132,20 @@ emit_rendered_gap() {
     exit 76
   fi
   local compose=false
-  if [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
+  if [ "$PREPARE_COMPOSE_CLEANUP_PENDING" = true ] || [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
     compose=true
   elif [ -z "$EXPECTED_RESOURCE_OWNERSHIP" ] && [ -f "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ]; then
     compose="$(jq -r '.targetSource == "repository-declaration" and .repositoryEvidence.resourceOwnership == "review-created-compose"' "$STATE_FILE" 2>/dev/null)"
   fi
   case "$compose" in true|false) ;; *) compose=false ;; esac
   jq -cn --arg reason "$reason" --argjson compose "$compose" \
+    --argjson prepare_pending "$PREPARE_COMPOSE_CLEANUP_PENDING" \
     '{state:"not_available",dispatchAllowed:false,reason:$reason,
       coverageDisposition:"NOT RUN",reviewDisposition:"completed",
-      createdResources:(if $compose then 1 else 0 end),
+      createdResources:(if $prepare_pending then null elif $compose then 1 else 0 end),
       nextAction:"none; restore rendered readiness only when browser coverage is needed"} +
       (if $compose then {cleanup:"registry_cleanup_required",registryCleanupPending:true,
-        nextAction:"run the exact Workflow Kernel Docker cleanup plan referenced by private readiness state"} else {} end)'
+        nextAction:"reconcile the exact host-registered Workflow Kernel Docker resources after restoring registry authority"} else {} end)'
   exit 0
 }
 

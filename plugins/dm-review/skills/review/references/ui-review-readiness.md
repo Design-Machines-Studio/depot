@@ -265,3 +265,10 @@ still validates the same registry and exact source fingerprint; it does not
 parse wrappers or own their lifecycle. Record application authentication and
 required populated/prototype cases separately from server readiness and browser
 transport. Successful readiness is permission to inspect, not a clean review.
+
+When repository Compose preparation fails before readiness state is written, the
+host-selected registry context still requires exact registry cleanup. The helper
+emits `registryCleanupPending: true` for required and optional rendered cases;
+optional failures report `createdResources: null` because validation did not
+establish a count. Restore registry authority and reconcile the host registry;
+rejected evidence never authorizes removal.

@@ -637,6 +637,17 @@ missing_registry_rc="$(run_prepare registry-missing --target-source repository-d
 assert test "$missing_registry_rc" -eq 76
 assert jq -e '.reason == "dev_server_unavailable" and
   (.nextAction | contains("resource_registry_unavailable"))' "$TMP/registry-missing.result"
+assert jq -e '.registryCleanupPending == true and .cleanup == "registry_cleanup_required" and
+  (.nextAction | contains("reconcile the exact host-registered"))' "$TMP/registry-missing.result"
+assert test ! -e "$STATE_ROOT/registry-missing.state"
+optional_missing_registry_rc="$(run_prepare registry-missing-optional --target-source repository-declaration \
+  --repository-evidence-file "$TMP/repository-compose-evidence.json" --visual-required false)"
+assert test "$optional_missing_registry_rc" -eq 0
+assert jq -e '.dispatchAllowed == false and .reviewDisposition == "completed" and
+  .createdResources == null and .registryCleanupPending == true and
+  .cleanup == "registry_cleanup_required" and
+  (.nextAction | contains("reconcile the exact host-registered"))' "$TMP/registry-missing-optional.result"
+assert test ! -e "$STATE_ROOT/registry-missing-optional.state"
 
 # Dirty initialized submodules are rejected because the root dirty marker does
 # not bind their changing content.
