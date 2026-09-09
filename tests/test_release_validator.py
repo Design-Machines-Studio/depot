@@ -127,6 +127,7 @@ class ReleaseValidatorTests(unittest.TestCase):
             "record-attempt",
             "plan-create", "plan-compose", "record-create", "plan-cleanup",
             "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
+            "validate-resource-registry",
             "plan-reconcile",
             "plan-verification", "run-verification",
             "owned-run-start", "owned-run-create", "owned-run-finish",

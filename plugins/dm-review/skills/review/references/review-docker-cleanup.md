@@ -31,3 +31,33 @@ Never execute proposed cleanup argv separately or cross-use the two plan authori
 
 The cleanup report includes Docker before/after inventories and `removed|missing|retained|blocked|unmanaged` dispositions alongside Git. Cleanup runs on every terminal path. A cleanup failure never becomes a clean disposition or changes the authoritative code-review finding result.
 
+
+## Repository lifecycle teardown
+
+For an instrumented repository author loop, invoke its original clean command
+with the same exact instance, state/run roots, and scoped Docker hook. Intercept
+its Compose teardown request and execute the existing Kernel cleanup sequence
+above for the registered IDs. Do not execute raw `compose down --remove-orphans`
+or use the project name as deletion authority. A plan can contain safe container actions alongside an in-use network retained
+for dependency. Execute and record the sealed eligible steps, then replan once
+after removing the containers. An unchanged in-use dependency remains retained;
+never turn a blocked disposition into a direct removal. Status and harmless inspection
+continue to address the wrapper's unchanged target. A wrapper cleanup builder
+is another creating call and must be planned and recorded before teardown.
+
+Allow the wrapper's image removal only when the current exact image ID matches
+the image this invocation positively created at an initially absent tag. Retain
+its state and run roots on any ambiguous identity or cleanup failure. Let the
+wrapper perform its documented filesystem cleanup, then finish only the
+remaining exact-owned filesystem paths; its normal clean may preserve data.
+Existing developer images, data, instances, and caches are never adopted.
+
+On partial start or interruption, settle the saved pending creation plan against
+fresh before/after evidence first. Run exact registered cleanup even when no
+browser opened. Resume a persisted cleanup plan using its ordered outcomes;
+after an interrupted command whose outcome could not be persisted, replan from
+fresh exact-ID inspection instead of inventing a successful result or replaying
+raw teardown. An absent object is handled by Kernel's exact absence proof.
+If evidence cannot establish ownership, report retained resources and the
+specific recovery prerequisite. Cleanup failure does not change the review
+finding verdict or turn missing populated browser cases into passes.

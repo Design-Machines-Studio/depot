@@ -71,6 +71,9 @@ def _normalized_docker_text(value: object, maximum: int) -> bool:
     )
 
 
+from workflow_kernel.resources import valid_command_argument
+
+
 class CommandRunner(Protocol):
     def run(self, argv: Tuple[str, ...]) -> CommandResult: ...
 
@@ -273,7 +276,8 @@ class DockerCreationPlan:
         except Exception:
             raise invalid_policy("invalid_docker_creation_plan") from None
         if (
-            not argv or any(not _normalized_docker_text(value, 4096) for value in argv)
+            not argv or not _normalized_docker_text(argv[0], 4096)
+            or any(not valid_command_argument(value) for value in argv)
             or any(not _normalized_docker_text(key, 256) or type(value) is not str for key, value in labels.items())
             or self.lifecycle not in VALID_LIFECYCLES
             or any(type(value) is not ResourceRegistrationIntent for value in intents)
@@ -388,6 +392,7 @@ class DockerBackend:
     def plan_compose(
         self, argv: Sequence[str], run_id: str, node_id: str, lifecycle: str,
         cleanup_policy: str, *, dependent_node_ids: Sequence[str] = (),
+        project_name: Optional[str] = None, registry: Optional[ResourceRegistry] = None,
     ) -> DockerCreationPlan:
         command = tuple(argv)
         if command[:2] != ("docker", "compose"):
@@ -395,6 +400,14 @@ class DockerBackend:
         action_index = next((index for index, value in enumerate(command[2:], 2) if value in {"up", "create", "run", "start"}), None)
         if action_index is None:
             return DockerCreationPlan(command, {}, lifecycle, (), managed=False, reason="unsupported_compose_form")
+        if project_name is not None and (
+            type(project_name) is not str
+            or re.fullmatch(r"[a-z0-9][a-z0-9_-]{0,62}", project_name) is None
+            or type(registry) is not ResourceRegistry
+        ):
+            return DockerCreationPlan(command, {}, lifecycle, (), managed=False,
+                                      reason="repository_project_authority_required")
+        supplied_projects = []
         compose_files = []
         index = 2
         while index < action_index:
@@ -404,10 +417,20 @@ class DockerBackend:
                 or (value.startswith("-p") and not value.startswith("--") and len(value) > 2)
                 or value.startswith("--project-name=")
             ):
-                return DockerCreationPlan(
-                    command, {}, lifecycle, (), managed=False,
-                    reason="caller_project_name_forbidden",
-                )
+                if project_name is None:
+                    return DockerCreationPlan(command, {}, lifecycle, (), managed=False,
+                                              reason="caller_project_name_forbidden")
+                if value in {"-p", "--project-name"}:
+                    if index + 1 >= action_index:
+                        return DockerCreationPlan(command, {}, lifecycle, (), managed=False,
+                                                  reason="repository_project_name_mismatch")
+                    supplied_projects.append(command[index + 1])
+                    index += 2
+                else:
+                    supplied_projects.append(value.split("=", 1)[1] if value.startswith("--")
+                                             else value[2:].removeprefix("="))
+                    index += 1
+                continue
             if value in {"-f", "--file"}:
                 if index + 1 >= action_index or not _normalized_docker_text(command[index + 1], 4096):
                     return DockerCreationPlan(command, {}, lifecycle, (), managed=False, reason="compose_file_invalid")
@@ -426,9 +449,16 @@ class DockerBackend:
                     return DockerCreationPlan(command, {}, lifecycle, (), managed=False, reason="compose_file_invalid")
                 compose_files.append(compose_file)
             index += 1
+        if project_name is not None and supplied_projects != [project_name]:
+            return DockerCreationPlan(command, {}, lifecycle, (), managed=False,
+                                      reason="repository_project_name_mismatch")
         if not compose_files:
             return DockerCreationPlan(command, {}, lifecycle, (), managed=False, reason="compose_file_required")
-        inspected = self.runner.run(command[:action_index] + ("config", "--format", "json"))
+        # Include profiled builders when instrumenting a repository lifecycle.
+        # Otherwise `compose run builder` could create an unlabelled container.
+        inspected = self.runner.run(command[:action_index]
+            + (("--profile", "*") if project_name is not None else ())
+            + ("config", "--format", "json"))
         if inspected.exit_code != 0:
             return DockerCreationPlan(command, {}, lifecycle, (), managed=False, reason="compose_config_failed")
         try:
@@ -444,14 +474,35 @@ class DockerBackend:
             return DockerCreationPlan(command, {}, lifecycle, (), managed=False, reason="compose_external_resource")
         if _has_anonymous_volume(services):
             return DockerCreationPlan(command, {}, lifecycle, (), managed=False, reason="compose_anonymous_volume")
+        retained_labels = {}
+        if project_name is not None:
+            # A fixed repository name is an explicit integration choice, never
+            # ownership. Refuse aliases that could reach outside that project.
+            if (config.get("name") != project_name
+                or any(not isinstance(value, dict) or value.get("container_name")
+                       for value in services.values())
+                or any(not isinstance(value, dict)
+                       or value.get("name", project_name + "_" + name) != project_name + "_" + name
+                       for collection in (networks, volumes) for name, value in collection.items())):
+                return DockerCreationPlan(command, {}, lifecycle, (), managed=False,
+                                          reason="repository_project_resource_alias")
+            reason = self.repository_project_collision(
+                project_name, registry, run_id, node_id,
+                tuple((kind, project_name + "_" + name)
+                      for kind, collection in ((ResourceKind.NETWORK, networks), (ResourceKind.VOLUME, volumes))
+                      for name in collection),
+                retained_labels=retained_labels,
+            )
+            if reason:
+                return DockerCreationPlan(command, {}, lifecycle, (), managed=False, reason=reason)
         labels = self.labels_for(run_id, node_id, lifecycle, cleanup_policy)
-        project = _project_name(run_id, node_id)
-        override_networks = {name: {"labels": labels} for name in networks}
+        project = project_name or _project_name(run_id, node_id)
+        override_networks = {name: {"labels": retained_labels.get((ResourceKind.NETWORK, project + "_" + name), labels)} for name in networks}
         override_networks.setdefault("default", {"labels": labels})
         override = {
             "services": {name: {"labels": labels} for name in services},
             "networks": override_networks,
-            "volumes": {name: {"labels": labels} for name in volumes},
+            "volumes": {name: {"labels": retained_labels.get((ResourceKind.VOLUME, project + "_" + name), labels)} for name in volumes},
         }
         dependencies = tuple(dependent_node_ids)
         intents = [
@@ -459,22 +510,91 @@ class DockerBackend:
             for name in services
         ]
         intents.extend(
-            ResourceRegistrationIntent(ResourceKind.NETWORK, name, run_id, node_id, lifecycle, cleanup_policy, labels, dependencies)
+            ResourceRegistrationIntent(ResourceKind.NETWORK, name, run_id, node_id, lifecycle, cleanup_policy, override_networks[name]["labels"], dependencies)
             for name in override_networks
         )
         intents.extend(
-            ResourceRegistrationIntent(ResourceKind.VOLUME, name, run_id, node_id, lifecycle, cleanup_policy, labels, dependencies)
+            ResourceRegistrationIntent(ResourceKind.VOLUME, name, run_id, node_id, lifecycle, cleanup_policy, override["volumes"][name]["labels"], dependencies)
             for name in volumes
         )
         override_path = Path(".workflow-kernel") / "docker-overrides" / (project + ".json")
         planned = (
-            command[:2] + ("--project-name", project) + command[2:action_index]
+            command[:2] + (() if project_name else ("--project-name", project)) + command[2:action_index]
             + ("-f", str(override_path)) + command[action_index:]
         )
         return DockerCreationPlan(
             planned, labels, lifecycle, tuple(intents), override_path,
             json.dumps(override, sort_keys=True), project, {"COMPOSE_PROJECT_NAME": project},
         )
+
+    def repository_project_collision(self, project, registry, run_id, node_id, named_resources=(), *, retained_labels=None):
+        """Read-only collision proof; labels alone never admit an existing object."""
+        records = {}
+        for record in registry.resources_for(run_id, node_id):
+            if record.kind not in KIND_ORDER:
+                continue
+            inspected = self.runner.run(_inspect_argv(record.kind, record.resource_id))
+            if _is_exact_not_found(record.kind, record.resource_id, inspected):
+                continue
+            try:
+                value = json.loads(inspected.stdout)[0]
+                resource = _resource_from_inspect(record.kind, record.resource_id, value)
+                if (inspected.exit_code != 0
+                    or not valid_registered_docker_record(record, self.repository_scope_id)
+                    or not _registry_labels_agree(record, resource, self.creation_time_skew,
+                                                  self.repository_scope_id)):
+                    return "repository_project_collision"
+                # Existing registries may contain Docker's short network IDs.
+                # Resolve them by exact inspect, never by guessed prefix matching.
+                records[(record.kind, value.get("Id", record.resource_id))] = record
+                records[(record.kind, record.resource_id)] = record
+            except Exception:
+                return "repository_project_inventory_failed"
+        queries = (
+            (ResourceKind.CONTAINER, ("docker", "ps", "-a", "--no-trunc"), "{{.ID}}"),
+            (ResourceKind.NETWORK, ("docker", "network", "ls", "--no-trunc"), "{{.ID}}"),
+            (ResourceKind.VOLUME, ("docker", "volume", "ls"), "{{.Name}}"),
+        )
+        # Also inspect declared names: a foreign object may have no Compose label.
+        for kind, name in named_resources:
+            result = self.runner.run(_inspect_argv(kind, name))
+            if result.exit_code != 0:
+                if _is_exact_not_found(kind, name, result):
+                    continue
+                return "repository_project_inventory_failed"
+            try:
+                values = json.loads(result.stdout)
+                resource = _resource_from_inspect(kind, values[0].get("Id", name), values[0])
+                record = records.get((kind, resource.resource_id))
+                if (record is None or not valid_registered_docker_record(record, self.repository_scope_id)
+                    or not _registry_labels_agree(record, resource, self.creation_time_skew,
+                                                  self.repository_scope_id)):
+                    return "repository_project_collision"
+                if retained_labels is not None:
+                    retained_labels[(kind, name)] = dict(record.labels)
+            except Exception:
+                return "repository_project_inventory_failed"
+        for kind, prefix, output in queries:
+            result = self.runner.run(prefix + ("--filter", "label=com.docker.compose.project=" + project,
+                                               "--format", output))
+            if result.exit_code != 0:
+                return "repository_project_inventory_failed"
+            for resource_id in result.stdout.splitlines():
+                record = records.get((kind, resource_id))
+                if record is None:
+                    return "repository_project_collision"
+                inspected = self.runner.run(_inspect_argv(kind, resource_id))
+                try:
+                    value = json.loads(inspected.stdout)
+                    resource = _resource_from_inspect(kind, resource_id, value[0])
+                    if (inspected.exit_code != 0
+                        or not valid_registered_docker_record(record, self.repository_scope_id)
+                        or not _registry_labels_agree(record, resource, self.creation_time_skew,
+                                                      self.repository_scope_id)):
+                        return "repository_project_collision"
+                except Exception:
+                    return "repository_project_inventory_failed"
+        return None
 
     def inventory(self) -> DockerInventory:
         resources = []
@@ -1388,6 +1508,38 @@ def _valid_ownership_labels(
     except Exception:
         return False
     return True
+
+
+def valid_registered_docker_record(
+    record: ResourceRecord, repository_scope_id: str,
+    creation_time_skew: timedelta = timedelta(minutes=5),
+) -> bool:
+    """Validate registry metadata as exact Workflow Kernel Docker ownership."""
+    if (
+        type(record) is not ResourceRecord
+        or record.kind not in KIND_ORDER
+        or type(repository_scope_id) is not str
+        or re.fullmatch(r"[0-9a-f]{64}", repository_scope_id) is None
+        or not isinstance(creation_time_skew, timedelta)
+        or creation_time_skew.total_seconds() < 0
+    ):
+        return False
+    labels = dict(record.labels)
+    if (
+        set(labels) != set(REQUIRED_LABELS)
+        or not _valid_ownership_labels(labels, repository_scope_id)
+        or labels[RUN_LABEL] != record.run_id
+        or labels[NODE_LABEL] != record.node_id
+        or labels[LIFECYCLE_LABEL] != record.lifecycle
+        or labels[POLICY_LABEL] != record.cleanup_policy
+    ):
+        return False
+    try:
+        return abs(
+            record.created_at - _parse_timestamp(labels[CREATED_LABEL])
+        ) <= creation_time_skew
+    except Exception:
+        return False
 
 
 def _registry_labels_agree(

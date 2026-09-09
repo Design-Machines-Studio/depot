@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
-description: Use for workflow-state validation and replay, bounded cross-harness observation indexes, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.21.0
+description: Use for workflow-state validation and replay, strict existing Docker resource-registry validation, bounded cross-harness observation indexes, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
+version: 0.22.0
 ---
 
 # Workflow Kernel
@@ -90,7 +90,9 @@ command.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
-0.19.1 surface keeps schema-1 repository scope IDs stable across device-number
+0.22.0 adds strict, read-only validation of one existing active Docker registry
+for an exact repository scope/run/node through `validate-resource-registry`.
+The 0.19.1 surface keeps schema-1 repository scope IDs stable across device-number
 changes while preserving canonical path/inode and live descriptor checks; new
 run receipts use the current descriptor devices and the scope file is not
 rewritten. The

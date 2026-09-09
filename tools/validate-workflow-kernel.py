@@ -171,6 +171,10 @@ BEHAVIORAL_CLI_CASES = {
     "next-cleanup-step": ("--state-dir", "<state>", "--plan", "<missing>", "--outcomes", "<missing>", "--output", "<output>"),
     "execute-cleanup-step": ("--state-dir", "<state>", "--plan", "<missing>", "--step-index", "0", "--inventory", "<missing>", "--node-statuses", "<missing>", "--outcomes", "<missing>", "--output", "<output>"),
     "record-cleanup": ("--state-dir", "<state>", "--plan", "<missing>", "--outcomes", "<missing>"),
+    "validate-resource-registry": (
+        "--state-dir", "<state>", "--run-id", "validator-cli",
+        "--node-id", "node",
+    ),
     "plan-reconcile": ("--state-dir", "<state>", "--run-id", "validator-cli", "--output", "<output>"),
 }
 SUCCESSFUL_CLI_COMMANDS = frozenset(BEHAVIORAL_CLI_CASES)
@@ -532,6 +536,7 @@ def check_cli(context):
         "owned-run-exec",
         "plan-create", "plan-compose", "record-create", "plan-cleanup",
         "next-cleanup-step", "execute-cleanup-step", "record-cleanup",
+        "validate-resource-registry",
         "plan-reconcile",
         "inspection-validate", "inspection-classify", "inspection-trend",
         "inspection-finalize", "inspection-render", "inspection-run",

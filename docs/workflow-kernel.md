@@ -6,7 +6,10 @@ bounded cross-harness observation indexes, and owned-resource cleanup. Pipeline 
 depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
-Version 0.19.1 keeps schema-1 repository scope IDs usable across filesystem
+Version 0.22.0 adds `validate-resource-registry`, a strict read-only check of
+one existing registry's active Docker records for an exact repository
+scope/run/node. It rejects empty, truncated, malformed, or ambiguous journals
+and emits no resource identities or labels. Version 0.19.1 keeps schema-1 repository scope IDs usable across filesystem
 device renumbering: stored device values are historical diagnostics, while
 canonical paths and inodes remain durable identity and every invocation uses
 fresh descriptor device values. Version 0.19.0 adds `observation-index-v1`, a strict observation-only sidecar
@@ -55,6 +58,13 @@ Inspect the exact paths before removal and retain any audit material required by
 local policy. The three final directories contain retired credential, trust,
 state, and runtime data; removing them is intentionally destructive.
 
+The optional `plan-compose --repository-project-name` integration preserves a
+repository-owned lifecycle wrapper's exact target while requiring collision
+checks and existing Kernel creation/registry/cleanup ownership. Literal multiline
+builder argv is preserved without loosening resource identifiers or cleanup
+commands. See dm-review's `review-docker-create.md` for the host-owned hook and
+[the Governance canary](ui-ready-03-governance.md) for its evidence and limits.
+
 ## Runtime and state layout
 
 Invoke the kernel through `workflow-kernel-launcher.sh` (in the plugin's
@@ -66,7 +76,8 @@ consumers require `>=0.5.0`; exact-ref repository-verification consumers require
 `>=0.14.0`; ordinary run-cost-summary consumers require `>=0.8.0`;
 matrix-backed run-cost-summary
 consumers require `>=0.13.0`; legacy browser-reconciliation writer consumers
-require `>=0.18.1`; observation-index consumers require `>=0.19.0`. The
+require `>=0.18.1`; observation-index consumers require `>=0.19.0`;
+and strict resource-registry validation requires `>=0.22.0`. The
 launcher verifies Python 3.12+, sets the module path, and execs the CLI. Never
 discover the runtime from the downstream project, `PATH`, or a symlink escape.
 The full consumer-facing contract is `references/runtime-resolution.md`; in
@@ -123,6 +134,25 @@ safe templates; replace placeholders only with run-owned paths and exact IDs.
 
 `init` defaults to `shadow`. Never initialize a production run in another mode
 unless a separately approved promotion has made that authority available.
+
+### Strict Docker registry validation
+
+```sh
+"$WORKFLOW_KERNEL" validate-resource-registry \
+  --state-dir .workflow-kernel/runs/RUN/review \
+  --run-id RUN \
+  --node-id setup-ui
+```
+
+The command opens an existing non-linked `resources.jsonl` without creating or
+repairing it, strictly replays the complete newline-terminated journal, binds
+the state directory to its canonical repository scope, and requires at least
+one active Docker record whose complete ownership labels agree with the exact
+run/node and registry record. Success is a bounded count-only JSON result;
+failure emits no registry contents. The registry bytes are never changed.
+Validation creates no lock sidecar. It compares stable file metadata before and
+after the complete read and replay, rejecting concurrent journal changes rather
+than accepting a stale ownership snapshot.
 
 ### Cross-harness observation index
 

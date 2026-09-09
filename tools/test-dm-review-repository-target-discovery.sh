@@ -24,6 +24,8 @@ assert grep -Fq 'repository-declaration' "$CONTRACT"
 assert grep -Fq 'accepted exact-head browser packet reuse' "$CONTRACT"
 assert grep -Fq 'A suitable target that was already running is' "$CONTRACT"
 assert grep -Fq '`pre-existing`' "$CONTRACT"
+assert grep -Fq 'does not start an unregistered' "$CONTRACT"
+assert grep -Fq '`review-created-compose`' "$CONTRACT"
 assert grep -Fq 'repository-browser-target-discovery.md' "$READINESS"
 assert grep -Fq 'repository-browser-target-discovery.md' "$REVIEW_SKILL"
 assert grep -Fq 'repository-browser-target-discovery.md' "$VISUAL_SKILL"
@@ -81,10 +83,10 @@ EOF
 cat > "$REPO/docs/development.md" <<'EOF'
 # Development
 
-Application: storefront-web from the current physical checkout and HEAD.
-Status/readiness argv: ["./tools/dev-status"]
-Start/rebuild argv: ["./tools/dev-start"]
-Cleanup argv: ["./tools/dev-stop"]
+Application: storefront-web Compose consumer from the current physical checkout and HEAD.
+Status/readiness argv: ["make","dev","ACTION=status"]
+Start/rebuild argv: ["docker","compose","up","storefront-web"] through the Workflow Kernel creation plan.
+Cleanup is owned only by the Workflow Kernel registry.
 Target URL: accept the HTTP(S) URL printed by status or start.
 Production example only: https://storefront.example.com
 Port example only: 3000
@@ -102,25 +104,13 @@ printf 'application=storefront-web\ncheckout=%s\ncommit=%s\nstate=%s\nurl=%s\n' 
   "$(if [ -n "$(git status --porcelain)" ]; then printf dirty; else printf clean; fi)" \
   "$TARGET_DYNAMIC_URL"
 EOF
-cat > "$REPO/tools/dev-start" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' start >> "$TARGET_ATTEMPT_LOG"
-touch "$TARGET_READY_MARKER"
-printf '%s\n' "$TARGET_DYNAMIC_URL"
-EOF
-cat > "$REPO/tools/dev-stop" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' cleanup >> "$TARGET_ATTEMPT_LOG"
-rm -f "$TARGET_READY_MARKER"
-EOF
-cat > "$REPO/tools/dev-fail" <<'EOF'
-#!/usr/bin/env bash
-set -euo pipefail
-printf '%s\n' failed-start >> "$TARGET_ATTEMPT_LOG"
-printf '%s\n' 'fixture start failed before target creation' >&2
-exit 42
+cat > "$REPO/Makefile" <<'EOF'
+.PHONY: dev
+dev:
+	@case "$(ACTION)" in \
+	  status) ./tools/dev-status ;; \
+	  *) exit 2 ;; \
+	esac
 EOF
 chmod +x "$REPO"/tools/dev-*
 git -C "$REPO" add .
@@ -141,23 +131,49 @@ run_attempt() {
   printf '%s\n' "$rc" > "$TMP/$name.rc"
 }
 
-# A documented-but-stopped target performs status, the exact start procedure,
-# and status again. The URL is taken from actual command output, not port 3000.
-run_attempt stopped-status ./tools/dev-status
-assert test "$(cat "$TMP/stopped-status.rc")" -eq 7
+# A documented-but-stopped target performs status, then routes Compose creation
+# through the same durable Workflow Kernel registry used by record-create. It
+# never invokes the declared Compose argv or a raw process directly.
+run_attempt stopped-status make dev ACTION=status
+assert test "$(cat "$TMP/stopped-status.rc")" -eq 2
 assert grep -Fq 'storefront-web is stopped' "$TMP/stopped-status.stderr"
-run_attempt stopped-start ./tools/dev-start
-assert test "$(cat "$TMP/stopped-start.rc")" -eq 0
-discovered_url="$(tail -n 1 "$TMP/stopped-start.stdout")"
-assert test "$discovered_url" = "$TARGET_DYNAMIC_URL"
-assert sh -c '! grep -Fq "3000" "$1"' sh "$TMP/stopped-start.stdout"
-run_attempt started-status ./tools/dev-status
+mkdir -p "$TMP/review"
+PYTHONPATH="$ROOT/plugins/workflow-kernel/skills/workflow-kernel/references" python3 - <<PY
+from datetime import datetime, timezone
+from pathlib import Path
+from workflow_kernel.resources import ResourceKind, ResourceRecord, ResourceRegistry
+
+created = datetime.now(timezone.utc)
+ResourceRegistry(Path("$TMP/review/resources.jsonl")).register(ResourceRecord(
+    resource_id="storefront-compose-container",
+    kind=ResourceKind.CONTAINER,
+    run_id="fixture-review",
+    node_id="storefront-compose",
+    lifecycle="run",
+    cleanup_policy="stop-remove",
+    created_at=created,
+    labels={
+        "com.designmachines.depot.managed":"true",
+        "com.designmachines.depot.run-id":"fixture-review",
+        "com.designmachines.depot.node-id":"storefront-compose",
+        "com.designmachines.depot.created-at":created.isoformat(),
+        "com.designmachines.depot.lifecycle":"run",
+        "com.designmachines.depot.cleanup-policy":"stop-remove",
+        "com.designmachines.depot.repository-scope-id":"0" * 64,
+    },
+))
+PY
+assert jq -se 'any(.[]; .event == "registered" and .resource.node_id == "storefront-compose")' \
+  "$TMP/review/resources.jsonl"
+touch "$TARGET_READY_MARKER"
+discovered_url="$TARGET_DYNAMIC_URL"
+run_attempt started-status make dev ACTION=status
 assert test "$(cat "$TMP/started-status.rc")" -eq 0
 assert grep -Fq "application=storefront-web" "$TMP/started-status.stdout"
 assert grep -Fq "checkout=$(cd "$REPO" && pwd -P)" "$TMP/started-status.stdout"
 assert grep -Fq "commit=$(git -C "$REPO" rev-parse HEAD)" "$TMP/started-status.stdout"
 assert grep -Fq "url=$TARGET_DYNAMIC_URL" "$TMP/started-status.stdout"
-assert test "$(grep -c '^start$' "$TARGET_ATTEMPT_LOG")" -eq 1
+assert test "$(grep -Ec '^(start|cleanup)$' "$TARGET_ATTEMPT_LOG" || true)" -eq 0
 start_line="$(grep -nF 'Start/rebuild argv:' "$REPO/docs/development.md" | cut -d: -f1)"
 target_line="$(grep -nF 'Target URL:' "$REPO/docs/development.md" | cut -d: -f1)"
 assert test "$start_line" -gt 0
@@ -166,43 +182,42 @@ jq -cn --arg url "$discovered_url" --arg checkout "$(cd "$REPO" && pwd -P)" \
   --argjson target_line "$target_line" \
   '{targetSource:"repository-declaration",source:{path:"docs/development.md",lineStart:$start_line,lineEnd:$target_line},
     application:"storefront-web",checkoutRoot:$checkout,repositoryCommit:$head,checkoutState:"clean",
-    statusAttempt:{commandArgv:["./tools/dev-status"],initialExitStatus:7,finalExitStatus:0},
-    startAttempt:{commandArgv:["./tools/dev-start"],exitStatus:0},
-    targetUrl:$url,targetUrlProvenance:"start-output",resourceOwnership:"review-created"}' \
+    statusAttempt:{commandArgv:["make","dev","ACTION=status"],initialExitStatus:2,finalExitStatus:0},
+    creationPlan:{declaredArgv:["docker","compose","up","storefront-web"],authority:"workflow-kernel",fixtureExecution:"simulated"},
+    targetUrl:$url,targetUrlProvenance:"status-output",resourceOwnership:"review-created-compose",
+    resourceRegistryRef:"review/resources.jsonl",resourceRegistryRunId:"fixture-review",
+    resourceRegistryNodeId:"storefront-compose"}' \
   > "$TMP/stopped-evidence.json"
 assert jq -e --arg url "$TARGET_DYNAMIC_URL" '
   .targetSource == "repository-declaration" and .source.path == "docs/development.md" and
   .source.lineStart > 0 and .source.lineEnd >= .source.lineStart and
-  .statusAttempt.commandArgv == ["./tools/dev-status"] and
-  .statusAttempt.initialExitStatus == 7 and .statusAttempt.finalExitStatus == 0 and
-  .startAttempt == {commandArgv:["./tools/dev-start"],exitStatus:0} and
-  .targetUrl == $url and .targetUrlProvenance == "start-output" and
-  .resourceOwnership == "review-created"' "$TMP/stopped-evidence.json"
+  .statusAttempt.commandArgv == ["make","dev","ACTION=status"] and
+  .statusAttempt.initialExitStatus == 2 and .statusAttempt.finalExitStatus == 0 and
+  .creationPlan == {declaredArgv:["docker","compose","up","storefront-web"],authority:"workflow-kernel",fixtureExecution:"simulated"} and
+  .targetUrl == $url and .targetUrlProvenance == "status-output" and
+  .resourceOwnership == "review-created-compose" and
+  .resourceRegistryRef == "review/resources.jsonl" and
+  .resourceRegistryRunId == "fixture-review" and
+  .resourceRegistryNodeId == "storefront-compose"' "$TMP/stopped-evidence.json"
 
-# Review-created resources use the recorded cleanup; this successful fixture
-# cleans once and proves the marker is gone.
-run_attempt started-cleanup ./tools/dev-stop
-assert test "$(cat "$TMP/started-cleanup.rc")" -eq 0
-assert test ! -e "$TARGET_READY_MARKER"
-assert test "$(grep -c '^cleanup$' "$TARGET_ATTEMPT_LOG")" -eq 1
-
-# An actual failed declared command is executed once and preserves its real
-# exit/failure evidence. A token assertion alone cannot satisfy this case.
+# An actual failed status command is executed once and preserves its real
+# exit/failure evidence without granting raw-process start authority.
+rm -f "$TARGET_READY_MARKER"
 : > "$TARGET_ATTEMPT_LOG"
-run_attempt actual-failure ./tools/dev-fail
-assert test "$(cat "$TMP/actual-failure.rc")" -eq 42
-assert grep -Fxq failed-start "$TARGET_ATTEMPT_LOG"
-assert grep -Fq 'fixture start failed before target creation' "$TMP/actual-failure.stderr"
+run_attempt actual-failure make dev ACTION=status
+assert test "$(cat "$TMP/actual-failure.rc")" -eq 2
+assert grep -Fxq status "$TARGET_ATTEMPT_LOG"
+assert grep -Fq 'storefront-web is stopped' "$TMP/actual-failure.stderr"
 assert test ! -e "$TARGET_READY_MARKER"
 failure_reason="$(tail -c 8192 "$TMP/actual-failure.stderr")"
 jq -cn --arg reason "$failure_reason" \
-  '{reason:"dev_server_unavailable",source:{path:"docs/development.md",lineStart:5,lineEnd:5},
-    attemptedCommand:{argv:["./tools/dev-fail"],exitStatus:42,failureReason:$reason}}' \
+  '{reason:"dev_server_unavailable",source:{path:"docs/development.md",lineStart:4,lineEnd:4},
+    attemptedCommand:{argv:["make","dev","ACTION=status"],exitStatus:2,failureReason:$reason}}' \
   > "$TMP/actual-failure-evidence.json"
 assert jq -e '.reason == "dev_server_unavailable" and
-  .attemptedCommand.argv == ["./tools/dev-fail"] and
-  .attemptedCommand.exitStatus == 42 and
-  (.attemptedCommand.failureReason | contains("fixture start failed"))' \
+  .attemptedCommand.argv == ["make","dev","ACTION=status"] and
+  .attemptedCommand.exitStatus == 2 and
+  (.attemptedCommand.failureReason | contains("storefront-web is stopped"))' \
   "$TMP/actual-failure-evidence.json"
 assert grep -Fq 'A declared status/start/readiness command is actually attempted and fails:' "$CONTRACT"
 assert grep -Fq '`dev_server_unavailable`' "$CONTRACT"
@@ -214,20 +229,15 @@ git -C "$REPO" -c user.name=test -c user.email=test@example.invalid commit --all
 current_head="$(git -C "$REPO" rev-parse HEAD)"
 assert test "$recorded_head" != "$current_head"
 : > "$TARGET_ATTEMPT_LOG"
-run_attempt stale-status ./tools/dev-status
-assert test "$(cat "$TMP/stale-status.rc")" -eq 7
-run_attempt stale-start ./tools/dev-start
-assert test "$(cat "$TMP/stale-start.rc")" -eq 0
-assert grep -Fxq "$TARGET_DYNAMIC_URL" "$TMP/stale-start.stdout"
-assert test "$(grep -c '^start$' "$TARGET_ATTEMPT_LOG")" -eq 1
-run_attempt stale-cleanup ./tools/dev-stop
-assert test ! -e "$TARGET_READY_MARKER"
+run_attempt stale-status make dev ACTION=status
+assert test "$(cat "$TMP/stale-status.rc")" -eq 2
+assert test "$(grep -Ec '^(start|cleanup)$' "$TARGET_ATTEMPT_LOG" || true)" -eq 0
 
 # A suitable pre-existing exact-head target runs status only. It is neither
 # started nor cleaned, and remains available after the scenario.
 touch "$TARGET_READY_MARKER"
 : > "$TARGET_ATTEMPT_LOG"
-run_attempt preexisting-status ./tools/dev-status
+run_attempt preexisting-status make dev ACTION=status
 assert test "$(cat "$TMP/preexisting-status.rc")" -eq 0
 assert grep -Fq "commit=$current_head" "$TMP/preexisting-status.stdout"
 assert test "$(grep -c '^status$' "$TARGET_ATTEMPT_LOG")" -eq 1
@@ -235,7 +245,8 @@ assert test "$(grep -Ec '^(start|cleanup)$' "$TARGET_ATTEMPT_LOG" || true)" -eq 
 assert test -e "$TARGET_READY_MARKER"
 jq -cn --arg head "$current_head" --arg url "$TARGET_DYNAMIC_URL" \
   '{targetSource:"repository-declaration",repositoryCommit:$head,targetUrl:$url,
-    targetUrlProvenance:"status-output",resourceOwnership:"pre-existing"}' \
+    targetUrlProvenance:"status-output",resourceOwnership:"pre-existing",resourceRegistryRef:"",
+    resourceRegistryRunId:"",resourceRegistryNodeId:""}' \
   > "$TMP/preexisting-evidence.json"
 assert jq -e '.resourceOwnership == "pre-existing" and
   .targetUrlProvenance == "status-output"' "$TMP/preexisting-evidence.json"

@@ -65,7 +65,7 @@ graph LR
 | dm-review | ghostwriter | required | `>=3.7.0` |
 | dm-review | council | required | `>=1.5.0` |
 | dm-review | model-router | required | `>=0.4.0` |
-| dm-review | workflow-kernel | required | `>=0.19.1` |
+| dm-review | workflow-kernel | required | `>=0.22.0` |
 | dm-review | ned | optional | `>=1.4.0` |
 | dm-review | superpowers | optional | `>=1.0.0` |
 | dm-review | airlift | optional | `>=1.0.0` |

@@ -283,7 +283,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.80.0",
+      "version": "1.80.2",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -409,12 +409,12 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.21.0",
+      "version": "0.22.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
       },
-      "description": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, replay, recovery, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
+      "description": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, replay, recovery, strict resource-registry validation, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
       "capabilities_summary": {
         "skills": 1,
         "agents": 0,
@@ -425,7 +425,8 @@
           "event-ledger",
           "replay",
           "recovery",
-          "shadow-mode"
+          "shadow-mode",
+          "resource-registry"
         ]
       }
     },

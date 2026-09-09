@@ -23,6 +23,18 @@ prefix, feature slug, label subset, or age resembles an owned resource. Do not
 scan by age, prefix, wildcard, or broad glob. Do not call any Git or Docker
 prune command as resource cleanup.
 
+dm-review's repository browser readiness flow is the first Compose consumer of
+this handoff. A cleanup step can reuse the full registered reconciliation
+inventory: the CLI selects that step's exact resource and compares it with a
+fresh Kernel inspection using parsed exact-ID state, not unrelated registered
+resources or volatile private `docker inspect` stdout such as rotating health
+history. The Kernel still revalidates the live resource before executing the
+sealed action. This closes the demonstrated plan-to-execution gap while
+replacing dm-review-owned registry parsing or a second Compose cleanup
+authority. Exact absence also accepts the current Docker CLI's paired `[]`
+response with its exact-ID container or network not-found message, while
+rejecting every other stdout or stderr shape.
+
 Git namespaces include the unique run ID, not only a feature slug:
 
 ```text
