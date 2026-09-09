@@ -183,7 +183,6 @@ class LiveTests(unittest.TestCase):
 
     def test_containment_race_and_changing_read(self):
         e = event(); self.publish(e)
-        original = live.os.replace
         with live.pinned_directory(self.parent) as (fd, verify):
             self.parent.rename(self.parent.with_name("moved"))
             self.parent.mkdir(mode=0o700)
