@@ -59,6 +59,7 @@ SCHEMA_DOCUMENTS = frozenset({
     "cleanup-plan-schema.json",
     "cleanup-receipt-schema.json",
     "observation-index-schema.json",
+    "live-observation-schema.json",
     "repository-verification-plan-schema.json",
     "repository-verification-profile-schema.json",
     "repository-verification-result-schema.json",
@@ -69,6 +70,10 @@ SCHEMA_DOCUMENTS = frozenset({
     "workflow-policy-schema.json",
 })
 BEHAVIORAL_CLI_CASES = {
+    "codex-observation-hook": ("--parent", "<missing>", "--identity", "0:0", "--workspace", "validator"),
+    "live-observation-validate": ("<missing>",),
+    "live-observation-publish": ("--parent", "<missing>", "--identity", "0:0"),
+
     "init": ("<run>", "--run-id", "validator-cli", "--occurred-at", "2026-07-14T00:00:00Z"),
     "validate": ("<run>",),
     "append": ("<run>", "--event", "<event>"),
@@ -514,6 +519,7 @@ def check_cli(context):
     from workflow_kernel import cli
     expected = {
         "init", "validate", "append", "replay", "status",
+        "live-observation-validate", "live-observation-publish",
         "decide-validation-retry", "bind-prediction",
         "bind-verification-contract",
         "observe-pipeline", "reconcile-legacy-browser", "observe-review",
@@ -532,6 +538,7 @@ def check_cli(context):
         "inspection-publish", "resolve-plugin-bundle", "resolve-plugin-asset",
         "kernel-info",
         "snapshot-files",
+        "codex-observation-hook",
     }
     choices = next(
         action.choices for action in cli.parser()._actions
@@ -583,7 +590,7 @@ def check_cli(context):
                 # failure must never become a workflow failure, and the command
                 # records its own skip line rather than signalling by exit code.
                 # Probing it with a missing events file asserts exactly that.
-                "emit-cost-summary",
+                "emit-cost-summary", "codex-observation-hook",
             }:
                 require(completed.returncode == 0, f"{command} behavioral execution failed")
             else:
@@ -995,6 +1002,12 @@ def check_cli(context):
             result = unittest.TestResult()
             QualityPulseKernelTests(method).run(result)
             require(result.wasSuccessful(), f"inspection CLI case failed: {method}")
+        from tests.test_codex_observation import CodexTests
+        for method in ("test_hook_cli_is_inert_on_success_and_every_error",
+                       "test_validation_and_neutral_publication_cli"):
+            result = unittest.TestResult()
+            CodexTests(method).run(result)
+            require(result.wasSuccessful(), "observation CLI contract failed")
         require(set(outcomes) == SUCCESSFUL_CLI_COMMANDS, "successful CLI coverage incomplete")
     invalid = run([sys.executable, "-m", "workflow_kernel", "not-a-command"])
     require(invalid.returncode == cli.EXIT_INVALID, "invalid CLI exit code changed")
@@ -1068,7 +1081,8 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verbose", action="store_true")
     parser.add_argument(
-        "--evidence-output", metavar="PATH", default=str(DEFAULT_EVIDENCE_OUTPUT),
+        "--evidence-output", metavar="PATH",
+        default=os.environ.get("WORKFLOW_KERNEL_EVIDENCE_OUTPUT", str(DEFAULT_EVIDENCE_OUTPUT)),
         help="write deterministic fixture-only compatibility and promotion evidence",
     )
     args = parser.parse_args(argv)
