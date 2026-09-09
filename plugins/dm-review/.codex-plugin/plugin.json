@@ -317,7 +317,7 @@
     "ghostwriter": ">=3.7.0",
     "council": ">=1.5.0",
     "model-router": ">=0.4.0",
-    "workflow-kernel": ">=0.20.0"
+    "workflow-kernel": ">=0.22.0"
   },
   "optionalPluginDependencies": {
     "ned": ">=1.4.0",

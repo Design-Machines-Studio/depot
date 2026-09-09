@@ -3208,6 +3208,8 @@ def command_plan_compose(args):
     plan = adapter.plan_compose(
         argv, args.run_id, args.node_id, args.lifecycle, args.cleanup_policy,
         dependent_node_ids=tuple(dependencies),
+        project_name=getattr(args, "repository_project_name", None),
+        registry=_registry(args.state_dir) if getattr(args, "repository_project_name", None) else None,
     )
     _write_json(args.output, _creation_plan_dict(plan))
     return 0 if plan.managed else EXIT_UNSAFE_PLAN
@@ -3855,12 +3857,48 @@ def command_owned_run_exec(args):
     return status
 
 
+def command_live_validate(args):
+    from .live_observation import read_snapshot, pinned_directory
+    with pinned_directory(args.directory) as (fd, verify):
+        value = read_snapshot(fd)
+        verify()
+        if value is None:
+            raise ValueError()
+    _emit(value)
+    return 0
+
+
+def command_live_publish(args):
+    from .live_observation import publish_live_observation
+    from .codex_observation import read_callback
+    _emit(publish_live_observation(args.parent, args.identity, read_callback()))
+    return 0
+
+
+def command_codex_hook(args):
+    from .codex_observation import hook_main
+    return hook_main(args)
+
+
 def parser():
     from .verification_contract import BOUNDARY_CHOICES
     from .verification_repository import RISK_CHOICES
 
     result = KernelArgumentParser(prog="workflow_kernel", description="Durable workflow state kernel")
     commands = result.add_subparsers(dest="command", required=True)
+
+    live_validate = commands.add_parser("live-observation-validate", help="validate observation metadata only")
+    live_validate.add_argument("directory")
+    live_validate.set_defaults(handler=command_live_validate)
+    for name, handler in (("live-observation-publish", command_live_publish),
+                          ("codex-observation-hook", command_codex_hook)):
+        command = commands.add_parser(name, help="publish observation metadata only")
+        command.add_argument("--parent", required=True)
+        command.add_argument("--identity", required=True, help="configured parent device:inode")
+        if name == "codex-observation-hook":
+            command.add_argument("--workspace", required=True)
+            command.add_argument("--producer", default="codex-0.153.4")
+        command.set_defaults(handler=handler)
 
     init = commands.add_parser("init", help="initialize a shadow-mode run")
     init.add_argument("directory")
@@ -4240,6 +4278,8 @@ def parser():
         command.add_argument("--argv-json", required=True)
         command.add_argument("--dependent-node-ids-json")
         command.add_argument("--output", required=True)
+        if name == "plan-compose":
+            command.add_argument("--repository-project-name")
         command.set_defaults(handler=handler)
 
     creation_command("plan-create", command_plan_create)
@@ -4495,6 +4535,18 @@ def parser():
 
 
 def main(argv=None):
+    # Observation callbacks must remain inert even when configuration is malformed.
+    actual = sys.argv[1:] if argv is None else argv
+    if actual and actual[0] == "codex-observation-hook":
+        import contextlib
+        import io
+        try:
+            with contextlib.redirect_stderr(io.StringIO()):
+                args = parser().parse_args(actual)
+            return args.handler(args)
+        except (Exception, SystemExit):
+            print("{}")
+            return 0
     try:
         args = parser().parse_args(argv)
         return args.handler(args)

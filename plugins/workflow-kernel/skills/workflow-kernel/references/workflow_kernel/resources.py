@@ -64,6 +64,17 @@ def _valid_text(value: object, *, maximum: int) -> bool:
     )
 
 
+def valid_command_argument(value: object) -> bool:
+    """Bounded literal argv, including repository-authored multiline scripts.
+
+    Identifiers and cleanup actions retain their stricter normalized policy.
+    This value is never reparsed by a host shell.
+    """
+    return (type(value) is str and len(value) <= _MAX_RESOURCE_ID
+            and not any(ord(char) < 32 and char not in "\n\t" or ord(char) == 127
+                        for char in value))
+
+
 def _valid_timestamp(value: object) -> bool:
     return type(value) is datetime and value.tzinfo is not None and value.utcoffset() is not None
 
@@ -92,7 +103,7 @@ class CommandResult:
         if type(self.argv) is not tuple:
             raise invalid_policy("invalid_command_result")
         argv = self.argv
-        if not argv or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in argv):
+        if not argv or not _valid_text(argv[0], maximum=_MAX_RESOURCE_ID) or any(not valid_command_argument(value) for value in argv):
             raise invalid_policy("invalid_command_result")
         if type(self.exit_code) is not int or type(self.stdout) is not str or type(self.stderr) is not str:
             raise invalid_policy("invalid_command_result")
@@ -267,7 +278,7 @@ class ResourceDisposition:
         if type(self.evidence) is not tuple or type(self.command) is not tuple:
             raise invalid_policy("invalid_resource_disposition_collections")
         command = self.command
-        if len(command) > _MAX_RECEIPT_ITEMS or any(not _valid_text(value, maximum=_MAX_RESOURCE_ID) for value in command):
+        if len(command) > _MAX_RECEIPT_ITEMS or any(not valid_command_argument(value) for value in command):
             raise invalid_policy("invalid_cleanup_command")
         if self.follow_up is not None and not _valid_text(self.follow_up, maximum=_MAX_RESOURCE_ID):
             raise invalid_policy("invalid_resource_disposition")

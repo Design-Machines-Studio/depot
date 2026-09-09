@@ -478,7 +478,7 @@ assert jq -e '
 fixture healthy
 run_role fast builder-fast low --capability read-repository --capability write-repository --capability structured-output
 assert jq -e '.role == "builder-fast" and (.participantId | test("^participant-[a-f0-9]{8}$")) and .disposition == "completed"' "$TMP/fast.public"
-assert sh -c "! grep -Eq 'deepseek|openrouter|gpt-5|fable|kimi|qwen|grok' '$TMP/fast.public'"
+assert sh -c "! grep -Eq 'deepseek|openrouter|gpt-[0-9]|fable|kimi|qwen|grok' '$TMP/fast.public'"
 
 # Deep work prefers healthy native subscription capacity.
 run_role deep builder-deep high --capability read-repository --capability tool-use
@@ -512,7 +512,7 @@ jq -s '.[0] as $base | .[1].codex as $codex | $base | .codex = $codex' \
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role all-buckets-exhausted builder-deep high \
   --capability read-repository --capability long-context
-assert jq -e '.served.transport == "openrouter" and ([.attempts[] | select(.transport == "codex-cli" and .reason == "rate_limit_exhausted")] | length) == 2' \
+assert jq -e '.served.transport == "openrouter" and ([.attempts[] | select(.transport == "codex-cli" and .reason == "rate_limit_exhausted")] | length) == 3' \
   "$TMP/all-buckets-exhausted.receipt"
 
 # When authoritative policy metadata does name the applicable 0.147 bucket,
@@ -542,7 +542,7 @@ HOME="$FAKE_HOME" MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
     --capability read-repository --capability long-context \
     --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
     --output-file "$TMP/missing-map.out" --receipt-file "$TMP/missing-map.receipt" >/dev/null
-assert jq -e '.served.transport == "openrouter" and ([.attempts[] | select(.transport == "codex-cli" and .reason == "rate_limit_mapping_unknown")] | length) == 2' "$TMP/missing-map.receipt"
+assert jq -e '.served.transport == "openrouter" and ([.attempts[] | select(.transport == "codex-cli" and .reason == "rate_limit_mapping_unknown")] | length) == 3' "$TMP/missing-map.receipt"
 
 # Safe availability reasons survive candidate attempts and the operator receipt
 # without carrying raw response/account/quota data.
@@ -573,27 +573,44 @@ assert jq -e '.served.transport == "openrouter" and .fallback == true' "$TMP/dee
 # A current quota response exhausts the native rail for this run; it is not
 # retried under a second model alias.
 fixture healthy
-jq '.candidateResults["gpt-5.6-sol"].outcome="quota"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.candidateResults["gpt-6-astra"].outcome="quota"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role quota-fallback builder-deep high --capability read-repository --capability long-context
-assert jq -e '.served.transport == "openrouter" and .attempts[0].reason == "rate_limit_exhausted" and ([.attempts[].model] | index("gpt-5.6-terra") == null)' "$TMP/quota-fallback.receipt"
+assert jq -e '.served.transport == "openrouter" and .attempts[0].reason == "rate_limit_exhausted" and ([.attempts[].model] | index("gpt-5.6-terra") == null and index("gpt-5.6-sol") == null)' "$TMP/quota-fallback.receipt"
 
 # Failure reasons are attempt-local; an earlier quota cannot relabel a later transport failure.
 fixture healthy
-jq '.candidateResults["gpt-5.6-sol"].outcome="quota"
+jq '.candidateResults["gpt-6-astra"].outcome="quota"
   | .candidateResults["deepseek/deepseek-v4-pro-0813"].outcome="transport"
   | .candidateResults["x-ai/grok-4.6"].outcome="success"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role local-failure builder-deep high --capability read-repository --capability long-context
 assert jq -e '.served.model == "x-ai/grok-4.6" and .fallbackReason == "transport-unavailable"' "$TMP/local-failure.receipt"
 
+# Driver requests preserve their own effort; bounded workers do not inherit it.
+fixture healthy
+for effort in low medium high max; do
+  run_role "astra-$effort" architect "$effort" --capability read-repository --capability structured-output
+  assert jq -e --arg effort "$effort" '.served.model == "gpt-6-astra" and .requested.effort == $effort and .normalizedEffort == $effort' "$TMP/astra-$effort.receipt"
+done
+for effort in high max; do
+  run_role "luna-$effort" builder-fast "$effort" --capability read-repository --capability structured-output
+  assert jq -e --arg effort "$effort" '.served.model == "gpt-5.6-luna" and .requested.effort == $effort and .normalizedEffort == $effort' "$TMP/luna-$effort.receipt"
+done
+# Model-specific transport failure can use the optional native baseline; a
+# quota response above must instead skip the entire exhausted subscription rail.
+jq '.candidateResults["gpt-6-astra"].outcome="transport"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role sol-baseline architect high --capability read-repository --capability structured-output
+assert jq -e '.served.model == "gpt-5.6-sol" and .normalizedEffort == "high" and .fallback == true' "$TMP/sol-baseline.receipt"
+
 # Two eligible operators receive identical subscription-first behavior from one policy.
 fixture healthy
-run_role architect-a architect max --capability read-repository --capability structured-output
-assert jq -e '.served.model == "gpt-5.6-sol" and .served.billingMode == "included-subscription"' "$TMP/architect-a.receipt"
+run_role architect-a architect low --capability read-repository --capability structured-output
+assert jq -e '.served.model == "gpt-6-astra" and .served.billingMode == "included-subscription"' "$TMP/architect-a.receipt"
 fixture second-eligible-operator
-run_role architect-b architect max --capability read-repository --capability structured-output
-assert jq -e '.served.model == "gpt-5.6-sol" and .served.billingMode == "included-subscription"' "$TMP/architect-b.receipt"
+run_role architect-b architect medium --capability read-repository --capability structured-output
+assert jq -e '.served.model == "gpt-6-astra" and .served.billingMode == "included-subscription"' "$TMP/architect-b.receipt"
 
 # Claude allowance states remain distinct when the subscription-first Codex
 # candidate is unavailable.
@@ -659,7 +676,7 @@ assert jq -e '.served.model == "qwen/qwen3.8-max" and .served.transport == "open
 fixture healthy
 run_role security security-review high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "gpt-5.6-terra" and .served.transport == "codex-cli"' "$TMP/security.receipt"
-assert sh -c "! grep -Eq 'kimi|moonshot|openrouter|deepseek|gpt-5|fable|qwen|grok' '$TMP/security.public'"
+assert sh -c "! grep -Eq 'kimi|moonshot|openrouter|deepseek|gpt-[0-9]|fable|qwen|grok' '$TMP/security.public'"
 
 # Human-authored work excludes no family, so subscription-first remains the
 # head even when OpenRouter is unavailable.
@@ -688,7 +705,7 @@ jq '.probeSource="live" | .transportStub=false' "$TMP/implementer.receipt" > "$T
 run_role independent plan-critic high --capability read-repository --capability independent-family --independence-receipt-dir "$TMP/implementation-registry" --independence-receipt-id "$implementer_id"
 assert jq -e '.familyIndependence.required == true and .familyIndependence.passed == true and (.served.family != "openai")' "$TMP/independent.receipt"
 assert jq -e '.participantId | test("^planner-[a-f0-9]{8}$")' "$TMP/independent.public"
-assert sh -c "! grep -Eq 'openai|qwen|deepseek|grok|anthropic|moonshot|openrouter|gpt-5|fable|kimi' '$TMP/independent.public'"
+assert sh -c "! grep -Eq 'openai|qwen|deepseek|grok|anthropic|moonshot|openrouter|gpt-[0-9]|fable|kimi' '$TMP/independent.public'"
 
 # Fixture/stub receipts cannot be laundered into family-independence evidence.
 mkdir "$TMP/simulated-registry"
@@ -774,7 +791,7 @@ printf '%s\n' 'initial' > "$TMP/write-repo/tracked.txt"
 git -C "$TMP/write-repo" add tracked.txt
 git -C "$TMP/write-repo" -c user.name=test -c user.email=test@example.invalid commit -qm initial
 fixture healthy
-jq '.candidateResults["gpt-5.6-sol"].outcome="mutate-fail"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.candidateResults["gpt-6-astra"].outcome="mutate-fail"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 set +e
 (
@@ -842,7 +859,7 @@ git -C "$TMP/publication-write-repo" add tracked.txt
 git -C "$TMP/publication-write-repo" -c user.name=test -c user.email=test@example.invalid commit -qm initial
 write_initial_head="$(git -C "$TMP/publication-write-repo" rev-parse HEAD)"
 fixture healthy
-jq '.candidateResults["gpt-5.6-sol"].outcome="commit-success"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.candidateResults["gpt-6-astra"].outcome="commit-success"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 mkdir "$TMP/publication-write"
 set +e

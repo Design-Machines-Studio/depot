@@ -784,17 +784,18 @@ class RuntimeCliTests(unittest.TestCase):
             invalid_ledger = root / "invalid-receipts.json"
             invalid_ledger.write_text(json.dumps(invalid))
             invalid_outputs = {
-                "observation": root / "invalid-observation.json",
                 "comparison": root / "invalid-comparison.json",
                 "metrics": root / "invalid-metrics.json",
                 "cost": root / "invalid-cost.json",
             }
+            observation_before = observation.read_bytes()
             rejected_observation = self.run_cli(
                 "observe-pipeline", "--manifest", manifest,
                 "--receipts", invalid_ledger,
-                "--state-dir", invalid_outputs["observation"],
+                "--state-dir", root,
             )
             self.assertEqual(rejected_observation.returncode, 2)
+            self.assertEqual(observation.read_bytes(), observation_before)
             rejected_comparison = self.run_cli(
                 "compare", "--state-dir", root,
                 "--authoritative-receipts", invalid_ledger,
@@ -1496,6 +1497,28 @@ class RuntimeCliTests(unittest.TestCase):
             plan = json.loads(output.read_text())
             self.assertTrue(plan["managed"])
             self.assertIn("com.designmachines.depot.run-id", plan["labels"])
+
+    def test_plan_compose_repository_project_option_reaches_guard(self):
+        from workflow_kernel import cli
+        from workflow_kernel.adapters.docker import DockerCreationPlan
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.init_lifecycle(root, "run-1")
+            argv = root / "argv.json"
+            command = ["docker", "compose", "-p", "assembly-fdev-review", "-f", "compose.yml", "up"]
+            argv.write_text(json.dumps(command))
+            output = root / "plan.json"
+            with mock.patch.object(cli, "_scoped_docker_adapter") as scoped:
+                adapter = mock.Mock()
+                scoped.return_value = (None, adapter)
+                adapter.plan_compose.return_value = DockerCreationPlan(tuple(command), {}, "run", (), managed=False, reason="repository_project_collision")
+                status = cli.main(["plan-compose", "--state-dir", str(root / ".workflow-kernel/runs/run-1"),
+                    "--run-id", "run-1", "--node-id", "chunk-1", "--lifecycle", "run",
+                    "--cleanup-policy", "stop-remove", "--argv-json", str(argv),
+                    "--repository-project-name", "assembly-fdev-review", "--output", str(output)])
+            self.assertEqual(status, 3)
+            self.assertEqual(adapter.plan_compose.call_args.kwargs["project_name"], "assembly-fdev-review")
+            self.assertEqual(json.loads(output.read_text())["reason"], "repository_project_collision")
 
     def test_runtime_resolver_ignores_cwd_and_rejects_symlink_escape(self):
         from workflow_kernel.cli import resolve_workflow_kernel_runtime

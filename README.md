@@ -112,7 +112,7 @@ Assembly governance application development with Go, Templ, and Datastar. 3 skil
 - **templ-scaffolder** (agent) -- Scaffolds new Templ pages, handlers, routes, and SSE endpoints
 - **datastar-sse** (agent) -- Datastar reactivity and SSE endpoint patterns
 - **nats-reviewer** (agent) -- Reviews NATS usage for embedded safety, ScopedEventBus patterns, and event ordering
-- **go-test-runner** (agent) -- Runs profile-selected focused, level, candidate, and authenticated remote verification
+- **go-test-runner** (agent) -- Runs profile-selected focused, level, and candidate verification; reports required remote evidence as pending
 - `/assembly-build` -- Backward-compatible Docker build/test modes plus opt-in tiered repository verification
 
 ### live-wires
@@ -271,6 +271,14 @@ Plugins compose through five patterns:
 5. **CLI-Mediated Model Delegation** -- A plugin invokes an external model CLI/API and returns structured findings to the calling workflow
 
 See [docs/orchestration-patterns.md](docs/orchestration-patterns.md) for details.
+
+## Development improvement plan
+
+The [Assembly development improvement plan](plans/astra-routing-and-system-rollout.md)
+tracks routing, project instructions, shared skills, model costs, the Pi harness,
+and workspace cleanup, with owning repositories and completion checks.
+Use the [fresh-session prompts](plans/prompts/assembly-improvements/README.md)
+for complete project tasks and their model recommendations.
 
 ## Validation
 

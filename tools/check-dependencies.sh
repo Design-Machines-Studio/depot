@@ -264,7 +264,7 @@ elif kernel.get("pluginDependencies", {}) or kernel.get("optionalPluginDependenc
 consumer_floors = {
     "assembly": ">=0.17.0",
     "pipeline": ">=0.19.1",
-    "dm-review": ">=0.20.0",
+    "dm-review": ">=0.22.0",
 }
 
 for consumer, expected in consumer_floors.items():
@@ -280,8 +280,8 @@ if dm_review_floor != ">=1.79.1":
 
 router_floors = {
     "dm-review": ("pluginDependencies", ">=0.4.0"),
-    "pipeline": ("pluginDependencies", ">=0.6.0"),
-    "project-manager": ("optionalPluginDependencies", ">=0.6.0"),
+    "pipeline": ("pluginDependencies", ">=0.7.0"),
+    "project-manager": ("optionalPluginDependencies", ">=0.7.0"),
 }
 for consumer, (dependency_kind, expected) in router_floors.items():
     manifest = manifests.get(consumer)

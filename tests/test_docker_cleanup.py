@@ -852,6 +852,116 @@ class DockerLifecycleTests(unittest.TestCase):
         override = json.loads(plan.compose_override_content)
         self.assertEqual({"labels"}, set(override["services"]["app"]))
 
+    def test_repository_fixed_project_name_is_explicit_and_preserved(self):
+        project = "assembly-fdev-review-03"
+        argv = ("docker", "compose", "--project-name", project,
+                "--project-directory", "/review/run", "-f", "/review/run/compose.yml",
+                "up", "-d", "--no-build", "--force-recreate", "runtime")
+        config = {"name": project, "services": {"runtime": {"image": "local"}}}
+        runner = FakeRunner((CommandResult(argv[:8] + ("--profile", "*", "config", "--format", "json"),
+                                          0, json.dumps(config), ""),))
+        adapter = DockerAdapter(runner, now=lambda: NOW, repository_scope_id=SCOPE_ID)
+        registry = ResourceRegistry(Path(self.directory.name) / "fixed-project.jsonl")
+        plan = adapter.plan_compose(argv, "run-1", "node-1", "chunk", "stop-remove",
+                                    project_name=project, registry=registry)
+        self.assertTrue(plan.managed, plan.reason)
+        self.assertEqual(plan.project_name, project)
+        self.assertEqual(plan.argv.count("--project-name"), 1)
+        self.assertEqual(plan.argv[plan.argv.index("--project-name") + 1], project)
+        self.assertEqual(plan.argv[-5:], argv[-5:])
+        self.assertEqual(json.loads(plan.compose_override_content)["services"]["runtime"]["labels"], plan.labels)
+        # No creation occurs during planning; default callers still fail closed.
+        self.assertTrue(all("up" not in call for call in runner.calls))
+        denied = adapter.plan_compose(argv, "run-1", "node-1", "chunk", "stop-remove")
+        self.assertEqual(denied.reason, "caller_project_name_forbidden")
+        for supplied in ("another-project", "../escape"):
+            denied = adapter.plan_compose(argv, "run-1", "node-1", "chunk", "stop-remove",
+                                          project_name=supplied, registry=registry)
+            self.assertFalse(denied.managed)
+
+    def test_repository_project_collision_and_inventory_failure_do_not_adopt(self):
+        project = "assembly-fdev-review-03"
+        argv = ("docker", "compose", "-p", project, "-f", "compose.yml", "up")
+        query = ("docker", "ps", "-a", "--no-trunc", "--filter",
+                 "label=com.docker.compose.project=" + project, "--format", "{{.ID}}")
+        registry = ResourceRegistry(Path(self.directory.name) / "collision.jsonl")
+        for code, output, reason in ((0, "foreign-id\n", "repository_project_collision"),
+                                     (1, "", "repository_project_inventory_failed")):
+            runner = FakeRunner((CommandResult(argv[:-1] + ("--profile", "*", "config", "--format", "json"),
+                0, json.dumps({"name": project, "services": {"runtime": {}}}), ""),
+                CommandResult(query, code, output, "")))
+            adapter = DockerAdapter(runner, now=lambda: NOW, repository_scope_id=SCOPE_ID)
+            plan = adapter.plan_compose(argv, "run-1", "node-1", "chunk", "stop-remove",
+                                        project_name=project, registry=registry)
+            self.assertEqual(plan.reason, reason)
+            self.assertEqual(registry.resources_for("run-1"), ())
+
+    def test_repository_wrapper_multiline_partial_start_registers_exact_resources(self):
+        project = "assembly-fdev-review-03"
+        script = "\n\tset -eu\n\tgo mod tidy\n\tgo build -o /output/candidate .\n"
+        argv = ("docker", "compose", "-p", project, "-f", "compose.yml",
+                "run", "--rm", "--no-deps", "builder", "-ec", script)
+        config = {"name": project, "services": {"builder": {}, "runtime": {}}}
+        runner = FakeRunner((CommandResult(argv[:6] + ("--profile", "*", "config", "--format", "json"),
+                                          0, json.dumps(config), ""),))
+        registry = ResourceRegistry(Path(self.directory.name) / "partial-fixed.jsonl")
+        adapter = DockerAdapter(runner, now=lambda: NOW, repository_scope_id=SCOPE_ID)
+        plan = adapter.plan_compose(argv, "run-1", "node-1", "chunk", "stop-remove",
+                                   project_name=project, registry=registry)
+        self.assertTrue(plan.managed, plan.reason)
+        self.assertEqual(plan.argv[-1], script)
+        network = DockerResource("network-created", ResourceKind.NETWORK,
+            {**plan.labels, "com.docker.compose.project": project,
+             "com.docker.compose.network": "default"}, NOW)
+        receipt = adapter.record_creation(registry, plan,
+            CommandResult(plan.argv, 1, "", "builder failed"), DockerInventory(()),
+            DockerInventory((network,)))
+        self.assertFalse(receipt.command_succeeded)
+        self.assertEqual([r.resource_id for r in receipt.registered], ["network-created"])
+        for invalid in ("a\x00b", "a\rb", "a\x1bb"):
+            with self.assertRaises(InvalidSchemaError):
+                CommandResult(("docker", invalid), 0, "", "")
+
+    def test_repository_project_existing_network_requires_exact_active_registry(self):
+        project = "assembly-fdev-review-03"
+        argv = ("docker", "compose", "-p", project, "-f", "compose.yml", "up")
+        registry = ResourceRegistry(Path(self.directory.name) / "existing-fixed.jsonl")
+        labels = owned_labels()
+        registry.register(ResourceRecord("network-owned", ResourceKind.NETWORK,
+            "run-1", "node-1", "chunk", "stop-remove", NOW, (), labels))
+        config = {"name": project, "services": {"runtime": {}},
+                  "networks": {"default": {"name": project + "_default"}}}
+        network = {"Id": "network-full-id", "Name": project + "_default",
+                   "Created": NOW.isoformat(), "Labels": labels, "Containers": {}}
+        for owner_labels, allowed in ((labels, True), ({}, False)):
+            network["Labels"] = owner_labels
+            runner = FakeRunner((
+                CommandResult(argv[:6] + ("--profile", "*", "config", "--format", "json"), 0, json.dumps(config), ""),
+                CommandResult(("docker", "network", "inspect", project + "_default"),
+                              0, json.dumps([network]), ""),
+                CommandResult(("docker", "network", "inspect", "network-owned"),
+                              0, json.dumps([network]), ""),
+            ))
+            plan = DockerAdapter(runner, now=lambda: NOW + timedelta(seconds=30), repository_scope_id=SCOPE_ID).plan_compose(
+                argv, "run-1", "node-1", "chunk", "stop-remove", project_name=project, registry=registry)
+            self.assertEqual(plan.managed, allowed, plan.reason)
+            if allowed:
+                self.assertEqual(json.loads(plan.compose_override_content)["networks"]["default"]["labels"], labels)
+
+    def test_repository_project_rejects_resource_aliases(self):
+        project = "assembly-fdev-review-03"
+        argv = ("docker", "compose", "-p", project, "-f", "compose.yml", "up")
+        registry = ResourceRegistry(Path(self.directory.name) / "aliases.jsonl")
+        for addition in ({"services": {"runtime": {"container_name": "dm027"}}},
+                         {"volumes": {"data": {"name": "developer-data"}}},
+                         {"networks": {"default": {"name": "developer-network"}}}):
+            config = {"name": project, "services": {"runtime": {}}, **addition}
+            runner = FakeRunner((CommandResult(argv[:-1] + ("--profile", "*", "config", "--format", "json"),
+                                              0, json.dumps(config), ""),))
+            plan = DockerAdapter(runner, now=lambda: NOW, repository_scope_id=SCOPE_ID).plan_compose(
+                argv, "run-1", "node-1", "chunk", "stop-remove", project_name=project, registry=registry)
+            self.assertEqual(plan.reason, "repository_project_resource_alias")
+
     def test_compose_requires_base_file_and_rejects_caller_project_name(self):
         for argv, reason in (
             (("docker", "compose", "up"), "compose_file_required"),

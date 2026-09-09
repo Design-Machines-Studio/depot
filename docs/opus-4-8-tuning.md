@@ -1,6 +1,8 @@
 # Claude Non-Coding Tuning
 
-How depot plugins leverage Opus 4.8 and the effort levers. This is the canonical reference -- pipeline and dm-review point here instead of restating the effort model.
+Claude host effort compatibility. For current cross-harness driver/worker guidance,
+see [driver-worker guidance](../plugins/model-router/skills/model-router/references/driver-worker-guidance.md).
+Claude defaults below are not defaults for Codex or routed workers.
 
 ## What Changed in Opus 4.8
 
@@ -52,7 +54,7 @@ records any normalization privately.
 
 | Tier | Agents | Effort | Why |
 | :--- | :----- | :----- | :-- |
-| Planning decision-gate reasoning | `architect` or independent `plan-critic` role | `high` or `max` | model-router resolves the participant; callers never pin an alias. |
+| Planning decision-gate reasoning | `architect` or independent `plan-critic` role | architect `medium`; critic `high`; selective escalation | Callers name the task difficulty; model-router resolves each participant separately. |
 | Editorial/synthesis | `editorial` role | workload-controlled | Raise effort only when the writing or synthesis warrants it. |
 | Coding and review agents | `builder-fast`, `builder-deep`, `review-fast`, `review-deep`, or `security-review` role | `low` through `max` | Agent cards inherit; model-router normalizes effort for the resolved transport. |
 

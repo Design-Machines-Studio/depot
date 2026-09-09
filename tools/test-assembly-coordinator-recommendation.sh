@@ -22,11 +22,11 @@ JSON
 
 "$RECOMMEND" --role builder-deep --capability read-repository \
   --capability write-repository --capability tool-use --capability long-context \
-  --capability structured-output --effort high --matrix-file "$MATRIX" \
+  --capability structured-output --effort low --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/builder.json"
-assert jq -e '.recommendedStart.model == "gpt-5.6-sol" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "high"' "$TMP/builder.json"
-assert jq -e '.recommendedStart.fallback.model == "gpt-5.6-terra" and (.recommendedStart.fallback | keys | length) == 3' "$TMP/builder.json"
-assert jq -e '.recommendedStart.cost.label == "included subscription" and .recommendedStart.cost.apiEquivalent.inputUsdPerM == 5 and .recommendedStart.cost.apiPrice == null' "$TMP/builder.json"
+assert jq -e '.recommendedStart.model == "gpt-6-astra" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "low"' "$TMP/builder.json"
+assert jq -e '.recommendedStart.fallback.model == "gpt-5.6-sol" and (.recommendedStart.fallback | keys | length) == 3' "$TMP/builder.json"
+assert jq -e '.recommendedStart.cost.label == "included subscription" and .recommendedStart.cost.apiEquivalent == null and .recommendedStart.cost.apiPrice == null' "$TMP/builder.json"
 
 "$RECOMMEND" --role review-fast --capability read-repository \
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
@@ -152,7 +152,7 @@ assert jq -e '.recommendedStart.harness == "OpenRouter" and .recommendedStart.av
 
 assert grep -Fq 'Routine status-only coordination emits no empty block.' "$COORDINATOR"
 assert grep -Fq 'The block is for the human operator and primary executor only.' "$COORDINATOR"
-assert sh -c "! grep -Eq 'gpt-5\\.|deepseek/|qwen/|x-ai/|moonshotai/|Recommended start' '$OPINIONS' '$REVIEW_PROMPT'"
+assert sh -c "! grep -Eq 'gpt-[0-9]|deepseek/|qwen/|x-ai/|moonshotai/|Recommended start' '$OPINIONS' '$REVIEW_PROMPT'"
 assert grep -Fq 'tokenProvenance' "$TERMINAL"
 assert grep -Fq 'billedCostUsd' "$TERMINAL"
 

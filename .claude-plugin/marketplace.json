@@ -69,7 +69,7 @@
     {
       "name": "project-manager",
       "source": "./plugins/project-manager",
-      "version": "1.13.0",
+      "version": "1.14.0",
       "author": {
         "name": "Design Machines"
       },
@@ -234,7 +234,7 @@
     {
       "name": "project-scaffolder",
       "source": "./plugins/project-scaffolder",
-      "version": "1.9.2",
+      "version": "1.9.4",
       "author": {
         "name": "Design Machines"
       },
@@ -361,7 +361,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.66.1",
+      "version": "1.67.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -388,7 +388,7 @@
     {
       "name": "model-router",
       "source": "./plugins/model-router",
-      "version": "0.6.2",
+      "version": "0.7.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -409,7 +409,7 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.20.0",
+      "version": "0.22.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -457,7 +457,7 @@
     {
       "name": "openrouter",
       "source": "./plugins/openrouter",
-      "version": "1.20.2",
+      "version": "1.20.3",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

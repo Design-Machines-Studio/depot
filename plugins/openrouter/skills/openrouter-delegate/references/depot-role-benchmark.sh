@@ -35,7 +35,7 @@ DURATION="0"
 BEHAVIOR_REVISION=1
 BEHAVIOR_DIGEST="sha256:3ecea8dc49c02a8a8ac2a6e7ede9993fb6609f7520d5438ab8bf0cf9170ba32a"
 NORMALIZER_REVISION=1
-SCORER_REVISION=1
+SCORER_REVISION=2
 
 usage() {
   printf '%s\n' \
@@ -216,8 +216,8 @@ evaluate_case() {
       add_assertion "$destination" plan.no-invented-issues semantic "$passed" 25 'only the disclosed closed issue sets' 'Do not invent other issues.'
       ;;
     plan-contradiction-repair)
-      passed=false; jq -e '(.contradiction | type) == "string" and (.correction | type) == "string" and (.preservedDecisions | type) == "array"' "$input" >/dev/null && passed=true
-      add_assertion "$destination" plan.contradiction-envelope mandatory "$passed" 0 'contradiction, correction, and preservedDecisions' 'Return every contracted field.'
+      passed=false; jq -e 'keys == ["contradiction", "correction", "preservedDecisions"] and (.contradiction | type) == "string" and (.correction | type) == "string" and (.preservedDecisions | type) == "array"' "$input" >/dev/null && passed=true
+      add_assertion "$destination" plan.contradiction-envelope mandatory "$passed" 0 'exactly contradiction, correction, and preservedDecisions' 'Return only the three contracted fields.'
       passed=false; jq -e '.contradiction | test("statement 3|3") and test("statement 1|1")' "$input" >/dev/null && passed=true
       add_assertion "$destination" plan.contradiction-found semantic "$passed" 25 'statement 3 contradicts statement 1' 'Identify the disclosed contradiction.'
       passed=false; jq -e '.correction | test("local runner|local"; "i")' "$input" >/dev/null && passed=true

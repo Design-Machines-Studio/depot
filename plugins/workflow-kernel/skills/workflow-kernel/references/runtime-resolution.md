@@ -95,7 +95,7 @@ contains the asset, it emits the kernel's structured
   matrix-backed run-cost-summary consumers require `>=0.13.0`. Pipeline
   consumers invoking the closed legacy browser-recovery reconciliation require
   `>=0.18.1`; consumers of strict existing Docker-registry validation require
-  `>=0.20.0`.
+  `>=0.22.0`.
   Candidates are ordered by their parsed semver
   path segment, newest first, and the plugin manifest's declared name and
   version must match. Reject symlink escapes, project-cwd/PATH discovery,

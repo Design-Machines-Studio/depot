@@ -258,3 +258,10 @@ acceptance-criteria requirements, or a repository verification profile. Call
 `prepare --visual-required true` for those cases. If no target exists, emit one
 honest `REVIEW INCOMPLETE` coverage result and one next action. File extensions
 and template changes alone do not make visual infrastructure mandatory.
+
+Repository lifecycle wrappers retain their fixed target names through the
+explicit Kernel >=0.22.0 integration in `review-docker-create.md`. The helper
+still validates the same registry and exact source fingerprint; it does not
+parse wrappers or own their lifecycle. Record application authentication and
+required populated/prototype cases separately from server readiness and browser
+transport. Successful readiness is permission to inspect, not a clean review.

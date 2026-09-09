@@ -115,7 +115,7 @@ runtime_files=(
   "$ROOT/plugins/project-manager/skills/assembly-coordinator/SKILL.md"
   "$ROOT/plugins/project-manager/skills/assembly-coordinator/references/planning-opinions.md"
 )
-if grep -Ein -- '(deepseek/|qwen/|x-ai/|moonshotai/|gpt-5\.|claude-fable|(^|[^[:alnum:]_])(fable|kimi|opus|sonnet|haiku)([^[:alnum:]_]|$)|openrouter/model/agent|codex-fallback/agent|kimi-security|claude-planner|/openrouter[^[:cntrl:]]*--model|codex[[:space:]]+exec([^[:alnum:]_-]|$)|claude[[:space:]]+-p([^[:alnum:]_-]|$))' "${runtime_files[@]}" > "$TMP/leaks"; then
+if grep -Ein -- '(deepseek/|qwen/|x-ai/|moonshotai/|gpt-[0-9]|claude-fable|(^|[^[:alnum:]_])(fable|kimi|opus|sonnet|haiku)([^[:alnum:]_]|$)|openrouter/model/agent|codex-fallback/agent|kimi-security|claude-planner|/openrouter[^[:cntrl:]]*--model|codex[[:space:]]+exec([^[:alnum:]_-]|$)|claude[[:space:]]+-p([^[:alnum:]_-]|$))' "${runtime_files[@]}" > "$TMP/leaks"; then
   sed -n '1,20p' "$TMP/leaks" >&2
   fail 'concrete participant leaked into orchestrator-facing runtime files'
 fi
@@ -140,7 +140,7 @@ done < <(find "$ROOT/plugins/pipeline/agents" "$ROOT/plugins/dm-review/agents" "
 # concrete invocation instructions. OpenRouter's own transport cards remain in
 # its explicit provider allowlist above this orchestration boundary.
 while IFS= read -r card; do
-  if grep -Ein -- '(model tier|(^|[^[:alnum:]_])(opus|sonnet|haiku|fable|kimi)([^[:alnum:]_]|$)|deepseek/|qwen/|x-ai/|moonshotai/|gpt-5\.|claude-fable|codex exec|claude -p)' "$card" > "$TMP/card-leaks"; then
+  if grep -Ein -- '(model tier|(^|[^[:alnum:]_])(opus|sonnet|haiku|fable|kimi)([^[:alnum:]_]|$)|deepseek/|qwen/|x-ai/|moonshotai/|gpt-[0-9]|claude-fable|codex exec|claude -p)' "$card" > "$TMP/card-leaks"; then
     sed -n '1,10p' "$TMP/card-leaks" >&2
     fail "concrete participant leaked into routed card: ${card#$ROOT/}"
   fi
@@ -227,6 +227,31 @@ if CASCADE_CONTACT_FILE="$TMP/cascade-contacts" MODEL_ROUTER_TEST_MODE=1 MODEL_R
   fail 'invalid legacy receipt template accepted'
 fi
 [ ! -s "$TMP/cascade-contacts" ] || fail 'invalid legacy receipt template contacted a transport'
+
+# An installed compatibility adapter has no checkout-local sibling router.
+# If no bundle meets the new floor, fail closed instead of using older policy.
+mkdir -p "$TMP/installed-pipeline/references" "$TMP/floor-kernel"
+cp "$CASCADE" "$TMP/installed-pipeline/references/cascade-dispatch.sh"
+cat > "$TMP/floor-kernel/workflow-kernel-launcher.sh" <<'STUB'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$CASCADE_RESOLVER_LOG"
+exit 76
+STUB
+chmod +x "$TMP/floor-kernel/workflow-kernel-launcher.sh"
+if CASCADE_RESOLVER_LOG="$TMP/resolver-args" \
+  "$TMP/installed-pipeline/references/cascade-dispatch.sh" --kind logic --prompt x \
+    --workflow-kernel "$TMP/floor-kernel/workflow-kernel-launcher.sh" \
+    > "$TMP/floor-output" 2> "$TMP/floor-error"; then
+  fail 'missing eligible installed router did not fail closed'
+fi
+python3 - "$TMP/resolver-args" <<'PY'
+import pathlib, sys
+args = pathlib.Path(sys.argv[1]).read_text().splitlines()
+assert args[0] == "resolve-plugin-bundle"
+assert args[args.index("--minimum-version") + 1] == "0.7.0"
+assert args[args.index("--plugin") + 1] == "model-router"
+PY
+grep -Fq 'role router unavailable' "$TMP/floor-error" || fail 'missing router reason lost'
 
 # Routing never weakens zero-deferral.
 grep -q 'Every retained P1, P2, and P3 finding is mandatory work' "$ROOT/plugins/dm-review/skills/review/SKILL.md" || fail 'dm-review zero-deferral missing'

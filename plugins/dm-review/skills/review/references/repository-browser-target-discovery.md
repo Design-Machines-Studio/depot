@@ -124,7 +124,8 @@ content without a second snapshot contract.
 
 Source lines are evidence locators, not executable authority. Preserve argv as
 an array. Execute status/readiness argv directly from the selected checkout;
-route Compose start/rebuild argv through `review-docker-create.md`, and do not
+route Compose start/rebuild argv through `review-docker-create.md` (including
+its scoped repository-wrapper command instrumentation), and do not
 execute raw-process starts in this pass. Never turn declaration prose into
 `sh -c`. Redact credentials and private endpoint material using the existing
 evidence rules.
@@ -137,7 +138,9 @@ and target identity. Reachability or `curl` alone proves none of those.
 If the declared target is stopped or unsuitable for the exact head, reuse a
 suitable exact-head target only when the identity fields agree. Otherwise, a
 declared Compose consumer may start only through `review-docker-create.md`:
-materialize the exact declared argv in the Workflow Kernel plan, execute only
+keep any directly linked repository lifecycle wrapper as the caller and
+instrument its exact Docker creation boundary as described there; materialize
+the exact Compose argv in the Workflow Kernel plan, execute only
 the returned label-instrumented creation argv/override, record its observed
 before/after inventory, and retain the resulting `resources.jsonl` registry
 reference. A stopped raw-process target is not started by this pass; report
@@ -189,6 +192,30 @@ Success, command failure, browser failure, analysis failure, and
 this review. Reused resources remain untouched. Never run a cleanup command
 for a failed start unless the before/after evidence and existing registry show
 that the attempt created the exact resource.
+
+## Authentication and populated cases
+
+Target identity, application authentication, test data, and browser transport
+are separate prerequisites. An authenticated empty state proves neither the
+required populated cases nor the repaired source. Bind the running artifact to
+the exact source snapshot used to build it, including relevant dirty-source
+content; a metadata source path plus a reachable URL is insufficient after edits.
+A build receipt and unchanged snapshot are usable proof; status output alone
+must not be described as exact-commit proof when it does not report a commit.
+
+Try the session's actual T3 tools first. If T3 cannot complete the required
+interaction, discover and try an available appropriate host browser transport.
+A missing routed browser participant says nothing about host tool availability.
+Keep the T3 failure and the chosen fallback in the browser evidence.
+
+An app sign-in failure is `application_authentication_unavailable`, with the
+specific missing supported sign-in prerequisite; do not relabel it as a server
+or transport failure. Missing mixed-response, abstention-only, open/resolved,
+or matched rendered prototype cases are `required_browser_cases_unavailable`.
+Use supported setup/UI only on disposable review-owned data. If a consumer has
+not implemented position-taking or story setup, name that consumer prerequisite;
+do not inject database rows, invent product features, or reset developer data.
+These are host evidence diagnoses, not new readiness-helper CLI states.
 
 ## Outcomes
 

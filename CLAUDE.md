@@ -84,7 +84,13 @@ mappings), `validate-composition.sh` (composition references), and
 `validate-workflow-contracts.sh` (repository cleanup, Datastar-first,
 Baseplate evidence, and workflow-kernel integration anchors).
 
-Before tagging or pushing a release, run the preflight. It is read-only and prints a release receipt:
+For a documentation-only correction, use focused source/template checks,
+placeholder and link checks, temporary hook fixtures, `git diff --check`, and
+the relevant generated-surface checks. The full Pipeline and an automatic
+agent roster are not required for instruction edits. Plugin source changes
+still retain `./tools/validate-composition.sh --all` as composition proof.
+
+Before publishing or tagging a release, run the preflight. It is read-only and prints a release receipt:
 
 ```shell
 ./tools/check-release-preflight.sh
@@ -98,12 +104,14 @@ authenticated. When Codex or its installed-cache evidence is unavailable,
 `REQ-CODEX-CACHE-GATE` reports an explicit `SKIP` rather than failing the
 preflight. That `SKIP` is a coverage gap: report it, and do not claim installed
 Codex-cache verification unless the receipt contains the corresponding `OK`.
-**Never claim a release, tag, or push completed unless the preflight passed, and
-always include its coverage gaps in the release evidence.** It is not part of
-`--all` -- release hygiene is separate from composition validity. `--no-net` is
-local-only evidence: it skips both the remote equal-bump inspection and the
-origin authentication probe, so neither push safety nor cross-lane
-version-collision safety is verified.
+**Never claim a release or tag completed unless the preflight passed, and always
+include its coverage gaps in the release evidence.** An ordinary source-branch
+commit or push does not require installed caches to equal an unreleased source
+branch. Publication, cache synchronization, and installed consumer proof are
+separate claims. The preflight is not part of `--all` -- release hygiene is
+separate from composition validity. `--no-net` is local-only evidence: it skips
+both the remote equal-bump inspection and the origin authentication probe, so
+neither push safety nor cross-lane version-collision safety is verified.
 
 ## Plugin Versioning
 
@@ -201,6 +209,12 @@ Use sparingly. The full validator (`bash tools/validate-composition.sh --all`) r
 - **Artifact format (pipeline planning phase):** the four pipeline planning artifacts -- `brainstorm`, `assessment`, `research`, `plan` -- are emitted as self-contained **HTML carrying a JSON data island** (a `<script type="application/json" id="pipeline-data">` block). The HTML links the target project's compiled CSS; the island is what downstream agents read (via `extract-json-island.sh`) instead of grepping prose. Agent-only handoffs (`original-prompt.md`, `prompts/*.md`, `manifest.json`, crosscheck) stay **Markdown/JSON**. Terminal status reports (dm-review reports, pipeline receipts, delivery reports) stay **inline/markdown** -- HTML buys nothing for a one-shot status summary. Templates and the rationale live in `plugins/pipeline/skills/promptcraft/references/templates/` and `docs/html-artifacts.md`.
 
 ## Model & Effort Tuning
+
+Human-facing model recommendations and optional context tradeoffs live in the
+current [model-router guidance](plugins/model-router/skills/model-router/references/driver-worker-guidance.md).
+Shared requests stay provider-neutral: ask for a closed role, required
+capabilities, and normalized effort. This does not change Claude host settings
+or select identities in agent cards.
 
 **Review origin evidence is not a prerequisite.** Ordinary review lanes must
 run without historical implementation receipts or family exclusions. Missing

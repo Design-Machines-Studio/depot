@@ -6,7 +6,7 @@ bounded cross-harness observation indexes, and owned-resource cleanup. Pipeline 
 depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
-Version 0.20.0 adds `validate-resource-registry`, a strict read-only check of
+Version 0.22.0 adds `validate-resource-registry`, a strict read-only check of
 one existing registry's active Docker records for an exact repository
 scope/run/node. It rejects empty, truncated, malformed, or ambiguous journals
 and emits no resource identities or labels. Version 0.19.1 keeps schema-1 repository scope IDs usable across filesystem
@@ -16,7 +16,7 @@ fresh descriptor device values. Version 0.19.0 adds `observation-index-v1`, a st
 over explicitly named, digest-bound run evidence. Pipeline and dm-review use the
 same harness-neutral envelope; missing facts remain unavailable, cost remains
 measured/imputed/unavailable, and large artifacts remain bounded references.
-Version 0.18.1 repairs that reconciliation's exact raw-receipt digest boundary
+Version 0.18.1 repairs the legacy browser-recovery reconciliation's exact raw-receipt digest boundary
 for schema-owned colon-bearing identifiers without weakening durable-string,
 URI, redaction, or semantic eligibility checks. Version 0.18.0 adds one
 Pipeline-owned, append-only reconciliation for an exact
@@ -58,6 +58,13 @@ Inspect the exact paths before removal and retain any audit material required by
 local policy. The three final directories contain retired credential, trust,
 state, and runtime data; removing them is intentionally destructive.
 
+The optional `plan-compose --repository-project-name` integration preserves a
+repository-owned lifecycle wrapper's exact target while requiring collision
+checks and existing Kernel creation/registry/cleanup ownership. Literal multiline
+builder argv is preserved without loosening resource identifiers or cleanup
+commands. See dm-review's `review-docker-create.md` for the host-owned hook and
+[the Governance canary](ui-ready-03-governance.md) for its evidence and limits.
+
 ## Runtime and state layout
 
 Invoke the kernel through `workflow-kernel-launcher.sh` (in the plugin's
@@ -68,8 +75,9 @@ quality-pulse, behavioral-contract, validation-retry, and review-contribution
 consumers require `>=0.5.0`; exact-ref repository-verification consumers require
 `>=0.14.0`; ordinary run-cost-summary consumers require `>=0.8.0`;
 matrix-backed run-cost-summary
-consumers require `>=0.13.0`; observation-index consumers require `>=0.19.0`;
-and `validate-resource-registry` consumers require `>=0.20.0`. The
+consumers require `>=0.13.0`; legacy browser-reconciliation writer consumers
+require `>=0.18.1`; observation-index consumers require `>=0.19.0`;
+and strict resource-registry validation requires `>=0.22.0`. The
 launcher verifies Python 3.12+, sets the module path, and execs the CLI. Never
 discover the runtime from the downstream project, `PATH`, or a symlink escape.
 The full consumer-facing contract is `references/runtime-resolution.md`; in

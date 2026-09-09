@@ -1,0 +1,579 @@
+{
+  "type": "object",
+  "properties": {
+    "contract": {
+      "const": "live-observation-v1"
+    },
+    "workspace": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "producer": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 128,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+    },
+    "session_key": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "revision": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "published_at": {
+      "type": "string",
+      "maxLength": 40,
+      "format": "date-time"
+    },
+    "last_observed_at": {
+      "type": "string",
+      "maxLength": 40,
+      "format": "date-time"
+    },
+    "recent_activity": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 200,
+      "items": {
+        "$ref": "#/$defs/event"
+      }
+    },
+    "dropped_activity": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 9007199254740991
+    },
+    "diagnostics": {
+      "type": "array",
+      "maxItems": 1,
+      "items": {
+        "const": "activity_truncated"
+      }
+    },
+    "relationships": {
+      "type": "object",
+      "properties": {
+        "parent": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "fork_parent": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "work": {
+          "anyOf": [
+            {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "required": [
+        "parent",
+        "fork_parent",
+        "work"
+      ],
+      "additionalProperties": false
+    },
+    "state": {
+      "type": "object",
+      "properties": {
+        "execution": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "enum": [
+                "unknown",
+                "active",
+                "waiting",
+                "interrupted",
+                "idle"
+              ]
+            },
+            "observed_at": {
+              "type": "string",
+              "maxLength": 40,
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "value",
+            "observed_at"
+          ],
+          "additionalProperties": false
+        },
+        "response": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "enum": [
+                "unknown",
+                "open",
+                "closed"
+              ]
+            },
+            "observed_at": {
+              "type": "string",
+              "maxLength": 40,
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "value",
+            "observed_at"
+          ],
+          "additionalProperties": false
+        },
+        "session_state": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "enum": [
+                "unknown",
+                "open",
+                "closed"
+              ]
+            },
+            "observed_at": {
+              "type": "string",
+              "maxLength": 40,
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "value",
+            "observed_at"
+          ],
+          "additionalProperties": false
+        },
+        "attention": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "enum": [
+                "unknown",
+                "none",
+                "approval_required"
+              ]
+            },
+            "observed_at": {
+              "type": "string",
+              "maxLength": 40,
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "value",
+            "observed_at"
+          ],
+          "additionalProperties": false
+        },
+        "outcome": {
+          "type": "object",
+          "properties": {
+            "value": {
+              "enum": [
+                "unknown",
+                "success",
+                "failure"
+              ]
+            },
+            "observed_at": {
+              "type": "string",
+              "maxLength": 40,
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "value",
+            "observed_at"
+          ],
+          "additionalProperties": false
+        }
+      },
+      "required": [
+        "execution",
+        "response",
+        "session_state",
+        "attention",
+        "outcome"
+      ],
+      "additionalProperties": false
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "last_observation": {
+      "$ref": "#/$defs/event"
+    }
+  },
+  "required": [
+    "contract",
+    "workspace",
+    "producer",
+    "session_key",
+    "revision",
+    "published_at",
+    "last_observed_at",
+    "recent_activity",
+    "dropped_activity",
+    "diagnostics",
+    "relationships",
+    "state",
+    "digest",
+    "last_observation"
+  ],
+  "additionalProperties": false,
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "live-observation-schema.json",
+  "title": "live-observation-v1",
+  "$defs": {
+    "event": {
+      "type": "object",
+      "properties": {
+        "contract": {
+          "const": "live-observation-v1"
+        },
+        "workspace": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "producer": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "publication_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 128,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+        },
+        "observed_at": {
+          "type": "string",
+          "maxLength": 40,
+          "format": "date-time"
+        },
+        "activity": {
+          "enum": [
+            "session_started",
+            "session_resumed",
+            "session_closed",
+            "turn_submitted",
+            "tool_started",
+            "tool_returned",
+            "approval_requested",
+            "compaction_started",
+            "compaction_finished",
+            "agent_started",
+            "response_closed",
+            "interrupted",
+            "outcome_reported"
+          ]
+        },
+        "facts": {
+          "type": "object",
+          "properties": {
+            "session": {
+              "$ref": "#/$defs/required_fact"
+            },
+            "turn": {
+              "$ref": "#/$defs/fact"
+            },
+            "agent": {
+              "$ref": "#/$defs/fact"
+            },
+            "parent": {
+              "$ref": "#/$defs/fact"
+            },
+            "attempt": {
+              "$ref": "#/$defs/fact"
+            },
+            "work": {
+              "$ref": "#/$defs/fact"
+            },
+            "event": {
+              "$ref": "#/$defs/fact"
+            },
+            "tool_call": {
+              "$ref": "#/$defs/fact"
+            },
+            "trigger_turn": {
+              "$ref": "#/$defs/fact"
+            },
+            "fork_parent": {
+              "$ref": "#/$defs/fact"
+            },
+            "model": {
+              "$ref": "#/$defs/fact"
+            },
+            "source_timestamp": {
+              "$ref": "#/$defs/timestamp_fact"
+            }
+          },
+          "required": [
+            "session",
+            "turn",
+            "agent",
+            "parent",
+            "attempt",
+            "work",
+            "event",
+            "tool_call",
+            "trigger_turn",
+            "fork_parent",
+            "model",
+            "source_timestamp"
+          ],
+          "additionalProperties": false
+        },
+        "execution": {
+          "enum": [
+            "unknown",
+            "active",
+            "waiting",
+            "interrupted",
+            "idle"
+          ]
+        },
+        "response": {
+          "enum": [
+            "unknown",
+            "open",
+            "closed"
+          ]
+        },
+        "session_state": {
+          "enum": [
+            "unknown",
+            "open",
+            "closed"
+          ]
+        },
+        "attention": {
+          "enum": [
+            "unknown",
+            "none",
+            "approval_required"
+          ]
+        },
+        "outcome": {
+          "enum": [
+            "unknown",
+            "success",
+            "failure"
+          ]
+        }
+      },
+      "required": [
+        "contract",
+        "workspace",
+        "producer",
+        "publication_id",
+        "observed_at",
+        "activity",
+        "facts",
+        "execution",
+        "response",
+        "session_state",
+        "attention",
+        "outcome"
+      ],
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "outcome": {
+                "enum": [
+                  "success",
+                  "failure"
+                ]
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "activity": {
+                "const": "outcome_reported"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "fact": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "reason": {
+              "type": "null"
+            },
+            "provenance": {
+              "enum": [
+                "native_callback",
+                "explicit_binding"
+              ]
+            }
+          },
+          "required": [
+            "value",
+            "reason",
+            "provenance"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "null"
+            },
+            "reason": {
+              "enum": [
+                "not_reported",
+                "unsupported_by_source",
+                "parent_model_not_child_model",
+                "explicit_binding_required"
+              ]
+            },
+            "provenance": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "value",
+            "reason",
+            "provenance"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "timestamp_fact": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "maxLength": 40,
+              "format": "date-time"
+            },
+            "reason": {
+              "type": "null"
+            },
+            "provenance": {
+              "enum": [
+                "native_callback",
+                "explicit_binding"
+              ]
+            }
+          },
+          "required": [
+            "value",
+            "reason",
+            "provenance"
+          ],
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "null"
+            },
+            "reason": {
+              "enum": [
+                "not_reported",
+                "unsupported_by_source",
+                "parent_model_not_child_model",
+                "explicit_binding_required"
+              ]
+            },
+            "provenance": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "value",
+            "reason",
+            "provenance"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    },
+    "required_fact": {
+      "oneOf": [
+        {
+          "type": "object",
+          "properties": {
+            "value": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 128,
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$"
+            },
+            "reason": {
+              "type": "null"
+            },
+            "provenance": {
+              "enum": [
+                "native_callback",
+                "explicit_binding"
+              ]
+            }
+          },
+          "required": [
+            "value",
+            "reason",
+            "provenance"
+          ],
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

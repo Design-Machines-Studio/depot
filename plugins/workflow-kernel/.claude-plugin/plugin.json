@@ -1,7 +1,7 @@
 {
   "name": "workflow-kernel",
   "description": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, bounded cross-harness observation indexes, replay, recovery, strict resource-registry validation, exact-owned cleanup, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
-  "version": "0.20.0",
+  "version": "0.22.0",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
