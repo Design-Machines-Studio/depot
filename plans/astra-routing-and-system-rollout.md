@@ -1,24 +1,26 @@
 # Assembly development improvements — implementation plan
 
-**Current plan, refreshed 2026-09-08.** This covers the entire instruction,
+**Program audit: 2026-09-08; next-chunk update: 2026-09-10.** This covers the entire instruction,
 model, skill, harness, and workspace audit. It supersedes the sequence in the
 [earlier alignment audit](https://github.com/Design-Machines-Studio/depot/blob/docs/depot-planning-20260907/plans/astra-alignment-20260908.md),
 which remains the detailed source inventory. Routing is source-complete. Later
 project completion must be reconciled from each returned exact PR/result; do not
 rerun a successful task merely because this planning snapshot has not caught up.
 
-**Next Depot implementation chunk: INSTRUCTIONS-01 — repair shared instruction
-and workflow defaults.** Updating the generator prevents future scaffolding from
-reintroducing the old chores. Consumer-local repairs can proceed independently
-using the agreed policy in their execution packet; no new generator artifact
-is required. The routing source is merged; publication and consumer proof remain separate;
-PR #129 retains its own browser/Compose closeout owner. Neither the native price
-refresh nor a model benchmark tournament is a prerequisite for instruction work.
+**Next Depot chunk: UI-DEFAULTS-01 — finish definitive prototype fidelity and
+reviews on established development sites.** The existing
+`fix/prototype-review-defaults` implementation worktree already owns these
+surfaces. Use the [current decision and evidence](prototype-and-development-site-review.md)
+and [complete continuation prompt](prompts/ui-defaults-01.md); do not start a
+competing writer. INSTRUCTIONS-01 merged in #133; browser/Compose #129 merged
+in `7e5475195ecab8c626b03ee79185d3b863852c82`. Those are no longer open
+dependencies. The remaining audit below is historical unless explicitly refreshed.
 
 ## Execution prompts
 
-Use [INSTRUCTIONS-01](prompts/assembly-improvements/01-instructions-01.md) for
-the Depot generator. A previously blocked consumer session should resume its
+Use [UI-DEFAULTS-01](prompts/ui-defaults-01.md) for the current owning session
+or a fresh session after handoff. Retain the old generator packet as history;
+do not rerun its merged work. A previously blocked consumer session should resume its
 updated project prompt; the old generator-merge gate has been removed.
 The [fresh-session prompt pack](prompts/assembly-improvements/README.md) contains
 complete prompts and installed-router model recommendations for each affected
@@ -26,7 +28,7 @@ project, shared skill pass, cost/harness task and optional maintenance operation
 Bring back exact PR results for inspection. Stop only for a real dependency or
 file-ownership conflict, not an unrelated instruction or prompt-pack merge.
 
-## Current status and authority
+## September 8 audit status and authority
 
 Depot main is `386b98e26f493cc220047c981cd5c01b1513b24d` after merged PR #131.
 Routing branch `feat/astra-driver-routing` was implemented and locally validated
@@ -118,6 +120,9 @@ current planning task. Existing PR #129 remains a separate browser-review lane.
 
 ### INSTRUCTIONS-01 — fix the shared generator first
 
+Source complete through merged PR #133, with project-scaffolder 1.9.4 on
+September 10 main. The specification below is retained; it is not a new task.
+
 Owner: Depot `project-scaffolder`, plus Depot's root workflow guidance.
 Likely surfaces: scaffolding SKILL.md, `references/project-configs.md`, generated
 instruction/hook templates, associated fixtures, AGENTS.md and CLAUDE.md.
@@ -173,7 +178,8 @@ Owner: Depot, one plugin per branch in this order:
    requirements, deterministic verification, cleanup and delivery contracts.
 3. dm-review: consolidate repeated guidance, retain applicable lanes, all retained
    findings, repository-owned browser discovery and honest unavailable outcomes.
-   Begin after the active #129 owner has finished its shared review surfaces.
+   #129 has merged. Coordinate with the current UI-DEFAULTS-01 owner before
+   changing its shared review surfaces.
 4. Design Machines strategy/discovery: narrow the oversized trigger description
    and load task-specific references without losing company constraints.
 
