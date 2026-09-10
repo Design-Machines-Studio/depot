@@ -19,13 +19,16 @@ Terse. Structured blocks and receipts only; reserve prose for Step 6. Minimize t
 
 Execute every step for every chunk:
 
-- Worktree per chunk -- never execute in the main working tree.
+- Worktree per chunk unless Step 1c selects the established-checkout strategy;
+  never implement on the main branch.
 - Evaluation gate after EVERY chunk (see Chunk Classification).
 - Manifest's approved final dm-review mode after all chunks merge. Full is default; quick only by the validated explicit manifest contract, escalating to full on a security-sensitive final diff.
 - Prepare the compact optional session observation for a capable caller.
 - Report honestly what you actually did.
 
-Exception: `sequential-on-branch` replaces per-chunk worktrees only when Step 1c detects a container-mounted harness. Record it as `isolationStrategy`, never an `executionMode` value.
+Exception: `sequential-on-branch` replaces per-chunk worktrees when Step 1c
+detects a canonical project checkout/domain binding or a container-mounted
+harness. Record it as `isolationStrategy`, never an `executionMode` value.
 
 ## CRITICAL: Subagent Budget & Dead-Lane Handling
 
@@ -127,7 +130,7 @@ cleanup. Host identity never changes the role contract or selects a participant.
 `kind` controls review classification; `renderedSurface` controls browser/persona/visual/Datastar obligations. New manifests require `required|not_applicable` plus a non-empty rationale; mixed/uncertain scope is `required`. Sensitive-path overrides all of this and requires full dm-review (at most two passes).
 
 - **UI** (served `.templ`/`.twig`/`.html`/`.css`; unserved `plans/**` excluded): focused `review-deep`; browser evidence only when `renderedSurface: required`.
-- **Logic** (`.go`/`.py`/`.ts`/`.php` handlers/services/migrations): focused `review-deep`; no browser evidence.
+- **Logic** (`.go`/`.py`/`.ts`/`.php` handlers/services/migrations): focused `review-deep`; browser evidence when `renderedSurface: required`, including handler-only save/interaction changes.
 - **Trivial** (config/docs): one focused `review-fast`; fix and re-run once if findings.
 - **Integration** (routes/main/wiring): focused `review-deep` plus wiring check; browser evidence only when `renderedSurface: required`.
 
@@ -362,7 +365,17 @@ Any missing remote ref, mismatch, divergent local branch, or checkout failure bl
 
 ### 1c: Execution Mode Selection
 
-Use `sequential-on-branch` when the test harness runs against the checked-out repo root instead of arbitrary worktrees:
+Before selecting isolation, resolve the established browser target through
+`plugins/dm-review/skills/review/references/repository-browser-target-discovery.md`.
+For ordinary rendered work, use `sequential-on-branch` in the available canonical
+project repo folder when its existing domain serves that checkout. Verify a
+clean/owned checkout and feature-branch availability first. Serialize its use;
+do not switch another worker's checkout or create an alternate review harness
+to bypass a collision. Independent worktrees remain available for disjoint
+source work; browser review still uses a safe branch handoff to the established
+instance. Record any genuinely required isolated browser exception.
+
+Also use `sequential-on-branch` when the test harness runs against the checked-out repo root instead of arbitrary worktrees:
 
 - `docker compose run ... go test`, `docker compose exec ... go test`, or a Makefile target wraps tests in Docker with the repo root mounted.
 - A devcontainer or compose service bind-mounts the repository root and the test command runs inside that mount.
@@ -463,7 +476,13 @@ No refs are created in that mode, so nothing is registered for this chunk. Mark 
 
 #### Docker/Compose creation ownership
 
-When creating a Docker container, network, named volume, or Compose project, load `plugins/pipeline/references/execution-docker-resources.md` and run its Creation commands. Planning returns argv only; execute that argv once. Unproven ownership is `unmanaged/retained`. Never execute returned cleanup argv outside `execute-cleanup-step`.
+For documented rebuild/restart of the established developer instance, follow
+dm-review's `repository-browser-target-discovery.md` maintenance path and retain
+its existing service/data. Do not register it for review cleanup. For new
+isolated Docker containers, networks, named volumes, or Compose projects, load
+`plugins/pipeline/references/execution-docker-resources.md` and run its Creation
+commands. Planning returns argv only; execute that argv once. Unproven ownership
+is `unmanaged/retained`. Never execute returned cleanup argv outside `execute-cleanup-step`.
 
 ### 3c: Apply Input Guardrails
 
@@ -635,6 +654,14 @@ Wires component search, post-edit source comparison, matched prototype/target
 browser comparison, and named intentional differences. Generic UI benchmarks
 remain secondary to covered prototype decisions. A validated
 `status: no_counterpart` reference carries no chunk parity packet.
+
+For prototype-covered cases, apply dm-review’s `ui-case-selection.md` existing
+prototype tasks and personas contract. Carry the exact task source/commit,
+selected task IDs and persona/role/state/device combinations, preconditions,
+steps, success criteria and screenshot points into the existing prompts and
+browser evidence. Execute the paired cases and record prototype result,
+application result and observed difference; expected permission denial is a
+verified boundary check, and expected FRICTION remains a hypothesis.
 
 When done:
 1. Verify all acceptance criteria are met

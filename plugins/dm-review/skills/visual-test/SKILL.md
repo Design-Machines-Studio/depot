@@ -23,11 +23,18 @@ allowed-tools:
 
 Standalone visual testing that loads pages in a real browser, screenshots at multiple breakpoints, tests interactive states, and runs runtime accessibility checks. This is the same testing protocol used by the `visual-browser-tester` agent in `/dm-review`, but invokable independently.
 
+For prototype-covered cases, apply dm-review’s `ui-case-selection.md` existing
+prototype tasks and personas contract. Carry the exact task source/commit,
+selected task IDs and persona/role/state/device combinations, preconditions,
+steps, success criteria and screenshot points into the existing prompts and
+browser evidence. Execute the paired cases and record prototype result,
+application result and observed difference; expected permission denial is a
+verified boundary check, and expected FRICTION remains a hypothesis.
+
 ## Usage
 
-- `/dm-review-visual` -- use an attached T3 preview or optional tracked
-  `.dm/ui-review.json`, then bounded repository author-loop discovery, and test
-  the affected selected cases
+- `/dm-review-visual` -- use the established project domain and canonical
+  checkout with the feature branch selected; test the affected selected cases
 - `/dm-review-visual <url>` -- test a specific URL
 - `/dm-review-visual --states` -- focus on interactive state testing only
 - `/dm-review-visual --a11y` -- focus on runtime accessibility checks only
@@ -37,18 +44,18 @@ Standalone visual testing that loads pages in a real browser, screenshots at mul
 
 ### Phase 1: Target Resolution
 
-**If a URL argument was provided:** use it directly.
-
-**If no URL provided:** first use an already attached, automation-capable T3
-preview and its exact current URL. Otherwise use optional tracked
-`.dm/ui-review.json` through the shared `ui-review-readiness.md` start/readiness
-contract. If neither supplies usable evidence, load the review skill's
-`repository-browser-target-discovery.md` and run its host-interpreted bounded
-pass before declaring the target unavailable. Do not scan localhost ports,
-infer a target from the project type, or guess a mutating start command.
+Load the review skill's `repository-browser-target-discovery.md` before choosing
+a target. An explicit invocation URL overrides the default but still needs
+application/source verification. Otherwise use the established project domain
+and canonical checkout: select the feature branch safely, run the existing
+documented build/restart as needed, and verify the served source. Follow the
+shared order for optional declarations, exact-head packet reuse, and a
+source-verified attached preview when no established target is declared.
+T3 is the preferred browser transport, not authority for which app to review.
+Do not invent a new harness, scan ports, or reconfigure the domain/environment.
 
 This command explicitly requires rendered evidence. Run the shared helper with
-`--visual-required true`. If neither source exists or navigation cannot be
+`--visual-required true`. If no usable source exists or navigation cannot be
 proved, record `target unavailable` and emit one `REVIEW INCOMPLETE` coverage
 result with the exact missing
 persona/scenario/route/engine/viewport cases and one next action. Never return a

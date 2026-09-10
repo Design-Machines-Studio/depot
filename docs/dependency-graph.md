@@ -43,6 +43,7 @@ graph LR
   project-manager --> ghostwriter
   project-manager --> council
   project-manager -.-> model-router
+  project-manager -.-> dm-review
   project-scaffolder -.-> live-wires
   project-scaffolder -.-> dm-review
   project-scaffolder -.-> pipeline
@@ -58,7 +59,7 @@ graph LR
 | assembly | workflow-kernel | required | `>=0.17.0` |
 | assembly | council | optional | `>=1.5.0` |
 | assembly | design-machines | optional | `>=1.3.0` |
-| assembly | dm-review | optional | `>=1.35.0` |
+| assembly | dm-review | optional | `>=1.81.0` |
 | design-machines | council | required | `>=1.9.0` |
 | dm-review | accessibility-compliance | required | `>=1.2.0` |
 | dm-review | live-wires | required | `>=1.8.0` |
@@ -74,12 +75,12 @@ graph LR
 | model-router | openrouter | optional | `>=1.20.2` |
 | model-router | workflow-kernel | optional | `>=0.17.0` |
 | ned | superpowers | optional | `>=1.0.0` |
-| pipeline | dm-review | required | `>=1.79.1` |
+| pipeline | dm-review | required | `>=1.81.0` |
 | pipeline | model-router | required | `>=0.7.0` |
 | pipeline | workflow-kernel | required | `>=0.19.1` |
 | pipeline | ned | optional | `>=1.4.0` |
 | pipeline | design-machines | optional | `>=1.3.0` |
-| pipeline | assembly | optional | `>=3.16.0` |
+| pipeline | assembly | optional | `>=3.17.0` |
 | pipeline | live-wires | optional | `>=1.8.0` |
 | pipeline | craft-developer | optional | `>=1.0.0` |
 | pipeline | accessibility-compliance | optional | `>=1.2.0` |
@@ -92,7 +93,8 @@ graph LR
 | project-manager | ghostwriter | required | `>=3.7.0` |
 | project-manager | council | required | `>=1.5.0` |
 | project-manager | model-router | optional | `>=0.7.0` |
+| project-manager | dm-review | optional | `>=1.81.0` |
 | project-scaffolder | live-wires | optional | `>=1.0.0` |
-| project-scaffolder | dm-review | optional | `>=1.0.0` |
-| project-scaffolder | pipeline | optional | `>=1.0.0` |
+| project-scaffolder | dm-review | optional | `>=1.81.0` |
+| project-scaffolder | pipeline | optional | `>=1.68.0` |
 | project-scaffolder | accessibility-compliance | optional | `>=1.0.0` |

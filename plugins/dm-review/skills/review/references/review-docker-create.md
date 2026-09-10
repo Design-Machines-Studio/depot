@@ -1,7 +1,11 @@
 # Docker/Compose resource creation (review harness)
 
-Loaded only when review setup creates a Docker or Compose resource -- a dev
-server or review harness. A review that creates none never loads this file.
+Loaded only when a justified isolated review setup creates a Docker or Compose
+resource. Ordinary review uses the established project domain and canonical
+checkout under `repository-browser-target-discovery.md`. Its documented
+maintenance rebuild/restart retains the existing developer service and data;
+do not adopt those resources into a disposable review registry. This exception
+does not authorize a new service, topology, fresh data root, or reset.
 
 ```text
 "$WORKFLOW_KERNEL" plan-create --state-dir <exact-run-root>/review --run-id ID --node-id ID --lifecycle SCOPE --cleanup-policy POLICY --argv-json <exact-run-root>/review/docker/<node-id>-create-argv.json --dependent-node-ids-json <exact-run-root>/review/docker/<node-id>-dependent-node-ids.json --output <exact-run-root>/review/docker/<node-id>-creation-plan.json
@@ -65,7 +69,7 @@ roots, and bind-mounted data are fresh or already positively created by this
 invocation. Kernel's Docker registry does not own images or bind-mounted data.
 Use the existing `owned-run-*` filesystem receipt and record the exact created
 image ID for the wrapper's own image cleanup. A foreign collision stops the
-attempt; never reset or rebuild the developer's default instance. If the host
+attempt; never reset or repurpose the developer's default instance as an isolated harness. If the host
 cannot instrument this boundary, name that integration prerequisite and retain
 `REVIEW INCOMPLETE`; do not call the raw start as a fallback.
 

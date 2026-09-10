@@ -30,18 +30,19 @@ nonnegative `duration_seconds` and exactly one `wait_category` from
 the non-overlapping orchestrator-level interval, not one per parallel worker.
 Never estimate an interval or classify active implementation/review as waiting.
 
-**Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: branch create/reuse semantics, worktree isolation or the documented `sequential-on-branch` isolation strategy (recorded as `isolationStrategy`, never as `executionMode`) for container-mounted test harnesses, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, the approved final review mode, cleanup, and summary. Personal-memory enrichment remains optional.
+**Protocol source:** Read `plugins/pipeline/agents/workflow/execution-orchestrator.md` as the execution contract. The current Codex agent acts as the orchestrator in-process because Codex does not expose Claude's generic agent runner. All orchestrator steps remain mandatory: branch create/reuse semantics, worktree isolation or the documented `sequential-on-branch` isolation strategy (recorded as `isolationStrategy`, never as `executionMode`) for the canonical project checkout/domain or container-mounted test harnesses, input guardrails, chunk dispatch, validation, evaluation gates, merge-back, the approved final review mode, cleanup, and summary. Personal-memory enrichment remains optional.
 
-**Implementation dispatch:** For each chunk, create the worktree first and
+**Implementation dispatch:** For each chunk, select the canonical feature-branch checkout under
+`sequential-on-branch`, or create its worktree under `per-chunk-worktree`, then
 materialize the complete prompt. Invoke model-router's `role-dispatch.sh` from
-that worktree with the manifest's `executorRole`, repeated
+that selected checkout with the manifest's `executorRole`, repeated
 `executorCapabilities`, and `executorEffort`, plus fresh output and private
 receipt destinations, the complete repository-evidence file, and the current
 behavioral contract digest/revision. Pass the exact invocation-local validated
 Kernel launcher as `--workflow-kernel "$WORKFLOW_KERNEL"`. Build argv as an array. Never call a host
 worker/model transport directly. The materialized prompt MUST include:
 
-- The worktree path as the only allowed write scope.
+- The selected checkout path as the only allowed write scope.
 - The complete chunk prompt content, not a path to the prompt.
 - The pipeline Fix Philosophy and ambiguity-trailer requirements.
 - A reminder that other workers may be active and the worker must not revert unrelated changes.

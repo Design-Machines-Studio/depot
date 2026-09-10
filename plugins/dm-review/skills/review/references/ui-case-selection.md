@@ -39,6 +39,40 @@ Materialize the explicit candidate set and inputs, then run
 this closed filter. It does not score changes, infer an impact graph, discover
 routes, or plan tests.
 
+## Existing prototype tasks and personas
+
+For a declared Assembly counterpart, resolve `Design-Machines-Studio/assembly`
+by canonical remote and exact reviewed commit (local discovery hint:
+`/home/ned/assembly/assembly`). Read `tests/ux/README.md`,
+`tests/ux/coverage-matrix.md`, applicable `tests/ux/tasks/**/*.md`,
+`tests/ux/personas/_index.md`, selected persona profiles, and heuristics named
+by selected tasks. Individual task frontmatter and steps override the generated
+coverage matrix. These are content-defined browser scenarios: do not invent a
+CLI runner or copy the suite into Depot.
+
+Select affected existing task IDs and persona/role/state/device combinations,
+including handler-only Datastar changes. Carry source paths/commit, task IDs,
+preconditions, steps, success criteria and screenshot points through Pipeline
+prompts into the existing candidate cases and browser evidence. Use stable case
+IDs for each selected combination; keep the detailed task context in the
+existing prompt/evidence packet, not new helper fields or another ledger.
+
+Actually execute selected scenarios in both prototype and application with
+comparable designated demo accounts, permissions and initial data. Explicitly
+map differing routes, account IDs and record IDs without weakening the scenario
+or production authorization. For each case record prototype result, application
+result and observed difference in existing interaction observations/artifacts.
+Exercise save/autosave, reload/revisit, validation, cancel and keyboard/focus
+where applicable; capture designated screenshot points. Reading tasks or
+imagining persona experiences is not execution or real-user research.
+
+An expected permission denial is a successful boundary check when verified,
+not unavailable infrastructure. Expected FRICTION is a hypothesis to assess,
+not an automatic finding. Record stale task/source conflicts and approved
+production differences. Unimplemented out-of-scope areas do not become feature
+requirements; missing setup for a selected required case is an honest coverage
+gap. Do not run the entire task/persona cross-product for an ordinary change.
+
 ## Full matrix
 
 Select the complete declared matrix only for one of these closed reasons:

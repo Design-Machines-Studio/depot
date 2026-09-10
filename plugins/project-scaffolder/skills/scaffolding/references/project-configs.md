@@ -183,6 +183,23 @@ settings.json, CLAUDE.md, and starter files for each project type. Replace all `
 
 ## CLAUDE.md Templates
 
+For every rendered project, populate its root instructions with the verified
+project code, established review domain, canonical serving repo folder, and
+directly linked build/restart procedure. Design Machines codes such as
+`DM-006/WORKS` map to `dm006.asmbly.app`; use the existing mapping, not a new
+publication. Query the Project Codes catalog only if the code is unknown.
+Record that ordinary review checks out the feature branch in that folder and
+uses its existing domain and environment; a new harness needs a concrete test
+requirement such as simultaneous Federation peers. Do not invent missing
+bindings or make scaffolding change DNS, ports, data or service configuration.
+For Assembly Baseplate/Fixtures, also declare the Assembly prototype as the
+definitive HTML/Live Wires/component and Datastar interaction baseline, with
+source comparison and matched browser save/reload proof. Link existing
+prototype UX task/persona selection through dm-review’s `ui-case-selection.md`.
+Include status commands and the safe detached exact-head alternative when the
+feature branch is already checked out elsewhere; retain the maintained
+instance. Carry these same instructions into the generated AGENTS.md; do not create a second registry.
+
 ### go-templ-datastar
 
 ```markdown
@@ -196,6 +213,29 @@ This file is the routing document for Claude Code. Critical rules live here; det
 
 - **Local:** {{PROJECT_URL_LOCAL}}
 - **Production:** {{PROJECT_URL_PROD}}
+
+## Existing Development Site
+
+- Project code: [verified project code]
+- Review domain: [established project-code.asmbly.app mapping]
+- Serving checkout: [verified absolute checkout and canonical remote]
+- Source binding: [how status/build evidence identifies the served source]
+- Status command: [existing exact command]
+- Rebuild/restart: [existing exact command or directly linked runbook]
+
+Use ordinary Git in the clean, available serving checkout to select the feature
+branch, or its exact detached commit when that branch is already checked out
+elsewhere. Preserve owned edits and fingerprint them for in-place review; name
+unrelated dirty or concurrent ownership collisions. Rebuild before claiming the
+new source is served. Keep the same domain, service, data and configuration.
+Check incompatible migrations before maintenance; never reset shared data.
+Leave the maintained instance available. Isolated browser environments need a
+concrete test requirement; ordinary unit-test containers remain valid.
+
+For Assembly counterparts, inspect exact prototype templates, rendered HTML,
+Live Wires classes/components and Datastar save behavior before implementation.
+Use existing prototype UX tasks/personas through dm-review's
+`ui-case-selection.md`; compare paired interactions and reload/revisit evidence.
 
 ## Workflow Orchestration
 
@@ -546,6 +586,29 @@ This file is the routing document for Claude Code.
 
 - **Local:** {{PROJECT_URL_LOCAL}}
 - **Production:** {{PROJECT_URL_PROD}}
+
+## Existing Development Site
+
+- Project code: [verified project code]
+- Review domain: [established project-code.asmbly.app mapping]
+- Serving checkout: [verified absolute checkout and canonical remote]
+- Source binding: [how status/build evidence identifies the served source]
+- Status command: [existing exact command]
+- Rebuild/restart: [existing exact command or directly linked runbook]
+
+Use ordinary Git in the clean, available serving checkout to select the feature
+branch, or its exact detached commit when that branch is already checked out
+elsewhere. Preserve owned edits and fingerprint them for in-place review; name
+unrelated dirty or concurrent ownership collisions. Rebuild before claiming the
+new source is served. Keep the same domain, service, data and configuration.
+Check incompatible migrations before maintenance; never reset shared data.
+Leave the maintained instance available. Isolated browser environments need a
+concrete test requirement; ordinary unit-test containers remain valid.
+
+For Assembly counterparts, inspect exact prototype templates, rendered HTML,
+Live Wires classes/components and Datastar save behavior before implementation.
+Use existing prototype UX tasks/personas through dm-review's
+`ui-case-selection.md`; compare paired interactions and reload/revisit evidence.
 
 ## Workflow Orchestration
 

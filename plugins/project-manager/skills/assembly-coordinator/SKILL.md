@@ -124,6 +124,17 @@ Every prompt must state:
 
 - repository and exact base;
 - worktree and branch expectations;
+- for rendered work, the established project domain and canonical serving repo
+  folder, feature branch/head and existing build/restart command. Default to
+  checking out the feature branch or its exact detached commit there for browser review; an implementation
+  worktree does not authorize a new harness or environment reconfiguration.
+  Resolve through dm-review's `repository-browser-target-discovery.md`;
+- for prototype-covered Fixture work, exact prototype source/commit, HTML and
+  Live Wires class/component parity, Datastar/save interaction traces, and
+  matched browser interaction plus reload proof in both apps. Carry existing
+  prototype task IDs, persona/role/state/device combinations, preconditions,
+  steps, success criteria and screenshot points through the prompt using
+  dm-review’s `ui-case-selection.md`; map routes/accounts/records explicitly;
 - owning repository and collision boundaries;
 - bounded scope and explicit non-goals;
 - acceptance criteria;

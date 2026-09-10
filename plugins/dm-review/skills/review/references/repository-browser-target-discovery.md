@@ -1,19 +1,22 @@
 # Repository browser-target discovery
 
-Load this host contract only after the ordinary UI target/evidence choices have
-failed to supply usable rendered evidence. It lets dm-review use an existing
-repository author loop without guessing a port or requiring a new checked-in
+Load this host contract before choosing a browser target. The default for a
+project with an established review domain is its canonical repo folder with
+the feature branch checked out, reviewed through that existing domain. This
+uses the existing author loop without requiring a new environment or checked-in
 declaration. It does not extend `ui-review-readiness.sh` into a runbook parser.
 
 ## Entry and precedence
 
 Keep the shared readiness order intact:
 
-1. explicit invocation URL;
-2. attached automation-capable T3 preview and its current URL;
-3. valid tracked `.dm/ui-review.json`;
+1. explicit invocation target override, bound to the intended app and source;
+2. the established project domain and canonical checkout from current user
+   context or the bounded repository discovery below;
+3. valid tracked `.dm/ui-review.json` when no established target is declared;
 4. accepted exact-head browser packet reuse; then
-5. this bounded repository discovery pass.
+5. an attached automation-capable T3 preview whose application and source
+   identity the host has verified. An attached tab alone is not target proof.
 
 A present higher-precedence source that is malformed, ambiguous, unsafe, or
 actually fails does not authorize blind fallback. Preserve its precise failure
@@ -30,9 +33,69 @@ enclosing Pipeline final review passes its exact packet through the shared
 contract; if packet validation rejects it, the nested dm-review may continue to
 this pass without Pipeline inventing a separate discovery ladder.
 
+## Established project checkout and domain
+
+For Design Machines projects, resolve the project code from current context or
+root instructions. The [Project Codes catalog](https://app.notion.com/p/gertz/2f7d87938808802888b4c184d4d3cf62?v=305d8793880880129530000ce06e58cc&source=copy_link)
+is a lookup fallback: `DM-006/WORKS` maps to `dm006.asmbly.app`, for example.
+Do not require Notion when the code is already known. The code identifies the
+domain; verify its actual repo/service binding locally before using it. Do not
+infer that a production/customer deployment is a branch-switchable review app.
+
+1. Resolve the canonical physical repo folder, remote identity, project domain,
+   feature branch and exact intended commit. Read its current branch, status,
+   worktree registrations, and the documented service/build commands. Capture
+   the original branch/head for handoff. Source-analysis worktrees do not
+   automatically become browser environments.
+2. Check out the feature branch in that canonical folder when it is clean and
+   available for this work. This ordinary checkout and the documented local
+   rebuild are part of authorized implementation/review; do not ask again.
+   If it already holds this run's edits, preserve them and bind evidence to that
+   source snapshot. If another run owns it, unrelated changes would be
+   displaced, name the concrete collision and coordinate a safe handoff before
+   switching. If the feature branch is checked out in an implementation
+   worktree, a normal `git checkout --detach <exact-committed-head>` in the clean,
+   free serving checkout is acceptable; record detached HEAD honestly. Never stash/reset others' work, force
+   duplicate branch checkout, or silently substitute a fresh harness.
+3. Use the project's existing build/restart or Fixture composition command to
+   serve that source through the same domain, service and data. Rebuild compiled
+   Go/Templ/CSS/JS as documented; changing Git HEAD alone does not refresh a
+   running binary. Verify relevant dependency/source bindings for a Fixture's
+   existing Baseplate consumer. No domain, DNS, Caddy, tunnel, ports, environment
+   files, or Compose topology changes are authorized by an ordinary review.
+4. This is a maintained developer instance, not review-owned infrastructure.
+   Its documented rebuild/restart may replace its application container; retain
+   its existing service identity, networks, volumes, data and configuration.
+   Record the rebuild and source evidence as `pre-existing`, with no review
+   cleanup argv or ownership adoption. Do not run reset/seed/wipe or automatic
+   migrations that would make switching back unsafe; name that concrete
+   prerequisite if the documented restart would do so. New isolated resources
+   still require `review-docker-create.md`; maintenance cannot be used to evade
+   that creation contract.
+5. Navigate the established domain with the available host browser, using T3
+   first when supported. Verify the served artifact and assets against the
+   intended source and exercise the selected cases. Bind helper evidence to the
+   actual serving checkout, not merely the worktree used for source analysis.
+   Record domain, source branch/head, build proof and actual observations.
+6. Serialize use of a shared review instance. Leave the reviewed feature branch
+   selected for the operator unless an earlier agreed handoff requires a
+   restore; a restore also needs the documented rebuild. Never clean up or
+   repoint the established instance as if it were a disposable review resource.
+
+An isolated browser environment is an exception requiring a concrete testing
+need or explicit user direction, such as simultaneous Federation peers. A
+worktree, a convenient attached tab, or generic reviewer isolation is not that
+need. Record why the established instance cannot cover the selected case and
+use the existing isolated creation/cleanup contracts only for that exception.
+Ordinary isolated unit-test containers are unaffected by this browser default.
+
 ## Closed inspection boundary
 
 The host, not a generalized parser, interprets human-authored declarations.
+Current user-provided targets and project mappings also apply. Repository
+evidence still uses tracked source ranges for the local binding and author
+loop; a catalog entry alone is not serving-source proof. Never relabel a
+catalog-derived target as an explicit invocation URL.
 Inspect only these files in the selected checkout:
 
 - root `AGENTS.md` and root `CLAUDE.md` that apply to the current checkout;
@@ -63,7 +126,9 @@ target must already be running. A missing application, checkout binding,
 status identity, start command, or cleanup/ownership declaration is an
 incomplete declaration, not permission to guess.
 
-The host-interpreted pass may execute a directly named Make target when it is
+The established-instance maintenance path above may execute its documented
+rebuild/restart without adopting cleanup ownership. For new resources, the
+host-interpreted pass may execute a directly named Make target when it is
 the exact status/readiness command or when it delegates a Compose consumer to
 Workflow Kernel's Docker creation contract. It does not start an unregistered
 raw process. A stopped process target requires the structured
@@ -124,7 +189,7 @@ content without a second snapshot contract.
 
 Source lines are evidence locators, not executable authority. Preserve argv as
 an array. Execute status/readiness argv directly from the selected checkout;
-route Compose start/rebuild argv through `review-docker-create.md` (including
+route new isolated Compose start/rebuild argv through `review-docker-create.md` (including
 its scoped repository-wrapper command instrumentation), and do not
 execute raw-process starts in this pass. Never turn declaration prose into
 `sh -c`. Redact credentials and private endpoint material using the existing
@@ -135,6 +200,8 @@ is not enough by itself: interpret its bounded output and declaration to bind
 the affected application, selected checkout, source commit, checkout state,
 and target identity. Reachability or `curl` alone proves none of those.
 
+For a maintained instance, first apply the established-checkout procedure above.
+The following creation path applies only to a justified isolated target.
 If the declared target is stopped or unsuitable for the exact head, reuse a
 suitable exact-head target only when the identity fields agree. Otherwise, a
 declared Compose consumer may start only through `review-docker-create.md`:
@@ -166,10 +233,11 @@ attempt into `dev_server_unavailable`.
 ## Ownership and cleanup
 
 Inventory before creation. A suitable target that was already running is
-`pre-existing`: do not register, rebuild, stop, or clean it. This
+`pre-existing`: do not register or clean it. Rebuild/restart only through the
+established-checkout procedure when required to serve the reviewed source. This
 host-interpreted pass never starts a raw process; a stopped process needs the
 structured `.dm/ui-review.json` path, whose helper records cleanup before the
-start and supervises interruption. For Docker/Compose, load
+start and supervises interruption. For new isolated Docker/Compose resources, load
 `review-docker-create.md` before execution; use its labelled creation plan and
 registry, retain only `resources.jsonl` (relative to the review state
 directory) or `review/resources.jsonl` (relative to the exact run root) in
@@ -189,7 +257,7 @@ incomplete or ambiguous ownership declaration blocks the attempt.
 
 Success, command failure, browser failure, analysis failure, and
 `SIGINT`/`SIGTERM` all clean only resources positively recorded as created by
-this review. Reused resources remain untouched. Never run a cleanup command
+this review. Reused resources remain retained. Never run a cleanup command
 for a failed start unless the before/after evidence and existing registry show
 that the attempt created the exact resource.
 

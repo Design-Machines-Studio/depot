@@ -61,12 +61,12 @@ same bundle. For each selected lane:
 
 Before any selected UI lane is dispatched, load `ui-case-selection.md` and
 `ui-review-readiness.md`. Select the affected case set once, then run the
-ordered application/browser gate once. Prefer an explicit invocation URL, then
-an attached automation-capable T3 preview, then optional tracked
-`.dm/ui-review.json`, then accepted exact-head packet reuse. If none supplies
-usable evidence, load `repository-browser-target-discovery.md` for the one
-bounded host-interpreted author-loop pass. A declared Compose consumer uses
-the existing review Docker creation/cleanup contracts; an exact declared
+ordered application/browser gate once. Load `repository-browser-target-discovery.md`
+before selecting a target: explicit override, established project domain and
+canonical checkout with the feature branch selected, optional declaration,
+exact-head packet reuse, then a source-verified attached preview. Use its
+documented maintenance path for the established developer instance. A justified
+isolated Compose consumer uses the existing review Docker creation/cleanup contracts; an exact declared
 process uses `ui-review-readiness.sh`. Verify reachability independently, then
 prove actual local browser navigation independently.
 
@@ -89,7 +89,7 @@ source-capable lane still runs. If a requested analysis role is unavailable,
 settle that cause as `model_participant_unavailable` distinctly. Prerequisite
 failures are coverage gaps, not code findings. Settle the aggregate UI result
 once and clean only resources registered by this review; pre-existing resources
-remain untouched.
+remain retained.
 
 An enclosing Pipeline may pass one explicit exact-head browser packet path.
 Validate it with `browser-evidence-packet.sh`; do not discover a latest packet.
