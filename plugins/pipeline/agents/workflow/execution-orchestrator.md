@@ -30,6 +30,10 @@ Exception: `sequential-on-branch` replaces per-chunk worktrees when Step 1c
 detects a canonical project checkout/domain binding or a container-mounted
 harness. Record it as `isolationStrategy`, never an `executionMode` value.
 
+`<chunk-root>` means the selected implementation checkout: the registered
+per-chunk worktree or the canonical feature-branch checkout in sequential mode.
+Use that same root for implementation, review, repair and verification.
+
 ## CRITICAL: Subagent Budget & Dead-Lane Handling
 
 1. **Inject the checkpoint contract into every implementation subagent prompt.** Implementation subagents inherit the invariant Tool-Call Exploration Checkpoint block from the promptcraft template; review agents keep the hard read-only limits in their own frontmatter. Hand-authored implementation prompts treat approximately 40 tool calls as an exploration checkpoint: stop new research, broad exploration, speculative refactoring, scope expansion, and unrelated improvements, then move directly to closeout. The checkpoint never prohibits calls to inspect the current diff and status, run proportionate focused verification, perform targeted repair and rerun the failing check, commit coherent work, push the branch, create or update the PR, or provide the final report. After at most two targeted repair-and-recheck cycles, report any remaining failure honestly and push a coherent recoverable branch or draft PR. Keep mandatory `NOT-COVERED:` / `COMMANDS-RUN:` sections; transparency does not replace delivery. **Reaching the exploration checkpoint is never, by itself, a valid reason to leave implemented work unverified, uncommitted, unpushed, or unreported.**
@@ -60,12 +64,20 @@ For an ordinary eligible quick result: collect the complete P1/P2/P3 finding set
 
 ### Full review-fix loop (sensitive chunks and full final review)
 
+Bind `<review-root>` once: `CHUNK_ROOT` for a sensitive chunk.
+Final feature review uses the existing physical checkout of
+`<featureBranch>`, verified through Git worktree registrations and branch.
+Use it for todos, edits, commits, checks and re-review after chunk cleanup.
+
 ```text
 prior_signature = null
 for iteration in 1..max_iterations (default 2):
-  Skill(skill="dm-review:review", args="full <worktree-path>")
+  for a chunk: capture CHUNK_END_HEAD and set review_args = "full <review-root> --base-commit <CHUNK_START_HEAD> --head-commit <CHUNK_END_HEAD>"
+  for the final feature review: set review_args = "full <featureBranch>"
+  invoke the review from <review-root>
+  Skill(skill="dm-review:review", args=review_args)
 
-  pending = ls <worktree-path>/todos/*-pending-*.md
+  pending = ls <review-root>/todos/*-pending-*.md
   current_signature = sorted basenames of pending
 
   if pending is empty:
@@ -81,11 +93,16 @@ for iteration in 1..max_iterations (default 2):
 
   for each pending todo file:
     read finding (file path, line, severity, suggested fix)
-    apply the fix to the cited worktree file via Edit/Write
+    apply the fix to the cited file in <review-root> via Edit/Write
     rename pending -> done
 
+  stage and commit the complete repair batch in <review-root> using Step 3d's scoped commit protocol
+  run the required affected verification in <review-root> before re-review
+  for a sequential chunk, rerun Step 3e's commit check using the original CHUNK_START_HEAD
+
   if iteration == max_iterations:
-    Skill(skill="dm-review:review", args="full <worktree-path>")  -- final verify
+    refresh review_args with the repaired end head for a chunk; keep full feature scope for the final gate
+    Skill(skill="dm-review:review", args=review_args)  -- final verify
     if pending after final: report NEEDS ATTENTION with each remaining finding
       and stop; do not mark the chunk clean or merge it
 ```
@@ -103,7 +120,7 @@ If `filesToModify` is missing, the sensitive-path set cannot be read, or glob ma
 
 `PIPELINE_FULL_TIER_REVIEW=1` forces full dm-review on every chunk and can never downgrade a sensitive-path or final-gate full review. When set to exactly `1`, keep the policy-chosen `review_tier` and add `forced_full_review: yes`; otherwise record `forced_full_review: no`.
 
-Before the per-chunk review, test `filesToModify` against the sensitive-path set. Any match runs **full** review (`args="full <worktree-path>"`) so the independent `security-review` lane and all conditional lanes engage, recorded as `review_tier: full (sensitive path)`:
+Before the per-chunk review, test `filesToModify` against the sensitive-path set. Any match runs **full** review (`args="full <chunk-root> --base-commit <CHUNK_START_HEAD> --head-commit <CHUNK_END_HEAD>"`) so the independent `security-review` lane and all conditional lanes engage, recorded as `review_tier: full (sensitive path)`:
 
 ```
 internal/auth/**            internal/federation/**
@@ -474,6 +491,13 @@ git checkout <featureBranch>
 
 No refs are created in that mode, so nothing is registered for this chunk. Mark `[chunk-id] 2. Create worktree` complete, or `branch selected` for `sequential-on-branch`.
 
+In either mode, bind `CHUNK_ROOT` to that physical checkout and capture
+`CHUNK_START_HEAD` with `git -C "$CHUNK_ROOT" rev-parse HEAD` before dispatch.
+Keep that original boundary through repair attempts; do not recapture it after
+the implementation commits. Store it in the existing chunk receipt and pass
+the resulting chunk diff to verification and review. In sequential mode set
+`FEATURE_BRANCH` to the manifest's feature branch, never `main`.
+
 #### Docker/Compose creation ownership
 
 For documented rebuild/restart of the established developer instance, follow
@@ -566,7 +590,10 @@ display an internal report before Pipeline's merge decision.
 
 **Step 3d.1 -- Dispatch the role.** Materialize the worker prompt, a fresh output
 path, and a private receipt path within the run-private router registry. Build
-argv as an array:
+argv as an array. Resolve `ROLE_DISPATCH`, `WORKFLOW_KERNEL`, `WORKER_PROMPT`,
+`WORKER_OUTPUT`, `PRIVATE_ROUTER_RECEIPT` and `COMPLETE_REPOSITORY_EVIDENCE` to
+absolute paths before changing directory. Dispatch from `CHUNK_ROOT` in a
+subshell so the orchestrator's own working directory stays unchanged:
 
 ```bash
 ROLE_ARGS=(--role "$EXECUTOR_ROLE" --effort "$EXECUTOR_EFFORT"
@@ -580,7 +607,9 @@ if [ "${#EXECUTOR_CAPABILITIES[@]}" -gt 0 ]; then
     ROLE_ARGS+=(--capability "$capability")
   done
 fi
-OPENROUTER_EXEC_ALLOWED_PATHS="$OWNED_PATHS" "$ROLE_DISPATCH" "${ROLE_ARGS[@]}"
+# selected-root-dispatch:start
+(cd "$CHUNK_ROOT" && OPENROUTER_EXEC_ALLOWED_PATHS="$OWNED_PATHS" "$ROLE_DISPATCH" "${ROLE_ARGS[@]}")
+# selected-root-dispatch:end
 ```
 
 The dispatcher owns live availability, billing eligibility, family exclusion,
@@ -684,12 +713,47 @@ Mark `[chunk-id] 4. Dispatch subagent` complete.
 Verify before proceeding:
 
 1. **Completion check:** the subagent reported completion (not an error or question).
-2. **Commit check:** `git log <featureBranch>..<chunk-branch> --oneline` MUST show at least one commit.
+2. **Commit check:** under `per-chunk-worktree`, `git log <featureBranch>..<chunk-branch> --oneline` MUST show at least one commit. Under `sequential-on-branch`, run the sequential commit check below against the captured starting head; do not reference a chunk branch.
 3. **Focused verification:** on profile-aware repositories, invoke `plan-verification` for boundary `chunk` using the exact chunk diff, then `run-verification`; do not run a repository-wide or race suite here. On the repository-native path, run only focused checks explicitly approved by the chunk prompt. Do not run the canonical native command here. Record `verificationPlanner: unavailable` plus the exact command and policy source in existing verification evidence where supported.
 4. **Role receipt check:** the public result contains the requested role,
    anonymous participant, closed disposition, requested/effective effort, and
    fallback state. The private receipt exists and is content-free; do not copy
    its concrete identity into this validation or a repair prompt.
+
+Sequential commit check (run in the host after dispatch and after any repair;
+failure blocks the chunk):
+
+```bash
+# sequential-commit-check:start
+test "$(git -C "$CHUNK_ROOT" branch --show-current)" = "$FEATURE_BRANCH" || exit 1
+CHUNK_END_HEAD=$(git -C "$CHUNK_ROOT" rev-parse HEAD) || exit 1
+git -C "$CHUNK_ROOT" merge-base --is-ancestor "$CHUNK_START_HEAD" "$CHUNK_END_HEAD" || exit 1
+CHUNK_COMMIT_COUNT=$(git -C "$CHUNK_ROOT" rev-list --count "$CHUNK_START_HEAD..$CHUNK_END_HEAD") || exit 1
+test "$CHUNK_COMMIT_COUNT" -gt 0 || exit 1
+CHUNK_STATUS=$(git -C "$CHUNK_ROOT" status --porcelain) || exit 1
+test -z "$CHUNK_STATUS" || exit 1
+# sequential-commit-check:end
+```
+
+After successful commit validation in **both isolation modes**, capture the
+current end head before materializing any verification or review input:
+
+```bash
+# chunk-end-head:start
+CHUNK_END_HEAD=$(git -C "$CHUNK_ROOT" rev-parse HEAD) || exit 1
+# chunk-end-head:end
+```
+
+Use `CHUNK_START_HEAD..CHUNK_END_HEAD` as the sequential chunk's verification
+and review boundary; each later chunk captures its own start.
+
+For focused per-chunk review, materialize
+`git -C "$CHUNK_ROOT" diff "$CHUNK_START_HEAD..$CHUNK_END_HEAD"` and its
+`--name-only` inventory. Supply both heads, that inventory and that diff as
+target evidence in the common reviewer prompt. Refresh the end head after
+committed repairs; retain the original start. Nested dm-review receives
+`--base-commit <CHUNK_START_HEAD> --head-commit <CHUNK_END_HEAD>` arguments;
+its Phase 1 validates and materializes that range. Final review uses the full PR.
 
 Represent a passing repository-verification result once with a bounded summary containing selected check IDs, status, and plan digest. Raw passing stdout/stderr and repeated result copies must not enter a builder repair prompt or any later reviewer prompt.
 
@@ -729,6 +793,13 @@ For `renderedSurface: required`, run Datastar/markup static checks and one brows
 
 **Trivial:** Request `review-fast` at medium effort. If findings, fix and re-run once.
 
+Every Step 3g repair batch, including focused UI/Logic, Integration and Trivial
+paths, must use Step 3d's scoped stage-and-commit protocol in `CHUNK_ROOT`
+before re-review. Refresh `CHUNK_END_HEAD` through Step 3e in either isolation
+mode; for sequential chunks rerun its clean-tree commit check with the original
+`CHUNK_START_HEAD`. Then run required affected verification and refresh review
+inputs. An uncommitted repair cannot pass the evaluation gate or merge.
+
 **Zero-deferral:** every retained P1/P2/P3 must be fixed and verified; no deferral flag. P1 security/corruption/breaking; P2 performance/architecture/reliability; P3 observable minor defects. Every retained finding must identify an observable current defect, location, and smallest adequate repair; P1/P2 must identify the affected current user or operator and realistic harm. Reject unsupported preferences and speculative scope.
 
 If P1/P2/P3 remain after max iterations: STOP, apply targeted line fixes, re-run review. If any retained finding remains, stop as needs attention.
@@ -762,6 +833,14 @@ render preserves source work but blocks the rendered-parity claim.
 
 Before merging, search for `EVAL_GATE_PASSED: [chunk-id] |`. If absent: STOP, run Step 3g, then merge.
 
+Under `sequential-on-branch`, rerun the sequential commit check and confirm
+required review and browser evidence covers the current `CHUNK_END_HEAD`.
+Record `already-integrated` with the start/end heads in the existing merge
+disposition and mark Step 3i complete. Do not run a merge: the chunk commits
+are already on the feature branch.
+
+Only under `per-chunk-worktree`, run:
+
 ```bash
 git checkout <featureBranch>
 git merge pipeline/<run-id>/<chunk-id> --no-ff -m "pipeline: merge <chunk-id> -- <chunk-title>"
@@ -777,7 +856,12 @@ Docker cleanup is limited to exact resources registered as owned by this run/nod
 
 **Empty-plan fast path:** After `plan-cleanup`, if the plan has zero steps/actions, skip `next-cleanup-step` and `execute-cleanup-step`. Write the empty outcomes array and call `record-cleanup` directly.
 
-Apply `repo-cleanup-contract.md`. Never suppress git exit status. Load `plugins/pipeline/references/execution-worktree-cleanup.md` -- it defines `block` and the per-chunk script -- and run it. Prove merge with `merge-base --is-ancestor` before `git branch -d`. Carry every `block` into the Step 5b inventory as `blocked`. Mark `[chunk-id] 10. Clean up worktree` complete (or `blocked: [reason]`).
+Apply `repo-cleanup-contract.md`. In `sequential-on-branch`, no chunk worktree
+or branch was created: record Git cleanup as `not-applicable`, retain
+`CHUNK_ROOT` and the feature branch, and do not run the per-chunk worktree
+cleanup script. The owned Docker cleanup above still applies.
+
+Only under `per-chunk-worktree`, load `plugins/pipeline/references/execution-worktree-cleanup.md` -- it defines `block` and the per-chunk script -- and run it. Never suppress git exit status. Prove merge with `merge-base --is-ancestor` before `git branch -d`. Carry every `block` into the Step 5b inventory as `blocked`. Mark `[chunk-id] 10. Clean up worktree` complete (or `blocked: [reason]`).
 
 ### 3k: Verify the Integrated Execution Level
 

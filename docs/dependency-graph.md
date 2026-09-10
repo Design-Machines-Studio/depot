@@ -75,7 +75,7 @@ graph LR
 | model-router | openrouter | optional | `>=1.20.2` |
 | model-router | workflow-kernel | optional | `>=0.17.0` |
 | ned | superpowers | optional | `>=1.0.0` |
-| pipeline | dm-review | required | `>=1.81.0` |
+| pipeline | dm-review | required | `>=1.81.1` |
 | pipeline | model-router | required | `>=0.7.0` |
 | pipeline | workflow-kernel | required | `>=0.19.1` |
 | pipeline | ned | optional | `>=1.4.0` |

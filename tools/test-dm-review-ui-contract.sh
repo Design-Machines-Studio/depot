@@ -155,6 +155,17 @@ from pathlib import Path
 import sys
 root=Path(sys.argv[1])
 def read(path): return (root/path).read_text()
+review=read("plugins/dm-review/skills/review/SKILL.md")
+for lane in ("visual-browser-tester", "ux-quality-reviewer", "ui-standards-reviewer"):
+    rows=[line for line in review.splitlines() if line.startswith("| ") and f"**{lane}**" in line]
+    assert len(rows) == 1, (lane, rows)
+    condition=rows[0].split("|")[1]
+    assert "handler/Datastar/client changes affect a rendered interaction" in condition, lane
+    for extension in (".templ", ".twig", ".html", ".css"):
+        assert extension in condition, (lane, extension)
+# Selection must precede the existing readiness gate, including a Go-only save.
+assert review.index("**visual-browser-tester**") < review.index("### Phase 3.9:")
+assert "When any browser/UI lane is selected" in review
 cases=read("plugins/dm-review/skills/review/references/ui-case-selection.md")
 for phrase in ("tests/ux/README.md", "tests/ux/coverage-matrix.md",
                "tests/ux/tasks/**/*.md", "tests/ux/personas/_index.md",
@@ -190,6 +201,11 @@ for phrase in ("T3 preview status/open first", "repository-browser-target-discov
 ux=read("plugins/dm-review/agents/review/ux-quality-reviewer.md")
 for phrase in ("external Assembly prototype", "not execution or real-user research", "not an automatic finding", "does not assign a severity"):
     assert phrase in ux, phrase
+coordinator=read("plugins/project-manager/skills/assembly-coordinator/SKILL.md")
+for phrase in ("When dm-review is available", "when available; map routes/accounts/records",
+               "If dm-review is absent, continue prompt preparation", "root repository instructions",
+               "unresolved prerequisites", "does not claim that evidence has passed"):
+    assert phrase in coordinator, phrase
 print("prototype task propagation: source contracts passed")
 PYCONTRACT
 

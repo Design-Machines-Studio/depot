@@ -79,12 +79,15 @@ references.
 - For ordinary non-sensitive chunks, request one focused read-only
   `review-fast` or `review-deep` role against the chunk diff and allow at most
   one P1/P2/P3 repair/recheck pass. Preserve pending/done todo receipts.
-- For sensitive-path chunks, run the full inline `plugins/dm-review/skills/review/SKILL.md` protocol against the chunk worktree, with at most two passes.
+- For sensitive-path chunks, run the full inline `plugins/dm-review/skills/review/SKILL.md` protocol from `CHUNK_ROOT`, with at most two passes. Forward the orchestrator's `--base-commit <CHUNK_START_HEAD> --head-commit <CHUNK_END_HEAD>` target arguments into Phase 1, including its exact-range validation and diff/file materialization; do not rediscover `main...HEAD`. This applies to both isolation modes and every committed repair recheck, retaining the chunk's original base and refreshing its end head.
 - For the final gate, read `finalReviewMode`. `full` runs the review skill's
   full-mode protocol. `quick` loads and executes the installed
   `dm-review-quick` protocol against the feature branch; if that protocol finds
   a bounded security-sensitive path, escalate to full and receipt the effective
   mode.
+- Bind final review, todo lookup, repairs, commits and verification to the
+  feature-branch checkout as `<review-root>`, not a removed chunk worktree.
+  Final review keeps complete feature/PR scope without the per-chunk range.
 - Dispatch every selected review lane through model-router using dm-review's
   role mapping. Never attach implementation or repair receipts, author-origin
   claims, family exclusions, or independence inputs to a review request.

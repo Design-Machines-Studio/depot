@@ -164,6 +164,31 @@ Execute in order; do not skip. Majors are 1--8; lettered sub-phases run in seque
 
 ### Phase 1: Target Detection
 
+First parse optional paired `--base-commit <sha>` and `--head-commit <sha>`
+arguments. When neither is supplied, use ordinary detection below. Reject
+partial or invalid ranges without fallback. For a range, set `REVIEW_ROOT` to
+the supplied physical repository root and bind the commit variables literally.
+Choose fresh absolute `REVIEW_DIFF_FILE` and `REVIEW_FILES_FILE` paths under
+this run's owned output directory, then run:
+
+```bash
+# exact-review-range:start
+[[ "$REVIEW_BASE_COMMIT" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]] || exit 1
+[[ "$REVIEW_HEAD_COMMIT" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]] || exit 1
+test "$(git -C "$REVIEW_ROOT" cat-file -t "$REVIEW_BASE_COMMIT")" = commit || exit 1
+test "$(git -C "$REVIEW_ROOT" rev-parse HEAD)" = "$REVIEW_HEAD_COMMIT" || exit 1
+git -C "$REVIEW_ROOT" merge-base --is-ancestor "$REVIEW_BASE_COMMIT" "$REVIEW_HEAD_COMMIT" || exit 1
+REVIEW_STATUS=$(git -C "$REVIEW_ROOT" status --porcelain) || exit 1
+test -z "$REVIEW_STATUS" || exit 1
+git -C "$REVIEW_ROOT" diff "$REVIEW_BASE_COMMIT..$REVIEW_HEAD_COMMIT" > "$REVIEW_DIFF_FILE" || exit 1
+git -C "$REVIEW_ROOT" diff --name-only "$REVIEW_BASE_COMMIT..$REVIEW_HEAD_COMMIT" > "$REVIEW_FILES_FILE" || exit 1
+# exact-review-range:end
+```
+
+Use those exact files for changed-file discovery, lane triggers, reviewer
+prompts and receipts. Record both commits and skip ordinary detection.
+Empty diff: stop. All review gates still apply.
+
 Determine changed files; try in order: (1) PR number/URL given: `gh pr diff <number>`; (2) feature branch: `git diff main...HEAD --name-only`; (3) uncommitted: `git diff --name-only` + `git diff --cached --name-only`; (4) path given: use it. Store changed files and extensions; if none, tell the user and stop. Also capture the full diff (`git diff main...HEAD` or matching command) for the agents.
 
 ---
@@ -388,9 +413,9 @@ The indexed arrays are the final roster's resolution projection, not a second se
 | `.go` or `.templ` changed AND `go.mod` exists | **go-build-verifier** | `dm-review/*/agents/review/go-build-verifier.md` |
 | `.twig` or `.php` changed AND (`craft/` or `.ddev/` exists) | **craft-reviewer** | `dm-review/*/agents/review/craft-reviewer.md` |
 | `.sql` changed under `migrations/` or `seeds/` | **migration-validator** | `dm-review/*/agents/review/migration-validator.md` |
-| `.templ`, `.twig`, `.html`, or `.css` changed | **visual-browser-tester** | `dm-review/*/agents/review/visual-browser-tester.md` |
-| `.templ`, `.twig`, `.html`, or `.css` changed | **ux-quality-reviewer** | `dm-review/*/agents/review/ux-quality-reviewer.md` |
-| `.templ`, `.twig`, `.html`, or `.css` changed | **ui-standards-reviewer** | `dm-review/*/agents/review/ui-standards-reviewer.md` |
+| `.templ`, `.twig`, `.html`, or `.css` changed, OR handler/Datastar/client changes affect a rendered interaction | **visual-browser-tester** | `dm-review/*/agents/review/visual-browser-tester.md` |
+| `.templ`, `.twig`, `.html`, or `.css` changed, OR handler/Datastar/client changes affect a rendered interaction | **ux-quality-reviewer** | `dm-review/*/agents/review/ux-quality-reviewer.md` |
+| `.templ`, `.twig`, `.html`, or `.css` changed, OR handler/Datastar/client changes affect a rendered interaction | **ui-standards-reviewer** | `dm-review/*/agents/review/ui-standards-reviewer.md` |
 | A large diff needs a bounded bulk first pass | **bulk-analyst** -- `review-deep` + `long-context` | `openrouter/*/agents/review/openrouter-bulk-analyst.md` |
 
 #### Selective Lane Allowlist (internal loop input)
