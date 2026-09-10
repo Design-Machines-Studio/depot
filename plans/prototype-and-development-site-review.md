@@ -9,7 +9,8 @@ Parent program: [Assembly development improvements](astra-routing-and-system-rol
 Finish the existing `fix/prototype-review-defaults` work as **UI-DEFAULTS-01**.
 It already spans the two reported problems; do not launch competing browser
 or prototype rewrites. The [complete continuation prompt](prompts/ui-defaults-01.md)
-is for its current owner or a fresh session after handoff.
+now supports a fresh Depot session and explicitly verifies the correct remote
+before editing. Preserve any work from a session started in the wrong project.
 
 At inspection, the branch was based on
 `7e5475195ecab8c626b03ee79185d3b863852c82` with uncommitted changes in 18 files.
@@ -55,6 +56,45 @@ authorization, CSRF, storage and SDK wiring must remain correct; use only the
 minimal necessary adaptation, with evidence. Other design changes require
 explicit approved scope and start from the prototype. No counterpart requires
 an inspected-source explanation rather than an invented redesign.
+
+## Reuse the prototype's UX tasks and personas
+
+The prototype's `tests/ux/` is an existing content-defined browser test suite.
+Read its README and coverage matrix for discovery, then use individual task
+frontmatter/steps, selected persona profiles and referenced heuristics as the
+scenario authority. Carry existing task/persona IDs into Pipeline prompts and
+dm-review's existing case selection; do not copy the suite into Depot or add
+a runner, persona framework, second report format or full-matrix default.
+
+For each affected scenario, preserve preconditions, role expectations, steps,
+success criteria and screenshot points. Run it in both prototype and target
+with comparable demo accounts/data, mapping route/account/record IDs explicitly.
+Record each side's observed interactions and outcomes, including save/reload
+when applicable. Reading a task is not executing it. Agent persona evaluation
+is not a human usability study.
+
+An expected authorization denial is a successful boundary check when observed;
+it is not missing browser coverage. An expected FRICTION outcome is a hypothesis,
+not proof of a defect. Generated indexes do not override task source. If a task
+disagrees with exact prototype source or approved production scope, preserve
+and name that discrepancy rather than silently changing either authority.
+Unrelated unimplemented product areas are excluded with a reason; missing
+setup for an already selected required case remains an honest coverage gap.
+
+Evidence inspected at prototype `cb355281d6e065dac257e4f3ac89241a9ad77072`
+with no `tests/ux/` working-tree changes:
+
+- `tests/ux/README.md` defines browser execution of persona-task scenarios.
+- `tests/ux/personas/_index.md` maps six personas to seed accounts, roles,
+  behavioral expectations and devices.
+- `GOV-PL-003` exercises draft editing, autosave feedback and edited-by metadata.
+- `GOV-PP-007` exercises changing a position, immediate distribution updates
+  and activity feedback. Its exact task wording must be compared with the
+  selected current prototype and approved target before reuse.
+
+These examples are discovery evidence, not completed browser tests. The
+continuation prompt includes focused case-propagation checks and a canary
+using applicable existing tasks and personas.
 
 ## Existing development-site contract
 

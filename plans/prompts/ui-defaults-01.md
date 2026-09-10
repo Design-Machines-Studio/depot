@@ -1,8 +1,8 @@
 # UI-DEFAULTS-01 — complete prototype fidelity and existing-site review defaults
 
-Prepared 2026-09-10 from authenticated Depot main. This is a continuation for
-the existing implementation owner, or a fresh session after its handoff. Do not
-start a second writer in the implementation worktree.
+Prepared 2026-09-10 from authenticated Depot main. Complete replacement prompt
+for a fresh Depot session, including existing prototype UX tasks and personas.
+It does not require the previous session or planning PR to complete first.
 
 Recommended start
 
@@ -25,8 +25,8 @@ Existing implementation worktree:
   /home/ned/ai/depot-worktrees/prototype-review-defaults
 Prepared implementation HEAD: 7e5475195ecab8c626b03ee79185d3b863852c82
 Its uncommitted changes already cover this task. Continue them; do not replace
-them or start a competing implementation. Use this prompt in that owning
-session, or after its handoff. A dirty implementation tree is expected.
+them or start a competing implementation. A dirty implementation tree is expected.
+This fresh session is authorized to continue that task's existing diff.
 
 executorRole: builder-deep
 executorCapabilities: [read-repository, write-repository, tool-use, structured-output]
@@ -34,10 +34,20 @@ executorEffort: medium
 Browser execution belongs to the host's actual tools, separately from routing.
 
 OWNERSHIP AND START
+Even if this session starts in another project, first set the working directory
+to the exact Depot implementation worktree above. Before editing, verify
+git rev-parse --show-toplevel and git remote get-url origin identify that
+worktree and Design-Machines-Studio/depot. Accept equivalent SSH/HTTPS remotes.
+Do not create or edit files in the project where the earlier prompt was run;
+do not undo its work. Apply the instructions governing Depot files.
+
 Refresh main, branch state, open PRs and actual file ownership. Read applicable
 AGENTS/CLAUDE instructions and references, Assembly Coordinator, Design Machines
 strategy, affected skills, and existing validation/release guidance.
 PR #129 is merged; retain dm-review 1.80.2 / Kernel 0.22.0 repairs.
+PR #135 is planning only, not an implementation prerequisite. Do not convert
+that planning PR into the implementation PR. A dirty task-owned diff is not
+an active-owner conflict; pause only for evidence of a concurrent writer.
 
 Keep existing edits and all other worktrees intact. Do not stash, reset, clean,
 force-push, delete worktrees or modify the protected primary checkout.
@@ -80,6 +90,34 @@ Production auth, CSRF, storage and SDK wiring may differ without redesigning
 the experience. A necessary security/accessibility correction must be narrow
 and evidenced. Other design divergence requires explicit approved scope.
 If there is no counterpart, identify what was inspected; do not invent one.
+
+REUSE PROTOTYPE UX TASKS AND PERSONAS
+Resolve the canonical Design-Machines-Studio/assembly prototype at the exact
+reviewed commit. Local discovery path: /home/ned/assembly/assembly.
+Read tests/ux/README.md, coverage-matrix.md, applicable tasks/**/*.md,
+personas/_index.md, the selected persona files, and referenced heuristics.
+Task frontmatter and steps are authoritative over the generated coverage matrix.
+These are content-defined browser scenarios, not an invented CLI test runner.
+
+Select the existing task IDs and persona/role/state/device combinations affected
+by the change, including handler-only Datastar changes. Carry those references,
+preconditions, steps, success criteria and screenshot points through Pipeline
+planning/prompts into dm-review's existing case selection and evidence packet.
+Do not duplicate the suite or run the full persona/task cross-product by default.
+
+Execute the selected scenarios in both prototype and app with comparable demo
+accounts, permissions and initial data. Explicitly map different route/account/
+record IDs without weakening the scenario or production authorization. Record
+prototype result, app result and observed difference for each selected case.
+Include save/reload where relevant. Reading tasks or imagining a persona's
+experience does not count as browser execution or real-user research.
+
+An expected permission denial is a successful boundary check when verified,
+not unavailable infrastructure. Expected FRICTION is a hypothesis to assess,
+not an automatic finding. Report stale task/source conflicts and approved
+production differences explicitly. Unimplemented out-of-scope product areas
+do not become new feature requirements; selected required cases remain
+incomplete if missing data/access prevents their execution.
 
 REQUIRED REVIEW-SITE RULE
 Default to the project's established development domain and designated serving
@@ -133,13 +171,17 @@ Extend existing focused contract tests for:
 - existing-instance retention versus justified isolated-resource cleanup;
 - exact structure/classes and handler-only Datastar interaction changes;
 - save/reload behavior, theme differences, and approved minimal adaptations.
+- existing UX task/persona selection and propagation from an external prototype,
+  expected denial versus coverage failure, and paired browser observations.
 
 Run relevant trigger tests only where descriptions change, affected readiness/
 discovery/UI/Pipeline/scaffolder/coordinator checks, generated checks, and
 ./tools/validate-composition.sh --all. Fix every retained P1/P2/P3 finding.
 Use one proportional review and affected rechecks; no repeated full rosters.
 
-Canary with one existing Governance UI flow and its exact prototype counterpart:
+Canary with an applicable existing Governance UX task and its mapped personas
+against the exact prototype counterpart (GOV-PL-003 draft editing is a candidate
+only if that flow exists in the target's approved scope):
 use dm027/dm006 through verified current bindings, build the selected source
 through documented commands, and compare desktop/mobile interaction plus
 save/reload on designated demo records. Do not change consumer product code.
