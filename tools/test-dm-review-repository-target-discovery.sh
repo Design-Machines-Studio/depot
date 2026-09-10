@@ -251,4 +251,47 @@ jq -cn --arg head "$current_head" --arg url "$TARGET_DYNAMIC_URL" \
 assert jq -e '.resourceOwnership == "pre-existing" and
   .targetUrlProvenance == "status-output"' "$TMP/preexisting-evidence.json"
 
+# Declared project beats an unrelated attached tab; maintenance retains ownership.
+assert grep -Fq '2. the established project domain and canonical checkout' "$CONTRACT"
+assert grep -Fq '5. an attached automation-capable T3 preview' "$CONTRACT"
+assert grep -Fq 'git checkout --detach <exact-committed-head>' "$CONTRACT"
+assert grep -Fq 'name the concrete collision' "$CONTRACT"
+assert grep -Fq 'changing Git HEAD alone does not refresh' "$CONTRACT"
+assert grep -Fq 'cleanup argv or ownership adoption' "$CONTRACT"
+assert grep -Fq 'simultaneous Federation peers' "$CONTRACT"
+
+# Exercise ordinary Git in disposable fixture repos. The implementation branch
+# stays owned by its worktree. This simulated binary requires a separate rebuild.
+SERVING="$TMP/serving"
+BUILDER="$TMP/builder"
+git init -q "$SERVING"
+printf 'base\n' > "$SERVING/source.txt"
+git -C "$SERVING" add source.txt
+git -C "$SERVING" -c user.name=test -c user.email=test@example.invalid commit -qm base
+git -C "$SERVING" rev-parse HEAD > "$TMP/served-build-head"
+git -C "$SERVING" worktree add -qb fixture-feature "$BUILDER"
+printf 'feature\n' > "$BUILDER/source.txt"
+git -C "$BUILDER" add source.txt
+git -C "$BUILDER" -c user.name=test -c user.email=test@example.invalid commit -qm feature
+feature_head="$(git -C "$BUILDER" rev-parse HEAD)"
+if git -C "$SERVING" checkout fixture-feature 2> "$TMP/branch-owned-error"; then
+  printf 'FAIL: duplicate branch checkout unexpectedly succeeded\n' >&2
+  exit 1
+fi
+assert grep -Eq 'already (checked out|used)' "$TMP/branch-owned-error"
+git -C "$SERVING" checkout -q --detach "$feature_head"
+assert test "$(git -C "$SERVING" rev-parse HEAD)" = "$feature_head"
+assert test "$(git -C "$BUILDER" branch --show-current)" = fixture-feature
+assert test -z "$(git -C "$SERVING" branch --show-current)"
+assert test "$(cat "$TMP/served-build-head")" != "$feature_head"
+# Simulated rebuild receipt, not application/browser evidence.
+git -C "$SERVING" rev-parse HEAD > "$TMP/served-build-head"
+assert test "$(cat "$TMP/served-build-head")" = "$feature_head"
+printf 'unrelated owned edit\n' >> "$SERVING/source.txt"
+before_dirty="$(git -C "$SERVING" diff | git hash-object --stdin)"
+assert test -n "$(git -C "$SERVING" status --porcelain)"
+# On a collision, retain the checkout without switching or cleaning it.
+assert test "$(git -C "$SERVING" diff | git hash-object --stdin)" = "$before_dirty"
+assert test -d "$SERVING"
+
 printf 'dm-review-repository-target-discovery: %d assertions passed\n' "$pass"

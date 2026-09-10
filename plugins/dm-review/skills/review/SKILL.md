@@ -164,6 +164,31 @@ Execute in order; do not skip. Majors are 1--8; lettered sub-phases run in seque
 
 ### Phase 1: Target Detection
 
+First parse optional paired `--base-commit <sha>` and `--head-commit <sha>`
+arguments. When neither is supplied, use ordinary detection below. Reject
+partial or invalid ranges without fallback. For a range, set `REVIEW_ROOT` to
+the supplied physical repository root and bind the commit variables literally.
+Choose fresh absolute `REVIEW_DIFF_FILE` and `REVIEW_FILES_FILE` paths under
+this run's owned output directory, then run:
+
+```bash
+# exact-review-range:start
+[[ "$REVIEW_BASE_COMMIT" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]] || exit 1
+[[ "$REVIEW_HEAD_COMMIT" =~ ^([0-9a-f]{40}|[0-9a-f]{64})$ ]] || exit 1
+test "$(git -C "$REVIEW_ROOT" cat-file -t "$REVIEW_BASE_COMMIT")" = commit || exit 1
+test "$(git -C "$REVIEW_ROOT" rev-parse HEAD)" = "$REVIEW_HEAD_COMMIT" || exit 1
+git -C "$REVIEW_ROOT" merge-base --is-ancestor "$REVIEW_BASE_COMMIT" "$REVIEW_HEAD_COMMIT" || exit 1
+REVIEW_STATUS=$(git -C "$REVIEW_ROOT" status --porcelain) || exit 1
+test -z "$REVIEW_STATUS" || exit 1
+git -C "$REVIEW_ROOT" diff "$REVIEW_BASE_COMMIT..$REVIEW_HEAD_COMMIT" > "$REVIEW_DIFF_FILE" || exit 1
+git -C "$REVIEW_ROOT" diff --name-only "$REVIEW_BASE_COMMIT..$REVIEW_HEAD_COMMIT" > "$REVIEW_FILES_FILE" || exit 1
+# exact-review-range:end
+```
+
+Use those exact files for changed-file discovery, lane triggers, reviewer
+prompts and receipts. Record both commits and skip ordinary detection.
+Empty diff: stop. All review gates still apply.
+
 Determine changed files; try in order: (1) PR number/URL given: `gh pr diff <number>`; (2) feature branch: `git diff main...HEAD --name-only`; (3) uncommitted: `git diff --name-only` + `git diff --cached --name-only`; (4) path given: use it. Store changed files and extensions; if none, tell the user and stop. Also capture the full diff (`git diff main...HEAD` or matching command) for the agents.
 
 ---
@@ -233,7 +258,7 @@ Ordinary quick review always selects exactly these two core judgment lanes:
 
 Add only applicable lanes using their existing triggers:
 
-- **ui-standards-reviewer** when `.templ`, `.twig`, `.html`, or `.css` files changed.
+- **ui-standards-reviewer** when templates, CSS, or handler-only Datastar changes affect a rendered interaction.
 - **go-build-verifier** when `.go` or `.templ` files changed and the project has `go.mod` + `docker-compose.yml`.
 - **craft-reviewer** when `.twig` or `.php` files changed and the project has `craft/` or `.ddev/`.
 
@@ -388,9 +413,9 @@ The indexed arrays are the final roster's resolution projection, not a second se
 | `.go` or `.templ` changed AND `go.mod` exists | **go-build-verifier** | `dm-review/*/agents/review/go-build-verifier.md` |
 | `.twig` or `.php` changed AND (`craft/` or `.ddev/` exists) | **craft-reviewer** | `dm-review/*/agents/review/craft-reviewer.md` |
 | `.sql` changed under `migrations/` or `seeds/` | **migration-validator** | `dm-review/*/agents/review/migration-validator.md` |
-| `.templ`, `.twig`, `.html`, or `.css` changed | **visual-browser-tester** | `dm-review/*/agents/review/visual-browser-tester.md` |
-| `.templ`, `.twig`, `.html`, or `.css` changed | **ux-quality-reviewer** | `dm-review/*/agents/review/ux-quality-reviewer.md` |
-| `.templ`, `.twig`, `.html`, or `.css` changed | **ui-standards-reviewer** | `dm-review/*/agents/review/ui-standards-reviewer.md` |
+| `.templ`, `.twig`, `.html`, or `.css` changed, OR handler/Datastar/client changes affect a rendered interaction | **visual-browser-tester** | `dm-review/*/agents/review/visual-browser-tester.md` |
+| `.templ`, `.twig`, `.html`, or `.css` changed, OR handler/Datastar/client changes affect a rendered interaction | **ux-quality-reviewer** | `dm-review/*/agents/review/ux-quality-reviewer.md` |
+| `.templ`, `.twig`, `.html`, or `.css` changed, OR handler/Datastar/client changes affect a rendered interaction | **ui-standards-reviewer** | `dm-review/*/agents/review/ui-standards-reviewer.md` |
 | A large diff needs a bounded bulk first pass | **bulk-analyst** -- `review-deep` + `long-context` | `openrouter/*/agents/review/openrouter-bulk-analyst.md` |
 
 #### Selective Lane Allowlist (internal loop input)
@@ -414,7 +439,8 @@ Skipping Y agents:
 
 ### Phase 3.25: Design Spec Discovery
 
-If the change includes `.templ`, `.twig`, `.html`, or `.css`, load
+If the change includes `.templ`, `.twig`, `.html`, `.css`, or handler/Datastar/JS
+changes affecting a rendered interaction (including save timing), load
 `${CLAUDE_SKILL_DIR}/references/design-spec-discovery.md`. Prefer caller-provided
 Pipeline prototype context; otherwise resolve exact declarations from the
 current PR/Issue, root instructions, or active plan. Read external prototype
@@ -465,11 +491,14 @@ When any browser/UI lane is selected, load
 route-mapping preflight from `ui-case-selection.md`, recording exact
 file-to-route pairs or `unresolved-rendered-route`, then select affected cases
 once and complete one application and local-browser decision before model
-dispatch. Select an explicit invocation URL first, then an already attached
-automation-capable T3 preview, then optional tracked `.dm/ui-review.json`.
+dispatch. Load `repository-browser-target-discovery.md` before choosing the
+target. Prefer an explicit override, then the established project domain and
+canonical checkout with the feature branch selected. Optional declarations,
+exact-head packet reuse and a source-verified attached preview follow in that
+contract's order. T3 is a browser transport, not authority for the target URL.
 Start a stopped raw process only through the structured `.dm/ui-review.json`
 helper path, which snapshots and supervises cleanup. Start a repository-
-discovered Compose consumer only through Workflow Kernel's Docker creation
+discovered isolated Compose consumer only through Workflow Kernel's Docker creation
 contract, and track only resources this invocation created. Pass the already
 resolved trusted Workflow Kernel launcher and the host-owned expected registry
 run/node IDs separately to every readiness-helper action that consumes Compose
@@ -479,10 +508,9 @@ state select or downgrade its validator, expected identity, or cleanup duty. Nev
 readiness from changed file extensions or interpret supported viewport/engine
 declarations as a full matrix requirement.
 
-If those sources and accepted exact-head packet reuse supply no usable
-evidence, load
-`${CLAUDE_SKILL_DIR}/references/repository-browser-target-discovery.md` and run
-its one bounded host-interpreted pass. Inspect only the current root
+Run the bounded host-interpreted repository pass at its precedence point.
+Use its established-instance maintenance path for the existing service; do not
+create a new harness for ordinary review. Inspect only the current root
 instructions, directly named development runbooks, relevant declared Makefile
 and Compose declarations, `tests/ux/verification.json`, and directly named
 browser handoffs. Preserve bounded source lines and exact command/URL
@@ -697,7 +725,7 @@ invocation.
 
 ## Reference Files
 
-Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `ui-case-selection.md` (affected/full UI case boundary), `ui-review-readiness.md` (shared source/rendered readiness gate), `repository-browser-target-discovery.md` (bounded host interpretation of repository author loops after ordinary target/evidence sources fail), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (exact worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
+Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `ui-case-selection.md` (affected/full UI case boundary), `ui-review-readiness.md` (shared source/rendered readiness gate), `repository-browser-target-discovery.md` (established project checkout/domain and bounded author-loop discovery), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (exact worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
 
 ## Agent Definition Paths
 

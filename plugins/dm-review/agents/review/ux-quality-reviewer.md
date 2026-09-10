@@ -105,6 +105,14 @@ For an Assembly project (`go.mod` plus governance-related templates), load the U
 3. `tests/ux/heuristics/governance-specific.md` -- the G1-G10 governance heuristics.
 4. **`tests/ux/tasks/**/*.md` is authority.** The generated `coverage-matrix.md` is an index aid only and cannot add, remove, or override task-frontmatter cases.
 
+For production Fixtures whose tasks live in the external Assembly prototype,
+use the host-resolved exact-commit task/persona packet from `ui-case-selection.md`.
+Do not require a copied local suite or rediscover a different prototype commit.
+Compare the supplied paired interaction observations, success criteria and
+screenshot points. Reading a persona is not execution or real-user research.
+Verified expected permission denial is a successful boundary check, not missing
+infrastructure. Expected FRICTION is a hypothesis, not an automatic finding.
+
 Use only the affected case set selected under `ui-case-selection.md`. A full
 repository matrix remains mandatory when an explicit sweep, full visual mode,
 release/readiness profile, or genuinely shared surface selected it. The mere
@@ -119,7 +127,7 @@ Governance pages additionally check **G1 Permission Clarity** (unavailable actio
 
 **Coverage matrix diagnostics.** Derive runnable cases and findings only from authoritative task declarations -- they are the sole case authority. Use `coverage-matrix.md` only to locate candidate declarations and to emit the advisory `coverage_matrix_mismatch` diagnostic when it drifts from task frontmatter; never emit a P1, P2, or P3 finding from `coverage-matrix.md`.
 
-**Persona friction attribution.** Attribute each Assembly finding to affected personas using their friction profiles: blocking David from a primary action is P1; causing Aisha anxiety on mobile is P2; confusing Alex about permissions is P2.
+**Persona friction attribution.** Tie observed friction to the selected persona and evidence. Use the shared severity mapping for actual impact; a persona label, expected FRICTION, or correctly enforced permission boundary does not assign a severity by itself.
 
 **Destructive action heuristic.** For any delete, archive, reset, or irreversible action: consequence communication (does the UI say what will happen -- "This will permanently delete 3 proposals and their votes"), undo vs confirmation (reversible actions offer undo; irreversible ones need a confirmation dialog), and language (the confirm button names the action, "Delete proposal", not "OK" or "Yes"). Missing consequence communication is P2.
 

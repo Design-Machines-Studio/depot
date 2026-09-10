@@ -141,4 +141,72 @@ assert grep -Fq 'Only this mode may note' "$UX_REVIEWER"
 assert grep -Fq 'Source-only runs do not create a screenshot directory' "$UX_REVIEWER"
 assert grep -Fq 'never add a lane during fallback' "$REVIEW_SKILL"
 
+# Handler-only autosave selects existing cases without a template diff.
+jq '.acceptanceCaseIds=[] | .prototypeParityCaseIds=["proposal-mobile"] |
+    .changedRenderedFiles=["handlers/proposal_save.go"] |
+    .renderedRouteMappings=[{renderedFile:"handlers/proposal_save.go",status:"resolved",route:"/proposals"}]' \
+  "$TMP/cases-ordinary.json" > "$TMP/handler-only.json"
+"$HELPER" select-cases --request "$TMP/handler-only.json" > "$TMP/handler-only-result.json"
+assert jq -e '.selectedCaseIds == ["proposal-mobile"] and .selectionMode == "affected-cases" and .reviewDisposition == "completed"' "$TMP/handler-only-result.json"
+
+# These are source-contract checks, not claims of paired browser execution.
+python3 - "$ROOT" <<'PYCONTRACT'
+from pathlib import Path
+import sys
+root=Path(sys.argv[1])
+def read(path): return (root/path).read_text()
+review=read("plugins/dm-review/skills/review/SKILL.md")
+for lane in ("visual-browser-tester", "ux-quality-reviewer", "ui-standards-reviewer"):
+    rows=[line for line in review.splitlines() if line.startswith("| ") and f"**{lane}**" in line]
+    assert len(rows) == 1, (lane, rows)
+    condition=rows[0].split("|")[1]
+    assert "handler/Datastar/client changes affect a rendered interaction" in condition, lane
+    for extension in (".templ", ".twig", ".html", ".css"):
+        assert extension in condition, (lane, extension)
+# Selection must precede the existing readiness gate, including a Go-only save.
+assert review.index("**visual-browser-tester**") < review.index("### Phase 3.9:")
+assert "When any browser/UI lane is selected" in review
+cases=read("plugins/dm-review/skills/review/references/ui-case-selection.md")
+for phrase in ("tests/ux/README.md", "tests/ux/coverage-matrix.md",
+               "tests/ux/tasks/**/*.md", "tests/ux/personas/_index.md",
+               "frontmatter and steps override", "not unavailable infrastructure",
+               "FRICTION is a hypothesis", "real-user research", "out-of-scope",
+               "reload/revisit", "keyboard/focus"):
+    assert phrase in cases, phrase
+for path in (
+    "plugins/pipeline/references/prototype-authority.md",
+    "plugins/pipeline/references/visual-verification-protocol.md",
+    "plugins/pipeline/skills/promptcraft/SKILL.md",
+    "plugins/pipeline/agents/workflow/execution-orchestrator.md",
+    "plugins/dm-review/skills/review/references/design-spec-discovery.md",
+    "plugins/dm-review/skills/visual-test/SKILL.md",
+    "plugins/project-manager/skills/assembly-coordinator/SKILL.md",
+    "plugins/pipeline/skills/promptcraft/references/prompt-template.md"):
+    text=read(path)
+    for phrase in ("ui-case-selection.md", "preconditions", "success criteria", "screenshot points"):
+        assert phrase in text, (path,phrase)
+assembly=read("plugins/assembly/skills/development/SKILL.md")
+assert assembly.index("Prototype fidelity before implementation") < assembly.index("## The Prototyping Workflow")
+for phrase in ("Prototype-only examples", "not production Fixture", "class strings", "signals/bindings", "small pixel differences"):
+    assert phrase in assembly, phrase
+quick=read("plugins/dm-review/commands/dm-review-quick.md")
+assert "handler-only Datastar" in quick and "prototype authority before" in quick
+scaffold=read("plugins/project-scaffolder/skills/scaffolding/references/project-configs.md")
+assert scaffold.count("## Existing Development Site") == 2
+for phrase in ("status commands", "detached exact-head", "ui-case-selection.md", "generated AGENTS.md", "Source binding:", "Status command:", "Check incompatible migrations"):
+    assert phrase in scaffold, phrase
+preflight=read("plugins/pipeline/references/execution-browser-preflight.md")
+for phrase in ("T3 preview status/open first", "repository-browser-target-discovery.md", "unrelated attached tab", "served-source verification"):
+    assert phrase in preflight, phrase
+ux=read("plugins/dm-review/agents/review/ux-quality-reviewer.md")
+for phrase in ("external Assembly prototype", "not execution or real-user research", "not an automatic finding", "does not assign a severity"):
+    assert phrase in ux, phrase
+coordinator=read("plugins/project-manager/skills/assembly-coordinator/SKILL.md")
+for phrase in ("When dm-review is available", "when available; map routes/accounts/records",
+               "If dm-review is absent, continue prompt preparation", "root repository instructions",
+               "unresolved prerequisites", "does not claim that evidence has passed"):
+    assert phrase in coordinator, phrase
+print("prototype task propagation: source contracts passed")
+PYCONTRACT
+
 printf 'dm-review-ui-contract: %d assertions passed\n' "$pass"

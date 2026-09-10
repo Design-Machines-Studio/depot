@@ -24,8 +24,11 @@ Store these as the **chunk's visual baseline** for evaluation in steps 4 and 5.
 
 #### Step 2: Matched Page-Level Evidence
 
-1. Use the exact host-selected or repository-declared target; never scan
-   localhost, infer a port, or invent a start command.
+1. Resolve the established project domain and canonical serving checkout using
+   dm-review's `repository-browser-target-discovery.md`. Select the feature
+   branch there safely and use its documented rebuild/restart as needed. Bind
+   the running artifact to that source. Never scan localhost, invent a harness,
+   or reconfigure the domain/environment for ordinary review.
 2. Navigate the cases selected from this chunk's affected rendered files,
    routes, prototype parity, and acceptance criteria.
 3. Take a full-page screenshot at each selected case viewport. Add at most one
@@ -43,6 +46,20 @@ accessibility/DOM snapshots, targeted hierarchy, actual class lists, visible
 copy/action order, and only the computed layout/spacing values needed to explain
 a mismatch. Use T3 collaborative preview first in T3 Code. A target-only
 screenshot, curl, or `looks close` is incomplete prototype evidence.
+
+For each affected interaction, perform the same action in both apps. Inspect
+Datastar event timing, save requests/responses and visible feedback, then reload
+or revisit to verify persistence. Include validation, cancel/discard and focus
+when affected. Use designated demo/disposable records and label prototype
+stubs honestly. A visual match or a responding button is not save-flow proof.
+
+For prototype-covered cases, apply dm-review’s `ui-case-selection.md` existing
+prototype tasks and personas contract. Carry the exact task source/commit,
+selected task IDs and persona/role/state/device combinations, preconditions,
+steps, success criteria and screenshot points into the existing prompts and
+browser evidence. Execute the paired cases and record prototype result,
+application result and observed difference; expected permission denial is a
+verified boundary check, and expected FRICTION remains a hypothesis.
 
 #### Step 3: Element-Level Screenshots
 

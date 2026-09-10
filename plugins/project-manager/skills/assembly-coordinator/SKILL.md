@@ -124,6 +124,17 @@ Every prompt must state:
 
 - repository and exact base;
 - worktree and branch expectations;
+- for rendered work, the established project domain and canonical serving repo
+  folder, feature branch/head and existing build/restart command. Default to
+  checking out the feature branch or its exact detached commit there for browser review; an implementation
+  worktree does not authorize a new harness or environment reconfiguration.
+  When dm-review is available, resolve through its `repository-browser-target-discovery.md`;
+- for prototype-covered Fixture work, exact prototype source/commit, HTML and
+  Live Wires class/component parity, Datastar/save interaction traces, and
+  matched browser interaction plus reload proof in both apps. Carry existing
+  prototype task IDs, persona/role/state/device combinations, preconditions,
+  steps, success criteria and screenshot points through the prompt using
+  dm-review’s `ui-case-selection.md` when available; map routes/accounts/records explicitly;
 - owning repository and collision boundaries;
 - bounded scope and explicit non-goals;
 - acceptance criteria;
@@ -141,6 +152,15 @@ Every prompt must state:
   `builder-deep` at `medium` for demanding design or integration, escalating
   only when the task warrants it. The main driver retains design decisions,
   integration, and final review; workers do not inherit its model or effort.
+
+If dm-review is absent, continue prompt preparation from the current user
+context, root repository instructions and their directly linked development
+runbooks. Carry the verified target, checkout, build commands and prototype
+task/persona facts described above without claiming dm-review validation.
+Mark missing bindings or task/account mappings as unresolved prerequisites in
+the prompt; do not invent them, start services or require plugin installation
+to finish planning. Required browser and parity evidence remains required for
+the executor; this fallback does not claim that evidence has passed.
 
 The prompt must not call a direct provider command or contain a concrete
 routing override. Its role request is resolved later by model-router.

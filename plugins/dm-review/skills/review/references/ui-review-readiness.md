@@ -31,15 +31,15 @@ the source/rendered disposition without duplicating the gap per lane.
 
 ## Target selection
 
-Select exactly one target in this order:
-
-1. an explicit URL supplied by the current invocation;
-2. an already attached, automation-capable T3 preview and its current URL;
-3. the optional tracked `<repository>/.dm/ui-review.json` declaration;
-4. an accepted exact-head browser packet explicitly passed by an enclosing
-   Pipeline; then
-5. the bounded repository author-loop discovery in
-   `repository-browser-target-discovery.md`.
+Load `repository-browser-target-discovery.md` first and follow its target order:
+explicit override, established project domain/canonical checkout, optional
+tracked declaration, exact-head packet reuse, then a source-verified attached
+preview. Check out the feature branch and use the existing project's documented
+rebuild when needed. Browser transport preference never selects the application.
+Do not create an isolated harness merely because the implementation used a
+worktree. This host decision precedes the helper; the helper does not rank URLs.
+The optional tracked `<repository>/.dm/ui-review.json` remains optional; an
+established locally declared site does not require adding that file.
 
 Pass invocation and T3 targets to `prepare` with `--target-url` and
 `--target-source explicit|t3-preview`. After the host validates and attempts a
@@ -136,14 +136,16 @@ consumer is sufficient.
    action snapshots cleanup authority before it supervises startup and returns
    `app_ready` with `dispatchAllowed: false`. Do not execute a raw process start
    from the host-interpreted fallback.
-3. For declared Compose, follow the existing Docker creation contract, then
+3. For an established developer instance, use the documented maintenance path
+   in `repository-browser-target-discovery.md` and retain `pre-existing`
+   ownership. For a justified isolated Compose target, follow the existing Docker creation contract, then
    rerun the independent readiness check.
-4. If the preceding sources and accepted packet reuse supply no usable
-   evidence, load `repository-browser-target-discovery.md`. Inspect only its
+4. Perform bounded repository discovery at its precedence point, before an
+   attached preview. Inspect only its
    closed source set, retain exact source-line and command/URL provenance, and
    use the documented application/checkout identity and ownership-safe author
-   loop. Directly named Make targets are valid for status/readiness and for a
-   Compose command executed through the Docker creation contract; they are not
+   loop. Directly named Make targets are valid for established maintenance,
+   status/readiness, and an isolated Compose command executed through the Docker creation contract; they are not
    raw process-start authority. Materialize the bounded source/attempt/output,
    ownership, safe Compose registry reference, and exact registry run/node IDs
    in the repository evidence file. Pass the separately retained trusted
@@ -189,7 +191,9 @@ Only
    `structured-output`; do not request `browser` or generic `tool-use`.
    For a declared counterpart, include matched prototype/target route, state,
    viewport, targeted hierarchy, actual classes, visible copy/action order, and
-   explanatory layout/spacing values. Exact theme colors are not a parity gate.
+   explanatory layout/spacing values. Exercise affected Datastar interactions
+   in both apps, including save/autosave, feedback and reload persistence;
+   screenshots alone cannot prove behavior. Exact theme colors are not a parity gate.
 9. Dispatch each applicable analysis lane once with the same packet reference.
    Settle the aggregate analysis result once through `ui-review-readiness.sh
    settle`; settlement requires the result lane set to equal the set bound by
@@ -241,7 +245,7 @@ probe that proves local navigation.
 
 | Reason | Review state | One next action |
 |---|---|---|
-| `visual_target_unavailable` | `NOT RUN` ordinarily; `REVIEW INCOMPLETE` when required | Supply an explicit URL, attach T3 preview, or add the optional declaration when coverage is required. |
+| `visual_target_unavailable` | `NOT RUN` ordinarily; `REVIEW INCOMPLETE` when required | Resolve the established project domain and checkout binding first; supply the exact missing binding when coverage is required. |
 | `dev_server_unavailable` | `NOT RUN` ordinarily; `REVIEW INCOMPLETE` when required | Repair the exact failed or incomplete repository-owned author-loop prerequisite when rendered coverage is required. |
 | `browser_transport_unavailable` | `NOT RUN` ordinarily; `REVIEW INCOMPLETE` when required | Attach a local interactive browser or pass exact matching evidence when rendered coverage is required. |
 | `model_participant_unavailable` | `REVIEW INCOMPLETE` | Restore an eligible provider-neutral analysis participant and rerun the lane. |

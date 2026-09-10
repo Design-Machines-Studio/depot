@@ -50,6 +50,18 @@ workstation path.]
 - Naming: [describe convention]
 - Assembly mutation pattern (when targeting Assembly): consult `assembly:development`'s Mutation Applicability Matrix; include only controls justified by the present behavior, with required events after commit
 
+## Browser Review Target (rendered work only)
+
+[Resolve from current project context and root instructions using dm-review's
+`repository-browser-target-discovery.md`: established project code/domain,
+canonical serving repo folder, feature branch and source head, existing
+build/restart command, and checkout ownership. Default to checking out this
+feature branch there (or its exact detached commit when already checked out
+elsewhere) and reviewing through the existing domain. Do not create
+a new harness or reconfigure the environment. Name any concrete exception,
+such as simultaneous Federation peers. Record the prototype's established
+target too when comparison is required. Omit for non-rendered work.]
+
 ## Companion Skills
 
 Load these skills for domain-specific guidance:
@@ -65,8 +77,18 @@ Prototype authority (when applicable):
 - Repository + exact commit: [canonical identity @ commit]
 - Authority source: [user, Issue/PR, root instructions, plan, or Assembly skill]
 - Prototype -> target cases: [route, state, viewport pairs]
-- Relevant source: [paths and concise structural excerpts]
-- Intentional differences: [approved production constraints]
+- Relevant source: [templates/components, Datastar bindings, handlers/client code,
+  concise structural excerpts and exact Live Wires classes]
+- Interaction trace: [event -> request/timing -> save response -> feedback ->
+  reload persistence; approved stub behavior identified]
+- Existing UX tasks/personas: [exact source commit and task/profile paths from
+  dm-review’s `ui-case-selection.md`; task IDs, persona/role/state/device,
+  preconditions, steps, success criteria and screenshot points]
+- Cross-app mapping: [prototype/application routes, demo accounts, permissions,
+  initial data and record IDs; preserve scenario and authorization]
+- Paired results: [prototype result, application result, observed difference;
+  save/autosave, reload/revisit, validation, cancel, keyboard/focus as applicable]
+- Intentional differences: [approved production constraints and stale task/source conflicts]
 
 Key visual decisions:
 - [Decision 1: e.g., "Sidebar headings use h4 with font-medium, not h3"]
@@ -77,7 +99,8 @@ The rendered result must match these visual treatments. If you cannot determine 
 
 When the prototype covers this surface, it is primary. Inspect its exact source
 before editing, then search existing target and Live Wires components before
-creating anything. Preserve its settled structure, class vocabulary, copy,
+creating anything. Copy its affected HTML hierarchy, exact Live Wires classes,
+and shared livewires-templ components. Preserve its copy, save behavior,
 action order, and control placement unless an approved requirement names a
 divergence. Generic SaaS heuristics cannot redesign a settled prototype choice.
 
@@ -107,6 +130,10 @@ For a declared prototype counterpart, include both kinds of parity proof:
   states, and viewports with screenshots plus targeted DOM/accessibility/class
   and computed layout evidence. Do not require global DOM, pixel, theme-token,
   or exact-color equality.
+- [ ] Perform affected interactions in both apps using designated demo records:
+  change, save/autosave at the same trigger, observe feedback/errors, then
+  reload/revisit. Include affected cancel/focus behavior. A click or screenshot
+  alone does not prove saving; distinguish prototype stubs from durable storage.
 - [ ] If the prototype render is unavailable after browser recovery, preserve
   source work and return `human_help_required`; do not claim rendered parity.
 

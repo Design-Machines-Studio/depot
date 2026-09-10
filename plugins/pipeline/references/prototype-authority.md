@@ -1,6 +1,7 @@
 # Declared prototype authority
 
-Load this reference only for rendered work when a prototype is declared by the
+Load this reference for rendered work, including handler/Datastar changes that
+alter an existing interaction even without a template diff, when a prototype is declared by the
 user, the current native Issue or PR, root repository instructions, or the
 active product plan. For Assembly Baseplate or Fixture work, also load it when
 `assembly:development` identifies a corresponding surface in the canonical
@@ -25,8 +26,12 @@ explanation. If exact source inspection proves there is no counterpart, record
 `no prototype counterpart`, name the inspected source, and fall back to the
 target's existing production patterns. A missing counterpart is not a blocker.
 
-Read the exact prototype templates and components before evaluating the target.
-Do not create a prototype database, durable registry, copied template, or
+Read the exact prototype templates, shared components, Datastar attributes,
+supporting handlers, and relevant client code before evaluating the target.
+Copy the affected HTML structure and exact Live Wires classes into the
+implementation, using the same livewires-templ components where available.
+The restriction on whole templates concerns prompt/evidence duplication, not
+implementation reuse. Do not create a prototype database, durable registry, or
 second ledger.
 
 ## Bounded parity map
@@ -42,7 +47,9 @@ each execution prompt or review packet:
   components;
 - exact visible headings, labels, helper text, metadata phrasing, and action
   order;
-- responsive and interaction decisions;
+- responsive behavior and a short interaction trace: initiating event,
+  Datastar signals/bindings, request timing and payload, handler/response,
+  feedback/error state, and what persists after reload;
 - source evidence status and rendered evidence status; and
 - named intentional differences with their requirement or boundary.
 
@@ -59,13 +66,32 @@ primary. Generic product benchmarks and design heuristics are secondary and
 must not redesign those decisions merely because Stripe, Linear, Notion, or
 another product chose differently.
 
-This authority is not a byte-for-byte port. Preserve and name required
-differences for dynamic IDs and values, URLs, authentication and CSRF,
-authorization, public component APIs, production data, Baseplate/Fixture host
-composition, Templ implementation details, and accessibility improvements.
-Never weaken functionality, authorization, accessibility, security, or Fixture
-boundaries to imitate the prototype. Theme variables and exact colors may
-differ when the structural scheme is equivalent.
+The affected rendered HTML hierarchy, Live Wires class strings, shared
+component composition, spacing, and interaction behavior are the implementation
+baseline. Do not substitute equivalent-looking custom CSS, different wrappers,
+new controls, or a new save flow. Any design change starts from this foundation
+and needs an explicit approved requirement; agent preference is not approval.
+
+Adapt dynamic IDs/values, URLs, authentication/CSRF, authorization, storage,
+and host wiring to production while preserving the observable design and
+behavior. Those adaptations are not blanket permission to redesign. A concrete
+security, accessibility, or public-API constraint permits only its necessary
+minimal difference, recorded with source evidence and its effect on parity.
+Never weaken those boundaries to imitate the prototype. Theme variables and exact colors may
+differ; theme variation does not waive class, structure, or spacing comparison.
+
+For example, production storage does not justify replacing change/blur
+autosave with a Save button, or the reverse. Trace when a change is sent, what
+is saved, and how success/failure appears before porting it. A prototype stub
+is evidence of intended interaction, not proof of production persistence.
+
+For prototype-covered cases, apply dm-review’s `ui-case-selection.md` existing
+prototype tasks and personas contract. Carry the exact task source/commit,
+selected task IDs and persona/role/state/device combinations, preconditions,
+steps, success criteria and screenshot points into the existing prompts and
+browser evidence. Execute the paired cases and record prototype result,
+application result and observed difference; expected permission denial is a
+verified boundary check, and expected FRICTION remains a hypothesis.
 
 ## Complementary source and browser proof
 
@@ -82,8 +108,19 @@ copy; source cannot prove resulting spacing, composition, interaction, or
 responsive behavior. Matching class names never waive browser comparison, and
 a close screenshot never waives source comparison.
 
-In T3 Code, use the collaborative preview first: inspect status, open it when
-needed, then navigate and capture the matched cases. Follow the existing
+Actually perform each affected interaction in both apps using comparable roles
+and disposable or designated demo records. For editing, change a value, trigger
+the prototype's save/autosave event, observe pending/success/error behavior,
+then reload or revisit to check persistence. Include cancel/discard, keyboard
+and focus behavior, and validation when affected. Record observed behavior on
+each side and distinguish a synthetic/stubbed save from durable storage.
+Do not reset shared data or use real member records to manufacture evidence.
+
+Resolve each app's established review domain and canonical checkout through
+dm-review's `repository-browser-target-discovery.md` before browser navigation.
+In T3 Code, use the collaborative preview as the browser transport: inspect
+status, open it when needed, then navigate to those verified targets and capture
+the matched cases. An attached tab does not establish the correct target. Follow the existing
 browser recovery ladder before any supported fallback. Curl, a target-only
 screenshot, or `looks close` never completes required prototype browser proof.
 If the prototype render is temporarily unavailable, preserve completed source

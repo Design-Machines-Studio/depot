@@ -135,6 +135,22 @@ during decomposition.
 
 ### Phase 2.5: Visual Reference Extraction
 
+For rendered work, carry the established project domain, canonical serving repo
+folder, feature branch/head, and documented build/restart command in the prompt.
+Use dm-review's `repository-browser-target-discovery.md`; review defaults to
+that folder with the feature branch checked out, not a new worktree harness.
+State a concrete reason for any isolated browser environment. For prototype
+ports include the Datastar event/request/save/feedback/reload trace alongside
+the exact HTML, classes and shared components, including handler-only changes.
+
+For prototype-covered cases, apply dm-review’s `ui-case-selection.md` existing
+prototype tasks and personas contract. Carry the exact task source/commit,
+selected task IDs and persona/role/state/device combinations, preconditions,
+steps, success criteria and screenshot points into the existing prompts and
+browser evidence. Execute the paired cases and record prototype result,
+application result and observed difference; expected permission denial is a
+verified boundary check, and expected FRICTION remains a hypothesis.
+
 For chunks with `renderedSurface: required`, first read any applicable
 `prototypeReference` and `prototypeParity` entries from the assessment/plan
 island. Load `plugins/pipeline/references/prototype-authority.md` when a declared

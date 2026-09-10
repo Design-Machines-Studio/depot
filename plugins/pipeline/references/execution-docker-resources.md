@@ -2,6 +2,12 @@
 
 Load when creating, cleaning, or reconciling Docker/Compose resources.
 
+Ordinary browser review maintains the established project checkout/domain under
+dm-review's `repository-browser-target-discovery.md`. Its documented application
+rebuild/restart retains the existing service, configuration and data; do not
+adopt it into this disposable resource registry. The creation rules below still
+apply to new isolated resources, including a justified multi-peer test setup.
+
 ## Creation
 
 Before creating a container, network, named volume, or Compose project, invoke exactly one of:

@@ -12,7 +12,29 @@ Build cooperative governance applications with Go, Templ, and Datastar. Build pa
 
 ## Philosophy
 
-**Prototype toward production.** Every page you build is real code. Use mockup data in SQLite, but structure your handlers and DTOs for real queries. The prototype becomes the product.
+**Prototype fidelity before implementation.** For a corresponding surface in
+`Design-Machines-Studio/assembly`, inspect the exact reviewed commit, templates,
+rendered HTML, Live Wires class strings, livewires-templ components and Datastar
+behavior before editing. Preserve hierarchy, wrappers, spacing classes, copy,
+components and control placement; approximate custom CSS or new controls are
+not substitutes. Trace event → signals/bindings → request timing/payload →
+handler/response → feedback/error state → persisted result. Preserve save versus
+autosave and when changes take effect. Theme colors and small pixel differences
+are acceptable, but do not excuse different structure or interaction flow.
+
+Production authentication, CSRF, storage, URLs and public SDK wiring may differ;
+prototype stubs do not prove durable storage. Security/accessibility adaptations
+must be narrow and evidenced. Other design changes require explicit approved
+scope and begin from the prototype foundation. If no counterpart exists, name
+the inspected source and use established production patterns; never invent one.
+When using Pipeline, apply its `references/prototype-authority.md` parity
+contract. For dm-review, apply `references/ui-case-selection.md` for existing
+prototype task/persona selection, paired execution and evidence.
+
+**Prototype-only examples.** The prototyping workflow, mock-data, directory and
+handler examples below describe the legacy prototype, not production Fixture
+architecture. Production Fixtures follow their owning repository and public
+Baseplate SDK; reuse the observable design without copying prototype internals.
 
 ### Operating Doctrine
 
@@ -730,10 +752,20 @@ routes, states, and viewports. Source and browser evidence are complementary;
 matching screenshots cannot prove hierarchy/classes/copy, and matching classes
 cannot prove rendered composition.
 
-This is design authority, not a byte-for-byte port. Functional behavior,
-authorization, accessibility improvements, the public Fixture SDK, production
-data, CSRF, component APIs, and Baseplate host composition may require an
-intentional difference. Name and justify every such difference; never weaken a
+The prototype is the definitive design and interaction specification. Copy its
+affected HTML hierarchy, exact Live Wires classes, and livewires-templ component
+composition; do not replace them with equivalent-looking custom CSS or new UI.
+Read its Datastar bindings/signals, event timing, request payloads, handlers,
+save responses, feedback, and reload behavior. Exercise the same interaction
+in both prototype and production app, including saving and revisiting the
+record. A screenshot alone cannot verify this contract. Theme values may
+differ; structure, classes, spacing, and behavior still require comparison.
+
+Production adaptation must preserve that baseline. Authentication, CSRF,
+storage, URLs, public Fixture SDK APIs and host composition may differ without
+changing the intended experience. Security/accessibility adaptations must be
+necessary, narrow and evidenced. Other design changes require explicit approved
+scope and start from the prototype foundation. Never weaken a
 production boundary to imitate prototype code. If exact source inspection
 proves no counterpart exists, record that fact and use established production
 patterns rather than inventing a counterpart from a similar page.

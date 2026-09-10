@@ -23,7 +23,7 @@ Each agent has a file-type trigger. Do NOT dispatch an agent whose trigger is ab
 
 - **go-build-verifier:** dispatch ONLY if `.go` or `.templ` files changed and the project has `go.mod` + `docker-compose.yml`. Skip otherwise.
 - **craft-reviewer:** dispatch ONLY if `.twig`, `.php`, or Craft module config files changed and the project has `craft/` or `.ddev/`. Skip otherwise.
-- **ui-standards-reviewer:** dispatch when `.templ`, `.twig`, `.html`, or `.css` files changed. Evaluates rendered UI against Stripe/Notion/Linear quality bar with token discovery and Live Wires compliance.
+- **ui-standards-reviewer:** dispatch when `.templ`, `.twig`, `.html`, `.css`, or handler-only Datastar interaction changes affect UI. Load design-spec discovery and the shared UI case-selection/readiness contracts; preserve declared prototype authority before secondary generic heuristics.
 
 Compute the trigger set from the diff before dispatching. Log applicable selected lanes and any triggered lane that was meaningfully unavailable. Do not manufacture skip rows for every agent in the plugin.
 
