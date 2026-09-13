@@ -48,7 +48,11 @@ A chunk is a logically complete unit (one feature aspect, one migration, one com
    `plugins/pipeline/references/routing-policy.json`:
    - bounded config, docs, and mechanical work -> `builder-fast`;
    - complex logic, UI, and integration -> `builder-deep`;
-   - `browser` requires interaction, not rendered acceptance.
+   - add `tool-use`, `long-context`, or `structured-output` only when the
+     worker actually requires that capability, using the closed routing override
+     when the policy default differs;
+   - `browser` requires worker interaction, not rendered acceptance. Host-owned
+     browser evidence never adds it to `executorCapabilities`.
 
    Keep the main driver responsible for design decisions, integration, and
    final review. A bounded implementation may use `builder-fast` at `high`
