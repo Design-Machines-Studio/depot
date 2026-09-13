@@ -5,7 +5,13 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 RECOMMEND="$ROOT/plugins/model-router/skills/model-router/references/operator-recommendation.sh"
 POLICY="$ROOT/plugins/model-router/skills/model-router/references/role-policy.json"
 MATRIX="$ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-matrix.json"
+PIPELINE_POLICY="$ROOT/plugins/pipeline/references/routing-policy.json"
+VALIDATE_MANIFEST="$ROOT/plugins/pipeline/references/validate-role-manifest.sh"
 COORDINATOR="$ROOT/plugins/project-manager/skills/assembly-coordinator/SKILL.md"
+PROMPTCRAFT="$ROOT/plugins/pipeline/skills/promptcraft/SKILL.md"
+PROMPT_TEMPLATE="$ROOT/plugins/pipeline/skills/promptcraft/references/prompt-template.md"
+PREFLIGHT="$ROOT/plugins/pipeline/references/execution-browser-preflight.md"
+FULL_LANE="$ROOT/plugins/dm-review/skills/review/references/full-lane-dispatch.md"
 OPINIONS="$ROOT/plugins/project-manager/skills/assembly-coordinator/references/planning-opinions.md"
 REVIEW_PROMPT="$ROOT/plugins/dm-review/skills/review/references/reviewer-prompt-template.md"
 TERMINAL="$ROOT/plugins/model-router/skills/model-router/references/render-terminal-report.sh"
@@ -19,6 +25,80 @@ assert() { "$@" >/dev/null || { printf 'FAIL: %s\n' "$*" >&2; exit 1; }; pass=$(
 cat > "$TMP/healthy.json" <<'JSON'
 {"codex":{"state":"ok","authMode":"subscription"},"claude":{"state":"ok","authMode":"subscription","plan":"max","fable":"available"},"openrouter":{"state":"ok"}}
 JSON
+
+# An explicit browser-worker request remains unsupported. The host's browser
+# tools are not a routed capability, so the renderer must fail closed rather
+# than silently dropping the request or presenting a false recommendation.
+set +e
+"$RECOMMEND" --role builder-deep --capability read-repository \
+  --capability write-repository --capability tool-use --capability browser \
+  --capability long-context --capability structured-output --effort medium \
+  --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
+  --format json > "$TMP/browser-worker.json"
+browser_worker_rc=$?
+set -e
+assert test "$browser_worker_rc" -eq 76
+assert jq -e '.recommendedStart == null and .reason == "no_capability_compatible_candidate"' "$TMP/browser-worker.json"
+
+# A browser-required rendered task keeps browser work host-owned while its
+# provider-neutral worker request remains compatible with the current router.
+BROWSER_PROMPT='Host browser verification must cover prototype comparison, UX tasks/personas, desktop/mobile interaction, save/reload proof, and existing-site review. If browser setup is missing, report a browser evidence/setup gap; do not report implementation model or subscription unavailability.'
+printf '%s\n' "$BROWSER_PROMPT" > "$TMP/browser-required-prompt.md"
+jq -n --arg prompt 'prompts/01-browser-required.md' --arg rationale 'Served UI requires host browser verification; the worker does not interact with the browser.' --arg branch 'fix/browser-required-fixture' \
+  '{
+    feature:"browser-required-fixture",
+    workflowClass:"bug",
+    decisionProfile:{uncertainty:"medium",consequence:"medium",rationale:"Bounded routing correction."},
+    renderedSurface:"required",
+    baseBranch:"main",
+    featureBranch:$branch,
+    branchMode:"create",
+    expectedFeatureHead:null,
+    finalReviewMode:"full",
+    finalReviewRationale:"Preserve rendered-surface verification.",
+    chunks:[{
+      id:"01-browser-required",
+      level:0,
+      title:"Browser-required rendered task",
+      prompt:$prompt,
+      kind:"ui",
+      renderedSurface:"required",
+      renderedSurfaceRationale:$rationale,
+      executorRole:"builder-deep",
+      executorCapabilities:["read-repository","write-repository","tool-use","long-context","structured-output"],
+      executorEffort:"medium",
+      filesToModify:["templates/proposal.templ"],
+      dependsOn:[],
+      companionSkills:[],
+      estimatedComplexity:"medium"
+    }]
+  }' > "$TMP/browser-required-manifest.json"
+"$VALIDATE_MANIFEST" "$TMP/browser-required-manifest.json"
+assert jq -e '
+  .renderedSurface == "required" and
+  .chunks[0].renderedSurface == "required" and
+  (.chunks[0].executorCapabilities | index("browser") | not) and
+  (.chunks[0].executorCapabilities | index("tool-use") != null) and
+  (.chunks[0].prompt == "prompts/01-browser-required.md")
+' "$TMP/browser-required-manifest.json"
+assert grep -Fq 'prototype comparison' "$TMP/browser-required-prompt.md"
+assert grep -Fq 'UX tasks/personas' "$TMP/browser-required-prompt.md"
+assert grep -Fq 'desktop/mobile interaction' "$TMP/browser-required-prompt.md"
+assert grep -Fq 'save/reload proof' "$TMP/browser-required-prompt.md"
+assert grep -Fq 'existing-site review' "$TMP/browser-required-prompt.md"
+assert grep -Fq 'browser evidence/setup gap' "$TMP/browser-required-prompt.md"
+
+"$RECOMMEND" --role builder-deep --capability read-repository \
+  --capability write-repository --capability tool-use --capability long-context \
+  --capability structured-output --effort medium --matrix-file "$MATRIX" \
+  --availability-file "$TMP/healthy.json" --format json > "$TMP/browser-required-recommendation.json"
+assert jq -e '
+  .recommendedStart.model == "gpt-6-astra" and
+  .recommendedStart.harness == "Codex" and
+  .recommendedStart.effort == "medium" and
+  .recommendedStart.fallback.model == "gpt-5.6-sol" and
+  (.recommendedStart.fallback | keys | length) == 3
+' "$TMP/browser-required-recommendation.json"
 
 "$RECOMMEND" --role builder-deep --capability read-repository \
   --capability write-repository --capability tool-use --capability long-context \
@@ -152,7 +232,18 @@ assert jq -e '.recommendedStart.harness == "OpenRouter" and .recommendedStart.av
 
 assert grep -Fq 'Routine status-only coordination emits no empty block.' "$COORDINATOR"
 assert grep -Fq 'The block is for the human operator and primary executor only.' "$COORDINATOR"
+assert grep -Fq '`executorCapabilities` are worker-only' "$COORDINATOR"
+assert grep -Fq 'requires supported' "$COORDINATOR"
+assert grep -Fq 'browser' "$COORDINATOR"
+assert grep -Fq 'acceptance.' "$COORDINATOR"
+assert grep -Fq 'not rendered acceptance' "$PROMPTCRAFT"
+assert grep -Fq 'Host owns browser evidence;' "$PROMPT_TEMPLATE"
+assert grep -Fq 'A missing routed browser' "$PREFLIGHT"
+assert grep -Fq 'participant does not imply host browser tools are unavailable.' "$PREFLIGHT"
+assert grep -Fq 'model_participant_unavailable' "$FULL_LANE"
+assert jq -e 'all(.chunkKinds[]; (.executorCapabilities | index("browser") | not))' "$PIPELINE_POLICY"
 assert sh -c "! grep -Eq 'gpt-[0-9]|deepseek/|qwen/|x-ai/|moonshotai/|Recommended start' '$OPINIONS' '$REVIEW_PROMPT'"
+assert sh -c "! grep -Eq 'gpt-[0-9]|deepseek/|qwen/|x-ai/|moonshotai/' '$TMP/browser-required-prompt.md'"
 assert grep -Fq 'tokenProvenance' "$TERMINAL"
 assert grep -Fq 'billedCostUsd' "$TERMINAL"
 

@@ -144,8 +144,10 @@ Every prompt must state:
 - `executorRole`, `executorCapabilities`, and `executorEffort` for every
   implementation or review lane. Use `builder-fast` for bounded docs,
   configuration, and mechanical work; `builder-deep` for complex logic, UI,
-  and integration; and the matching review role for verification. Add browser,
-  tool-use, long-context, or structured-output capabilities only when required.
+  and integration; and the matching review role.
+  `executorCapabilities` are worker-only; `browser` requires supported
+  transport, not rendered acceptance. Host owns browser work/evidence; setup gaps
+  do not imply unavailability.
   For a bounded implementation with settled requirements, exact file ownership,
   and verifiable acceptance criteria, use `builder-fast` at `high`; reserve
   `max` for a demonstrated difficulty and keep mechanical tasks lower. Use

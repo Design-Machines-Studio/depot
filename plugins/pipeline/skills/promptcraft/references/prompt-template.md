@@ -62,6 +62,8 @@ a new harness or reconfigure the environment. Name any concrete exception,
 such as simultaneous Federation peers. Record the prototype's established
 target too when comparison is required. Omit for non-rendered work.]
 
+Host owns browser evidence; `renderedSurface: required` does not add `browser`.
+
 ## Companion Skills
 
 Load these skills for domain-specific guidance:

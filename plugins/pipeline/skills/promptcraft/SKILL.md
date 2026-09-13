@@ -48,8 +48,7 @@ A chunk is a logically complete unit (one feature aspect, one migration, one com
    `plugins/pipeline/references/routing-policy.json`:
    - bounded config, docs, and mechanical work -> `builder-fast`;
    - complex logic, UI, and integration -> `builder-deep`;
-   - add `browser`, `tool-use`, `long-context`, or `structured-output` only
-     when the chunk actually requires that capability.
+   - `browser` requires interaction, not rendered acceptance.
 
    Keep the main driver responsible for design decisions, integration, and
    final review. A bounded implementation may use `builder-fast` at `high`
@@ -142,7 +141,6 @@ that folder with the feature branch checked out, not a new worktree harness.
 State a concrete reason for any isolated browser environment. For prototype
 ports include the Datastar event/request/save/feedback/reload trace alongside
 the exact HTML, classes and shared components, including handler-only changes.
-
 For prototype-covered cases, apply dm-review’s `ui-case-selection.md` existing
 prototype tasks and personas contract. Carry the exact task source/commit,
 selected task IDs and persona/role/state/device combinations, preconditions,
