@@ -47,7 +47,9 @@ A chunk is a logically complete unit (one feature aspect, one migration, one com
    Then derive `executorRole`, `executorCapabilities`, and `executorEffort` from
    `plugins/pipeline/references/routing-policy.json`:
    - bounded config, docs, and mechanical work -> `builder-fast`;
-   - complex logic, UI, and integration -> `builder-deep`;
+   - settled bounded UI with exact prototype/acceptance evidence ->
+     `builder-fast` at `high`; unresolved design, complex logic, or integration
+     -> `builder-deep` at `medium`;
    - add `tool-use`, `long-context`, or `structured-output` only when the
      worker actually requires that capability, using the closed routing override
      when the policy default differs;

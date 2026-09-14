@@ -14,7 +14,7 @@ fail() { printf 'provider-neutral-routing: %s\n' "$1" >&2; exit 1; }
 # Closed roles, capabilities, effort, bounded GLM placement, focused Kimi use, and
 # no invented Codex candidate-to-allowance mapping.
 jq -e '
-  (.roles | keys | sort) == (["architect","builder-deep","builder-fast","editorial","plan-critic","research-fast","review-deep","review-fast","security-review"] | sort) and
+  (.roles | keys | sort) == (["architect","builder-deep","builder-fast","design-consultant","editorial","plan-critic","research-fast","review-coordinator","review-deep","review-fast","security-review"] | sort) and
   (.effort.vocabulary == ["low","medium","high","max"]) and
   all(.roles[]; any(.[]; .transport == "openrouter")) and
   ([.roles[][] | .capabilities[] | select(IN("read-repository","write-repository","tool-use","browser","long-context","structured-output","independent-family") | not)] | length == 0) and

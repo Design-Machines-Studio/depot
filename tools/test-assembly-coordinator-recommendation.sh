@@ -113,6 +113,33 @@ assert jq -e '.recommendedStart.cost.label == "included subscription" and .recom
   --availability-file "$TMP/healthy.json" --format json > "$TMP/review.json"
 assert jq -e '.recommendedStart.model == "gpt-5.6-luna" and .recommendedStart.harness == "Codex" and .recommendedStart.cost.label == "included subscription"' "$TMP/review.json"
 
+"$RECOMMEND" --role review-coordinator --capability read-repository \
+  --capability long-context --capability structured-output --effort medium \
+  --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
+  --format json > "$TMP/review-coordinator.json"
+assert jq -e '.recommendedStart.model == "gpt-5.6-sol" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-6-astra"' "$TMP/review-coordinator.json"
+
+"$RECOMMEND" --role design-consultant --capability long-context \
+  --capability structured-output --effort medium --matrix-file "$MATRIX" \
+  --availability-file "$TMP/healthy.json" --format json > "$TMP/fable-design.json"
+assert jq -e '.recommendedStart.model == "fable" and .recommendedStart.harness == "Claude Code" and .recommendedStart.fallback.model == "gpt-5.6-sol"' "$TMP/fable-design.json"
+
+# The ignored common-checkout profile can retire Opus without changing shared
+# policy or user-level configuration; both dispatch and recommendation read it.
+mkdir -p "$TMP/profile-repo/.dm"
+git -C "$TMP/profile-repo" init -q
+printf '%s\n' '{"disabledCandidates":["opus"]}' > "$TMP/profile-repo/.dm/model-router.local.json"
+jq '.codex.state="unavailable" | .claude.state="ok" | .claude.authMode="subscription" | .openrouter.state="ok"' \
+  "$TMP/healthy.json" > "$TMP/profile-availability.json"
+(
+  cd "$TMP/profile-repo"
+  "$RECOMMEND" --role architect --capability read-repository \
+    --capability long-context --capability structured-output --effort medium \
+    --matrix-file "$MATRIX" --availability-file "$TMP/profile-availability.json" \
+    --format json > "$TMP/opus-disabled.json"
+)
+assert jq -e '.recommendedStart.model == "qwen/qwen3.8-max" and .recommendedStart.harness == "OpenRouter"' "$TMP/opus-disabled.json"
+
 jq '.openrouter.state="unavailable"' "$TMP/healthy.json" > "$TMP/no-openrouter.json"
 "$RECOMMEND" --role review-fast --capability read-repository \
   --capability structured-output --effort medium --matrix-file "$MATRIX" \

@@ -171,7 +171,7 @@ routing override. Its role request is resolved later by model-router.
 
 Whenever this coordinator produces an implementation or review copy-paste
 prompt, resolve one coherent model-router bundle through Workflow Kernel at
-minimum version `0.7.0`, requiring
+minimum version `0.8.0`, requiring
 `skills/model-router/references/operator-recommendation.sh`, `role-policy.json`,
 and `availability-probe.sh`. Resolve the current OpenRouter
 `model-matrix.json` through Workflow Kernel without changing it. Invoke the
@@ -189,7 +189,7 @@ Recommended start
 - Harness/rail: Codex, Claude Code, or OpenRouter
 - Effort: low, medium, high, or max
 - Why: one sentence tied to the requested role and task
-- Cost: included subscription, metered API price, or unavailable
+- Cost: included subscription, paid Claude credits, metered API price, or unavailable
 - Fallback: exactly one concrete fallback
 - Matrix evidence: snapshot date
 ```
@@ -243,3 +243,12 @@ Return a compact, outcome-first report containing:
     execution prompt; routine sessions emit no empty report.
 
 Do not bury the recommendation beneath process narration.
+
+For completed implementation or PR follow-up, use dm-review's
+`review-next-action.sh` with authenticated current head/feedback and the
+repository's retained coverage and recording the actual dirty-state boundary.
+Report its exact `Review`, `Action`, `Why`, and
+`Reuse` lines. Only when it emits `modelWork: true`, render the requested
+`review-coordinator` recommendation through the actual model-router renderer.
+This follow-up does not dispatch a review or turn green checks into settlement
+of unresolved external comments.

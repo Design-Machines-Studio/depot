@@ -550,8 +550,9 @@ model-router bundle:
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
 MODEL_ROUTER_BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle \
-  --plugin model-router --minimum-version 0.7.0 \
+  --plugin model-router --minimum-version 0.8.0 \
   --required-executable skills/model-router/references/role-dispatch.sh \
+  --required-executable skills/model-router/references/operator-recommendation.sh \
   --required-executable skills/model-router/references/render-terminal-report.sh \
   --required-asset skills/model-router/references/role-request-schema.json \
   --required-asset skills/model-router/references/role-policy.json)
@@ -1079,6 +1080,12 @@ requirements cross-check, repairs, and Step 4c merge policy are settled.
   identity, cost, or expanded receipt data.
 
 Mark `FINAL 5a.1. Terminal model report or owner handoff` complete.
+
+Before Step 6, resolve dm-review `>=1.83.0` and run its
+`review-next-action.sh` with final diff, cases, final-head coverage, findings,
+and settled PR feedback. Pass the actual base, final head, and dirty state.
+Return its four public lines; recheck only evidence
+invalidated by later changes.
 
 ## Step 5b: Artifact and Repository Cleanup
 

@@ -6,11 +6,13 @@ critic, or architect packets. The existing `role-policy.json` owns selection.
 
 | Work | Starting point | Escalation |
 |---|---|---|
-| Main driver and orchestration | GPT-6 Astra Low in Codex | Medium for demanding reasoning; High or above only for a named difficult architecture, debugging, or review problem |
-| Architecture and integration participant | `architect` or `builder-deep`; native Astra first | Medium for demanding work; explicit High/Max when justified |
+| Main driver and routine coordination | GPT-6 Astra Low in Codex | Medium for substantive planning; High or above only for a named difficult architecture, debugging, or review problem |
+| Architecture and integration participant | `architect` or `builder-deep`; native Astra first | Medium for demanding work; explicit High/Max only for named uncertainty or difficulty, never a UI/integration label or file count alone |
 | Bounded execution | `builder-fast`; native GPT-5.6 Luna at High | Max for demonstrated difficulty; lower effort for simple mechanical work |
 | Final design, integration, and review decisions | Main driver | Keep applicable specialist review lanes and fix every retained P1/P2/P3 |
-| Optional fallback or comparison | GPT-5.6 Sol High | Existing fallback candidate, never the primary driver |
+| Substantive implementation | `builder-deep`; native Astra with Sol as a normal candidate | Medium by default; use Astra escalation only for named difficulty |
+| Standalone review orchestration | `review-coordinator`; native GPT-5.6 Sol | Medium by default; Astra is the one difficult-judgment fallback |
+| Narrow design question | `design-consultant`; native Fable when eligible | One question and compact evidence; one fallback, no repeated pass |
 | Specialist middle tier | Existing GPT-5.6 Terra critic/review candidates | No new tier, role, or orchestration branch |
 
 Luna execution requires settled requirements, exact file ownership, and
@@ -49,6 +51,11 @@ perspectives after capability and availability resolution. A quota response
 exhausts that native rail for the run; do not retry it under another model name.
 Unknown allowance mapping is not proof of exhaustion, and an active Codex driver
 is not unavailable merely because a nested CLI cannot identify its parent.
+Deliberate relief before exhaustion uses the existing direct `/openrouter`
+choice or ignored local `disabledCandidates`; it does not require a quota error
+or tracked provider override. An unknown monthly-spend/headroom measurement is
+never described as verified affordability even when the API credential and
+current balance make the rail attemptable.
 
 Keep OpenAI and Anthropic on their native CLI rails; no Astra slug is added to
 the OpenRouter routing catalog. That catalog's 2026-08-27 evidence is unchanged.

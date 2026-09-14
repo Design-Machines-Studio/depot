@@ -1,7 +1,7 @@
 ---
 name: dm-review-visual
 description: Codex skill alias for /dm-review-visual. Run visual browser testing on rendered pages -- responsive layouts, interactive states, and accessibility
-argument-hint: "[optional: URL to test, --states, --a11y, or --all]"
+argument-hint: "[optional: --base-commit SHA --head-commit SHA, URL, --states, --a11y, or --all]"
 ---
 
 # Codex Command Alias: /dm-review-visual
@@ -31,6 +31,14 @@ debt. See `plugins/dm-review/skills/review/references/severity-mapping.md` for
 the policy.
 
 ## Process
+
+Before target selection, parse optional paired `--base-commit <sha>` and
+`--head-commit <sha>` values. Reject a partial pair, non-commit objects, a head
+that differs from the current checkout's `HEAD`, a base that is not its
+ancestor, or a dirty checkout. Remove the pair from the remaining visual
+arguments after validation and bind route discovery, readiness, browser
+evidence, receipts, and the report to that exact source range. This is the
+same fail-closed exact-range boundary used by the main review skill.
 
 1. Load the visual-test skill from `plugins/dm-review/skills/visual-test/SKILL.md`
 2. Execute with the provided argument:

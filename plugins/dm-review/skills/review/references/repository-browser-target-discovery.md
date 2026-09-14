@@ -47,15 +47,20 @@ infer that a production/customer deployment is a branch-switchable review app.
    worktree registrations, and the documented service/build commands. Capture
    the original branch/head for handoff. Source-analysis worktrees do not
    automatically become browser environments.
-2. Check out the feature branch in that canonical folder when it is clean and
-   available for this work. This ordinary checkout and the documented local
+2. Capture the canonical folder's entry status and source fingerprint. Check
+   out the feature branch there when ordinary Git can preserve every
+   pre-existing change. A dirty checkout is not automatically blocked:
+   unrelated plans, lessons, and non-overlapping source edits may remain. This
+   ordinary checkout and the documented local
    rebuild are part of authorized implementation/review; do not ask again.
    If it already holds this run's edits, preserve them and bind evidence to that
-   source snapshot. If another run owns it, unrelated changes would be
-   displaced, name the concrete collision and coordinate a safe handoff before
-   switching. If the feature branch is checked out in an implementation
-   worktree, a normal `git checkout --detach <exact-committed-head>` in the clean,
-   free serving checkout is acceptable; record detached HEAD honestly. Never stash/reset others' work, force
+   source snapshot. If another run owns it, or checkout/build would overwrite a
+   named path or mix dirty source into the reviewed artifact, name the concrete
+   collision and coordinate a safe handoff before switching. Never force,
+   stash, reset, or clean to make the checkout pass. If the feature branch is
+   checked out in an implementation worktree, a normal `git checkout --detach
+   <exact-committed-head>` in the available serving checkout is acceptable;
+   record detached HEAD honestly. Never force
    duplicate branch checkout, or silently substitute a fresh harness.
 3. Use the project's existing build/restart or Fixture composition command to
    serve that source through the same domain, service and data. Rebuild compiled
@@ -72,12 +77,17 @@ infer that a production/customer deployment is a branch-switchable review app.
    prerequisite if the documented restart would do so. New isolated resources
    still require `review-docker-create.md`; maintenance cannot be used to evade
    that creation contract.
-5. Navigate the established domain with the available host browser, using T3
+5. Prove the rebuilt application and relevant assets came from the recorded
+   source fingerprint. A Git HEAD, status line, container start, or successful
+   HTTP response alone is insufficient; retain a build receipt plus an
+   application-visible source/build marker or content/asset observation tied to
+   that unchanged fingerprint.
+6. Navigate the established domain with the available host browser, using T3
    first when supported. Verify the served artifact and assets against the
    intended source and exercise the selected cases. Bind helper evidence to the
    actual serving checkout, not merely the worktree used for source analysis.
    Record domain, source branch/head, build proof and actual observations.
-6. Serialize use of a shared review instance. Leave the reviewed feature branch
+7. Serialize use of a shared review instance. Leave the reviewed feature branch
    selected for the operator unless an earlier agreed handoff requires a
    restore; a restore also needs the documented rebuild. Never clean up or
    repoint the established instance as if it were a disposable review resource.
@@ -284,6 +294,9 @@ Use supported setup/UI only on disposable review-owned data. If a consumer has
 not implemented position-taking or story setup, name that consumer prerequisite;
 do not inject database rows, invent product features, or reset developer data.
 These are host evidence diagnoses, not new readiness-helper CLI states.
+
+When authentication is required, load `development-authentication.md`. It owns
+documented accounts, UI login, secret handling, and failure classification.
 
 ## Outcomes
 

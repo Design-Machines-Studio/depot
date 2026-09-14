@@ -5,6 +5,13 @@
   "type": "object",
   "additionalProperties": false,
   "properties": {
-    "allowPaidClaudeCredits": {"type": "boolean", "default": false}
+    "allowPaidClaudeCredits": {"type": "boolean", "default": false},
+    "disabledCandidates": {
+      "type": "array",
+      "uniqueItems": true,
+      "maxItems": 16,
+      "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9./_-]{0,127}$"},
+      "default": []
+    }
   }
 }

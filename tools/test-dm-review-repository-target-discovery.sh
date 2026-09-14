@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONTRACT="$ROOT/plugins/dm-review/skills/review/references/repository-browser-target-discovery.md"
+AUTH_CONTRACT="$ROOT/plugins/dm-review/skills/review/references/development-authentication.md"
 READINESS="$ROOT/plugins/dm-review/skills/review/references/ui-review-readiness.md"
 REVIEW_SKILL="$ROOT/plugins/dm-review/skills/review/SKILL.md"
 VISUAL_SKILL="$ROOT/plugins/dm-review/skills/visual-test/SKILL.md"
@@ -254,8 +255,9 @@ assert jq -e '.resourceOwnership == "pre-existing" and
 # Declared project beats an unrelated attached tab; maintenance retains ownership.
 assert grep -Fq '2. the established project domain and canonical checkout' "$CONTRACT"
 assert grep -Fq '5. an attached automation-capable T3 preview' "$CONTRACT"
-assert grep -Fq 'git checkout --detach <exact-committed-head>' "$CONTRACT"
-assert grep -Fq 'name the concrete collision' "$CONTRACT"
+assert grep -Fq 'git checkout --detach' "$CONTRACT"
+assert grep -Fq '<exact-committed-head>' "$CONTRACT"
+assert grep -Fq 'collision and coordinate a safe handoff' "$CONTRACT"
 assert grep -Fq 'changing Git HEAD alone does not refresh' "$CONTRACT"
 assert grep -Fq 'cleanup argv or ownership adoption' "$CONTRACT"
 assert grep -Fq 'simultaneous Federation peers' "$CONTRACT"
@@ -293,5 +295,62 @@ assert test -n "$(git -C "$SERVING" status --porcelain)"
 # On a collision, retain the checkout without switching or cleaning it.
 assert test "$(git -C "$SERVING" diff | git hash-object --stdin)" = "$before_dirty"
 assert test -d "$SERVING"
+
+# Unrelated tracked plan dirtiness survives an ordinary detached checkout.
+DIRTY_SERVING="$TMP/dirty-serving"
+DIRTY_BUILDER="$TMP/dirty-builder"
+git init -q "$DIRTY_SERVING"
+mkdir -p "$DIRTY_SERVING/plans"
+printf 'base\n' > "$DIRTY_SERVING/app.txt"
+printf 'operator notes\n' > "$DIRTY_SERVING/plans/notes.md"
+git -C "$DIRTY_SERVING" add .
+git -C "$DIRTY_SERVING" -c user.name=test -c user.email=test@example.invalid commit -qm base
+git -C "$DIRTY_SERVING" worktree add -qb dirty-feature "$DIRTY_BUILDER"
+printf 'feature\n' > "$DIRTY_BUILDER/app.txt"
+git -C "$DIRTY_BUILDER" add app.txt
+git -C "$DIRTY_BUILDER" -c user.name=test -c user.email=test@example.invalid commit -qm feature
+dirty_feature_head="$(git -C "$DIRTY_BUILDER" rev-parse HEAD)"
+printf 'pre-existing notes\n' >> "$DIRTY_SERVING/plans/notes.md"
+notes_digest="$(git -C "$DIRTY_SERVING" diff -- plans/notes.md | git hash-object --stdin)"
+git -C "$DIRTY_SERVING" checkout -q --detach "$dirty_feature_head"
+assert test "$(git -C "$DIRTY_SERVING" rev-parse HEAD)" = "$dirty_feature_head"
+assert test "$(git -C "$DIRTY_SERVING" diff -- plans/notes.md | git hash-object --stdin)" = "$notes_digest"
+assert grep -Fq 'plans/notes.md' <(git -C "$DIRTY_SERVING" status --porcelain)
+
+# Overlapping source dirtiness fails closed and preserves the original head.
+git -C "$DIRTY_SERVING" checkout -q --detach HEAD~1
+source_base_head="$(git -C "$DIRTY_SERVING" rev-parse HEAD)"
+printf 'local source edit\n' >> "$DIRTY_SERVING/app.txt"
+set +e
+git -C "$DIRTY_SERVING" checkout --detach "$dirty_feature_head" > "$TMP/overlap.out" 2>&1
+overlap_rc=$?
+set -e
+assert test "$overlap_rc" -ne 0
+assert test "$(git -C "$DIRTY_SERVING" rev-parse HEAD)" = "$source_base_head"
+assert grep -Fq 'app.txt' <(git -C "$DIRTY_SERVING" status --porcelain)
+
+# Exact-head source without a matching build marker cannot become served proof.
+printf '%s\n' "$source_base_head" > "$TMP/application-build-head"
+assert test "$(git -C "$DIRTY_BUILDER" rev-parse HEAD)" != "$(cat "$TMP/application-build-head")"
+assert grep -Fq 'HTTP response alone is insufficient' "$CONTRACT"
+
+# Documented login success and rejection are application outcomes, never a
+# browser-transport diagnosis. The fixture emits no credential material.
+cat > "$TMP/documented-login" <<'EOF'
+#!/usr/bin/env bash
+[ "${1:-}" = development-password ] || exit 9
+printf '%s\n' 'role=member state=ready'
+EOF
+chmod +x "$TMP/documented-login"
+assert "$TMP/documented-login" development-password
+set +e
+"$TMP/documented-login" rejected-password >/dev/null 2>&1
+bad_login_rc=$?
+set -e
+assert test "$bad_login_rc" -eq 9
+assert grep -Fq 'development-authentication.md' "$CONTRACT"
+assert grep -Fq 'documented_credentials_rejected' "$AUTH_CONTRACT"
+assert grep -Fq 'None is' "$AUTH_CONTRACT"
+assert grep -Fq '`browser_transport_unavailable`' "$AUTH_CONTRACT"
 
 printf 'dm-review-repository-target-discovery: %d assertions passed\n' "$pass"

@@ -64,7 +64,7 @@ if [ "$MODEL_ROUTER_TEST_MODE" != 1 ] &&
   exit 2
 fi
 case "$ROLE" in
-  architect|plan-critic|builder-fast|builder-deep|review-fast|review-deep|security-review|research-fast|editorial) ;;
+  architect|plan-critic|builder-fast|builder-deep|review-fast|review-deep|review-coordinator|security-review|research-fast|editorial|design-consultant) ;;
   *) usage ;;
 esac
 case "$EFFORT" in low|medium|high|max) ;; *) usage ;; esac
@@ -171,14 +171,20 @@ local_profile_path() {
   physical_parent="$(cd "$parent" && pwd -P)" || return 0
   [ "$physical_parent" = "$physical_root/.dm" ] || return 0
   git -C "$root" ls-files --error-unmatch -- .dm/model-router.local.json >/dev/null 2>&1 && return 0
-  jq -e 'type == "object" and ((keys - ["allowPaidClaudeCredits"]) | length == 0) and (.allowPaidClaudeCredits == null or (.allowPaidClaudeCredits | type) == "boolean")' "$candidate" >/dev/null 2>&1 || return 0
+  jq -e 'type == "object" and ((keys - ["allowPaidClaudeCredits","disabledCandidates"]) | length == 0) and
+    (.allowPaidClaudeCredits == null or (.allowPaidClaudeCredits | type) == "boolean") and
+    (.disabledCandidates == null or ((.disabledCandidates | type) == "array" and
+      (.disabledCandidates | length) <= 16 and (.disabledCandidates | length) == (.disabledCandidates | unique | length) and
+      all(.disabledCandidates[]; test("^[a-z0-9][a-z0-9./_-]{0,127}$"))))' "$candidate" >/dev/null 2>&1 || return 0
   printf '%s\n' "$candidate"
 }
 
 PAID_CLAUDE_CREDITS=false
+DISABLED_CANDIDATES='[]'
 PROFILE="$(local_profile_path)"
 if [ -n "$PROFILE" ]; then
   PAID_CLAUDE_CREDITS="$(jq -r '.allowPaidClaudeCredits // false' "$PROFILE")"
+  DISABLED_CANDIDATES="$(jq -c '.disabledCandidates // []' "$PROFILE")"
 fi
 
 OPENROUTER_BUNDLE_STATE="workflow_kernel_unavailable"
@@ -584,6 +590,9 @@ while IFS= read -r candidate; do
   fi
   transport="$(printf '%s' "$candidate" | jq -r '.transport')"
   model="$(printf '%s' "$candidate" | jq -r '.model')"
+  if printf '%s' "$DISABLED_CANDIDATES" | jq -e --arg value "$model" 'index($value) != null' >/dev/null; then
+    continue
+  fi
   provider="$(printf '%s' "$candidate" | jq -r '.provider')"
   rate_limit_id="$(printf '%s' "$candidate" | jq -r '.rateLimitId // empty')"
   EFFECTIVE_EFFORT="$(jq -r --arg transport "$transport" --arg effort "$EFFORT" '.effort.transports[$transport][$effort]' "$POLICY")"
@@ -603,6 +612,7 @@ while IFS= read -r candidate; do
   ATTEMPT_EFFORT_EVIDENCE="unavailable"
   ATTEMPT_HEAD=""
   ATTEMPT_STATUS=""
+  OBSERVED_SERVED_IDENTITY="unknown"
   if [ "$WRITE_REQUEST" -eq 1 ]; then
     ATTEMPT_HEAD="$(git rev-parse --verify HEAD 2>/dev/null)" || exit 76
     ATTEMPT_STATUS="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" || exit 76
@@ -630,6 +640,34 @@ while IFS= read -r candidate; do
   else
     invoke_candidate "$transport" "$model" "$EFFECTIVE_EFFORT"
     rc=$?
+  fi
+  if [ "$rc" -eq 0 ] && [ "$transport" = claude-cli ] &&
+     printf '%s' "$candidate" | jq -e '(.servedIdentities // []) | length > 0' >/dev/null; then
+    observed_identity="$(jq -r '
+      def usage_rows:
+        (.modelUsage // {} | to_entries |
+          map({model:.key, outputTokens:(.value.outputTokens // .value.output_tokens // null)}));
+      (.response.model // .responseModel // .model // null) as $explicit
+      | if ($explicit | type) == "string" and ($explicit | length) > 0 then $explicit
+        else usage_rows as $rows
+        | if ($rows | length) > 0 and all($rows[]; (.outputTokens | type) == "number" and .outputTokens >= 0) then
+            ($rows | map(.outputTokens) | max) as $maximum
+            | [$rows[] | select(.outputTokens == $maximum and .outputTokens > 0)] as $winners
+            | if ($winners | length) == 1 then $winners[0].model else "unknown" end
+          else "unknown"
+          end
+        end
+    ' "$PROVIDER_RECEIPT" 2>/dev/null || printf unknown)"
+    if [ "$observed_identity" = unknown ] || [ -z "$observed_identity" ]; then
+      INVOKE_REASON="provider_model_identity_unavailable"
+      rc=77
+    else
+      OBSERVED_SERVED_IDENTITY="$observed_identity"
+      if ! printf '%s' "$candidate" | jq -e --arg identity "$observed_identity" '(.servedIdentities // []) | index($identity) != null' >/dev/null; then
+        INVOKE_REASON="provider_model_substitution"
+        rc=77
+      fi
+    fi
   fi
   if [ "$WRITE_REQUEST" -eq 1 ] && [ "$PROBE_SOURCE" = live ] &&
      [ "$TRANSPORT_STUB" = false ] && [ "$rc" -eq 0 ] && [ -s "$TRANSPORT_OUTPUT" ]; then
@@ -664,11 +702,11 @@ while IFS= read -r candidate; do
     fi
     transmitted_effort_json=null
     [ -z "$ATTEMPT_TRANSMITTED_EFFORT" ] || transmitted_effort_json="$(jq -Rn --arg effort "$ATTEMPT_TRANSMITTED_EFFORT" '$effort')"
-    ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --argjson transmitted_effort "$transmitted_effort_json" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,provider:$provider,transport:$transport,billingMode:$billing,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,effortEvidence:$effort_evidence,outcome:"served",durationSeconds:$duration}]')"
+    ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg served_identity "$OBSERVED_SERVED_IDENTITY" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --argjson transmitted_effort "$transmitted_effort_json" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,servedIdentity:$served_identity,provider:$provider,transport:$transport,billingMode:$billing,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,effortEvidence:$effort_evidence,outcome:"served",durationSeconds:$duration}]')"
     fallback=false
     fallback_reason=none
     [ "$ATTEMPT_INDEX" -gt 1 ] && { fallback=true; fallback_reason="$LAST_REASON"; }
-    jq -n --arg receipt_id "$RECEIPT_ID" --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --arg model "$model" --arg provider "$provider" --arg transport "$transport" --arg family "$family" --arg billing "$BILLING_MODE" --arg allowance_window "$ALLOWANCE_WINDOW" --arg matrix "$MATRIX_SNAPSHOT" --arg fallback_reason "$fallback_reason" --arg token_provenance "$token_provenance" --arg cost_provenance "$cost_provenance" --arg contract_digest "$CONTRACT_DIGEST" --arg probe_source "$PROBE_SOURCE" --argjson transmitted_effort "$transmitted_effort_json" --argjson transport_stub "$TRANSPORT_STUB" --argjson contract_revision "$CONTRACT_REVISION_JSON" --argjson requested_candidate "$REQUESTED_CANDIDATE" --argjson capabilities "$CAPABILITIES_JSON" --argjson attempts "$ATTEMPTS" --argjson independence_ids "$INDEPENDENCE_IDS_JSON" --argjson excluded_families "$EXCLUDED_FAMILIES" --argjson fallback "$fallback" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" --argjson duration "$DURATION_SECONDS" --argjson usage "$usage_json" --argjson cost "$cost_json" --argjson commit "$commit_json" --argjson files_changed "$files_changed_json" '{schemaVersion:1,receiptId:$receipt_id,probeSource:$probe_source,transportStub:$transport_stub,requested:{role:$role,capabilities:$capabilities,effort:$requested_effort,independenceReceiptIds:$independence_ids,humanAuthored:$human_authored,candidate:{model:$requested_candidate.model,provider:$requested_candidate.provider,transport:$requested_candidate.transport}},contract_digest:(if $contract_digest == "" then null else $contract_digest end),revision:$contract_revision,participantId:$participant,attempts:$attempts,served:{model:$model,provider:$provider,transport:$transport,family:$family,billingMode:$billing,allowanceWindow:$allowance_window,durationSeconds:$duration,tokens:$usage,tokenProvenance:$token_provenance,billedCostUsd:$cost,costProvenance:$cost_provenance,commit:$commit,filesChanged:$files_changed},normalizedEffort:$normalized_effort,effectiveEffort:$transmitted_effort,transmittedEffort:$transmitted_effort,effortTransmission:{status:$effort_status,evidence:$effort_evidence,modelReasoningMeasurement:null},effortNormalized:($requested_effort != $normalized_effort),fallback:$fallback,fallbackReason:$fallback_reason,matrixSnapshot:$matrix,publication:{output:"pending"},familyIndependence:{required:(($independence_ids|length>0) or $human_authored),humanAuthored:$human_authored,excludedFamilies:$excluded_families,passed:true}}' > "$EMERGENCY_RECEIPT" || exit 76
+    jq -n --arg receipt_id "$RECEIPT_ID" --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --arg model "$model" --arg served_identity "$OBSERVED_SERVED_IDENTITY" --arg provider "$provider" --arg transport "$transport" --arg family "$family" --arg billing "$BILLING_MODE" --arg allowance_window "$ALLOWANCE_WINDOW" --arg matrix "$MATRIX_SNAPSHOT" --arg fallback_reason "$fallback_reason" --arg token_provenance "$token_provenance" --arg cost_provenance "$cost_provenance" --arg contract_digest "$CONTRACT_DIGEST" --arg probe_source "$PROBE_SOURCE" --argjson transmitted_effort "$transmitted_effort_json" --argjson transport_stub "$TRANSPORT_STUB" --argjson contract_revision "$CONTRACT_REVISION_JSON" --argjson requested_candidate "$REQUESTED_CANDIDATE" --argjson capabilities "$CAPABILITIES_JSON" --argjson attempts "$ATTEMPTS" --argjson independence_ids "$INDEPENDENCE_IDS_JSON" --argjson excluded_families "$EXCLUDED_FAMILIES" --argjson fallback "$fallback" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" --argjson duration "$DURATION_SECONDS" --argjson usage "$usage_json" --argjson cost "$cost_json" --argjson commit "$commit_json" --argjson files_changed "$files_changed_json" '{schemaVersion:1,receiptId:$receipt_id,probeSource:$probe_source,transportStub:$transport_stub,requested:{role:$role,capabilities:$capabilities,effort:$requested_effort,independenceReceiptIds:$independence_ids,humanAuthored:$human_authored,candidate:{model:$requested_candidate.model,provider:$requested_candidate.provider,transport:$requested_candidate.transport}},contract_digest:(if $contract_digest == "" then null else $contract_digest end),revision:$contract_revision,participantId:$participant,attempts:$attempts,served:{model:$model,servedIdentity:$served_identity,provider:$provider,transport:$transport,family:$family,billingMode:$billing,allowanceWindow:$allowance_window,durationSeconds:$duration,tokens:$usage,tokenProvenance:$token_provenance,billedCostUsd:$cost,costProvenance:$cost_provenance,commit:$commit,filesChanged:$files_changed},normalizedEffort:$normalized_effort,effectiveEffort:$transmitted_effort,transmittedEffort:$transmitted_effort,effortTransmission:{status:$effort_status,evidence:$effort_evidence,modelReasoningMeasurement:null},effortNormalized:($requested_effort != $normalized_effort),fallback:$fallback,fallbackReason:$fallback_reason,matrixSnapshot:$matrix,publication:{output:"pending"},familyIndependence:{required:(($independence_ids|length>0) or $human_authored),humanAuthored:$human_authored,excludedFamilies:$excluded_families,passed:true}}' > "$EMERGENCY_RECEIPT" || exit 76
     cp "$TRANSPORT_OUTPUT" "$PUBLIC_OUTPUT_TMP" 2>/dev/null || publication_failed output-preparation-failed
     jq '.publication.output="published"' "$EMERGENCY_RECEIPT" > "$PUBLIC_RECEIPT_TMP" || publication_failed receipt-preparation-failed
     mv "$PUBLIC_OUTPUT_TMP" "$OUTPUT_FILE" 2>/dev/null || publication_failed output-publication-failed
@@ -687,7 +725,7 @@ while IFS= read -r candidate; do
   fi
   transmitted_effort_json=null
   [ -z "$ATTEMPT_TRANSMITTED_EFFORT" ] || transmitted_effort_json="$(jq -Rn --arg effort "$ATTEMPT_TRANSMITTED_EFFORT" '$effort')"
-  ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --arg reason "$reason" --argjson transmitted_effort "$transmitted_effort_json" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,provider:$provider,transport:$transport,billingMode:$billing,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,effortEvidence:$effort_evidence,outcome:"failed",reason:$reason,durationSeconds:$duration}]')"
+  ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg served_identity "$OBSERVED_SERVED_IDENTITY" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --arg reason "$reason" --argjson transmitted_effort "$transmitted_effort_json" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,servedIdentity:$served_identity,provider:$provider,transport:$transport,billingMode:$billing,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,effortEvidence:$effort_evidence,outcome:"failed",reason:$reason,durationSeconds:$duration}]')"
   if [ "$WRITE_REQUEST" -eq 1 ]; then
     CURRENT_HEAD="$(git rev-parse --verify HEAD 2>/dev/null)" || exit 76
     CURRENT_STATUS="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" || exit 76

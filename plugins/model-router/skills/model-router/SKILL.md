@@ -91,7 +91,15 @@ Developer-local paid Claude credits default to disabled. The only tracked
 preference schema is
 `${CLAUDE_SKILL_DIR}/references/operator-profile-schema.json`; an actual
 preference belongs in ignored `.dm/model-router.local.json` in the common
-checkout and must never contain operator identity.
+checkout and must never contain operator identity. `disabledCandidates` is the
+small local preference for retiring a candidate such as `opus`; it filters both
+dispatch and human recommendation without changing shared policy or retrying an
+exhausted Claude rail.
+
+For one narrow unresolved UI/design question, load
+`${CLAUDE_SKILL_DIR}/references/design-consultation.md` and request
+`design-consultant`. Fable is eligible only through native Claude under that
+bounded one-shot contract. It is not a repository-wide reviewer or builder.
 
 For a coordinator preparing a human copy-paste execution prompt, use
 `${CLAUDE_SKILL_DIR}/references/operator-recommendation.sh`. This read-only

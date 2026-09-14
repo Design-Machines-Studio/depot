@@ -50,7 +50,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-case "$ROLE" in architect|plan-critic|builder-fast|builder-deep|review-fast|review-deep|security-review|research-fast|editorial) ;; *) usage ;; esac
+case "$ROLE" in architect|plan-critic|builder-fast|builder-deep|review-fast|review-deep|review-coordinator|security-review|research-fast|editorial|design-consultant) ;; *) usage ;; esac
 case "$EFFORT" in low|medium|high|max) ;; *) usage ;; esac
 case "$FORMAT" in markdown|json) ;; *) usage ;; esac
 [ -r "$POLICY" ] && [ ! -L "$POLICY" ] && jq -e '.schemaVersion == 1' "$POLICY" >/dev/null || usage
@@ -62,6 +62,32 @@ for capability in "${CAPABILITIES[@]}"; do
   case "$capability" in read-repository|write-repository|tool-use|browser|long-context|structured-output|independent-family) ;; *) usage ;; esac
   CAPABILITIES_JSON="$(printf '%s' "$CAPABILITIES_JSON" | jq -c --arg value "$capability" '. + [$value] | unique | sort')"
 done
+
+PAID_CLAUDE_CREDITS=false
+DISABLED_CANDIDATES='[]'
+common="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+if [ -n "$common" ]; then
+  case "$common" in
+    /*) ;;
+    *) worktree_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"; common="$worktree_root/$common" ;;
+  esac
+  common="$(cd "$common" 2>/dev/null && pwd -P || true)"
+  [ "${common##*/}" = .git ] || common=''
+  root="${common%/.git}"
+  profile="$root/.dm/model-router.local.json"
+  profile_parent="$(cd "$(dirname "$profile")" 2>/dev/null && pwd -P || true)"
+  if [ -f "$profile" ] && [ ! -L "$profile" ] &&
+     [ "$profile_parent" = "$root/.dm" ] &&
+     ! git -C "$root" ls-files --error-unmatch -- .dm/model-router.local.json >/dev/null 2>&1 &&
+     jq -e 'type == "object" and ((keys - ["allowPaidClaudeCredits","disabledCandidates"]) | length == 0) and
+       (.allowPaidClaudeCredits == null or (.allowPaidClaudeCredits | type) == "boolean") and
+       (.disabledCandidates == null or ((.disabledCandidates | type) == "array" and
+       (.disabledCandidates | length) <= 16 and (.disabledCandidates | length) == (.disabledCandidates | unique | length) and
+       all(.disabledCandidates[]; test("^[a-z0-9][a-z0-9./_-]{0,127}$"))))' "$profile" >/dev/null 2>&1; then
+    PAID_CLAUDE_CREDITS="$(jq -r '.allowPaidClaudeCredits // false' "$profile")"
+    DISABLED_CANDIDATES="$(jq -c '.disabledCandidates // []' "$profile")"
+  fi
+fi
 
 if [ -n "$AVAILABILITY_FILE" ]; then
   [ -r "$AVAILABILITY_FILE" ] && [ ! -L "$AVAILABILITY_FILE" ] || usage
@@ -76,7 +102,7 @@ else
 fi
 
 candidate_status() {
-  local candidate="$1" transport model rate_limit_id auth state
+  local candidate="$1" transport model rate_limit_id auth state plan paid
   transport="$(printf '%s' "$candidate" | jq -r '.transport')"
   model="$(printf '%s' "$candidate" | jq -r '.model')"
   case "$transport" in
@@ -101,9 +127,16 @@ candidate_status() {
     claude-cli)
       auth="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.authMode // .claude.auth_mode // "unknown"')"
       state="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.state // "unknown"')"
+      plan="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.plan // "unknown"')"
+      paid="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.paidCreditsEnabled // empty')"
+      [ -n "$paid" ] || paid="$PAID_CLAUDE_CREDITS"
       [ "$auth" = subscription ] || { printf unavailable; return; }
       if [ "$model" = fable ] && [ "$(printf '%s' "$AVAILABILITY" | jq -r '.claude.fable // "unknown"')" = exhausted ]; then
         printf unavailable
+      elif [ "$plan" = credits-only ]; then
+        if [ "$paid" = true ] && [ "$state" != unavailable ]; then printf attemptable
+        else printf unavailable
+        fi
       else
         case "$state" in ok) printf available ;; unavailable) printf unavailable ;; *) printf unknown ;; esac
       fi
@@ -118,6 +151,10 @@ candidate_status() {
 CANDIDATES='[]'
 while IFS= read -r candidate; do
   [ -n "$candidate" ] || continue
+  candidate_model="$(printf '%s' "$candidate" | jq -r '.model')"
+  if printf '%s' "$DISABLED_CANDIDATES" | jq -e --arg value "$candidate_model" 'index($value) != null' >/dev/null; then
+    continue
+  fi
   if jq -en --argjson requested "$CAPABILITIES_JSON" --argjson candidate "$candidate" '
     ($requested - ["independent-family"]) as $needed
     | all($needed[]; . as $cap | $candidate.capabilities | index($cap) != null)
@@ -143,7 +180,7 @@ harness_for() {
   case "$1" in codex-cli) printf Codex ;; claude-cli) printf 'Claude Code' ;; openrouter) printf OpenRouter ;; esac
 }
 cost_for() {
-  local candidate="$1" transport model alias price
+  local candidate="$1" transport model alias price plan paid
   transport="$(printf '%s' "$candidate" | jq -r '.transport')"
   model="$(printf '%s' "$candidate" | jq -r '.model')"
   if [ "$transport" = openrouter ]; then
@@ -152,6 +189,17 @@ cost_for() {
       | if . == null then null else {inputUsdPerM:.input_usd_per_m,outputUsdPerM:.output_usd_per_m,snapshotDate:.snapshot_date} end
     ' "$MATRIX")"
     jq -cn --argjson price "$price" '{label:"metered API",apiPrice:$price,apiEquivalent:null}'
+  elif [ "$transport" = claude-cli ]; then
+    plan="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.plan // "unknown"')"
+    paid="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.paidCreditsEnabled // empty')"
+    [ -n "$paid" ] || paid="$PAID_CLAUDE_CREDITS"
+    alias="$(jq -r --arg model "$model" '.native_api_equivalent_cost.aliases[$model] // empty' "$MATRIX")"
+    price="$(jq -c --arg alias "$alias" '[.native_api_equivalent_cost.models[] | select(.slug == $alias)][0] // null | if . == null then null else {inputUsdPerM:.input_usd_per_m,outputUsdPerM:.output_usd_per_m,snapshotDate:.snapshot_date,basis:.pricing_basis} end' "$MATRIX")"
+    if [ "$plan" = credits-only ] && [ "$paid" = true ]; then
+      jq -cn --argjson price "$price" '{label:"paid Claude credits",apiPrice:null,apiEquivalent:$price}'
+    else
+      jq -cn --argjson price "$price" '{label:"included subscription",apiPrice:null,apiEquivalent:$price}'
+    fi
   else
     alias="$(jq -r --arg model "$model" '.native_api_equivalent_cost.aliases[$model] // empty' "$MATRIX")"
     price="$(jq -c --arg alias "$alias" '[.native_api_equivalent_cost.models[] | select(.slug == $alias)][0] // null | if . == null then null else {inputUsdPerM:.input_usd_per_m,outputUsdPerM:.output_usd_per_m,snapshotDate:.snapshot_date,basis:.pricing_basis} end' "$MATRIX")"
@@ -194,6 +242,9 @@ cost_label="$(printf '%s' "$RESULT" | jq -r '.recommendedStart.cost.label')"
 if [ "$cost_label" = 'metered API' ]; then
   price_text="$(printf '%s' "$RESULT" | jq -r 'if .recommendedStart.cost.apiPrice == null then "price unavailable in current matrix" else "$" + (.recommendedStart.cost.apiPrice.inputUsdPerM|tostring) + "/M input, $" + (.recommendedStart.cost.apiPrice.outputUsdPerM|tostring) + "/M output" end')"
   COST_TEXT="metered API; $price_text"
+elif [ "$cost_label" = 'paid Claude credits' ]; then
+  equivalent_text="$(printf '%s' "$RESULT" | jq -r 'if .recommendedStart.cost.apiEquivalent == null then "API-equivalent estimate unavailable" else "API-equivalent $" + (.recommendedStart.cost.apiEquivalent.inputUsdPerM|tostring) + "/M input, $" + (.recommendedStart.cost.apiEquivalent.outputUsdPerM|tostring) + "/M output" end')"
+  COST_TEXT="paid Claude credits; $equivalent_text"
 else
   equivalent_text="$(printf '%s' "$RESULT" | jq -r 'if .recommendedStart.cost.apiEquivalent == null then "API-equivalent unavailable in current matrix" else "API-equivalent $" + (.recommendedStart.cost.apiEquivalent.inputUsdPerM|tostring) + "/M input, $" + (.recommendedStart.cost.apiEquivalent.outputUsdPerM|tostring) + "/M output (" + .recommendedStart.cost.apiEquivalent.snapshotDate + ")" end')"
   COST_TEXT="included subscription; $equivalent_text"

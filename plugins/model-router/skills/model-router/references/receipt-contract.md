@@ -13,7 +13,8 @@ including `rate_limit_probe_no_response`, `rate_limit_response_malformed`,
 `workflow_kernel_unavailable`, `provider_bundle_unavailable`,
 `provider_credential_unavailable`, `provider_availability_unknown`,
 `provider_boundary_declined`, `provider_transport_failed`,
-`provider_model_unavailable`, `organization_monthly_budget_exceeded`,
+`provider_model_unavailable`, `provider_model_identity_unavailable`,
+`provider_model_substitution`, `organization_monthly_budget_exceeded`,
 `insufficient_credits`, `rate_limited`, `unknown_provider_failure`,
 `browser_transport_unavailable`, and
 `model_participant_unavailable`, and
