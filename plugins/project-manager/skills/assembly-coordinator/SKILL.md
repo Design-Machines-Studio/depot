@@ -243,3 +243,11 @@ Return a compact, outcome-first report containing:
     execution prompt; routine sessions emit no empty report.
 
 Do not bury the recommendation beneath process narration.
+
+For completed implementation or PR follow-up, use dm-review's
+`review-next-action.sh` with authenticated current head/feedback and the
+repository's retained coverage. Report its exact `Review`, `Action`, `Why`, and
+`Reuse` lines. Only when it emits `modelWork: true`, render the requested
+`review-coordinator` recommendation through the actual model-router renderer.
+This follow-up does not dispatch a review or turn green checks into settlement
+of unresolved external comments.

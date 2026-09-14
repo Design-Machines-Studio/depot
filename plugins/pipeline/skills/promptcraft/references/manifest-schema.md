@@ -166,7 +166,8 @@ templates or create a durable registry.
 Derive defaults from `references/routing-policy.json`:
 
 - `docs`, `config`, and bounded `mechanical-logic` use `builder-fast`;
-- complex `logic`, `ui`, and `integration` use `builder-deep`;
+- settled bounded `ui` uses `builder-fast` at `high`; complex `logic`,
+  unresolved-design `ui`, and `integration` use `builder-deep` at `medium`;
 - add `browser`, `tool-use`, `long-context`, or `structured-output` only when
   the chunk actually requires it.
 

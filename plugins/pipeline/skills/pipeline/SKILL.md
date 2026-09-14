@@ -449,6 +449,11 @@ Requirements Cross-Check:
 
 **GATE (ledger item 12):** AskUserQuestion with the compact terminal summary contract: lead with the outcome and one recommendation, e.g. "Done. Feature branch `<branch>` passed verification. Recommended next action: create the PR. Reply with feedback instead if another iteration is needed." Include evidence paths; no standing multiple-choice menu.
 
+Before presenting it, run dm-review's `review-next-action.sh` from final-head
+policy, coverage, findings, and settled feedback. Preserve its four public
+lines. For `modelWork: true`, run the emitted request through model-router's
+recommendation renderer; otherwise omit the model block. Existing gates remain.
+
 **The exact-owned cleanup phase runs on all three answers.** Only requested
 deliverable disposition varies. Exact registered worktrees, temp chunk branches,
 run roots, temporary repositories/caches, and labelled Docker resources must

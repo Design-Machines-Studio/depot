@@ -6,7 +6,7 @@
     "config": {"executorRole": "builder-fast", "executorCapabilities": ["read-repository", "write-repository", "structured-output"], "executorEffort": "medium"},
     "mechanical-logic": {"executorRole": "builder-fast", "executorCapabilities": ["read-repository", "write-repository", "structured-output"], "executorEffort": "medium"},
     "logic": {"executorRole": "builder-deep", "executorCapabilities": ["read-repository", "write-repository", "long-context", "structured-output"], "executorEffort": "medium"},
-    "ui": {"executorRole": "builder-deep", "executorCapabilities": ["read-repository", "write-repository", "structured-output"], "executorEffort": "medium"},
+    "ui": {"executorRole": "builder-fast", "executorCapabilities": ["read-repository", "write-repository", "structured-output"], "executorEffort": "high"},
     "integration": {"executorRole": "builder-deep", "executorCapabilities": ["read-repository", "write-repository", "long-context", "structured-output"], "executorEffort": "medium"}
   },
   "legacyExecutorTranslation": {
