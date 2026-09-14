@@ -641,9 +641,27 @@ while IFS= read -r candidate; do
     invoke_candidate "$transport" "$model" "$EFFECTIVE_EFFORT"
     rc=$?
   fi
-  if [ "$rc" -eq 0 ] && [ "$transport" = claude-cli ] && jq -e . "$PROVIDER_RECEIPT" >/dev/null 2>&1; then
-    observed_identity="$(jq -r '.model // .responseModel // "unknown"' "$PROVIDER_RECEIPT")"
-    if [ "$observed_identity" != unknown ] && [ -n "$observed_identity" ]; then
+  if [ "$rc" -eq 0 ] && [ "$transport" = claude-cli ] &&
+     printf '%s' "$candidate" | jq -e '(.servedIdentities // []) | length > 0' >/dev/null; then
+    observed_identity="$(jq -r '
+      def usage_rows:
+        (.modelUsage // {} | to_entries |
+          map({model:.key, outputTokens:(.value.outputTokens // .value.output_tokens // null)}));
+      (.response.model // .responseModel // .model // null) as $explicit
+      | if ($explicit | type) == "string" and ($explicit | length) > 0 then $explicit
+        else usage_rows as $rows
+        | if ($rows | length) > 0 and all($rows[]; (.outputTokens | type) == "number" and .outputTokens >= 0) then
+            ($rows | map(.outputTokens) | max) as $maximum
+            | [$rows[] | select(.outputTokens == $maximum and .outputTokens > 0)] as $winners
+            | if ($winners | length) == 1 then $winners[0].model else "unknown" end
+          else "unknown"
+          end
+        end
+    ' "$PROVIDER_RECEIPT" 2>/dev/null || printf unknown)"
+    if [ "$observed_identity" = unknown ] || [ -z "$observed_identity" ]; then
+      INVOKE_REASON="provider_model_identity_unavailable"
+      rc=77
+    else
       OBSERVED_SERVED_IDENTITY="$observed_identity"
       if ! printf '%s' "$candidate" | jq -e --arg identity "$observed_identity" '(.servedIdentities // []) | index($identity) != null' >/dev/null; then
         INVOKE_REASON="provider_model_substitution"

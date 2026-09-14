@@ -44,7 +44,13 @@ if [ -n "${MODEL_ROUTER_EXPECT_PUBLICATION_DIR:-}" ]; then
   [ -e "$1" ] || exit 78
 fi
 case "$outcome" in
-  success) printf 'bounded role output\n' > "$output" ;;
+  success)
+    printf 'bounded role output\n' > "$output"
+    case "$model" in
+      fable) printf '%s\n' '{"model":"claude-fable-5"}' > "$provider_receipt" ;;
+      opus) printf '%s\n' '{"model":"claude-opus-5"}' > "$provider_receipt" ;;
+    esac
+    ;;
   quota) printf 'quota exhausted\n' >&2; exit 77 ;;
   content-refusal) printf 'model content refusal\n' >&2; exit 77 ;;
   mutate-fail)
@@ -898,12 +904,26 @@ assert jq -e '.fallback == true and .fallbackReason == "content-refusal" and .se
 fixture healthy
 run_role review-coordinator review-coordinator medium --capability read-repository --capability long-context --capability structured-output
 assert jq -e '.served.model == "gpt-5.6-sol" and .served.transport == "codex-cli" and .normalizedEffort == "medium"' "$TMP/review-coordinator.receipt"
-run_role fable-design design-consultant medium --capability long-context --capability structured-output
-assert jq -e '.served.model == "fable" and .served.servedIdentity == "unknown" and .served.transport == "claude-cli" and (.attempts | length) == 1' "$TMP/fable-design.receipt"
+printf '%s\n' '{}' > "$TMP/fable-missing-identity.json"
+MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/fable-missing-identity.json" \
+  run_role fable-design design-consultant medium --capability long-context --capability structured-output
+assert jq -e '.served.model == "gpt-5.6-sol" and .fallback == true and ([.attempts[] | select(.model == "fable" and .servedIdentity == "unknown" and .reason == "provider_model_identity_unavailable")] | length) == 1' "$TMP/fable-design.receipt"
 printf '%s\n' '{"model":"claude-fable-5"}' > "$TMP/fable-identity.json"
 MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/fable-identity.json" \
   run_role fable-identity design-consultant medium --capability long-context --capability structured-output
 assert jq -e '.served.model == "fable" and .served.servedIdentity == "claude-fable-5"' "$TMP/fable-identity.receipt"
+printf '%s\n' '{"response":{"model":"claude-fable-5"},"model":"fable"}' > "$TMP/fable-response-identity.json"
+MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/fable-response-identity.json" \
+  run_role fable-response-identity design-consultant medium --capability long-context --capability structured-output
+assert jq -e '.served.model == "fable" and .served.servedIdentity == "claude-fable-5"' "$TMP/fable-response-identity.receipt"
+printf '%s\n' '{"modelUsage":{"claude-fable-5":{"outputTokens":12},"claude-haiku-4-5":{"outputTokens":3}}}' > "$TMP/fable-usage-identity.json"
+MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/fable-usage-identity.json" \
+  run_role fable-usage-identity design-consultant medium --capability long-context --capability structured-output
+assert jq -e '.served.model == "fable" and .served.servedIdentity == "claude-fable-5"' "$TMP/fable-usage-identity.receipt"
+printf '%s\n' '{"modelUsage":{"claude-fable-5":{"outputTokens":12},"claude-opus-5":{"outputTokens":12}}}' > "$TMP/fable-ambiguous-identity.json"
+MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/fable-ambiguous-identity.json" \
+  run_role fable-ambiguous-identity design-consultant medium --capability long-context --capability structured-output
+assert jq -e '.served.model == "gpt-5.6-sol" and .fallback == true and ([.attempts[] | select(.model == "fable" and .reason == "provider_model_identity_unavailable")] | length) == 1' "$TMP/fable-ambiguous-identity.receipt"
 printf '%s\n' '{"model":"claude-opus-5"}' > "$TMP/fable-substitution.json"
 MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/fable-substitution.json" \
   run_role fable-substitution design-consultant medium --capability long-context --capability structured-output
@@ -928,6 +948,46 @@ jq '.codex.state="unavailable" | .claude.state="ok" | .claude.authMode="subscrip
       --output-file "$TMP/profile-dispatch.out" --receipt-file "$TMP/profile-dispatch.receipt" >/dev/null
 )
 assert jq -e '.served.model == "qwen/qwen3.8-max" and .served.transport == "openrouter" and ([.attempts[].model] | index("opus") == null)' "$TMP/profile-dispatch.receipt"
+
+printf '%s\n' '{"allowPaidClaudeCredits":"yes","disabledCandidates":["opus"]}' > "$TMP/profile-dispatch/.dm/model-router.local.json"
+printf '%s\n' '{"model":"claude-opus-5"}' > "$TMP/opus-identity.json"
+(
+  cd "$TMP/profile-dispatch"
+  MODEL_ROUTER_AVAILABILITY_FILE="$TMP/profile-dispatch-availability.json" \
+    MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+    MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/opus-identity.json" \
+    "$ROUTER" --workflow-kernel "$KERNEL" --role architect --effort medium \
+      --capability read-repository --capability long-context --capability structured-output \
+      --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+      --output-file "$TMP/invalid-profile-dispatch.out" --receipt-file "$TMP/invalid-profile-dispatch.receipt" >/dev/null
+)
+assert jq -e '.served.model == "opus" and .served.servedIdentity == "claude-opus-5"' "$TMP/invalid-profile-dispatch.receipt"
+
+jq '.claude.plan="credits-only" | del(.claude.paidCreditsEnabled)' \
+  "$TMP/profile-dispatch-availability.json" > "$TMP/profile-credits-availability.json"
+printf '%s\n' '{"allowPaidClaudeCredits":false}' > "$TMP/profile-dispatch/.dm/model-router.local.json"
+(
+  cd "$TMP/profile-dispatch"
+  MODEL_ROUTER_AVAILABILITY_FILE="$TMP/profile-credits-availability.json" \
+    MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+    "$ROUTER" --workflow-kernel "$KERNEL" --role architect --effort medium \
+      --capability read-repository --capability long-context --capability structured-output \
+      --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+      --output-file "$TMP/credits-disabled-dispatch.out" --receipt-file "$TMP/credits-disabled-dispatch.receipt" >/dev/null
+)
+assert jq -e '.served.model == "qwen/qwen3.8-max" and ([.attempts[] | select(.model == "opus" and .outcome == "skipped")] | length) == 1' "$TMP/credits-disabled-dispatch.receipt"
+
+printf '%s\n' '{"allowPaidClaudeCredits":true}' > "$TMP/profile-dispatch/.dm/model-router.local.json"
+(
+  cd "$TMP/profile-dispatch"
+  MODEL_ROUTER_AVAILABILITY_FILE="$TMP/profile-credits-availability.json" \
+    MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+    "$ROUTER" --workflow-kernel "$KERNEL" --role architect --effort medium \
+      --capability read-repository --capability long-context --capability structured-output \
+      --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+      --output-file "$TMP/credits-enabled-dispatch.out" --receipt-file "$TMP/credits-enabled-dispatch.receipt" >/dev/null
+)
+assert jq -e '.served.model == "opus" and .served.billingMode == "paid-credits"' "$TMP/credits-enabled-dispatch.receipt"
 
 # Empty capability lists remain safe under nounset (including Bash 3.2).
 fixture healthy

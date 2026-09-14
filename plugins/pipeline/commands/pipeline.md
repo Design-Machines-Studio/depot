@@ -436,7 +436,8 @@ Requirements Cross-Check:
 
 Before presenting it, run dm-review's `review-next-action.sh` from final-head
 policy, coverage, findings, and settled feedback. Preserve its four public
-lines. For `modelWork: true`, run the emitted request through model-router's
+lines. Pass the actual base, final head, and dirty state. For `modelWork: true`,
+run the emitted request through model-router's
 recommendation renderer; otherwise omit the model block. Existing gates remain.
 
 **The exact-owned cleanup phase runs on all three answers.** Only requested

@@ -1083,7 +1083,8 @@ Mark `FINAL 5a.1. Terminal model report or owner handoff` complete.
 
 Before Step 6, resolve dm-review `>=1.83.0` and run its
 `review-next-action.sh` with final diff, cases, final-head coverage, findings,
-and settled PR feedback. Return its four public lines; recheck only evidence
+and settled PR feedback. Pass the actual base, final head, and dirty state.
+Return its four public lines; recheck only evidence
 invalidated by later changes.
 
 ## Step 5b: Artifact and Repository Cleanup

@@ -715,12 +715,15 @@ enclosing workflow removes them after its one terminal render.
 
 Only after Phase 8 has completed, add its authoritative repository and Docker cleanup results to the provisional unified report. Then write the complete report to `.claude/ux-review/report.md` -- the existing dm-review artifact flow, not a new report subsystem.
 
-Run `review-next-action.sh` against the final-head diff, repository policy,
+Run `review-next-action.sh` against the base/final-head diff, repository policy,
 required cases, completed coverage, retained findings, and settled PR feedback.
+Record whether the reviewed boundary is dirty; a dirty boundary uses the same commit for
+`baseCommit` and `finalHead` and cannot produce a reusable review command.
 Use its exact `Review`, `Action`, `Why`, and `Reuse` lines. When it emits
 `modelWork: true`, invoke model-router's `operator-recommendation.sh` once as
-`review-coordinator` at the emitted effort/capabilities and append that actual
-`Recommended start` block. Emit no model recommendation when `modelWork: false`.
+`review-coordinator` at the emitted effort/capabilities and place that actual
+`Recommended start` block immediately before `Reuse`. Emit no model
+recommendation when `modelWork: false`.
 
 Deliver the compact human handoff after that write, following `references/output-format.md`. Preserve the complete unified report and all machine-readable companions in the established evidence flow. The compact handoff links `.claude/ux-review/report.md` and names any blocked cleanup requiring operator action. Do not dump the expanded report, provider tables, agent transcripts, synthesis ledger, cleanup inventory, or raw reports into visible chat by default.
 
