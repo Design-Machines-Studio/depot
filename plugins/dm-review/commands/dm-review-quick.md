@@ -34,8 +34,10 @@ skill, do not use this ordinary roster as a substitute for security review.
 Escalate to full mode, which retains the mandatory full-diff security
 sign-off, authorized external security lens, and full-only second perspective.
 Do not infer extra security triggers from generic handlers, shell scripts,
-dependency manifests, or configuration files. Quick review is early feedback;
-the one final full pre-merge review remains the complete security boundary.
+dependency manifests, or configuration files. Quick review may be the final
+review when repository policy or an approved Pipeline plan permits it and every
+required lane passes at the final head. Security-sensitive paths and
+high-consequence work still require full review.
 
 ## Zero-Deferral Finding Policy
 

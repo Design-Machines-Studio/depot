@@ -57,8 +57,9 @@ Default to the cheapest tier that fits.
 | Bulk second opinions / large-diff first pass | fixed lane-to-role mapping | Security analysis plus style, duplication, pattern, and doc lanes; eligible diff sections only; mandatory full-diff security sign-off |
 | Bounded repair review | full + one repair | One repair batch and one affected-lane recheck; repeat broad review only when the original was incomplete or the repair changed a real sensitive boundary |
 
-**Escalation exception:** quick review is an early feedback gate, not the final
-security boundary; every PR still receives one full pre-merge review. Escalate
+**Escalation exception:** quick review is a supported final mode when repository
+policy or an approved Pipeline plan permits it and final-head required coverage
+passes. Escalate
 a chunk early only when a changed path matches this bounded set:
 `internal/auth/**`, `internal/federation/**`, `**/security/**`,
 `**/middleware/auth*`, `**/middleware/security*`, `**/secretbox*`,
@@ -303,6 +304,7 @@ DM_REVIEW_REQUIRED_ASSETS=(
   "skills/review/references/external-finding-intake.md"
   "skills/review/references/external-finding-intake.sh"
   "skills/review/references/external-finding-settlement.sh"
+  "skills/review/references/review-next-action.sh"
 )
 ACCESSIBILITY_REQUIRED_ASSETS=()
 LIVE_WIRES_REQUIRED_ASSETS=()
@@ -335,7 +337,7 @@ COUNCIL_BUNDLE_ROOT=""
 for PLUGIN in dm-review accessibility-compliance live-wires ghostwriter council; do
   case "$PLUGIN" in
     dm-review)
-      PLUGIN_MINIMUM_VERSION="1.71.0"
+      PLUGIN_MINIMUM_VERSION="1.83.0"
       REQUIRED_ASSETS=("${DM_REVIEW_REQUIRED_ASSETS[@]}")
       ;;
     accessibility-compliance)
@@ -677,7 +679,9 @@ unavailable line and never changes the review disposition or cleanup sequence.
 
 Runs in **every mode** (quick and full), on every exit path -- including `REVIEW INCOMPLETE`, `BLOCKS MERGE`, and a stalled convergence loop. Read `${CLAUDE_SKILL_DIR}/references/repo-cleanup-contract.md`; it is authoritative.
 
-dm-review creates no worktrees, so its obligations are narrower than pipeline's:
+dm-review ordinarily creates no worktrees, but an active host may create one on
+its behalf. Such a worktree is owned only with explicit host creation/handoff
+metadata and remains blocked until the host reports it released:
 
 1. **Do not adopt or prune refs.** Query only exact refs this invocation registered. Pre-existing/user refs and interrupted Pipeline refs are foreign.
 2. **Delete only branches this review created** -- in practice the batch-cleanup branch from `references/issue-tracking.md`, and only once decision-table row 1 passes.
@@ -710,6 +714,13 @@ enclosing workflow removes them after its one terminal render.
 ### Finalize Report and Deliver Handoff
 
 Only after Phase 8 has completed, add its authoritative repository and Docker cleanup results to the provisional unified report. Then write the complete report to `.claude/ux-review/report.md` -- the existing dm-review artifact flow, not a new report subsystem.
+
+Run `review-next-action.sh` against the final-head diff, repository policy,
+required cases, completed coverage, retained findings, and settled PR feedback.
+Use its exact `Review`, `Action`, `Why`, and `Reuse` lines. When it emits
+`modelWork: true`, invoke model-router's `operator-recommendation.sh` once as
+`review-coordinator` at the emitted effort/capabilities and append that actual
+`Recommended start` block. Emit no model recommendation when `modelWork: false`.
 
 Deliver the compact human handoff after that write, following `references/output-format.md`. Preserve the complete unified report and all machine-readable companions in the established evidence flow. The compact handoff links `.claude/ux-review/report.md` and names any blocked cleanup requiring operator action. Do not dump the expanded report, provider tables, agent transcripts, synthesis ledger, cleanup inventory, or raw reports into visible chat by default.
 

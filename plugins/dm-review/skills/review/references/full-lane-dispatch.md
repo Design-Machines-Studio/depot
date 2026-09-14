@@ -33,8 +33,10 @@ task still requests `tool-use` and therefore excludes prompt-only transports.
 ## Dispatch
 
 Resolve one coherent model-router bundle with Workflow Kernel and require
-`skills/model-router/references/role-dispatch.sh`, the request schema, and role
-policy at minimum version `0.4.0`. When this invocation owns terminal reporting,
+`skills/model-router/references/role-dispatch.sh`,
+`skills/model-router/references/operator-recommendation.sh`,
+`skills/model-router/references/design-consultation.md`, the request schema,
+and role policy at minimum version `0.8.0`. When this invocation owns terminal reporting,
 require `skills/model-router/references/render-terminal-report.sh` from that
 same bundle. For each selected lane:
 
@@ -124,6 +126,11 @@ credential-shaped, classified, security-sensitive, or deployment-related.
 There is no approval prompt. Transport failure or structurally invalid evidence
 falls through within the same role; the complete roster and every required diff
 section must still settle.
+
+## Optional design consultation
+
+For one unresolved consequential design question, load model-router's
+`design-consultation.md`. It is optional advice, not a review lane or authority.
 
 ## Diff scoping per lane
 

@@ -2,28 +2,32 @@
 
 Binding on every automation run that creates git refs in a target repo. Consumers: `pipeline` (`execution-orchestrator` Steps 0e/3b/3j/5b and the three pipeline commands) and `dm-review` (`review` skill Phase 8, `/dm-review-loop`, `/dm-review-fix`).
 
-This file lives in `dm-review` because `pipeline` depends on `dm-review` and the reverse edge would be a cycle. It states the Git rules only. The pipeline worktree implementation lives in `plugins/pipeline/references/execution-worktree-cleanup.md`, loaded only at Steps 3j/5b. The cross-resource terminal convention lives in Workflow Kernel's `exact-owned-cleanup.md`; Docker mechanics remain in `docker-ownership.md`.
-
-A run that leaves orphan worktrees and temp branches behind poisons the next run: `git worktree add` collides on a stale path, `git branch -d` collides on a stale name, and a dirty tree makes the next diff unreadable.
+This file owns Git rules. Pipeline mechanics live in
+`execution-worktree-cleanup.md`; cross-resource lifecycle and Docker remain in
+Workflow Kernel.
 
 ## 1. Ref registry
 
-Every worktree and branch the automation creates is appended to the run's durable exact-resource registry **in the same creation action**, never reconstructed afterward from a glob. `kind` is one of `worktree`, `chunk-branch`, `review-branch`, `feature-branch`. Capture the before state inside the exact-owned run root so the inventory can report a delta without leaving `/tmp` residue.
+Every worktree and branch the automation creates is appended to the run's durable exact-resource registry **in the same creation action**, never reconstructed afterward from a glob. `kind` is one of `worktree`, `chunk-branch`, `review-branch`, `feature-branch`. Capture the entry status, registered-worktree set, and before state inside the exact-owned run root so completion compares against the baseline rather than demanding that pre-existing changes disappear.
 
-- **Nothing is deleted outside the exact creation records** -- for pipeline, paths and branches include the unique run ID; for dm-review, only the batch-cleanup branch this invocation created. A ref outside the registry is foreign and left alone, no matter how stale it looks.
+- **Nothing is deleted outside exact creation records.** Unregistered refs are foreign.
 - **Nothing registered is silently dropped.** Every registered ref appears in the final inventory with a disposition, even if that disposition is "kept".
 
-Creation and registration are one guarded action: if registration fails after
-`git worktree add`, that action rolls back its exact path/ref before returning.
-There is no end-of-run namespace sweep. Concurrent runs may share a feature
-slug because their run IDs, roots, branch names, and registry records are
-distinct. An interruption resumes cleanup from those exact records.
+Creation and registration are one guarded action; registration failure rolls
+back that exact creation. Runs use distinct IDs and resume exact records.
+
+A host-created worktree is adopted only from explicit host creation/handoff
+metadata. Load `host-worktree-cleanup.md` when such metadata exists; otherwise
+it is foreign.
 
 ## 2. The cleanup phase is mandatory
 
-It runs on successful completion; on review failure (`BLOCKS MERGE`, findings remaining, REVIEW INCOMPLETE); on chunk- and pipeline-blocking failures, before the failure is reported; and on every answer to a user gate, including "Give feedback" and "Done". Exiting without it is a contract violation. It still runs when the run aborts on an exception -- it is deterministic git and cannot make the failure worse.
+It runs on success, every failure/abort, and every user-gate answer before
+reporting. Exiting without it is a contract violation.
 
-Cleanup is plain Git executed by the orchestrator in-process. It is never delegated to a subagent, and never routed through `openrouter-wrapper.sh`, `openrouter-exec.sh`, or a Codex `multi_agent_v1.spawn_agent` call. Deleting refs is not a judgment task. The host invokes the same terminal sequence for `EXIT`, `SIGINT`, and `SIGTERM`; a review abort before execution records an empty inventory and removes its disposable run root.
+Cleanup is plain in-process Git, never model-delegated. The host uses the same
+sequence for `EXIT`, `SIGINT`, and `SIGTERM`; a pre-execution abort records an
+empty inventory and removes its disposable root.
 
 ## 3. Safe-to-delete decision table
 
@@ -37,11 +41,16 @@ Evaluate each registered ref in order. First match wins.
 | 4 | Worktree has uncommitted or untracked changes | `git -C <path> status --porcelain` non-empty | **keep**, report |
 | 5 | Anything else | -- | **keep**, report |
 
-Rows 1 and 2 are the only paths to deletion; there is no "it looks done" path. Row 2 fires only when the branch's base differs from the merge target -- when `base == target`, row 1 matches first and uses the safer `-d`. Check row 3 before probing a worktree: its path is gone, so `git status` can only fail, and probing first mislabels it "unreadable, blocked" with a follow-up command that cannot succeed. A missing exact record is already reconciled and never authorizes a repository-wide prune. Remove a present worktree before deleting its branch. Never suppress git's exit status with `2>/dev/null` -- a silenced `git status` returns empty stdout, reads as "clean", and routes an unreadable worktree straight to removal.
+Only rows 1–2 delete. Row 2 requires base != target; row 1 handles equal
+base/target with `-d`. Check absence before status, remove worktree before
+branch, and never suppress Git exit status. Missing records never authorize
+pruning. Do not run `git worktree prune`.
 
 ## 4. Feature-branch protection
 
-The main feature branch is **never** deleted without concrete merge proof: a zero exit from `git merge-base --is-ancestor "$featureBranch" main` or the same test against `origin/main`. Absent that, the branch is kept and the receipt says `kept -- no merge proof`. "The review was clean", "the PR was opened", and "the user said done" are not merge proof. `git branch -D` is **forbidden on the feature branch, always** -- no condition unlocks it. Elsewhere, `-D` is permitted only after decision-table row 2 has passed, and every use is recorded in the inventory's Proof column.
+Delete the feature branch only after `git merge-base --is-ancestor` proves it
+merged into `main` or `origin/main`; otherwise record `kept -- no merge proof`.
+`git branch -D` is always forbidden for it and requires row 2 elsewhere.
 
 ## 5. Blocked-removal reporting
 
@@ -56,7 +65,10 @@ A blocked ref is never reported as cleaned, never counted in the "deleted" total
 
 ## 6. Next-run readiness checks
 
-After removals, query each registered worktree/ref exactly and run `git status --porcelain` (expect empty). Do not run `git worktree prune` or scan for automation paths; both exceed this invocation's ownership records. Confirm no exact registered disposable path remains. A failing check is reported as failing; it does not block the run's primary result, but the next operator must know what they inherit.
+After removals, query each registered worktree/ref exactly and compare status
+with the entry baseline plus intentional task-owned changes. Preserve and
+report pre-existing/concurrent residue; fail only new unexplained residue or
+exact-owned removal. Never prune or scan automation namespaces.
 
 ## 7. Final inventory block
 
@@ -89,7 +101,9 @@ Disposition is one of `deleted`, `kept`, `blocked`. Every registered ref appears
 
 **pipeline-fix.** Runs on the current feature branch with `noMergeOnCompletion: true`, creates no refs, so cleanup deletes nothing. It still emits the inventory and readiness checks.
 
-**dm-review.** Creates no worktrees. Its cleanup phase reconciles only its exact records, deletes only the batch-cleanup branch it created once row 1 proves it merged, asserts a clean tree, and emits the inventory. Automation refs it did not create are reported under "Remaining after cleanup" with a follow-up command and left alone.
+**dm-review.** Ordinarily creates no worktrees; a host-owned handoff follows
+`host-worktree-cleanup.md`. Reconcile exact records, compare against the entry
+baseline, and leave foreign refs alone.
 
 ## 9. Non-Git owned resources
 

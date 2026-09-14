@@ -24,7 +24,11 @@ verdict from the complete report. Keep the explanation to one plain sentence.
 <Only gaps that require human action. If none: `None.`>
 
 ### Recommended next action
-<One action.>
+Review: <needed | already satisfied | not warranted>
+Action: <one exact supported command and target PR/head, or next non-review action>
+Why: <one short reason>
+Recommended start: <actual model-router block, only when model work remains>
+Reuse: <relevant valid final-head or unaffected evidence>
 
 ### Complete evidence
 `Full report: .claude/ux-review/report.md`.

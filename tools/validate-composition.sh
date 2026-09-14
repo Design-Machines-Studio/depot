@@ -656,6 +656,11 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  if ! "$SCRIPT_DIR/test-review-next-action.sh"; then
+    echo "FAIL: review next-action behavioral tests failed"
+    any_failed=1
+  fi
+
   printf "\n${BOLD}dm-review source/rendered UI contract:${RESET}\n"
   if ! "$SCRIPT_DIR/test-dm-review-ui-contract.sh"; then
     any_failed=1
