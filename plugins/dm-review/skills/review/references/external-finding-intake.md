@@ -11,9 +11,17 @@ Resolve the authenticated `owner/repository`, PR number, and exact head. Under
 the exact-owned review root run:
 
 ```bash
-"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/external-finding-intake.sh" \
+if "$DM_REVIEW_BUNDLE_ROOT/skills/review/references/external-finding-intake.sh" \
   --repo "$REVIEW_REPOSITORY" --pr "$REVIEW_PR_NUMBER" \
-  --output <exact-run-root>/review/external-finding-intake.json
+  --output <exact-run-root>/review/external-finding-intake.json; then
+  :
+else
+  intake_status=$?
+  # Continue only when the artifact proves a matching partial/unavailable intake.
+  jq -e --arg repo "$REVIEW_REPOSITORY" --argjson pr "$REVIEW_PR_NUMBER" \
+    '.repository == $repo and .pr_number == $pr and (.collection_status == "partial" or .collection_status == "unavailable")' \
+    <exact-run-root>/review/external-finding-intake.json >/dev/null || exit "$intake_status"
+fi
 ```
 
 The helper independently paginates inline comments/replies, submitted review
@@ -50,7 +58,8 @@ Write `external-finding-decisions.json` with schema/artifact role,
 repository/PR/head/cutoff, then one row per candidate: `source_finding_id`, all
 GitHub `source_ids`, canonical `finding_id`, disposition, reason,
 `evidence_ref`, `current_head_evidence_ref`, and rationale. Retained rows add
-`repair_ref`; merged rows add `merged_into_finding_id`. Do not invent reviewer,
+`repair_ref`; merged rows add `merged_into_finding_id` and, for a dm-review lane
+target, its `merged_target_evidence_ref`. Do not invent reviewer,
 independence, dispatch, token, or cost provenance. Validate before repair and
 terminal reporting:
 
@@ -76,5 +85,6 @@ link decisions instead of repeating bodies.
 After repair/recheck and before reporting, fetch the head and intake once more.
 If the head advanced, report both heads and require a new review. At the same
 head, evaluate new/changed source IDs and send retained deltas through the same
-bounded repair/recheck. Otherwise validate and finish. Record head and cutoff;
+bounded repair/recheck. Regenerate the decision ledger's cutoff and complete
+source index even when nothing changed, then validate. Record head and cutoff;
 do not poll.

@@ -150,8 +150,8 @@ Execute in order; do not skip. Majors are 1--8; lettered sub-phases run in seque
 ### Phase 1: Target Detection
 
 First parse optional paired `--base-commit <sha>` and `--head-commit <sha>`
-values; reject partial/invalid ranges. Otherwise use ordinary detection. Bind the physical `REVIEW_ROOT`, literal
-commits, and fresh owned absolute diff/file-list paths, then run:
+values; reject partial/invalid ranges. Only when the complete pair is supplied,
+bind the physical `REVIEW_ROOT`, literal commits, and fresh owned paths, then run:
 
 ```bash
 # exact-review-range:start

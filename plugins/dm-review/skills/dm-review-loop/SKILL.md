@@ -346,8 +346,9 @@ and the per-pass receipt fields.
 
 Every `STOP` in the loop exits model-dependent work into this terminal sequence;
 it does not bypass reporting or cleanup. For a PR, every `STOP` first completes
-Phase 1b settlement; changed/incomplete evidence yields `REVIEW INCOMPLETE`,
-while retained deltas use the existing bounded repair/recheck. After the final clean, findings-
+Phase 1b settlement; changed/incomplete evidence yields `REVIEW INCOMPLETE`.
+Run `/dm-review-fix` and its affected-lane verification for retained deltas
+before settling the disposition. After the final clean, findings-
 remaining, stalled, failed, blocked, or stopped disposition is settled, load
 model-router's `terminal-report-contract.md` and render exactly once from the
 loop-private ordered index to `<exact-run-root>/review/model-cost-report.json`

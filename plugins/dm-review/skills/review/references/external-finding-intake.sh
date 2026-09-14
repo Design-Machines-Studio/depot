@@ -19,6 +19,9 @@ OUTPUT_FILE=""
 MAX_ITEMS=2000
 MAX_BODY_BYTES=32768
 MAX_BODY_CHARS=8192
+if [ "${DM_REVIEW_TEST_MODE:-0}" = 1 ] && printf '%s' "${DM_REVIEW_TEST_MAX_ITEMS:-}" | grep -Eq '^[1-9][0-9]*$' && [ "$DM_REVIEW_TEST_MAX_ITEMS" -le 2000 ]; then
+  MAX_ITEMS="$DM_REVIEW_TEST_MAX_ITEMS"
+fi
 
 usage() {
   printf '%s\n' 'usage: external-finding-intake.sh --repo OWNER/REPO --pr NUMBER --output FILE' >&2
@@ -109,8 +112,13 @@ fetch_pages checks "repos/$REPOSITORY/commits/$INSPECTED_HEAD/check-runs?per_pag
 
 printf '[]\n' > "$TMP/annotations.items.json"
 ANNOTATION_STATUS=successful
+ANNOTATION_COUNT=0
 while IFS= read -r check_id; do
   [ -n "$check_id" ] || continue
+  if [ "$ANNOTATION_COUNT" -ge "$MAX_ITEMS" ]; then
+    ANNOTATION_STATUS=partial
+    break
+  fi
   name="annotations-$check_id"
   fetch_pages "$name" "repos/$REPOSITORY/check-runs/$check_id/annotations?per_page=100" arrays
   item_status="$(cat "$TMP/$name.status")"
@@ -119,8 +127,16 @@ while IFS= read -r check_id; do
     partial|truncated) ANNOTATION_STATUS=partial ;;
   esac
   jq --argjson check_id "$check_id" 'map(. + {check_run_id:$check_id})' "$TMP/$name.items.json" > "$TMP/$name.tagged.json"
+  remaining=$((MAX_ITEMS - ANNOTATION_COUNT))
+  tagged_count="$(jq 'length' "$TMP/$name.tagged.json")"
+  if [ "$tagged_count" -gt "$remaining" ]; then
+    jq --argjson remaining "$remaining" '.[:$remaining]' "$TMP/$name.tagged.json" > "$TMP/$name.bounded.json"
+    mv "$TMP/$name.bounded.json" "$TMP/$name.tagged.json"
+    ANNOTATION_STATUS=partial
+  fi
   jq -s '.[0] + .[1]' "$TMP/annotations.items.json" "$TMP/$name.tagged.json" > "$TMP/annotations.next.json"
   mv "$TMP/annotations.next.json" "$TMP/annotations.items.json"
+  ANNOTATION_COUNT="$(jq 'length' "$TMP/annotations.items.json")"
 done < <(jq -r '.[] | select((.annotations_count // 0) > 0) | .id' "$TMP/checks.items.json")
 
 if [ "$(jq 'length' "$TMP/annotations.items.json")" -gt "$MAX_ITEMS" ]; then
@@ -161,7 +177,7 @@ jq --argjson max_body "$MAX_BODY_BYTES" --argjson max_chars "$MAX_BODY_CHARS" --
   [ to_entries[] | .value as \$a |
     (\$checks | map(select(.id == (\$a.check_run_id // -1))) | first) as \$check |
     {source_id:(\"github:check-annotation:\" + ((\$a.check_run_id // 0)|tostring) + \":\" +
-      ([\$a.path,\$a.start_line,\$a.end_line,\$a.title,\$a.message] | @json | @base64)),
+      ([\$a.path,\$a.start_line,\$a.end_line,\$a.start_column,\$a.end_column,\$a.title,\$a.message,\$a.annotation_level,\$a.raw_details] | @json | @base64)),
      github_id:(\$a.check_run_id // null),url:(\$a.blob_href // \$check.url),
      source_commit:(\$check.head_sha // null),check_name:(\$check.name // null),path:\$a.path,
      location:{start_line:\$a.start_line,end_line:\$a.end_line,start_column:\$a.start_column,end_column:\$a.end_column},
@@ -194,7 +210,7 @@ done
 COLLECTION_STATUS=complete
 GAPS='[]'
 PR_BODY_TRUNCATED=false
-if jq -e --argjson max_body "$MAX_BODY_BYTES" '(.body // "") | utf8bytelength > $max_body' "$TMP/pr.json" >/dev/null; then
+if jq -e --argjson max_body "$MAX_BODY_BYTES" --argjson max_chars "$MAX_BODY_CHARS" '(.body // "") | (length > $max_chars or utf8bytelength > $max_body)' "$TMP/pr.json" >/dev/null; then
   PR_BODY_TRUNCATED=true
   COLLECTION_STATUS=partial
   GAPS='["pull_request_body:truncated"]'

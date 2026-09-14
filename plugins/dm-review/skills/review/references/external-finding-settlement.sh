@@ -42,7 +42,7 @@ jq -e --arg head "$CURRENT_HEAD" --slurpfile intake "$INTAKE" '
   def source_ids: [$intake[0].pull_request.source_id, $intake[0].surfaces[].items[].source_id];
   def retained_code: . == "retained-unique" or . == "retained-corroborated" or . == "retained-disagreement";
   def merged_code: . == "exact-duplicate" or . == "same-root-cause-merge";
-  def discarded_code: . == "superseded-by-stronger-evidence" or . == "out-of-scope" or . == "not-reproducible";
+  def discarded_code: . == "superseded-by-stronger-evidence" or . == "out-of-scope" or . == "not-reproducible" or . == "agent-findings-cap";
   source_ids as $known_source_ids |
   .decisions as $decisions |
   .source_evidence_index as $source_index |
@@ -71,7 +71,11 @@ jq -e --arg head "$CURRENT_HEAD" --slurpfile intake "$INTAKE" '
     if $decision.finding_disposition == "retained" then
       ($decision.decision_reason_code | retained_code) and ($decision.repair_ref | type == "string" and length > 0)
     elif $decision.finding_disposition == "merged" then
-      ($decision.decision_reason_code | merged_code) and ($decision.merged_into_finding_id | test("^finding-v1:sha256\\([0-9a-f]{64}\\)$"))
+      ($decision.decision_reason_code | merged_code) and
+      ($decision.merged_into_finding_id | test("^finding-v1:sha256\\([0-9a-f]{64}\\)$")) and
+      ($decision.merged_into_finding_id != $decision.finding_id) and
+      (any($decisions[]; .finding_disposition == "retained" and .finding_id == $decision.merged_into_finding_id) or
+        ($decision.merged_target_evidence_ref | type == "string" and length > 0))
     elif $decision.finding_disposition == "discarded" then
       ($decision.decision_reason_code | discarded_code)
     else false end))
