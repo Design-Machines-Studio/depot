@@ -893,6 +893,42 @@ mv "$TMP/availability.next" "$TMP/availability.json"
 run_role refusal plan-critic high --capability read-repository --capability structured-output
 assert jq -e '.fallback == true and .fallbackReason == "content-refusal" and .served.model == "deepseek/deepseek-v4-pro-0813"' "$TMP/refusal.receipt"
 
+# Standalone review coordination starts economically on Sol, while a bounded
+# design consultation uses native Fable once and falls back when exhausted.
+fixture healthy
+run_role review-coordinator review-coordinator medium --capability read-repository --capability long-context --capability structured-output
+assert jq -e '.served.model == "gpt-5.6-sol" and .served.transport == "codex-cli" and .normalizedEffort == "medium"' "$TMP/review-coordinator.receipt"
+run_role fable-design design-consultant medium --capability long-context --capability structured-output
+assert jq -e '.served.model == "fable" and .served.servedIdentity == "unknown" and .served.transport == "claude-cli" and (.attempts | length) == 1' "$TMP/fable-design.receipt"
+printf '%s\n' '{"model":"claude-fable-5"}' > "$TMP/fable-identity.json"
+MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/fable-identity.json" \
+  run_role fable-identity design-consultant medium --capability long-context --capability structured-output
+assert jq -e '.served.model == "fable" and .served.servedIdentity == "claude-fable-5"' "$TMP/fable-identity.receipt"
+printf '%s\n' '{"model":"claude-opus-5"}' > "$TMP/fable-substitution.json"
+MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/fable-substitution.json" \
+  run_role fable-substitution design-consultant medium --capability long-context --capability structured-output
+assert jq -e '.served.model == "gpt-5.6-sol" and .fallback == true and ([.attempts[] | select(.model == "fable" and .servedIdentity == "claude-opus-5" and .reason == "provider_model_substitution")] | length) == 1' "$TMP/fable-substitution.receipt"
+fixture fable-exhausted
+run_role fable-design-fallback design-consultant medium --capability long-context --capability structured-output
+assert jq -e '.served.model == "gpt-5.6-sol" and .fallback == true and ([.attempts[] | select(.model == "fable" and .outcome == "skipped")] | length) == 1' "$TMP/fable-design-fallback.receipt"
+
+mkdir -p "$TMP/profile-dispatch/.dm"
+git -C "$TMP/profile-dispatch" init -q
+printf '%s\n' '{"disabledCandidates":["opus"]}' > "$TMP/profile-dispatch/.dm/model-router.local.json"
+fixture healthy
+jq '.codex.state="unavailable" | .claude.state="ok" | .claude.authMode="subscription" | .openrouter.state="ok"' \
+  "$TMP/availability.json" > "$TMP/profile-dispatch-availability.json"
+(
+  cd "$TMP/profile-dispatch"
+  MODEL_ROUTER_AVAILABILITY_FILE="$TMP/profile-dispatch-availability.json" \
+    MODEL_ROUTER_TRANSPORT_STUB="$TMP/transport-stub" \
+    "$ROUTER" --workflow-kernel "$KERNEL" --role architect --effort medium \
+      --capability read-repository --capability long-context --capability structured-output \
+      --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+      --output-file "$TMP/profile-dispatch.out" --receipt-file "$TMP/profile-dispatch.receipt" >/dev/null
+)
+assert jq -e '.served.model == "qwen/qwen3.8-max" and .served.transport == "openrouter" and ([.attempts[].model] | index("opus") == null)' "$TMP/profile-dispatch.receipt"
+
 # Empty capability lists remain safe under nounset (including Bash 3.2).
 fixture healthy
 MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \

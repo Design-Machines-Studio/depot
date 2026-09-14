@@ -41,8 +41,9 @@ check 'driver policy retains the baseline and distinct specialist workers' jq -e
   .roles["review-fast"][0].model == "gpt-5.6-luna" and
   .roles["review-deep"][0].model == "gpt-5.6-terra"' "$POLICY"
 
-check 'demanding execution is medium while mechanical and security defaults stay distinct' jq -e '
-  all(.chunkKinds | to_entries[] | select(.key | IN("logic","ui","integration")); .value.executorEffort == "medium") and
+check 'settled UI uses Luna-high while unresolved deep work and mechanical defaults stay distinct' jq -e '
+  all(.chunkKinds | to_entries[] | select(.key | IN("logic","integration")); .value.executorEffort == "medium") and
+  .chunkKinds.ui.executorRole == "builder-fast" and .chunkKinds.ui.executorEffort == "high" and
   .chunkKinds.docs.executorEffort == "low" and
   .chunkKinds["mechanical-logic"].executorEffort == "medium" and
   .reviewRoles.security.effort == "high"' "$ROOT/plugins/pipeline/references/routing-policy.json"

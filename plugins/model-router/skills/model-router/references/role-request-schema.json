@@ -7,7 +7,7 @@
   "required": ["role", "capabilities", "effort", "workflowKernel", "promptFile", "outputFile", "receiptFile"],
   "properties": {
     "role": {
-      "enum": ["architect", "plan-critic", "builder-fast", "builder-deep", "review-fast", "review-deep", "security-review", "research-fast", "editorial"]
+      "enum": ["architect", "plan-critic", "builder-fast", "builder-deep", "review-fast", "review-deep", "review-coordinator", "security-review", "research-fast", "editorial", "design-consultant"]
     },
     "capabilities": {
       "type": "array",

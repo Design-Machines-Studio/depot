@@ -42,12 +42,14 @@ assert jq -e '
 ' "$SUITE"
 assert sh -c "[ \"\$('$RUNNER' --list | wc -l | tr -d ' ')\" = 18 ]"
 
-# role-policy.json is the sole role inventory authority. Every current role has
-# at least two distinct case IDs and task types; unknown suite roles are rejected.
+# Benchmark only the policy's established implementation/judgment roles. The
+# bounded human coordinator and one-question design consultation are exercised
+# by routing fixtures instead of creating a paid benchmark tournament.
 assert jq -n -e --slurpfile suite "$SUITE" --slurpfile policy "$ROLE_POLICY" '
-  ($policy[0].roles | keys | sort) as $policyRoles
+  ($policy[0].benchmarkRoles | sort) as $policyRoles
   | ($suite[0].cases | map(.role) | unique | sort) as $suiteRoles
   | $suiteRoles == $policyRoles
+  and (($policy[0].roles | keys) - $policy[0].benchmarkRoles | sort) == (["design-consultant","review-coordinator"] | sort)
   and all($policyRoles[]; . as $role
     | ($suite[0].cases | map(select(.role == $role))) as $cases
     | ($cases | length) >= 2

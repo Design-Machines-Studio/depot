@@ -50,7 +50,7 @@ while [ "$#" -gt 0 ]; do
   esac
 done
 
-case "$ROLE" in architect|plan-critic|builder-fast|builder-deep|review-fast|review-deep|security-review|research-fast|editorial) ;; *) usage ;; esac
+case "$ROLE" in architect|plan-critic|builder-fast|builder-deep|review-fast|review-deep|review-coordinator|security-review|research-fast|editorial|design-consultant) ;; *) usage ;; esac
 case "$EFFORT" in low|medium|high|max) ;; *) usage ;; esac
 case "$FORMAT" in markdown|json) ;; *) usage ;; esac
 [ -r "$POLICY" ] && [ ! -L "$POLICY" ] && jq -e '.schemaVersion == 1' "$POLICY" >/dev/null || usage
@@ -62,6 +62,29 @@ for capability in "${CAPABILITIES[@]}"; do
   case "$capability" in read-repository|write-repository|tool-use|browser|long-context|structured-output|independent-family) ;; *) usage ;; esac
   CAPABILITIES_JSON="$(printf '%s' "$CAPABILITIES_JSON" | jq -c --arg value "$capability" '. + [$value] | unique | sort')"
 done
+
+DISABLED_CANDIDATES='[]'
+common="$(git rev-parse --git-common-dir 2>/dev/null || true)"
+if [ -n "$common" ]; then
+  case "$common" in
+    /*) ;;
+    *) worktree_root="$(git rev-parse --show-toplevel 2>/dev/null || true)"; common="$worktree_root/$common" ;;
+  esac
+  common="$(cd "$common" 2>/dev/null && pwd -P || true)"
+  [ "${common##*/}" = .git ] || common=''
+  root="${common%/.git}"
+  profile="$root/.dm/model-router.local.json"
+  profile_parent="$(cd "$(dirname "$profile")" 2>/dev/null && pwd -P || true)"
+  if [ -f "$profile" ] && [ ! -L "$profile" ] &&
+     [ "$profile_parent" = "$root/.dm" ] &&
+     ! git -C "$root" ls-files --error-unmatch -- .dm/model-router.local.json >/dev/null 2>&1 &&
+     jq -e 'type == "object" and ((keys - ["allowPaidClaudeCredits","disabledCandidates"]) | length == 0) and
+       (.disabledCandidates == null or ((.disabledCandidates | type) == "array" and
+       (.disabledCandidates | length) <= 16 and (.disabledCandidates | length) == (.disabledCandidates | unique | length) and
+       all(.disabledCandidates[]; test("^[a-z0-9][a-z0-9./_-]{0,127}$"))))' "$profile" >/dev/null 2>&1; then
+    DISABLED_CANDIDATES="$(jq -c '.disabledCandidates // []' "$profile")"
+  fi
+fi
 
 if [ -n "$AVAILABILITY_FILE" ]; then
   [ -r "$AVAILABILITY_FILE" ] && [ ! -L "$AVAILABILITY_FILE" ] || usage
@@ -118,6 +141,10 @@ candidate_status() {
 CANDIDATES='[]'
 while IFS= read -r candidate; do
   [ -n "$candidate" ] || continue
+  candidate_model="$(printf '%s' "$candidate" | jq -r '.model')"
+  if printf '%s' "$DISABLED_CANDIDATES" | jq -e --arg value "$candidate_model" 'index($value) != null' >/dev/null; then
+    continue
+  fi
   if jq -en --argjson requested "$CAPABILITIES_JSON" --argjson candidate "$candidate" '
     ($requested - ["independent-family"]) as $needed
     | all($needed[]; . as $cap | $candidate.capabilities | index($cap) != null)
