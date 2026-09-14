@@ -34,11 +34,25 @@ case "$endpoint" in
     printf '%s\n' '[[{"id":201,"html_url":"https://github.com/acme/widget/pull/7#pullrequestreview-201","commit_id":"0000000000000000000000000000000000000000","state":"COMMENTED","user":{"login":"bot"},"submitted_at":"2026-09-13T00:00:00Z","body":"Review-body finding"}]]'
     ;;
   *issues/7/comments*) printf '%s\n' '[[]]' ;;
+  *commits/1111111111111111111111111111111111111111/check-suites?per_page=1*)
+    printf '{"total_count":%s,"check_suites":[]}\n' "${FAKE_CHECK_SUITE_COUNT:-1}"
+    ;;
+  *commits/1111111111111111111111111111111111111111/check-runs?filter=all\&per_page=100*)
+    if [ "${FAKE_CROSS_RUN:-0}" = 1 ]; then
+      printf '%s\n' '[{"check_runs":[{"id":302,"url":"https://api.github.com/repos/acme/widget/check-runs/302","html_url":"https://github.com/acme/widget/runs/302","details_url":"https://checks.example/302","name":"Macroscope","head_sha":"1111111111111111111111111111111111111111","status":"completed","conclusion":"success","started_at":"2026-09-14T00:02:00Z","completed_at":"2026-09-14T00:03:00Z","annotations_count":1,"output":{"title":"No issues identified","summary":"New rerun","text":""}},{"id":301,"url":"https://api.github.com/repos/acme/widget/check-runs/301","html_url":"https://github.com/acme/widget/runs/301","details_url":"https://checks.example/301","name":"Macroscope","head_sha":"1111111111111111111111111111111111111111","status":"completed","conclusion":"success","started_at":"2026-09-14T00:00:00Z","completed_at":"2026-09-14T00:01:00Z","annotations_count":1,"output":{"title":"No issues identified","summary":"Latest check is green","text":""}},{"id":300,"url":"https://api.github.com/repos/acme/widget/check-runs/300","html_url":"https://github.com/acme/widget/runs/300","details_url":"https://checks.example/300","name":"Macroscope","head_sha":"1111111111111111111111111111111111111111","status":"completed","conclusion":"failure","started_at":"2026-09-13T23:00:00Z","completed_at":"2026-09-13T23:01:00Z","annotations_count":0,"output":{"title":"Finding","summary":"Earlier rerun finding","text":""}}]}]'
+    else
+      printf '%s\n' '[{"check_runs":[{"id":301,"url":"https://api.github.com/repos/acme/widget/check-runs/301","html_url":"https://github.com/acme/widget/runs/301","details_url":"https://checks.example/301","name":"Macroscope","head_sha":"1111111111111111111111111111111111111111","status":"completed","conclusion":"success","started_at":"2026-09-14T00:00:00Z","completed_at":"2026-09-14T00:01:00Z","annotations_count":1,"output":{"title":"No issues identified","summary":"Latest check is green","text":""}},{"id":300,"url":"https://api.github.com/repos/acme/widget/check-runs/300","html_url":"https://github.com/acme/widget/runs/300","details_url":"https://checks.example/300","name":"Macroscope","head_sha":"1111111111111111111111111111111111111111","status":"completed","conclusion":"failure","started_at":"2026-09-13T23:00:00Z","completed_at":"2026-09-13T23:01:00Z","annotations_count":0,"output":{"title":"Finding","summary":"Earlier rerun finding","text":""}}]}]'
+    fi
+    ;;
   *commits/1111111111111111111111111111111111111111/check-runs*)
-    printf '%s\n' '[{"check_runs":[{"id":301,"url":"https://api.github.com/repos/acme/widget/check-runs/301","html_url":"https://github.com/acme/widget/runs/301","details_url":"https://checks.example/301","name":"Macroscope","head_sha":"1111111111111111111111111111111111111111","status":"completed","conclusion":"success","started_at":"2026-09-14T00:00:00Z","completed_at":"2026-09-14T00:01:00Z","annotations_count":1,"output":{"title":"No issues identified","summary":"Latest check is green","text":""}}]}]'
+    printf '%s\n' 'check-runs request omitted filter=all' >&2
+    exit 1
     ;;
   *check-runs/301/annotations*)
-    printf '%s\n' '[[{"check_run_id":301,"blob_href":"https://github.com/acme/widget/blob/111/a.go#L12","path":"a.go","start_line":12,"end_line":12,"start_column":1,"end_column":3,"annotation_level":"warning","title":"Finding","message":"Annotation finding","raw_details":"proof one"},{"check_run_id":301,"blob_href":"https://github.com/acme/widget/blob/111/a.go#L12","path":"a.go","start_line":12,"end_line":12,"start_column":4,"end_column":6,"annotation_level":"warning","title":"Finding","message":"Annotation finding","raw_details":"proof two"}]]'
+    printf '%s\n' '[[{"check_run_id":301,"blob_href":"https://github.com/acme/widget/blob/111/a.go#L12","path":"a.go","start_line":12,"end_line":12,"start_column":1,"end_column":3,"annotation_level":"warning","title":"Finding","message":"Annotation finding","raw_details":"proof one"},{"check_run_id":301,"blob_href":"https://github.com/acme/widget/blob/111/a.go#L12","path":"a.go","start_line":12,"end_line":12,"start_column":1,"end_column":3,"annotation_level":"warning","title":"Finding","message":"Annotation finding","raw_details":"proof one"},{"check_run_id":301,"blob_href":"https://github.com/acme/widget/blob/111/a.go#L12","path":"a.go","start_line":12,"end_line":12,"start_column":4,"end_column":6,"annotation_level":"warning","title":"Finding","message":"Annotation finding","raw_details":"proof two"}]]'
+    ;;
+  *check-runs/302/annotations*)
+    printf '%s\n' '[[{"check_run_id":302,"blob_href":"https://github.com/acme/widget/blob/111/a.go#L12","path":"a.go","start_line":12,"end_line":12,"start_column":1,"end_column":3,"annotation_level":"warning","title":"Finding","message":"Annotation finding","raw_details":"proof one"}]]'
     ;;
   *) printf 'unexpected endpoint: %s\n' "$endpoint" >&2; exit 1 ;;
 esac
@@ -51,11 +65,23 @@ assert jq -e '.collection_status == "complete" and .inspected_head == "111111111
 assert jq -e '.surfaces.inline_comments.status == "successful" and (.surfaces.inline_comments.items | length) == 2' "$OUT"
 assert jq -e '.surfaces.conversation_comments.status == "successful" and (.surfaces.conversation_comments.items | length) == 0' "$OUT"
 assert jq -e '.surfaces.submitted_reviews.items[0].body.text == "Review-body finding"' "$OUT"
-assert jq -e '[.surfaces.checks.items[].source_id | select(startswith("github:check-annotation:301:"))] | length == 2 and length == (unique | length)' "$OUT"
+assert jq -e '[.surfaces.checks.items[].source_id | select(startswith("github:check-annotation:301:"))] | length == 3 and length == (unique | length)' "$OUT"
 assert jq -e '[.surfaces.inline_comments.items[].source_commit] | index("0000000000000000000000000000000000000000") != null' "$OUT"
 assert jq -e '.surfaces.inline_comments.items[1].body.text == "No longer relevant" and .surfaces.inline_comments.items[1].location.line == 4' "$OUT"
 assert jq -e '.surfaces.checks.items[] | select(.source_id == "github:check-summary:301") | .conclusion == "success"' "$OUT"
+assert jq -e '.surfaces.checks.items[] | select(.source_id == "github:check-summary:300") | .conclusion == "failure"' "$OUT"
 assert test ! -e "$UNTRUSTED_SENTINEL"
+
+FAKE_CROSS_RUN=1 DM_REVIEW_TEST_MODE=1 DM_REVIEW_TEST_GH_BIN="$FAKE_GH" "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/cross-run.json" >/dev/null
+assert test "$(jq -S '[.surfaces.checks.items[] | select(.source_id | startswith("github:check-annotation:301:")) | .source_id]' "$OUT")" = "$(jq -S '[.surfaces.checks.items[] | select(.source_id | startswith("github:check-annotation:301:")) | .source_id]' "$TMP/cross-run.json")"
+assert jq -e '[.surfaces.checks.items[] | select(.source_id | startswith("github:check-annotation:302:")) | .source_id] as $ids | ($ids | length) == 1 and ($ids[0] | endswith(":0"))' "$TMP/cross-run.json"
+
+set +e
+FAKE_CHECK_SUITE_COUNT=2 DM_REVIEW_TEST_MODE=1 DM_REVIEW_TEST_MAX_CHECK_SUITES=1 DM_REVIEW_TEST_GH_BIN="$FAKE_GH" "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/suite-cap.json" >/dev/null
+status=$?
+set -e
+assert test "$status" -ne 0
+assert jq -e '.collection_status == "partial" and .surfaces.checks.status == "partial" and (.gaps | index("checks:partial") != null)' "$TMP/suite-cap.json"
 
 # One surface fails after another succeeded: the aggregate is partial, not empty.
 sed 's#\*issues/7/comments\*) printf.*#*issues/7/comments*) printf '\''partial page'\''; exit 1 ;;#' "$FAKE_GH" > "$TMP/gh-partial"
@@ -91,21 +117,24 @@ cat > "$TMP/decisions.json" <<'JSON'
   {"source_id":"github:inline-comment:101","candidate_source_finding_ids":["external-1"],"rationale":"Distinct finding claim."},
   {"source_id":"github:inline-comment:102","candidate_source_finding_ids":["external-2"],"rationale":"Distinct finding claim despite metadata."},
   {"source_id":"github:submitted-review:201","candidate_source_finding_ids":["external-3"],"rationale":"Review-body finding."},
+  {"source_id":"github:check-summary:300","candidate_source_finding_ids":[],"rationale":"Historical check summary retained by the all-runs request."},
   {"source_id":"github:check-summary:301","candidate_source_finding_ids":[],"rationale":"Status summary, not a finding."},
   {"source_id":"ANNOTATION_SOURCE_ID_1","candidate_source_finding_ids":["external-3"],"rationale":"Duplicate claim from another surface."},
-  {"source_id":"ANNOTATION_SOURCE_ID_2","candidate_source_finding_ids":["external-3"],"rationale":"Distinct annotation evidence with the same message."}
+  {"source_id":"ANNOTATION_SOURCE_ID_2","candidate_source_finding_ids":["external-3"],"rationale":"Repeated byte-identical annotation retained with a stable occurrence ID."},
+  {"source_id":"ANNOTATION_SOURCE_ID_3","candidate_source_finding_ids":["external-3"],"rationale":"Distinct annotation evidence with the same message."}
 ],"decisions":[
   {"source_finding_id":"external-1","source_ids":["github:inline-comment:101"],"finding_id":"finding-v1:sha256(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)","finding_disposition":"retained","decision_reason_code":"retained-unique","evidence_ref":"intake.json#/surfaces/inline_comments/items/0","current_head_evidence_ref":"a.go:test","repair_ref":"todos/001-pending-p2-example.md","rationale":"Earlier-commit claim reproduces at current head."},
   {"source_finding_id":"external-2","source_ids":["github:inline-comment:102"],"finding_id":"finding-v1:sha256(bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb)","finding_disposition":"discarded","decision_reason_code":"superseded-by-stronger-evidence","evidence_ref":"intake.json#/surfaces/inline_comments/items/1","current_head_evidence_ref":"b.go:test-fixed","rationale":"Current-head proof shows the claim is already fixed; metadata alone was not used."},
-  {"source_finding_id":"external-3","source_ids":["github:submitted-review:201","ANNOTATION_SOURCE_ID_1","ANNOTATION_SOURCE_ID_2"],"finding_id":"finding-v1:sha256(cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc)","finding_disposition":"merged","decision_reason_code":"same-root-cause-merge","merged_into_finding_id":"finding-v1:sha256(dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)","merged_target_evidence_ref":"synthesis-decisions.json#/decisions/lane-finding","evidence_ref":"intake.json#/surfaces/submitted_reviews/items/0","current_head_evidence_ref":"a.go:test","rationale":"Same root cause and location as the retained lane finding."}
+  {"source_finding_id":"external-3","source_ids":["github:submitted-review:201","ANNOTATION_SOURCE_ID_1","ANNOTATION_SOURCE_ID_2","ANNOTATION_SOURCE_ID_3"],"finding_id":"finding-v1:sha256(cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc)","finding_disposition":"merged","decision_reason_code":"same-root-cause-merge","merged_into_finding_id":"finding-v1:sha256(dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd)","merged_target_evidence_ref":"synthesis-decisions.json#/decisions/lane-finding","evidence_ref":"intake.json#/surfaces/submitted_reviews/items/0","current_head_evidence_ref":"a.go:test","rationale":"Same root cause and location as the retained lane finding."}
 ]}
 JSON
 cutoff="$(jq -r '.collection_cutoff' "$OUT")"
 annotation_source_id_1="$(jq -r '[.surfaces.checks.items[] | select(.source_id | startswith("github:check-annotation:301:"))][0].source_id' "$OUT")"
 annotation_source_id_2="$(jq -r '[.surfaces.checks.items[] | select(.source_id | startswith("github:check-annotation:301:"))][1].source_id' "$OUT")"
+annotation_source_id_3="$(jq -r '[.surfaces.checks.items[] | select(.source_id | startswith("github:check-annotation:301:"))][2].source_id' "$OUT")"
 sed "s/CUT_OFF/$cutoff/" "$TMP/decisions.json" > "$TMP/decisions.next.json"
 mv "$TMP/decisions.next.json" "$TMP/decisions.json"
-sed "s#ANNOTATION_SOURCE_ID_1#$annotation_source_id_1#g; s#ANNOTATION_SOURCE_ID_2#$annotation_source_id_2#g" "$TMP/decisions.json" > "$TMP/decisions.next.json"
+sed "s#ANNOTATION_SOURCE_ID_1#$annotation_source_id_1#g; s#ANNOTATION_SOURCE_ID_2#$annotation_source_id_2#g; s#ANNOTATION_SOURCE_ID_3#$annotation_source_id_3#g" "$TMP/decisions.json" > "$TMP/decisions.next.json"
 mv "$TMP/decisions.next.json" "$TMP/decisions.json"
 assert "$SETTLEMENT" --intake "$OUT" --decisions "$TMP/decisions.json" --current-head 1111111111111111111111111111111111111111
 jq '.decisions[1].decision_reason_code = "agent-findings-cap"' "$TMP/decisions.json" > "$TMP/capped.json"

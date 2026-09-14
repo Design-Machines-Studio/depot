@@ -17,10 +17,14 @@ REPOSITORY=""
 PR_NUMBER=""
 OUTPUT_FILE=""
 MAX_ITEMS=2000
+MAX_CHECK_SUITES=1000
 MAX_BODY_BYTES=32768
 MAX_BODY_CHARS=8192
 if [ "${DM_REVIEW_TEST_MODE:-0}" = 1 ] && printf '%s' "${DM_REVIEW_TEST_MAX_ITEMS:-}" | grep -Eq '^[1-9][0-9]*$' && [ "$DM_REVIEW_TEST_MAX_ITEMS" -le 2000 ]; then
   MAX_ITEMS="$DM_REVIEW_TEST_MAX_ITEMS"
+fi
+if [ "${DM_REVIEW_TEST_MODE:-0}" = 1 ] && printf '%s' "${DM_REVIEW_TEST_MAX_CHECK_SUITES:-}" | grep -Eq '^[1-9][0-9]*$' && [ "$DM_REVIEW_TEST_MAX_CHECK_SUITES" -le 1000 ]; then
+  MAX_CHECK_SUITES="$DM_REVIEW_TEST_MAX_CHECK_SUITES"
 fi
 
 usage() {
@@ -108,7 +112,16 @@ fetch_pages() {
 fetch_pages inline "repos/$REPOSITORY/pulls/$PR_NUMBER/comments?per_page=100" arrays
 fetch_pages reviews "repos/$REPOSITORY/pulls/$PR_NUMBER/reviews?per_page=100" arrays
 fetch_pages conversation "repos/$REPOSITORY/issues/$PR_NUMBER/comments?per_page=100" arrays
-fetch_pages checks "repos/$REPOSITORY/commits/$INSPECTED_HEAD/check-runs?per_page=100" check_runs
+CHECK_SUITE_STATUS=successful
+CHECK_SUITE_COUNT=0
+if ! "$GH_BIN" api "repos/$REPOSITORY/commits/$INSPECTED_HEAD/check-suites?per_page=1" > "$TMP/check-suites.json" 2> "$TMP/check-suites.err"; then
+  CHECK_SUITE_STATUS=failed
+elif ! jq -e '.total_count | type == "number" and . >= 0 and floor == .' "$TMP/check-suites.json" >/dev/null 2>&1; then
+  CHECK_SUITE_STATUS=failed
+else
+  CHECK_SUITE_COUNT="$(jq -r '.total_count' "$TMP/check-suites.json")"
+fi
+fetch_pages checks "repos/$REPOSITORY/commits/$INSPECTED_HEAD/check-runs?filter=all&per_page=100" check_runs
 
 printf '[]\n' > "$TMP/annotations.items.json"
 ANNOTATION_STATUS=successful
@@ -174,10 +187,12 @@ jq --argjson max_body "$MAX_BODY_BYTES" --argjson max_chars "$MAX_BODY_CHARS" "$
   "$TMP/checks.items.json" > "$TMP/checks.normalized.json"
 
 jq --argjson max_body "$MAX_BODY_BYTES" --argjson max_chars "$MAX_BODY_CHARS" --slurpfile checks "$TMP/checks.items.json" "$body_expr
-  [ to_entries[] | .value as \$a |
+  . as \$annotations | [ to_entries[] | .key as \$index | .value as \$a |
     (\$checks[0] | map(select(.id == (\$a.check_run_id // -1))) | first) as \$check |
+    ([\$a.path,\$a.start_line,\$a.end_line,\$a.start_column,\$a.end_column,\$a.title,\$a.message,\$a.annotation_level,\$a.raw_details] | @json | @base64) as \$identity |
+    (\$annotations[0:\$index] | map(select(.check_run_id == \$a.check_run_id) | [.path,.start_line,.end_line,.start_column,.end_column,.title,.message,.annotation_level,.raw_details] | @json | @base64) | map(select(. == \$identity)) | length) as \$occurrence |
     {source_id:(\"github:check-annotation:\" + ((\$a.check_run_id // 0)|tostring) + \":\" +
-      ([\$a.path,\$a.start_line,\$a.end_line,\$a.start_column,\$a.end_column,\$a.title,\$a.message,\$a.annotation_level,\$a.raw_details] | @json | @base64)),
+      \$identity + \":\" + (\$occurrence | tostring)),
      github_id:(\$a.check_run_id // null),url:(\$a.blob_href // \$check.url),
      source_commit:(\$check.head_sha // null),check_name:(\$check.name // null),path:\$a.path,
      location:{start_line:\$a.start_line,end_line:\$a.end_line,start_column:\$a.start_column,end_column:\$a.end_column},
@@ -193,6 +208,8 @@ INLINE_STATUS="$(cat "$TMP/inline.status")"
 REVIEWS_STATUS="$(cat "$TMP/reviews.status")"
 CONVERSATION_STATUS="$(cat "$TMP/conversation.status")"
 CHECKS_STATUS="$(cat "$TMP/checks.status")"
+[ "$CHECK_SUITE_STATUS" = successful ] || CHECKS_STATUS=partial
+[ "$CHECK_SUITE_COUNT" -le "$MAX_CHECK_SUITES" ] || CHECKS_STATUS=partial
 [ "$ANNOTATION_STATUS" = successful ] || CHECKS_STATUS=partial
 
 for pair in "inline:$TMP/inline.normalized.json" "reviews:$TMP/reviews.normalized.json" "conversation:$TMP/conversation.normalized.json" "checks:$TMP/checks.normalized.json" "annotations:$TMP/annotations.normalized.json"; do
