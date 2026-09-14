@@ -56,6 +56,7 @@ as optional P3 debt.
    - PR number or URL: review that pull request
    - Branch name: review that branch vs main
    - File path: review that specific file or directory
+   A PR (including one unambiguous branch association) requires Phase 1b intake.
 5. Dispatch the two core lanes plus applicable existing UI/build/domain verification lanes
 6. Output the unified review report with the standard merge recommendation,
    followed by this invocation's one terminal operator report

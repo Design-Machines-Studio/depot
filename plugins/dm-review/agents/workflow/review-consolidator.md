@@ -47,6 +47,10 @@ You receive the raw output from every review agent that ran. Each agent's output
 
 Some depot-native agents (a11y-html-reviewer, a11y-css-reviewer, css-reviewer, voice-editor, governance-domain) use their own output formats. Normalize them into the P1/P2/P3 system using the severity mapping.
 
+For a PR review, external source decisions join the ordinary identity,
+deduplication, severity, and synthesis process without invented lane or model
+provenance.
+
 Agents now run under a hard tool-call budget and emit a fixed ledger block plus `NOT-COVERED:` and `COMMANDS-RUN:` sections. Fold each agent's `NOT-COVERED:` lines into the report's Coverage Gaps section (Step 5.5) so a capped or partial run never reads as full coverage.
 
 ## Dead / Missing Agent Handling
@@ -69,6 +73,9 @@ Extract every finding from every agent. For each finding, record:
 - Description
 - Reference (OWASP, WCAG, pattern name, etc.)
 - The evidence text and a `raw_ref` into the untouched reviewer artifact
+
+Also collect every host-selected external candidate with its immutable intake
+reference; each actual claim receives a decision.
 
 Merge findings from every completed selected lane before applying severity
 mapping; a finding from any lane is in-scope unless direct code evidence at HEAD
