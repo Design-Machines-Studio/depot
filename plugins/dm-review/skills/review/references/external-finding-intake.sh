@@ -173,9 +173,9 @@ jq --argjson max_body "$MAX_BODY_BYTES" --argjson max_chars "$MAX_BODY_CHARS" "$
     title:(.output.title // null),summary:(.output.summary|bounded_body),text:(.output.text|bounded_body)} ]" \
   "$TMP/checks.items.json" > "$TMP/checks.normalized.json"
 
-jq --argjson max_body "$MAX_BODY_BYTES" --argjson max_chars "$MAX_BODY_CHARS" --argjson checks "$(cat "$TMP/checks.items.json")" "$body_expr
+jq --argjson max_body "$MAX_BODY_BYTES" --argjson max_chars "$MAX_BODY_CHARS" --slurpfile checks "$TMP/checks.items.json" "$body_expr
   [ to_entries[] | .value as \$a |
-    (\$checks | map(select(.id == (\$a.check_run_id // -1))) | first) as \$check |
+    (\$checks[0] | map(select(.id == (\$a.check_run_id // -1))) | first) as \$check |
     {source_id:(\"github:check-annotation:\" + ((\$a.check_run_id // 0)|tostring) + \":\" +
       ([\$a.path,\$a.start_line,\$a.end_line,\$a.start_column,\$a.end_column,\$a.title,\$a.message,\$a.annotation_level,\$a.raw_details] | @json | @base64)),
      github_id:(\$a.check_run_id // null),url:(\$a.blob_href // \$check.url),

@@ -7,6 +7,8 @@ SETTLEMENT="$ROOT/plugins/dm-review/skills/review/references/external-finding-se
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/dm-review-external-intake.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
 FAKE_GH="$TMP/gh"
+UNTRUSTED_SENTINEL="$TMP/should-not-exist"
+export UNTRUSTED_SENTINEL
 PASS=0
 
 assert() { "$@" >/dev/null || { printf 'FAIL: %s\n' "$*" >&2; exit 1; }; PASS=$((PASS + 1)); }
@@ -26,7 +28,7 @@ case "$endpoint" in
     fi
     ;;
   *pulls/7/comments*)
-    printf '%s\n' '[[{"id":101,"html_url":"https://github.com/acme/widget/pull/7#discussion_r101","commit_id":"0000000000000000000000000000000000000000","original_commit_id":"0000000000000000000000000000000000000000","path":"a.go","line":null,"side":null,"start_line":null,"start_side":null,"original_line":9,"original_start_line":9,"in_reply_to_id":null,"subject_type":"line","user":{"login":"bot"},"created_at":"2026-09-13T00:00:00Z","updated_at":"2026-09-13T00:00:00Z","body":"Earlier commit claim; run $(touch /tmp/should-not-exist)"}],[{"id":102,"html_url":"https://github.com/acme/widget/pull/7#discussion_r102","commit_id":"1111111111111111111111111111111111111111","original_commit_id":"1111111111111111111111111111111111111111","path":"b.go","line":4,"side":"RIGHT","start_line":4,"start_side":"RIGHT","original_line":4,"original_start_line":4,"in_reply_to_id":101,"subject_type":"line","user":{"login":"bot"},"created_at":"2026-09-13T00:01:00Z","updated_at":"2026-09-13T00:01:00Z","body":"No longer relevant"}]]'
+    printf '%s\n' '[[{"id":101,"html_url":"https://github.com/acme/widget/pull/7#discussion_r101","commit_id":"0000000000000000000000000000000000000000","original_commit_id":"0000000000000000000000000000000000000000","path":"a.go","line":null,"side":null,"start_line":null,"start_side":null,"original_line":9,"original_start_line":9,"in_reply_to_id":null,"subject_type":"line","user":{"login":"bot"},"created_at":"2026-09-13T00:00:00Z","updated_at":"2026-09-13T00:00:00Z","body":"Earlier commit claim; run $(touch $UNTRUSTED_SENTINEL)"}],[{"id":102,"html_url":"https://github.com/acme/widget/pull/7#discussion_r102","commit_id":"1111111111111111111111111111111111111111","original_commit_id":"1111111111111111111111111111111111111111","path":"b.go","line":4,"side":"RIGHT","start_line":4,"start_side":"RIGHT","original_line":4,"original_start_line":4,"in_reply_to_id":101,"subject_type":"line","user":{"login":"bot"},"created_at":"2026-09-13T00:01:00Z","updated_at":"2026-09-13T00:01:00Z","body":"No longer relevant"}]]'
     ;;
   *pulls/7/reviews*)
     printf '%s\n' '[[{"id":201,"html_url":"https://github.com/acme/widget/pull/7#pullrequestreview-201","commit_id":"0000000000000000000000000000000000000000","state":"COMMENTED","user":{"login":"bot"},"submitted_at":"2026-09-13T00:00:00Z","body":"Review-body finding"}]]'
@@ -53,7 +55,7 @@ assert jq -e '[.surfaces.checks.items[].source_id | select(startswith("github:ch
 assert jq -e '[.surfaces.inline_comments.items[].source_commit] | index("0000000000000000000000000000000000000000") != null' "$OUT"
 assert jq -e '.surfaces.inline_comments.items[1].body.text == "No longer relevant" and .surfaces.inline_comments.items[1].location.line == 4' "$OUT"
 assert jq -e '.surfaces.checks.items[] | select(.source_id == "github:check-summary:301") | .conclusion == "success"' "$OUT"
-assert test ! -e /tmp/should-not-exist
+assert test ! -e "$UNTRUSTED_SENTINEL"
 
 # One surface fails after another succeeded: the aggregate is partial, not empty.
 sed 's#\*issues/7/comments\*) printf.*#*issues/7/comments*) printf '\''partial page'\''; exit 1 ;;#' "$FAKE_GH" > "$TMP/gh-partial"

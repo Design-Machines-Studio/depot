@@ -28,8 +28,9 @@ The helper independently paginates inline comments/replies, submitted review
 bodies, conversation comments, head check summaries/annotations, and PR-body
 receipt evidence. It preserves bounded claims, GitHub IDs/URLs, source commits,
 locations, and timestamps. Each surface is `successful`, `failed`, `partial`,
-or `truncated`; successful empty differs from unavailable. Any incomplete
-surface is one external-coverage gap but does not stop ordinary diff review.
+`truncated`, or `not_attempted`; the last means PR metadata was unavailable.
+Successful empty differs from unavailable. Any incomplete surface is one
+external-coverage gap but does not stop ordinary diff review.
 
 For a branch, use authenticated `gh pr list --head <branch>` and intake one
 unambiguous open PR. With none, report `not applicable -- no associated PR`
