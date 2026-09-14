@@ -19,6 +19,9 @@ advisory is forbidden.
 
 The default convergence path is one repair batch followed by one affected-lane recheck. Repeat broad review only when the original required review was incomplete or the repair changed a real sensitive boundary.
 
+For a PR, preserve external evidence through repair/recheck without adding a
+lane or duplicate repair.
+
 ## Arguments
 
 Parse the argument string for flags and pass-through values:
@@ -327,7 +330,10 @@ and the per-pass receipt fields.
 ### 2.5 Terminal Model Report
 
 Every `STOP` in the loop exits model-dependent work into this terminal sequence;
-it does not bypass reporting or cleanup. After the final clean, findings-
+it does not bypass reporting or cleanup. For a PR, every `STOP` first completes
+Phase 1b settlement; changed/incomplete evidence yields `REVIEW INCOMPLETE`.
+Run `/dm-review-fix` and its affected-lane verification for retained deltas
+before settling the disposition. After the final clean, findings-
 remaining, stalled, failed, blocked, or stopped disposition is settled, load
 model-router's `terminal-report-contract.md` and render exactly once from the
 loop-private ordered index to `<exact-run-root>/review/model-cost-report.json`

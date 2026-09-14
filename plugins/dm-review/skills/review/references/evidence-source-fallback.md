@@ -1,11 +1,11 @@
 # Evidence source fallback
 
-Loaded at Phase 1b only when reviewer threads and PR comments come back empty,
-or no PR exists. A review whose PR threads already yielded evidence never loads
-this file.
+Loaded at Phase 1b after the independent external-finding intake when no prior
+evidence was found, or when no PR exists. It supplements GitHub surface intake;
+it never replaces it.
 
-**Absence of threads is never absence of findings.** When reviewer threads and
-PR comments come back empty, or no PR exists, fall through these in order and
+**Absence of threads is never absence of findings.** When the complete PR
+surface intake found no candidate evidence, or no PR exists, fall through these in order and
 use the first that yields evidence: (1) **checked-in receipts** --
 `plans/*/receipt.md`, Auth Boundary Map receipts in the PR body or `docs/`,
 JSON and screenshot receipts under `.claude/ux-review/`; (2) **merge-commit

@@ -70,6 +70,8 @@ keep every retained finding in the repair queue.
 **Agents Launched:** X of Y applicable
 **Lanes:** architecture/review-deep/reviewer-a: ran | security/security-review/reviewer-b: fallback | second-perspective/plan-critic/reviewer-c: unavailable
 **Evidence source:** PR threads | receipts | merge bodies | closed issues | verification files | none found
+**External findings:** N considered; N retained, N merged, N discarded | not applicable -- no associated PR | incomplete -- <gap>
+**External evidence:** `.claude/ux-review/external-finding-decisions-<run-id>.json` (head `<sha>`, cutoff `<timestamp>`)
 
 ---
 
@@ -142,6 +144,9 @@ evidence, source severity, disposition, closed
 severity disagreement, show every source severity, the chosen severity, and why
 the selected evidence outranks the alternatives.
 Contradictions and discarded positions remain visible.
+
+External rows show stable GitHub IDs/URLs, omit invented model provenance, and
+link the detailed decision artifact instead of repeating bodies.
 
 If there are zero raw findings, emit `Synthesis Decisions: none -- no source
 findings required a decision.` The section is still required.

@@ -113,37 +113,22 @@ if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrou
 
 The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file, writes a schema-bound `run-cost-summary.json` beside that run's `authoritative-receipts.json`, and appends exactly one receipt line -- the artifact path, or `run-cost-summary: skipped (<reason>)` on any internal failure. It is observation-only: it exits 0 for every measurement outcome, never gates or alters a review, lane, or phase outcome, and its absence never fails one. Exit 6 (receipt write failed after acceptance) appends `skipped (receipt-write-failed)` through the status-aware `||` fallback; exit 2 is an invalid invocation and propagates; any other non-zero status appends `skipped (kernel-unresolvable)`, and a failing final append keeps its own status visible. A refused symlinked receipt path still exits 0 and reports on stderr alone -- a non-zero exit would append through the symlink just refused. Receipt paths are fixed per directory, so concurrent runs sharing one directory overwrite each other: use the invocation's exact-owned root or serialize callers that intentionally share a documented deliverable directory. Pass a coherent installed bundle's matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; an unreadable or invalid matrix emits one stderr line, skips imputation, and never fails the emission. Populate events with `record-attempt` as each lane settles -- a standalone `--append-to` translator double-counts the attempt, and `lanes: 0` after a run that executed lanes means this boundary is not wired. Full flags: `cli-measurement-commands.md`; otherwise the flags named here are the complete required set.
 
-At the same terminal boundary and before private receipt cleanup, materialize
-`<exact-run-root>/review/observation-index-input.json` per Workflow Kernel's
-`observation-index-contract.md`. Use explicit `producer.name: dm-review` and
-bind its `source_digest` to the terminal review receipt with `role: producer`.
-Reference the request, lifecycle, authoritative receipts, attempts, metrics,
-cost, verification, installed-bundle resolutions, and canonical finding
-contribution coverage with digests, sizes, media types, provenance, and
-freshness. A complete run binds the contribution coverage receipt. A partial
-run binds only valid existing evidence and marks missing lanes, browser cases,
-contributions, candidates, token counters, or cost unavailable. Raw findings,
-reviewer output, transcripts, provider payloads, and artifact content remain
-reference-bound.
-
-Use the already validated exact-owned run ID in the durable filename. Never
-select an existing file by recency or reuse another run's companion. Then
-invoke the shared command exactly once:
+Before private cleanup, materialize `observation-index-input.json` per
+`observation-index-contract.md`, with `producer.name: dm-review` and the
+terminal `role: producer` digest. Reference all run evidence by digest. Complete
+runs bind contribution coverage; partial runs mark missing evidence unavailable.
+Raw findings, transcripts, payloads, and artifact content remain reference-bound.
+Use the validated exact-owned run ID, never a latest file, and invoke once:
 
 ```text
 "$WORKFLOW_KERNEL" emit-observation-index --input <exact-run-root>/review/observation-index-input.json --output .claude/ux-review/observation-index-<run-id>.json
 ```
 
-Record the durable accepted path plus canonical digest in `run-receipt.md` and
-the complete report. On failure, record exactly one closed unavailable reason
-(`invalid-or-unsafe-input`, `runtime-unavailable`, `write-conflict`, or
-`emission-failed`) in `run-receipt.md` only. Do not repeat it per lane or phase,
-add it to the complete report, or include it in the normal compact chat
-handoff. Surface the closed reason only when the user requests observability
-diagnostics or when the index itself is the required deliverable. Phase 8
-preserves the accepted index beside `report.md` and removes its private input
-with the exact-owned root. This observation cannot change findings, coverage,
-recommendation, cleanup, completion, or the merge recommendation.
+Record the durable accepted path/digest. Failure records one closed reason in
+`run-receipt.md` only, never per lane or phase or in the normal compact chat
+handoff; expose it only for requested observability diagnostics. Phase 8 preserves
+the accepted index and removes its private input. Observation never changes the
+review result.
 
 If this review creates any Docker/Compose resource, load `${CLAUDE_SKILL_DIR}/references/review-docker-create.md` and follow it exactly.
 
@@ -165,11 +150,8 @@ Execute in order; do not skip. Majors are 1--8; lettered sub-phases run in seque
 ### Phase 1: Target Detection
 
 First parse optional paired `--base-commit <sha>` and `--head-commit <sha>`
-arguments. When neither is supplied, use ordinary detection below. Reject
-partial or invalid ranges without fallback. For a range, set `REVIEW_ROOT` to
-the supplied physical repository root and bind the commit variables literally.
-Choose fresh absolute `REVIEW_DIFF_FILE` and `REVIEW_FILES_FILE` paths under
-this run's owned output directory, then run:
+values; reject partial/invalid ranges. Only when the complete pair is supplied,
+bind the physical `REVIEW_ROOT`, literal commits, and fresh owned paths, then run:
 
 ```bash
 # exact-review-range:start
@@ -186,19 +168,24 @@ git -C "$REVIEW_ROOT" diff --name-only "$REVIEW_BASE_COMMIT..$REVIEW_HEAD_COMMIT
 ```
 
 Use those exact files for changed-file discovery, lane triggers, reviewer
-prompts and receipts. Record both commits and skip ordinary detection.
-Empty diff: stop. All review gates still apply.
+prompts and receipts; record both commits and skip ordinary detection. Empty
+diff stops after all gates.
 
-Determine changed files; try in order: (1) PR number/URL given: `gh pr diff <number>`; (2) feature branch: `git diff main...HEAD --name-only`; (3) uncommitted: `git diff --name-only` + `git diff --cached --name-only`; (4) path given: use it. Store changed files and extensions; if none, tell the user and stop. Also capture the full diff (`git diff main...HEAD` or matching command) for the agents.
+Otherwise detect in order: PR, branch vs main, staged/unstaged, then supplied
+path. Capture the changed files and full matching diff; stop if empty.
 
 ---
 
-### Phase 1b: Evidence Source Fallback
+### Phase 1b: External Finding Intake and Evidence Fallback
 
-**Absence of threads is never absence of findings.** When reviewer threads and
-PR comments come back empty, or no PR exists, load
+For every PR-scoped full or quick review, when the target has one PR, load
+`${CLAUDE_SKILL_DIR}/references/external-finding-intake.md` before dispatch and
+follow its host-owned collection, decision, repair, and settlement contract.
+For a branch without one unambiguous PR, record that scope and continue.
+
+When prior evidence is empty or no PR exists, load
 `${CLAUDE_SKILL_DIR}/references/evidence-source-fallback.md` and walk its
-ordered sources. Record the source in the report header:
+ordered repository-history sources. Record the source in the report header:
 
 ```text
 **Evidence source:** PR threads | receipts | merge bodies | closed issues | verification files | none found
@@ -313,6 +300,9 @@ DM_REVIEW_REQUIRED_ASSETS=(
   "skills/review/references/ui-review-contract.sh"
   "skills/review/references/ui-case-selection.md"
   "skills/review/references/browser-evidence-packet.sh"
+  "skills/review/references/external-finding-intake.md"
+  "skills/review/references/external-finding-intake.sh"
+  "skills/review/references/external-finding-settlement.sh"
 )
 ACCESSIBILITY_REQUIRED_ASSETS=()
 LIVE_WIRES_REQUIRED_ASSETS=()
@@ -576,6 +566,9 @@ identity only for the terminal operator report.
 
 After all agents complete, synthesize findings into the unified report.
 
+For a PR review, consolidate Phase 1b external candidates under that contract;
+they use ordinary identities, decisions, severities, and repairs, not a lane.
+
 #### Output guardrails (apply first)
 
 Per `${CLAUDE_SKILL_DIR}/references/guardrails.md`: (1) **Structure check** -- each agent output carries severity classifications (P0/P1/P2/P3 or Critical/Serious/Moderate) or a no-findings indicator; flag malformed outputs. (2) **Ghost file check** -- discard findings referencing files not in the changed list. (3) **Findings cap** -- >25 findings from one agent truncates to top 25 by severity. (4) **Failure summary** -- timeouts, errors, and empty returns are recorded in the Agent Summary table.
@@ -664,6 +657,9 @@ Skip in Quick mode. Determine ai-memory availability from the callable-tool inve
 
 ### Phase 7c: Terminal Model Report Boundary
 
+For a PR review, complete Phase 1b's one refresh and settlement before terminal
+reporting; incomplete coverage or a changed head yields `REVIEW INCOMPLETE`.
+
 All lane execution, consolidation, tracking, optional repair verification, and
 final disposition must be settled before this phase. When
 `terminalModelReportOwner` is `dm-review`, load model-router's
@@ -704,7 +700,8 @@ Never delete the feature branch under review. There is no condition under which 
 For a standalone owner, preserve the already-generated JSON and Markdown beside
 `run-cost-summary.json` while cleaning its private receipts. In every mode,
 preserve the accepted `.claude/ux-review/observation-index-<run-id>.json`
-companion. For an enclosing
+companion. A PR review also preserves its bounded external intake and decision
+artifacts. For an enclosing
 owner, defer only that owner's exact private router directory and index; the
 enclosing workflow removes them after its one terminal render.
 
