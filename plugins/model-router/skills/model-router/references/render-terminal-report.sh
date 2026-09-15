@@ -177,7 +177,7 @@ if ! jq -S -s \
     . as $value
     | if type == "string" and (["valid-provider-failure","missing",
         "malformed-or-unsupported","publication-failed","preservation-failed",
-        "adapter-local-rejection","not-requested","unavailable"] | index($value) != null)
+        "adapter-local-rejection","valid-provider-success","not-requested","unavailable"] | index($value) != null)
       then . else "unavailable" end;
   def safe_failure_kind:
     . as $value
@@ -248,13 +248,13 @@ if ! jq -S -s \
     | (($usage.input_tokens // $usage.prompt_tokens // null) | nonnegative_integer) as $input
     | (($usage.output_tokens // $usage.completion_tokens // null) | nonnegative_integer) as $output
     | (($usage.total_tokens // null) | nonnegative_integer) as $total
-    | if $e.status == "valid-provider-failure" and $total != null then
+    | if ($e | type) == "object" and ($e | valid_provider_failure) and $total != null then
         {input:$input, output:$output, total:$total, status:"provider-reported", provenance:"provider-receipt"}
       else {input:null,output:null,total:null,status:"unavailable",provenance:"unavailable"} end;
   def failure_billed_cost($attempt):
     ($attempt.providerFailureEvidence // {}) as $e
     | ($e.billedCostUsd | nonnegative_number) as $usd
-    | if $e.status == "valid-provider-failure" and $usd != null then
+    | if ($e | type) == "object" and ($e | valid_provider_failure) and $usd != null then
         {usd:$usd,status:"measured",provenance:"provider-receipt"}
       else {usd:null,status:"unavailable",provenance:"unavailable"} end;
   def normalize_receipt:

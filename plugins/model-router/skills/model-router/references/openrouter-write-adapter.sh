@@ -451,7 +451,8 @@ if [ "$RECEIPT_VALID" = "1" ] && [ -n "$ATTEMPT_RECEIPT" ]; then
         failureKind: (.failureKind // null),
         failureReason: (.failureReason // null),
         timeoutKind: (.timeout.kind // null),
-        httpStatus: (if .httpStatus == 0 then null else (.httpStatus | number_or_null) end),
+        httpStatus: (if .failureKind != "http_error" or .httpStatus == 0 then null
+          else (.httpStatus | number_or_null) end),
         generationId: (.generationId // null),
         responseModel: (.responseModel // null),
         usage: (if (.usage | type) == "object" then

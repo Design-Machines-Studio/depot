@@ -331,7 +331,10 @@ case "${FAKE_PROVIDER_OUTCOME:-success}" in
   unknown|server) write_valid_failure http_error unknown_http_error 500; exit 1 ;;
   transport) write_valid_failure transport_error "" 0; exit 1 ;;
   timeout) write_valid_failure stream_timeout "" "" idle; exit 28 ;;
-  stream) write_valid_failure stream_error "" ""; exit 1 ;;
+  stream) write_valid_failure stream_error "" 200; exit 1 ;;
+  wrong-lane) lane=attempt-99; write_valid_failure http_error rate_limited 429; exit 1 ;;
+  success-no-diff) write_valid_success; exit 0 ;;
+  publication-temp) printf '%s\n' '{}' > "$OPENROUTER_RECEIPT_FILE.tmp.$$"; exit 1 ;;
   inconsistent) write_valid_failure stream_timeout rate_limited "" idle; exit 1 ;;
   publication-failure) printf '%s\n' '### RUNNER FAILURE: could not write OpenRouter failure receipt' >&2; exit 1 ;;
   malformed) printf '%s\n' '{"schemaVersion":2,"outcome":"error","failureKind":"future_failure","diagnostic":"fixture-secret"}' > "$OPENROUTER_RECEIPT_FILE"; exit 1 ;;
@@ -408,7 +411,7 @@ assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_transport_failed" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.failureKind == "stream_timeout" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.timeoutKind == "idle")' "$TMP/real-timeout.receipt"
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].processExitStatus == 28)' "$TMP/real-timeout.receipt"
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_transport_failed" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.failureKind == "stream_error")' "$TMP/real-stream.receipt"
-assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.httpStatus == null)' "$TMP/real-stream.receipt"
+assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.httpStatus == null and [.attempts[] | select(.transport == "openrouter")][0].providerReceiptStatus == "valid-provider-failure")' "$TMP/real-stream.receipt"
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "unknown_provider_failure" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.httpStatus == 500)' "$TMP/real-server.receipt"
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_receipt_missing" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence == null)' "$TMP/real-missing.receipt"
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_receipt_malformed" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence == null)' "$TMP/real-malformed.receipt"
@@ -418,6 +421,17 @@ assert sh -c "! grep -Eq 'fixture-secret|diagnostic|fake-home|OPENROUTER_API_KEY
 run_real_write_case real-publication-failure publication-failure >/dev/null
 assert test "$(cat "$TMP/real-publication-failure.rc")" -eq 76
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_receipt_publication_failed" and [.attempts[] | select(.transport == "openrouter")][0].providerReceiptStatus == "publication-failed")' "$TMP/real-publication-failure.receipt"
+
+run_real_write_case real-publication-temp publication-temp >/dev/null
+assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_receipt_publication_failed" and [.attempts[] | select(.transport == "openrouter")][0].providerReceiptStatus == "publication-failed")' "$TMP/real-publication-temp.receipt"
+assert test "$(find "$TMP/real-write-real-publication-temp" -name '*.tmp.*' -print)" = ""
+
+run_real_write_case real-wrong-lane wrong-lane >/dev/null
+assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_receipt_malformed" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence == null)' "$TMP/real-wrong-lane.receipt"
+
+run_real_write_case real-success-no-diff success-no-diff >/dev/null
+assert test "$(cat "$TMP/real-write-real-success-no-diff/tracked.txt")" = initial
+assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_adapter_rejected" and [.attempts[] | select(.transport == "openrouter")][0].providerReceiptStatus == "adapter-local-rejection")' "$TMP/real-success-no-diff.receipt"
 
 local_repo="$(new_write_repo real-local-rejection)"
 fixture codex-exhausted
@@ -496,6 +510,33 @@ unset -f curl
 assert jq -e '.probeSource == "live" and .served.transport == "codex-cli" and .served.allowanceWindow == "mapping-unknown" and (.attempts | length) == 1' \
   "$TMP/live-path.receipt"
 assert test "$(wc -l < "$TMP/live-path.calls" | tr -d ' ')" -eq 1
+
+# The live pre-invoke clean-tree refusal is router-owned. OpenRouter write
+# attempts keep that reason instead of reporting a missing provider receipt.
+dirty_repo="$(new_write_repo live-dirty)"
+printf '%s\n' dirty > "$dirty_repo/untracked.txt"
+curl() { printf '%s\n' '{"data":{"total_credits":10,"total_usage":1}}'; }
+export -f curl
+set +e
+(
+  cd "$dirty_repo"
+  env PATH="$TMP/bin:$PATH" HOME="$FAKE_HOME" OPENROUTER_API_KEY=test \
+    FAKE_CLAUDE_AUTH=none FAKE_BUNDLE_LOG="$TMP/live-dirty-bundle.log" \
+    FAKE_PROVIDER_OUTCOME=first-fail FAKE_PROVIDER_CALLS="$TMP/live-dirty.provider-calls" \
+    MODEL_ROUTER_CODEX_FIXTURE=all-exhausted MODEL_ROUTER_CODEX_RPC_TIMEOUT=2 \
+    OPENROUTER_EXEC_ALLOWED_PATHS=tracked.txt \
+    "$ROUTER" --workflow-kernel "$TMP/fake-kernel/workflow-kernel-launcher.sh" \
+      --role builder-fast --effort medium --capability read-repository \
+      --capability write-repository --capability structured-output \
+      --prompt-file "$TMP/prompt" --repository-evidence-file "$TMP/evidence" \
+      --output-file "$TMP/live-dirty.out" --receipt-file "$TMP/live-dirty.receipt" \
+      --contract-digest "sha256:$(printf 'f%.0s' {1..64})" --contract-revision 6 >/dev/null 2>&1
+)
+set -e
+unset -f curl
+assert jq -e '.probeSource == "live" and .served == null and ([.attempts[] | select(.transport == "openrouter")] | length) > 0 and all(.attempts[] | select(.transport == "openrouter"); .reason == "repository-not-clean" and .providerReceiptStatus == "not-requested")' "$TMP/live-dirty.receipt"
+assert test ! -e "$TMP/live-dirty.provider-calls"
+assert test "$(cat "$dirty_repo/tracked.txt")" = initial
 
 fixture codex-exhausted
 rm -f "$TMP/fake-bundle.log"

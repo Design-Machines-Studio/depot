@@ -48,7 +48,8 @@ printf '%s\n' '{"schemaVersion":1,"receiptFiles":["invalid-provider-failure.json
 "$RENDERER" --receipt-index "$TMP/invalid-provider-failure-index.json" \
   --status failed --json-output "$TMP/invalid-provider-failure.json.out" \
   --markdown-output "$TMP/invalid-provider-failure.md" >/dev/null
-assert jq -e '.calls[0].attempts[0].providerFailure.status == "unavailable" and .calls[0].attempts[0].providerFailure.failureKind == "unavailable"' "$TMP/invalid-provider-failure.json.out"
+assert jq -e '.calls[0].attempts[0].providerFailure.status == "unavailable" and .calls[0].attempts[0].providerFailure.failureKind == "unavailable" and .calls[0].attempts[0].tokens.status == "unavailable" and .calls[0].attempts[0].billedCost.status == "unavailable" and .summary.measuredPaidCostUsd == null' "$TMP/invalid-provider-failure.json.out"
+assert grep -Fq 'Paid total: `unavailable`' "$TMP/invalid-provider-failure.md"
 assert grep -Fq 'unavailable | failed' "$TMP/invalid-provider-failure.md"
 
 cp "$TMP/report.json" "$TMP/report-first.json"

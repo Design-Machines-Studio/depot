@@ -268,6 +268,8 @@ if [ "$WRITE_REQUEST" -eq 1 ]; then
     exit 76
   }
   ATTEMPT_RECEIPT_DIR_NAME="$(basename "$ATTEMPT_RECEIPT_DIR")"
+  # A hard kill skips cleanup; keep any leftover directory out of git status.
+  printf '%s\n' '*' > "$ATTEMPT_RECEIPT_DIR/.gitignore" || exit 76
 fi
 PRESERVE_EMERGENCY_RECEIPT=0
 cleanup() {
@@ -396,18 +398,14 @@ openrouter_write_failure_reason() {
   if grep -Fq 'could not preserve attempt receipt' "$PRIVATE_LOG"; then
     printf '%s\n' provider_receipt_preservation_failed
   elif grep -Fq 'could not write OpenRouter failure receipt' "$PRIVATE_LOG" ||
-       grep -Fq 'could not write OpenRouter success receipt' "$PRIVATE_LOG"; then
+       grep -Fq 'could not write OpenRouter success receipt' "$PRIVATE_LOG" ||
+       grep -Fq 'provider receipt publication failed' "$PRIVATE_LOG"; then
     printf '%s\n' provider_receipt_publication_failed
   elif grep -Fq 'provider receipt malformed or unsupported' "$PRIVATE_LOG"; then
     printf '%s\n' provider_receipt_malformed
   elif grep -Fq 'provider receipt missing' "$PRIVATE_LOG"; then
     printf '%s\n' provider_receipt_missing
-  elif grep -Fq 'wrapper invocation rejected' "$PRIVATE_LOG" ||
-       grep -Fq 'model returned no unified diff' "$PRIVATE_LOG" ||
-       grep -Fq 'rejected model patch' "$PRIVATE_LOG" ||
-       grep -Fq 'repository context rejected' "$PRIVATE_LOG" ||
-       grep -Fq 'configured OpenRouter key unavailable' "$PRIVATE_LOG" ||
-       grep -Fq 'attempt receipt' "$PRIVATE_LOG"; then
+  elif grep -Fq 'openrouter-exec:' "$PRIVATE_LOG"; then
     printf '%s\n' provider_adapter_rejected
   else
     printf '%s\n' provider_receipt_missing
@@ -755,7 +753,7 @@ while IFS= read -r candidate; do
     invoke_candidate "$transport" "$model" "$EFFECTIVE_EFFORT"
     rc=$?
   fi
-  if [ "$WRITE_REQUEST" -eq 1 ] && [ "$transport" = openrouter ]; then
+  if [ "$WRITE_REQUEST" -eq 1 ] && [ "$transport" = openrouter ] && [ "$rc" -ne 79 ]; then
     if [ -f "$ATTEMPT_RECEIPT_ABSOLUTE_PATH" ] && [ ! -L "$ATTEMPT_RECEIPT_ABSOLUTE_PATH" ]; then
       PROVIDER_FAILURE_EVIDENCE_JSON="$(provider_failure_evidence \
         "$ATTEMPT_RECEIPT_ABSOLUTE_PATH" "$model" "$EFFECTIVE_EFFORT" \
@@ -890,10 +888,10 @@ while IFS= read -r candidate; do
     exit 0
   fi
   if [ -n "${INVOKE_REASON:-}" ]; then reason="$INVOKE_REASON"
-  elif [ "$WRITE_REQUEST" -eq 1 ] && [ "$transport" = openrouter ]; then reason="$(openrouter_write_failure_reason)"
   elif grep -Fqi 'repository-not-clean' "$PRIVATE_LOG"; then reason=repository-not-clean
   elif grep -Fqi 'write-completion-without-commit' "$PRIVATE_LOG"; then reason=write-completion-without-commit
   elif grep -Fqi 'write-completion-dirty' "$PRIVATE_LOG"; then reason=write-completion-dirty
+  elif [ "$WRITE_REQUEST" -eq 1 ] && [ "$transport" = openrouter ]; then reason="$(openrouter_write_failure_reason)"
   elif grep -qiE 'usage.?limit|rate.?limit|quota|exhausted' "$PRIVATE_LOG"; then
     if [ "$transport" = codex-cli ]; then reason=rate_limit_exhausted; else reason=quota-exhausted; fi
   elif grep -qiE 'declin|refus' "$PRIVATE_LOG"; then reason=content-refusal
