@@ -1,0 +1,41 @@
+{
+  "schemaVersion": 1,
+  "receiptId": "dispatch-000000000000000000000011",
+  "requested": {"role": "builder-fast", "effort": "medium"},
+  "attempts": [
+    {
+      "model": "deepseek/deepseek-v4-flash-0731",
+      "provider": "openrouter",
+      "transport": "openrouter",
+      "billingMode": "api",
+      "requestedEffort": "medium",
+      "normalizedEffort": "medium",
+      "transmittedEffort": "medium",
+      "effortStatus": "transmitted",
+      "effortEvidence": "request-envelope",
+      "providerReceiptStatus": "valid-provider-failure",
+      "providerFailureEvidence": {
+        "status": "valid-provider-failure",
+        "failureKind": "http_error",
+        "failureReason": "rate_limited",
+        "httpStatus": 429,
+        "timeoutKind": null,
+        "usage": {"prompt_tokens": 8, "completion_tokens": 3, "total_tokens": 11, "cost": 0.0125},
+        "billedCostUsd": 0.0125,
+        "reasoningEffort": {"requested": "medium", "transmitted": "medium", "status": "transmitted", "evidence": "request-envelope", "modelReasoningMeasurement": null}
+      },
+      "processExitStatus": 77,
+      "outcome": "failed",
+      "reason": "rate_limited",
+      "durationSeconds": 614
+    }
+  ],
+  "served": null,
+  "normalizedEffort": null,
+  "effectiveEffort": null,
+  "transmittedEffort": null,
+  "effortTransmission": {"status": "unavailable", "evidence": "unavailable", "modelReasoningMeasurement": null},
+  "fallback": true,
+  "fallbackReason": "rate_limited",
+  "matrixSnapshot": "openrouter:2026-08-25"
+}

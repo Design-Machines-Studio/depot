@@ -16,6 +16,9 @@ including `rate_limit_probe_no_response`, `rate_limit_response_malformed`,
 `provider_model_unavailable`, `provider_model_identity_unavailable`,
 `provider_model_substitution`, `organization_monthly_budget_exceeded`,
 `insufficient_credits`, `rate_limited`, `unknown_provider_failure`,
+`provider_receipt_missing`, `provider_receipt_malformed`,
+`provider_receipt_publication_failed`, `provider_receipt_preservation_failed`,
+`provider_adapter_rejected`,
 `browser_transport_unavailable`, and
 `model_participant_unavailable`, and
 `provider_effort_evidence_unavailable`. They
@@ -34,6 +37,18 @@ than inferring it from the old `effectiveEffort` field. A transmitted setting
 records request-envelope or native-CLI evidence only; it is never a measurement
 of the model's internal reasoning process. Concrete receipt fields must never
 be copied into peer prompts or ordinary orchestration summaries.
+
+Write attempts may also retain a bounded `providerFailureEvidence` object in
+the private attempt receipt. The sibling `providerReceiptStatus` is the
+attempt-level status, one of `valid-provider-failure`,
+`valid-provider-success`, `missing`, `malformed-or-unsupported`,
+`publication-failed`, `preservation-failed`, `adapter-local-rejection`, or
+`not-requested`. A valid failure object contains only closed failure
+kind/reason values, HTTP status (`http_error` only), timeout kind, transmitted
+effort, process exit status, and usage/cost values when the provider reports
+them. Missing, malformed, unsupported, or publication evidence never becomes a
+provider diagnosis or a zero-cost claim. `processExitStatus` is retained as a
+sibling field on every failed attempt.
 
 After every model-dependent decision has settled, the terminal workflow may
 load `terminal-report-contract.md` and pass one exact run-private ordered index

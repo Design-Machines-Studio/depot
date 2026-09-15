@@ -80,7 +80,15 @@ model and no dispatch, review, repair, synthesis, routing, or merge decision may
 follow generation or display.
 
 Failed and blocked invocations still render incurred attempts once dispatch has
-stopped. An Assembly coordinator invocation that made no routed opinion call
+stopped. Each attempt's `Failure evidence` column and JSON `providerFailure`
+object show `kind/reason HTTP n` only for private evidence that passes the
+renderer's closed validation; otherwise they show the closed
+`providerReceiptStatus`, or `unavailable` when that status is missing,
+unrecognized, or claims `valid-provider-failure` without valid evidence. A
+failed attempt reports tokens and billed cost only from validated provider
+failure evidence. When no cost was measured,
+`summary.measuredPaidCostUsd` is `null` and Paid total shows `unavailable`,
+never `$0`. An Assembly coordinator invocation that made no routed opinion call
 does not create an empty index or report.
 
 ## Failure closure

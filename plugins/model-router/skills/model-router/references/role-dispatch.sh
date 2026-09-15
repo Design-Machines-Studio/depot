@@ -256,9 +256,25 @@ PROVIDER_RECEIPT="$(mktemp "${TMPDIR:-/tmp}/model-router.provider.XXXXXX")" || {
 EMERGENCY_RECEIPT="$(mktemp "${TMPDIR:-/tmp}/model-router.mutation-receipt.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT"; exit 76; }
 PUBLIC_OUTPUT_TMP="$(mktemp "$(dirname "$OUTPUT_FILE")/.model-router-output.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT"; exit 76; }
 PUBLIC_RECEIPT_TMP="$(mktemp "$(dirname "$RECEIPT_FILE")/.model-router-receipt.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT" "$PUBLIC_OUTPUT_TMP"; exit 76; }
+ATTEMPT_RECEIPT_DIR=""
+ATTEMPT_RECEIPT_DIR_NAME=""
+if [ "$WRITE_REQUEST" -eq 1 ]; then
+  REPOSITORY_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
+    rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT" "$PUBLIC_OUTPUT_TMP" "$PUBLIC_RECEIPT_TMP"
+    exit 76
+  }
+  ATTEMPT_RECEIPT_DIR="$(mktemp -d "$REPOSITORY_ROOT/.model-router-attempts.XXXXXX")" || {
+    rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT" "$PUBLIC_OUTPUT_TMP" "$PUBLIC_RECEIPT_TMP"
+    exit 76
+  }
+  ATTEMPT_RECEIPT_DIR_NAME="$(basename "$ATTEMPT_RECEIPT_DIR")"
+  # A hard kill skips cleanup; keep any leftover directory out of git status.
+  printf '%s\n' '*' > "$ATTEMPT_RECEIPT_DIR/.gitignore" || exit 76
+fi
 PRESERVE_EMERGENCY_RECEIPT=0
 cleanup() {
   rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$PUBLIC_OUTPUT_TMP" "$PUBLIC_RECEIPT_TMP"
+  [ -z "$ATTEMPT_RECEIPT_DIR" ] || rm -rf "$ATTEMPT_RECEIPT_DIR"
   [ "$PRESERVE_EMERGENCY_RECEIPT" -eq 1 ] || rm -f "$EMERGENCY_RECEIPT"
 }
 trap cleanup EXIT
@@ -313,6 +329,87 @@ closed_openrouter_failure_reason() {
       ;;
     *) printf '%s\n' unknown_provider_failure ;;
   esac
+}
+
+provider_failure_evidence() {
+  local receipt="$1" model="$2" effort="$3" runid="$4" lane="$5"
+  jq -c --arg model "$model" --arg effort "$effort" --arg runid "$runid" --arg lane "$lane" '
+    def failure_kinds:
+      ["http_error","transport_error","curl_timeout","stream_timeout",
+       "incomplete_stream","stream_error","malformed_stream",
+       "missing_generation_provenance","malformed_model_provenance",
+       "native_vendor_origin","unexpected_model_provenance","interrupted"];
+    def failure_reasons:
+      ["organization_monthly_budget_exceeded","key_permission_denied",
+       "guardrail_blocked","insufficient_credits","rate_limited",
+       "unknown_http_error"];
+    . as $receipt
+    | ($receipt.usage // null) as $usage
+    | ($receipt.billedCostUsd // null) as $cost
+    | ($receipt.failureKind // null) as $kind
+    | ($receipt.failureReason // null) as $reason
+    | ($receipt.httpStatus // null) as $status
+    | ($receipt.timeoutKind // null) as $timeout
+    | if (($receipt | keys) - ["schemaVersion","invocationId","outcome","requestedModel",
+          "failureKind","failureReason","timeoutKind","httpStatus","generationId",
+          "responseModel","usage","billedCostUsd","reasoningEffort","authorization",
+          "processExitStatus"] | length) != 0 or
+       $receipt.schemaVersion != 2 or
+       ($receipt.outcome != "error" and $receipt.outcome != "timeout") or
+       ($receipt.invocationId | type) != "string" or
+       (($receipt.invocationId | test("^[0-9a-f]{64}$")) | not) or
+       $receipt.requestedModel != $model or
+       ($kind | type) != "string" or (failure_kinds | index($kind)) == null or
+       ($reason != null and (($reason | type) != "string" or (failure_reasons | index($reason)) == null)) or
+       ($status != null and (($status | type) != "number" or ($status | isfinite) | not or
+         ($status | floor) != $status or $status < 100 or $status > 599)) or
+       ($timeout != null and (["overall","first_byte","idle"] | index($timeout)) == null) or
+       (($receipt.authorization | type) != "object") or
+       $receipt.authorization.runId != $runid or $receipt.authorization.laneId != $lane or
+       (($receipt.authorization.requestEnvelopeSha256 | type) != "string") or
+       (($receipt.authorization.requestEnvelopeSha256 | test("^[0-9a-f]{64}$")) | not) or
+       ($receipt.reasoningEffort | type) != "object" or
+       (($receipt.reasoningEffort | keys) - ["requested","transmitted","status","evidence","modelReasoningMeasurement"] | length) != 0 or
+       $receipt.reasoningEffort.requested != $effort or
+       $receipt.reasoningEffort.transmitted != $effort or
+       $receipt.reasoningEffort.status != "transmitted" or
+       $receipt.reasoningEffort.evidence != "request-envelope" or
+       $receipt.reasoningEffort.modelReasoningMeasurement != null or
+       ($usage != null and (($usage | type) != "object" or
+         (any($usage | to_entries[]; .value != null and
+           (($usage[.key] | type) != "number" or (($usage[.key] | isfinite) | not) or $usage[.key] < 0))))) or
+       ($cost != null and (($cost | type) != "number" or ($cost | isfinite) | not or $cost < 0)) or
+       ($receipt.processExitStatus | type) != "number" or
+       ($receipt.processExitStatus | floor) != $receipt.processExitStatus or
+       $receipt.processExitStatus < 0 or $receipt.processExitStatus > 255 or
+       ($receipt.outcome == "timeout" and ($kind != "stream_timeout" and $kind != "curl_timeout")) or
+       ($kind == "http_error" and ($status == null or $status < 400 or $reason == null)) or
+       ($kind != "http_error" and ($reason != null or $status != null)) or
+       (($kind == "stream_timeout" or $kind == "curl_timeout") and $timeout == null)
+       then empty
+       else {status:"valid-provider-failure",failureKind:$kind,failureReason:$reason,
+         httpStatus:$status,timeoutKind:$timeout,usage:$usage,billedCostUsd:$cost,
+         reasoningEffort:$receipt.reasoningEffort,processExitStatus:$receipt.processExitStatus}
+       end
+  ' "$receipt"
+}
+
+openrouter_write_failure_reason() {
+  if grep -Fq 'could not preserve attempt receipt' "$PRIVATE_LOG"; then
+    printf '%s\n' provider_receipt_preservation_failed
+  elif grep -Fq 'could not write OpenRouter failure receipt' "$PRIVATE_LOG" ||
+       grep -Fq 'could not write OpenRouter success receipt' "$PRIVATE_LOG" ||
+       grep -Fq 'provider receipt publication failed' "$PRIVATE_LOG"; then
+    printf '%s\n' provider_receipt_publication_failed
+  elif grep -Fq 'provider receipt malformed or unsupported' "$PRIVATE_LOG"; then
+    printf '%s\n' provider_receipt_malformed
+  elif grep -Fq 'provider receipt missing' "$PRIVATE_LOG"; then
+    printf '%s\n' provider_receipt_missing
+  elif grep -Fq 'openrouter-exec:' "$PRIVATE_LOG"; then
+    printf '%s\n' provider_adapter_rejected
+  else
+    printf '%s\n' provider_receipt_missing
+  fi
 }
 
 transport_eligibility() {
@@ -506,14 +603,19 @@ invoke_candidate() {
       [ "$OPENROUTER_BUNDLE_STATE" = resolved ] || { INVOKE_REASON="$OPENROUTER_BUNDLE_STATE"; return 77; }
       if printf '%s' "$CAPABILITIES_JSON" | jq -e 'index("write-repository") != null' >/dev/null; then
         [ -n "${OPENROUTER_EXEC_ALLOWED_PATHS:-}" ] || return 77
-        argv=("$DIR/openrouter-write-adapter.sh" --model "$model" --effort "$effective")
-        MODEL_ROUTER_CONTRACT_DIGEST="$CONTRACT_DIGEST" \
-          MODEL_ROUTER_CONTRACT_REVISION="$CONTRACT_REVISION" \
-          OPENROUTER_BUNDLE_RESOLVED=1 OPENROUTER_BUNDLE_REF="$OPENROUTER_BUNDLE_REF" \
-          OPENROUTER_BUNDLE_VERSION="$OPENROUTER_BUNDLE_VERSION" \
-          OPENROUTER_BUNDLE_CACHE_CLASS="$OPENROUTER_BUNDLE_CACHE_CLASS" \
-          OPENROUTER_BUNDLE_REASON="$OPENROUTER_BUNDLE_REASON" \
-          "${argv[@]}" < "$PROMPT_FILE" > "$PROVIDER_RECEIPT" 2>>"$PRIVATE_LOG" || return $?
+        argv=("$DIR/openrouter-write-adapter.sh" --model "$model" --effort "$effective" \
+          --attempt-receipt "$ATTEMPT_RECEIPT_PATH")
+        (
+          cd "$REPOSITORY_ROOT" || exit 77
+          MODEL_ROUTER_CONTRACT_DIGEST="$CONTRACT_DIGEST" \
+            MODEL_ROUTER_CONTRACT_REVISION="$CONTRACT_REVISION" \
+            OPENROUTER_BUNDLE_RESOLVED=1 OPENROUTER_BUNDLE_REF="$OPENROUTER_BUNDLE_REF" \
+            OPENROUTER_BUNDLE_VERSION="$OPENROUTER_BUNDLE_VERSION" \
+            OPENROUTER_BUNDLE_CACHE_CLASS="$OPENROUTER_BUNDLE_CACHE_CLASS" \
+            OPENROUTER_BUNDLE_REASON="$OPENROUTER_BUNDLE_REASON" \
+            OPENROUTER_RUN_ID="$RECEIPT_ID" OPENROUTER_LANE_ID="attempt-$ATTEMPT_INDEX" \
+            "${argv[@]}" < "$PROMPT_FILE" > "$PROVIDER_RECEIPT" 2>>"$PRIVATE_LOG"
+        ) || return $?
         if jq -e --arg effort "$effective" '
           .reasoningEffort.requested == $effort and
           .reasoningEffort.transmitted == $effort and
@@ -613,12 +715,22 @@ while IFS= read -r candidate; do
   ATTEMPT_HEAD=""
   ATTEMPT_STATUS=""
   OBSERVED_SERVED_IDENTITY="unknown"
+  ATTEMPT_RECEIPT_PATH=""
+  ATTEMPT_RECEIPT_ABSOLUTE_PATH=""
+  PROVIDER_RECEIPT_STATUS="not-requested"
+  PROVIDER_FAILURE_EVIDENCE_JSON=null
+  PROVIDER_PROCESS_EXIT_STATUS=""
   if [ "$WRITE_REQUEST" -eq 1 ]; then
     ATTEMPT_HEAD="$(git rev-parse --verify HEAD 2>/dev/null)" || exit 76
     ATTEMPT_STATUS="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" || exit 76
+    if [ "$transport" = openrouter ]; then
+      ATTEMPT_RECEIPT_PATH="$ATTEMPT_RECEIPT_DIR_NAME/attempt-$ATTEMPT_INDEX.json"
+      ATTEMPT_RECEIPT_ABSOLUTE_PATH="$REPOSITORY_ROOT/$ATTEMPT_RECEIPT_PATH"
+    fi
   fi
   STARTED="$(date +%s)"
   : > "$PRIVATE_LOG"
+  INVOKE_REASON=""
   fixture_outcome="$(printf '%s' "$AVAILABILITY" | jq -r --arg model "$model" '.candidateResults[$model].outcome // ""')"
   if [ "$WRITE_REQUEST" -eq 1 ] && [ "$PROBE_SOURCE" = live ] &&
      [ "$TRANSPORT_STUB" = false ] && [ -n "$ATTEMPT_STATUS" ]; then
@@ -640,6 +752,67 @@ while IFS= read -r candidate; do
   else
     invoke_candidate "$transport" "$model" "$EFFECTIVE_EFFORT"
     rc=$?
+  fi
+  if [ "$WRITE_REQUEST" -eq 1 ] && [ "$transport" = openrouter ] && [ "$rc" -ne 79 ]; then
+    if [ -f "$ATTEMPT_RECEIPT_ABSOLUTE_PATH" ] && [ ! -L "$ATTEMPT_RECEIPT_ABSOLUTE_PATH" ]; then
+      PROVIDER_FAILURE_EVIDENCE_JSON="$(provider_failure_evidence \
+        "$ATTEMPT_RECEIPT_ABSOLUTE_PATH" "$model" "$EFFECTIVE_EFFORT" \
+        "$RECEIPT_ID" "attempt-$ATTEMPT_INDEX" 2>/dev/null)"
+      if [ -n "$PROVIDER_FAILURE_EVIDENCE_JSON" ]; then
+        PROVIDER_RECEIPT_STATUS="valid-provider-failure"
+        INVOKE_REASON="$(printf '%s' "$PROVIDER_FAILURE_EVIDENCE_JSON" | \
+          jq -r '.failureReason as $reason | .httpStatus as $status |
+            if $status == 404 then "provider_model_unavailable"
+            elif $reason == "key_permission_denied" then "provider_credential_unavailable"
+            elif $reason == "guardrail_blocked" then "provider_boundary_declined"
+            elif $reason == "organization_monthly_budget_exceeded" then "organization_monthly_budget_exceeded"
+            elif $reason == "insufficient_credits" then "insufficient_credits"
+            elif $reason == "rate_limited" then "rate_limited"
+            elif $reason == "unknown_http_error" then "unknown_provider_failure"
+            elif .failureKind == "transport_error" or .failureKind == "curl_timeout" or
+                 .failureKind == "stream_timeout" or .failureKind == "incomplete_stream" or
+                 .failureKind == "stream_error" or .failureKind == "malformed_stream" or
+                 .failureKind == "interrupted" then "provider_transport_failed"
+            else "unknown_provider_failure" end')"
+        ATTEMPT_TRANSMITTED_EFFORT="$EFFECTIVE_EFFORT"
+        ATTEMPT_EFFORT_STATUS="transmitted"
+        ATTEMPT_EFFORT_EVIDENCE="request-envelope"
+      elif jq -e '.outcome == "success" and (.generationId | type) == "string" and (.responseModel | type) == "string"' "$ATTEMPT_RECEIPT_ABSOLUTE_PATH" >/dev/null 2>&1; then
+        PROVIDER_RECEIPT_STATUS="valid-provider-success"
+        PROVIDER_FAILURE_EVIDENCE_JSON=null
+      else
+        PROVIDER_RECEIPT_STATUS="malformed-or-unsupported"
+        PROVIDER_FAILURE_EVIDENCE_JSON=null
+        [ "$rc" -eq 0 ] && rc=77
+        [ -n "$INVOKE_REASON" ] || INVOKE_REASON=provider_receipt_malformed
+      fi
+      [ "$PROVIDER_FAILURE_EVIDENCE_JSON" = null ] || \
+        PROVIDER_PROCESS_EXIT_STATUS="$(printf '%s' "$PROVIDER_FAILURE_EVIDENCE_JSON" | jq -r '.processExitStatus')"
+      if [ "$PROVIDER_RECEIPT_STATUS" = "valid-provider-success" ] && [ "$rc" -ne 0 ]; then
+        if [ "$(openrouter_write_failure_reason)" = "provider_adapter_rejected" ]; then
+          PROVIDER_RECEIPT_STATUS="adapter-local-rejection"
+          INVOKE_REASON=provider_adapter_rejected
+        fi
+      fi
+      rm -f "$ATTEMPT_RECEIPT_ABSOLUTE_PATH" || {
+        PROVIDER_RECEIPT_STATUS="preservation-failed"
+        PROVIDER_FAILURE_EVIDENCE_JSON=null
+        INVOKE_REASON=provider_receipt_preservation_failed
+      }
+    else
+      receipt_reason="$(openrouter_write_failure_reason)"
+      case "$receipt_reason" in
+        provider_receipt_missing) PROVIDER_RECEIPT_STATUS="missing" ;;
+        provider_receipt_malformed) PROVIDER_RECEIPT_STATUS="malformed-or-unsupported" ;;
+        provider_receipt_publication_failed) PROVIDER_RECEIPT_STATUS="publication-failed" ;;
+        provider_receipt_preservation_failed) PROVIDER_RECEIPT_STATUS="preservation-failed" ;;
+        provider_adapter_rejected) PROVIDER_RECEIPT_STATUS="adapter-local-rejection" ;;
+      esac
+      if [ "$rc" -eq 0 ]; then
+        rc=77
+        INVOKE_REASON="$receipt_reason"
+      fi
+    fi
   fi
   if [ "$rc" -eq 0 ] && [ "$transport" = claude-cli ] &&
      printf '%s' "$candidate" | jq -e '(.servedIdentities // []) | length > 0' >/dev/null; then
@@ -702,7 +875,7 @@ while IFS= read -r candidate; do
     fi
     transmitted_effort_json=null
     [ -z "$ATTEMPT_TRANSMITTED_EFFORT" ] || transmitted_effort_json="$(jq -Rn --arg effort "$ATTEMPT_TRANSMITTED_EFFORT" '$effort')"
-    ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg served_identity "$OBSERVED_SERVED_IDENTITY" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --argjson transmitted_effort "$transmitted_effort_json" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,servedIdentity:$served_identity,provider:$provider,transport:$transport,billingMode:$billing,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,effortEvidence:$effort_evidence,outcome:"served",durationSeconds:$duration}]')"
+    ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg served_identity "$OBSERVED_SERVED_IDENTITY" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --arg receipt_status "$PROVIDER_RECEIPT_STATUS" --argjson transmitted_effort "$transmitted_effort_json" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,servedIdentity:$served_identity,provider:$provider,transport:$transport,billingMode:$billing,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,effortEvidence:$effort_evidence,providerReceiptStatus:$receipt_status,outcome:"served",durationSeconds:$duration}]')"
     fallback=false
     fallback_reason=none
     [ "$ATTEMPT_INDEX" -gt 1 ] && { fallback=true; fallback_reason="$LAST_REASON"; }
@@ -718,6 +891,7 @@ while IFS= read -r candidate; do
   elif grep -Fqi 'repository-not-clean' "$PRIVATE_LOG"; then reason=repository-not-clean
   elif grep -Fqi 'write-completion-without-commit' "$PRIVATE_LOG"; then reason=write-completion-without-commit
   elif grep -Fqi 'write-completion-dirty' "$PRIVATE_LOG"; then reason=write-completion-dirty
+  elif [ "$WRITE_REQUEST" -eq 1 ] && [ "$transport" = openrouter ]; then reason="$(openrouter_write_failure_reason)"
   elif grep -qiE 'usage.?limit|rate.?limit|quota|exhausted' "$PRIVATE_LOG"; then
     if [ "$transport" = codex-cli ]; then reason=rate_limit_exhausted; else reason=quota-exhausted; fi
   elif grep -qiE 'declin|refus' "$PRIVATE_LOG"; then reason=content-refusal
@@ -725,7 +899,13 @@ while IFS= read -r candidate; do
   fi
   transmitted_effort_json=null
   [ -z "$ATTEMPT_TRANSMITTED_EFFORT" ] || transmitted_effort_json="$(jq -Rn --arg effort "$ATTEMPT_TRANSMITTED_EFFORT" '$effort')"
-  ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg served_identity "$OBSERVED_SERVED_IDENTITY" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --arg reason "$reason" --argjson transmitted_effort "$transmitted_effort_json" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,servedIdentity:$served_identity,provider:$provider,transport:$transport,billingMode:$billing,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,effortEvidence:$effort_evidence,outcome:"failed",reason:$reason,durationSeconds:$duration}]')"
+  process_exit_status=null
+  if [ -n "$PROVIDER_PROCESS_EXIT_STATUS" ]; then
+    process_exit_status="$PROVIDER_PROCESS_EXIT_STATUS"
+  elif [ "$rc" -ge 0 ] && [ "$rc" -le 255 ]; then
+    process_exit_status="$rc"
+  fi
+  ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg served_identity "$OBSERVED_SERVED_IDENTITY" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --arg receipt_status "$PROVIDER_RECEIPT_STATUS" --arg reason "$reason" --argjson provider_failure "$PROVIDER_FAILURE_EVIDENCE_JSON" --argjson process_exit_status "$process_exit_status" --argjson transmitted_effort "$transmitted_effort_json" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,servedIdentity:$served_identity,provider:$provider,transport:$transport,billingMode:$billing,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,effortEvidence:$effort_evidence,providerReceiptStatus:$receipt_status,providerFailureEvidence:$provider_failure,processExitStatus:$process_exit_status,outcome:"failed",reason:$reason,durationSeconds:$duration}]')"
   if [ "$WRITE_REQUEST" -eq 1 ]; then
     CURRENT_HEAD="$(git rev-parse --verify HEAD 2>/dev/null)" || exit 76
     CURRENT_STATUS="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" || exit 76

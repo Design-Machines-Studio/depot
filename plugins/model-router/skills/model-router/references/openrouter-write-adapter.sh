@@ -365,13 +365,40 @@ rc=$?
 set -e
 PROVIDER_DURATION_SECONDS=$(( $(date +%s) - PROVIDER_STARTED_AT ))
 
+# A wrapper can leave its private temporary receipt behind when publication
+# fails. Turn that observable condition into a bounded router marker.
+if [ ! -s "$RECEIPT_FILE" ]; then
+  for receipt_tmp in "$RECEIPT_FILE".tmp.*; do
+    if [ -e "$receipt_tmp" ] && [ ! -L "$receipt_tmp" ]; then
+      echo "openrouter-exec: provider receipt publication failed" >&2
+      rm -f "$receipt_tmp"
+      break
+    fi
+  done
+fi
+
 RECEIPT_VALID=0
-if [ -s "$RECEIPT_FILE" ] && jq -e --arg effort "$REASONING_EFFORT" '
+if [ -s "$RECEIPT_FILE" ] && jq -e --arg model "$MODEL" \
+  --arg runid "${OPENROUTER_RUN_ID:-}" --arg lane "${OPENROUTER_LANE_ID:-}" \
+  --arg effort "$REASONING_EFFORT" '
+  def usage_is_safe:
+    . == null or
+    (type == "object" and
+     (. as $usage |
+       all(["prompt_tokens","completion_tokens","total_tokens",
+            "input_tokens","output_tokens","cost","costUsd","cost_usd"][];
+         . as $key | $usage[$key] == null or
+           ($usage[$key] | type == "number" and isfinite and . >= 0))));
   .schemaVersion == 2 and
   (.outcome | type == "string" and length > 0) and
   (.invocationId | type == "string" and test("^[0-9a-f]{64}$")) and
-  (.requestedModel | type == "string" and length > 0) and
+  .requestedModel == $model and
   (.authorization.requestEnvelopeSha256 | test("^[0-9a-f]{64}$")) and
+  (.authorization.runId == null or (.authorization.runId | type == "string")) and
+  (.authorization.laneId == null or (.authorization.laneId | type == "string")) and
+  (if $runid == "" then true else
+     .authorization.runId == $runid and .authorization.laneId == $lane
+   end) and
   (.reasoningEffort | type == "object") and
   (if $effort == "" then
      .reasoningEffort == {requested:null,transmitted:null,status:"default-unknown",evidence:"unavailable",modelReasoningMeasurement:null}
@@ -382,22 +409,77 @@ if [ -s "$RECEIPT_FILE" ] && jq -e --arg effort "$REASONING_EFFORT" '
      .reasoningEffort.evidence == "request-envelope" and
      .reasoningEffort.modelReasoningMeasurement == null
    end) and
-  (.usage == null or (.usage | type == "object")) and
+  (.usage | usage_is_safe) and
+  (.costUsd == null or (.costUsd | type == "number" and isfinite and . >= 0)) and
+  (.cost_usd == null or (.cost_usd | type == "number" and isfinite and . >= 0)) and
+  (.timeout == null or
+    (.timeout | type == "object" and (keys - ["kind"] | length) == 0 and
+      (.kind as $kind | (["overall","first_byte","idle"] | index($kind) != null)))) and
+  (if .outcome == "error" or .outcome == "timeout" then
+     (.failureKind | type == "string" and length > 0) and
+     (.failureReason == null or (.failureReason | type == "string" and length > 0)) and
+     (.httpStatus == null or
+       (.httpStatus | type == "number" and isfinite and floor == . and . >= 0 and . <= 599))
+   elif .outcome == "success" then
+     (.generationId | type == "string" and length > 0) and
+     (.responseModel | type == "string" and length > 0)
+   else false end) and
   ([(.. | objects) | keys[] |
-    select(test("^(prompt|response|content|api_?key|secret)$"; "i"))] | length) == 0
+    select(test("^(prompt|response|content|api_?key|secret|stderr|body|message|diagnostic)$"; "i"))] | length) == 0
 ' "$RECEIPT_FILE" >/dev/null 2>&1; then
   RECEIPT_VALID=1
+fi
+if [ "$RECEIPT_VALID" != "1" ]; then
+  if [ -s "$RECEIPT_FILE" ]; then
+    echo "openrouter-exec: provider receipt malformed or unsupported" >&2
+  else
+    echo "openrouter-exec: provider receipt missing" >&2
+  fi
 fi
 if [ "$RECEIPT_VALID" = "1" ] && [ -n "$ATTEMPT_RECEIPT" ]; then
   ATTEMPT_RECEIPT_TMP="${ATTEMPT_RECEIPT}.tmp.$$"
   (
     umask 077
-    jq -c '.' "$RECEIPT_FILE" > "$ATTEMPT_RECEIPT_TMP"
+    jq -c '
+      def number_or_null:
+        if type == "number" and isfinite and . >= 0 then . else null end;
+      {
+        schemaVersion: 2,
+        invocationId,
+        outcome,
+        requestedModel,
+        failureKind: (.failureKind // null),
+        failureReason: (.failureReason // null),
+        timeoutKind: (.timeout.kind // null),
+        httpStatus: (if .failureKind != "http_error" or .httpStatus == 0 then null
+          else (.httpStatus | number_or_null) end),
+        generationId: (.generationId // null),
+        responseModel: (.responseModel // null),
+        usage: (if (.usage | type) == "object" then
+          .usage | with_entries(select(.key |
+            ["prompt_tokens","completion_tokens","total_tokens",
+             "input_tokens","output_tokens","cost","costUsd","cost_usd"] |
+            index(.) != null))
+        else null end),
+        billedCostUsd: (.costUsd // .cost_usd // .usage.cost // .usage.costUsd // .usage.cost_usd // null),
+        reasoningEffort,
+        authorization: {
+          runId: (.authorization.runId // null),
+          laneId: (.authorization.laneId // null),
+          requestEnvelopeSha256: .authorization.requestEnvelopeSha256
+        },
+        processExitStatus: $exit_status
+      }
+    ' --argjson exit_status "$rc" "$RECEIPT_FILE" > "$ATTEMPT_RECEIPT_TMP"
   ) || {
     echo "openrouter-exec: could not preserve attempt receipt" >&2
     exit 2
   }
-  mv "$ATTEMPT_RECEIPT_TMP" "$ATTEMPT_RECEIPT"
+  mv "$ATTEMPT_RECEIPT_TMP" "$ATTEMPT_RECEIPT" || {
+    rm -f "$ATTEMPT_RECEIPT_TMP"
+    echo "openrouter-exec: could not preserve attempt receipt" >&2
+    exit 2
+  }
   ATTEMPT_RECEIPT_TMP=""
 fi
 case "$rc" in
