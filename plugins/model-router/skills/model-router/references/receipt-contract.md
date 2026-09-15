@@ -39,13 +39,15 @@ of the model's internal reasoning process. Concrete receipt fields must never
 be copied into peer prompts or ordinary orchestration summaries.
 
 Write attempts may also retain a bounded `providerFailureEvidence` object in
-the private attempt receipt. Its status distinguishes valid provider failure,
+the private attempt receipt. The sibling `providerReceiptStatus` is the
+attempt-level status: it distinguishes valid provider failure or success,
 missing or malformed evidence, receipt publication or preservation failure,
-and adapter-local rejection. A valid object contains only closed failure
-kind/reason values, HTTP status, timeout kind, transmitted effort, process
-exit status, and validated usage/cost values. Missing, malformed, unsupported,
-or publication evidence never becomes a provider diagnosis or a zero-cost
-claim.
+and adapter-local rejection. A valid failure object contains only closed
+failure kind/reason values, HTTP status, timeout kind, transmitted effort,
+process exit status, and validated usage/cost values. Missing, malformed,
+unsupported, or publication evidence never becomes a provider diagnosis or a
+zero-cost claim. `processExitStatus` is retained as a sibling attempt field
+for all attempted transports.
 
 After every model-dependent decision has settled, the terminal workflow may
 load `terminal-report-contract.md` and pass one exact run-private ordered index

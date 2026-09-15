@@ -196,9 +196,31 @@ if ! jq -S -s \
     . as $value
     | if type == "number" and floor == . and . >= 100 and . <= 599
       then . else null end;
+  def valid_provider_failure:
+    (.status == "valid-provider-failure") and
+    ((keys - ["status","failureKind","failureReason","httpStatus","timeoutKind","usage","billedCostUsd","reasoningEffort","processExitStatus"] | length) == 0) and
+    ((.failureKind | safe_failure_kind) != "unavailable") and
+    (.failureReason == null or (.failureReason | safe_failure_reason) != "unavailable") and
+    (.httpStatus == null or (.httpStatus | safe_http_status) != null) and
+    (if .failureKind == "http_error" then
+       .httpStatus != null and .failureReason != null
+     else .httpStatus == null and .failureReason == null
+     end) and
+    (if .failureKind == "stream_timeout" or .failureKind == "curl_timeout"
+     then (.timeoutKind as $timeout | ($timeout | type) == "string" and
+       (["overall","first_byte","idle"] | index($timeout)) != null)
+     else .timeoutKind == null
+     end) and
+    (.usage == null or
+      ((.usage | type) == "object" and
+       ((.usage | keys) - ["prompt_tokens","completion_tokens","total_tokens","input_tokens","output_tokens","cost","costUsd","cost_usd"] | length) == 0 and
+       all(.usage | to_entries[]; .value == null or
+         (.value | type == "number" and isfinite and . >= 0)))) and
+    (.billedCostUsd == null or
+      (.billedCostUsd | type == "number" and isfinite and . >= 0));
   def failure($attempt):
     ($attempt.providerFailureEvidence // {}) as $e
-    | if ($e | type) == "object" and ($e | has("status")) then
+    | if ($e | type) == "object" and ($e | valid_provider_failure) then
         {status:($e.status | safe_failure_status),
          failureKind:($e.failureKind | safe_failure_kind),
          failureReason:($e.failureReason | safe_failure_reason),
@@ -216,7 +238,7 @@ if ! jq -S -s \
             modelReasoningMeasurement:null}
          else null end)}
       else
-        {status:(($attempt.providerReceiptStatus // "unavailable") | safe_failure_status),
+        {status:(if $attempt.providerReceiptStatus == "valid-provider-failure" then "unavailable" else (($attempt.providerReceiptStatus // "unavailable") | safe_failure_status) end),
          failureKind:"unavailable",failureReason:"unavailable",httpStatus:null,
          timeoutKind:"unavailable",processExitStatus:null,reasoningEffort:null}
       end;
@@ -290,7 +312,8 @@ if ! jq -S -s \
   dedupe_receipts as $deduped
   | ($deduped | map(normalize_receipt)) as $calls
   | ($calls | map(.matrixSnapshot) | map(select(. != "unavailable")) | unique_first) as $matrices
-  | ($calls | map(.attempts[] | select(.billedCost.status == "measured") | .billedCost.usd) | add // 0) as $paid_total
+  | ($calls | map(.attempts[] | select(.billedCost.status == "measured") | .billedCost.usd) as $measured_costs
+     | if ($measured_costs | length) == 0 then null else ($measured_costs | add) end) as $paid_total
   | ($calls | map(select(.billingMode == "included-subscription" or .billingMode == "subscription-headroom-unknown")) | length) as $subscription_calls
   | ($calls | map(select(.billingMode == "paid-credits")) | length) as $paid_credit_calls
   | ($calls | map(select(.fallback)) | length) as $fallbacks
@@ -327,7 +350,7 @@ if ! jq -S -s \
 fi
 
 if ! jq -r '
-  def display_money: "$" + tostring + " measured";
+  def display_money: if . == null then "unavailable" else "$" + tostring + " measured" end;
   def display_duration: if .status == "measured" then (.seconds|tostring) + "s" else "unavailable" end;
   def display_tokens: if .status == "provider-reported" then (.total|tostring) else "unavailable" end;
   def display_cost($billing):

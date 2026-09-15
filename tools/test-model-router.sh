@@ -305,10 +305,10 @@ write_valid_failure() {
   local kind="$1" reason="$2" http="$3" timeout_kind="${4:-}"
   jq -n --arg model "$model" --arg effort "$effort" --arg runid "$runid" \
     --arg lane "$lane" --arg kind "$kind" --arg reason "$reason" --arg http "$http" \
-    --arg timeout_kind "$timeout_kind" '{schemaVersion:2,invocationId:("a" * 64),outcome:"error",failureKind:$kind,failureReason:(if $reason == "" then null else $reason end),timeout:(if $timeout_kind == "" then null else {kind:$timeout_kind} end),httpStatus:(if $http == "" then null else ($http|tonumber) end),requestedModel:$model,modelCandidates:[$model],attemptedModel:null,attemptedModels:null,attemptProvenance:"not_reported_by_completion",fallbackUsed:null,responseModel:null,responseModelProvenance:"not_available",servingProvider:null,servingProviderProvenance:"not_reported_by_completion",usage:{prompt_tokens:8,completion_tokens:3,total_tokens:11,cost:0.0125},reasoningEffort:{requested:$effort,transmitted:$effort,status:"transmitted",evidence:"request-envelope",modelReasoningMeasurement:null},routing:{workload:"mechanical",sort:"throughput",providerFallbackAllowed:true,webSearch:false},authorization:{runId:(if $runid == "" then null else $runid end),laneId:(if $lane == "" then null else $lane end),requestEnvelopeSha256:("b" * 64)}}' > "$OPENROUTER_RECEIPT_FILE"
+    --arg timeout_kind "$timeout_kind" '{schemaVersion:2,invocationId:("a" * 64),outcome:(if ($kind == "stream_timeout" or $kind == "curl_timeout") then "timeout" else "error" end),failureKind:$kind,failureReason:(if $reason == "" then null else $reason end),timeout:(if $timeout_kind == "" then null else {kind:$timeout_kind} end),httpStatus:(if $http == "" then null else ($http|tonumber) end),requestedModel:$model,modelCandidates:[$model],attemptedModel:null,attemptedModels:null,attemptProvenance:"not_reported_by_completion",fallbackUsed:null,responseModel:null,responseModelProvenance:"not_available",servingProvider:null,servingProviderProvenance:"not_reported_by_completion",usage:{prompt_tokens:8,completion_tokens:3,total_tokens:11,cost:0.0125},reasoningEffort:{requested:$effort,transmitted:$effort,status:"transmitted",evidence:"request-envelope",modelReasoningMeasurement:null},routing:{workload:"mechanical",sort:"throughput",providerFallbackAllowed:true,webSearch:false},authorization:{runId:(if $runid == "" then null else $runid end),laneId:(if $lane == "" then null else $lane end),requestEnvelopeSha256:("b" * 64)}}' > "$OPENROUTER_RECEIPT_FILE"
 }
 write_valid_success() {
-  jq -n --arg model "$model" --arg effort "$effort" --arg runid "$runid" --arg lane "$lane" '{schemaVersion:2,invocationId:("a" * 64),outcome:"success",failureKind:null,failureReason:null,timeout:null,httpStatus:200,generationId:"fixture-generation",requestedModel:$model,modelCandidates:[$model],attemptedModel:$model,attemptedModels:[$model],attemptProvenance:"response_model",fallbackUsed:false,responseModel:$model,responseModelProvenance:"response",servingProvider:"fixture-provider",servingProviderProvenance:"response",usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2,cost:0.000001},reasoningEffort:{requested:$effort,transmitted:$effort,status:"transmitted",evidence:"request-envelope",modelReasoningMeasurement:null},routing:{workload:"mechanical",sort:"throughput",providerFallbackAllowed:true,webSearch:false},authorization:{runId:(if $runid == "" then null else $runid end),laneId:(if $lane == "" then null else $lane end),requestEnvelopeSha256:("b" * 64)}}' > "$OPENROUTER_RECEIPT_FILE"
+  jq -n --arg model "$model" --arg effort "$effort" --arg runid "$runid" --arg lane "$lane" '{schemaVersion:2,invocationId:("a" * 64),outcome:"success",failureKind:null,failureReason:null,timeout:null,httpStatus:200,generationId:"fixture-generation",requestedModel:$model,modelCandidates:[$model],attemptedModel:$model,attemptedModels:[$model],attemptProvenance:"response_model",fallbackUsed:false,responseModel:$model,responseModelProvenance:"response",servingProvider:"fixture-provider",servingProviderProvenance:"response",usage:{prompt_tokens:1,completion_tokens:1,total_tokens:2,cost:0.000001,is_byok:false,prompt_tokens_details:{cached_tokens:0},cost_details:{upstream_inference_cost:0.000001},completion_tokens_details:{reasoning_tokens:0}},reasoningEffort:{requested:$effort,transmitted:$effort,status:"transmitted",evidence:"request-envelope",modelReasoningMeasurement:null},routing:{workload:"mechanical",sort:"throughput",providerFallbackAllowed:true,webSearch:false},authorization:{runId:(if $runid == "" then null else $runid end),laneId:(if $lane == "" then null else $lane end),requestEnvelopeSha256:("b" * 64)}}' > "$OPENROUTER_RECEIPT_FILE"
 }
 case "${FAKE_PROVIDER_OUTCOME:-success}" in
   success)
@@ -329,9 +329,10 @@ case "${FAKE_PROVIDER_OUTCOME:-success}" in
   credits) write_valid_failure http_error insufficient_credits 402; exit 1 ;;
   rate|quota) write_valid_failure http_error rate_limited 429; exit 1 ;;
   unknown|server) write_valid_failure http_error unknown_http_error 500; exit 1 ;;
-  transport) write_valid_failure transport_error "" ""; exit 1 ;;
+  transport) write_valid_failure transport_error "" 0; exit 1 ;;
   timeout) write_valid_failure stream_timeout "" "" idle; exit 28 ;;
   stream) write_valid_failure stream_error "" ""; exit 1 ;;
+  inconsistent) write_valid_failure stream_timeout rate_limited "" idle; exit 1 ;;
   publication-failure) printf '%s\n' '### RUNNER FAILURE: could not write OpenRouter failure receipt' >&2; exit 1 ;;
   malformed) printf '%s\n' '{"schemaVersion":2,"outcome":"error","failureKind":"future_failure","diagnostic":"fixture-secret"}' > "$OPENROUTER_RECEIPT_FILE"; exit 1 ;;
   missing) exit 1 ;;
@@ -394,7 +395,7 @@ assert test "$(cat "$real_success_repo/tracked.txt")" = written
 assert jq -e '.served.transport == "openrouter" and .served.commit != null and ([.attempts[] | select(.transport == "openrouter")][0].providerReceiptStatus == "valid-provider-success")' "$TMP/real-success.receipt"
 assert test "$(find "$real_success_repo" -maxdepth 1 -name '.model-router-attempts.*' -print)" = ""
 
-for real_failure_case in permission quota timeout stream server missing malformed; do
+for real_failure_case in permission quota timeout stream server missing malformed inconsistent; do
   run_real_write_case "real-$real_failure_case" "$real_failure_case" >/dev/null
   assert test "$(cat "$TMP/real-$real_failure_case.rc")" -eq 76
   assert test "$(cat "$TMP/real-write-real-$real_failure_case/tracked.txt")" = initial
@@ -405,10 +406,13 @@ done
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_credential_unavailable" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.failureReason == "key_permission_denied" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.httpStatus == 403 and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.usage.cost == 0.0125)' "$TMP/real-permission.receipt"
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "rate_limited" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.failureReason == "rate_limited" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.httpStatus == 429)' "$TMP/real-quota.receipt"
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_transport_failed" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.failureKind == "stream_timeout" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.timeoutKind == "idle")' "$TMP/real-timeout.receipt"
+assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].processExitStatus == 28)' "$TMP/real-timeout.receipt"
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_transport_failed" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.failureKind == "stream_error")' "$TMP/real-stream.receipt"
+assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.httpStatus == null)' "$TMP/real-stream.receipt"
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "unknown_provider_failure" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.httpStatus == 500)' "$TMP/real-server.receipt"
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_receipt_missing" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence == null)' "$TMP/real-missing.receipt"
 assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_receipt_malformed" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence == null)' "$TMP/real-malformed.receipt"
+assert jq -e '([.attempts[] | select(.transport == "openrouter")][0].reason == "provider_receipt_malformed" and [.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence == null)' "$TMP/real-inconsistent.receipt"
 assert sh -c "! grep -Eq 'fixture-secret|diagnostic|fake-home|OPENROUTER_API_KEY' '$TMP/real-malformed.receipt' '$TMP/real-missing.receipt'"
 
 run_real_write_case real-publication-failure publication-failure >/dev/null

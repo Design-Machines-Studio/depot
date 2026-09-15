@@ -343,55 +343,51 @@ provider_failure_evidence() {
        "unknown_http_error"];
     . as $receipt
     | ($receipt.usage // null) as $usage
-    | ($receipt.costUsd // $receipt.cost_usd // $usage.cost // $usage.costUsd // $usage.cost_usd // null) as $cost
-    | if (($receipt | keys) - ["schemaVersion","invocationId","outcome","failureKind",
-          "failureReason","timeout","httpStatus","generationId","created",
-          "requestedModel","modelCandidates","attemptedModel","attemptedModels",
-          "attemptProvenance","fallbackUsed","responseModel",
-          "responseModelProvenance","servingProvider",
-          "servingProviderProvenance","usage","reasoningEffort","routing",
-          "authorization","costUsd","cost_usd"] | length) != 0 or
-       $receipt.schemaVersion != 2 or $receipt.outcome != "error" or
-       (($receipt.invocationId | type) != "string") or
+    | ($receipt.billedCostUsd // null) as $cost
+    | ($receipt.failureKind // null) as $kind
+    | ($receipt.failureReason // null) as $reason
+    | ($receipt.httpStatus // null) as $status
+    | ($receipt.timeoutKind // null) as $timeout
+    | if (($receipt | keys) - ["schemaVersion","invocationId","outcome","requestedModel",
+          "failureKind","failureReason","timeoutKind","httpStatus","generationId",
+          "responseModel","usage","billedCostUsd","reasoningEffort","authorization",
+          "processExitStatus"] | length) != 0 or
+       $receipt.schemaVersion != 2 or
+       ($receipt.outcome != "error" and $receipt.outcome != "timeout") or
+       ($receipt.invocationId | type) != "string" or
        (($receipt.invocationId | test("^[0-9a-f]{64}$")) | not) or
        $receipt.requestedModel != $model or
-       (($receipt.failureKind | type) != "string") or
-       ((failure_kinds | index($receipt.failureKind)) == null) or
-       ($receipt.failureReason != null and (($receipt.failureReason | type) != "string" or
-         (failure_reasons | index($receipt.failureReason)) == null)) or
-       ($receipt.httpStatus != null and (($receipt.httpStatus | type) != "number" or
-         ($receipt.httpStatus | isfinite) | not or ($receipt.httpStatus | floor) != $receipt.httpStatus or
-         $receipt.httpStatus < 100 or $receipt.httpStatus > 599)) or
-       ($receipt.timeout != null and (($receipt.timeout | type) != "object" or
-         (($receipt.timeout | keys) - ["kind"] | length) != 0 or
-         (["overall","first_byte","idle"] | index($receipt.timeout.kind)) == null)) or
+       ($kind | type) != "string" or (failure_kinds | index($kind)) == null or
+       ($reason != null and (($reason | type) != "string" or (failure_reasons | index($reason)) == null)) or
+       ($status != null and (($status | type) != "number" or ($status | isfinite) | not or
+         ($status | floor) != $status or $status < 100 or $status > 599)) or
+       ($timeout != null and (["overall","first_byte","idle"] | index($timeout)) == null) or
        (($receipt.authorization | type) != "object") or
+       $receipt.authorization.runId != $runid or $receipt.authorization.laneId != $lane or
        (($receipt.authorization.requestEnvelopeSha256 | type) != "string") or
        (($receipt.authorization.requestEnvelopeSha256 | test("^[0-9a-f]{64}$")) | not) or
-       $receipt.authorization.runId != $runid or $receipt.authorization.laneId != $lane or
-       ((($receipt.authorization | keys) - ["runId","laneId","requestEnvelopeSha256"] | length) != 0) or
-       (($receipt.routing | type) != "object") or
-       ((($receipt.routing | keys) - ["workload","sort","providerFallbackAllowed","webSearch"] | length) != 0) or
-       (($receipt.reasoningEffort | type) != "object") or
-       ((($receipt.reasoningEffort | keys) - ["requested","transmitted","status","evidence","modelReasoningMeasurement"] | length) != 0) or
+       ($receipt.reasoningEffort | type) != "object" or
+       (($receipt.reasoningEffort | keys) - ["requested","transmitted","status","evidence","modelReasoningMeasurement"] | length) != 0 or
        $receipt.reasoningEffort.requested != $effort or
        $receipt.reasoningEffort.transmitted != $effort or
        $receipt.reasoningEffort.status != "transmitted" or
        $receipt.reasoningEffort.evidence != "request-envelope" or
        $receipt.reasoningEffort.modelReasoningMeasurement != null or
        ($usage != null and (($usage | type) != "object" or
-         (($usage | keys) - ["prompt_tokens","completion_tokens","total_tokens",
-           "input_tokens","output_tokens","cost","costUsd","cost_usd"] | length) != 0 or
-         (any($usage | to_entries[]; . as $entry | $entry.value != null and
-           (($entry.value | type) != "number" or (($entry.value | isfinite) | not) or $entry.value < 0))))) or
+         (any($usage | to_entries[]; .value != null and
+           (($usage[.key] | type) != "number" or (($usage[.key] | isfinite) | not) or $usage[.key] < 0))))) or
        ($cost != null and (($cost | type) != "number" or ($cost | isfinite) | not or $cost < 0)) or
-       ([(.. | objects) | keys[] |
-         select(test("^(prompt|response|content|api_?key|secret|stderr|body|message|diagnostic)$"; "i"))] | length) != 0
+       ($receipt.processExitStatus | type) != "number" or
+       ($receipt.processExitStatus | floor) != $receipt.processExitStatus or
+       $receipt.processExitStatus < 0 or $receipt.processExitStatus > 255 or
+       ($receipt.outcome == "timeout" and ($kind != "stream_timeout" and $kind != "curl_timeout")) or
+       ($kind == "http_error" and ($status == null or $status < 400 or $reason == null)) or
+       ($kind != "http_error" and ($reason != null or $status != null)) or
+       (($kind == "stream_timeout" or $kind == "curl_timeout") and $timeout == null)
        then empty
-       else {status:"valid-provider-failure",failureKind:$receipt.failureKind,
-         failureReason:$receipt.failureReason,httpStatus:($receipt.httpStatus // null),
-         timeoutKind:($receipt.timeout.kind // null),usage:$usage,billedCostUsd:$cost,
-         reasoningEffort:$receipt.reasoningEffort}
+       else {status:"valid-provider-failure",failureKind:$kind,failureReason:$reason,
+         httpStatus:$status,timeoutKind:$timeout,usage:$usage,billedCostUsd:$cost,
+         reasoningEffort:$receipt.reasoningEffort,processExitStatus:$receipt.processExitStatus}
        end
   ' "$receipt"
 }
@@ -725,6 +721,7 @@ while IFS= read -r candidate; do
   ATTEMPT_RECEIPT_ABSOLUTE_PATH=""
   PROVIDER_RECEIPT_STATUS="not-requested"
   PROVIDER_FAILURE_EVIDENCE_JSON=null
+  PROVIDER_PROCESS_EXIT_STATUS=""
   if [ "$WRITE_REQUEST" -eq 1 ]; then
     ATTEMPT_HEAD="$(git rev-parse --verify HEAD 2>/dev/null)" || exit 76
     ATTEMPT_STATUS="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" || exit 76
@@ -735,6 +732,7 @@ while IFS= read -r candidate; do
   fi
   STARTED="$(date +%s)"
   : > "$PRIVATE_LOG"
+  INVOKE_REASON=""
   fixture_outcome="$(printf '%s' "$AVAILABILITY" | jq -r --arg model "$model" '.candidateResults[$model].outcome // ""')"
   if [ "$WRITE_REQUEST" -eq 1 ] && [ "$PROBE_SOURCE" = live ] &&
      [ "$TRANSPORT_STUB" = false ] && [ -n "$ATTEMPT_STATUS" ]; then
@@ -781,7 +779,7 @@ while IFS= read -r candidate; do
         ATTEMPT_TRANSMITTED_EFFORT="$EFFECTIVE_EFFORT"
         ATTEMPT_EFFORT_STATUS="transmitted"
         ATTEMPT_EFFORT_EVIDENCE="request-envelope"
-      elif jq -e '.outcome == "success"' "$ATTEMPT_RECEIPT_ABSOLUTE_PATH" >/dev/null 2>&1; then
+      elif jq -e '.outcome == "success" and (.generationId | type) == "string" and (.responseModel | type) == "string"' "$ATTEMPT_RECEIPT_ABSOLUTE_PATH" >/dev/null 2>&1; then
         PROVIDER_RECEIPT_STATUS="valid-provider-success"
         PROVIDER_FAILURE_EVIDENCE_JSON=null
       else
@@ -789,6 +787,14 @@ while IFS= read -r candidate; do
         PROVIDER_FAILURE_EVIDENCE_JSON=null
         [ "$rc" -eq 0 ] && rc=77
         [ -n "$INVOKE_REASON" ] || INVOKE_REASON=provider_receipt_malformed
+      fi
+      [ "$PROVIDER_FAILURE_EVIDENCE_JSON" = null ] || \
+        PROVIDER_PROCESS_EXIT_STATUS="$(printf '%s' "$PROVIDER_FAILURE_EVIDENCE_JSON" | jq -r '.processExitStatus')"
+      if [ "$PROVIDER_RECEIPT_STATUS" = "valid-provider-success" ] && [ "$rc" -ne 0 ]; then
+        if [ "$(openrouter_write_failure_reason)" = "provider_adapter_rejected" ]; then
+          PROVIDER_RECEIPT_STATUS="adapter-local-rejection"
+          INVOKE_REASON=provider_adapter_rejected
+        fi
       fi
       rm -f "$ATTEMPT_RECEIPT_ABSOLUTE_PATH" || {
         PROVIDER_RECEIPT_STATUS="preservation-failed"
@@ -896,7 +902,11 @@ while IFS= read -r candidate; do
   transmitted_effort_json=null
   [ -z "$ATTEMPT_TRANSMITTED_EFFORT" ] || transmitted_effort_json="$(jq -Rn --arg effort "$ATTEMPT_TRANSMITTED_EFFORT" '$effort')"
   process_exit_status=null
-  [ "$rc" -ge 0 ] && [ "$rc" -le 255 ] && process_exit_status="$rc"
+  if [ -n "$PROVIDER_PROCESS_EXIT_STATUS" ]; then
+    process_exit_status="$PROVIDER_PROCESS_EXIT_STATUS"
+  elif [ "$rc" -ge 0 ] && [ "$rc" -le 255 ]; then
+    process_exit_status="$rc"
+  fi
   ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg served_identity "$OBSERVED_SERVED_IDENTITY" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --arg receipt_status "$PROVIDER_RECEIPT_STATUS" --arg reason "$reason" --argjson provider_failure "$PROVIDER_FAILURE_EVIDENCE_JSON" --argjson process_exit_status "$process_exit_status" --argjson transmitted_effort "$transmitted_effort_json" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,servedIdentity:$served_identity,provider:$provider,transport:$transport,billingMode:$billing,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,effortEvidence:$effort_evidence,providerReceiptStatus:$receipt_status,providerFailureEvidence:$provider_failure,processExitStatus:$process_exit_status,outcome:"failed",reason:$reason,durationSeconds:$duration}]')"
   if [ "$WRITE_REQUEST" -eq 1 ]; then
     CURRENT_HEAD="$(git rev-parse --verify HEAD 2>/dev/null)" || exit 76

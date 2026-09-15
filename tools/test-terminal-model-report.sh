@@ -41,6 +41,16 @@ assert jq -e '.calls[0].attempts[0].providerFailure.status == "valid-provider-fa
 assert grep -Fq 'http_error/rate_limited HTTP 429' "$TMP/provider-failure.md"
 assert grep -Fq 'Paid total: `$0.0125 measured`' "$TMP/provider-failure.md"
 
+# A forged or future evidence enum remains unknown at the terminal boundary.
+jq '.attempts[0].providerFailureEvidence.failureKind = "future_failure"' \
+  "$FIXTURES/11-provider-failure.json" > "$TMP/invalid-provider-failure.json"
+printf '%s\n' '{"schemaVersion":1,"receiptFiles":["invalid-provider-failure.json"]}' > "$TMP/invalid-provider-failure-index.json"
+"$RENDERER" --receipt-index "$TMP/invalid-provider-failure-index.json" \
+  --status failed --json-output "$TMP/invalid-provider-failure.json.out" \
+  --markdown-output "$TMP/invalid-provider-failure.md" >/dev/null
+assert jq -e '.calls[0].attempts[0].providerFailure.status == "unavailable" and .calls[0].attempts[0].providerFailure.failureKind == "unavailable"' "$TMP/invalid-provider-failure.json.out"
+assert grep -Fq 'unavailable | failed' "$TMP/invalid-provider-failure.md"
+
 cp "$TMP/report.json" "$TMP/report-first.json"
 cp "$TMP/report.md" "$TMP/report-first.md"
 "$RENDERER" --receipt-index "$FIXTURES/terminal-receipt-index.json" \
