@@ -35,6 +35,12 @@ assert grep -Fq 'subscription allowance' "$TMP/report.md"
 assert grep -Fq 'Paid total: `$0.103 measured`' "$TMP/report.md"
 assert sh -c "! grep -Eq 'ARBITRARY_PROVIDER|REFLECTED_INPUT|REFLECTED MATRIX|MODEL_OUTPUT|CREDENTIAL|UNRELATED_TEXT|duplicate-must-not-replace-first' '$TMP/report.json' '$TMP/report.md'"
 
+"$RENDERER" --receipt-index "$FIXTURES/provider-failure-index.json" \
+  --status failed --json-output "$TMP/provider-failure.json" --markdown-output "$TMP/provider-failure.md" >/dev/null
+assert jq -e '.calls[0].attempts[0].providerFailure.status == "valid-provider-failure" and .calls[0].attempts[0].providerFailure.failureKind == "http_error" and .calls[0].attempts[0].providerFailure.failureReason == "rate_limited" and .calls[0].attempts[0].providerFailure.httpStatus == 429 and .calls[0].attempts[0].tokens.total == 11 and .calls[0].attempts[0].billedCost.usd == 0.0125' "$TMP/provider-failure.json"
+assert grep -Fq 'http_error/rate_limited HTTP 429' "$TMP/provider-failure.md"
+assert grep -Fq 'Paid total: `$0.0125 measured`' "$TMP/provider-failure.md"
+
 cp "$TMP/report.json" "$TMP/report-first.json"
 cp "$TMP/report.md" "$TMP/report-first.md"
 "$RENDERER" --receipt-index "$FIXTURES/terminal-receipt-index.json" \

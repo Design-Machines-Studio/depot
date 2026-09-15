@@ -173,6 +173,68 @@ if ! jq -S -s \
     | (if $served.costProvenance == "provider-receipt" and $usd != null then
          {usd:$usd, status:"measured", provenance:"provider-receipt"}
        else {usd:null, status:"unavailable", provenance:"unavailable"} end);
+  def safe_failure_status:
+    . as $value
+    | if type == "string" and (["valid-provider-failure","missing",
+        "malformed-or-unsupported","publication-failed","preservation-failed",
+        "adapter-local-rejection","not-requested","unavailable"] | index($value) != null)
+      then . else "unavailable" end;
+  def safe_failure_kind:
+    . as $value
+    | if type == "string" and (["http_error","transport_error","curl_timeout",
+        "stream_timeout","incomplete_stream","stream_error","malformed_stream",
+        "missing_generation_provenance","malformed_model_provenance",
+        "native_vendor_origin","unexpected_model_provenance","interrupted"] | index($value) != null)
+      then . else "unavailable" end;
+  def safe_failure_reason:
+    . as $value
+    | if type == "string" and (["organization_monthly_budget_exceeded",
+        "key_permission_denied","guardrail_blocked","insufficient_credits",
+        "rate_limited","unknown_http_error"] | index($value) != null)
+      then . else "unavailable" end;
+  def safe_http_status:
+    . as $value
+    | if type == "number" and floor == . and . >= 100 and . <= 599
+      then . else null end;
+  def failure($attempt):
+    ($attempt.providerFailureEvidence // {}) as $e
+    | if ($e | type) == "object" and ($e | has("status")) then
+        {status:($e.status | safe_failure_status),
+         failureKind:($e.failureKind | safe_failure_kind),
+         failureReason:($e.failureReason | safe_failure_reason),
+         httpStatus:($e.httpStatus | safe_http_status),
+         timeoutKind:(if ($e.timeoutKind | type) == "string" and
+             (["overall","first_byte","idle"] | index($e.timeoutKind) != null)
+           then $e.timeoutKind else "unavailable" end),
+         processExitStatus:($attempt.processExitStatus | nonnegative_integer),
+         reasoningEffort:(if ($e.reasoningEffort | type) == "object" then
+           {requested:($e.reasoningEffort.requested | safe_effort),
+            transmitted:confirmed_effort($e.reasoningEffort.transmitted;
+              $e.reasoningEffort.status; $e.reasoningEffort.evidence),
+            status:(if $e.reasoningEffort.status == "transmitted" then "transmitted" else "unavailable" end),
+            evidence:(if $e.reasoningEffort.evidence == "request-envelope" then "request-envelope" else "unavailable" end),
+            modelReasoningMeasurement:null}
+         else null end)}
+      else
+        {status:(($attempt.providerReceiptStatus // "unavailable") | safe_failure_status),
+         failureKind:"unavailable",failureReason:"unavailable",httpStatus:null,
+         timeoutKind:"unavailable",processExitStatus:null,reasoningEffort:null}
+      end;
+  def failure_tokens($attempt):
+    ($attempt.providerFailureEvidence // {}) as $e
+    | ($e.usage // {}) as $usage
+    | (($usage.input_tokens // $usage.prompt_tokens // null) | nonnegative_integer) as $input
+    | (($usage.output_tokens // $usage.completion_tokens // null) | nonnegative_integer) as $output
+    | (($usage.total_tokens // null) | nonnegative_integer) as $total
+    | if $e.status == "valid-provider-failure" and $total != null then
+        {input:$input, output:$output, total:$total, status:"provider-reported", provenance:"provider-receipt"}
+      else {input:null,output:null,total:null,status:"unavailable",provenance:"unavailable"} end;
+  def failure_billed_cost($attempt):
+    ($attempt.providerFailureEvidence // {}) as $e
+    | ($e.billedCostUsd | nonnegative_number) as $usd
+    | if $e.status == "valid-provider-failure" and $usd != null then
+        {usd:$usd,status:"measured",provenance:"provider-receipt"}
+      else {usd:null,status:"unavailable",provenance:"unavailable"} end;
   def normalize_receipt:
     . as $receipt
     | ($receipt.served // {}) as $served
@@ -216,10 +278,12 @@ if ! jq -S -s \
               ),
               billingMode:((if $was_served then $served.billingMode else $entry.value.billingMode end) | safe_billing),
               duration:(if $was_served then duration($served.durationSeconds) else duration($entry.value.durationSeconds) end),
-              tokens:(if $was_served then tokens($served) else {input:null,output:null,total:null,status:"unavailable",provenance:"unavailable"} end),
-              billedCost:(if $was_served then billed_cost($served) else {usd:null,status:"unavailable",provenance:"unavailable"} end),
+              tokens:(if $was_served then tokens($served) else failure_tokens($entry.value) end),
+              billedCost:(if $was_served then billed_cost($served) else failure_billed_cost($entry.value) end),
+              providerFailure:failure($entry.value),
               result:$outcome,
-              served:$was_served
+              served:$was_served,
+              processExitStatus:($entry.value.processExitStatus | nonnegative_integer)
             }
         ]
       };
@@ -230,11 +294,11 @@ if ! jq -S -s \
   | ($calls | map(select(.billingMode == "included-subscription" or .billingMode == "subscription-headroom-unknown")) | length) as $subscription_calls
   | ($calls | map(select(.billingMode == "paid-credits")) | length) as $paid_credit_calls
   | ($calls | map(select(.fallback)) | length) as $fallbacks
-  | ($calls | map(select(([.attempts[] | select(.served)][0].tokens.status // "unavailable") == "unavailable")) | length) as $unavailable_tokens
-  | ($calls | map(select(([.attempts[] | select(.served)][0].billedCost.status // "unavailable") == "unavailable")) | length) as $unavailable_cost
+  | ($calls | map(select((([.attempts[] | select(.served)][0] // .attempts[0]).tokens.status // "unavailable") == "unavailable")) | length) as $unavailable_tokens
+  | ($calls | map(select((([.attempts[] | select(.served)][0] // .attempts[0]).billedCost.status // "unavailable") == "unavailable")) | length) as $unavailable_cost
   | ($calls | map(select(
-      (([.attempts[] | select(.served)][0].tokens.status // "unavailable") == "unavailable") or
-      (([.attempts[] | select(.served)][0].billedCost.status // "unavailable") == "unavailable")
+      ((([.attempts[] | select(.served)][0] // .attempts[0]).tokens.status // "unavailable") == "unavailable") or
+      ((([.attempts[] | select(.served)][0] // .attempts[0]).billedCost.status // "unavailable") == "unavailable")
     )) | length) as $unmeasured
   | {
       schemaVersion:1,
@@ -271,20 +335,25 @@ if ! jq -r '
     elif $billing == "included-subscription" or $billing == "subscription-headroom-unknown" then "subscription allowance"
     elif $billing == "paid-credits" then "paid-credit usage"
     else "unavailable" end;
+  def display_failure:
+    if .status == "valid-provider-failure" then
+      .failureKind + (if .failureReason == "unavailable" then "" else "/" + .failureReason end)
+        + (if .httpStatus == null then "" else " HTTP " + (.httpStatus | tostring) end)
+    else .status end;
   def matrix_line: if length == 0 then "unavailable" else join(", ") end;
   def attempt_rows:
     .calls[] as $call
     | $call.attempts[]
     | . as $attempt
-    | "| \($call.role) | \($attempt.model) \(if $attempt.served then "(served)" else "(attempted)" end) | \($attempt.provider) / \($attempt.transport) | \($attempt.requestedEffort) / \($attempt.transmittedEffort) | \($attempt.duration | display_duration) | \($attempt.tokens | display_tokens) | \($attempt.billedCost | display_cost($attempt.billingMode)) | \($attempt.result)\(if $attempt.served and $call.fallback then " (fallback)" else "" end) |";
+    | "| \($call.role) | \($attempt.model) \(if $attempt.served then "(served)" else "(attempted)" end) | \($attempt.provider) / \($attempt.transport) | \($attempt.requestedEffort) / \($attempt.transmittedEffort) | \($attempt.duration | display_duration) | \($attempt.tokens | display_tokens) | \($attempt.billedCost | display_cost($attempt.billingMode)) | \($attempt.providerFailure | display_failure) | \($attempt.result)\(if $attempt.served and $call.fallback then " (fallback)" else "" end) |";
   [
     "### Model & Cost Report",
     "",
     "Run: " + (.runStatus | ascii_upcase),
     "Matrix: " + (.matrixSnapshots | matrix_line),
     "",
-    "| Role | Attempted / served model | Rail | Effort requested / transmitted | Duration | Tokens | Billed cost | Result |",
-    "|---|---|---|---|---:|---:|---:|---|",
+    "| Role | Attempted / served model | Rail | Effort requested / transmitted | Duration | Tokens | Billed cost | Failure evidence | Result |",
+    "|---|---|---|---|---:|---:|---:|---|---|",
     (attempt_rows),
     "",
     "Paid total: `" + (.summary.measuredPaidCostUsd | display_money) + "`",
