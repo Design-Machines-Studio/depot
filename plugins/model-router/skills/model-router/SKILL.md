@@ -98,8 +98,9 @@ exhausted Claude rail.
 
 For one narrow unresolved UI/design question, load
 `${CLAUDE_SKILL_DIR}/references/design-consultation.md` and request
-`design-consultant`. Fable is eligible only through native Claude under that
-bounded one-shot contract. It is not a repository-wide reviewer or builder.
+`design-consultant`. The default candidate is native Codex. Claude candidates are excluded from
+automatic routing; an explicitly configured Fable consultation still requires
+that bounded native-Claude contract. It is not a repository-wide reviewer or builder.
 
 For a coordinator preparing a human copy-paste execution prompt, use
 `${CLAUDE_SKILL_DIR}/references/operator-recommendation.sh`. This read-only

@@ -801,7 +801,7 @@ require_text "$selective_allowlist" "Any validation failure discards the entire 
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.22.0"' "dm-review requires repository-project planning and strict registry validation"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.83.0"' "pipeline requires the current completion contract"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"model-router": ">=0.8.0"' "dm-review requires review recommendation routing"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"model-router": ">=0.8.0"' "pipeline requires the current routing runtime"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"model-router": ">=0.8.2"' "pipeline requires the current routing runtime"
 require_text "$review_skill" 'Implementation origin is not a coverage field or eligibility condition.' "dm-review makes implementation origin ineligible as a review filter"
 require_text "$review_skill" 'never request, infer, or pass implementation-origin declarations' "dm-review never collects implementation origin for lane routing"
 require_text "$orchestrator" 'one cumulative implementation receipt set' "Pipeline keeps implementation receipts for terminal reporting"
@@ -2057,6 +2057,11 @@ PY
     failures=1
   fi
 fi
+
+# Maintained-site delivery and authorized repair closeout.
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/repository-browser-target-discovery.md" 'remote identity alone cannot choose the site' "multiple maintained instances retain their own binding"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/repo-cleanup-contract.md" 'local feature HEAD equals the remote PR' "authorized repairs verify pushed delivery"
+require_text "$REPO_ROOT/plugins/dm-review/commands/dm-review-fix.md" 'Never glob-delete todos' "repair cleanup preserves foreign todo files"
 
 printf "\n"
 if [ "$failures" -ne 0 ]; then

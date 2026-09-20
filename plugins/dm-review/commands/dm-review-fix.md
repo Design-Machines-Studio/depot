@@ -88,38 +88,25 @@ Resolved N of M findings:
 Remaining: X pending findings
 ```
 
-If all findings are resolved, suggest committing:
-```
-All review findings resolved. Commit the fixes?
-```
+Before presenting the final summary, complete the authorized delivery and cleanup
+below. A resolved finding is not a pushed repair until the PR head is verified.
 
-### 5. Cleanup
+### 5. Cleanup and delivery
 
-Two parts, both unconditional -- do not gate either on whether fixes were committed.
+Both steps are unconditional, including partial repair and failed verification.
 
-**5a. Repository cleanup.** Run the cleanup phase per `plugins/dm-review/skills/review/references/repo-cleanup-contract.md`: reconcile only exact refs this fix pass registered, delete only branches it created and that are provably merged, leave foreign refs alone with a follow-up command, assert a clean tree, and report the inventory. Never prune Git metadata or delete the branch being fixed.
+**5a. Settle this run's files.** Use the exact entry baseline and ownership records.
+Remove only completed todo files created by this run whose disposition is retained
+in the review report. Preserve pre-existing todos and uncommitted work. Include
+intentional task-owned source, documentation and lesson changes; do not generate
+extra planning/lesson artifacts for routine repairs. Never glob-delete todos.
 
-**5b. Completed todo files.** Stale done files accumulate across sessions when this step is skipped.
-
-1. Find all done todo files:
-```bash
-ls todos/*-done-*.md 2>/dev/null
-```
-
-2. Delete all completed todo files:
-```bash
-rm -- todos/*-done-*.md
-```
-
-3. If the todos/ directory is now empty, report:
-```
-All review findings resolved and cleaned up. todos/ directory is clean.
-```
-
-4. If pending findings remain, list them:
-```
-Cleaned up N completed todos. Remaining:
-- 003-pending-p2-description
-```
-
-Always clean up after fixes are committed -- don't leave completed todo files accumulating.
+**5b. Commit, push and reconcile.** Follow
+`plugins/dm-review/skills/review/references/repo-cleanup-contract.md`, including
+its task-change delivery requirement. Commit and push the authorized repair to
+its existing PR, verify the remote head, then reconcile exact owned resources.
+Preserve the feature branch, maintained serving checkout and foreign work. Compare
+remaining dirty files against the entry baseline rather than asserting global
+cleanliness. For UI repairs, rebuild and recheck the maintained domain at the
+final repaired head and leave it available for the operator. Report blocked
+pushes, browser cases or host-worktree release truthfully; never silently omit them.

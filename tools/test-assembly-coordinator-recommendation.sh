@@ -93,7 +93,7 @@ assert grep -Fq 'browser evidence/setup gap' "$TMP/browser-required-prompt.md"
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/browser-required-recommendation.json"
 assert jq -e '
-  .recommendedStart.model == "gpt-6-astra" and
+  .recommendedStart.model == "gpt-5.6-terra" and
   .recommendedStart.harness == "Codex" and
   .recommendedStart.effort == "medium" and
   .recommendedStart.fallback.model == "gpt-5.6-sol" and
@@ -104,9 +104,9 @@ assert jq -e '
   --capability write-repository --capability tool-use --capability long-context \
   --capability structured-output --effort low --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/builder.json"
-assert jq -e '.recommendedStart.model == "gpt-6-astra" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "low"' "$TMP/builder.json"
+assert jq -e '.recommendedStart.model == "gpt-5.6-terra" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "low"' "$TMP/builder.json"
 assert jq -e '.recommendedStart.fallback.model == "gpt-5.6-sol" and (.recommendedStart.fallback | keys | length) == 3' "$TMP/builder.json"
-assert jq -e '.recommendedStart.cost.label == "included subscription" and .recommendedStart.cost.apiEquivalent == null and .recommendedStart.cost.apiPrice == null' "$TMP/builder.json"
+assert jq -e '.recommendedStart.cost.label == "included subscription" and .recommendedStart.cost.apiEquivalent.basis == "API-equivalent planning estimate; never billed subscription spend" and .recommendedStart.cost.apiPrice == null' "$TMP/builder.json"
 
 "$RECOMMEND" --role review-fast --capability read-repository \
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
@@ -122,7 +122,22 @@ assert jq -e '.recommendedStart.model == "gpt-5.6-sol" and .recommendedStart.har
 "$RECOMMEND" --role design-consultant --capability long-context \
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/fable-design.json"
-assert jq -e '.recommendedStart.model == "fable" and .recommendedStart.harness == "Claude Code" and .recommendedStart.fallback.model == "gpt-5.6-sol"' "$TMP/fable-design.json"
+assert jq -e '.recommendedStart.model == "gpt-5.6-sol" and .recommendedStart.harness == "Codex" and .recommendedStart.fallback.model == "qwen/qwen3.8-max"' "$TMP/fable-design.json"
+
+# The two reported consumer tasks choose economical roles, with concrete native
+# fallbacks even when the host needs tools. These exercise the real renderer.
+"$RECOMMEND" --role builder-fast --capability read-repository \
+  --capability write-repository --capability tool-use --capability structured-output \
+  --effort high --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
+  --format json > "$TMP/node-policy-repair.json"
+assert jq -e '.recommendedStart.model == "gpt-5.6-luna" and .recommendedStart.effort == "high" and .recommendedStart.fallback.model == "gpt-5.6-terra"' "$TMP/node-policy-repair.json"
+"$RECOMMEND" --role research-fast --capability read-repository \
+  --capability tool-use --capability structured-output --effort medium \
+  --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
+  --format json > "$TMP/publication-readiness.json"
+assert jq -e '.recommendedStart.model == "gpt-5.6-luna" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-5.6-sol"' "$TMP/publication-readiness.json"
+assert jq -e 'all(.roles[][]; .transport != "claude-cli")' "$POLICY"
+assert jq -e 'all(.chunkKinds.logic,.chunkKinds.ui,.chunkKinds.integration; .executorRole == "builder-fast" and (.executorCapabilities|index("long-context")|not))' "$PIPELINE_POLICY"
 
 # The ignored common-checkout profile can retire Opus without changing shared
 # policy or user-level configuration; both dispatch and recommendation read it.

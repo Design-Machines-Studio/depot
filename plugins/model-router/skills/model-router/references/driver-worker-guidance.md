@@ -1,25 +1,42 @@
 # Main driver and bounded workers
 
-Human-facing setup and calibration, observed 2026-09-08. Concrete identities in
-this reference are for the operator; never copy them into worker, reviewer,
-critic, or architect packets. The existing `role-policy.json` owns selection.
+Human-facing policy, updated 2026-09-20. Optimize total completion cost:
+input (including repeated cached context), output/reasoning, retries, integration
+and review, defects/rework, elapsed time and maintainer attention. Start with the
+lowest capable model for the whole job, not the cheapest token price. A stronger
+model, including Astra as the initial choice, is justified by task-specific
+uncertainty or evidence that it improves correctness, completeness or total
+completion efficiency. Do not require a predictable cheap-model failure first.
+Speed matters when it reduces total delivery cost; no model name guarantees it.
+Concrete identities here are operator-only; `role-policy.json` owns selection.
 
 | Work | Starting point | Escalation |
 |---|---|---|
-| Main driver and routine coordination | GPT-6 Astra Low in Codex | Medium for substantive planning; High or above only for a named difficult architecture, debugging, or review problem |
-| Architecture and integration participant | `architect` or `builder-deep`; native Astra first | Medium for demanding work; explicit High/Max only for named uncertainty or difficulty, never a UI/integration label or file count alone |
-| Bounded execution | `builder-fast`; native GPT-5.6 Luna at High | Max for demonstrated difficulty; lower effort for simple mechanical work |
-| Final design, integration, and review decisions | Main driver | Keep applicable specialist review lanes and fix every retained P1/P2/P3 |
-| Substantive implementation | `builder-deep`; native Astra with Sol as a normal candidate | Medium by default; use Astra escalation only for named difficulty |
-| Standalone review orchestration | `review-coordinator`; native GPT-5.6 Sol | Medium by default; Astra is the one difficult-judgment fallback |
-| Narrow design question | `design-consultant`; native Fable when eligible | One question and compact evidence; one fallback, no repeated pass |
-| Specialist middle tier | Existing GPT-5.6 Terra critic/review candidates | No new tier, role, or orchestration branch |
+| Evidence gathering, release-readiness checks, routine planning and coordination | `research-fast`; GPT-5.6 Luna Medium in Codex | Sol Medium when evidence materially conflicts |
+| Mechanical/docs changes | `builder-fast`; Luna Low or Medium | Increase only for demonstrated difficulty |
+| Bounded implementation, including settled UI, logic and integration | `builder-fast`; Luna High | Terra after one focused failed attempt or named uncertainty |
+| Complex implementation requiring unresolved judgment | `builder-deep`; Terra Medium | Sol, then Astra only for concrete difficulty |
+| Unresolved architecture | `architect`; Sol Medium | Astra for particularly difficult architecture; not a routine planning default |
+| Standalone review orchestration | `review-coordinator`; Sol Medium | Astra for difficult judgment; do not repeat already valid reviews |
+| Narrow design question | `design-consultant`; Sol with the prototype as authority | Existing eligible specialist fallback, not a redesign mandate |
+| Bounded inexpensive or specialized analysis | Eligible OpenRouter participant | Host retains tools, integration and verification unless transport proves otherwise |
 
-Luna execution requires settled requirements, exact file ownership, and
-verifiable acceptance criteria. The driver owns unresolved design and integrates
-the result. Workers do not inherit the driver identity or effort: agent cards
-remain `model: inherit` as neutral metadata, while actual dispatch uses each
-explicit role request. Routine review workers remain separate from the driver.
+Codex drives coding, integration and verification. Claude is excluded from the
+default candidate policy, including design consultations; available Claude
+credentials do not restore automatic eligibility. Native Claude transport remains
+compatible for separately configured use, without any paid-overage default.
+
+Do not add delegation automatically. For a small settled task, packet preparation,
+duplicate context and synthesis may cost more than direct execution. When useful,
+workers receive only relevant evidence, owned files and verifiable acceptance.
+They never inherit the driver's model or effort. Agent cards remain `model: inherit`
+as neutral metadata; dispatch uses each explicit role request.
+
+Every human recommendation names the exact model, effort, harness and one exact
+fallback from the router. Explain any choice above the lowest capable role with
+one task-specific reason. OpenRouter text analysis/patch drafting is not autonomous
+tool execution. Do not broaden worker capabilities merely because the host runs
+Git, tests or browser acceptance. Do not drop capabilities the worker really needs.
 
 The normalized request vocabulary stays `low|medium|high|max`. Explicit effort
 is preserved across candidate fallback, with only the existing transport mapping
@@ -29,19 +46,24 @@ Native host-only levels such as `xhigh` do not expand the routing contract.
 
 ## Evidence and limits
 
-[Tibo's September 6 calibration](https://x.com/thsottiaux/status/2096688770523467947)
-recommends moving from satisfactory Sol High usage to Astra Low or Medium. This
-is first-party calibration guidance, not a guarantee on every Depot task. The
-post was retrieved through the public FxTwitter mirror when direct X retrieval
-failed. It supplies no evidence for Luna execution performance.
+Earlier first-party Astra calibration is historical guidance, not evidence that
+Astra is cheapest for every task. The lowest-capable policy supersedes the old
+Astra-first defaults. Compare accepted results, corrections and total tokens when
+available; never infer account allowance savings from API prices or model names.
+Keep applicable specialist review and fix every retained P1/P2/P3.
 
-Luna High/Max bounded execution is a workflow hypothesis. Validate it with an
-ordinary implementation chunk and its required review: accepted result, retained
-defects, corrections, elapsed time, tokens when measured, and actual paid cost.
-Do not call this a benchmark win or claim lower subscription usage without
-measurements. Use one useful comparison when evidence warrants it, not a model
-tournament. The [Astra migration guide](https://developers.openai.com/api/docs/guides/latest-model)
-also supports clear instructions, deliberate delegation, and proportionate tests.
+## Reduce repeated context
+
+- Refresh changed facts, not the entire project inventory, on every planning turn.
+- Read required instructions once; use targeted ranges and bounded command output.
+- Keep one concise current handoff with exact heads, decisions and remaining work.
+  Start a fresh task session at a meaningful boundary when old context dominates;
+  do not restart each turn and lose useful cache reuse.
+- Reuse still-exact verification/browser evidence and recheck affected lanes only.
+- Do not attach whole transcripts to agents or repeat full model reports per stage.
+- Large context is optional. A shorter handoff or earlier compaction can reduce
+  repeated input, but compaction also costs tokens; measure a real task before
+  asserting savings. Never change user context settings silently.
 
 ## Subscription and provider boundaries
 

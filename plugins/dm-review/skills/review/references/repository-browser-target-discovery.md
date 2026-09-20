@@ -35,6 +35,16 @@ this pass without Pipeline inventing a separate discovery ladder.
 
 ## Established project checkout and domain
 
+A repository may have several maintained instances of the same Git remote. Bind
+this run to the specific folder/domain pair from its originating checkout, user
+instruction or repository runbook; remote identity alone cannot choose the site.
+Carry that pair through repair, rebuild, browser evidence and terminal handoff.
+For a required multi-instance scenario, bind and verify each instance separately.
+An implementation worktree is neither instance. Never rewrite a server's source
+mount/root to point at it. If the pair is genuinely ambiguous, resolve that fact
+before switching an unrelated maintained instance.
+
+
 For Design Machines projects, resolve the project code from current context or
 root instructions. The [Project Codes catalog](https://app.notion.com/p/gertz/2f7d87938808802888b4c184d4d3cf62?v=305d8793880880129530000ce06e58cc&source=copy_link)
 is a lookup fallback: `DM-006/WORKS` maps to `dm006.asmbly.app`, for example.

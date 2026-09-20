@@ -251,7 +251,10 @@ Emitted by Phase 8. Two tables, matching `repo-cleanup-contract.md` section 7 ve
 - Branches deleted: N   blocked: M   left (foreign): K
 - `git status --porcelain`: clean | <residue>
 
-If the review created and left nothing, state `Repository cleanup: nothing created, tree clean.`
+If the review created and left nothing, state `Repository cleanup: no run-owned residue; entry baseline preserved.`
+For authorized repairs also report the final committed/pushed PR head. For rendered
+work report the maintained domain, serving checkout and actual branch/head left
+for the operator, or the exact blocker, per `repo-cleanup-contract.md`.
 
 ---
 

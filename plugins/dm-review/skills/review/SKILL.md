@@ -677,6 +677,10 @@ unavailable line and never changes the review disposition or cleanup sequence.
 
 ### Phase 8: Repository Cleanup
 
+Apply `repo-cleanup-contract.md`'s task-change delivery requirement for authorized
+repairs before final reporting. Verify the pushed PR head and leave the maintained
+preview on that reviewed feature head. A read-only review creates no repair authority.
+
 Runs in **every mode** (quick and full), on every exit path -- including `REVIEW INCOMPLETE`, `BLOCKS MERGE`, and a stalled convergence loop. Read `${CLAUDE_SKILL_DIR}/references/repo-cleanup-contract.md`; it is authoritative.
 
 dm-review ordinarily creates no worktrees, but an active host may create one on

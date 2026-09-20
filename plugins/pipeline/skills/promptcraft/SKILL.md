@@ -7,6 +7,13 @@ description: Self-contained execution prompts and a manifest from a plan, with o
 
 Transform a plan into self-contained execution prompts with overlap-aware dependency ordering. Produces a manifest that the execution-orchestrator consumes directly.
 
+## Lowest-capable execution
+
+Optimize correct, complete delivery across tokens, rework and human time. Justify
+stronger initial roles by task benefit; avoid predictably wasteful cheap attempts
+or delegation. Codex owns tools; OpenRouter supplies eligible analysis/patches.
+Exclude automatic Claude fallback, reuse exact evidence and keep overrides local.
+
 ## Input
 
 1. **Plan file** -- a pipeline `plan.html` carrying a `#pipeline-data` JSON island (`chunks`, `decisions`, `requirementsCoverage`). When invoked standalone on a hand-written markdown plan, parse the prose directly; within `/pipeline` the plan is HTML.
@@ -48,7 +55,7 @@ A chunk is a logically complete unit (one feature aspect, one migration, one com
    `plugins/pipeline/references/routing-policy.json`:
    - bounded config, docs, and mechanical work -> `builder-fast`;
    - settled bounded UI with exact prototype/acceptance evidence ->
-     `builder-fast` at `high`; unresolved design, complex logic, or integration
+     `builder-fast` at `high`; named unresolved design or complex logic
      -> `builder-deep` at `medium`;
    - add `tool-use`, `long-context`, or `structured-output` only when the
      worker actually requires that capability, using the closed routing override
@@ -56,16 +63,12 @@ A chunk is a logically complete unit (one feature aspect, one migration, one com
    - `browser` requires worker interaction, not rendered acceptance. Host-owned
      browser evidence never adds it to `executorCapabilities`.
 
-   Keep the main driver responsible for design decisions, integration, and
-   final review. A bounded implementation may use `builder-fast` at `high`
-   effort, with `max` reserved for a demonstrated difficulty, when its prompt
-   supplies settled requirements, exact file ownership, and verifiable
-   acceptance criteria. Use the existing `bounded-mechanical-work` override
-   only when that description is true; unresolved design stays `builder-deep`.
-   This is a workflow hypothesis to validate on real chunks, not a benchmark
-   claim. Simple docs and mechanical changes keep their lower policy effort.
-   Do not inherit the driver's model or effort for each worker. Raising effort
-   never adds a review lane or changes required verification.
+   The driver owns design, integration and final review. `builder-fast` at `high`
+   requires settled requirements, owned files and verifiable acceptance; `max`
+   requires demonstrated difficulty. Keep mechanical work lower. Use
+   `bounded-mechanical-work` only when true; unresolved judgment uses `builder-deep`.
+   Workers never inherit driver effort. Effort changes neither review lanes nor
+   verification. Validate this workflow hypothesis on real chunks.
 
    Planning HTML is an explicit narrow exception to the `.html` UI trigger: a chunk containing only planning Markdown/JSON/YAML plus unserved `plans/**.html` artifacts remains `config` and `builder-fast`. If splitting separates offline planning artifacts from served UI or live-tool work, split it; mixed or uncertain product surfaces classify up: `ui` > `integration` > `logic` > `config`.
 
