@@ -2084,7 +2084,8 @@ for todo_surface in \
   require_absent "$todo_surface" 'auto-cleaned before' "$todo_rel rejects next-review pre-cleanup"
 done
 
-require_text "$REPO_ROOT/plugins/pipeline/references/artifact-lifecycle.md" '1 if run-created; otherwise 3' "completed-todo tiers distinguish run ownership"
+require_text "$REPO_ROOT/plugins/pipeline/references/artifact-lifecycle.md" '1 (run-created only)' "completed-todo tier applies only to run-created files"
+require_text "$REPO_ROOT/plugins/pipeline/references/artifact-lifecycle.md" 'Pre-existing completed todos are foreign to this run.' "completed-todo tier never grants ownership"
 
 printf "\n"
 if [ "$failures" -ne 0 ]; then
