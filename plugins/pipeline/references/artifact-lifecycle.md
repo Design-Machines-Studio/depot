@@ -66,7 +66,7 @@ Refs are not artifacts -- they are not deleted by tier, but by the safe-to-delet
 | `<exact-run-root>/review/workflow-kernel/{shadow-report,metrics}.json` | 2 | Terminal parity and proposal-only reliability inputs; compact conclusions project into the report |
 | `<exact-run-root>/review/workflow-kernel/docker/*.json` | 2 | Owned-resource plans, proof snapshots, outcomes, and receipts |
 | `todos/*-pending-*.md` | 3 | Active findings -- persist until resolved |
-| `todos/*-done-*.md` | 3 | Resolved findings -- preserve pre-existing files; remove only exact run-created paths after recording disposition and committing authorized fixes |
+| `todos/*-done-*.md` | 1 if run-created; otherwise 3 | Resolved findings -- preserve pre-existing files; remove only exact run-created paths after recording disposition and committing authorized fixes |
 | `todos/*-deferred-*.md` | 3 | Tracked debt with justifications -- never auto-cleaned |
 
 ### Durable records (Tier 4)

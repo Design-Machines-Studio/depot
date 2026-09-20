@@ -2084,6 +2084,8 @@ for todo_surface in \
   require_absent "$todo_surface" 'auto-cleaned before' "$todo_rel rejects next-review pre-cleanup"
 done
 
+require_text "$REPO_ROOT/plugins/pipeline/references/artifact-lifecycle.md" '1 if run-created; otherwise 3' "completed-todo tiers distinguish run ownership"
+
 printf "\n"
 if [ "$failures" -ne 0 ]; then
   printf "FIX  restore the missing workflow-contract anchors (see docs and plugin sources above)\n"
