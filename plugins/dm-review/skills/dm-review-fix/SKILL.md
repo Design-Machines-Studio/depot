@@ -77,6 +77,10 @@ reapplying an existing fix.
 ### 3. Implement Fixes
 
 Fix all pending findings in priority order: P1 first, then P2, then P3.
+For a verified external blocker, follow the review skill's
+`references/issue-tracking.md`: create/reuse its owning GitHub issue, retain the
+pending finding, and continue independent local repairs. Never ask the user to
+choose tracking or treat issue creation as resolution.
 
 For each finding:
 

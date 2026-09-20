@@ -9,6 +9,10 @@ argument-hint: "[scope: PR number, branch, path, or blank]"
 
 One-command code review launching parallel specialized agents for Design Machines stacks: Go+Templ+Datastar, Craft CMS+Twig, Live Wires CSS.
 
+Standalone reviews delegate to `/dm-review-loop` before dispatch, preserving
+mode. Nested reviews return findings to their owner without recursion.
+Explicit read-only requests remain read-only.
+
 ## Zero-Deferral Finding Policy
 
 Every retained P1, P2, and P3 finding is mandatory work and prevents `CLEAN`
@@ -635,23 +639,15 @@ switch. When airlift is absent, skip it silently and do not load that file.
 
 ### Phase 6: Issue Tracking
 
-After consolidation, determine tracking method automatically:
+Load `${CLAUDE_SKILL_DIR}/references/issue-tracking.md`. Never ask for a
+tracking choice. Create noncolliding temporary pending todos for retained
+P1/P2/P3 findings and hand them to the enclosing repair owner. Preserve foreign
+todos; do not delete completed files by glob. Explicit read-only reviews report
+findings without mutations. If externally blocked, load
+`references/review-github-tracking.md`; an issue never clears a finding.
 
-**1. If `todos/` exists** in the project root -- use text file tracking automatically; do NOT ask the user. Create todo files for every retained P1, P2, and P3 finding.
-
-**2. If `todos/` does not exist** -- ask the user:
-
-```
-No todos/ directory found. How should I track these findings?
-1. Create todos/ directory with text file tracking
-2. GitHub Issues
-```
-
-Tracking may change location, but it never waives the finding or permits a clean recommendation. Do not offer a skip or defer option.
-
-**Text file tracking:** First clean stale completed files: `rm -- todos/*-done-*.md 2>/dev/null`. Create `todos/` if missing. For each retained finding, create `todos/{id}-pending-{priority}-{slug}.md` per the template in `${CLAUDE_SKILL_DIR}/references/issue-tracking.md` (e.g. `todos/001-pending-p1-sql-injection-in-search.md`), then summarize what was created and name `/dm-review-fix` as the resolver. After the pending todo files are written and the optional `airlift` plugin is installed, load `${CLAUDE_SKILL_DIR}/references/airlift-checkpoint.md` and fire its `dm-review-findings` checkpoint so the `todos/*-pending-*.md` findings survive a usage cap, rate limit, or model switch before `/dm-review-fix` runs; when airlift is absent, skip it silently.
-
-**GitHub Issues:** If tracking via GitHub Issues, load `${CLAUDE_SKILL_DIR}/references/review-github-tracking.md`.
+When optional airlift is installed, use `references/airlift-checkpoint.md` for
+the `dm-review-findings` checkpoint before repair; otherwise skip silently.
 
 ### Phase 7: Optional Memory Enrichment (Full mode only)
 

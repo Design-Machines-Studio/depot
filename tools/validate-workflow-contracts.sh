@@ -984,7 +984,7 @@ require_text "$selective_rerun_ref" 'the touched-file set is the union of `git d
 require_text "$selective_rerun_ref" "An empty computed lane set is never dispatched." "selective re-run contract never dispatches an empty selection"
 require_text "$selective_rerun_ref" 'selection fails open to a full fan-out with `fallback_reason: empty selection`' "selective re-run contract fails open on an empty selection"
 require_text "$selective_rerun_ref" '`max-iterations-verification-receipt.json`' "selective re-run contract names the max-iterations receipt artifact"
-require_text "$review_loop" "one repair batch followed by one" "default review convergence uses one repair batch"
+require_text "$review_loop" "starts with one repair batch" "review convergence starts with one bounded repair batch"
 require_text "$review_loop" "affected-lane recheck" "default review convergence keeps the affected-lane recheck"
 require_absent "$promptcraft" "mechanical_path.py" "promptcraft adds no mechanical classifier"
 require_absent "$orchestrator" "mechanical_globs" "orchestrator adds no caller-supplied mechanical globs"
@@ -1598,7 +1598,7 @@ require_absent "$review_consolidator" 'Write that report to `.claude/ux-review/r
   "dm-review consolidator does not write the final report early"
 require_absent "$review_consolidator" 'then project its compact' \
   "dm-review consolidator does not project the handoff early"
-require_text "$review_skill" 'After consolidation, determine tracking method automatically:' \
+require_before "$review_skill" '### Phase 5:' '### Phase 6: Issue Tracking' \
   "dm-review issue tracking follows consolidation rather than publication"
 require_absent "$review_skill" 'After outputting the report' \
   "dm-review removes the stale early-publication Phase 6 phrase"
@@ -2057,6 +2057,17 @@ PY
     failures=1
   fi
 fi
+
+# Automatic repair defaults must not regress to backlog selection.
+issue_tracking="$REPO_ROOT/plugins/dm-review/skills/review/references/issue-tracking.md"
+require_absent "$review_skill" 'How should I track these findings?' "review has no tracking-choice pause"
+require_absent "$review_skill" 'rm -- todos/*-done-*.md' "review preserves foreign completed todos"
+require_text "$issue_tracking" 'Create or reuse a GitHub issue only when a concrete external dependency' "issues require external blocker evidence"
+require_text "$issue_tracking" 'Continue all independent local repairs' "external blockers do not stop independent fixes"
+require_text "$review_loop" 'max_iterations += 1' "default checkpoint continues productive local repair"
+require_absent "$review_loop" 'Manual decision required.' "first recheck does not defer fixable findings"
+require_text "$review_skill" 'without recursion' "nested review preserves enclosing repair ownership"
+require_text "$review_skill" 'Explicit read-only requests remain read-only' "read-only review override remains effective"
 
 # Maintained-site delivery and authorized repair closeout.
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/repository-browser-target-discovery.md" 'remote identity alone cannot choose the site' "multiple maintained instances retain their own binding"
