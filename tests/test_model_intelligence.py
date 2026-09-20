@@ -9,6 +9,7 @@ from collections import Counter
 from pathlib import Path
 import stat
 import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -16,6 +17,20 @@ import unittest
 REPO = Path(__file__).resolve().parents[1]
 TOOL = REPO / "tools/model-intelligence.py"
 NATIVE_BENCH = REPO / "tools/run-native-depot-role-benchmark.sh"
+
+
+def opt_in_claude_policy(destination: Path) -> Path:
+    """Test historical alias/transport evidence without restoring shared defaults."""
+    policy = json.loads((REPO / "plugins/model-router/skills/model-router/references/role-policy.json").read_text())
+    for role in ("architect", "editorial"):
+        policy["roles"][role].append({
+            "model": "opus", "servedIdentities": ["claude-opus-5"],
+            "provider": "anthropic", "transport": "claude-cli", "family": "anthropic",
+            "billing": "subscription-or-local-paid-credits",
+            "capabilities": ["read-repository", "long-context", "structured-output"],
+        })
+    destination.write_text(json.dumps(policy))
+    return destination
 
 
 class ModelIntelligenceTest(unittest.TestCase):
@@ -27,9 +42,23 @@ class ModelIntelligenceTest(unittest.TestCase):
         self.tmp.cleanup()
 
     def run_tool(self, *args: str) -> subprocess.CompletedProcess[str]:
-        return subprocess.run(
-            [str(TOOL), *args], cwd=REPO, text=True, capture_output=True
-        )
+        # Only historical-Claude evidence tests opt in; ordinary reports still
+        # exercise the actual default policy and its retired-candidate exclusion.
+        historical = {
+            "test_editorial_human_evidence_is_optional_blinded_and_digest_matched",
+            "test_human_rubric_requires_artifact_recomputation_and_valid_declared_digests",
+            "test_native_served_identity_must_match_the_policy_alias_mapping",
+        }
+        command = [str(TOOL), *args]
+        if self._testMethodName in historical:
+            policy = opt_in_claude_policy(self.root / "claude-policy.json")
+            command = [sys.executable, "-c",
+                "import runpy,sys; from pathlib import Path; "
+                "ns=runpy.run_path(sys.argv[1]); "
+                "ns['main'].__globals__['DEFAULT_ROLE_POLICY']=Path(sys.argv[2]); "
+                "sys.argv=[sys.argv[1],*sys.argv[3:]]; sys.exit(ns['main']())",
+                str(TOOL), str(policy), *args]
+        return subprocess.run(command, cwd=REPO, text=True, capture_output=True)
 
     def v2_result(
         self,
@@ -1188,7 +1217,7 @@ class ModelIntelligenceTest(unittest.TestCase):
             evidence_state="incompatible",
         )
         write_validation(
-            "fault", role="architect", candidate="opus", transport="claude-cli",
+            "fault", role="architect", candidate="gpt-5.6-sol", transport="codex-cli",
             comparable=False, conclusion=None, benchmark_fault=True,
             evidence_state="benchmark-faulted",
         )
@@ -1283,6 +1312,8 @@ class NativeDepotBenchmarkTest(unittest.TestCase):
             if transport == "codex-cli"
             else "DEPOT_BENCH_CLAUDE_BIN"
         ] = str(stub)
+        if transport == "claude-cli":
+            env["DEPOT_BENCH_ROLE_POLICY"] = str(opt_in_claude_policy(self.root / "claude-policy.json"))
         if extra_env:
             env.update(extra_env)
         return subprocess.run(

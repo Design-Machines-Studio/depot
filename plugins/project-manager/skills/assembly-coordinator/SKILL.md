@@ -53,6 +53,10 @@ Stop there. Do not fetch GitHub, inspect worktrees, survey coordination document
 
 ## Establish the full evidence base
 
+Establish this baseline once per fresh session. On follow-up turns, refresh changed
+heads, feedback and relevant evidence; reuse already-read instructions that remain
+current. A narrow question does not require repeating the whole inventory.
+
 1. Resolve the current repository from `git remote get-url origin`. Confirm the owner/repository instead of inferring it from the directory name.
 2. Fetch current remote refs with `git fetch origin --prune`, record the exact `origin/main` commit, and inspect the current branch, status, registered worktrees, and relevant remote branches without modifying, stashing, rebasing, cleaning, or checking out user work.
 3. Read the repository instructions and every directly referenced instruction file. Then inspect engineering principles when present, local plans, prepared prompts, coordination documents, and `tasks/lessons.md`. Treat these as durable context, not proof of current GitHub status.
@@ -128,6 +132,10 @@ Every prompt must state:
   folder, feature branch/head and existing build/restart command. Default to
   checking out the feature branch or its exact detached commit there for browser review; an implementation
   worktree does not authorize a new harness or environment reconfiguration.
+  For multiple maintained instances, carry the exact originating folder/domain
+  pair through review and leave the reviewed feature head serving for the operator.
+  Require final task-owned commit/push and remote PR-head verification; cleanup
+  preserves unrelated files and removes only owned disposable resources.
   When dm-review is available, resolve through its `repository-browser-target-discovery.md`;
 - for prototype-covered Fixture work, exact prototype source/commit, HTML and
   Live Wires class/component parity, Datastar/save interaction traces, and
@@ -142,9 +150,10 @@ Every prompt must state:
 - required evidence levels;
 - terminal handoff, including what must remain unmerged or unchanged.
 - `executorRole`, `executorCapabilities`, and `executorEffort` for every
-  implementation or review lane. Use `builder-fast` for bounded docs,
-  configuration, and mechanical work; `builder-deep` for complex logic, UI,
-  and integration; and the matching review role.
+  implementation or review lane. Start with `research-fast` at `medium` for evidence gathering, release-readiness
+  checks and routine planning; `builder-fast` for settled implementation, including
+  logic, UI and integration; and the matching review role. File type, file count,
+  UI or integration labels alone never justify `builder-deep` or an architect.
   `executorCapabilities` are worker-only; `browser` requires supported
   transport, not rendered acceptance. Host owns browser work/evidence; setup gaps
   do not imply unavailability.
@@ -167,11 +176,37 @@ the executor; this fallback does not claim that evidence has passed.
 The prompt must not call a direct provider command or contain a concrete
 routing override. Its role request is resolved later by model-router.
 
+### Lowest-capable planning
+
+Optimize total completion cost: correctness, completeness, defect/rework risk,
+latency, maintainer time and tokens including repeated context, retries and review.
+A stronger starting model is appropriate when a concrete task-specific reason
+predicts a better overall result; do not require a predictably wasteful cheap attempt.
+For every recommendation above the lowest capable role/effort, state the concrete
+uncertainty, evidence conflict, or failed focused attempt that justifies it.
+A diagnosed Node builder policy repair with owned files and objective scans is
+`builder-fast`/`high`; checking an existing Fixture publication procedure is
+`research-fast`/`medium`. Security judgment or conflicting publication evidence
+can justify escalation; the topic name alone cannot.
+
+Codex owns execution and verification; cheap or specialized OpenRouter support
+is optional, never an automatic extra agent. Use current model-router policy;
+Claude availability must not reinstate retired coding recommendations. Keep
+exact models outside participant packets, and distinguish text-only analysis or
+patch drafting from autonomous tool-capable work.
+
+Refresh only changed heads, feedback and relevant evidence on follow-up turns.
+Do not reload every instruction, plan and repository inventory when already read
+and still current. Use concise handoffs and bounded output; preserve all required
+verification and review. See model-router's driver-worker guidance for the shared
+cost policy. Existing sessions must reload updated guidance after installation;
+a source PR alone does not update other planning threads.
+
 ### Recommended start
 
 Whenever this coordinator produces an implementation or review copy-paste
 prompt, resolve one coherent model-router bundle through Workflow Kernel at
-minimum version `0.8.0`, requiring
+minimum version `0.8.2`, requiring
 `skills/model-router/references/operator-recommendation.sh`, `role-policy.json`,
 and `availability-probe.sh`. Resolve the current OpenRouter
 `model-matrix.json` through Workflow Kernel without changing it. Invoke the

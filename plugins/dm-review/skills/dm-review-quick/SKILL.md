@@ -23,6 +23,13 @@ argument-hint: "[optional: PR number, branch name, or file path]"
 
 Run a fast applicability-driven code review. Security-sensitive changes escalate to full mode.
 
+Default to review-and-repair. Unless explicitly read-only or already owned by
+Pipeline or dm-review-loop, invoke `/dm-review-loop` with the same target
+before dispatching any lanes. Preserve the requested quick mode and reuse the
+loop's single terminal report. Nested reviews return findings to their repair
+owner without recursion. Follow `references/issue-tracking.md`: local findings
+are repaired in place; only concrete external blockers create/reuse GitHub issues.
+
 ## Core Lanes
 
 Ordinary quick review always selects exactly:

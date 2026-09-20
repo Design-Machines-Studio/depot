@@ -97,6 +97,8 @@ assert grep -Fxq -- '- Effort: medium' "$TMP/recommendation.md"
 assert test "$(grep -c '^- Fallback:' "$TMP/recommendation.md")" -eq 1
 assert grep -Fq -- '- Matrix evidence:' "$TMP/recommendation.md"
 
+# Neither a malformed profile nor paid-Claude opt-in can reintroduce a candidate
+# absent from the shipped coding policy. Explicit transport tests live in router tests.
 mkdir -p "$TMP/profile-recommendation/.dm"
 git -C "$TMP/profile-recommendation" init -q
 printf '%s\n' '{"allowPaidClaudeCredits":"yes","disabledCandidates":["opus"]}' > "$TMP/profile-recommendation/.dm/model-router.local.json"
@@ -108,7 +110,7 @@ jq '.codex.state="unavailable" | .claude.state="ok" | .claude.authMode="subscrip
     --capability structured-output --effort medium --matrix-file "$MATRIX" \
     --availability-file "$TMP/profile-availability.json" --format markdown
 ) > "$TMP/invalid-profile-recommendation.md"
-assert grep -Fxq -- '- Model: opus' "$TMP/invalid-profile-recommendation.md"
+assert grep -Fxq -- '- Model: qwen/qwen3.8-max' "$TMP/invalid-profile-recommendation.md"
 
 jq '.codex.state="unavailable" | .codex.authMode="none" |
   .claude={state:"ok",authMode:"subscription",plan:"credits-only"} |
@@ -129,8 +131,8 @@ printf '%s\n' '{"allowPaidClaudeCredits":true}' > "$TMP/profile-recommendation/.
     --capability structured-output --effort medium --matrix-file "$MATRIX" \
     --availability-file "$TMP/credits-only-availability.json" --format markdown
 ) > "$TMP/credits-enabled-recommendation.md"
-assert grep -Fxq -- '- Model: opus' "$TMP/credits-enabled-recommendation.md"
-assert grep -Fq -- '- Cost: paid Claude credits;' "$TMP/credits-enabled-recommendation.md"
+assert grep -Fxq -- '- Model: qwen/qwen3.8-max' "$TMP/credits-enabled-recommendation.md"
+assert grep -Fq -- '- Harness/rail: OpenRouter' "$TMP/credits-enabled-recommendation.md"
 
 jq '.claude.state="unknown"' "$TMP/credits-only-availability.json" > "$TMP/credits-only-unknown-availability.json"
 (
@@ -139,7 +141,7 @@ jq '.claude.state="unknown"' "$TMP/credits-only-availability.json" > "$TMP/credi
     --capability structured-output --effort medium --matrix-file "$MATRIX" \
     --availability-file "$TMP/credits-only-unknown-availability.json" --format markdown
 ) > "$TMP/credits-enabled-unknown-recommendation.md"
-assert grep -Fxq -- '- Model: opus' "$TMP/credits-enabled-unknown-recommendation.md"
-assert grep -Fq -- 'candidate attemptable' "$TMP/credits-enabled-unknown-recommendation.md"
+assert grep -Fxq -- '- Model: qwen/qwen3.8-max' "$TMP/credits-enabled-unknown-recommendation.md"
+assert grep -Fq -- '- Harness/rail: OpenRouter' "$TMP/credits-enabled-unknown-recommendation.md"
 
 printf 'review-next-action: %d assertions passed\n' "$pass"

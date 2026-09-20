@@ -29,6 +29,21 @@ Cleanup is plain in-process Git, never model-delegated. The host uses the same
 sequence for `EXIT`, `SIGINT`, and `SIGTERM`; a pre-execution abort records an
 empty inventory and removes its disposable root.
 
+## Task changes and delivery
+
+Authorized implementation/repairs include commit and push to the existing PR
+unless explicitly local-only. Settle exact task-owned source/docs/lessons and
+tracked cleanup changes, run applicable checks, then verify local feature HEAD equals the remote PR
+head. Do not merely suggest committing or stage foreign changes. Failed push
+means incomplete delivery. Read-only review grants no repair authority. Keep
+runtime evidence in its existing artifact location; avoid unsolicited lessons.
+
+After the last UI repair, rebuild/recheck the maintained site and leave the
+reviewed feature branch or exact detached head available for the operator.
+Report `Preview: <domain> — <serving checkout> — <branch/head>` with existing
+browser/build proof or the concrete blocker. Never repoint the server to an
+implementation worktree, restore main by default or remove the serving folder.
+
 ## 3. Safe-to-delete decision table
 
 Evaluate each registered ref in order. First match wins.

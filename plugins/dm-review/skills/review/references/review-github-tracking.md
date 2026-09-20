@@ -1,36 +1,13 @@
-# GitHub Issues finding tracking
+# GitHub issues for external blockers
 
-Loaded at Phase 6 only when the user selects GitHub Issues tracking. A project
-with a `todos/` directory uses text-file tracking and never loads this file.
+Load only for a concrete external dependency under `issue-tracking.md`.
+Search the owning repository's existing issues before creating one. Reuse a
+matching issue; otherwise create it with `gh issue create --repo <owner/repo>`
+and a body file containing the finding evidence, reviewed head, dependency,
+unblock condition, and acceptance criteria. Use existing labels when available.
+Never create new labels just to satisfy a template.
 
-For each retained P1, P2, and P3 finding, create a GitHub Issue using `gh issue create`:
-
-```bash
-gh issue create --title "[P1] Finding title" \
-  --body "$(cat <<'EOF'
-## Problem
-Description from the review finding.
-
-## Location
-`path/to/file.ext:line`
-
-## Fix
-Remediation steps.
-
-## Reference
-OWASP/WCAG/pattern reference.
-
----
-*From dm-review ([Full] mode, DATE)*
-EOF
-)" --label "review,p1"
-```
-
-Use labels `review` + `p1`/`p2`/`p3` for severity. Create the labels first if they don't exist.
-
-The airlift `dm-review-findings` checkpoint is not fired here: it protects the default `todos/*-pending-*.md` artifacts, so it lives on the text-file tracking path in the review skill's Phase 6, not on this GitHub-Issues route.
-
----
-
-## Ecosystem Integration
-
+Keep the pending todo and issue URL in the review report until the dependency
+is available and the affected verification passes. Creating an issue does not
+resolve the finding. Continue independent local repairs. Report permission or
+API failures with prepared issue details; do not claim creation without a URL.

@@ -21,6 +21,13 @@ argument-hint: "[optional: PR number, branch name, or file path]"
 
 # Full Code Review
 
+Default to review-and-repair. Unless explicitly read-only or already owned by
+Pipeline or dm-review-loop, invoke `/dm-review-loop` --full with the same target
+before dispatching any lanes. Preserve the requested full mode and reuse the
+loop's single terminal report. Nested reviews return findings to their repair
+owner without recursion. Follow `references/issue-tracking.md`: local findings
+are repaired in place; only concrete external blockers create/reuse GitHub issues.
+
 ## Zero-Deferral Finding Policy
 
 Every retained P1, P2, and P3 finding is mandatory work: `/dm-review` tracks it, `/dm-review-fix` resolves it, `/dm-review-loop` repairs and rechecks until none remain; severity orders work but never makes it optional. Reject speculative, duplicate, disproved, or out-of-scope suggestions during consolidation; no deferral flag or clean-with-P3s outcome exists. Merge recommendation: zero findings -- `CLEAN` (safe to merge); **P3 only:** `APPROVE WITH FIXES`. Must fix. **P2 present:** `APPROVE WITH FIXES`. Must fix. **P1 present:** `BLOCKS MERGE`. Must fix.

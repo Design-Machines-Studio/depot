@@ -1,6 +1,33 @@
 # Issue Tracking Reference
 
-Template and conventions for tracking review findings as todo files or GitHub Issues.
+Repair is the default, not a tracking choice. Standalone `/dm-review` and
+`/dm-review-quick` delegate to `/dm-review-loop` before dispatch, preserving the
+requested mode and target. A nested review owned by Pipeline or dm-review-loop
+returns findings to that owner instead of starting a recursive loop. Explicit
+read-only or local-only user instructions override mutation or push defaults.
+
+Fix every retained P1/P2/P3 in the current feature branch, verify affected lanes,
+commit and push to its PR, and verify the remote head. Do not ask whether to
+create todos, file issues, or begin repairs. Todo files are temporary repair
+inputs, not deferred debt; allocate noncolliding IDs and preserve foreign files.
+No findings means no repair dispatch. Never merge or release by implication.
+
+## External blockers
+
+Create or reuse a GitHub issue only when a concrete external dependency prevents
+the repair here, such as an unavailable Baseplate SDK release or an upstream
+service/access failure. Search the owning repository for the same blocker
+first. Record the reviewed head, finding evidence, dependency/owner, why local
+repair cannot resolve it, exact unblock condition, and acceptance check. Link
+the issue in the review report and keep the finding pending and review non-clean.
+Continue all independent local repairs. Do not move a local repair to an issue
+because it is P3, inconvenient, or needs another focused attempt. Repeated local
+repair failure is unresolved work, not evidence of an external dependency.
+
+Issue creation is part of this default repair workflow, subject to explicit
+read-only scope and available GitHub permission. If creation fails, preserve the
+finding and prepared issue details in the report; report the failure, never a
+fabricated issue URL. Do not modify or close unrelated existing issues.
 
 ---
 
@@ -87,7 +114,7 @@ Examples:
 ## Status Lifecycle
 
 ```
-pending -> done -> (deleted after commit)
+pending -> done -> retained or removed under the ownership rule below
 ```
 
 Rename the file when the fix is complete:
@@ -95,22 +122,22 @@ Rename the file when the fix is complete:
 mv todos/001-pending-p1-sql-injection.md todos/001-done-p1-sql-injection.md
 ```
 
-After fixes are committed, delete completed todo files:
-```bash
-rm todos/*-done-*.md
-```
-
-Don't leave completed todo files accumulating. Clean up after every fix session.
+Preserve pre-existing completed todos. Remove only exact completed todo paths
+created by this run whose dispositions are preserved in the report. Use the
+entry baseline and creation records to prove ownership; resolving a pre-existing
+todo does not make it run-created. Include tracked removals in the repair commit.
+Never glob-delete todos. Preserve pending blockers and other owners' work.
 
 ---
 
 ## GitHub Issue Template
 
-When tracking via GitHub Issues instead of text files:
+For a verified external blocker only (search for an existing issue first):
 
 **Title format:** `[P1] Finding title`, `[P2] Finding title`, or `[P3] Finding title`
 
-**Labels:** `review` + `p1`, `p2`, or `p3`
+**Labels:** reuse applicable existing repository labels; absent labels must not
+block issue creation or cause a new label taxonomy.
 
 **Body structure:**
 
@@ -136,25 +163,6 @@ OWASP/WCAG/pattern reference.
 ```
 
 ---
-
-## Moving a Finding to a Separate Repair Branch
-
-Every retained P1/P2/P3 finding is fixed before the reviewed branch is ready to
-merge. A concrete finding whose smallest adequate repair is structurally larger
-than the current branch may move to a dedicated repair branch and durable
-GitHub Issue, but the original review remains non-clean until that repair merges
-and the affected lane verifies it. Tracking changes work location; it never
-defers or waives the finding.
-
-Promote a finding to a GitHub issue (instead of a `todos/` file) when **all** of these hold:
-
-- The fix touches a data model, public interface, or file structure beyond the diff under review.
-- Implementing it in the current branch would expand scope past the branch's stated purpose.
-- The dedicated repair is started now and blocks the original branch rather than becoming an unspecified follow-up.
-
-Do **not** create an issue merely to move a finding out of the current result.
-If the proposed work has no observable current defect or current consumer,
-discard it as preference-only or out of scope instead of creating debt.
 
 ## Batch Cleanup PR Pattern
 

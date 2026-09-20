@@ -17,7 +17,7 @@ complete. Invalid, duplicate, disproved, and scope-expanding reviewer
 suggestions must be rejected during consolidation; retaining one and calling it
 advisory is forbidden.
 
-The default convergence path is one repair batch followed by one affected-lane recheck. Repeat broad review only when the original required review was incomplete or the repair changed a real sensitive boundary.
+The default convergence path starts with one repair batch and one affected-lane recheck. Continue focused local repairs while progress is made; no tracking-choice prompt or automatic deferral after that checkpoint. Repeat broad review only when the original required review was incomplete or the repair changed a real sensitive boundary.
 
 For a PR, preserve external evidence through repair/recheck without adding a
 lane or duplicate repair.
@@ -27,7 +27,7 @@ lane or duplicate repair.
 Parse the argument string for flags and pass-through values:
 
 - `--full` -- Use full dm-review instead of the applicability-driven quick roster
-- `--max-iterations N` -- Maximum review/fix passes (default: 2: one review and, when needed, one affected-lane recheck)
+- `--max-iterations N` -- Explicit maximum review/fix passes. Without this flag, start with 2 passes and extend for productive local repair; stop on unchanged failing evidence or a concrete blocker
 - Everything else -- Passed through to dm-review as the review target (PR number, branch, path)
 
 ## Environment Flags
@@ -122,8 +122,7 @@ while iteration < max_iterations:
       lanes_a = prior_finding_owner_lanes union the validated exact source_agents
                 lane IDs from remaining pending P1/P2/P3 findings
       # (b) every lane whose file-trigger set matches a file the fixes touched.
-      #     dm-review-fix does not commit, so a committed-range diff alone
-      #     would silently miss every uncommitted fix. Consult both.
+      #     Repairs may be committed or still uncommitted. Consult both.
       Require prior_review_head is non-null.
       fix_head = git rev-parse HEAD
       uncommitted_changed_files = paths from git status --porcelain
@@ -250,10 +249,12 @@ while iteration < max_iterations:
     `selection_fallback_reason` is the loop-local fallback_reason value.
 
   # Check for required findings. Every retained severity participates.
-  required_finding_files = todos/*-pending-p1-*.md plus todos/*-pending-p2-*.md plus todos/*-pending-p3-*.md
+  required_finding_files = todos/*-pending-p1-*.md plus todos/*-pending-p2-*.md plus todos/*-pending-p3-*.md;
+  Restrict required_finding_files to this run; exclude foreign findings unless explicitly adopted
   Count findings in required_finding_files
 
-  current_signature = sorted list of required_finding_files
+  current_signature = sorted stable finding IDs plus current failing acceptance evidence
+    for this run, excluding filenames, timestamps, and foreign pending todos
 
   if findings == 0:
     if required_verification_complete == false:
@@ -274,16 +275,18 @@ while iteration < max_iterations:
   prior_finding_owner_lanes = union of validated exact source_agents from
                               required_finding_files
 
-  # The default convergence contract is one repair batch followed by one
-  # affected-lane recheck. Remaining or newly supported findings after that
-  # recheck require operator attention, not an automatic second repair batch.
-  if iteration > 1 and explicit_iteration_override == false:
-    Report: "{findings} supported finding(s) remain after the targeted recheck. Manual decision required."
-    List remaining todo files
-    STOP -- needs attention
+  # Two passes are a checkpoint, not permission to defer fixable findings.
+  # Continue focused repairs while there is measurable progress. An explicit
+  # user iteration cap remains binding; repeated failure still stops safely.
+  if only externally blocked findings remain:
+    Create/reuse blocker issues per references/issue-tracking.md
+    Report unresolved findings, issue URLs, and exact unblock conditions
+    STOP -- blocked, never clean
+  if iteration == max_iterations and explicit_iteration_override == false:
+    max_iterations += 1  # another local repair and affected-lane recheck
 
   # Fix every retained finding (P1/P2/P3).
-  Run /dm-review-fix with workflowClass and workflow_class_defaulted forwarded unchanged,
+  Run /dm-review-fix for required_finding_files only, with workflowClass and workflow_class_defaulted forwarded unchanged,
     using the loop-private router directory/index and terminal reporting suppressed
   # dm-review-fix resolves and cleans up todo files
 
@@ -304,6 +307,7 @@ while iteration < max_iterations:
       "max_iterations_affected_lane_verification", after coverage validates; append it to
       authoritative-receipts.json BEFORE observe-review.
     Count remaining todos/*-pending-p1-*.md, todos/*-pending-p2-*.md, and todos/*-pending-p3-*.md
+      restricted to this run or explicitly adopted findings
     if findings == 0:
       if required_verification_complete == false:
         Report the nested review's REVIEW INCOMPLETE or exact coverage failure

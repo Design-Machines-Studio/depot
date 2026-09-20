@@ -166,8 +166,9 @@ templates or create a durable registry.
 Derive defaults from `references/routing-policy.json`:
 
 - `docs`, `config`, and bounded `mechanical-logic` use `builder-fast`;
-- settled bounded `ui` uses `builder-fast` at `high`; complex `logic`,
-  unresolved-design `ui`, and `integration` use `builder-deep` at `medium`;
+- settled bounded `logic`, `ui`, and `integration` use `builder-fast` at `high`;
+- named unresolved judgment uses an explicit `builder-deep`/`medium` override
+  with a concrete reason; labels and file count alone are not escalation evidence;
 - add `browser`, `tool-use`, `long-context`, or `structured-output` only when
   the chunk actually requires it.
 

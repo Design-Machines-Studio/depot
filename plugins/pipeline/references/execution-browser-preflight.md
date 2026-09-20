@@ -27,7 +27,10 @@ With browser tools and rendered-surface chunks, load dm-review's
 `repository-browser-target-discovery.md` and follow its target precedence.
 An explicit invocation override comes first; otherwise use the established
 project domain and designated serving checkout, with documented rebuild and
-actual served-source verification. `manifest.devServerURL` is target context,
+actual served-source verification. Bind the originating maintained folder/domain
+pair explicitly when the repository has multiple instances; do not pick another
+instance merely because it shares the same remote. Carry this pair into the final
+repair and operator handoff, and leave the reviewed feature head serving there. `manifest.devServerURL` is target context,
 not proof of source identity. An unrelated attached tab never overrides the
 project declaration. Keep maintained instances available after review. Never infer a port from
 Compose mappings, scan localhost, guess a project domain, or invent a start

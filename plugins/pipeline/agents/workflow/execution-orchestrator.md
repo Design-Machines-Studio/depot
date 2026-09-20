@@ -550,7 +550,7 @@ model-router bundle:
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
 MODEL_ROUTER_BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle \
-  --plugin model-router --minimum-version 0.8.0 \
+  --plugin model-router --minimum-version 0.8.2 \
   --required-executable skills/model-router/references/role-dispatch.sh \
   --required-executable skills/model-router/references/operator-recommendation.sh \
   --required-executable skills/model-router/references/render-terminal-report.sh \
@@ -1269,6 +1269,8 @@ Present this compact report. Populate every evidence path that exists; omit a no
 <What changed, or the exact blocker and what stopped.>
 
 **Verification:** <passed checks and final review result, or exact failed/pending evidence>
+**Delivery:** <verified committed/pushed PR head; owned residue/blocker>
+**Preview:** <maintained domain, serving checkout and feature head left available>
 **Attempt result:** <for a failed role attempt: stable role-level reason; usage/cost measured or unavailable>
 **Branch or PR:** <branch and PR URL when present>
 **Recommended next action:** <one action; for blocked work, the smallest operator action>
