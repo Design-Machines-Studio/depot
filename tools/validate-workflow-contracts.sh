@@ -2073,6 +2073,16 @@ require_text "$review_skill" 'Explicit read-only requests remain read-only' "rea
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/repository-browser-target-discovery.md" 'remote identity alone cannot choose the site' "multiple maintained instances retain their own binding"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/repo-cleanup-contract.md" 'local feature HEAD equals the remote PR' "authorized repairs verify pushed delivery"
 require_text "$REPO_ROOT/plugins/dm-review/commands/dm-review-fix.md" 'Never glob-delete todos' "repair cleanup preserves foreign todo files"
+for todo_surface in \
+  "$review_skill" \
+  "$REPO_ROOT/plugins/dm-review/skills/review/references/issue-tracking.md" \
+  "$REPO_ROOT/plugins/pipeline/references/artifact-lifecycle.md"; do
+  todo_rel="${todo_surface#$REPO_ROOT/}"
+  require_text "$todo_surface" 'Preserve pre-existing completed todos.' "$todo_rel preserves completed todos from other runs"
+  require_absent "$todo_surface" 'rm -- todos/*-done-*.md' "$todo_rel rejects blanket todo deletion with --"
+  require_absent "$todo_surface" 'rm todos/*-done-*.md' "$todo_rel rejects blanket todo deletion"
+  require_absent "$todo_surface" 'auto-cleaned before' "$todo_rel rejects next-review pre-cleanup"
+done
 
 printf "\n"
 if [ "$failures" -ne 0 ]; then

@@ -114,7 +114,7 @@ Examples:
 ## Status Lifecycle
 
 ```
-pending -> done -> (deleted after commit)
+pending -> done -> retained or removed under the ownership rule below
 ```
 
 Rename the file when the fix is complete:
@@ -122,9 +122,11 @@ Rename the file when the fix is complete:
 mv todos/001-pending-p1-sql-injection.md todos/001-done-p1-sql-injection.md
 ```
 
-Remove only this run's completed todo files whose dispositions are preserved in
-the report. Include tracked removals in the repair commit; never glob-delete
-pre-existing todos. Preserve pending blockers and other owners' work.
+Preserve pre-existing completed todos. Remove only exact completed todo paths
+created by this run whose dispositions are preserved in the report. Use the
+entry baseline and creation records to prove ownership; resolving a pre-existing
+todo does not make it run-created. Include tracked removals in the repair commit.
+Never glob-delete todos. Preserve pending blockers and other owners' work.
 
 ---
 

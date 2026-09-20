@@ -642,7 +642,8 @@ switch. When airlift is absent, skip it silently and do not load that file.
 Load `${CLAUDE_SKILL_DIR}/references/issue-tracking.md`. Never ask for a
 tracking choice. Create noncolliding temporary pending todos for retained
 P1/P2/P3 findings and hand them to the enclosing repair owner. Preserve foreign
-todos; do not delete completed files by glob. Explicit read-only reviews report
+todos. Preserve pre-existing completed todos. Do not delete files by glob.
+Explicit read-only reviews report
 findings without mutations. If externally blocked, load
 `references/review-github-tracking.md`; an issue never clears a finding.
 

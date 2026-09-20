@@ -66,7 +66,7 @@ Refs are not artifacts -- they are not deleted by tier, but by the safe-to-delet
 | `<exact-run-root>/review/workflow-kernel/{shadow-report,metrics}.json` | 2 | Terminal parity and proposal-only reliability inputs; compact conclusions project into the report |
 | `<exact-run-root>/review/workflow-kernel/docker/*.json` | 2 | Owned-resource plans, proof snapshots, outcomes, and receipts |
 | `todos/*-pending-*.md` | 3 | Active findings -- persist until resolved |
-| `todos/*-done-*.md` | 1 | Resolved findings -- auto-cleaned before next review |
+| `todos/*-done-*.md` | 3 | Resolved findings -- preserve pre-existing files; remove only exact run-created paths after recording disposition and committing authorized fixes |
 | `todos/*-deferred-*.md` | 3 | Tracked debt with justifications -- never auto-cleaned |
 
 ### Durable records (Tier 4)
@@ -126,7 +126,10 @@ never rotates, scans, or deletes another run's screenshots.
 
 ### dm-review todo lifecycle
 
-- `*-done-*.md` files auto-cleaned before creating new todos (Phase 6 pre-cleanup)
+- Preserve pre-existing completed todos. Never clear them before creating new
+  findings. After authorized fixes are committed, remove only exact completed
+  todo paths created by this run whose disposition is retained in the review
+  report; the entry baseline and creation records prove ownership.
 - `*-deferred-*.md` files never auto-cleaned -- represent tracked debt
 - `*-pending-*.md` files persist until resolved via `/dm-review-fix`
 
