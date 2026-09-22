@@ -39,6 +39,11 @@ than the implementation family.
 
 ## Process
 
+For Jev (`typesafe/jev-1.13`), read and follow
+the bundle-root reference `skills/openrouter-delegate/references/jev-decisions.md`
+instead of the chat steps below. Use the Decisions adapter from that same
+bundle; never submit Jev to chat completions or substitute a chat model.
+
 ### Step 1: Parse Arguments
 
 Extract the prompt and optional `--model` flag from the user's input.

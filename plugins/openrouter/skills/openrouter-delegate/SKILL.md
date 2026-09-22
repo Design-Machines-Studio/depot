@@ -1,6 +1,6 @@
 ---
 name: openrouter-delegate
-description: Use when the user explicitly asks to delegate work to OpenRouter; requests a routed exact model; wants cheap bounded config/docs work, long-context or bulk review, an independent second opinion, or subscription relief. Routes focused security to Kimi K3, routine documentation/test review and bounded execution to DeepSeek, bulk/independent review to Qwen3.8 Max, demanding escalation to Grok 4.6, and economical fallback to Luna. Do not trigger for ordinary coding, review, pipeline, commit, or push requests that do not mention OpenRouter, a routed model, cost offload, or large-context analysis.
+description: Use when the user explicitly asks to delegate work to OpenRouter; requests Jev typed decisions or another routed exact model; wants cheap bounded config/docs work, long-context or bulk review, an independent second opinion, or subscription relief. Routes Jev through its Decisions adapter, focused security to Kimi K3, routine documentation/test review and bounded execution to DeepSeek, bulk/independent review to Qwen3.8 Max, demanding escalation to Grok 4.6, and economical fallback to Luna. Do not trigger for ordinary coding, review, pipeline, commit, or push requests that do not mention OpenRouter, Jev, a routed model, cost offload, or large-context analysis.
 ---
 
 # OpenRouter Delegation
@@ -21,6 +21,13 @@ reserved for focused applicable security analysis.
 ## One-Shot vs Agentic (read first)
 
 The wrapper (`references/openrouter-wrapper.sh`) is a **single-turn completion call**. It returns text; it does not read/write files or run a tool loop.
+
+### Jev typed decisions
+
+When the requested model is `typesafe/jev-1.13`, load and follow
+`${CLAUDE_SKILL_DIR}/references/jev-decisions.md` instead of the chat invocation
+protocol below. Resolve `openrouter-decisions.sh` from that same coherent bundle;
+never send Jev to `openrouter-wrapper.sh` or substitute a chat model.
 
 The bounded Pipeline executor uses the same configured-key wrapper path for its
 already-authorized config/docs/mechanical workload. It still

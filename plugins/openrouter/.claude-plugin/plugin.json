@@ -1,7 +1,7 @@
 {
   "name": "openrouter",
   "description": "OpenRouter provider with sensitive-payload refusal, routed DeepSeek/Qwen/Grok/Kimi/Luna workflows, and MCP controls.",
-  "version": "1.20.3",
+  "version": "1.21.1",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -24,7 +24,7 @@
       {
         "id": "openrouter-delegate",
         "name": "OpenRouter Delegation",
-        "description": "Use non-interactive configured-key OpenRouter delegation for automatically screened direct, dm-review, and bounded Pipeline workloads.",
+        "description": "Use non-interactive configured-key OpenRouter delegation for Jev typed decisions and automatically screened direct, dm-review, and bounded Pipeline workloads.",
         "triggers": [
           "use openrouter",
           "ask openrouter",
@@ -35,6 +35,8 @@
           "openrouter analysis",
           "use glm-5.2",
           "use kimi k3",
+          "use jev decisions",
+          "typesafe jev typed decisions",
           "openrouter mcp",
           "1M context diff analysis",
           "reduce anthropic usage"

@@ -13,6 +13,8 @@
   {"query": "second opinion via openrouter", "should_trigger": true},
   {"query": "generate this config with a cheap model", "should_trigger": true},
   {"query": "run the large diff through glm-5.2", "should_trigger": true},
+  {"query": "use Jev decisions to classify these records", "should_trigger": true},
+  {"query": "ask typesafe Jev for typed decisions", "should_trigger": true},
   {"query": "review my PR", "should_trigger": false},
   {"query": "fix this CSS bug", "should_trigger": false},
   {"query": "write a Go handler", "should_trigger": false},
