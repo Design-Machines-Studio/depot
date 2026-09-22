@@ -26,6 +26,21 @@ run.
 
 ## What it routes
 
+### Jev typed decisions
+
+OpenRouter 1.21.0 adds an opt-in Decisions adapter for `typesafe/jev-1.13`.
+It sends `state` and typed `questions` to `/api/alpha/decisions`, separately from
+the unchanged chat runner. It reuses this bundle's credential and structural
+boundaries, applies a 20-second hard deadline, validates answers, and writes
+content-free receipts. It makes no automatic retries or model substitutions.
+See [the Decisions contract](skills/openrouter-delegate/references/jev-decisions.md).
+
+Offline verification: `python3 -m unittest discover -s tests -p test_openrouter_decisions.py -v`
+from the Depot repository root. Fixture success proves transport handling, not
+live Jev accuracy. This adapter does not change Model Router or Pipeline routing.
+
+### Existing chat routing
+
 Task-to-role intent is governed by each caller's provider-neutral policy;
 `plugins/model-router/skills/model-router/references/role-policy.json` alone owns
 concrete candidate order. OpenRouter owns its transport and response controls,
