@@ -20,8 +20,11 @@ instructions: put the judgment in `instructions`.
 
 ```sh
 bash "$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-decisions.sh" \
-  --receipt /private/new-receipt.json --timeout 20 < /private/request.json
+  --receipt ./jev-receipt.json --timeout 20 < ./jev-request.json
 ```
+
+`jev-request.json` must exist and `jev-receipt.json` must not; the adapter
+creates the receipt with mode 0600.
 
 This is one request with no retries or fallback. The adapter reuses the bundle's
 credential-file policy and structural boundary. It caps requests at 32,000 UTF-8
@@ -29,7 +32,8 @@ bytes and 32 questions, enforces a hard overall timeout (default 20 seconds,
 maximum 60), rejects redirects and ambient proxies, validates answer
 distributions, and reserves a new 0600 receipt before network access. JSON
 answers go to stdout. Error messages omit remote bodies and credentials.
-Chat-only privacy/provider/reasoning/web overrides are rejected before sending;
+Chat-only privacy/provider/reasoning/web overrides, including an explicit
+`OPENROUTER_ALLOW_FALLBACKS` setting, are rejected before sending;
 the alpha Decisions contract cannot silently satisfy a requested ZDR policy.
 
 On failure stop, report the safe receipt, and do not retry automatically. An

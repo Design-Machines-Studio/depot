@@ -3,6 +3,7 @@ import copy
 import json
 import os
 from pathlib import Path
+import signal
 import subprocess
 import tempfile
 import threading
@@ -43,14 +44,18 @@ class DecisionsTests(unittest.TestCase):
         self.addCleanup(self.server.server_close)
         self.addCleanup(self.server.shutdown)
 
-    def invoke(self, body=None, timeout=3, env=None):
+    def environment(self, env=None):
         environment = {k:v for k,v in os.environ.items() if not k.startswith('OPENROUTER_')}
         environment.update(OPENROUTER_API_KEY='test',
             OPENROUTER_DECISIONS_ENDPOINT=f'http://127.0.0.1:{self.server.server_port}/api/alpha/decisions')
         environment.update(env or {})
+        return environment
+
+    def invoke(self, body=None, timeout=3, env=None):
         receipt=self.directory/'receipt.json'
         result=subprocess.run(['bash',str(RUNNER),'--receipt',str(receipt),'--timeout',str(timeout)],
-            input=json.dumps(REQUEST if body is None else body),text=True,capture_output=True,env=environment,timeout=6)
+            input=json.dumps(REQUEST if body is None else body),text=True,capture_output=True,
+            env=self.environment(env),timeout=6)
         return result,json.loads(receipt.read_text()) if receipt.exists() else None
 
     def test_success_exact_body_and_unknown_provenance(self):
@@ -70,6 +75,12 @@ class DecisionsTests(unittest.TestCase):
         self.assertEqual(result.returncode,0,result.stderr)
         self.assertEqual(receipt['generationId'],'gen-fixture-1')
         self.assertEqual(receipt['servingProviderProvenance'],'response')
+
+    def test_documented_versioned_response_model(self):
+        self.server.response['model']='typesafe/jev-1.13-20260917'
+        result,receipt=self.invoke()
+        self.assertEqual(result.returncode,0,result.stderr)
+        self.assertEqual(receipt['responseModel'],'typesafe/jev-1.13-20260917')
 
     def test_http_failure_no_leak_no_retry(self):
         self.server.status=429; self.server.response={'error':'SECRET_ECHO_SENTINEL'}
@@ -91,6 +102,21 @@ class DecisionsTests(unittest.TestCase):
         self.assertEqual(result.returncode,28)
         self.assertEqual(receipt['failureKind'],'timeout')
         self.assertEqual(len(self.server.calls),1)
+
+    def test_hangup_writes_interrupted_receipt(self):
+        self.server.delay=2
+        receipt=self.directory/'receipt.json'
+        process=subprocess.Popen(['bash',str(RUNNER),'--receipt',str(receipt),'--timeout','3'],
+            stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE,text=True,
+            env=self.environment())
+        process.stdin.write(json.dumps(REQUEST));process.stdin.close();process.stdin=None
+        deadline=time.monotonic()+2
+        while not self.server.calls and time.monotonic() < deadline: time.sleep(0.01)
+        self.assertTrue(self.server.calls)
+        os.kill(process.pid,signal.SIGHUP)
+        process.communicate(timeout=3)
+        self.assertEqual(process.returncode,130)
+        self.assertEqual(json.loads(receipt.read_text())['failureKind'],'interrupted')
 
     def test_bad_model_sends_nothing(self):
         body=copy.deepcopy(REQUEST);body['model']='anthropic/anything'
@@ -121,7 +147,7 @@ class DecisionsTests(unittest.TestCase):
         # invoke parses receipt, so call directly for this deliberately non-JSON file.
         result=subprocess.run(['bash',str(RUNNER),'--receipt',str(self.directory/'receipt.json')],
             input=json.dumps(REQUEST),text=True,capture_output=True,
-            env={**os.environ,'OPENROUTER_API_KEY':'test'},timeout=6)
+            env=self.environment(),timeout=6)
         self.assertEqual(result.returncode,2)
         self.assertEqual(original.read_text(),'preserve')
         self.assertFalse(self.server.calls)
@@ -134,6 +160,12 @@ class DecisionsTests(unittest.TestCase):
 
     def test_privacy_requirement_not_silently_ignored(self):
         result,receipt=self.invoke(env={'OPENROUTER_ZDR':'1'})
+        self.assertEqual(result.returncode,2)
+        self.assertIsNone(receipt)
+        self.assertFalse(self.server.calls)
+
+    def test_provider_fallback_requirement_not_silently_ignored(self):
+        result,receipt=self.invoke(env={'OPENROUTER_ALLOW_FALLBACKS':'0'})
         self.assertEqual(result.returncode,2)
         self.assertIsNone(receipt)
         self.assertFalse(self.server.calls)

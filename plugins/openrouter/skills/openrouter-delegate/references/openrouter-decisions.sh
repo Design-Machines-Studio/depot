@@ -96,7 +96,8 @@ def validate_response(body, request):
             require(answer.get('legend') == {str(i): v for i, v in enumerate(question['criteria'])})
             clean[name] = {k: answer[k] for k in ('type', 'score', 'confidence', 'probabilities', 'legend')}
     model = body.get('model')
-    require(model is None or model in (MODEL, 'jev-1.13.0'))
+    require(model is None or model == MODEL or (
+        type(model) is str and bool(re.fullmatch(re.escape(MODEL) + r'-[0-9]{8}', model))))
     usage = body.get('usage')
     require(type(usage) is dict)
     require(all(type(usage.get(k)) is int and usage[k] >= 0 for k in ('input_tokens', 'output_tokens')))
@@ -117,6 +118,10 @@ def alarm(*args):
     raise TimeoutError
 
 
+def interrupt(*args):
+    raise InterruptedError
+
+
 def main():
     root = Path(sys.argv.pop(1)).resolve()
     parser = argparse.ArgumentParser(description=__doc__)
@@ -131,7 +136,8 @@ def main():
     # Refuse requirements we cannot preserve rather than silently dropping them.
     if os.environ.get('OPENROUTER_ZDR') == '1' or any(os.environ.get(k) for k in (
             'OPENROUTER_PROVIDER_ORDER', 'OPENROUTER_PROVIDER_SORT',
-            'OPENROUTER_FALLBACK_PROVIDER_ORDER', 'OPENROUTER_REASONING_EFFORT')) or os.environ.get('OPENROUTER_WEB_SEARCH') == '1':
+            'OPENROUTER_FALLBACK_PROVIDER_ORDER', 'OPENROUTER_ALLOW_FALLBACKS',
+            'OPENROUTER_REASONING_EFFORT')) or os.environ.get('OPENROUTER_WEB_SEARCH') == '1':
         parser.exit(2, 'Requested chat privacy/routing options are unsupported by Decisions.\n')
     endpoint = os.environ.get('OPENROUTER_DECISIONS_ENDPOINT', ENDPOINT)
     if endpoint != ENDPOINT and not (key == 'test' and re.fullmatch(r'http://127\.0\.0\.1:[1-9][0-9]{0,4}/api/alpha/decisions', endpoint)):
@@ -149,7 +155,8 @@ def main():
     started = time.monotonic()
     result, code = None, 1
     signal.signal(signal.SIGALRM, alarm)
-    signal.signal(signal.SIGTERM, lambda *_: (_ for _ in ()).throw(InterruptedError()))
+    signal.signal(signal.SIGHUP, interrupt)
+    signal.signal(signal.SIGTERM, interrupt)
     signal.alarm(args.timeout)
     try:
         with os.fdopen(3, 'rb') as incoming:
