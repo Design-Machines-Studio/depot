@@ -37,9 +37,10 @@ Chat-only privacy/provider/reasoning/web overrides, including an explicit
 `OPENROUTER_ALLOW_FALLBACKS` setting, are rejected before sending;
 the alpha Decisions contract cannot silently satisfy a requested ZDR policy.
 
-On failure stop, report the safe receipt, and do not retry automatically. An
-interrupted request may have been billed. Exit codes: 0 success, 1 transport or
-credential failure, 2 schema/configuration failure, 28 timeout, 130 interrupted.
+On failure stop, report the safe receipt when one was created; otherwise report
+the safe stderr failure. Do not retry automatically. An interrupted request may
+have been billed. Exit codes: 0 success, 1 transport or credential failure, 2
+schema/configuration failure, 28 timeout, 130 interrupted.
 
 Report generation ID, response model/provider with provenance, usage and request
 digest from the content-free receipt. Missing identity stays unknown: a pinned
