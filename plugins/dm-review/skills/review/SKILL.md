@@ -674,21 +674,21 @@ unavailable line and never changes the review disposition or cleanup sequence.
 
 ### Phase 8: Repository Cleanup
 
+Apply `repo-cleanup-contract.md` to browser artifacts; recheck readiness after
+final report/receipt writes.
+
 Apply `repo-cleanup-contract.md`'s task-change delivery requirement for authorized
 repairs before final reporting. Verify the pushed PR head and leave the maintained
 preview on that reviewed feature head. A read-only review creates no repair authority.
 
 Runs in **every mode** (quick and full), on every exit path -- including `REVIEW INCOMPLETE`, `BLOCKS MERGE`, and a stalled convergence loop. Read `${CLAUDE_SKILL_DIR}/references/repo-cleanup-contract.md`; it is authoritative.
 
-dm-review ordinarily creates no worktrees, but an active host may create one on
-its behalf. Such a worktree is owned only with explicit host creation/handoff
-metadata and remains blocked until the host reports it released:
-
-1. **Do not adopt or prune refs.** Query only exact refs this invocation registered. Pre-existing/user refs and interrupted Pipeline refs are foreign.
-2. **Delete only branches this review created** -- in practice the batch-cleanup branch from `references/issue-tracking.md`, and only once decision-table row 1 passes.
-3. **Leave foreign refs alone.** Orphan `.worktrees/pipeline/**` paths and `pipeline/**` branches from an interrupted pipeline run are not dm-review's to delete; report them under "Remaining after cleanup" with a follow-up command. Deleting a ref you did not create is how a review loses someone's work.
-4. **Assert a clean tree.** `git status --porcelain` empty, or the exact residue listed.
-5. **Emit the inventory.** The `### Repository Cleanup` block in the report (see `references/output-format.md`).
+Host-created worktrees require explicit creation/handoff metadata and host
+release before removal. Reconcile only this invocation's exact registered refs;
+pre-existing, user, and interrupted Pipeline refs remain foreign. Apply
+`repo-cleanup-contract.md`'s decision table and report every retained ref with a
+follow-up command. Compare `git status --porcelain` against the entry baseline;
+list exact residue. Emit the `### Repository Cleanup` inventory in the report.
 
 If this review created Docker resources for a dev server or review harness, load `${CLAUDE_SKILL_DIR}/references/review-docker-cleanup.md` and follow it exactly: clean only resources registered by this review, after validation, consolidation, and browser evidence are authoritative, writing the complete fresh dependent-node status proof before planning and again before every guarded execute.
 
@@ -700,7 +700,7 @@ root is genuinely useful. Its terminal report must state the exact path, reason,
 contents, and exact removal command; never retain both a kernel run root and a
 dirty worktree. Install this same Phase 8 sequence on every exit path.
 
-Never delete the feature branch under review. There is no condition under which a code review deletes the branch it was asked to review.
+Never delete the feature branch under review.
 
 For a standalone owner, preserve the already-generated JSON and Markdown beside
 `run-cost-summary.json` while cleaning its private receipts. In every mode,

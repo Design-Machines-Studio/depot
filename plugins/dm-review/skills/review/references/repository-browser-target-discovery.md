@@ -6,6 +6,10 @@ the feature branch checked out, reviewed through that existing domain. This
 uses the existing author loop without requiring a new environment or checked-in
 declaration. It does not extend `ui-review-readiness.sh` into a runbook parser.
 
+Before any browser capture, load `browser-artifact-cleanup.md`. Select and pass
+an absolute owned evidence destination; record exact tool-returned paths across
+both implementation and serving checkouts for terminal cleanup.
+
 ## Entry and precedence
 
 Keep the shared readiness order intact:

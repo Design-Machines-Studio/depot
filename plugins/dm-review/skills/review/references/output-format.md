@@ -30,6 +30,9 @@ Why: <one short reason>
 Recommended start: <actual model-router block, only when model work remains>
 Reuse: <relevant valid final-head or unaffected evidence>
 
+### Next chunk
+<ready | blocked -- exact run-owned residue and reason; foreign changes separately>
+
 ### Complete evidence
 `Full report: .claude/ux-review/report.md`.
 `Observation index: .claude/ux-review/observation-index-<run-id>.json` when accepted.

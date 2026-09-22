@@ -85,6 +85,9 @@ fallback. A required changed surface without an exact route remains
 
 ### Phase 2: Visual Testing
 
+Before capture, follow the review skill's `repo-cleanup-contract.md` browser
+artifact rules: absolute owned output paths, preserved evidence, no root files.
+
 Read the visual-browser-tester agent definition from `plugins/dm-review/agents/review/visual-browser-tester.md` and execute its full eight-phase testing protocol (Baseline, Responsive, State Testing, Accessibility Runtime, Live Wires, UX Design, Visual Design Quality, Live Wires CSS Compliance).
 
 Use `${CLAUDE_SKILL_DIR}/references/breakpoints.md` only to interpret the
@@ -135,7 +138,11 @@ Output findings using the standard P1/P2/P3 format:
 Summary of screenshots taken during testing.
 ```
 
-After the report, suggest next steps:
+Before the handoff, execute `repo-cleanup-contract.md` cleanup even on failure.
+Preserve required screenshots and valid report links, remove disposable owned
+captures, and check every used checkout after the final report write. Report
+`Next chunk: ready` or the exact cleanup blocker separately from the visual
+verdict. Leave the maintained preview running. Then suggest next steps:
 
 - If findings exist: "Fix every P1/P2/P3 issue and re-run `/dm-review-visual` to verify."
 - If clean: "Visual tests passed. Run `/dm-review` for a full code review."
