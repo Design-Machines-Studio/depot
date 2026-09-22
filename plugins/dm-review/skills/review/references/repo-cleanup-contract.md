@@ -1,6 +1,6 @@
 # Repository Cleanup Contract
 
-Binding on every automation run that creates git refs in a target repo. Consumers: `pipeline` (`execution-orchestrator` Steps 0e/3b/3j/5b and the three pipeline commands) and `dm-review` (`review` skill Phase 8, `/dm-review-loop`, `/dm-review-fix`).
+Binding on every automation run that creates files or git refs in a target repo. Consumers: `pipeline` (`execution-orchestrator` Steps 0e/3b/3j/5b and the three pipeline commands) and `dm-review` (`review` skill Phase 8, `/dm-review-loop`, `/dm-review-fix`).
 
 This file owns Git rules. Pipeline mechanics live in
 `execution-worktree-cleanup.md`; cross-resource lifecycle and Docker remain in
@@ -43,6 +43,16 @@ reviewed feature branch or exact detached head available for the operator.
 Report `Preview: <domain> — <serving checkout> — <branch/head>` with existing
 browser/build proof or the concrete blocker. Never repoint the server to an
 implementation worktree, restore main by default or remove the serving folder.
+
+## Final readiness
+
+When a run captures browser artifacts, load `browser-artifact-cleanup.md` before
+capture and apply it at closeout, including standalone visual review. Use exact
+owned paths and preserve linked evidence before removing disposable copies.
+After all report/receipt writes, check every used checkout against its baseline.
+Deliver intentional changes and remove run-owned residue before reporting
+`Next chunk: ready`; otherwise name exact paths and blockers. Preserve foreign
+work and the running feature preview. A clean code verdict does not prove cleanup.
 
 ## 3. Safe-to-delete decision table
 

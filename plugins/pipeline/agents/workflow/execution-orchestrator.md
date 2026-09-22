@@ -1158,6 +1158,10 @@ Every registered ref appears exactly once under "Created this run". A blocked re
 
 ### 2. Artifact cleanup
 
+Apply dm-review's `repo-cleanup-contract.md` browser-artifact lifecycle across
+implementation and serving checkouts. Preserve linked evidence before cleanup;
+remove only exact run-owned disposable captures, never arbitrary image globs.
+
 Create Tier 1 and Tier 2 execution material beneath the invocation's exact-owned
 root wherever it is not a documented standalone `/pipeline-prompts` deliverable.
 At terminal cleanup, reconcile only exact artifact records from this run. Never
@@ -1251,7 +1255,10 @@ the retained diagnostic root, remove both kernel/disposable roots and report
 that worktree instead. Install the same terminal action for `EXIT`, `SIGINT`,
 and `SIGTERM`.
 
-Mark `FINAL 5b. Artifact and repository cleanup` complete.
+After final report/receipt writes, repeat `repo-cleanup-contract.md` readiness
+checks in every used checkout. Report `Next chunk: ready` only with no run-owned
+dirty residue; otherwise name the paths and blocker. Preserve the live preview.
+Mark `FINAL 5b. Artifact and repository cleanup` complete only after this check.
 
 ## Step 5c: Campaign State Write
 
