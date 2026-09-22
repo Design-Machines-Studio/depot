@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # One-shot Jev Decisions adapter. JSON stdin; --receipt NEW_FILE; --timeout 1..60.
-# Uses this bundle's credential loader and structural boundary. No retries/fallback.
+# Uses this bundle's credential loader and structural boundary. No client retries or model substitution.
 set -euo pipefail
 export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

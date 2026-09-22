@@ -1,6 +1,6 @@
 # openrouter
 
-OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to exact versioned OpenRouter model slugs over one endpoint. The evidence matrix catalogs current candidates; model-router owns concrete candidate order while Pipeline and dm-review request provider-neutral roles. Anthropic remains native Claude-only.
+OpenRouter API provider plugin (leaf). Delegates policy-routed review, bulk / large-context diff analysis, second-opinion review, one-shot text generation, and bounded agentic execution to exact versioned OpenRouter model slugs through the chat and typed Decisions transports. The evidence matrix catalogs current candidates; model-router owns concrete candidate order while Pipeline and dm-review request provider-neutral roles. Anthropic remains native Claude-only.
 
 > **Current release mode:** a configured key plus one coherent installed bundle
 > makes OpenRouter available for direct, eligible dm-review, and bounded
@@ -28,7 +28,7 @@ run.
 
 ### Jev typed decisions
 
-OpenRouter 1.21.0 adds an opt-in Decisions adapter for `typesafe/jev-1.13`.
+OpenRouter 1.21.1 adds an opt-in Decisions adapter for `typesafe/jev-1.13`.
 It sends `state` and typed `questions` to `/api/alpha/decisions`, separately from
 the unchanged chat runner. It reuses this bundle's credential and structural
 boundaries, applies a 20-second hard deadline, validates answers, and writes

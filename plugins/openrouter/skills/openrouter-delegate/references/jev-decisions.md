@@ -6,7 +6,7 @@ Jev classifies supplied state; it does not generate prose or watch videos.
 For an installed bundle, follow the OpenRouter command's coherent kernel bundle
 resolution and additionally require the executable
 `skills/openrouter-delegate/references/openrouter-decisions.sh`, with minimum
-OpenRouter version 1.21.0. Do not mix credential, boundary or adapter files from
+OpenRouter version 1.21.1. Do not mix credential, boundary or adapter files from
 different bundles. An explicitly selected, inspected development checkout is
 also supported for fixture testing and user-authorized bounded trials, without
 installing or publishing that checkout. Derive all assets from that same root.
