@@ -799,7 +799,7 @@ require_text "$review_skill" "references/selective-lane-allowlist.md" "review re
 require_text "$selective_allowlist" "never relax this equality check to a subset check" "allowlist contract requires exact selected_full_set equality"
 require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.22.0"' "dm-review requires repository-project planning and strict registry validation"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.83.0"' "pipeline requires the current completion contract"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.83.3"' "pipeline requires the current completion contract"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"model-router": ">=0.8.0"' "dm-review requires review recommendation routing"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"model-router": ">=0.8.2"' "pipeline requires the current routing runtime"
 require_text "$review_skill" 'Implementation origin is not a coverage field or eligibility condition.' "dm-review makes implementation origin ineligible as a review filter"
@@ -2068,6 +2068,16 @@ require_text "$review_loop" 'max_iterations += 1' "default checkpoint continues 
 require_absent "$review_loop" 'Manual decision required.' "first recheck does not defer fixable findings"
 require_text "$review_skill" 'without recursion' "nested review preserves enclosing repair ownership"
 require_text "$review_skill" 'Explicit read-only requests remain read-only' "read-only review override remains effective"
+
+# Browser artifacts must not dirty the next chunk's source checkout.
+artifact_cleanup="$REPO_ROOT/plugins/dm-review/skills/review/references/browser-artifact-cleanup.md"
+require_text "$artifact_cleanup" 'Never use the repository root' "screenshots use an explicit owned destination"
+require_text "$artifact_cleanup" 'verify the copied bytes' "evidence is preserved before source copy removal"
+require_text "$artifact_cleanup" 'unknown files are foreign' "artifact cleanup preserves unknown files"
+require_text "$artifact_cleanup" 'After final reports and receipts are written' "readiness includes report-created residue"
+require_text "$artifact_cleanup" 'Next chunk: blocked' "cleanup failure remains visible"
+require_text "$REPO_ROOT/plugins/dm-review/skills/visual-test/SKILL.md" 'cleanup even on failure' "standalone visual review cleans artifacts"
+require_text "$orchestrator" 'only after this check' "Pipeline completion follows final readiness"
 
 # Maintained-site delivery and authorized repair closeout.
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/repository-browser-target-discovery.md" 'remote identity alone cannot choose the site' "multiple maintained instances retain their own binding"

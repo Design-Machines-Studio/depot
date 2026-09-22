@@ -1,6 +1,6 @@
 {
   "name": "pipeline",
-  "version": "1.69.2",
+  "version": "1.69.3",
   "description": "Autonomous feature development pipeline with approved-scope intake, minimum-adequate planning, bounded adversarial review, fresh tiered verification, browser recovery, and isolated execution",
   "author": {
     "name": "Design Machines",
@@ -163,7 +163,7 @@
     ]
   },
   "pluginDependencies": {
-    "dm-review": ">=1.83.0",
+    "dm-review": ">=1.83.3",
     "model-router": ">=0.8.2",
     "workflow-kernel": ">=0.19.1"
   },

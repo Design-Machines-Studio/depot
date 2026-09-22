@@ -278,6 +278,11 @@ Reference style: `[/proposals @ 320px]` for a specific breakpoint, `[/proposals 
 
 ## Host browser evidence
 
+The capturing host follows `repo-cleanup-contract.md` for absolute screenshot
+paths and final artifact cleanup. Return exact evidence references; preserve
+linked captures before their source worktree or disposable root is removed.
+
+
 This routed participant receives no Playwright/T3 browser capability. Every
 later `browser_*` instruction names an observation that must already exist in
 the bounded host evidence. Missing observations remain explicit coverage gaps.
