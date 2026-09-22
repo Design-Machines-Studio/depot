@@ -1,6 +1,6 @@
 # Main driver and bounded workers
 
-Human-facing policy, updated 2026-09-20. Optimize total completion cost:
+Human-facing policy, updated 2026-09-23. Optimize total completion cost:
 input (including repeated cached context), output/reasoning, retries, integration
 and review, defects/rework, elapsed time and maintainer attention. Start with the
 lowest capable model for the whole job, not the cheapest token price. A stronger
@@ -12,12 +12,12 @@ Concrete identities here are operator-only; `role-policy.json` owns selection.
 
 | Work | Starting point | Escalation |
 |---|---|---|
-| Evidence gathering, release-readiness checks, routine planning and coordination | `research-fast`; GPT-5.6 Luna Medium in Codex | Sol Medium when evidence materially conflicts |
+| Evidence gathering, release-readiness checks, routine planning and coordination | `research-fast`; GPT-6 Luna Medium in Codex | GPT-6 Sol Medium when evidence materially conflicts |
 | Mechanical/docs changes | `builder-fast`; Luna Low or Medium | Increase only for demonstrated difficulty |
-| Bounded implementation, including settled UI, logic and integration | `builder-fast`; Luna High | Terra after one focused failed attempt or named uncertainty |
-| Complex implementation requiring unresolved judgment | `builder-deep`; Terra Medium | Sol, then Astra only for concrete difficulty |
-| Unresolved architecture | `architect`; Sol Medium | Astra for particularly difficult architecture; not a routine planning default |
-| Standalone review orchestration | `review-coordinator`; Sol Medium | Astra for difficult judgment; do not repeat already valid reviews |
+| Bounded implementation, including settled UI, logic and integration | `builder-fast`; Luna High | Sol after one focused failed attempt or named uncertainty |
+| Complex implementation requiring unresolved judgment | `builder-deep`; Luna Medium | Sol, then Astra only for concrete difficulty |
+| Unresolved architecture | `architect`; GPT-6 Sol Medium | Astra for particularly difficult architecture; not a routine planning default |
+| Standalone review orchestration | `review-coordinator`; GPT-6 Sol Medium | Astra for difficult judgment; do not repeat already valid reviews |
 | Narrow design question | `design-consultant`; Sol with the prototype as authority | Existing eligible specialist fallback, not a redesign mandate |
 | Bounded inexpensive or specialized analysis | Eligible OpenRouter participant | Host retains tools, integration and verification unless transport proves otherwise |
 
@@ -79,13 +79,12 @@ or tracked provider override. An unknown monthly-spend/headroom measurement is
 never described as verified affordability even when the API credential and
 current balance make the rail attemptable.
 
-Keep OpenAI and Anthropic on their native CLI rails; no Astra slug is added to
-the OpenRouter routing catalog. That catalog's 2026-08-27 evidence is unchanged.
-Astra's API-equivalent price is absent from the existing cost matrix, so report
-it as unavailable while labeling native use `included subscription`. A later
-native-cost refresh must handle current prices and long-input tiers rather than
-applying a short-input price to every request. Never report API-equivalent
-estimates as subscription charges.
+Native Codex remains first; OpenRouter eligibility stays in the role policy.
+GPT-6 Sol/Luna catalog evidence was refreshed on 2026-09-23; other catalog rows
+retain their explicitly dated prior evidence. New native API-equivalent aliases
+remain unavailable until imputation respects long-input tiers. Historical
+GPT-5.6 prices remain historical only, never subscription charges. Published API
+context limits do not prove this host's Codex context or rollout availability.
 
 Use the existing bounded OpenRouter controls and exact terminal receipts. For
 the current operator, the target is at most $50/month; this is a budget goal,

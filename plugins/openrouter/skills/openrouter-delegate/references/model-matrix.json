@@ -1,10 +1,10 @@
 {
-  "_comment": "CANONICAL machine-readable OpenRouter model matrix. This file records current provider catalog, pricing, feature, and compatibility evidence; model-router's private role-policy.json is the cross-transport routing authority. Native Codex identities and native Claude aliases are absent from OpenRouter catalog models. native_api_equivalent_cost is observation-only pricing evidence and never routing authority. anthropic/* routing slugs are rejected before provider contact.",
+  "_comment": "CANONICAL machine-readable OpenRouter model matrix. This file records current provider catalog, pricing, feature, and compatibility evidence; model-router's private role-policy.json is the cross-transport routing authority. Native Codex identities and native Claude aliases are absent from OpenRouter catalog models. native_api_equivalent_cost is observation-only pricing evidence and never routing authority. anthropic/* routing slugs are rejected before provider contact. GPT-5.6 native prices and aliases are historical receipt evidence only. GPT-6 native imputation awaits tier-aware pricing. Routing snapshot date is assembly date; catalog_evidence_date/status distinguishes refreshed GPT-6 rows from retained prior evidence.",
   "schema_version": 1,
-  "snapshot_date": "2026-08-27",
-  "catalog_observed_at": "2026-08-27T13:00:19+08:00",
+  "snapshot_date": "2026-09-23",
+  "catalog_observed_at": "2026-09-22T22:29:04.613056+00:00",
   "catalog_source": "https://openrouter.ai/api/v1/models",
-  "catalog_snapshot_sha256": "6b22e89ea31924f3d68c4a6d799122472bfeb0abbe835f4d7455b7f930e99839",
+  "catalog_snapshot_sha256": "8c6bada59a7f10c50171db4eeaf92705e7394851eeac6367450f9f803a3a8726",
   "native_api_equivalent_cost": {
     "schema_version": 1,
     "snapshot_date": "2026-08-12",
@@ -153,7 +153,7 @@
       },
       "local_evidence": "2026-08-17 canary reached OpenRouter once and failed with HTTP 429 before output; this does not disprove the executor contract.",
       "role": "Catalog evidence supports low-cost bounded text, tool, reasoning, and structured-output work; model-router decides consumers and order.",
-      "snapshot_date": "2026-08-27",
+      "snapshot_date": "2026-09-23",
       "sources": [
         "https://openrouter.ai/deepseek/deepseek-v4-flash-0731",
         "https://api-docs.deepseek.com/news/news260424/",
@@ -201,7 +201,9 @@
         ],
         "default_effort": "high"
       },
-      "default_parameters": {}
+      "default_parameters": {},
+      "catalog_evidence_date": "2026-08-27",
+      "catalog_evidence_status": "retained-prior-evidence-not-reverified"
     },
     {
       "slug": "deepseek/deepseek-v4-pro-0813",
@@ -233,7 +235,7 @@
       },
       "local_evidence": "2026-08-17 canary produced a valid seven-line minimal unified diff in 7 seconds; 125 prompt, 709 completion, 661 reasoning tokens; $0.00297264. On 2026-08-27, one retained pipeline-legacy-translation control scored 15/100 before the top-level chunks envelope was explicit and is not comparable. After OpenRouter 1.19.9 repaired that prompt, three exact-model attempts scored 100/100 with no model fallback; comparable medians were 6 seconds, 163 prompt tokens, 258 completion tokens, 195 reasoning tokens, and $0.00123684 provider-billed cost. Single-case evidence does not justify a routing change.",
       "role": "Catalog and local single-case evidence support long-context reasoning, tools, and structured output; this model remains a later routed candidate rather than a role head.",
-      "snapshot_date": "2026-08-27",
+      "snapshot_date": "2026-09-23",
       "sources": [
         "https://openrouter.ai/deepseek/deepseek-v4-pro-0813",
         "https://api-docs.deepseek.com/news/news260424/"
@@ -279,7 +281,9 @@
       "default_parameters": {
         "temperature": 1,
         "top_p": 1
-      }
+      },
+      "catalog_evidence_date": "2026-08-27",
+      "catalog_evidence_status": "retained-prior-evidence-not-reverified"
     },
     {
       "slug": "qwen/qwen3.8-max",
@@ -313,7 +317,7 @@
       },
       "local_evidence": "2026-08-17 canary found the seeded arithmetic defect in the required one-line format in 5 seconds; 203 prompt, 174 completion, 138 reasoning tokens; $0.00145.",
       "role": "Catalog evidence supports long-context independent analysis, tools, and structured output when resolver family constraints permit.",
-      "snapshot_date": "2026-08-27",
+      "snapshot_date": "2026-09-23",
       "sources": [
         "https://openrouter.ai/qwen/qwen3.8-max",
         "https://qwenlm.github.io/qwen-code-docs/en/blog/updates/weekly-update-2026-07-23/"
@@ -356,7 +360,9 @@
         ],
         "default_effort": "xhigh"
       },
-      "default_parameters": {}
+      "default_parameters": {},
+      "catalog_evidence_date": "2026-08-27",
+      "catalog_evidence_status": "retained-prior-evidence-not-reverified"
     },
     {
       "slug": "qwen/qwen3.8-2.4t-a95b",
@@ -382,7 +388,7 @@
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
       "role": "Catalog evidence only; model-router policy owns any active use.",
-      "snapshot_date": "2026-08-27",
+      "snapshot_date": "2026-09-23",
       "sources": [
         "https://openrouter.ai/qwen/qwen3.8-2.4t-a95b"
       ],
@@ -430,7 +436,9 @@
         "temperature": 1,
         "top_p": 0.95,
         "top_k": 20
-      }
+      },
+      "catalog_evidence_date": "2026-08-27",
+      "catalog_evidence_status": "retained-prior-evidence-not-reverified"
     },
     {
       "slug": "qwen/qwen3.8-27b",
@@ -458,7 +466,7 @@
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
       "role": "Catalogued compact evidence; context and feature fields do not imply an active resolver assignment.",
-      "snapshot_date": "2026-08-27",
+      "snapshot_date": "2026-09-23",
       "sources": [
         "https://openrouter.ai/qwen/qwen3.8-27b"
       ],
@@ -506,7 +514,9 @@
         "temperature": 1,
         "top_p": 0.95,
         "top_k": 20
-      }
+      },
+      "catalog_evidence_date": "2026-08-27",
+      "catalog_evidence_status": "retained-prior-evidence-not-reverified"
     },
     {
       "slug": "qwen/qwen3.7-flash",
@@ -551,7 +561,7 @@
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
       "role": "Catalogued economical evidence; the incomplete parameter contract does not establish resolver eligibility.",
-      "snapshot_date": "2026-08-27",
+      "snapshot_date": "2026-09-23",
       "sources": [
         "https://openrouter.ai/qwen/qwen3.7-flash"
       ],
@@ -587,7 +597,9 @@
         "frequency_penalty": null,
         "presence_penalty": null,
         "repetition_penalty": null
-      }
+      },
+      "catalog_evidence_date": "2026-08-27",
+      "catalog_evidence_status": "retained-prior-evidence-not-reverified"
     },
     {
       "slug": "x-ai/grok-4.6",
@@ -629,7 +641,7 @@
       },
       "local_evidence": "2026-08-17 canary found the seeded arithmetic defect in the exact one-line format in 5 seconds; 352 prompt, 295 completion, 274 reasoning tokens; $0.002282.",
       "role": "Catalog evidence supports demanding bounded reasoning, tools, structured output, and a distinct model family.",
-      "snapshot_date": "2026-08-27",
+      "snapshot_date": "2026-09-23",
       "sources": [
         "https://openrouter.ai/x-ai/grok-4.6"
       ],
@@ -667,7 +679,9 @@
         ],
         "default_effort": "high"
       },
-      "default_parameters": {}
+      "default_parameters": {},
+      "catalog_evidence_date": "2026-08-27",
+      "catalog_evidence_status": "retained-prior-evidence-not-reverified"
     },
     {
       "slug": "google/gemini-3.7-flash",
@@ -714,7 +728,7 @@
       },
       "local_evidence": "No local call authorized for this refresh.",
       "role": "Catalog evidence includes multimodal, tool, structured-output, and priced web-search support; resolver policy owns active use.",
-      "snapshot_date": "2026-08-27",
+      "snapshot_date": "2026-09-23",
       "sources": [
         "https://openrouter.ai/google/gemini-3.7-flash"
       ],
@@ -749,7 +763,9 @@
         ],
         "default_effort": "medium"
       },
-      "default_parameters": {}
+      "default_parameters": {},
+      "catalog_evidence_date": "2026-08-27",
+      "catalog_evidence_status": "retained-prior-evidence-not-reverified"
     },
     {
       "slug": "meta/muse-spark-1.2",
@@ -780,7 +796,7 @@
       "benchmark_evidence": null,
       "local_evidence": "No local call authorized for this refresh.",
       "role": "Catalogued multimodal evidence only; resolver policy owns active use.",
-      "snapshot_date": "2026-08-27",
+      "snapshot_date": "2026-09-23",
       "sources": [
         "https://openrouter.ai/meta/muse-spark-1.2"
       ],
@@ -816,7 +832,9 @@
         ],
         "default_effort": "medium"
       },
-      "default_parameters": {}
+      "default_parameters": {},
+      "catalog_evidence_date": "2026-08-27",
+      "catalog_evidence_status": "retained-prior-evidence-not-reverified"
     },
     {
       "slug": "z-ai/glm-5.2",
@@ -863,7 +881,7 @@
       },
       "local_evidence": "Prior Depot/Assembly operator evidence found repeated handholding; no call was authorized in this refresh.",
       "role": "Catalog evidence only; no active resolver assignment is established here.",
-      "snapshot_date": "2026-08-27",
+      "snapshot_date": "2026-09-23",
       "sources": [
         "https://openrouter.ai/z-ai/glm-5.2",
         "https://z.ai/blog/glm-5.2"
@@ -915,7 +933,9 @@
         "frequency_penalty": null,
         "presence_penalty": null,
         "repetition_penalty": null
-      }
+      },
+      "catalog_evidence_date": "2026-08-27",
+      "catalog_evidence_status": "retained-prior-evidence-not-reverified"
     },
     {
       "slug": "moonshotai/kimi-k3",
@@ -959,7 +979,7 @@
       },
       "local_evidence": "Recent Baseplate review: 5 attempts, about $1.334, with useful security evidence but excessive cost for routine review.",
       "role": "Catalog and local evidence support focused security analysis at high cost; resolver policy owns every assignment and exclusion.",
-      "snapshot_date": "2026-08-27",
+      "snapshot_date": "2026-09-23",
       "sources": [
         "https://openrouter.ai/moonshotai/kimi-k3",
         "https://artificialanalysis.ai/models/kimi-k3"
@@ -1011,18 +1031,20 @@
         "frequency_penalty": null,
         "presence_penalty": null,
         "repetition_penalty": null
-      }
+      },
+      "catalog_evidence_date": "2026-08-27",
+      "catalog_evidence_status": "retained-prior-evidence-not-reverified"
     },
     {
-      "slug": "openai/gpt-5.6-luna",
-      "name": "GPT-5.6 Luna",
-      "catalog_name": "OpenAI: GPT-5.6 Luna",
+      "slug": "openai/gpt-6-luna",
+      "name": "GPT-6 Luna",
+      "catalog_name": "OpenAI: GPT-6 Luna",
       "catalog_status": "available",
-      "recommendation_status": "candidate-economical-mechanical-evidence",
-      "input_usd_per_m": 0.2,
-      "output_usd_per_m": 1.2,
-      "cache_read_usd_per_m": 0.02,
-      "cache_write_usd_per_m": 0.25,
+      "recommendation_status": "catalogued-not-routed",
+      "input_usd_per_m": 0.1,
+      "output_usd_per_m": 0.5,
+      "cache_read_usd_per_m": 0.01,
+      "cache_write_usd_per_m": 0.125,
       "context_tokens": 1050000,
       "top_provider_context_tokens": 1050000,
       "top_provider_max_completion_tokens": 128000,
@@ -1030,10 +1052,10 @@
       "pricing_overrides": [
         {
           "min_prompt_tokens": 272000,
-          "prompt": 0.4,
-          "completion": 1.8,
-          "input_cache_read": 0.04,
-          "input_cache_write": 0.5
+          "prompt": 0.2,
+          "completion": 0.75,
+          "input_cache_read": 0.02,
+          "input_cache_write": 0.25
         }
       ],
       "input_modalities": [
@@ -1047,21 +1069,14 @@
       "supports_structured_outputs": true,
       "quality_rank": 90,
       "benchmark_evidence": null,
-      "market_usage_evidence": {
-        "source": "OpenRouter rankings",
-        "period_end": "2026-08-24",
-        "rank": 7,
-        "public_tokens_trillions": 4.48,
-        "status": "adoption-signal-not-quality-score"
-      },
-      "local_evidence": "Recent Baseplate review: 5 attempts, about $0.019; economical but no longer primary for all routine reviewers.",
-      "role": "Catalog and local evidence support economical mechanical analysis; resolver policy owns candidate order.",
-      "snapshot_date": "2026-08-27",
+      "local_evidence": "No local GPT-6 execution canary; predecessor results do not transfer.",
+      "role": "Current catalog evidence only; local task quality is unverified. Role policy owns candidate order.",
+      "snapshot_date": "2026-09-23",
       "sources": [
-        "https://openrouter.ai/openai/gpt-5.6-luna",
-        "https://developers.openai.com/api/docs/models/gpt-5.6-luna"
+        "https://openrouter.ai/openai/gpt-6-luna",
+        "https://developers.openai.com/api/docs/models/gpt-6-luna"
       ],
-      "canonical_slug": "openai/gpt-5.6-luna-20260709",
+      "canonical_slug": "openai/gpt-6-luna-20260922",
       "web_search_usd_per_request": 0.01,
       "top_provider_is_moderated": true,
       "output_modalities": [
@@ -1069,7 +1084,6 @@
       ],
       "supported_parameters": [
         "include_reasoning",
-        "max_completion_tokens",
         "max_tokens",
         "reasoning",
         "reasoning_effort",
@@ -1099,16 +1113,18 @@
         "frequency_penalty": null,
         "presence_penalty": null,
         "repetition_penalty": null
-      }
+      },
+      "catalog_evidence_date": "2026-09-23",
+      "catalog_evidence_status": "live-catalog"
     },
     {
-      "slug": "openai/gpt-5.6-terra",
-      "name": "GPT-5.6 Terra",
-      "catalog_name": "OpenAI: GPT-5.6 Terra",
+      "slug": "openai/gpt-6-sol",
+      "name": "GPT-6 Sol",
+      "catalog_name": "OpenAI: GPT-6 Sol",
       "catalog_status": "available",
       "recommendation_status": "catalogued-not-routed",
-      "input_usd_per_m": 2,
-      "output_usd_per_m": 12,
+      "input_usd_per_m": 2.0,
+      "output_usd_per_m": 10.0,
       "cache_read_usd_per_m": 0.2,
       "cache_write_usd_per_m": 2.5,
       "context_tokens": 1050000,
@@ -1118,10 +1134,10 @@
       "pricing_overrides": [
         {
           "min_prompt_tokens": 272000,
-          "prompt": 4,
-          "completion": 18,
+          "prompt": 4.0,
+          "completion": 15.0,
           "input_cache_read": 0.4,
-          "input_cache_write": 5
+          "input_cache_write": 5.0
         }
       ],
       "input_modalities": [
@@ -1135,14 +1151,14 @@
       "supports_structured_outputs": true,
       "quality_rank": 94,
       "benchmark_evidence": null,
-      "local_evidence": "No local call authorized for this refresh.",
-      "role": "Catalogued explicit-choice evidence only; resolver policy owns active use.",
-      "snapshot_date": "2026-08-27",
+      "local_evidence": "No local GPT-6 execution canary; predecessor results do not transfer.",
+      "role": "Current catalog evidence only; local task quality is unverified. Role policy owns candidate order.",
+      "snapshot_date": "2026-09-23",
       "sources": [
-        "https://openrouter.ai/openai/gpt-5.6-terra",
-        "https://developers.openai.com/api/docs/models/gpt-5.6-terra"
+        "https://openrouter.ai/openai/gpt-6-sol",
+        "https://developers.openai.com/api/docs/models/gpt-6-sol"
       ],
-      "canonical_slug": "openai/gpt-5.6-terra-20260709",
+      "canonical_slug": "openai/gpt-6-sol-20260922",
       "web_search_usd_per_request": 0.01,
       "top_provider_is_moderated": true,
       "output_modalities": [
@@ -1150,7 +1166,6 @@
       ],
       "supported_parameters": [
         "include_reasoning",
-        "max_completion_tokens",
         "max_tokens",
         "reasoning",
         "reasoning_effort",
@@ -1180,7 +1195,9 @@
         "frequency_penalty": null,
         "presence_penalty": null,
         "repetition_penalty": null
-      }
+      },
+      "catalog_evidence_date": "2026-09-23",
+      "catalog_evidence_status": "live-catalog"
     },
     {
       "slug": "z-ai/glm-5.3",
@@ -1251,10 +1268,12 @@
       },
       "local_evidence": "No live canary request was sent because no configured OpenRouter credential was available in this worktree session.",
       "role": "Catalog evidence records mandatory reasoning and default max; it does not establish an active resolver assignment.",
-      "snapshot_date": "2026-08-27",
+      "snapshot_date": "2026-09-23",
       "sources": [
         "https://openrouter.ai/api/v1/models"
-      ]
+      ],
+      "catalog_evidence_date": "2026-08-27",
+      "catalog_evidence_status": "retained-prior-evidence-not-reverified"
     },
     {
       "slug": "z-ai/glm-5.3-flash",
@@ -1331,13 +1350,15 @@
       },
       "local_evidence": "2026-08-27 retained seven pipeline-legacy-translation attempts. Attempts 1-2 hit HTTP 429 because same-model provider fallback was incorrectly disabled; attempts 3-4 predated the complete prompt contract and are not comparable. After OpenRouter 1.19.9 made the mapping and top-level chunks envelope explicit, three exact-model attempts scored 100/100 with no model fallback; comparable medians were 5 seconds, 160 prompt tokens, 155 completion tokens, 111 reasoning tokens, and $0.0000975 provider-billed cost. Total retained GLM billed cost was $0.000705319465. The other three applicable cases were not run, so no routing change is justified.",
       "role": "Catalog and local single-case evidence support bounded structured transformation; this model is not routed and is not a role head.",
-      "snapshot_date": "2026-08-27",
+      "snapshot_date": "2026-09-23",
       "sources": [
         "https://openrouter.ai/api/v1/models",
         "https://openrouter.ai/z-ai/glm-5.3-flash",
         "https://openrouter.ai/stealth/ox-alpha"
-      ]
+      ],
+      "catalog_evidence_date": "2026-08-27",
+      "catalog_evidence_status": "retained-prior-evidence-not-reverified"
     }
   ],
-  "catalog_snapshot": "/home/ned/.local/state/openrouter-model-pulse/catalog/models-20260827T130019.json"
+  "catalog_snapshot": "/home/ned/.local/state/openrouter-model-pulse/catalog/models-20260923-8c6bada59a7f.json"
 }

@@ -10,7 +10,8 @@ engine.
 
 ## Available Models
 
-Prices below are a checked-in planning snapshot from 2026-08-27, in USD per
+GPT-6 Sol/Luna prices were refreshed on 2026-09-23; other rows retain
+2026-08-27 evidence. Prices are in USD per
 million input/output tokens. The compact refresh receipt is
 `docs/openrouter-model-matrix-refreshes/2026-08-27.md`; use a fresh catalog
 receipt before a later paid or policy-changing run.
@@ -29,8 +30,8 @@ receipt before a later paid or policy-changing run.
 | `z-ai/glm-5.3` | $1.40 / $4.40 | 1,048,576 | Catalogued-not-routed; mandatory reasoning defaults to max |
 | `z-ai/glm-5.3-flash` | $0.075 / $0.25 | 1,310,720 | Historical v1: formerly Ox Alpha; three corrected pipeline attempts at 100/100; incompatible single-case evidence only |
 | `moonshotai/kimi-k3` | $3 / $15 | 1,048,576 | Focused security-analysis evidence at high cost |
-| `openai/gpt-5.6-luna` | $0.20 / $1.20 | 1,050,000 | Economical mechanical-analysis evidence |
-| `openai/gpt-5.6-terra` | $2 / $12 | 1,050,000 | Catalogued compatibility evidence; no default role |
+| `openai/gpt-6-luna` | $0.10 / $0.50 | 1,050,000 | New catalog entry; local execution unverified |
+| `openai/gpt-6-sol` | $2 / $10 | 1,050,000 | Catalogued compatibility evidence; no default role |
 
 Every executable identity is an exact versioned slug. Moving aliases such as
 `latest` are forbidden. GLM 5.3 is recorded only as the exact catalog identity

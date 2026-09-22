@@ -737,14 +737,14 @@ assert jq -e '.served.transport == "openrouter" and .fallback == true' "$TMP/dee
 # A current quota response exhausts the native rail for this run; it is not
 # retried under a second model alias.
 fixture healthy
-jq '.candidateResults["gpt-5.6-terra"].outcome="quota"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.candidateResults["gpt-6-luna"].outcome="quota"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role quota-fallback builder-deep high --capability read-repository --capability long-context
-assert jq -e '.served.transport == "openrouter" and .attempts[0].reason == "rate_limit_exhausted" and ([.attempts[].model] | index("gpt-6-astra") == null and index("gpt-5.6-sol") == null)' "$TMP/quota-fallback.receipt"
+assert jq -e '.served.transport == "openrouter" and .attempts[0].reason == "rate_limit_exhausted" and ([.attempts[].model] | index("gpt-6-astra") == null and index("gpt-6-sol") == null)' "$TMP/quota-fallback.receipt"
 
 # Failure reasons are attempt-local; an earlier quota cannot relabel a later transport failure.
 fixture healthy
-jq '.candidateResults["gpt-5.6-terra"].outcome="quota"
+jq '.candidateResults["gpt-6-luna"].outcome="quota"
   | .candidateResults["deepseek/deepseek-v4-pro-0813"].outcome="transport"
   | .candidateResults["x-ai/grok-4.6"].outcome="success"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
@@ -755,15 +755,15 @@ assert jq -e '.served.model == "x-ai/grok-4.6" and .fallbackReason == "transport
 fixture healthy
 for effort in low medium high max; do
   run_role "architect-$effort" architect "$effort" --capability read-repository --capability structured-output
-  assert jq -e --arg effort "$effort" '.served.model == "gpt-5.6-sol" and .requested.effort == $effort and .normalizedEffort == $effort' "$TMP/architect-$effort.receipt"
+  assert jq -e --arg effort "$effort" '.served.model == "gpt-6-sol" and .requested.effort == $effort and .normalizedEffort == $effort' "$TMP/architect-$effort.receipt"
 done
 for effort in high max; do
   run_role "luna-$effort" builder-fast "$effort" --capability read-repository --capability structured-output
-  assert jq -e --arg effort "$effort" '.served.model == "gpt-5.6-luna" and .requested.effort == $effort and .normalizedEffort == $effort' "$TMP/luna-$effort.receipt"
+  assert jq -e --arg effort "$effort" '.served.model == "gpt-6-luna" and .requested.effort == $effort and .normalizedEffort == $effort' "$TMP/luna-$effort.receipt"
 done
 # Model-specific transport failure can escalate to the next native candidate; a
 # quota response above must instead skip the entire exhausted subscription rail.
-jq '.candidateResults["gpt-5.6-sol"].outcome="transport"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.candidateResults["gpt-6-sol"].outcome="transport"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role architect-escalation architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "gpt-6-astra" and .normalizedEffort == "high" and .fallback == true' "$TMP/architect-escalation.receipt"
@@ -771,10 +771,10 @@ assert jq -e '.served.model == "gpt-6-astra" and .normalizedEffort == "high" and
 # Two eligible operators receive identical subscription-first behavior from one policy.
 fixture healthy
 run_role architect-a architect low --capability read-repository --capability structured-output
-assert jq -e '.served.model == "gpt-5.6-sol" and .served.billingMode == "included-subscription"' "$TMP/architect-a.receipt"
+assert jq -e '.served.model == "gpt-6-sol" and .served.billingMode == "included-subscription"' "$TMP/architect-a.receipt"
 fixture second-eligible-operator
 run_role architect-b architect medium --capability read-repository --capability structured-output
-assert jq -e '.served.model == "gpt-5.6-sol" and .served.billingMode == "included-subscription"' "$TMP/architect-b.receipt"
+assert jq -e '.served.model == "gpt-6-sol" and .served.billingMode == "included-subscription"' "$TMP/architect-b.receipt"
 
 # Default policy excludes Claude even when its subscription is healthy.
 assert jq -e 'all(.roles[][]; .transport != "claude-cli")' "$(dirname "$ROUTER")/role-policy.json"
@@ -850,7 +850,7 @@ ROUTER="$DEFAULT_ROUTER"
 # Security head identity stays private.
 fixture healthy
 run_role security security-review high --capability read-repository --capability structured-output
-assert jq -e '.served.model == "gpt-5.6-terra" and .served.transport == "codex-cli"' "$TMP/security.receipt"
+assert jq -e '.served.model == "gpt-6-luna" and .served.transport == "codex-cli"' "$TMP/security.receipt"
 assert sh -c "! grep -Eq 'kimi|moonshot|openrouter|deepseek|gpt-[0-9]|fable|qwen|grok' '$TMP/security.public'"
 
 # Human-authored work excludes no family, so subscription-first remains the
@@ -858,9 +858,9 @@ assert sh -c "! grep -Eq 'kimi|moonshot|openrouter|deepseek|gpt-[0-9]|fable|qwen
 jq '.openrouter.state="unknown"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role native-independent plan-critic high --capability read-repository --capability independent-family --human-authored
-assert jq -e '.served.model == "gpt-5.6-terra" and .served.transport == "codex-cli"' "$TMP/native-independent.receipt"
+assert jq -e '.served.model == "gpt-6-luna" and .served.transport == "codex-cli"' "$TMP/native-independent.receipt"
 run_role native-security security-review high --capability read-repository --capability independent-family --human-authored
-assert jq -e '.served.model == "gpt-5.6-terra" and .served.transport == "codex-cli"' "$TMP/native-security.receipt"
+assert jq -e '.served.model == "gpt-6-luna" and .served.transport == "codex-cli"' "$TMP/native-security.receipt"
 
 # Ordinary security and critic reviews need no historical origin receipts.
 fixture healthy
@@ -966,7 +966,7 @@ printf '%s\n' 'initial' > "$TMP/write-repo/tracked.txt"
 git -C "$TMP/write-repo" add tracked.txt
 git -C "$TMP/write-repo" -c user.name=test -c user.email=test@example.invalid commit -qm initial
 fixture healthy
-jq '.candidateResults["gpt-5.6-terra"].outcome="mutate-fail"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.candidateResults["gpt-6-luna"].outcome="mutate-fail"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 set +e
 (
@@ -1034,7 +1034,7 @@ git -C "$TMP/publication-write-repo" add tracked.txt
 git -C "$TMP/publication-write-repo" -c user.name=test -c user.email=test@example.invalid commit -qm initial
 write_initial_head="$(git -C "$TMP/publication-write-repo" rev-parse HEAD)"
 fixture healthy
-jq '.candidateResults["gpt-5.6-terra"].outcome="commit-success"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.candidateResults["gpt-6-luna"].outcome="commit-success"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 mkdir "$TMP/publication-write"
 set +e
@@ -1063,7 +1063,7 @@ rm -f "$write_publication_receipt"
 
 # Model content refusal follows the role ladder with no prompt.
 fixture healthy
-jq '.candidateResults["gpt-5.6-terra"].outcome="content-refusal"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.candidateResults["gpt-6-luna"].outcome="content-refusal"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role refusal plan-critic high --capability read-repository --capability structured-output
 assert jq -e '.fallback == true and .fallbackReason == "content-refusal" and .served.model == "deepseek/deepseek-v4-pro-0813"' "$TMP/refusal.receipt"
@@ -1072,7 +1072,7 @@ assert jq -e '.fallback == true and .fallbackReason == "content-refusal" and .se
 # design consultation uses native Fable once and falls back when exhausted.
 fixture healthy
 run_role review-coordinator review-coordinator medium --capability read-repository --capability long-context --capability structured-output
-assert jq -e '.served.model == "gpt-5.6-sol" and .served.transport == "codex-cli" and .normalizedEffort == "medium"' "$TMP/review-coordinator.receipt"
+assert jq -e '.served.model == "gpt-6-sol" and .served.transport == "codex-cli" and .normalizedEffort == "medium"' "$TMP/review-coordinator.receipt"
 # Opt-in transport identity tests do not re-enable Claude in the shipped policy.
 ROUTER="$TMP/claude-opt-in-router/role-dispatch.sh"
 jq '.roles["design-consultant"] |= ([{model:"fable",servedIdentities:["claude-fable-5"],provider:"anthropic",transport:"claude-cli",family:"anthropic",billing:"subscription-or-local-paid-credits",capabilities:["long-context","structured-output"]}] + .)' \
@@ -1081,7 +1081,7 @@ mv "$TMP/claude-design-policy.json" "$TMP/claude-opt-in-router/role-policy.json"
 printf '%s\n' '{}' > "$TMP/fable-missing-identity.json"
 MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/fable-missing-identity.json" \
   run_role fable-design design-consultant medium --capability long-context --capability structured-output
-assert jq -e '.served.model == "gpt-5.6-sol" and .fallback == true and ([.attempts[] | select(.model == "fable" and .servedIdentity == "unknown" and .reason == "provider_model_identity_unavailable")] | length) == 1' "$TMP/fable-design.receipt"
+assert jq -e '.served.model == "gpt-6-sol" and .fallback == true and ([.attempts[] | select(.model == "fable" and .servedIdentity == "unknown" and .reason == "provider_model_identity_unavailable")] | length) == 1' "$TMP/fable-design.receipt"
 printf '%s\n' '{"model":"claude-fable-5"}' > "$TMP/fable-identity.json"
 MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/fable-identity.json" \
   run_role fable-identity design-consultant medium --capability long-context --capability structured-output
@@ -1097,14 +1097,14 @@ assert jq -e '.served.model == "fable" and .served.servedIdentity == "claude-fab
 printf '%s\n' '{"modelUsage":{"claude-fable-5":{"outputTokens":12},"claude-opus-5":{"outputTokens":12}}}' > "$TMP/fable-ambiguous-identity.json"
 MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/fable-ambiguous-identity.json" \
   run_role fable-ambiguous-identity design-consultant medium --capability long-context --capability structured-output
-assert jq -e '.served.model == "gpt-5.6-sol" and .fallback == true and ([.attempts[] | select(.model == "fable" and .reason == "provider_model_identity_unavailable")] | length) == 1' "$TMP/fable-ambiguous-identity.receipt"
+assert jq -e '.served.model == "gpt-6-sol" and .fallback == true and ([.attempts[] | select(.model == "fable" and .reason == "provider_model_identity_unavailable")] | length) == 1' "$TMP/fable-ambiguous-identity.receipt"
 printf '%s\n' '{"model":"claude-opus-5"}' > "$TMP/fable-substitution.json"
 MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/fable-substitution.json" \
   run_role fable-substitution design-consultant medium --capability long-context --capability structured-output
-assert jq -e '.served.model == "gpt-5.6-sol" and .fallback == true and ([.attempts[] | select(.model == "fable" and .servedIdentity == "claude-opus-5" and .reason == "provider_model_substitution")] | length) == 1' "$TMP/fable-substitution.receipt"
+assert jq -e '.served.model == "gpt-6-sol" and .fallback == true and ([.attempts[] | select(.model == "fable" and .servedIdentity == "claude-opus-5" and .reason == "provider_model_substitution")] | length) == 1' "$TMP/fable-substitution.receipt"
 fixture fable-exhausted
 run_role fable-design-fallback design-consultant medium --capability long-context --capability structured-output
-assert jq -e '.served.model == "gpt-5.6-sol" and .fallback == true and ([.attempts[] | select(.model == "fable" and .outcome == "skipped")] | length) == 1' "$TMP/fable-design-fallback.receipt"
+assert jq -e '.served.model == "gpt-6-sol" and .fallback == true and ([.attempts[] | select(.model == "fable" and .outcome == "skipped")] | length) == 1' "$TMP/fable-design-fallback.receipt"
 
 mkdir -p "$TMP/profile-dispatch/.dm"
 git -C "$TMP/profile-dispatch" init -q

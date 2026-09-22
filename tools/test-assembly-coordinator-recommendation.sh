@@ -93,10 +93,10 @@ assert grep -Fq 'browser evidence/setup gap' "$TMP/browser-required-prompt.md"
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/browser-required-recommendation.json"
 assert jq -e '
-  .recommendedStart.model == "gpt-5.6-terra" and
+  .recommendedStart.model == "gpt-6-luna" and
   .recommendedStart.harness == "Codex" and
   .recommendedStart.effort == "medium" and
-  .recommendedStart.fallback.model == "gpt-5.6-sol" and
+  .recommendedStart.fallback.model == "gpt-6-sol" and
   (.recommendedStart.fallback | keys | length) == 3
 ' "$TMP/browser-required-recommendation.json"
 
@@ -104,25 +104,25 @@ assert jq -e '
   --capability write-repository --capability tool-use --capability long-context \
   --capability structured-output --effort low --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/builder.json"
-assert jq -e '.recommendedStart.model == "gpt-5.6-terra" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "low"' "$TMP/builder.json"
-assert jq -e '.recommendedStart.fallback.model == "gpt-5.6-sol" and (.recommendedStart.fallback | keys | length) == 3' "$TMP/builder.json"
-assert jq -e '.recommendedStart.cost.label == "included subscription" and .recommendedStart.cost.apiEquivalent.basis == "API-equivalent planning estimate; never billed subscription spend" and .recommendedStart.cost.apiPrice == null' "$TMP/builder.json"
+assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "low"' "$TMP/builder.json"
+assert jq -e '.recommendedStart.fallback.model == "gpt-6-sol" and (.recommendedStart.fallback | keys | length) == 3' "$TMP/builder.json"
+assert jq -e '.recommendedStart.cost.label == "included subscription" and .recommendedStart.cost.apiEquivalent == null and .recommendedStart.cost.apiPrice == null' "$TMP/builder.json"
 
 "$RECOMMEND" --role review-fast --capability read-repository \
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/review.json"
-assert jq -e '.recommendedStart.model == "gpt-5.6-luna" and .recommendedStart.harness == "Codex" and .recommendedStart.cost.label == "included subscription"' "$TMP/review.json"
+assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.harness == "Codex" and .recommendedStart.cost.label == "included subscription"' "$TMP/review.json"
 
 "$RECOMMEND" --role review-coordinator --capability read-repository \
   --capability long-context --capability structured-output --effort medium \
   --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
   --format json > "$TMP/review-coordinator.json"
-assert jq -e '.recommendedStart.model == "gpt-5.6-sol" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-6-astra"' "$TMP/review-coordinator.json"
+assert jq -e '.recommendedStart.model == "gpt-6-sol" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-6-astra"' "$TMP/review-coordinator.json"
 
 "$RECOMMEND" --role design-consultant --capability long-context \
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/fable-design.json"
-assert jq -e '.recommendedStart.model == "gpt-5.6-sol" and .recommendedStart.harness == "Codex" and .recommendedStart.fallback.model == "qwen/qwen3.8-max"' "$TMP/fable-design.json"
+assert jq -e '.recommendedStart.model == "gpt-6-sol" and .recommendedStart.harness == "Codex" and .recommendedStart.fallback.model == "qwen/qwen3.8-max"' "$TMP/fable-design.json"
 
 # The two reported consumer tasks choose economical roles, with concrete native
 # fallbacks even when the host needs tools. These exercise the real renderer.
@@ -130,12 +130,12 @@ assert jq -e '.recommendedStart.model == "gpt-5.6-sol" and .recommendedStart.har
   --capability write-repository --capability tool-use --capability structured-output \
   --effort high --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
   --format json > "$TMP/node-policy-repair.json"
-assert jq -e '.recommendedStart.model == "gpt-5.6-luna" and .recommendedStart.effort == "high" and .recommendedStart.fallback.model == "gpt-5.6-terra"' "$TMP/node-policy-repair.json"
+assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.effort == "high" and .recommendedStart.fallback.model == "gpt-6-sol"' "$TMP/node-policy-repair.json"
 "$RECOMMEND" --role research-fast --capability read-repository \
   --capability tool-use --capability structured-output --effort medium \
   --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
   --format json > "$TMP/publication-readiness.json"
-assert jq -e '.recommendedStart.model == "gpt-5.6-luna" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-5.6-sol"' "$TMP/publication-readiness.json"
+assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-6-sol"' "$TMP/publication-readiness.json"
 assert jq -e 'all(.roles[][]; .transport != "claude-cli")' "$POLICY"
 assert jq -e 'all(.chunkKinds.logic,.chunkKinds.ui,.chunkKinds.integration; .executorRole == "builder-fast" and (.executorCapabilities|index("long-context")|not))' "$PIPELINE_POLICY"
 
@@ -159,7 +159,7 @@ jq '.openrouter.state="unavailable"' "$TMP/healthy.json" > "$TMP/no-openrouter.j
 "$RECOMMEND" --role review-fast --capability read-repository \
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/no-openrouter.json" --format json > "$TMP/review-native.json"
-assert jq -e '.recommendedStart.model == "gpt-5.6-luna" and .recommendedStart.harness == "Codex"' "$TMP/review-native.json"
+assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.harness == "Codex"' "$TMP/review-native.json"
 
 jq '.roles["review-fast"] += [
   {model:"qwen/qwen3.8-max",provider:"openrouter",transport:"openrouter",family:"qwen",billing:"api",capabilities:["read-repository","long-context","structured-output"]},
@@ -251,7 +251,7 @@ MODEL_ROUTER_CLI_LOG="$TMP/native/incoming.log" \
     --format json > "$TMP/native/incoming.json"
 assert grep -Fxq "$TMP/native/incoming/codex" "$TMP/native/incoming.log"
 assert grep -Fxq "$TMP/native/incoming/claude" "$TMP/native/incoming.log"
-assert jq -e '.recommendedStart.model == "gpt-5.6-luna" and .recommendedStart.harness == "Codex"' "$TMP/native/incoming.json"
+assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.harness == "Codex"' "$TMP/native/incoming.json"
 
 MODEL_ROUTER_CLI_LOG="$TMP/native/override.log" \
   PATH="$TMP/native/incoming:/usr/bin:/bin" HOME="$FAKE_HOME" \
@@ -296,6 +296,6 @@ assert grep -Fq 'billedCostUsd' "$TERMINAL"
   --availability-file "$TMP/healthy.json" --format markdown > "$TMP/recommended.md"
 assert test "$(grep -c '^Recommended start$' "$TMP/recommended.md")" -eq 1
 assert test "$(grep -c '^- Fallback:' "$TMP/recommended.md")" -eq 1
-assert grep -Fq -- '- Matrix evidence: 2026-08-27' "$TMP/recommended.md"
+assert grep -Fq -- '- Matrix evidence: 2026-09-23' "$TMP/recommended.md"
 
 printf 'assembly-coordinator-recommendation: %d assertions passed\n' "$pass"
