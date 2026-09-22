@@ -26,7 +26,8 @@ bash "$OPENROUTER_ROOT/skills/openrouter-delegate/references/openrouter-decision
 `jev-request.json` must exist and `jev-receipt.json` must not; the adapter
 creates the receipt with mode 0600.
 
-This is one request with no retries or fallback. The adapter reuses the bundle's
+This is one client request with no automatic retry or model substitution. The
+adapter reuses the bundle's
 credential-file policy and structural boundary. It caps requests at 32,000 UTF-8
 bytes and 32 questions, enforces a hard overall timeout (default 20 seconds,
 maximum 60), rejects redirects and ambient proxies, validates answer
