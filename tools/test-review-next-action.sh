@@ -91,7 +91,7 @@ JSON
   --capability long-context --capability structured-output --effort medium \
   --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
   --format markdown > "$TMP/recommendation.md"
-assert grep -Fxq -- '- Model: gpt-5.6-sol' "$TMP/recommendation.md"
+assert grep -Fxq -- '- Model: gpt-6-sol' "$TMP/recommendation.md"
 assert grep -Fxq -- '- Harness/rail: Codex' "$TMP/recommendation.md"
 assert grep -Fxq -- '- Effort: medium' "$TMP/recommendation.md"
 assert test "$(grep -c '^- Fallback:' "$TMP/recommendation.md")" -eq 1

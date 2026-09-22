@@ -93,7 +93,7 @@ Requirements:
 Output only the file content.
 ```
 
-**Model:** `deepseek/deepseek-v4-flash-0731`, with `openai/gpt-5.6-luna` as the economical fallback. **Timeout:** 1800s. The orchestrator writes the returned text to `{TARGET_FILE}` and commits it -- the wrapper never touches the filesystem.
+**Model:** `deepseek/deepseek-v4-flash-0731`, with `openai/gpt-6-luna` as the economical fallback. **Timeout:** 1800s. The orchestrator writes the returned text to `{TARGET_FILE}` and commits it -- the wrapper never touches the filesystem.
 
 ---
 

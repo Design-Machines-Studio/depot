@@ -18,28 +18,44 @@ check() {
   else printf '  FAIL  %s\n' "$label"; failures=1; fi
 }
 
+check 'GPT-6 migration removes retired active candidates and duplicate fallbacks' jq -e '
+  all(.roles[][]; (.model | test("gpt-5[.]6-(sol|luna|terra)") | not)) and
+  all(.roles[]; ([.[].model] | length) == ([.[].model] | unique | length)) and
+  .roles["builder-fast"][1].model == "gpt-6-sol"' "$POLICY"
+
+check 'new catalog prices and tiers have fresh model-specific evidence' jq -e '
+  ([.models[] | select(.slug == "openai/gpt-6-luna")][0] |
+    .input_usd_per_m == 0.1 and .output_usd_per_m == 0.5 and
+    .cache_read_usd_per_m == 0.01 and .catalog_evidence_date == "2026-09-23" and
+    .pricing_overrides[0].min_prompt_tokens == 272000) and
+  ([.models[] | select(.slug == "openai/gpt-6-sol")][0] |
+    .input_usd_per_m == 2 and .output_usd_per_m == 10 and .cache_read_usd_per_m == 0.2) and
+  all(.models[]; (.slug | test("gpt-5[.]6-(luna|terra)") | not)) and
+  (.native_api_equivalent_cost.aliases | has("gpt-6-luna") | not) and
+  (.native_api_equivalent_cost.aliases | has("gpt-6-sol") | not)' "$MATRIX"
+
 check 'router schema and threshold are closed' jq -e '
   .schemaVersion == 1 and .availability.headroomThresholdPct == 8 and
   .effort.vocabulary == ["low","medium","high","max"]' "$POLICY"
 
 check 'builder-fast starts with the bounded fast candidate' jq -e '
-  .roles["builder-fast"][0].model == "gpt-5.6-luna" and
+  .roles["builder-fast"][0].model == "gpt-6-luna" and
   .roles["builder-fast"][0].transport == "codex-cli"' "$POLICY"
 
 check 'builder-deep starts on native subscription capacity' jq -e '
-  .roles["builder-deep"][0].model == "gpt-5.6-terra" and
+  .roles["builder-deep"][0].model == "gpt-6-luna" and
   .roles["builder-deep"][0].billing == "included-subscription"' "$POLICY"
 
 check 'architect begins with Sol; Astra remains escalation' jq -e '
-  .roles.architect[0].model == "gpt-5.6-sol" and
+  .roles.architect[0].model == "gpt-6-sol" and
   .roles.architect[0].transport == "codex-cli"' "$POLICY"
 
 check 'driver policy retains the baseline and distinct specialist workers' jq -e '
   .roles.architect[1].model == "gpt-6-astra" and
-  .roles["builder-deep"][1].model == "gpt-5.6-sol" and
+  .roles["builder-deep"][1].model == "gpt-6-sol" and
   .roles["builder-deep"][2].model == "gpt-6-astra" and
-  .roles["review-fast"][0].model == "gpt-5.6-luna" and
-  .roles["review-deep"][0].model == "gpt-5.6-terra"' "$POLICY"
+  .roles["review-fast"][0].model == "gpt-6-luna" and
+  .roles["review-deep"][0].model == "gpt-6-luna"' "$POLICY"
 
 check 'settled UI uses Luna-high while unresolved deep work and mechanical defaults stay distinct' jq -e '
   all(.chunkKinds | to_entries[] | select(.key | IN("logic","integration")); .value.executorRole == "builder-fast" and .value.executorEffort == "high") and
@@ -57,7 +73,7 @@ check 'declared native aliases bind to exact approved served identities' jq -e '
   else true end)' "$POLICY"
 
 check 'security head is isolated from ordinary roles' jq -e '
-  .roles["security-review"][0].model == "gpt-5.6-terra" and
+  .roles["security-review"][0].model == "gpt-6-luna" and
   .roles["security-review"][1].model == "moonshotai/kimi-k3" and
   ([.roles | to_entries[] | select(.key != "security-review") | .value[].model | select(test("kimi";"i"))] | length == 0)' "$POLICY"
 
@@ -70,7 +86,7 @@ check 'tracked policy carries no operator identity or billing preference' sh -c 
   "! grep -Eiq 'travis|jeremy|email|allowPaidClaudeCredits' '$POLICY'"
 
 check 'OpenRouter matrix retains usage and price evidence' jq -e '
-  .snapshot_date == "2026-08-27" and
+  .snapshot_date == "2026-09-23" and
   all(.models[]; (.slug|type)=="string" and (.input_usd_per_m|type)=="number" and (.output_usd_per_m|type)=="number")' "$MATRIX"
 
 check 'OpenRouter wrapper retains content-free receipt fields' sh -c \

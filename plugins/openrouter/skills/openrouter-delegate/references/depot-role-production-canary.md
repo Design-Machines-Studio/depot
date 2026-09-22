@@ -26,7 +26,7 @@ BASE="$(git rev-parse HEAD)"
 "$CANARY" --run \
   --work-unit canary-research-claim-map \
   --transport codex-cli \
-  --model gpt-5.6-luna \
+  --model gpt-6-luna \
   --effort medium \
   --base-revision "$BASE" \
   --result-dir /home/ned/benchmark-results/depot-role-production-canary/native/research-fast/run-1

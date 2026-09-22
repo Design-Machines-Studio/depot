@@ -526,7 +526,7 @@ class ModelIntelligenceTest(unittest.TestCase):
         for name in ("one", "two"):
             evidence = self.v2_result(
                 case_id="mechanical-owned-edit",
-                model="gpt-5.6-luna",
+                model="gpt-6-luna",
                 transport="codex-cli",
                 observed_at="not-an-order",
             )
@@ -574,7 +574,7 @@ class ModelIntelligenceTest(unittest.TestCase):
         benchmark_root = self.root / "failure-classes-v2"
         mandatory = self.v2_result(
             case_id="review-zero-deferral",
-            model="gpt-5.6-luna",
+            model="gpt-6-luna",
             transport="codex-cli",
             observed_at="2026-08-29T03:00:00Z",
             success=False,
@@ -585,7 +585,7 @@ class ModelIntelligenceTest(unittest.TestCase):
         mandatory["contractPassed"] = True
         validation = self.v2_result(
             case_id="review-zero-deferral",
-            model="gpt-5.6-luna",
+            model="gpt-6-luna",
             transport="codex-cli",
             observed_at="2026-08-29T03:01:00Z",
             success=False,
@@ -597,7 +597,7 @@ class ModelIntelligenceTest(unittest.TestCase):
         validation["semanticPassed"] = True
         identity = self.v2_result(
             case_id="review-zero-deferral",
-            model="gpt-5.6-luna",
+            model="gpt-6-luna",
             transport="codex-cli",
             observed_at="2026-08-29T03:02:00Z",
             success=True,
@@ -765,7 +765,7 @@ class ModelIntelligenceTest(unittest.TestCase):
         )
         authority_variants.append(("wrong-transport", wrong_transport, None))
         newly_capable_research = self.v2_result(
-            case_id="research-claim-source-map", model="gpt-5.6-luna", transport="codex-cli",
+            case_id="research-claim-source-map", model="gpt-6-luna", transport="codex-cli",
             observed_at="2026-08-29T04:13:00Z",
         )
         self.write_attempt(benchmark_root, "newly-capable-research", newly_capable_research)
@@ -819,12 +819,12 @@ class ModelIntelligenceTest(unittest.TestCase):
         allowed["fallback"]["attemptedIdentity"] = "claude-opus-5"
         allowed["fallback"]["attemptedIdentities"] = ["claude-opus-5"]
         rejected = self.v2_result(
-            case_id="review-zero-deferral", model="gpt-5.6-luna", transport="codex-cli",
+            case_id="review-zero-deferral", model="gpt-6-luna", transport="codex-cli",
             observed_at="2026-08-29T04:21:00Z", endpoint_provider="openai",
         )
-        rejected["servedIdentity"] = "gpt-5.6-sol"
-        rejected["fallback"]["attemptedIdentity"] = "gpt-5.6-sol"
-        rejected["fallback"]["attemptedIdentities"] = ["gpt-5.6-sol"]
+        rejected["servedIdentity"] = "gpt-6-sol"
+        rejected["fallback"]["attemptedIdentity"] = "gpt-6-sol"
+        rejected["fallback"]["attemptedIdentities"] = ["gpt-6-sol"]
         self.write_attempt(benchmark_root, "allowed-opus-alias", allowed)
         self.write_attempt(benchmark_root, "rejected-cross-model", rejected)
 
@@ -837,7 +837,7 @@ class ModelIntelligenceTest(unittest.TestCase):
         self.assertEqual(completed.returncode, 0, completed.stderr)
         groups = json.loads(output.read_text())["benchmarks"]["groups"]
         opus = next(group for group in groups if group["requested_candidate"] == "opus")
-        luna = next(group for group in groups if group["requested_candidate"] == "gpt-5.6-luna")
+        luna = next(group for group in groups if group["requested_candidate"] == "gpt-6-luna")
         self.assertEqual(opus["validated_attempts"], 1)
         self.assertEqual(opus["comparable_attempts"], 1)
         self.assertEqual(luna["validated_attempts"], 0)
@@ -865,7 +865,7 @@ class ModelIntelligenceTest(unittest.TestCase):
                 for attempt, duration in enumerate(durations, 1):
                     add_attempt(
                         f"luna-{scorer}-{case_id}-{attempt}", case_id,
-                        "gpt-5.6-luna", "codex-cli", scorer, duration,
+                        "gpt-6-luna", "codex-cli", scorer, duration,
                     )
         for attempt in range(1, 4):
             add_attempt(
@@ -899,7 +899,7 @@ class ModelIntelligenceTest(unittest.TestCase):
 
     def test_v2_same_case_binding_conflicts_null_role_metrics_and_competition(self) -> None:
         benchmark_root = self.root / "case-binding-cohorts-v2"
-        model = "gpt-5.6-luna"
+        model = "gpt-6-luna"
 
         def add_attempt(name: str, case_id: str, binding: str, attempt: int) -> None:
             evidence = self.v2_result(
@@ -1212,12 +1212,12 @@ class ModelIntelligenceTest(unittest.TestCase):
                 first_pass_validity=index < 3,
             )
         write_validation(
-            "incompatible", role="research-fast", candidate="gpt-5.6-luna",
+            "incompatible", role="research-fast", candidate="gpt-6-luna",
             transport="codex-cli", comparable=False, conclusion=None,
             evidence_state="incompatible",
         )
         write_validation(
-            "fault", role="architect", candidate="gpt-5.6-sol", transport="codex-cli",
+            "fault", role="architect", candidate="gpt-6-sol", transport="codex-cli",
             comparable=False, conclusion=None, benchmark_fault=True,
             evidence_state="benchmark-faulted",
         )
@@ -1370,7 +1370,7 @@ printf '%s\n' '{event}'
         event = json.dumps(
             {
                 "type": "turn.completed",
-                "model": "gpt-5.6-luna",
+                "model": "gpt-6-luna",
                 "provider": "openai",
                 "fallbackUsed": False,
                 "usage": {
@@ -1388,7 +1388,7 @@ printf '%s\n' '{event}'
         result = self.run_native(
             case="review-zero-deferral",
             transport="codex-cli",
-            model="gpt-5.6-luna",
+            model="gpt-6-luna",
             result_dir=result_dir,
             stub=stub,
         )
@@ -1399,7 +1399,7 @@ printf '%s\n' '{event}'
         self.assertEqual(scored["transport"], "codex-cli")
         self.assertEqual(scored["billingMode"], "included-subscription")
         receipt = json.loads((result_dir / "receipt.json").read_text())
-        self.assertEqual(receipt["responseModel"], "gpt-5.6-luna")
+        self.assertEqual(receipt["responseModel"], "gpt-6-luna")
         self.assertEqual(
             receipt["usage"],
             {
@@ -1526,7 +1526,7 @@ printf '%s\n' '{event}'
         events = [
             {
                 "type": "turn.started",
-                "model": "gpt-5.6-luna",
+                "model": "gpt-6-luna",
                 "provider": "openai",
                 "fallbackUsed": False,
                 "usage": {"input_tokens": 11, "reasoning_output_tokens": 3},
@@ -1548,7 +1548,7 @@ printf '%s\n' '{event}'
         result = self.run_native(
             case="review-zero-deferral",
             transport="codex-cli",
-            model="gpt-5.6-luna",
+            model="gpt-6-luna",
             result_dir=result_dir,
             stub=stub,
         )
@@ -1675,13 +1675,13 @@ printf '%s\n' '{event}'
         result = self.run_native(
             case="review-zero-deferral",
             transport="codex-cli",
-            model="gpt-5.6-luna",
+            model="gpt-6-luna",
             result_dir=result_dir,
             stub=stub,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         receipt = json.loads((result_dir / "receipt.json").read_text())
-        self.assertEqual(receipt["requestedModel"], "gpt-5.6-luna")
+        self.assertEqual(receipt["requestedModel"], "gpt-6-luna")
         self.assertIsNone(receipt["responseModel"])
         self.assertEqual(receipt["responseModelProvenance"], "not_available")
         scored = json.loads((result_dir / "result.json").read_text())
@@ -1692,7 +1692,7 @@ printf '%s\n' '{event}'
         output = '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}'
         event = json.dumps(
             {
-                "type": "turn.completed", "model": "gpt-5.6-sol", "provider": "openai",
+                "type": "turn.completed", "model": "gpt-6-sol", "provider": "openai",
                 "fallbackUsed": False, "usage": {"input_tokens": 20, "output_tokens": 10},
             },
             separators=(",", ":"),
@@ -1700,13 +1700,13 @@ printf '%s\n' '{event}'
         stub = self.codex_stub("codex-cross-model-stub", event, output)
         result_dir = self.root / "codex-cross-model-result"
         result = self.run_native(
-            case="review-zero-deferral", transport="codex-cli", model="gpt-5.6-luna",
+            case="review-zero-deferral", transport="codex-cli", model="gpt-6-luna",
             result_dir=result_dir, stub=stub,
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         receipt = json.loads((result_dir / "receipt.json").read_text())
-        self.assertEqual(receipt["requestedModel"], "gpt-5.6-luna")
-        self.assertEqual(receipt["responseModel"], "gpt-5.6-sol")
+        self.assertEqual(receipt["requestedModel"], "gpt-6-luna")
+        self.assertEqual(receipt["responseModel"], "gpt-6-sol")
         scored = json.loads((result_dir / "result.json").read_text())
         self.assertFalse(scored["comparable"])
         self.assertFalse(scored["overallSuccess"])
@@ -1718,10 +1718,10 @@ printf '%s\n' '{event}'
         event = json.dumps(
             {
                 "type": "turn.completed",
-                "model": "gpt-5.6-luna-20260829",
+                "model": "gpt-6-luna-20260829",
                 "provider": "openai",
                 "fallbackUsed": True,
-                "attemptedModels": ["gpt-5.6-luna", "gpt-5.6-luna-20260829"],
+                "attemptedModels": ["gpt-6-luna", "gpt-6-luna-20260829"],
             },
             separators=(",", ":"),
         )
@@ -1730,7 +1730,7 @@ printf '%s\n' '{event}'
         result = self.run_native(
             case="review-zero-deferral",
             transport="codex-cli",
-            model="gpt-5.6-luna",
+            model="gpt-6-luna",
             result_dir=result_dir,
             stub=stub,
         )
@@ -1740,9 +1740,9 @@ printf '%s\n' '{event}'
         self.assertEqual(receipt["fallbackProvenance"], "cli-event")
         self.assertEqual(
             receipt["attemptedModels"],
-            ["gpt-5.6-luna", "gpt-5.6-luna-20260829"],
+            ["gpt-6-luna", "gpt-6-luna-20260829"],
         )
-        self.assertEqual(receipt["attemptedModel"], "gpt-5.6-luna-20260829")
+        self.assertEqual(receipt["attemptedModel"], "gpt-6-luna-20260829")
 
     def test_contradictory_fallback_telemetry_stays_ambiguous(self) -> None:
         output = '{"findings":[],"deferred":false}'
@@ -1750,16 +1750,16 @@ printf '%s\n' '{event}'
             "false-with-extra-attempt": [
                 {
                     "type": "turn.completed",
-                    "model": "gpt-5.6-luna",
+                    "model": "gpt-6-luna",
                     "provider": "openai",
                     "fallbackUsed": False,
-                    "attemptedModels": ["gpt-5.6-luna", "gpt-5.6-sol"],
+                    "attemptedModels": ["gpt-6-luna", "gpt-6-sol"],
                 }
             ],
             "inconsistent-booleans": [
                 {
                     "type": "turn.started",
-                    "model": "gpt-5.6-luna",
+                    "model": "gpt-6-luna",
                     "provider": "openai",
                     "fallbackUsed": False,
                 },
@@ -1776,7 +1776,7 @@ printf '%s\n' '{event}'
                 result = self.run_native(
                     case="review-zero-deferral",
                     transport="codex-cli",
-                    model="gpt-5.6-luna",
+                    model="gpt-6-luna",
                     result_dir=result_dir,
                     stub=stub,
                 )
@@ -1794,7 +1794,7 @@ printf '%s\n' '{event}'
                 if name == "false-with-extra-attempt":
                     self.assertEqual(
                         receipt["attemptedModels"],
-                        ["gpt-5.6-luna", "gpt-5.6-sol"],
+                        ["gpt-6-luna", "gpt-6-sol"],
                     )
                 scored = json.loads((result_dir / "result.json").read_text())
                 self.assertFalse(scored["comparable"])
@@ -1804,7 +1804,7 @@ printf '%s\n' '{event}'
         output = '{"findings":[],"deferred":false}'
         codex_base = {
             "type": "turn.completed",
-            "model": "gpt-5.6-luna",
+            "model": "gpt-6-luna",
             "provider": "openai",
             "fallbackUsed": False,
             "usage": {"input_tokens": 2},
@@ -1819,38 +1819,38 @@ printf '%s\n' '{event}'
             (
                 "codex-counter",
                 "codex-cli",
-                "gpt-5.6-luna",
+                "gpt-6-luna",
                 {**codex_base, "usage": {"input_tokens": "2"}},
             ),
             (
                 "codex-identity",
                 "codex-cli",
-                "gpt-5.6-luna",
+                "gpt-6-luna",
                 {**codex_base, "model": 56},
             ),
             (
                 "codex-provider",
                 "codex-cli",
-                "gpt-5.6-luna",
+                "gpt-6-luna",
                 {**codex_base, "provider": False},
             ),
             (
                 "codex-fallback",
                 "codex-cli",
-                "gpt-5.6-luna",
+                "gpt-6-luna",
                 {**codex_base, "fallbackUsed": "false"},
             ),
             (
                 "codex-usage",
                 "codex-cli",
-                "gpt-5.6-luna",
+                "gpt-6-luna",
                 {**codex_base, "usage": []},
             ),
             (
                 "codex-attempts",
                 "codex-cli",
-                "gpt-5.6-luna",
-                {**codex_base, "attemptedModels": "gpt-5.6-luna"},
+                "gpt-6-luna",
+                {**codex_base, "attemptedModels": "gpt-6-luna"},
             ),
             (
                 "claude-counter",
@@ -1969,11 +1969,11 @@ printf '%s\n' '{event}'
                 "codex-nonzero-stub",
                 "#!/usr/bin/env bash\nset -eu\noutput=''\nwhile [ \"$#\" -gt 0 ]; do case \"$1\" in --output-last-message) output=\"$2\"; shift 2 ;; *) shift ;; esac; done\ncat >/dev/null\nprintf '%s\\n' '"
                 + output
-                + "' > \"$output\"\nprintf '%s\\n' '{\"type\":\"turn.completed\",\"model\":\"gpt-5.6-luna\",\"provider\":\"openai\",\"fallbackUsed\":false}'\nexit 7\n",
+                + "' > \"$output\"\nprintf '%s\\n' '{\"type\":\"turn.completed\",\"model\":\"gpt-6-luna\",\"provider\":\"openai\",\"fallbackUsed\":false}'\nexit 7\n",
             ),
             "missing-output": self.codex_stub(
                 "codex-missing-output-stub",
-                '{"type":"turn.completed","model":"gpt-5.6-luna","provider":"openai","fallbackUsed":false}',
+                '{"type":"turn.completed","model":"gpt-6-luna","provider":"openai","fallbackUsed":false}',
                 None,
             ),
             "malformed-telemetry": self.codex_stub(
@@ -1986,7 +1986,7 @@ printf '%s\n' '{event}'
                 result = self.run_native(
                     case="review-zero-deferral",
                     transport="codex-cli",
-                    model="gpt-5.6-luna",
+                    model="gpt-6-luna",
                     result_dir=result_dir,
                     stub=stub,
                 )
@@ -2008,7 +2008,7 @@ printf '%s\n' '{event}'
         luna = next(
             candidate
             for candidate in insufficient_policy["roles"]["review-fast"]
-            if candidate["model"] == "gpt-5.6-luna"
+            if candidate["model"] == "gpt-6-luna"
         )
         luna["capabilities"].remove("structured-output")
         insufficient_path = self.root / "insufficient-policy.json"
@@ -2019,24 +2019,24 @@ printf '%s\n' '{event}'
         malformed_suite.write_text(json.dumps({"schemaVersion": 1, "cases": []}))
 
         scenarios = [
-            ("unknown-case", "not-a-v2-case", "gpt-5.6-luna", {}),
-            ("wrong-role", "review-zero-deferral", "gpt-5.6-sol", {}),
+            ("unknown-case", "not-a-v2-case", "gpt-6-luna", {}),
+            ("wrong-role", "review-zero-deferral", "gpt-6-sol", {}),
             (
                 "insufficient-capabilities",
                 "review-zero-deferral",
-                "gpt-5.6-luna",
+                "gpt-6-luna",
                 {"DEPOT_BENCH_ROLE_POLICY": str(insufficient_path)},
             ),
             (
                 "malformed-policy",
                 "review-zero-deferral",
-                "gpt-5.6-luna",
+                "gpt-6-luna",
                 {"DEPOT_BENCH_ROLE_POLICY": str(malformed_policy)},
             ),
             (
                 "malformed-suite",
                 "review-zero-deferral",
-                "gpt-5.6-luna",
+                "gpt-6-luna",
                 {"DEPOT_BENCH_SUITE": str(malformed_suite)},
             ),
         ]
@@ -2062,7 +2062,7 @@ printf '%s\n' '{event}'
         result = self.run_native(
             case="review-zero-deferral",
             transport="codex-cli",
-            model="gpt-5.6-luna",
+            model="gpt-6-luna",
             result_dir=nonempty,
             stub=stub,
             extra_env={"DEPOT_BENCH_MARKER": str(marker)},
