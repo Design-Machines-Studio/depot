@@ -4,6 +4,7 @@ import concurrent.futures
 import json
 import contextlib
 import io
+import subprocess
 import sys
 import tempfile
 import unittest
@@ -105,6 +106,14 @@ class AgentBoardTests(unittest.TestCase):
         with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as help_exit:
             cli.main(["agent-board", "--help"])
         self.assertEqual(0, help_exit.exception.code)
+        launcher = REFERENCES / "workflow-kernel-launcher.sh"
+        launched = subprocess.run(
+            [str(launcher), "agent-board", "--directory", str(self.root), "list",
+             "--destination-project", "Design-Machines-Studio/assembly-governance"],
+            capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(0, launched.returncode, launched.stderr)
+        self.assertEqual([], json.loads(launched.stdout)["messages"])
 
     def test_listing_is_bounded_and_signals_more_and_excludes_other_projects(self):
         first = self.handoff()
@@ -153,6 +162,17 @@ class AgentBoardTests(unittest.TestCase):
         )
         self.assertEqual(newer["id"], first["messages"][0]["id"])
 
+    def test_timestamp_that_overflows_utc_is_rejected_and_skipped(self):
+        invalid = self.handoff()
+        invalid.update(id=uuid.uuid4().hex, created_at="0001-01-01T00:00:00+23:59")
+        with self.assertRaisesRegex(agent_board.BoardError, "represented in UTC"):
+            agent_board.post(self.root, invalid)
+        (self.root / f"{invalid['id']}.json").write_text(json.dumps(invalid), encoding="utf-8")
+        valid = agent_board.post(self.root, dict(self.handoff(), id=uuid.uuid4().hex))
+        listing = agent_board.list_messages(self.root, "Design-Machines-Studio/assembly-governance")
+        self.assertEqual(valid["id"], listing["messages"][0]["id"])
+        self.assertEqual(invalid["id"] + ".json", listing["diagnostics"][0]["file"])
+
     def test_superseding_message_is_visible_without_editing_original(self):
         original = agent_board.post(self.root, self.handoff())
         replacement = self.handoff()
@@ -163,6 +183,18 @@ class AgentBoardTests(unittest.TestCase):
         self.assertEqual("superseded", result["state"])
         self.assertEqual(replacement["id"], result["superseded_by"][0]["id"])
         self.assertEqual(original["body"], json.loads((self.root / f"{original['id']}.json").read_text())["body"])
+
+    def test_superseding_message_keeps_source_and_destination_thread(self):
+        original = agent_board.post(self.root, self.handoff())
+        for change in (
+            {"source_project": "Other-Team/other-repo"},
+            {"destination_thread": "another-thread"},
+        ):
+            replacement = self.handoff()
+            replacement.update(id=uuid.uuid4().hex, supersedes_id=original["id"], **change)
+            with self.assertRaisesRegex(agent_board.BoardError, "original source and destination"):
+                agent_board.post(self.root, replacement)
+        self.assertEqual("unanswered", agent_board.read_message(self.root, original["id"])["state"])
 
     def test_unavailable_and_conflicting_evidence_remain_claims_after_reply(self):
         original = agent_board.post(self.root, self.handoff())
@@ -211,13 +243,25 @@ class AgentBoardTests(unittest.TestCase):
 
     def test_deep_or_oversized_integer_json_does_not_block_board(self):
         valid = agent_board.post(self.root, self.handoff())
-        for payload in ("[" * 1500 + "0" + "]" * 1500, "[" + "9" * 5000 + "]"):
+        for payload in ("[" * 30000 + "0" + "]" * 30000, "[" + "9" * 5000 + "]"):
             broken_id = uuid.uuid4().hex
             (self.root / f"{broken_id}.json").write_text(payload, encoding="utf-8")
         listing = agent_board.list_messages(self.root, "Design-Machines-Studio/assembly-governance")
         self.assertEqual(valid["id"], listing["messages"][0]["id"])
         self.assertEqual(2, len(listing["diagnostics"]))
         agent_board.post(self.root, dict(self.handoff(), id=uuid.uuid4().hex))
+
+    def test_deep_post_input_returns_a_cli_error_without_traceback(self):
+        source = Path(self.temporary.name) / "deep.json"
+        source.write_text("[" * 30000 + "0" + "]" * 30000, encoding="utf-8")
+        error = io.StringIO()
+        with contextlib.redirect_stderr(error):
+            code = cli.main([
+                "agent-board", "--directory", str(self.root), "post", "--input", str(source),
+            ])
+        self.assertEqual(2, code)
+        self.assertNotIn("Traceback", error.getvalue())
+        self.assertEqual([], list(self.root.glob("*.json")))
 
     def test_only_replies_can_link_an_answer(self):
         original = agent_board.post(self.root, self.handoff())

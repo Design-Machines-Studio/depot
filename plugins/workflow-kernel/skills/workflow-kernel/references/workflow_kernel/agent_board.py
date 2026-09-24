@@ -39,7 +39,12 @@ def _reject_constant(_value):
 
 
 def _loads(raw):
-    return json.loads(raw, object_pairs_hook=_unique_object, parse_constant=_reject_constant)
+    try:
+        return json.loads(raw, object_pairs_hook=_unique_object, parse_constant=_reject_constant)
+    except BoardError:
+        raise
+    except (json.JSONDecodeError, RecursionError, ValueError) as exc:
+        raise BoardError("JSON document is invalid or exceeds parser limits") from exc
 
 
 def _timestamp(value):
@@ -51,6 +56,10 @@ def _timestamp(value):
         raise BoardError("created_at must be a timezone-aware ISO-8601 timestamp") from exc
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise BoardError("created_at must include a timezone")
+    try:
+        parsed.astimezone(timezone.utc)
+    except (OverflowError, ValueError) as exc:
+        raise BoardError("created_at cannot be represented in UTC") from exc
     return value
 
 
@@ -200,8 +209,10 @@ def post(directory, message):
             raise BoardError("reply source and destination must reciprocate the referenced message")
     if "supersedes_id" in value:
         prior = messages[value["supersedes_id"]]
-        if value["destination_project"] != prior["destination_project"]:
-            raise BoardError("superseding message must retain the original destination project")
+        if (value["source_project"] != prior["source_project"]
+                or value["destination_project"] != prior["destination_project"]
+                or value["destination_thread"] != prior["destination_thread"]):
+            raise BoardError("superseding message must retain the original source and destination")
     final_path = root / f"{value['id']}.json"
     payload = (json.dumps(value, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
     fd, temporary = tempfile.mkstemp(prefix=".agent-message-", suffix=".tmp", dir=root)

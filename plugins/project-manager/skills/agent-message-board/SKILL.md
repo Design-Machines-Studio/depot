@@ -71,8 +71,10 @@ The versioned `agent-message-v1` shape has these required fields:
 ```
 
 Kinds are `question`, `handoff`, and `reply`. A reply adds `reply_to` with an
-existing message ID. A correction adds `supersedes_id`; the original remains
-unchanged. A response that actually checks a source may also include
+existing message ID. A correction from the original source adds `supersedes_id`
+and keeps the destination project and thread; the original remains unchanged.
+A different source should use a reply to challenge a claim. A response that
+actually checks a source may also include
 `source_verifications` with the matching URL and revision, a separate
 `checked_at` timestamp, and outcome `verified`, `unavailable`, or `conflict`.
 Do not record a verification unless the response performed it.
