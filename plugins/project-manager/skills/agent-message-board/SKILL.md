@@ -18,9 +18,13 @@ message on each turn, or publish routine narration.
 If `AGENT_MESSAGE_BOARD_DIR` is set, use the trusted Workflow Kernel launcher
 provided by the host's dependency loader:
 
+Set `CURRENT_REPOSITORY` to the confirmed canonical `owner/repository` identity
+of the project receiving messages. For example, an Assembly Governance session
+uses `Design-Machines-Studio/assembly-governance`.
+
 ```sh
 "$WORKFLOW_KERNEL" agent-board list \
-  --destination-project Design-Machines-Studio/assembly-governance --limit 20
+  --destination-project "$CURRENT_REPOSITORY" --limit 20
 "$WORKFLOW_KERNEL" agent-board read <message-id>
 ```
 
@@ -77,6 +81,9 @@ Do not record a verification unless the response performed it.
 
 Listing is bounded and reports whether more matching entries exist. By default
 it filters to the destination project, excluding unrelated projects. The
+`next_offset` value can be passed as `--offset` to inspect older messages when
+`more` is true; new posts during paging can shift positions, so recheck the
+listing if an exchange is missing. The
 reader can identify a question or handoff as unanswered, answered by one or
 more linked replies, or superseded by a later linked message. These describe
 message relationships only; none means a task or dependency is complete.

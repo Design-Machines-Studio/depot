@@ -14,7 +14,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 REFERENCES = ROOT / "plugins/workflow-kernel/skills/workflow-kernel/references"
 sys.path.insert(0, str(REFERENCES))
-from workflow_kernel import agent_board  # noqa: E402
+from workflow_kernel import agent_board, cli  # noqa: E402
 
 
 FIXTURE = ROOT / "tests/fixtures/agent-board/baseplate-handoff.json"
@@ -94,6 +94,18 @@ class AgentBoardTests(unittest.TestCase):
             ]))
             self.assertEqual(posted["id"], json.loads(output.getvalue())["message"]["id"])
 
+    def test_launcher_accepts_directory_override_and_help(self):
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            self.assertEqual(0, cli.main([
+                "agent-board", "--directory", str(self.root), "list",
+                "--destination-project", "Design-Machines-Studio/assembly-governance",
+            ]))
+        self.assertEqual([], json.loads(output.getvalue())["messages"])
+        with contextlib.redirect_stdout(io.StringIO()), self.assertRaises(SystemExit) as help_exit:
+            cli.main(["agent-board", "--help"])
+        self.assertEqual(0, help_exit.exception.code)
+
     def test_listing_is_bounded_and_signals_more_and_excludes_other_projects(self):
         first = self.handoff()
         agent_board.post(self.root, first)
@@ -110,6 +122,36 @@ class AgentBoardTests(unittest.TestCase):
         self.assertEqual(1, result["returned"])
         self.assertTrue(result["more"])
         self.assertEqual(third["id"], result["messages"][0]["id"])
+
+    def test_listing_pages_beyond_the_limit(self):
+        for _ in range(101):
+            item = self.handoff()
+            item["id"] = uuid.uuid4().hex
+            agent_board.post(self.root, item)
+        first = agent_board.list_messages(
+            self.root, "Design-Machines-Studio/assembly-governance", limit=100,
+        )
+        self.assertTrue(first["more"])
+        self.assertEqual(100, first["next_offset"])
+        last = agent_board.list_messages(
+            self.root, "Design-Machines-Studio/assembly-governance", limit=100,
+            offset=first["next_offset"],
+        )
+        self.assertEqual(1, last["returned"])
+        self.assertIsNone(last["next_offset"])
+        self.assertEqual(101, len({item["id"] for item in first["messages"] + last["messages"]}))
+
+    def test_timezone_offsets_sort_by_instant(self):
+        newer = self.handoff()
+        newer.update(id=uuid.uuid4().hex, created_at="2026-09-24T10:00:00Z")
+        older = self.handoff()
+        older.update(id=uuid.uuid4().hex, created_at="2026-09-24T12:00:00+03:00")
+        agent_board.post(self.root, newer)
+        agent_board.post(self.root, older)
+        first = agent_board.list_messages(
+            self.root, "Design-Machines-Studio/assembly-governance", limit=1,
+        )
+        self.assertEqual(newer["id"], first["messages"][0]["id"])
 
     def test_superseding_message_is_visible_without_editing_original(self):
         original = agent_board.post(self.root, self.handoff())
@@ -167,6 +209,25 @@ class AgentBoardTests(unittest.TestCase):
         with self.assertRaisesRegex(agent_board.BoardError, "malformed"):
             agent_board.read_message(self.root, broken_id)
 
+    def test_deep_or_oversized_integer_json_does_not_block_board(self):
+        valid = agent_board.post(self.root, self.handoff())
+        for payload in ("[" * 1500 + "0" + "]" * 1500, "[" + "9" * 5000 + "]"):
+            broken_id = uuid.uuid4().hex
+            (self.root / f"{broken_id}.json").write_text(payload, encoding="utf-8")
+        listing = agent_board.list_messages(self.root, "Design-Machines-Studio/assembly-governance")
+        self.assertEqual(valid["id"], listing["messages"][0]["id"])
+        self.assertEqual(2, len(listing["diagnostics"]))
+        agent_board.post(self.root, dict(self.handoff(), id=uuid.uuid4().hex))
+
+    def test_only_replies_can_link_an_answer(self):
+        original = agent_board.post(self.root, self.handoff())
+        question = self.reply(original["id"])
+        question["kind"] = "question"
+        question.pop("source_verifications")
+        with self.assertRaisesRegex(agent_board.BoardError, "only reply"):
+            agent_board.post(self.root, question)
+        self.assertEqual("unanswered", agent_board.read_message(self.root, original["id"])["state"])
+
     def test_duplicate_json_fields_are_rejected_and_do_not_publish(self):
         message = json.dumps(self.handoff())
         duplicate = message[:-1] + ', "kind":"reply"}'
@@ -182,6 +243,7 @@ class AgentBoardTests(unittest.TestCase):
 
     def test_rejects_invalid_references_and_never_creates_missing_root(self):
         message = self.handoff()
+        message["kind"] = "reply"
         message["reply_to"] = "22222222222242228222222222222222"
         with self.assertRaisesRegex(agent_board.BoardError, "readable existing message"):
             agent_board.post(self.root, message)

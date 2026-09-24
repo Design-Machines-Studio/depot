@@ -6,7 +6,7 @@ import json
 import os
 import re
 import tempfile
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -52,6 +52,10 @@ def _timestamp(value):
     if parsed.tzinfo is None or parsed.utcoffset() is None:
         raise BoardError("created_at must include a timezone")
     return value
+
+
+def _time_key(value):
+    return datetime.fromisoformat(value.replace("Z", "+00:00")).astimezone(timezone.utc)
 
 
 def _identity(value, field):
@@ -130,6 +134,8 @@ def validate_message(value):
             result[field] = ref
     if value["kind"] == "reply" and "reply_to" not in result:
         raise BoardError("reply messages require reply_to")
+    if value["kind"] != "reply" and "reply_to" in result:
+        raise BoardError("only reply messages may use reply_to")
     if "source_verifications" in value:
         if value["kind"] != "reply":
             raise BoardError("source verifications belong on a reply that performed the check")
@@ -175,7 +181,7 @@ def _read_files(root):
             if path.stem != message["id"]:
                 raise BoardError("filename does not match message id")
             messages[message["id"]] = message
-        except (OSError, UnicodeError, json.JSONDecodeError, BoardError) as exc:
+        except (OSError, UnicodeError, json.JSONDecodeError, RecursionError, ValueError, BoardError) as exc:
             diagnostics.append({"file": path.name, "error": str(exc) or type(exc).__name__})
     return messages, diagnostics
 
@@ -226,24 +232,27 @@ def _state(message, messages):
     return "reply"
 
 
-def list_messages(directory, destination_project, *, destination_thread=None, limit=20):
+def list_messages(directory, destination_project, *, destination_thread=None, limit=20, offset=0):
     root = _root(directory)
     project = _identity(destination_project, "destination_project")
     if type(limit) is not int or not 1 <= limit <= MAX_LIST:
         raise BoardError(f"limit must be between 1 and {MAX_LIST}")
+    if type(offset) is not int or offset < 0:
+        raise BoardError("offset must be a non-negative integer")
     thread = _label(destination_thread, "destination_thread") if destination_thread is not None else None
     messages, diagnostics = _read_files(root)
     relevant = [item for item in messages.values()
                 if item["destination_project"] == project
                 and (thread is None or item["destination_thread"] == thread)]
-    relevant.sort(key=lambda item: (item["created_at"], item["id"]), reverse=True)
-    selected = relevant[:limit]
+    relevant.sort(key=lambda item: (_time_key(item["created_at"]), item["id"]), reverse=True)
+    selected = relevant[offset:offset + limit]
     return {
         "messages": [{"id": item["id"], "kind": item["kind"], "source_project": item["source_project"],
                       "source_thread": item["source_thread"], "destination_project": item["destination_project"],
                       "destination_thread": item["destination_thread"], "body": item["body"],
                       "created_at": item["created_at"], "state": _state(item, messages)} for item in selected],
-        "returned": len(selected), "more": len(relevant) > limit,
+        "returned": len(selected), "more": len(relevant) > offset + limit,
+        "next_offset": offset + len(selected) if len(relevant) > offset + limit else None,
         "matching_count": len(relevant), "diagnostics": diagnostics[:20],
         "diagnostics_more": len(diagnostics) > 20,
     }
@@ -261,8 +270,8 @@ def read_message(directory, message_id):
     message = messages[message_id]
     replies = [item for item in messages.values() if item.get("reply_to") == message_id]
     superseders = [item for item in messages.values() if item.get("supersedes_id") == message_id]
-    replies.sort(key=lambda item: (item["created_at"], item["id"]))
-    superseders.sort(key=lambda item: (item["created_at"], item["id"]))
+    replies.sort(key=lambda item: (_time_key(item["created_at"]), item["id"]))
+    superseders.sort(key=lambda item: (_time_key(item["created_at"]), item["id"]))
     return {"message": message, "state": _state(message, messages),
             "replies": replies, "superseded_by": superseders,
             "diagnostics": diagnostics[:20], "diagnostics_more": len(diagnostics) > 20}
@@ -281,6 +290,7 @@ def main(argv=None):
     list_parser.add_argument("--destination-project", required=True)
     list_parser.add_argument("--destination-thread")
     list_parser.add_argument("--limit", type=int, default=20)
+    list_parser.add_argument("--offset", type=int, default=0)
     read_parser = commands.add_parser("read", help="read one message, replies and superseding messages")
     read_parser.add_argument("message_id")
     args = parser.parse_args(argv)
@@ -291,7 +301,8 @@ def main(argv=None):
         result = post(args.directory, _loads(text))
     elif args.command == "list":
         result = list_messages(args.directory, args.destination_project,
-                               destination_thread=args.destination_thread, limit=args.limit)
+                               destination_thread=args.destination_thread, limit=args.limit,
+                               offset=args.offset)
     else:
         result = read_message(args.directory, args.message_id)
     print(json.dumps(result, ensure_ascii=False, sort_keys=True, indent=2))

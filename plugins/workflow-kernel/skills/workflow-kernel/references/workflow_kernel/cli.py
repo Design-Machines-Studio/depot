@@ -4559,6 +4559,9 @@ def main(argv=None):
             print("{}")
             return 0
     try:
+        if actual and actual[0] == "agent-board":
+            from .agent_board import main as agent_board_main
+            return agent_board_main(actual[1:])
         args = parser().parse_args(argv)
         return args.handler(args)
     except InspectionError as exc:
