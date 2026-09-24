@@ -47,7 +47,7 @@ and `dm-review:dm-review-fix`.
 
 ## Plugins
 
-19 plugins | 42 domain-facing skills + 2 internal infrastructure skills = 44 total skills | 35 generated Codex command-skill aliases | 38 agents | 35 commands
+19 plugins | 43 domain-facing skills + 2 internal infrastructure skills = 45 total skills | 35 generated Codex command-skill aliases | 38 agents | 35 commands
 
 ### ned
 
@@ -80,11 +80,12 @@ Craft CMS 4/5 development expertise. 4 skills, 3 agents, 4 commands.
 
 ### project-manager
 
-LT10 methodology, Notion-integrated sprint planning, and Assembly coordination. 3 skills, 1 command.
+LT10 methodology, Notion-integrated sprint planning, and Assembly coordination. 4 skills, 1 command.
 
 - **lt10** -- Estimation (90th percentile), scoping, pricing, scheduling, risk management, stakeholder alignment, and communication scripts
 - **planner** -- Notion-integrated sprint planning with Userback triage, Calendar.app meeting prep, Mail.app scanning, content ideation, and velocity tracking
 - **assembly-coordinator** -- GitHub-native cross-repository Assembly planning pulse, next-chunk selection, dependency evidence, and scope guard
+- **agent-message-board** -- Optional source-linked local message exchange between agent sessions
 - `/sprint-plan` -- Run the full sprint planning workflow
 
 ### council

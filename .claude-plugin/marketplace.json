@@ -69,13 +69,13 @@
     {
       "name": "project-manager",
       "source": "./plugins/project-manager",
-      "version": "1.16.1",
+      "version": "1.17.0",
       "author": {
         "name": "Design Machines"
       },
       "description": "LT10 project management, Notion sprint planning, and GitHub-native Assembly coordination",
       "capabilities_summary": {
-        "skills": 3,
+        "skills": 4,
         "agents": 0,
         "commands": 1,
         "tags": [
@@ -86,7 +86,9 @@
           "userback",
           "velocity",
           "assembly",
-          "github-coordination"
+          "github-coordination",
+          "agent-coordination",
+          "message-board"
         ]
       }
     },
@@ -409,7 +411,7 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.22.0",
+      "version": "0.23.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

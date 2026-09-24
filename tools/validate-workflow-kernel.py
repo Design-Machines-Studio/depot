@@ -72,6 +72,10 @@ SCHEMA_DOCUMENTS = frozenset({
 BEHAVIORAL_CLI_CASES = {
     "codex-observation-hook": ("--parent", "<missing>", "--identity", "0:0", "--workspace", "validator"),
     "live-observation-validate": ("<missing>",),
+    "agent-board": (
+        "--directory", "<missing>", "list", "--destination-project",
+        "Example/project",
+    ),
     "live-observation-publish": ("--parent", "<missing>", "--identity", "0:0"),
 
     "init": ("<run>", "--run-id", "validator-cli", "--occurred-at", "2026-07-14T00:00:00Z"),
@@ -524,6 +528,7 @@ def check_cli(context):
     expected = {
         "init", "validate", "append", "replay", "status",
         "live-observation-validate", "live-observation-publish",
+        "agent-board",
         "decide-validation-retry", "bind-prediction",
         "bind-verification-contract",
         "observe-pipeline", "reconcile-legacy-browser", "observe-review",

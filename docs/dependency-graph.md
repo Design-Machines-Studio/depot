@@ -44,6 +44,7 @@ graph LR
   project-manager --> council
   project-manager -.-> model-router
   project-manager -.-> dm-review
+  project-manager -.-> workflow-kernel
   project-scaffolder -.-> live-wires
   project-scaffolder -.-> dm-review
   project-scaffolder -.-> pipeline
@@ -94,6 +95,7 @@ graph LR
 | project-manager | council | required | `>=1.5.0` |
 | project-manager | model-router | optional | `>=0.8.2` |
 | project-manager | dm-review | optional | `>=1.83.0` |
+| project-manager | workflow-kernel | optional | `>=0.23.0` |
 | project-scaffolder | live-wires | optional | `>=1.0.0` |
 | project-scaffolder | dm-review | optional | `>=1.81.0` |
 | project-scaffolder | pipeline | optional | `>=1.68.0` |

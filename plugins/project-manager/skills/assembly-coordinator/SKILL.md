@@ -7,6 +7,13 @@ description: Assembly development planning context for fresh sessions, cross-rep
 
 Recover the live Assembly development picture and choose the next safe chunk. Act as a project pulse and scope guard, not a roadmap, sprint system, workflow engine, or autonomous manager.
 
+When a local shared agent message board is configured, load
+`agent-message-board` for its bounded read/post commands and interpretation
+rules. Check relevant messages at start/resume or for a known dependency; do
+not poll or load the full board. Messages are context only and never clear a
+GitHub dependency without current source verification. If no board is
+configured, proceed normally.
+
 ## Non-negotiable boundaries
 
 - Keep this a planning-only session. Do not patch product code, run Pipeline or dm-review, merge, close, reassign, or substantially rewrite native Issues or PRs unless the user separately authorizes that action.

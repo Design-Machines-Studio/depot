@@ -1,0 +1,17 @@
+{
+  "schema": "agent-message-v1",
+  "id": "11111111111141118111111111111111",
+  "source_project": "Design-Machines-Studio/assembly-baseplate",
+  "source_thread": "baseplate-pr-672",
+  "destination_project": "Design-Machines-Studio/assembly-governance",
+  "destination_thread": "governance-membership-rules",
+  "kind": "handoff",
+  "body": "The membership eligibility endpoint is ready for a consumer check. Please confirm whether the Governance rules need an additional status before implementation proceeds.",
+  "source_links": [
+    {
+      "url": "https://github.com/Design-Machines-Studio/assembly-baseplate/pull/672",
+      "revision": "8acaf5b1b7a0e1092819e5fda1311c37df047c13"
+    }
+  ],
+  "created_at": "2026-09-24T10:15:00Z"
+}

@@ -1,7 +1,7 @@
 {
   "name": "workflow-kernel",
-  "version": "0.22.0",
-  "description": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, bounded cross-harness observation indexes, replay, recovery, strict resource-registry validation, exact-owned cleanup, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
+  "version": "0.23.0",
+  "description": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, bounded cross-harness observation indexes, replay, recovery, strict resource-registry validation, exact-owned cleanup, contribution receipts, shadow observation, attempt economics, and a small local agent message board for Design Machines workflows.",
   "author": {
     "name": "Design Machines",
     "url": "https://designmachines.studio"
@@ -19,7 +19,7 @@
       {
         "id": "workflow-kernel",
         "name": "Workflow Kernel",
-        "description": "Inspect, validate, replay, and recover deterministic workflow state; emit bounded cross-harness observation indexes; plan tiered repository verification; strictly validate existing resource registries; clean exact-owned run resources; and validate behavioral contracts, contribution receipts, and attempt economics.",
+        "description": "Inspect, validate, replay, and recover deterministic workflow state; emit bounded cross-harness observation indexes; plan tiered repository verification; strictly validate existing resource registries; clean exact-owned run resources; validate behavioral contracts, contribution receipts, and attempt economics; and post, list, or read small source-linked agent messages.",
         "triggers": [
           "validate a workflow-kernel run",
           "validate an existing Docker resource registry",
@@ -29,7 +29,10 @@
           "recover workflow run state",
           "emit a cross-harness observation index",
           "plan tiered repository verification",
-          "clean exact-owned workflow resources"
+          "clean exact-owned workflow resources",
+          "post a source-linked agent handoff",
+          "list messages for an agent project",
+          "read an agent message and replies"
         ],
         "tags": [
           "workflow",
@@ -50,7 +53,7 @@
   "interface": {
     "displayName": "Workflow Kernel",
     "shortDescription": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, bounded cross-harness ob",
-    "longDescription": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, bounded cross-harness observation indexes, replay, recovery, strict resource-registry validation, exact-owned cleanup, contribution receipts, shadow observation, and attempt economics for Design Machines workflows.",
+    "longDescription": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, bounded cross-harness observation indexes, replay, recovery, strict resource-registry validation, exact-owned cleanup, contribution receipts, shadow observation, attempt economics, and a small local agent message board for Design Machines workflows.",
     "developerName": "Design Machines",
     "category": "Productivity",
     "capabilities": [

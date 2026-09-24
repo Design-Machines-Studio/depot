@@ -3868,6 +3868,11 @@ def command_live_validate(args):
     return 0
 
 
+def command_agent_board(args):
+    from .agent_board import main as agent_board_main
+    return agent_board_main(args.args)
+
+
 def command_live_publish(args):
     from .live_observation import publish_live_observation
     from .codex_observation import read_callback
@@ -3890,6 +3895,12 @@ def parser():
     live_validate = commands.add_parser("live-observation-validate", help="validate observation metadata only")
     live_validate.add_argument("directory")
     live_validate.set_defaults(handler=command_live_validate)
+    agent_board = commands.add_parser(
+        "agent-board", help="post, list or read source-linked local agent messages",
+        add_help=False,
+    )
+    agent_board.add_argument("args", nargs=argparse.REMAINDER)
+    agent_board.set_defaults(handler=command_agent_board)
     for name, handler in (("live-observation-publish", command_live_publish),
                           ("codex-observation-hook", command_codex_hook)):
         command = commands.add_parser(name, help="publish observation metadata only")
@@ -4548,6 +4559,9 @@ def main(argv=None):
             print("{}")
             return 0
     try:
+        if actual and actual[0] == "agent-board":
+            from .agent_board import main as agent_board_main
+            return agent_board_main(actual[1:])
         args = parser().parse_args(argv)
         return args.handler(args)
     except InspectionError as exc:
