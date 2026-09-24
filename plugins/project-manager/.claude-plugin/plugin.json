@@ -1,7 +1,7 @@
 {
   "name": "project-manager",
   "description": "Project management: LT10 methodology, Notion-integrated sprint planning, and GitHub-native cross-repository Assembly coordination",
-  "version": "1.16.1",
+  "version": "1.17.0",
   "author": {
     "name": "Design Machines"
   },
@@ -13,7 +13,8 @@
   },
   "optionalPluginDependencies": {
     "model-router": ">=0.8.2",
-    "dm-review": ">=1.83.0"
+    "dm-review": ">=1.83.0",
+    "workflow-kernel": ">=0.23.0"
   },
   "capabilities": {
     "skills": [
@@ -38,6 +39,13 @@
         "description": "GitHub-native cross-repository Assembly planning pulse, provider-neutral execution-role assignment, scope guard, and bounded independent plan comparison",
         "triggers": ["fresh Assembly planning session", "Assembly Coordination Project", "next Assembly development chunk", "completed Assembly PR follow-up", "Fixture dependency planning", "bounded Pipeline prompt", "Assembly tooling scope creep", "compare Assembly plans", "independent planning opinion", "architect challenge sequence", "assign execution roles"],
         "tags": ["assembly", "coordination", "github", "cross-repository", "scope-guard", "fixture-planning", "role-routing", "plan-comparison"]
+      },
+      {
+        "id": "agent-message-board",
+        "name": "Agent Message Board",
+        "description": "Optional source-linked local message exchange between agent sessions",
+        "triggers": ["agent message board", "shared agent handoff", "cross-project agent message", "reply to an agent handoff", "read source-linked agent messages"],
+        "tags": ["agents", "coordination", "messages", "source-links"]
       }
     ],
     "agents": [],

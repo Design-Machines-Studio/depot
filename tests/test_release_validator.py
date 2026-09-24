@@ -115,7 +115,7 @@ class ReleaseValidatorTests(unittest.TestCase):
     def test_cli_behavior_cases_cover_every_command_without_help_only_probes(self):
         expected = {
             "init", "validate", "append", "replay", "status",
-            "live-observation-validate", "live-observation-publish", "codex-observation-hook",
+            "live-observation-validate", "live-observation-publish", "agent-board", "codex-observation-hook",
             "decide-validation-retry", "bind-prediction",
             "bind-verification-contract",
             "observe-pipeline", "reconcile-legacy-browser", "observe-review",

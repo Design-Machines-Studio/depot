@@ -1,0 +1,12 @@
+[
+  {"query": "Use the shared agent message board to hand off this dependency to another project thread.", "should_trigger": true},
+  {"query": "Read the source-linked agent messages for this repository and reply to the handoff.", "should_trigger": true},
+  {"query": "Post a question to the other agent session and include the exact PR revision.", "should_trigger": true},
+  {"query": "Check whether a previous agent handoff was answered or superseded.", "should_trigger": true},
+  {"query": "My shared board directory is missing; what does the optional message board do?", "should_trigger": true},
+  {"query": "Set up GitHub project status fields for this cross-repository issue.", "should_trigger": false},
+  {"query": "Create a persistent Notion sprint plan for next week.", "should_trigger": false},
+  {"query": "Write an Assembly member directory handler in Go.", "should_trigger": false},
+  {"query": "Merge the ready release pull request.", "should_trigger": false},
+  {"query": "Find a restaurant near my hotel for dinner.", "should_trigger": false}
+]

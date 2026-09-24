@@ -1,6 +1,6 @@
 {
   "name": "project-manager",
-  "version": "1.16.1",
+  "version": "1.17.0",
   "description": "Project management: LT10 methodology, Notion-integrated sprint planning, and GitHub-native cross-repository Assembly coordination",
   "author": {
     "name": "Design Machines"
@@ -86,6 +86,24 @@
           "role-routing",
           "plan-comparison"
         ]
+      },
+      {
+        "id": "agent-message-board",
+        "name": "Agent Message Board",
+        "description": "Optional source-linked local message exchange between agent sessions",
+        "triggers": [
+          "agent message board",
+          "shared agent handoff",
+          "cross-project agent message",
+          "reply to an agent handoff",
+          "read source-linked agent messages"
+        ],
+        "tags": [
+          "agents",
+          "coordination",
+          "messages",
+          "source-links"
+        ]
       }
     ],
     "agents": [],
@@ -106,7 +124,8 @@
   },
   "optionalPluginDependencies": {
     "model-router": ">=0.8.2",
-    "dm-review": ">=1.83.0"
+    "dm-review": ">=1.83.0",
+    "workflow-kernel": ">=0.23.0"
   },
   "interface": {
     "displayName": "Project Manager",
