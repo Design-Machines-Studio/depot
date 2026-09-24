@@ -2020,7 +2020,7 @@ printf '%s\n' '{event}'
 
         scenarios = [
             ("unknown-case", "not-a-v2-case", "gpt-6-luna", {}),
-            ("wrong-role", "review-zero-deferral", "gpt-6-sol", {}),
+            ("wrong-role", "review-zero-deferral", "gpt-6-astra", {}),
             (
                 "insufficient-capabilities",
                 "review-zero-deferral",

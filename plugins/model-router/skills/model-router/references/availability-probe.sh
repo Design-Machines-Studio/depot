@@ -268,9 +268,9 @@ normalize_codex_snapshot() {
                     else "unsupported" end),
             remaining:(100 - .usedPercent)
           }] as $windows
-          | if any($windows[]; .window == "unsupported")
-              or ([$windows[] | select(.window == "five_hour")] | length) != 1
-              or ([$windows[] | select(.window == "weekly")] | length) != 1 then
+          | if any($windows[]; .window == "unsupported") then
+              closed("rate_limit_shape_unsupported")
+            elif ($windows | length) == 0 then
               closed("required_window_missing")
             elif any($windows[]; .remaining <= $threshold) then
               {state:"limited",reason:"rate_limit_exhausted"}

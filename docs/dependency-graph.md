@@ -66,7 +66,7 @@ graph LR
 | dm-review | live-wires | required | `>=1.8.0` |
 | dm-review | ghostwriter | required | `>=3.7.0` |
 | dm-review | council | required | `>=1.5.0` |
-| dm-review | model-router | required | `>=0.8.0` |
+| dm-review | model-router | required | `>=0.9.0` |
 | dm-review | workflow-kernel | required | `>=0.22.0` |
 | dm-review | ned | optional | `>=1.4.0` |
 | dm-review | superpowers | optional | `>=1.0.0` |
@@ -77,7 +77,7 @@ graph LR
 | model-router | workflow-kernel | optional | `>=0.17.0` |
 | ned | superpowers | optional | `>=1.0.0` |
 | pipeline | dm-review | required | `>=1.83.3` |
-| pipeline | model-router | required | `>=0.8.2` |
+| pipeline | model-router | required | `>=0.9.0` |
 | pipeline | workflow-kernel | required | `>=0.19.1` |
 | pipeline | ned | optional | `>=1.4.0` |
 | pipeline | design-machines | optional | `>=1.3.0` |
@@ -93,7 +93,7 @@ graph LR
 | project-manager | design-machines | required | `>=1.3.0` |
 | project-manager | ghostwriter | required | `>=3.7.0` |
 | project-manager | council | required | `>=1.5.0` |
-| project-manager | model-router | optional | `>=0.8.2` |
+| project-manager | model-router | optional | `>=0.9.0` |
 | project-manager | dm-review | optional | `>=1.83.0` |
 | project-manager | workflow-kernel | optional | `>=0.23.0` |
 | project-scaffolder | live-wires | optional | `>=1.0.0` |

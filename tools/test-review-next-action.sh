@@ -102,7 +102,7 @@ assert grep -Fq -- '- Matrix evidence:' "$TMP/recommendation.md"
 mkdir -p "$TMP/profile-recommendation/.dm"
 git -C "$TMP/profile-recommendation" init -q
 printf '%s\n' '{"allowPaidClaudeCredits":"yes","disabledCandidates":["opus"]}' > "$TMP/profile-recommendation/.dm/model-router.local.json"
-jq '.codex.state="unavailable" | .claude.state="ok" | .claude.authMode="subscription" | .openrouter.state="ok"' \
+jq '.codex.state="unavailable" | .codex.authMode="none" | .claude.state="ok" | .claude.authMode="subscription" | .openrouter.state="ok"' \
   "$TMP/healthy.json" > "$TMP/profile-availability.json"
 (
   cd "$TMP/profile-recommendation"

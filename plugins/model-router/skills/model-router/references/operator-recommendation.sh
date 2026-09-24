@@ -112,16 +112,16 @@ candidate_status() {
       rate_limit_id="$(printf '%s' "$candidate" | jq -r '.rateLimitId // empty')"
       if [ -n "$rate_limit_id" ]; then
         state="$(printf '%s' "$AVAILABILITY" | jq -r --arg id "$rate_limit_id" '.codex.allowances[$id].state // "unknown"')"
-        case "$state" in ok) printf available ;; limited) printf unavailable ;; *) printf unknown ;; esac
+        case "$state" in ok) printf available ;; limited|exhausted) printf unavailable ;; *) printf attemptable ;; esac
       elif [ "$(printf '%s' "$AVAILABILITY" | jq -r '.codex.allowances? | type')" = object ] &&
            [ "$(printf '%s' "$AVAILABILITY" | jq -r '.codex.allowances | length')" -gt 0 ]; then
         if printf '%s' "$AVAILABILITY" | jq -e 'any(.codex.allowances[]; .state == "ok")' >/dev/null; then printf attemptable
-        elif printf '%s' "$AVAILABILITY" | jq -e 'all(.codex.allowances[]; .state == "limited")' >/dev/null; then printf unavailable
-        else printf unknown
+        elif printf '%s' "$AVAILABILITY" | jq -e 'all(.codex.allowances[]; .state == "limited" or .state == "exhausted")' >/dev/null; then printf unavailable
+        else printf attemptable
         fi
       else
         state="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.state // "unknown"')"
-        case "$state" in ok) printf available ;; limited|unavailable) printf unavailable ;; *) printf unknown ;; esac
+        case "$state" in ok) printf available ;; limited|exhausted) printf unavailable ;; *) printf attemptable ;; esac
       fi
       ;;
     claude-cli)
@@ -213,12 +213,20 @@ PRIMARY_HARNESS="$(harness_for "$PRIMARY_TRANSPORT")"
 FALLBACK_HARNESS="$(harness_for "$FALLBACK_TRANSPORT")"
 PRIMARY_AVAILABILITY="$(printf '%s' "$PRIMARY" | jq -r '.availability')"
 FALLBACK_AVAILABILITY="$(printf '%s' "$FALLBACK" | jq -r '.availability')"
+PRIMARY_DIAGNOSTIC=""
+if [ "$PRIMARY_TRANSPORT" = codex-cli ] && [ "$PRIMARY_AVAILABILITY" = attemptable ]; then
+  PRIMARY_DIAGNOSTIC="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.reason // "rate_limit_mapping_unknown"')"
+fi
 EFFECTIVE_EFFORT="$(jq -r --arg transport "$PRIMARY_TRANSPORT" --arg effort "$EFFORT" '.effort.transports[$transport][$effort]' "$POLICY")"
 CAPABILITY_TEXT="$(printf '%s' "$CAPABILITIES_JSON" | jq -r 'join(", ")')"
 if [ "$PRIMARY_AVAILABILITY" = unknown ]; then
   WHY="Availability is unknown; this is the first current policy candidate for $ROLE matching $CAPABILITY_TEXT."
 elif [ "$PRIMARY_AVAILABILITY" = attemptable ]; then
-  WHY="Current subscription evidence makes this $ROLE candidate attemptable without attributing an allowance bucket; invocation will settle availability."
+  if [ "$PRIMARY_TRANSPORT" = codex-cli ]; then
+    WHY="Confirmed Codex subscription; allowance telemetry is unknown ($PRIMARY_DIAGNOSTIC), so this $ROLE candidate is attemptable once without attributing an allowance bucket and is not verified healthy."
+  else
+    WHY="Current subscription evidence makes this $ROLE candidate attemptable without attributing an allowance bucket; invocation will settle availability."
+  fi
 else
   WHY="This is the first currently available policy candidate for $ROLE matching $CAPABILITY_TEXT."
 fi
@@ -227,10 +235,11 @@ SNAPSHOT="$(jq -r '.snapshot_date' "$MATRIX")"
 
 RESULT="$(jq -cn --arg model "$PRIMARY_MODEL" --arg harness "$PRIMARY_HARNESS" \
   --arg effort "$EFFECTIVE_EFFORT" --arg why "$WHY" --arg availability "$PRIMARY_AVAILABILITY" \
+  --arg availability_reason "$PRIMARY_DIAGNOSTIC" \
   --arg fallback_model "$(printf '%s' "$FALLBACK" | jq -r '.model')" \
   --arg fallback_harness "$FALLBACK_HARNESS" --arg fallback_availability "$FALLBACK_AVAILABILITY" \
   --arg snapshot "$SNAPSHOT" --argjson cost "$PRIMARY_COST" \
-  '{recommendedStart:{model:$model,harness:$harness,effort:$effort,availability:$availability,why:$why,cost:$cost,
+  '{recommendedStart:{model:$model,harness:$harness,effort:$effort,availability:$availability,availabilityReason:(if $availability_reason == "" then null else $availability_reason end),why:$why,cost:$cost,
     fallback:{model:$fallback_model,harness:$fallback_harness,availability:$fallback_availability},matrixEvidence:$snapshot}}')"
 
 if [ "$FORMAT" = json ]; then
