@@ -36,7 +36,7 @@ Resolve one coherent model-router bundle with Workflow Kernel and require
 `skills/model-router/references/role-dispatch.sh`,
 `skills/model-router/references/operator-recommendation.sh`,
 `skills/model-router/references/design-consultation.md`, the request schema,
-and role policy at minimum version `0.8.0`. When this invocation owns terminal reporting,
+and role policy at minimum version `0.9.0`. When this invocation owns terminal reporting,
 require `skills/model-router/references/render-terminal-report.sh` from that
 same bundle. For each selected lane:
 

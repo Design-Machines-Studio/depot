@@ -206,14 +206,14 @@ if [ "${MODEL_ROUTER_TEST_DEBUG:-0}" = 1 ]; then
   jq . "$TMP"/probe-v147.json "$TMP"/probe-exhausted.json \
     "$TMP"/probe-unknown-mapping.json "$TMP"/probe-malformed-map.json
 fi
-assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_mapping_unknown" and .codex.allowances.codex.reason == "required_window_missing" and .codex.allowances.codex_named.state == "ok"' "$TMP/probe-v147.json"
+assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_mapping_unknown" and .codex.allowances.codex.state == "ok" and .codex.allowances.codex_named.state == "ok"' "$TMP/probe-v147.json"
 assert jq -e '.codex.state == "limited" and .codex.reason == "rate_limit_exhausted"' "$TMP/probe-exhausted.json"
 assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_mapping_unknown" and .codex.allowances.codex.state == "limited" and .codex.allowances.codex_other.state == "ok"' "$TMP/probe-multiple-no-best.json"
 assert jq -e '.codex.state == "limited" and .codex.reason == "rate_limit_exhausted" and all(.codex.allowances[]; .state == "limited")' "$TMP/probe-all-exhausted.json"
 assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_mapping_unknown" and (has("defaultAllowanceId") | not)' "$TMP/probe-unknown-mapping.json"
 assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_response_malformed"' "$TMP/probe-malformed-map.json"
 assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_shape_unsupported"' "$TMP/probe-unsupported.json"
-assert jq -e '.codex.state == "unknown" and .codex.reason == "required_window_missing"' "$TMP/probe-missing-window.json"
+assert jq -e '.codex.state == "ok" and .codex.reason == "available" and .codex.defaultAllowanceId == "codex"' "$TMP/probe-missing-window.json"
 
 for codex_fixture in init-no-response rate-no-response; do
   started_at="$(date +%s)"
@@ -368,13 +368,13 @@ new_write_repo() {
 }
 
 run_real_write_case() {
-  local name="$1" outcome="$2" repo rc
+  local name="$1" outcome="$2" availability_name="${3:-codex-exhausted}" repo rc
   repo="$(new_write_repo "real-write-$name")"
-  fixture codex-exhausted
+  fixture "$availability_name"
   set +e
   (
     cd "$repo"
-    HOME="$FAKE_HOME" OPENROUTER_API_KEY=test FAKE_BUNDLE_LOG="$TMP/real-write-bundle.log" \
+    PATH="$TMP/bin:$PATH" HOME="$FAKE_HOME" OPENROUTER_API_KEY=test FAKE_BUNDLE_LOG="$TMP/real-write-bundle.log" \
       FAKE_WRITE_MODE=1 FAKE_PROVIDER_OUTCOME="$outcome" FAKE_PROVIDER_CALLS="$TMP/$name.calls" \
       MODEL_ROUTER_AVAILABILITY_FILE="$TMP/availability.json" \
       MODEL_ROUTER_INVOKE_FIXTURE_TRANSPORTS=1 OPENROUTER_EXEC_ALLOWED_PATHS=tracked.txt \
@@ -391,6 +391,27 @@ run_real_write_case() {
   printf '%s\n' "$rc" > "$TMP/$name.rc"
   printf '%s\n' "$repo"
 }
+
+# An exhausted paid account is shared by every OpenRouter model in this
+# dispatch. A reordered test policy exercises that path without changing the
+# production subscription-first order or contacting the paid API.
+cp -R "$ROOT/plugins/model-router/skills/model-router/references" "$TMP/credit-router"
+jq '.roles["builder-fast"] |= ([.[2], .[3], .[0], .[1]])' \
+  "$TMP/credit-router/role-policy.json" > "$TMP/credit-policy.json"
+mv "$TMP/credit-policy.json" "$TMP/credit-router/role-policy.json"
+ROUTER="$TMP/credit-router/role-dispatch.sh"
+credit_fallback_repo="$(run_real_write_case real-credits credits healthy)"
+assert test "$(cat "$TMP/real-credits.rc")" -eq 0
+assert jq -e '.requested.role == "builder-fast" and .requested.effort == "medium" and
+  .served.transport == "codex-cli" and .served.model == "gpt-6-luna" and
+  .fallback == true and .fallbackReason == "insufficient_credits" and
+  ([.attempts[] | select(.transport == "openrouter")] | length) == 1 and
+  ([.attempts[] | select(.transport == "openrouter")][0].providerReceiptStatus == "valid-provider-failure") and
+  ([.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.failureReason == "insufficient_credits") and
+  ([.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.httpStatus == 402) and
+  .served.tokens == null and .served.billedCostUsd == null' "$TMP/real-credits.receipt"
+assert test "$(cat "$credit_fallback_repo/tracked.txt")" = initial
+ROUTER="$ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh"
 
 real_success_repo="$(run_real_write_case real-success success)"
 assert test "$(cat "$TMP/real-success.rc")" -eq 0
@@ -638,6 +659,71 @@ assert jq -e '
     all(.[]; .outcome == "failed" and .reason == "provider_effort_evidence_unavailable" and .transmittedEffort == null))
 ' "$TMP/no-effort.receipt"
 
+# Incomplete Codex allowance data is distinct from subscription authentication.
+# It permits a bounded candidate attempt with an honest private receipt.
+fixture healthy
+jq '.codex={state:"unknown",authMode:"subscription",reason:"required_window_missing",defaultAllowanceId:"codex",allowances:{codex:{state:"unknown",reason:"required_window_missing"}}}' \
+  "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role codex-window-unknown builder-fast high --capability read-repository --capability structured-output
+assert jq -e '.served.model == "gpt-6-luna" and .served.transport == "codex-cli" and
+  .served.billingMode == "subscription-headroom-unknown" and .served.allowanceWindow == "unknown" and
+  .served.availability == "attemptable" and .served.availabilityReason == "required_window_missing" and
+  ([.attempts[] | select(.transport == "codex-cli")] | length) == 1' "$TMP/codex-window-unknown.receipt"
+
+fixture healthy
+jq '.codex={state:"unknown",authMode:"subscription",reason:"rate_limit_probe_no_response",allowances:{}}' \
+  "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role codex-probe-unknown builder-fast high --capability read-repository --capability structured-output
+assert jq -e '.served.transport == "codex-cli" and .served.availability == "attemptable" and
+  .served.availabilityReason == "rate_limit_probe_no_response"' "$TMP/codex-probe-unknown.receipt"
+
+for refused_auth in unknown api; do
+  fixture healthy
+  jq --arg auth "$refused_auth" '.codex={state:"unknown",authMode:$auth,reason:"required_window_missing"}' \
+    "$TMP/availability.json" > "$TMP/availability.next"
+  mv "$TMP/availability.next" "$TMP/availability.json"
+  run_role "codex-auth-$refused_auth" builder-fast high --capability read-repository --capability structured-output
+  assert jq -e 'all(.attempts[] | select(.transport == "codex-cli"); .outcome == "skipped" and .reason == "model_participant_unavailable") and .served.transport == "openrouter"' \
+    "$TMP/codex-auth-$refused_auth.receipt"
+done
+
+# Confirmed exhaustion still closes the native rail regardless of another
+# policy model name; it is not confused with missing allowance observation.
+fixture codex-exhausted
+run_role codex-exhausted-no-attempt builder-fast high --capability read-repository --capability structured-output
+assert jq -e 'all(.attempts[] | select(.transport == "codex-cli"); .outcome == "skipped" and .reason == "rate_limit_exhausted") and .served.transport == "openrouter"' \
+  "$TMP/codex-exhausted-no-attempt.receipt"
+
+# Model-specific failure advances to the added native reviewer candidate.
+fixture healthy
+jq '.candidateResults["gpt-6-luna"].outcome="transport"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role review-native-model-fallback review-deep high --capability read-repository --capability long-context --capability structured-output
+assert jq -e '.served.model == "gpt-6-sol" and .served.transport == "codex-cli" and .fallback == true and
+  .fallbackReason == "transport-unavailable" and ([.attempts[] | select(.transport == "codex-cli")] | length) == 2' \
+  "$TMP/review-native-model-fallback.receipt"
+
+# If both rails fail, retain the telemetry diagnostic and publish no
+# placeholder output or successful lane result.
+fixture healthy
+jq '.codex={state:"unknown",authMode:"subscription",reason:"required_window_missing"}
+  | .openrouter.state="unavailable"
+  | .candidateResults["gpt-6-luna"].outcome="transport"
+  | .candidateResults["gpt-6-sol"].outcome="transport"' "$TMP/availability.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+set +e
+run_role both-routes-unavailable builder-fast high --capability read-repository --capability structured-output
+both_routes_rc=$?
+set -e
+assert test "$both_routes_rc" -eq 76
+assert test ! -e "$TMP/both-routes-unavailable.out"
+assert jq -e '.served == null and .fallbackReason == "provider_availability_unknown" and
+  all(.attempts[] | select(.transport == "codex-cli"); .availability == "attemptable" and .availabilityReason == "required_window_missing") and
+  all(.attempts[] | select(.transport == "openrouter"); .outcome == "skipped" and .reason == "provider_availability_unknown")' \
+  "$TMP/both-routes-unavailable.receipt"
+
 # Fast work resolves externally while the public surface stays anonymous.
 fixture healthy
 run_role fast builder-fast low --capability read-repository --capability write-repository --capability structured-output
@@ -803,44 +889,44 @@ mv "$TMP/availability.next" "$TMP/availability.json"
 run_role opus-fallback architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "opus" and .served.transport == "claude-cli" and .fallback == true' "$TMP/opus-fallback.receipt"
 fixture fable-initial-telemetry-absent
-jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.codex.state="unavailable" | .codex.authMode="api"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role fable-bounded architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "opus" and .served.billingMode == "subscription-headroom-unknown"' "$TMP/fable-bounded.receipt"
 fixture claude-pro
-jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.codex.state="unavailable" | .codex.authMode="api"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role pro-bounded architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "opus" and .served.billingMode == "subscription-headroom-unknown"' "$TMP/pro-bounded.receipt"
 fixture claude-unrecognized-subscription
-jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.codex.state="unavailable" | .codex.authMode="api"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role future-bounded architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "opus" and .served.billingMode == "subscription-headroom-unknown"' "$TMP/future-bounded.receipt"
 fixture fable-agent-sdk-capacity
-jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.codex.state="unavailable" | .codex.authMode="api"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role fable-sdk architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "opus" and .served.billingMode == "included-subscription" and .served.allowanceWindow == "agent-sdk"' "$TMP/fable-sdk.receipt"
 
 # Credits, unauthenticated, and API-key states never masquerade as included use.
 fixture credits-disabled
-jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.codex.state="unavailable" | .codex.authMode="api"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role credits-off architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "qwen/qwen3.8-max" and .served.transport == "openrouter"' "$TMP/credits-off.receipt"
 fixture credits-enabled
-jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.codex.state="unavailable" | .codex.authMode="api"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role credits-on architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "opus" and .served.billingMode == "paid-credits"' "$TMP/credits-on.receipt"
 fixture claude-api-key
-jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.codex.state="unavailable" | .codex.authMode="api"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role api-key architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "qwen/qwen3.8-max" and .served.transport == "openrouter"' "$TMP/api-key.receipt"
 fixture claude-unauthenticated
-jq '.codex.state="unavailable"' "$TMP/availability.json" > "$TMP/availability.next"
+jq '.codex.state="unavailable" | .codex.authMode="api"' "$TMP/availability.json" > "$TMP/availability.next"
 mv "$TMP/availability.next" "$TMP/availability.json"
 run_role unauth architect high --capability read-repository --capability structured-output
 assert jq -e '.served.model == "qwen/qwen3.8-max" and .served.transport == "openrouter"' "$TMP/unauth.receipt"
@@ -1110,7 +1196,7 @@ mkdir -p "$TMP/profile-dispatch/.dm"
 git -C "$TMP/profile-dispatch" init -q
 printf '%s\n' '{"disabledCandidates":["opus"]}' > "$TMP/profile-dispatch/.dm/model-router.local.json"
 fixture healthy
-jq '.codex.state="unavailable" | .claude.state="ok" | .claude.authMode="subscription" | .openrouter.state="ok"' \
+jq '.codex.state="unavailable" | .codex.authMode="api" | .claude.state="ok" | .claude.authMode="subscription" | .openrouter.state="ok"' \
   "$TMP/availability.json" > "$TMP/profile-dispatch-availability.json"
 (
   cd "$TMP/profile-dispatch"

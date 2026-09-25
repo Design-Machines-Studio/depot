@@ -433,23 +433,37 @@ transport_eligibility() {
          [ "$(printf '%s' "$AVAILABILITY" | jq -r '.codex.allowances? | type')" = object ]; then
         allowance_count="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.allowances | length')"
         healthy_count="$(printf '%s' "$AVAILABILITY" | jq -r '[.codex.allowances[] | select(.state == "ok")] | length')"
+        auth_mode="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.authMode // .codex.auth_mode // "unknown"')"
+        [ "$auth_mode" = subscription ] || {
+          ELIGIBILITY_REASON="model_participant_unavailable"
+          return 1
+        }
         if [ "$allowance_count" -gt 0 ] && [ "$healthy_count" -gt 0 ]; then
-          auth_mode="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.authMode // .codex.auth_mode // "unknown"')"
-          [ "$auth_mode" = subscription ] || {
-            ELIGIBILITY_REASON="model_participant_unavailable"
-            return 1
-          }
           BILLING_MODE="included-subscription"
           ALLOWANCE_WINDOW="mapping-unknown"
           ELIGIBILITY_REASON="attemptable"
           return 0
         fi
         if [ "$allowance_count" -gt 0 ] &&
-           printf '%s' "$AVAILABILITY" | jq -e 'all(.codex.allowances[]; .state == "limited")' >/dev/null; then
+           printf '%s' "$AVAILABILITY" | jq -e 'all(.codex.allowances[]; .state == "limited" or .state == "exhausted")' >/dev/null; then
           ELIGIBILITY_REASON="rate_limit_exhausted"
           return 1
         fi
-        ELIGIBILITY_REASON="rate_limit_mapping_unknown"
+        if [ "$allowance_count" -gt 0 ]; then
+          BILLING_MODE="subscription-headroom-unknown"
+          ALLOWANCE_WINDOW="unknown"
+          ELIGIBILITY_REASON="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.reason // "rate_limit_mapping_unknown"')"
+          return 0
+        fi
+        state="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.state // "unknown"')"
+        allowance_reason="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.reason // "rate_limit_mapping_unknown"')"
+        if [ "$state" != limited ] && [ "$state" != exhausted ]; then
+          BILLING_MODE="subscription-headroom-unknown"
+          ALLOWANCE_WINDOW="unknown"
+          ELIGIBILITY_REASON="$allowance_reason"
+          return 0
+        fi
+        ELIGIBILITY_REASON="rate_limit_exhausted"
         return 1
       fi
       [ -n "$rate_limit_id" ] || { ELIGIBILITY_REASON="rate_limit_mapping_unknown"; return 1; }
@@ -470,15 +484,27 @@ transport_eligibility() {
         allowance_reason="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.reason // "rate_limit_mapping_unknown"')"
       fi
       auth_mode="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.authMode // .codex.auth_mode // "unknown"')"
-      if [ "$state" != ok ] || [ "$auth_mode" != subscription ]; then
+      if [ "$auth_mode" != subscription ]; then
+        ELIGIBILITY_REASON="model_participant_unavailable"
+        return 1
+      fi
+      if [ "$state" = limited ] || [ "$state" = exhausted ] ||
+         [ "$allowance_reason" = rate_limit_exhausted ]; then
+        ELIGIBILITY_REASON="rate_limit_exhausted"
+        return 1
+      fi
+      if [ "$state" != ok ]; then
         [ "$state" != limited ] || allowance_reason="rate_limit_exhausted"
         case "$allowance_reason" in
           rate_limit_probe_no_response|rate_limit_response_malformed|rate_limit_shape_unsupported|rate_limit_mapping_unknown|required_window_missing|rate_limit_exhausted)
             ELIGIBILITY_REASON="$allowance_reason"
             ;;
-          *) ELIGIBILITY_REASON="model_participant_unavailable" ;;
+          *) ELIGIBILITY_REASON="rate_limit_mapping_unknown" ;;
         esac
-        return 1
+        [ "$ELIGIBILITY_REASON" != rate_limit_exhausted ] || return 1
+        BILLING_MODE="subscription-headroom-unknown"
+        ALLOWANCE_WINDOW="unknown"
+        return 0
       fi
       BILLING_MODE="included-subscription"
       ALLOWANCE_WINDOW="$rate_limit_id"
@@ -709,6 +735,9 @@ while IFS= read -r candidate; do
     LAST_REASON="$reason"
     continue
   fi
+  ATTEMPT_AVAILABILITY="available"
+  [ "$BILLING_MODE" != subscription-headroom-unknown ] || ATTEMPT_AVAILABILITY="attemptable"
+  ATTEMPT_AVAILABILITY_REASON="$ELIGIBILITY_REASON"
   ATTEMPT_TRANSMITTED_EFFORT=""
   ATTEMPT_EFFORT_STATUS="unavailable"
   ATTEMPT_EFFORT_EVIDENCE="unavailable"
@@ -880,8 +909,14 @@ while IFS= read -r candidate; do
     fallback_reason=none
     [ "$ATTEMPT_INDEX" -gt 1 ] && { fallback=true; fallback_reason="$LAST_REASON"; }
     jq -n --arg receipt_id "$RECEIPT_ID" --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --arg model "$model" --arg served_identity "$OBSERVED_SERVED_IDENTITY" --arg provider "$provider" --arg transport "$transport" --arg family "$family" --arg billing "$BILLING_MODE" --arg allowance_window "$ALLOWANCE_WINDOW" --arg matrix "$MATRIX_SNAPSHOT" --arg fallback_reason "$fallback_reason" --arg token_provenance "$token_provenance" --arg cost_provenance "$cost_provenance" --arg contract_digest "$CONTRACT_DIGEST" --arg probe_source "$PROBE_SOURCE" --argjson transmitted_effort "$transmitted_effort_json" --argjson transport_stub "$TRANSPORT_STUB" --argjson contract_revision "$CONTRACT_REVISION_JSON" --argjson requested_candidate "$REQUESTED_CANDIDATE" --argjson capabilities "$CAPABILITIES_JSON" --argjson attempts "$ATTEMPTS" --argjson independence_ids "$INDEPENDENCE_IDS_JSON" --argjson excluded_families "$EXCLUDED_FAMILIES" --argjson fallback "$fallback" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" --argjson duration "$DURATION_SECONDS" --argjson usage "$usage_json" --argjson cost "$cost_json" --argjson commit "$commit_json" --argjson files_changed "$files_changed_json" '{schemaVersion:1,receiptId:$receipt_id,probeSource:$probe_source,transportStub:$transport_stub,requested:{role:$role,capabilities:$capabilities,effort:$requested_effort,independenceReceiptIds:$independence_ids,humanAuthored:$human_authored,candidate:{model:$requested_candidate.model,provider:$requested_candidate.provider,transport:$requested_candidate.transport}},contract_digest:(if $contract_digest == "" then null else $contract_digest end),revision:$contract_revision,participantId:$participant,attempts:$attempts,served:{model:$model,servedIdentity:$served_identity,provider:$provider,transport:$transport,family:$family,billingMode:$billing,allowanceWindow:$allowance_window,durationSeconds:$duration,tokens:$usage,tokenProvenance:$token_provenance,billedCostUsd:$cost,costProvenance:$cost_provenance,commit:$commit,filesChanged:$files_changed},normalizedEffort:$normalized_effort,effectiveEffort:$transmitted_effort,transmittedEffort:$transmitted_effort,effortTransmission:{status:$effort_status,evidence:$effort_evidence,modelReasoningMeasurement:null},effortNormalized:($requested_effort != $normalized_effort),fallback:$fallback,fallbackReason:$fallback_reason,matrixSnapshot:$matrix,publication:{output:"pending"},familyIndependence:{required:(($independence_ids|length>0) or $human_authored),humanAuthored:$human_authored,excludedFamilies:$excluded_families,passed:true}}' > "$EMERGENCY_RECEIPT" || exit 76
+    [ -s "$EMERGENCY_RECEIPT" ] || publication_failed receipt-preparation-failed
+    jq --arg availability "$ATTEMPT_AVAILABILITY" --arg availability_reason "$ATTEMPT_AVAILABILITY_REASON" \
+      '.served.availability=$availability | .served.availabilityReason=$availability_reason | .attempts[-1].availability=$availability | .attempts[-1].availabilityReason=$availability_reason' \
+      "$EMERGENCY_RECEIPT" > "$EMERGENCY_RECEIPT.next" || exit 76
+    mv "$EMERGENCY_RECEIPT.next" "$EMERGENCY_RECEIPT" || exit 76
     cp "$TRANSPORT_OUTPUT" "$PUBLIC_OUTPUT_TMP" 2>/dev/null || publication_failed output-preparation-failed
     jq '.publication.output="published"' "$EMERGENCY_RECEIPT" > "$PUBLIC_RECEIPT_TMP" || publication_failed receipt-preparation-failed
+    [ -s "$PUBLIC_RECEIPT_TMP" ] || publication_failed receipt-preparation-failed
     mv "$PUBLIC_OUTPUT_TMP" "$OUTPUT_FILE" 2>/dev/null || publication_failed output-publication-failed
     mv "$PUBLIC_RECEIPT_TMP" "$RECEIPT_FILE" 2>/dev/null || publication_failed receipt-publication-failed
     jq -n --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg output "$OUTPUT_FILE" --arg probe_source "$PROBE_SOURCE" --argjson transmitted_effort "$transmitted_effort_json" --argjson transport_stub "$TRANSPORT_STUB" --argjson capabilities "$CAPABILITIES_JSON" --argjson fallback "$fallback" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" --argjson excluded_family_count "$(printf '%s' "$EXCLUDED_FAMILIES" | jq 'length')" '{role:$role,capabilities:$capabilities,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,effectiveEffort:$transmitted_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,participantId:$participant,disposition:"completed",fallback:$fallback,evidenceSource:$probe_source,transportStub:$transport_stub,familyIndependence:{humanAuthored:$human_authored,excludedFamilyCount:$excluded_family_count},output:$output}'
@@ -906,6 +941,7 @@ while IFS= read -r candidate; do
     process_exit_status="$rc"
   fi
   ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg served_identity "$OBSERVED_SERVED_IDENTITY" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --arg receipt_status "$PROVIDER_RECEIPT_STATUS" --arg reason "$reason" --argjson provider_failure "$PROVIDER_FAILURE_EVIDENCE_JSON" --argjson process_exit_status "$process_exit_status" --argjson transmitted_effort "$transmitted_effort_json" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,servedIdentity:$served_identity,provider:$provider,transport:$transport,billingMode:$billing,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,effortEvidence:$effort_evidence,providerReceiptStatus:$receipt_status,providerFailureEvidence:$provider_failure,processExitStatus:$process_exit_status,outcome:"failed",reason:$reason,durationSeconds:$duration}]')"
+  ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg availability "$ATTEMPT_AVAILABILITY" --arg availability_reason "$ATTEMPT_AVAILABILITY_REASON" '.[-1].availability=$availability | .[-1].availabilityReason=$availability_reason')"
   if [ "$WRITE_REQUEST" -eq 1 ]; then
     CURRENT_HEAD="$(git rev-parse --verify HEAD 2>/dev/null)" || exit 76
     CURRENT_STATUS="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" || exit 76
@@ -916,8 +952,10 @@ while IFS= read -r candidate; do
       break
     fi
   fi
-  if [ "$reason" = quota-exhausted ] || [ "$reason" = rate_limit_exhausted ]; then
-    if [ "$transport" = codex-cli ]; then
+  if [ "$reason" = quota-exhausted ] || [ "$reason" = rate_limit_exhausted ] ||
+     { [ "$transport" = openrouter ] && [ "$reason" = insufficient_credits ]; }; then
+    if [ "$transport" = codex-cli ] ||
+       { [ "$transport" = openrouter ] && [ "$reason" = insufficient_credits ]; }; then
       EXHAUSTED_TRANSPORTS="$(printf '%s' "$EXHAUSTED_TRANSPORTS" | jq -c --arg value "$transport" '. + [$value] | unique')"
     else
       EXHAUSTED_MODELS="$(printf '%s' "$EXHAUSTED_MODELS" | jq -c --arg value "$model" '. + [$value] | unique')"

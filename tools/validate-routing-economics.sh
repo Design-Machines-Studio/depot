@@ -55,6 +55,10 @@ check 'driver policy retains the baseline and distinct specialist workers' jq -e
   .roles["builder-deep"][1].model == "gpt-6-sol" and
   .roles["builder-deep"][2].model == "gpt-6-astra" and
   .roles["review-fast"][0].model == "gpt-6-luna" and
+  .roles["review-fast"][1].model == "gpt-6-sol" and
+  .roles["review-fast"][2].transport == "openrouter" and
+  .roles["review-deep"][1].model == "gpt-6-sol" and
+  .roles["review-deep"][2].transport == "openrouter" and
   .roles["review-deep"][0].model == "gpt-6-luna"' "$POLICY"
 
 check 'settled UI uses Luna-high while unresolved deep work and mechanical defaults stay distinct' jq -e '

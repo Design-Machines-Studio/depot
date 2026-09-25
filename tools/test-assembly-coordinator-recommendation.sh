@@ -144,7 +144,7 @@ assert jq -e 'all(.chunkKinds.logic,.chunkKinds.ui,.chunkKinds.integration; .exe
 mkdir -p "$TMP/profile-repo/.dm"
 git -C "$TMP/profile-repo" init -q
 printf '%s\n' '{"disabledCandidates":["opus"]}' > "$TMP/profile-repo/.dm/model-router.local.json"
-jq '.codex.state="unavailable" | .claude.state="ok" | .claude.authMode="subscription" | .openrouter.state="ok"' \
+jq '.codex.state="unavailable" | .codex.authMode="api" | .claude.state="ok" | .claude.authMode="subscription" | .openrouter.state="ok"' \
   "$TMP/healthy.json" > "$TMP/profile-availability.json"
 (
   cd "$TMP/profile-repo"
@@ -169,7 +169,7 @@ jq '.roles["review-fast"] += [
   --capability read-repository --capability long-context \
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/review-long-context.json"
-assert jq -e '.recommendedStart.model == "qwen/qwen3.8-max" and .recommendedStart.fallback.model == "deepseek/deepseek-v4-pro-0813"' "$TMP/review-long-context.json"
+assert jq -e '.recommendedStart.model == "gpt-6-sol" and .recommendedStart.fallback.model == "qwen/qwen3.8-max"' "$TMP/review-long-context.json"
 
 jq '.roles["review-fast"] |= reverse' "$POLICY" > "$TMP/reordered-policy.json"
 "$RECOMMEND" --policy-file "$TMP/reordered-policy.json" --role review-fast \
@@ -179,7 +179,7 @@ jq '.roles["review-fast"] |= reverse' "$POLICY" > "$TMP/reordered-policy.json"
 assert jq -e '.recommendedStart.model == "z-ai/glm-5.3-flash" and .recommendedStart.harness == "OpenRouter"' "$TMP/reordered.json"
 
 jq '(.models[] | select(.slug == "deepseek/deepseek-v4-flash-0731")).input_usd_per_m=9.99 | (.models[] | select(.slug == "deepseek/deepseek-v4-flash-0731")).output_usd_per_m=8.88' "$MATRIX" > "$TMP/priced-matrix.json"
-jq '.codex.state="unavailable"' "$TMP/healthy.json" > "$TMP/no-codex.json"
+jq '.codex.state="unavailable" | .codex.authMode="api"' "$TMP/healthy.json" > "$TMP/no-codex.json"
 "$RECOMMEND" --role review-fast --capability read-repository \
   --capability structured-output --effort medium --matrix-file "$TMP/priced-matrix.json" \
   --availability-file "$TMP/no-codex.json" --format json > "$TMP/priced.json"
@@ -191,6 +191,23 @@ jq '.codex={state:"unknown",authMode:"subscription",reason:"rate_limit_mapping_u
   --capability structured-output --effort high --matrix-file "$MATRIX" \
   --availability-file "$TMP/unmapped.json" --format json > "$TMP/attemptable.json"
 assert jq -e '.recommendedStart.availability == "attemptable" and (.recommendedStart.why | contains("without attributing an allowance bucket"))' "$TMP/attemptable.json"
+
+# Confirmed Codex subscription with missing allowance telemetry stays an
+# attemptable recommendation and retains its diagnostic without inventing
+# remaining capacity. The review role keeps its native Sol fallback.
+jq '.codex={state:"unknown",authMode:"subscription",reason:"required_window_missing"} | .openrouter.state="unavailable"' \
+  "$TMP/healthy.json" > "$TMP/codex-telemetry-unknown.json"
+"$RECOMMEND" --role review-deep --capability read-repository \
+  --capability long-context --capability structured-output --effort high \
+  --matrix-file "$MATRIX" --availability-file "$TMP/codex-telemetry-unknown.json" \
+  --format json > "$TMP/codex-telemetry-recommendation.json"
+assert jq -e '.recommendedStart.model == "gpt-6-luna" and
+  .recommendedStart.harness == "Codex" and
+  .recommendedStart.availability == "attemptable" and
+  .recommendedStart.availabilityReason == "required_window_missing" and
+  (.recommendedStart.why | contains("not verified healthy")) and
+  .recommendedStart.fallback.model == "gpt-6-sol" and
+  .recommendedStart.cost.apiPrice == null' "$TMP/codex-telemetry-recommendation.json"
 
 # Live recommendations resolve native CLIs before sanitizing PATH, honor
 # explicit absolute overrides, and keep the OpenRouter rail when neither native

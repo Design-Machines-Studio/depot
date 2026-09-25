@@ -69,15 +69,25 @@ Keep applicable specialist review and fix every retained P1/P2/P3.
 
 Prefer eligible subscription capacity for each role. Existing OpenRouter
 candidates remain available as usage extenders and for useful independent
-perspectives after capability and availability resolution. A quota response
-exhausts that native rail for the run; do not retry it under another model name.
-Unknown allowance mapping is not proof of exhaustion, and an active Codex driver
-is not unavailable merely because a nested CLI cannot identify its parent.
+perspectives after capability and availability resolution. A known applicable
+quota response exhausts that native rail for the run; do not retry it under
+another model name. Confirmed Codex subscription authentication with missing or
+incomplete allowance telemetry remains unknown and permits one bounded native
+attempt. It is never described as verified healthy. Unknown allowance mapping
+is not proof of exhaustion, and an active Codex driver is not unavailable
+merely because a nested CLI cannot identify its parent.
 Deliberate relief before exhaustion uses the existing direct `/openrouter`
 choice or ignored local `disabledCandidates`; it does not require a quota error
 or tracked provider override. An unknown monthly-spend/headroom measurement is
 never described as verified affordability even when the API credential and
 current balance make the rail attemptable.
+
+An OpenRouter `insufficient_credits` response confirmed by its validated
+receipt exhausts that paid rail for the current dispatch; continue to an
+eligible native candidate without repeating OpenRouter models on the same
+credential. A 429 `rate_limited` response remains distinct. Missing token or
+cost measurements stay unavailable in the terminal receipt and never gate a
+required review lane.
 
 Native Codex remains first; OpenRouter eligibility stays in the role policy.
 GPT-6 Sol/Luna catalog evidence was refreshed on 2026-09-23; other catalog rows

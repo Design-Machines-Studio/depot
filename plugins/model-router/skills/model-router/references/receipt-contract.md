@@ -6,6 +6,11 @@ transport-normalized, and transmitted effort, attempted candidates, served
 model/provider/transport,
 billing mode, duration, token and cost provenance, fallback reason, matrix
 snapshot, and family-independence result. It contains no prompt or model output.
+Attempt and served entries also record normalized availability (`available` or
+`attemptable`) and the closed telemetry diagnostic when present. Confirmed
+subscription authentication with incomplete allowance telemetry uses
+`subscription-headroom-unknown` and `allowanceWindow: "unknown"`; it does not
+publish estimated remaining capacity or imply verified headroom.
 Availability/fallback reasons are limited to router-authored content-safe codes,
 including `rate_limit_probe_no_response`, `rate_limit_response_malformed`,
 `rate_limit_shape_unsupported`, `rate_limit_mapping_unknown`,

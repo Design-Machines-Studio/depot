@@ -41,20 +41,28 @@ The dispatcher:
 8. writes exact, content-free identity and measurement evidence to the private
    receipt.
 
-For Codex subscription candidates, an optional policy `rateLimitId` is valid
-only when an authoritative model-to-allowance mapping exists. The probe parses
-response shapes structurally, validates that every 0.147 map key matches its
-snapshot `limitId`, and evaluates only the mapped bucket's five-hour and weekly
-windows at the existing 8% threshold. It never selects the best bucket. The
-legacy 0.146 `rateLimits.primary`/`secondary` snapshot and a single 0.147 bucket
-are unambiguous defaults. Multiple 0.147 buckets without an authoritative
-candidate mapping remain unattributed. If every normalized allowance is
-exhausted, Codex is skipped as `rate_limit_exhausted`. If at least one allowance
-is healthy, the requested candidate is attemptable once and its actual
-invocation is authoritative; no bucket is selected or claimed. Missing,
-malformed, unsupported, or window-incomplete evidence remains unavailable with
-a content-safe reason. `rate_limit_mapping_unknown` alone never means exhausted
-or blocks an authenticated candidate.
+For Codex subscription candidates, authentication and allowance observation
+remain separate. The probe validates that every 0.147 map key matches its
+snapshot `limitId`, parses the 0.146 `rateLimits.primary`/`secondary` and 0.147
+`rateLimitsByLimitId` forms, and evaluates every observed supported window at
+the existing 8% threshold. An absent optional window is not fabricated and
+does not invalidate another observed window. An empty or incomplete snapshot
+stays unknown with its content-safe diagnostic. With confirmed ChatGPT
+subscription authentication, unknown or unavailable allowance telemetry
+permits one bounded native attempt and is labelled `attemptable`, never
+verified healthy. An observed applicable exhausted bucket, API-key-only or
+unknown authentication, or missing authentication still closes the native
+candidate. Multiple 0.147 buckets without an authoritative candidate mapping
+remain unattributed; the router does not choose a best bucket. If all
+unattributed buckets are exhausted, Codex is skipped as
+`rate_limit_exhausted`.
+
+An OpenRouter `insufficient_credits` failure is actionable only from its
+validated provider receipt with its HTTP status. It closes the OpenRouter
+credential rail for the current dispatch, while preserving the receipt
+evidence and allowing later eligible candidates on other rails. A 429
+`rate_limited` response remains a distinct model attempt failure. No
+account-wide balance cache or budget service is implied.
 
 Before availability probing, the dispatcher uses the supplied launcher to
 resolve one coherent OpenRouter bundle. That exact binding supplies credential
