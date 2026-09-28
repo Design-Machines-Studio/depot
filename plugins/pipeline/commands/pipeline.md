@@ -6,7 +6,7 @@ argument-hint: "[feature idea or feedback]"
 
 # Pipeline
 
-Full autonomous feature development pipeline. Takes an idea and delivers a clean feature branch.
+This pipeline takes ideas to clean feature branches; Codex runs its installed workflow in-session.
 
 ## Mode Selection
 

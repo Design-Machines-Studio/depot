@@ -1,6 +1,6 @@
 {
   "name": "project-scaffolder",
-  "version": "1.10.0",
+  "version": "1.10.1",
   "description": "Claude Code project infrastructure scaffolding with hooks, agents, settings, and CLAUDE.md templates (project-type-specific plus generic/DM-standard starters)",
   "author": {
     "name": "Design Machines"
@@ -40,7 +40,7 @@
   },
   "optionalPluginDependencies": {
     "live-wires": ">=1.0.0",
-    "dm-review": ">=1.81.0",
+    "dm-review": ">=1.83.5",
     "pipeline": ">=1.68.0",
     "accessibility-compliance": ">=1.0.0"
   },
