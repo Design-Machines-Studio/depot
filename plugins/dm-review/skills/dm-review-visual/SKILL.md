@@ -56,7 +56,7 @@ INCOMPLETE` coverage result and one next action.
 Materialize the validated standalone review request, including its explicit/defaulted `workflowClass`, at `<exact-run-root>/review/request.json`; maintain its cumulative ordered redacted receipts at `<exact-run-root>/review/authoritative-receipts.json`. Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md`. Initialize the run under `.workflow-kernel/runs/<run-id>`; the kernel derives and verifies the immutable repository scope from the state directory, and no caller-selected lease root is accepted. Before authoritative browser actions, seal the independent prediction:
 
 ```text
-"$WORKFLOW_KERNEL" bind-prediction --type review --request <exact-run-root>/review/request.json --prediction-receipts <exact-run-root>/review/independent-prediction-receipts.json --state-dir <exact-run-root>/review
+"$WORKFLOW_KERNEL" bind-prediction --type review --request <exact-run-root>/review/request.json --prediction-receipts <exact-run-root>/review/independent-prediction-receipts.json --state-dir .workflow-kernel/runs/<run-id>
 ```
 
 Load `ui-case-selection.md`. By default select affected routes, prototype cases,
@@ -74,8 +74,8 @@ On any missing required browser tool, dev server, authentication fixture, route 
 After the authoritative visual report exists, append it to `<exact-run-root>/review/authoritative-receipts.json` and invoke exactly:
 
 ```text
-"$WORKFLOW_KERNEL" observe-review --request <exact-run-root>/review/request.json --receipts <exact-run-root>/review/authoritative-receipts.json --state-dir <exact-run-root>/review
-"$WORKFLOW_KERNEL" compare --state-dir <exact-run-root>/review --authoritative-receipts <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/shadow-report.json
+"$WORKFLOW_KERNEL" observe-review --request <exact-run-root>/review/request.json --receipts <exact-run-root>/review/authoritative-receipts.json --state-dir .workflow-kernel/runs/<run-id>
+"$WORKFLOW_KERNEL" compare --state-dir .workflow-kernel/runs/<run-id> --authoritative-receipts <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/shadow-report.json
 "$WORKFLOW_KERNEL" metrics --events <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/metrics.json
 if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrouter --asset skills/openrouter-delegate/references/model-matrix.json --minimum-version 1.11.0); then :; else MODEL_MATRIX_ASSET=""; fi
 "$WORKFLOW_KERNEL" emit-cost-summary --events <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/run-cost-summary.json --receipt <exact-run-root>/review/run-receipt.md --matrix "$MODEL_MATRIX_ASSET" --repository-commit "$(git rev-parse HEAD)" $(test -n "$(git status --porcelain)" && echo --dirty-state) \

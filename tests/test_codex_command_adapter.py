@@ -68,6 +68,24 @@ class CodexCommandAdapterContractTests(unittest.TestCase):
         self.assertIn("Nested reviews return findings to their repair\nowner without recursion.", full)
         self.assertIn("Fix pending review findings", repair)
 
+    def test_review_kernel_commands_use_the_initialized_state_directory(self) -> None:
+        sources = (
+            "plugins/dm-review/commands/dm-review.md",
+            "plugins/dm-review/commands/dm-review-loop.md",
+            "plugins/dm-review/commands/dm-review-visual.md",
+            "plugins/dm-review/skills/review/SKILL.md",
+            "plugins/dm-review/skills/review/references/review-docker-create.md",
+            "plugins/dm-review/skills/review/references/review-docker-cleanup.md",
+        )
+        for source in sources:
+            with self.subTest(source=source):
+                content = (REPO / source).read_text()
+                self.assertNotIn("--state-dir <exact-run-root>/review", content)
+                self.assertIn("--state-dir .workflow-kernel/runs/<run-id>", content)
+        review = (REPO / "plugins/dm-review/skills/review/SKILL.md").read_text()
+        self.assertIn("init .workflow-kernel/runs/<run-id>", review)
+        self.assertIn("Produce nonempty independent `review_request` prediction receipts", review)
+
     def test_aliases_retain_canonical_command_bodies(self) -> None:
         expected = GENERATOR.expected_files()
         self.assertEqual(35, len(expected))

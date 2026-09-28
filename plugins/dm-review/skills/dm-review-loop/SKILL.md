@@ -82,13 +82,13 @@ terminalModelReportOwner = "dm-review-loop"
 The canonical loop state and todo files remain authoritative. Pass the exact `workflowClass` and `workflow_class_defaulted` values into every nested `/dm-review-quick` or `/dm-review`, every `/dm-review-fix`, every final re-review, every iteration receipt, and the terminal receipt. Nested commands MUST NOT re-default, infer, or change the class. Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md`. Initialize this run under `.workflow-kernel/runs/<run-id>`; the kernel derives and verifies the immutable repository scope from the state directory, and no caller-selected lease root is accepted. Append lifecycle transitions there. Materialize the validated request at `<exact-run-root>/review/request.json`. Before corresponding authoritative actions, produce and seal the independent prediction exactly once:
 
 ```text
-"$WORKFLOW_KERNEL" bind-prediction --type review --request <exact-run-root>/review/request.json --prediction-receipts <exact-run-root>/review/independent-prediction-receipts.json --state-dir <exact-run-root>/review
+"$WORKFLOW_KERNEL" bind-prediction --type review --request <exact-run-root>/review/request.json --prediction-receipts <exact-run-root>/review/independent-prediction-receipts.json --state-dir .workflow-kernel/runs/<run-id>
 ```
 
 Rewrite `<exact-run-root>/review/authoritative-receipts.json` as the complete ordered redacted receipt array after each iteration. After each complete review/fix iteration receipt, invoke exactly:
 
 ```text
-"$WORKFLOW_KERNEL" observe-review --request <exact-run-root>/review/request.json --receipts <exact-run-root>/review/authoritative-receipts.json --state-dir <exact-run-root>/review
+"$WORKFLOW_KERNEL" observe-review --request <exact-run-root>/review/request.json --receipts <exact-run-root>/review/authoritative-receipts.json --state-dir .workflow-kernel/runs/<run-id>
 ```
 
 Shadow prediction never advances the loop, declares convergence, changes a finding, or converts the terminal result. Record every requested, attempted, implemented-by, fallback, and reason field; do not silently drop unavailable lanes.
@@ -370,8 +370,8 @@ Also reconcile only Docker resources explicitly registered as created by this lo
 After authoritative cleanup receipts are appended, invoke exactly:
 
 ```text
-"$WORKFLOW_KERNEL" observe-review --request <exact-run-root>/review/request.json --receipts <exact-run-root>/review/authoritative-receipts.json --state-dir <exact-run-root>/review
-"$WORKFLOW_KERNEL" compare --state-dir <exact-run-root>/review --authoritative-receipts <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/shadow-report.json
+"$WORKFLOW_KERNEL" observe-review --request <exact-run-root>/review/request.json --receipts <exact-run-root>/review/authoritative-receipts.json --state-dir .workflow-kernel/runs/<run-id>
+"$WORKFLOW_KERNEL" compare --state-dir .workflow-kernel/runs/<run-id> --authoritative-receipts <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/shadow-report.json
 "$WORKFLOW_KERNEL" metrics --events <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/metrics.json
 if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrouter --asset skills/openrouter-delegate/references/model-matrix.json --minimum-version 1.11.0); then :; else MODEL_MATRIX_ASSET=""; fi
 "$WORKFLOW_KERNEL" emit-cost-summary --events <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/run-cost-summary.json --receipt <exact-run-root>/review/run-receipt.md --matrix "$MODEL_MATRIX_ASSET" --repository-commit "$(git rev-parse HEAD)" $(test -n "$(git status --porcelain)" && echo --dirty-state) \

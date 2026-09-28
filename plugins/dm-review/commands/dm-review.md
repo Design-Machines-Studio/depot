@@ -43,14 +43,14 @@ The review skill's routing contract governs OpenRouter availability, non-interac
 The review skill, selected lanes, findings, coverage receipt, merge recommendation, and cleanup report remain authoritative. Resolve `$WORKFLOW_KERNEL` once per run per the fail-closed contract in the workflow-kernel plugin's `references/runtime-resolution.md`, then load its `exact-owned-cleanup.md`. Materialize the validated request at `<exact-run-root>/review/request.json` and the cumulative ordered redacted authoritative receipt array at `<exact-run-root>/review/authoritative-receipts.json`. Initialize the run under `.workflow-kernel/runs/<run-id>` and one exact-owned disposable root; caller-selected lease roots and symlink, cross-repository, scope-metadata, or run-directory mismatches fail closed. Produce and seal independent prediction receipts before corresponding authoritative actions:
 
 ```text
-"$WORKFLOW_KERNEL" bind-prediction --type review --request <exact-run-root>/review/request.json --prediction-receipts <exact-run-root>/review/independent-prediction-receipts.json --state-dir <exact-run-root>/review
+"$WORKFLOW_KERNEL" bind-prediction --type review --request <exact-run-root>/review/request.json --prediction-receipts <exact-run-root>/review/independent-prediction-receipts.json --state-dir .workflow-kernel/runs/<run-id>
 ```
 
 After the consolidated review, coverage receipt, and terminal cleanup receipts exist, run exactly:
 
 ```text
-"$WORKFLOW_KERNEL" observe-review --request <exact-run-root>/review/request.json --receipts <exact-run-root>/review/authoritative-receipts.json --state-dir <exact-run-root>/review
-"$WORKFLOW_KERNEL" compare --state-dir <exact-run-root>/review --authoritative-receipts <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/shadow-report.json
+"$WORKFLOW_KERNEL" observe-review --request <exact-run-root>/review/request.json --receipts <exact-run-root>/review/authoritative-receipts.json --state-dir .workflow-kernel/runs/<run-id>
+"$WORKFLOW_KERNEL" compare --state-dir .workflow-kernel/runs/<run-id> --authoritative-receipts <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/shadow-report.json
 "$WORKFLOW_KERNEL" metrics --events <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/metrics.json
 if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrouter --asset skills/openrouter-delegate/references/model-matrix.json --minimum-version 1.11.0); then :; else MODEL_MATRIX_ASSET=""; fi
 "$WORKFLOW_KERNEL" emit-cost-summary --events <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/run-cost-summary.json --receipt <exact-run-root>/review/run-receipt.md --matrix "$MODEL_MATRIX_ASSET" --repository-commit "$(git rev-parse HEAD)" $(test -n "$(git status --porcelain)" && echo --dirty-state) \
