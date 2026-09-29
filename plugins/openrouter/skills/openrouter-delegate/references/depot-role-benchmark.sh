@@ -35,7 +35,7 @@ DURATION="0"
 BEHAVIOR_REVISION=1
 BEHAVIOR_DIGEST="sha256:3ecea8dc49c02a8a8ac2a6e7ede9993fb6609f7520d5438ab8bf0cf9170ba32a"
 NORMALIZER_REVISION=1
-SCORER_REVISION=2
+SCORER_REVISION=3
 
 usage() {
   printf '%s\n' \
@@ -158,18 +158,20 @@ evaluate_case() {
       add_assertion "$destination" review.zero-deferral semantic "$passed" 25 'deferred is false with all findings retained' 'Do not defer a seeded finding.'
       ;;
     assembly-next-chunk)
-      passed=false; jq -e '(.nextChunk | type) == "string" and (.executorRole | type) == "string" and (.executorCapabilities | type) == "array" and (.rejectedComplexity | type) == "array"' "$input" >/dev/null && passed=true
+      passed=false; jq -e '(.nextChunk | type) == "string" and (.executorRole | type) == "string" and (.executorCapabilities | type == "array") and (.rejectedScope | type == "array") and (.rejectedComplexity | type == "array")' "$input" >/dev/null && passed=true
       add_assertion "$destination" assembly.complete-envelope mandatory "$passed" 0 'all declared fields with the required types' 'Return every field named by the prompt.'
-      passed=false; jq -e '.nextChunk | test("benchmark|corpus|scor"; "i")' "$input" >/dev/null && passed=true
-      add_assertion "$destination" assembly.next-chunk semantic "$passed" 25 'benchmark corpus/scorer direction in clear wording' 'Choose the demonstrated benchmark work; no exact label is required.'
+      passed=false; jq -e '.nextChunk == "depot-benchmark-corpus-scorer"' "$input" >/dev/null && passed=true
+      add_assertion "$destination" assembly.next-chunk semantic "$passed" 20 'selects the approved benchmark corpus/scorer scope' 'Select the approved scope ID.'
       passed=false; jq -e '.executorRole | length > 0 and (test("openrouter|openai|anthropic|claude|codex|model"; "i") | not)' "$input" >/dev/null && passed=true
       add_assertion "$destination" assembly.executor-role semantic "$passed" 15 'non-empty provider-neutral role wording' 'Do not name a provider or model.'
       passed=false; jq -e '.executorCapabilities | length > 0 and all(.[]; type == "string" and length > 0 and (test("openrouter|openai|anthropic|claude|codex|model"; "i") | not))' "$input" >/dev/null && passed=true
-      add_assertion "$destination" assembly.capabilities semantic "$passed" 15 'non-empty provider-neutral capability wording' 'Describe applicable capabilities without provider identity.'
+      add_assertion "$destination" assembly.capabilities semantic "$passed" 15 'non-empty provider-neutral capabilities without a model' 'Describe applicable capabilities without provider identity.'
       passed=false; jq -e '.rejectedComplexity | type == "array" and length > 0' "$input" >/dev/null && passed=true
-      add_assertion "$destination" assembly.rejected-complexity semantic "$passed" 20 'non-empty rejectedComplexity' 'Name rejected unsupported scope.'
-      passed=false; ! jq -e '.nextChunk | test("issue[ #]*86|floor|daemon|broker|database|mcp|hosted|workflow[ -]?engine"; "i")' "$input" >/dev/null && passed=true
-      add_assertion "$destination" assembly.exclusions semantic "$passed" 25 'selected chunk excludes disclosed unsupported machinery' 'Keep the selected chunk inside the prompt exclusions.'
+      add_assertion "$destination" assembly.rejected-complexity semantic "$passed" 15 'non-empty rejectedComplexity' 'Name rejected unsupported scope.'
+      passed=false; jq -e 'if (.rejectedScope | type) == "array" then (all(.rejectedScope[]; . as $value | ["issue-86-floor-observation-schemas","daemon-orchestration","broker-orchestration","database-or-mcp-infrastructure","hosted-judge-or-generic-workflow-engine"] | index($value) != null) and ([.rejectedScope[]] | unique | length == 5)) else false end' "$input" >/dev/null && passed=true
+      add_assertion "$destination" assembly.rejected-scope semantic "$passed" 20 'explicitly rejects all five unsupported scope IDs' 'List every unsupported scope ID in rejectedScope.'
+      passed=false; jq -e '.nextChunk as $selected | (["depot-benchmark-corpus-scorer","issue-86-floor-observation-schemas","daemon-orchestration","broker-orchestration","database-or-mcp-infrastructure","hosted-judge-or-generic-workflow-engine"] | index($selected) != null) and ((.rejectedScope | index($selected)) == null)' "$input" >/dev/null && passed=true
+      add_assertion "$destination" assembly.scope-consistency semantic "$passed" 15 'selected scope is allowed and not also rejected' 'Do not select and reject the same scope.'
       ;;
     mechanical-owned-edit)
       passed=false; jq -e '(.targetPath | type) == "string" and (.newContent | type) == "object" and (.verification | type) == "string" and (.validationOutcome | type) == "string"' "$input" >/dev/null && passed=true
@@ -398,7 +400,7 @@ run_validator() {
       fi
       ;;
     architect-bounded-chunk)
-      if [ "$parsed" = true ] && jq -e '(.nextChunk | test("benchmark|corpus|scor"; "i")) and (.nextChunk | test("floor|daemon|broker|database|mcp|hosted|workflow[ -]?engine"; "i") | not) and (.rejectedComplexity | length > 0)' "$input" >/dev/null; then printf 'true'; else printf 'false'; fi
+      if [ "$parsed" = true ] && jq -e 'if (.rejectedScope | type) == "array" then (.nextChunk == "depot-benchmark-corpus-scorer" and ([.rejectedScope[]] | unique | sort) == ["broker-orchestration","daemon-orchestration","database-or-mcp-infrastructure","hosted-judge-or-generic-workflow-engine","issue-86-floor-observation-schemas"] and ((.rejectedScope | index("depot-benchmark-corpus-scorer")) == null) and (.rejectedComplexity | type == "array" and length > 0)) else false end' "$input" >/dev/null; then printf 'true'; else printf 'false'; fi
       ;;
     mechanical-owned-json)
       if [ "$parsed" = true ] && jq -e '. == {targetPath:"config/fixture.json",newContent:{schemaVersion:1,enabled:true},verification:"jq -e '\''.schemaVersion == 1 and .enabled == true'\'' config/fixture.json",validationOutcome:"passed"}' "$input" >/dev/null; then printf 'true'; else printf 'false'; fi

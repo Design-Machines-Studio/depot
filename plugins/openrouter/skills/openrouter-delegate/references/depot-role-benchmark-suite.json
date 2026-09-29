@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "suiteId": "depot-role-v2",
-  "suiteRevision": 1,
+  "suiteRevision": 2,
   "behavioralContract": {
     "revision": 1,
     "digest": "sha256:3ecea8dc49c02a8a8ac2a6e7ede9993fb6609f7520d5438ab8bf0cf9170ba32a"
@@ -301,8 +301,8 @@
     },
     {
       "id": "assembly-next-chunk",
-      "revision": 2,
-      "promptRevision": 2,
+      "revision": 3,
+      "promptRevision": 3,
       "role": "architect",
       "taskType": "bounded-next-chunk-selection",
       "objective": "Choose and bound one demonstrated next Assembly/Depot chunk.",
@@ -313,14 +313,15 @@
       ],
       "workload": "quality",
       "executionMode": "single-turn-sealed-evidence-pack",
-      "prompt": "Return one raw JSON object with string nextChunk, string executorRole, array executorCapabilities, and non-empty array rejectedComplexity. Evidence: provider-neutral role routing is independently reviewed; the remaining approved work is the role-complete Depot benchmark corpus and its deterministic case scorer. Issue #86 Floor observation schemas are not admitted. Choose and bound one next chunk supported by that evidence. Any clear wording for the benchmark corpus/scorer direction is accepted; no exact nextChunk label, executor label, or capability wording is required. Reject unsupported Floor UI, daemon, broker, database, MCP server, hosted judge, or generic workflow engine machinery.",
+      "prompt": "Return one raw JSON object with nextChunk (one allowed scope ID below), string executorRole, array executorCapabilities, non-empty array rejectedComplexity, and array rejectedScope. Evidence: provider-neutral role routing is independently reviewed; the remaining approved work is the role-complete Depot benchmark corpus and its deterministic case scorer. Select exactly one nextChunk value: \"depot-benchmark-corpus-scorer\", \"issue-86-floor-observation-schemas\", \"daemon-orchestration\", \"broker-orchestration\", \"database-or-mcp-infrastructure\", or \"hosted-judge-or-generic-workflow-engine\". RejectedScope is the exhaustive list of rejected scope IDs; include all five unsupported IDs, including Floor schemas, daemon, broker, database/MCP, and hosted judge/generic workflow engine. The selected nextChunk must not appear in rejectedScope. Give provider-neutral role and capability wording. Do not expand the selected work beyond the approved benchmark corpus/scorer.",
       "outputContract": {
         "format": "one raw JSON object",
         "fields": {
-          "nextChunk": "one benchmark-corpus/scorer proposal in any clear wording",
+          "nextChunk": "one exact scope ID from the prompt; select depot-benchmark-corpus-scorer",
           "executorRole": "provider-neutral role wording",
           "executorCapabilities": "provider-neutral capability wording",
-          "rejectedComplexity": "non-empty rejected scope"
+          "rejectedComplexity": "non-empty rejected scope explanation",
+          "rejectedScope": "all five unsupported scope IDs from the prompt"
         }
       },
       "mandatoryAssertions": [
@@ -334,13 +335,13 @@
         },
         {
           "id": "assembly.complete-envelope",
-          "description": "All four contracted fields have the required types."
+          "description": "All five contracted fields have the required types."
         }
       ],
       "semanticCriteria": [
         {
           "id": "assembly.next-chunk",
-          "description": "Selects the proven benchmark corpus/scorer direction using semantic alternatives."
+          "description": "Selects the approved benchmark corpus/scorer scope ID."
         },
         {
           "id": "assembly.executor-role",
@@ -355,8 +356,12 @@
           "description": "Names rejected unsupported scope."
         },
         {
-          "id": "assembly.exclusions",
-          "description": "Does not select excluded machinery."
+          "id": "assembly.rejected-scope",
+          "description": "Explicitly rejects each of the five unsupported scope IDs."
+        },
+        {
+          "id": "assembly.scope-consistency",
+          "description": "The selected scope is allowed and does not also appear in rejectedScope."
         }
       ],
       "validatorCriteria": [
@@ -373,7 +378,8 @@
         "assembly.executor-role",
         "assembly.capabilities",
         "assembly.rejected-complexity",
-        "assembly.exclusions"
+        "assembly.rejected-scope",
+        "assembly.scope-consistency"
       ],
       "validatorId": "architect-bounded-chunk",
       "fixtureProvenance": {
@@ -391,7 +397,7 @@
         "repositoryValidation": false
       },
       "expected": {
-        "nextChunk": "depot-role-benchmark",
+        "nextChunk": "depot-benchmark-corpus-scorer",
         "executorRole": "builder-fast",
         "executorCapabilities": [
           "read-repository",
@@ -399,16 +405,21 @@
           "structured-output"
         ],
         "rejectedComplexity": [
-          "Issue #86 Floor observation schemas",
-          "daemon",
-          "generic workflow engine"
+          "Unsupported Floor observation schemas, daemon, broker, database/MCP, and hosted judge or generic workflow engine work are out of scope."
+        ],
+        "rejectedScope": [
+          "issue-86-floor-observation-schemas",
+          "daemon-orchestration",
+          "broker-orchestration",
+          "database-or-mcp-infrastructure",
+          "hosted-judge-or-generic-workflow-engine"
         ]
       },
       "semanticAlternatives": [
         {
           "id": "descriptive-benchmark-wording",
           "output": {
-            "nextChunk": "role-complete benchmark corpus and deterministic scorer",
+            "nextChunk": "depot-benchmark-corpus-scorer",
             "executorRole": "bounded repository builder",
             "executorCapabilities": [
               "repository reading",
@@ -416,28 +427,40 @@
               "structured results"
             ],
             "rejectedComplexity": [
-              "hosted judge",
-              "Floor UI"
+              "hosted judge and Floor UI are outside scope"
+            ],
+            "rejectedScope": [
+              "issue-86-floor-observation-schemas",
+              "daemon-orchestration",
+              "broker-orchestration",
+              "database-or-mcp-infrastructure",
+              "hosted-judge-or-generic-workflow-engine"
             ]
           }
         }
       ],
       "negativeFixtures": [
         {
-          "id": "unsupported-engine",
+          "id": "selected-unsupported-engine",
           "output": {
-            "nextChunk": "generic workflow engine",
-            "executorRole": "builder",
+            "nextChunk": "hosted-judge-or-generic-workflow-engine",
+            "executorRole": "bounded repository builder",
             "executorCapabilities": [
-              "structured output"
+              "repository reading",
+              "structured results"
             ],
             "rejectedComplexity": [
-              "nothing"
+              "The hosted judge is unsupported."
+            ],
+            "rejectedScope": [
+              "issue-86-floor-observation-schemas",
+              "daemon-orchestration",
+              "broker-orchestration",
+              "database-or-mcp-infrastructure"
             ]
           },
           "mustFailAssertionIds": [
-            "assembly.next-chunk",
-            "assembly.exclusions"
+            "assembly.next-chunk"
           ]
         }
       ]
@@ -2481,8 +2504,8 @@
     }
   ],
   "bindings": {
-    "suiteRevision": 1,
-    "suiteDigest": "sha256:f13142a07531482fffd2b43105fb2acc50388a9c6c9d2ce5d316ed038577035f",
+    "suiteRevision": 2,
+    "suiteDigest": "sha256:af9b7e3d398cd0a60c19f6fa8c8a57b00f97070b97de7905939d58e1b309c3b6",
     "normalizerRevision": 1,
     "normalizerDigest": "sha256:cea619866aeb37714efaaba1d4a699d3d5ef3042630377554f6bfb36de81db5a",
     "cases": {
@@ -2491,144 +2514,144 @@
         "caseDigest": "sha256:2624b6fae3c1be0e36da58b35bbfcc882f969dfd1e9b43cb8a46d9c4407f2e57",
         "promptRevision": 2,
         "promptDigest": "sha256:7433b91d42736c7973830ad9ee508e97655aecba51c9721362425813fd344222",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:cd2b44003ebebd0b6de60181a9ad574f5eb51ac097163d069ea711d03a92ea40"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:537fa6d680a7ee7ce23fac3a07f2c01a16676dcd49834961d6a4fa43cbbc8e9e"
       },
       "review-zero-deferral": {
         "caseRevision": 2,
         "caseDigest": "sha256:ed9a010abf11bd55e660b331fd4cbd93c9305650c57637143ee4b913d7da1ecf",
         "promptRevision": 2,
         "promptDigest": "sha256:fe2340b70ad2dae1533882e0c0d051847974ba3d27047e59d844dd54cc1e3aba",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:a1e7344ae97b0147d8f5b1e068953178497316554861fcd2d92392b159555e7e"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:c0880ee8198e0ad1abddae74b92f434a0243198477b85b92603d9fe085407bcd"
       },
       "assembly-next-chunk": {
-        "caseRevision": 2,
-        "caseDigest": "sha256:cdb191c714f0fbe47a8bfb5ade2a98bf151e047a6f429e339ef1413b9e9cff14",
-        "promptRevision": 2,
-        "promptDigest": "sha256:ced4c87391b03f5d9615f36520753ebd1187a5830d83d65a14581aaf5ab298fe",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:5b9b853681933c503e4f9aca848c4e6f28ca60e042697d873c21b61cbf8bddd2"
+        "caseRevision": 3,
+        "caseDigest": "sha256:6ce9ef161da9d66a926c689c1f6eb767d58bd151d5dba253b9e43abe0a7e9c96",
+        "promptRevision": 3,
+        "promptDigest": "sha256:120707c2cbd70dd6867bba7ada6a1891a5e4ceb5b0ead4c30602cdffa34cd26d",
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:e332c71938124cbe368a4e1fbf22f3110aef6ce09838f1910c0b946266ed8242"
       },
       "mechanical-owned-edit": {
         "caseRevision": 2,
         "caseDigest": "sha256:1a2a4bcbad2c75abb380765557eae3ecbac7cd8ec1b13e6d266789644593a40c",
         "promptRevision": 2,
         "promptDigest": "sha256:05441fcde5413b936c4f4f8669789578fae9ae65b167782b23f49970377e210a",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:a5e87b612329ed26323b43d3aeed065402dbe31e1c29d4b5cd724eb4f1ba7caf"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:f10b0c79a4d3c7616339681af11f0dec2b15ec03eeb27c2ab992505ff9cd1611"
       },
       "architect-routing-tradeoff": {
         "caseRevision": 2,
         "caseDigest": "sha256:4ebdcf0d3b439fab4d25127449afe91bbd9d81cb4b56008d453093f2d7d3c847",
         "promptRevision": 2,
         "promptDigest": "sha256:1fcf5446bf990823f08704a9a4d075ef3e27bc98a574e2e37e5754ec9e6e6fd3",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:64d2c8dda9bfd0c7fd643381dc5a7d6f398a666bc7dc8909189fed707f907b7a"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:0b277db4a502dac3a6d5e53fc2f485e32b0311aee1f88ae2ce65931676bd88b7"
       },
       "plan-approved-scope-audit": {
         "caseRevision": 1,
         "caseDigest": "sha256:566809401871ebb3207b8463266581e872410a7a1c93879bfa2d9708632fd29d",
         "promptRevision": 1,
         "promptDigest": "sha256:383f9dc79c72169dbb62efac896b152dad4506114270b7d308631a7e6fa9b12f",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:78e0ce2278da34671fcd3185bd85be5d4e425b1139c37c17c679f3616fc2142d"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:b21723052504114320abae03d2f1d9bbdd9d80766c32545b4feb37b1cc53453f"
       },
       "plan-contradiction-repair": {
         "caseRevision": 3,
         "caseDigest": "sha256:553fe8a223e603829cb4f8fe6356a6c931a5a88391598b43a775b1b6215521f5",
         "promptRevision": 2,
         "promptDigest": "sha256:31cdbd17a24d977f680633a71a0b911cf028b7df331c0df3a99e685ef701d5e6",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:513177723e4129ac70946df6c5011f9e579e658759c5bbfe72f5ee1532e57089"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:8b788c919985348c00cf1486414a8fe43286c800b25036a7c821fb04569cd53b"
       },
       "builder-multifile-repair": {
         "caseRevision": 1,
         "caseDigest": "sha256:3a1b74b06e475e82f81bb1a2173b862805a1fbbfac802b218b236615f4146198",
         "promptRevision": 1,
         "promptDigest": "sha256:fec8bdda4db2be2e6082343ffcba9251f40a3cabb204c429a03b3365683648a6",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:4764422c6a19ad039ea15eb900d62618f1c8fea44d5acad845ad2307adc5e8dd"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:39fc9a09266cb4c9d82a6790cb5ad85602b0f2420422f0a3275cad178a6cf4d2"
       },
       "builder-validation-feedback-repair": {
         "caseRevision": 1,
         "caseDigest": "sha256:afdfe409ed8a140a694a57aa25276902be509f265348c2137347b2c722677310",
         "promptRevision": 1,
         "promptDigest": "sha256:ccdc10df5c54d7ca5a9f6228ad57a933cf69229e9770400c4a9d2a282307e7ee",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:bd40d248e30d51fa23636a4fd63f728c08103b381d6ada886eaefc9cb4af793e"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:18081bd8ad27813f4cae973a1fad84838658080cd6b2d53aa9fa6e3157885037"
       },
       "review-false-positive-control": {
         "caseRevision": 1,
         "caseDigest": "sha256:b5cd57147229ceb02685ecfd114d6c482a598ffcf0ed630781295258149829ea",
         "promptRevision": 1,
         "promptDigest": "sha256:78a5d75773feda0cd0509160e436a07fae6a930c595d82b3bad04fde91abdbf6",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:0d09f5e973d08140207eb767adb315ef683a04009fc24e9891bbea6bbdd9ae87"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:f296d23ec6558a105d697be61dc7a9b0f7e7b9a336a82f479d60ed5af29c8535"
       },
       "review-cross-file-invariant": {
         "caseRevision": 1,
         "caseDigest": "sha256:c2c8cb23c693d0541b9aa2b2be55064f5a7e5a54e30338a8825d9fc0095f8303",
         "promptRevision": 1,
         "promptDigest": "sha256:df191d1c381c98c26cdf944faa8891d35b1d3f29ff06feeea8ef74f6a57a4e21",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:f85e5b695cc3cf4880a6b61dfb25ac1646269bf328b6c981992bd90ce193757e"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:b6b4299662c9a95a40d9b934b19b3f2009eabbca19501431a60ab8e7a100493f"
       },
       "review-validation-claims": {
         "caseRevision": 1,
         "caseDigest": "sha256:4585cad36efe1e6d24a67e09cb5de2787cf294d417b1f7e8da30c8598dd340bc",
         "promptRevision": 1,
         "promptDigest": "sha256:80c7a8ae36db883451024be8f10cd1852656626cdcbc7310767efdfab4e616f1",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:a5beeef60525cdae4787a7ccebb283f5afc8fdd9f0fd74284a2460f802873cad"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:b47d0362ef10935c32cad086602e25a050a0dd35be4d373dcad8dc659dfa2ed4"
       },
       "security-auth-boundary": {
         "caseRevision": 1,
         "caseDigest": "sha256:a0a79e26334af26b90404b29561165652a4870e5ded5db27d6dd7210405deb56",
         "promptRevision": 1,
         "promptDigest": "sha256:2f001d0339751cf7bcf27807e89c0d818344d135c8ed7c38044a6f2ce0da708c",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:bb7b12cd0142a8c91655fb9c904c8a13f52265b70cf51e5396f0b3da0772d1d1"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:5275e4c7f03ab680a30fec52b60a46268d08596e6de11032778ef595be23d471"
       },
       "security-release-integrity": {
         "caseRevision": 1,
         "caseDigest": "sha256:940b211aec55489683597db3749811a34025e97b8319f4af4aa0cc0e810417fb",
         "promptRevision": 1,
         "promptDigest": "sha256:d210bbdb7e1b015c163e7ea3afeafc0439b25161f8f112661988fcca8cbe5ffa",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:484aee273e0ad7caeca8a68b4fc24e78c9306afcd68399216f9b616c1d28e9af"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:2f9a738b09bd9ea4b917ecb5b7d5a403052762a249c919be00a87ee7692f5a0e"
       },
       "research-claim-source-map": {
         "caseRevision": 1,
         "caseDigest": "sha256:8a91fb1cfff6fc0607e26f5af9aa1e69fd08c0699de75ec9981885bd3495f5d6",
         "promptRevision": 1,
         "promptDigest": "sha256:5d215c6c908d15141897e9b03afca21546fc3f8a674869f91c6f3611411fa3c3",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:1074082522b0780820904b8b177d00e373c44e6ceaf39d4656fc555c4960d4db"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:a1fece708a4ce7d734a82041b4ed6802c3c6c9ee94515c173119a32d20716a4b"
       },
       "research-conflicting-evidence": {
         "caseRevision": 1,
         "caseDigest": "sha256:d616e2d0dbf04fc47ef7f036bd7a0fd37bce3205b405cf330e0d31f1b47c1cc9",
         "promptRevision": 1,
         "promptDigest": "sha256:7010bbec72092c85c33ff04d4b45f8a1881482dd49a3a2334afad646eaf9bea9",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:7980aee53eff2a0cc04b417744ba2f9846372f68ca3d3164e7822fe6d7c06fc4"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:0f1e463af23ca1ca4eeaf34276d604987752d61cacfa79e5864f8817e6533f52"
       },
       "editorial-member-update": {
         "caseRevision": 2,
         "caseDigest": "sha256:c12a56c68702105d6ba07c3745dd14f8d668611f7264c49e2233954d64f378b2",
         "promptRevision": 1,
         "promptDigest": "sha256:987922ced4995abd1d5884982a0e4057d4ad5a427eaff96bef30e4d9556c8976",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:40c3f2d36ad818b00ff86b3478676bb718e67fa5535423f637f049f6ea97c801"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:7a2a4d1cc443c7ed902ee709379bae965623a3491d6b8996df026e3116d1a240"
       },
       "editorial-release-note": {
         "caseRevision": 2,
         "caseDigest": "sha256:2bbcf4d733a3d72d6f916bc8d3ef0265de24b23a7b2e03bd50210a8d06bcc241",
         "promptRevision": 1,
         "promptDigest": "sha256:013d8654e4ba9a5c31b6f9ed2959ad1ceac3241001d10c37472543638c55483d",
-        "scorerRevision": 2,
-        "scorerDigest": "sha256:dd8281012a1ccf928736bb8decff3081b5c0fcc4cb6b27fadca3d0348111ee64"
+        "scorerRevision": 3,
+        "scorerDigest": "sha256:3fe05a12d4628985a067323426de5e068571c389657db8d55bb944dc92484bef"
       }
     }
   }

@@ -34,7 +34,7 @@ score_fixture() {
 
 assert test -x "$RUNNER"
 assert jq -e '
-  .schemaVersion == 2 and .suiteId == "depot-role-v2" and .suiteRevision == 1
+  .schemaVersion == 2 and .suiteId == "depot-role-v2" and .suiteRevision == 2
   and .behavioralContract.revision == 1
   and .behavioralContract.digest == "sha256:3ecea8dc49c02a8a8ac2a6e7ede9993fb6609f7520d5438ab8bf0cf9170ba32a"
   and .measurementPolicy.liveProviderRequiredForFixtureValidation == false
@@ -120,6 +120,37 @@ while IFS= read -r case_id; do
   fi
 done < <(jq -r '.cases[].id' "$SUITE")
 
+# Regression evidence, not a fresh model result: exclusion language may mention
+# forbidden scope without selecting it. Scope is scored from the closed fields.
+jq --arg id assembly-next-chunk '.cases[] | select(.id == $id) | .expected' "$SUITE" > "$TMP/expected-assembly.json"
+jq '.rejectedComplexity = ["...exclude Issue #86 Floor observation schemas."]' \
+  "$TMP/expected-assembly.json" > "$TMP/historical-exclusion.json"
+score_fixture assembly-next-chunk "$TMP/historical-exclusion.json" "$TMP/historical-exclusion"
+assert jq -e '.overallSuccess and .semanticPassed and (.benchmarkFault | not)' \
+  "$TMP/historical-exclusion/result.json"
+
+jq '.nextChunk = "issue-86-floor-observation-schemas"' \
+  "$TMP/expected-assembly.json" > "$TMP/selected-unsupported.json"
+score_fixture assembly-next-chunk "$TMP/selected-unsupported.json" "$TMP/selected-unsupported"
+assert jq -e '(.overallSuccess | not) and (.semanticPassed | not) and (.benchmarkFault | not)' \
+  "$TMP/selected-unsupported/result.json"
+
+jq '.nextChunk = "issue-86-floor-observation-schemas" | .rejectedScope += ["issue-86-floor-observation-schemas"]' \
+  "$TMP/expected-assembly.json" > "$TMP/contradictory-scope.json"
+score_fixture assembly-next-chunk "$TMP/contradictory-scope.json" "$TMP/contradictory-scope"
+assert jq -e '(.overallSuccess | not) and any(.assertions[]; .id == "assembly.scope-consistency" and (.passed | not))' \
+  "$TMP/contradictory-scope/result.json"
+
+jq 'del(.rejectedScope)' "$TMP/expected-assembly.json" > "$TMP/incomplete-scope.json"
+score_fixture assembly-next-chunk "$TMP/incomplete-scope.json" "$TMP/incomplete-scope"
+assert jq -e '(.overallSuccess | not) and (.mandatoryPassed | not) and (.benchmarkFault | not)' \
+  "$TMP/incomplete-scope/result.json"
+
+printf '%s\n' '{malformed' > "$TMP/malformed-scope.json"
+score_fixture assembly-next-chunk "$TMP/malformed-scope.json" "$TMP/malformed-scope"
+assert jq -e '(.overallSuccess | not) and (.normalizedParse.passed | not) and (.benchmarkFault | not)' \
+  "$TMP/malformed-scope/result.json"
+
 # Documented judgment alternatives pass without hidden labels or exact wording.
 while IFS=$'\t' read -r case_id alternative_count; do
   index=0
@@ -135,7 +166,8 @@ done < <(jq -r '.cases[] | [.id, (.semanticAlternatives | length)] | @tsv' "$SUI
 assert jq -e '
   .cases[] | select(.id == "assembly-next-chunk")
   | (.semanticAlternatives | length) > 0
-  and (.prompt | contains("no exact nextChunk label, executor label, or capability wording is required"))
+  and (.prompt | contains("RejectedScope is the exhaustive list of rejected scope IDs"))
+  and (.revision == 3 and .promptRevision == 3)
 ' "$SUITE"
 assert jq -e '
   .cases[] | select(.id == "architect-routing-tradeoff")

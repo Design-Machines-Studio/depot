@@ -45,6 +45,12 @@ strict and normalized parse outcomes, requested and served identity,
 endpoint-provider provenance, fallback proof, duration and reported usage,
 deterministic assertions, validation, and stage-attributed failure evidence.
 
+The `assembly-next-chunk` case uses a closed `nextChunk` scope ID and an
+explicit `rejectedScope` list. The scorer checks selected scope and rejected
+scope independently, then rejects a scope listed in both fields. Exclusion
+language in `rejectedComplexity` is not scanned for forbidden words; free-text
+negation is not treated as a selected-scope signal.
+
 Comparable evidence must have matching suite, case, prompt, scorer, normalizer,
 and behavioral-contract revisions and digests; an eligible role/capability
 binding; a matching receipt; successful transport; confirmed served identity;

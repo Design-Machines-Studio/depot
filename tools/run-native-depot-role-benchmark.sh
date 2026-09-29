@@ -326,18 +326,14 @@ else
               or ($identity.identity != null
                 and (($attempts | index($identity.identity)) == null
                   or ($attempts | last) != $identity.identity))))) as $contradictory
-      | (($values | length) == 0 and ($attempts | length) == 0
-          and $identity.identity != null
-          and (([$requested] + ($candidate.servedIdentities // [])) | index($identity.identity)) != null) as $direct_identity
       | {used:(if $contradictory then null
           elif ($values | length) == 1 then $values[0]
-          elif $direct_identity then false else null end),
+          else null end),
          provenance:(if $contradictory then "contradictory-response-fields"
            elif ($values | length) == 1 then "response"
-           elif $direct_identity then "response-model-match" else "not_available" end),
+           else "not_available" end),
          ambiguous:$contradictory,reportedValues:$values,
-         attemptedModel:(if $direct_identity then $identity.identity else ($attempts | last // null) end),
-         attemptedModels:(if $direct_identity then [$identity.identity] else $attempts end)}
+         attemptedModel:($attempts | last // null),attemptedModels:$attempts}
     ' "$RAW")"
     provider_json="$(jq -c --argjson identity "$identity_json" '
       . as $root
@@ -361,9 +357,9 @@ end="$(date +%s)"
 duration="$((end-start))"
 outcome=success
 failure_kind=null
-if [ "$status" -ne 0 ]; then outcome=failed; failure_kind=cli-nonzero-status
-elif [ "$telemetry_valid" != true ]; then outcome=failed; failure_kind=malformed-telemetry
-elif [ "$output_present" != true ]; then outcome=failed; failure_kind=missing-output
+if [ "$status" -ne 0 ]; then outcome=failed; failure_kind=native-cli-runner-exit
+elif [ "$telemetry_valid" != true ]; then outcome=failed; failure_kind=native-cli-telemetry-unavailable
+elif [ "$output_present" != true ]; then outcome=failed; failure_kind=native-cli-output-missing
 fi
 
 response_model="$(jq -r '.identity // empty' <<<"$identity_json")"
