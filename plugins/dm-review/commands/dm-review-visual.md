@@ -41,13 +41,29 @@ This command always requires rendered evidence. Run the shared readiness gate
 with `--visual-required true`; if no target can be selected, return one `REVIEW
 INCOMPLETE` coverage result and one next action.
 
-Materialize the validated standalone review request, including its explicit/defaulted `workflowClass`, at `<exact-run-root>/review/request.json`; maintain its cumulative ordered redacted receipts at `<exact-run-root>/review/authoritative-receipts.json`. Resolve `$WORKFLOW_KERNEL` -- the workflow-kernel launcher script -- once per run, following the fail-closed resolution contract in the workflow-kernel plugin's `references/runtime-resolution.md`. Initialize the run under `.workflow-kernel/runs/<run-id>`; the kernel derives and verifies the immutable repository scope from the state directory, and no caller-selected lease root is accepted. Before authoritative browser actions, seal the independent prediction:
+Resolve `$WORKFLOW_KERNEL` once per run under the fail-closed contract in the
+workflow-kernel plugin's `references/runtime-resolution.md`. Load
+`ui-case-selection.md` first and settle the exact required browser case IDs.
+Materialize the validated standalone request, including explicit/defaulted
+`workflowClass`, selected lane IDs, exact browser cases, and its cumulative
+ordered receipts. Initialize the run under `.workflow-kernel/runs/<run-id>`;
+the kernel derives its immutable repository scope and rejects a
+caller-selected lease root. Before any reviewer or browser dispatch, bind the
+request's repository identity and HEAD:
+
+```text
+"$WORKFLOW_KERNEL" bind-review-source --run-root <exact-run-root> --repository-root <reviewed-repository> --request <exact-run-root>/review/request.json --required-browser-case <case-id> ...
+```
+
+Repeat the returned source and case bindings in the authoritative request,
+coverage row, and browser receipts. Then seal the independent prediction before
+authoritative browser actions:
 
 ```text
 "$WORKFLOW_KERNEL" bind-prediction --type review --request <exact-run-root>/review/request.json --prediction-receipts <exact-run-root>/review/independent-prediction-receipts.json --state-dir .workflow-kernel/runs/<run-id>
 ```
 
-Load `ui-case-selection.md`. By default select affected routes, prototype cases,
+By default select affected routes, prototype cases,
 acceptance cases, directly affected dimensions, and at most one justified
 baseline. `--all` selects the complete repository-declared matrix. Use the
 project verification profile from configuration and `tests/ux/` task
@@ -72,4 +88,4 @@ if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrou
 
 The `emit-cost-summary` command is one transaction: it owns the artifact path, clears any stale file, writes a schema-bound `run-cost-summary.json` beside that run's `authoritative-receipts.json`, and appends exactly one receipt line -- the artifact path, or `run-cost-summary: skipped (<reason>)` on any internal failure. It is observation-only: it exits 0 for every measurement outcome, never gates or alters a review, lane, or phase outcome, and its absence never fails one. Exit 6 (receipt write failed after acceptance) appends `skipped (receipt-write-failed)` through the status-aware `||` fallback; exit 2 is an invalid invocation and propagates; any other non-zero status appends `skipped (kernel-unresolvable)`, and a failing final append keeps its own status visible. A refused symlinked receipt path still exits 0 and reports on stderr alone -- a non-zero exit would append through the symlink just refused. Receipt paths are fixed per directory, so concurrent runs sharing one directory overwrite each other: use the invocation's exact-owned root or serialize callers that intentionally share a documented deliverable directory. Pass a coherent installed bundle's matrix asset as `--matrix "$MODEL_MATRIX_ASSET"`; an unreadable or invalid matrix emits one stderr line, skips imputation, and never fails the emission. Populate events with `record-attempt` as each lane settles -- a standalone `--append-to` translator double-counts the attempt, and `lanes: 0` after a run that executed lanes means this boundary is not wired. Full flags: `cli-measurement-commands.md`; otherwise the flags named here are the complete required set.
 
-`bind-prediction` atomically seals the independent source and translated context as `review-shadow-prediction.json`; later authoritative observation requires it and never creates or overwrites it. Keep the prediction source and bound artifact through comparison, then preserve only compact durable evidence. Missing or source-reused prediction evidence fails closed and never converts the visual result. The repository-lifetime scope file is never auto-deleted. After fresh exact-scope Docker inventory proves zero exact-run objects, success removes terminal state and disposable roots; failure/interruption may retain one bounded diagnostic root with the four required terminal fields.
+`bind-prediction` atomically seals the independent source and translated context as `review-shadow-prediction.json`; later authoritative observation requires it and never creates or overwrites it. Keep the prediction source and bound artifact through comparison. Before removing browser artifacts, outputs, or the source worktree, pass the completed verdict/findings report via `--report` to `preserve-review-evidence`; require complete selected-case coverage, all referenced browser artifacts, and valid retained report links. Missing cost, contribution, shadow-comparison, or observation-index output is unavailable diagnostics, not a browser gap. The repository-lifetime scope file is never auto-deleted. After fresh exact-scope Docker inventory proves zero exact-run objects, update the retained report with the cleanup inventory, then finish successful review roots with `owned-run-finish --outcome succeeded --retain-diagnostics`; failure/interruption may retain one bounded diagnostic root with the exact path, reason, contents, and cleanup command. If preservation fails, leave the source root intact and report its exact path.

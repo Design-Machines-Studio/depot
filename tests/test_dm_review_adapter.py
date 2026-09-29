@@ -8,6 +8,7 @@ from workflow_kernel.model import HostCapabilities, WorkflowClass
 from workflow_kernel.dm_review_adapter import (
     ReviewRequest, export_finding_contributions,
     require_complete_contribution_coverage, translate_review,
+    validate_optional_contribution_coverage,
     translate_review_receipts,
 )
 from workflow_kernel._translation import canonical_finding_identity
@@ -537,8 +538,12 @@ class DmReviewAdapterTests(unittest.TestCase):
             "finding_contribution_coverage",
         ])
         require_complete_contribution_coverage(zero)
+        self.assertTrue(validate_optional_contribution_coverage(zero))
+        self.assertFalse(validate_optional_contribution_coverage(()))
         with self.assertRaisesRegex(ValueError, "missing finding contribution coverage"):
             require_complete_contribution_coverage(())
+        with self.assertRaisesRegex(ValueError, "missing finding contribution coverage"):
+            validate_optional_contribution_coverage((zero[0] | {"stage": "finding_contribution"},))
         incomplete = copy.deepcopy(zero)
         incomplete[0]["coverage_complete"] = False
         with self.assertRaisesRegex(ValueError, "incomplete finding contribution coverage"):

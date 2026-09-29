@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import re
 from dataclasses import dataclass
 from typing import Iterable, Mapping, Optional, Tuple
 
@@ -99,6 +100,9 @@ class ReviewRequest:
     workflow_class_defaulted: bool = False
     decision_profile: Optional[Mapping[str, str]] = None
     decision_profile_defaulted: bool = True
+    source_repository: Optional[str] = None
+    source_head: Optional[str] = None
+    required_browser_cases: Tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         required_text(self.run_id, "run id")
@@ -114,6 +118,29 @@ class ReviewRequest:
             raise ValueError("invalid workflow class provenance")
         if type(self.decision_profile_defaulted) is not bool:
             raise ValueError("invalid decision profile provenance")
+        if self.source_repository is not None:
+            required_text(self.source_repository, "source repository")
+            if (
+                re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._/-]{0,254}", self.source_repository) is None
+                or ".." in self.source_repository.split("/")
+            ):
+                raise ValueError("invalid source repository")
+        if self.source_head is not None and re.fullmatch(
+            r"(?:[0-9a-f]{40}|[0-9a-f]{64})", self.source_head,
+        ) is None:
+            raise ValueError("invalid source head")
+        if (self.source_repository is None) != (self.source_head is None):
+            raise ValueError("incomplete review source identity")
+        if (
+            not isinstance(self.required_browser_cases, (list, tuple))
+            or any(
+                type(value) is not str
+                or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._:-]{0,127}", value) is None
+                for value in self.required_browser_cases
+            )
+            or len(self.required_browser_cases) != len(set(self.required_browser_cases))
+        ):
+            raise ValueError("invalid required browser cases")
         if self.decision_profile is None:
             if not self.decision_profile_defaulted:
                 raise ValueError("invalid decision profile provenance")
@@ -127,6 +154,7 @@ class ReviewRequest:
         except (TypeError, ValueError):
             raise ValueError("invalid workflow class") from None
         object.__setattr__(self, "required_lanes", tuple(self.required_lanes))
+        object.__setattr__(self, "required_browser_cases", tuple(self.required_browser_cases))
         object.__setattr__(self, "workflow_class", workflow_class)
 
     @classmethod
@@ -162,6 +190,9 @@ class ReviewRequest:
             value, "decision_profile_defaulted", "decisionProfileDefaulted",
             default=None,
         )
+        raw_browser_cases = value.get("required_browser_cases", ())
+        if type(raw_browser_cases) not in {list, tuple}:
+            raise ValueError("invalid required browser cases")
         if raw_profile_defaulted is None:
             profile_defaulted = raw_profile is None
         else:
@@ -179,10 +210,13 @@ class ReviewRequest:
             defaulted,
             raw_profile,
             profile_defaulted,
+            value.get("source_repository"),
+            value.get("source_head"),
+            tuple(raw_browser_cases),
         )
 
     def to_dict(self) -> dict:
-        return {
+        result = {
             "run_id": self.run_id, "required_lanes": list(self.required_lanes),
             "mode": self.mode, "workflow_class": self.workflow_class.value,
             "execution_mode": self.execution_mode,
@@ -193,6 +227,12 @@ class ReviewRequest:
             ),
             "decision_profile_defaulted": self.decision_profile_defaulted,
         }
+        if self.source_repository is not None:
+            result["source_repository"] = self.source_repository
+            result["source_head"] = self.source_head
+        if self.required_browser_cases:
+            result["required_browser_cases"] = list(self.required_browser_cases)
+        return result
 
 
 def translate_review(request: ReviewRequest, profile: HostCapabilities) -> RunSpec:
@@ -570,6 +610,25 @@ def require_complete_contribution_coverage(
         or coverage.get("contribution_count") != count
     ):
         raise ValueError("incomplete finding contribution coverage")
+
+
+def validate_optional_contribution_coverage(
+    receipts: Iterable[Mapping[str, object]],
+) -> bool:
+    """Validate contribution accounting only when the optional export exists."""
+    values = tuple(receipts)
+    has_contributions = any(
+        type(value) is dict and value.get("stage") == "finding_contribution"
+        for value in values
+    )
+    has_coverage = any(
+        type(value) is dict and value.get("stage") == "finding_contribution_coverage"
+        for value in values
+    )
+    if not has_contributions and not has_coverage:
+        return False
+    require_complete_contribution_coverage(values)
+    return True
 
 
 def require_browser_recovery_profile_binding(

@@ -99,12 +99,23 @@ execution, and interruption:
    before its branch; retain dirty/unreadable work only as the one diagnostic
    root after capturing why it cannot be removed safely.
 3. Preserve the requested deliverable and compact durable repository/GitHub
-   evidence. Raw Pipeline/review output, temporary clones, and caches remain
-   disposable.
-4. Finish the filesystem root.
+   evidence. Review owners additionally validate the selected lane/case scope
+   and seal the existing request, authoritative coverage receipts, structured
+   lane outputs, literal lane receipts, and private router receipts before
+   removing a worktree or temporary output that contains them. They also pass
+   the completed verdict/findings report to `preserve-review-evidence`; the
+   command checks local report links against the sealed copy. After exact
+   resource cleanup, the owner updates that retained report with the actual
+   cleanup inventory before successful finish. This uses the review-specific
+   command and existing bounded diagnostic directory; it does not retain
+   free-form transcripts.
+4. Finish the filesystem root only after evidence preservation succeeds. A
+   review-owned successful root must use `--retain-diagnostics`; the kernel
+   revalidates the sealed required review files and refuses premature success
+   cleanup. Other successful workflows keep the default remove behavior.
 
-Success, cancellation with no useful diagnostic, and review abort before any
-execution remove the complete exact-owned root:
+Ordinary success, cancellation with no useful diagnostic, and review abort
+before any execution remove the complete exact-owned root:
 
 ```sh
 "$WORKFLOW_KERNEL" owned-run-finish \
@@ -152,3 +163,10 @@ workflow, run ID, parent identity, and root identity before reuse. A retry may
 add a new exact child. Cleanup tolerates a recorded child that has already
 disappeared and removes the remaining root exactly once. `owned-run-finish`
 against an already-absent root reports `missing` and performs no deletion.
+For review workflows, `request.json` binds the canonical repository, HEAD,
+required lanes, and required browser cases. Retry closeout only from the same
+owned run and matching evidence scope. A retained-root finish is idempotent,
+revalidates required evidence for a successful review result, and returns its
+original cleanup receipt; it never appends another contribution or reruns a
+settled lane. A closeout retry after failure reads the exact retained copy and
+may add only matching source evidence or append-only authoritative receipts.

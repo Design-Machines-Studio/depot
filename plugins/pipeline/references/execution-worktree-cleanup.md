@@ -48,6 +48,9 @@ from the durable registry. Re-run the per-chunk decision table for each record
 in creation order. A recorded path that has already disappeared is `missing`
 and needs no command; its branch still receives an independent exact proof.
 
+For review-evidence cleanup, Pipeline follows the single-owner
+`dm-review/review-closeout-contract.md` before removing a source worktree.
+
 Do not enumerate `.worktrees/pipeline/**`, match the feature slug, infer refs
 from a prefix, or run `git worktree prune`. Another concurrent run's clean
 worktree is foreign even when it targets the same feature branch. Feature-branch

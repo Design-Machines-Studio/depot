@@ -35,6 +35,8 @@ Reuse: <relevant valid final-head or unaffected evidence>
 
 ### Complete evidence
 `Full report: .claude/ux-review/report.md`.
+`Retained report: <exact-owned-review-evidence-path>/report.md` after the
+terminal owner seals the required evidence.
 `Observation index: .claude/ux-review/observation-index-<run-id>.json` when accepted.
 <If findings exist: `Open findings: N -- <evidence pointer>.`>
 ```
@@ -52,15 +54,17 @@ state `N additional findings` with the exact remaining count, and point to the
 complete report. Never imply that omitted findings do not exist. Chat keeps P3
 compact, but it follows the same fix queue and convergence path as P1/P2.
 
-Do not repeat private routing tables, agent transcripts, synthesis ledgers, cleanup
-tables, or raw reports in the handoff. Write them to the established durable
-artifacts `.claude/ux-review/report.md` and, when accepted, the bounded
-`.claude/ux-review/observation-index-<run-id>.json` companion before delivery. Coverage gaps, blocked
-browser evidence, cleanup truth, finding IDs, and
-exact participant identity remains only in content-free private router receipts.
+Do not repeat private tables, transcripts, or raw reports in the handoff. Link
+the human report at `.claude/ux-review/report.md` and retained `report.md`.
+Keep exact participant identity in private router receipts.
 
-Clean review: use `CLEAN` only when every required lane completed and no
-retained P1/P2/P3 finding remains.
+Clean review: use `CLEAN` only with complete required lane/browser evidence, validated
+outputs and receipts, and no retained finding. Missing contribution, cost,
+shadow, or observation exports are unavailable diagnostics only. Missing
+required source evidence means `REVIEW INCOMPLETE`.
+
+Emit one verdict in both reports; never pair an informal clean status with
+another verdict.
 
 Review with actionable findings: use `APPROVE WITH FIXES` or `BLOCKS MERGE` and
 keep every retained finding in the repair queue.
@@ -199,9 +203,11 @@ receipts. Do not copy reviewer output into this report.
 | code-simplicity-reviewer | simplicity | `review-deep` / reviewer-a | Done | 2 | `raw/simplicity.md#finding-1` | `contribution-inputs/raw-lane-outputs/<digest>.json` | `sha256:<digest>` |
 | security-auditor | security | `security-review` / reviewer-b | Partial | 0 | `raw/security.md` | `contribution-inputs/raw-lane-outputs/<digest>.json` | `sha256:<digest>` |
 
-Use public lane receipt values, references, `raw_output_ref`, and
-`raw_output_digest`. Incomplete required lanes stay visible here and in
-Coverage Gaps; they never support clean. This index creates no transcript.
+Use lane receipt values, references, `raw_output_ref`, and `raw_output_digest`.
+Link to retained `review/raw-lane-outputs.json`; these refs must not depend on
+optional contribution storage. Incomplete required lanes stay visible here
+and in Coverage Gaps; they never support clean. This index creates no
+transcript.
 
 ---
 
