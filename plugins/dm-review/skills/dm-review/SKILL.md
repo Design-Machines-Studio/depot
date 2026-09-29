@@ -54,11 +54,14 @@ The review skill's routing contract governs OpenRouter availability, non-interac
 
 The review skill, selected lanes, findings, coverage receipt, merge recommendation, and cleanup report remain authoritative. Resolve `$WORKFLOW_KERNEL` once per run per the fail-closed contract in the workflow-kernel plugin's `references/runtime-resolution.md`, then load its `exact-owned-cleanup.md`. Materialize the validated request at `<exact-run-root>/review/request.json` and the cumulative ordered redacted authoritative receipt array at `<exact-run-root>/review/authoritative-receipts.json`. Initialize the run under `.workflow-kernel/runs/<run-id>` and one exact-owned disposable root; caller-selected lease roots and symlink, cross-repository, scope-metadata, or run-directory mismatches fail closed. Produce and seal independent prediction receipts before corresponding authoritative actions:
 
+Before dispatch, bind the request to the exact repository/HEAD and selected
+lane/browser scope as specified by the review skill.
+
 ```text
 "$WORKFLOW_KERNEL" bind-prediction --type review --request <exact-run-root>/review/request.json --prediction-receipts <exact-run-root>/review/independent-prediction-receipts.json --state-dir .workflow-kernel/runs/<run-id>
 ```
 
-After the consolidated review, coverage receipt, and terminal cleanup receipts exist, run exactly:
+After the consolidated review, required coverage receipt, and terminal cleanup receipts exist, run exactly:
 
 ```text
 "$WORKFLOW_KERNEL" observe-review --request <exact-run-root>/review/request.json --receipts <exact-run-root>/review/authoritative-receipts.json --state-dir .workflow-kernel/runs/<run-id>
@@ -102,6 +105,10 @@ run-scoped index beside `report.md` while removing its private input with the
 exact-owned root. Failure cannot alter findings, coverage, merge recommendation,
 cleanup authority, or terminal model reporting.
 
-Inline Python source is forbidden. `bind-prediction` atomically seals the pre-action source, translated events, event digest, and request context, appending its exact authority to the canonical lifecycle ledger before `run.started`; observation and direct comparison require that binding plus the matching artifact and never create or mutate either. Keep the source input, request, authoritative receipts, `review-shadow-observation.json`, and `review-shadow-prediction.json` through comparison; delete raw prediction inputs afterward while preserving the compact report. Missing prediction evidence fails closed and preserves the review result; a parity gap cannot convert `CLEAN`, `APPROVE WITH FIXES`, `BLOCKS MERGE`, or `REVIEW INCOMPLETE` -- it is proposal-only evidence. Never auto-delete `.workflow-kernel/repository-scope.json`; after fresh exact-scope Docker inventory proves zero exact-run objects, success removes the terminal run state and disposable root. Failure/interruption may retain only one bounded diagnostic root and must report its exact path, reason, contents, and cleanup command.
+Inline Python source is forbidden. `bind-prediction` atomically seals the pre-action source, translated events, event digest, and request context, appending its exact authority to the canonical lifecycle ledger before `run.started`; observation and direct comparison require that binding plus the matching artifact and never create or mutate either. Keep the source input, request, authoritative receipts, `review-shadow-observation.json`, and `review-shadow-prediction.json` through comparison; delete raw prediction inputs afterward while preserving the compact report. Missing prediction evidence fails closed and preserves the review result; a parity gap cannot convert `CLEAN`, `APPROVE WITH FIXES`, `BLOCKS MERGE`, or `REVIEW INCOMPLETE` -- it is proposal-only evidence. Never auto-delete `.workflow-kernel/repository-scope.json`.
+
+Before cleanup, the exact-run-root creator loads and follows
+`review-closeout-contract.md`. Nested reviews return evidence to that owner;
+they do not finalize a shared root.
 
 Translate a missing explicit `workflowClass` as `feature` with `workflow_class_defaulted=true`; never infer it from findings, diff kinds, or severity. Preserve requested/attempted/implemented-by/fallback/reason evidence for every provider lane.

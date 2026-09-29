@@ -82,5 +82,6 @@ as optional P3 debt.
 6. Output the unified review report with the standard merge recommendation,
    followed by this invocation's one terminal operator report
 
-Every pre-execution abort and terminal outcome uses the review skill's
-exact-owned cleanup sequence; quick mode does not get a weaker cleanup path.
+Every outcome uses the review skill's exact-owned sequence. At closeout, load
+`review-closeout-contract.md`; selected-lane and browser evidence is required,
+while optional exports cannot change a supported verdict.

@@ -1283,21 +1283,18 @@ def command_reconcile_legacy_browser(args):
     return 0
 
 
-def command_observe_review(args):
+def _validated_existing_review_contributions(
+    request, receipts, state_dir, expected_references=None,
+):
     from .dm_review_adapter import (
         export_finding_contributions,
-        ReviewRequest, require_browser_recovery_profile_binding,
         require_complete_contribution_coverage,
-        require_secret_safe_contribution_inputs,
-        translate_review, translate_review_receipts,
+        validate_optional_contribution_coverage,
+        translate_review_receipts,
     )
 
-    request = ReviewRequest.from_mapping(_load_json(args.request))
-    receipts = _load_json(args.receipts, strict=True)
-    if not isinstance(receipts, list):
-        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
-    # Validate every receipt field, including the sealed references, before
-    # using any receipt-supplied value as a filesystem path.
+    if not validate_optional_contribution_coverage(receipts):
+        return None
     events = translate_review_receipts(receipts)
     require_complete_contribution_coverage(receipts)
     coverage_index = next(
@@ -1315,22 +1312,42 @@ def command_observe_review(args):
         "lane_receipts": coverage["lane_receipts_ref"],
         "raw_lane_outputs": coverage["raw_lane_outputs_ref"],
     }
-    sealed = _load_contribution_artifacts(args.state_dir, references)
+    if expected_references is not None and references != expected_references:
+        raise ValueError("existing contribution export belongs to different source evidence")
+    sealed = _load_contribution_artifacts(state_dir, references)
+    from .dm_review_adapter import require_secret_safe_contribution_inputs
     require_secret_safe_contribution_inputs(*sealed.values())
     sealed_lane_outputs = {}
     for output in sealed["raw_lane_outputs"].get("outputs", ()):
         digest = _document_digest(output).removeprefix("sha256:")
         reference = "contribution-inputs/raw-lane-output-sha256-" + digest + ".json"
         sealed_lane_outputs[reference] = _load_contribution_artifacts(
-            args.state_dir, {"output": reference},
+            state_dir, {"output": reference},
         )["output"]
-    expected_receipts = export_finding_contributions(
+    expected = export_finding_contributions(
         request, sealed["decisions"], sealed["raw_findings"],
         sealed["lane_receipts"], sealed["raw_lane_outputs"],
         receipts[:first_contribution], references, sealed_lane_outputs,
     )
-    if tuple(receipts[:coverage_index + 1]) != expected_receipts:
+    if tuple(receipts[:coverage_index + 1]) != expected:
         raise ValueError("finding contribution coverage does not bind sealed inputs")
+    return tuple(receipts)
+
+
+def command_observe_review(args):
+    from .dm_review_adapter import (
+        ReviewRequest, require_browser_recovery_profile_binding,
+        translate_review, translate_review_receipts,
+    )
+
+    request = ReviewRequest.from_mapping(_load_json(args.request))
+    receipts = _load_json(args.receipts, strict=True)
+    if not isinstance(receipts, list):
+        raise InvalidSchemaError(ErrorMessage.INVALID_COMMAND_ARGUMENTS)
+    # Validate every receipt field, including the sealed references, before
+    # using any receipt-supplied value as a filesystem path.
+    events = translate_review_receipts(receipts)
+    _validated_existing_review_contributions(request, receipts, args.state_dir)
     spec = translate_review(request, _profile_from_receipts(receipts))
     _require_spec_receipt_context(spec, events)
     if any(receipt.get("stage") == "browser_recovery" for receipt in receipts):
@@ -1379,6 +1396,41 @@ def command_observe_review(args):
     return 0
 
 
+def command_preserve_review_evidence(args):
+    from .review_closeout import preserve_review_evidence
+
+    result = preserve_review_evidence(
+        run_root=args.run_root,
+        repository_root=args.repository_root,
+        request_path=args.request,
+        receipts_path=args.receipts,
+        lane_receipts_path=args.lane_receipts,
+        raw_lane_outputs_path=args.raw_lane_outputs,
+        raw_findings_path=args.raw_findings,
+        decisions_path=args.decisions,
+        private_router_directory=args.private_router_directory,
+        report_path=args.report,
+    )
+    _emit(result)
+    return 0 if result["status"] == "complete" else 3
+
+
+def command_bind_review_source(args):
+    from .review_closeout import bind_review_source
+
+    result = bind_review_source(
+        run_root=args.run_root,
+        repository_root=args.repository_root,
+        request_path=args.request,
+        required_browser_cases=(
+            tuple(args.required_browser_case)
+            if args.required_browser_case else None
+        ),
+    )
+    _emit(result)
+    return 0
+
+
 def command_export_review_contributions(args):
     from .dm_review_adapter import (
         ReviewRequest, export_finding_contributions,
@@ -1411,6 +1463,16 @@ def command_export_review_contributions(args):
         digest = _document_digest(document).removeprefix("sha256:")
         name = role + "-sha256-" + digest + ".json"
         references[key] = "contribution-inputs/" + name
+    existing = _validated_existing_review_contributions(
+        request, receipts, args.state_dir, references,
+    )
+    if existing is not None:
+        _write_json(args.output, list(existing))
+        _emit({
+            "exported": 0, "receipt_count": len(existing),
+            "output": str(Path(args.output)), "reused": True,
+        })
+        return 0
     exported = export_finding_contributions(
         request, decisions, raw_findings, lane_receipts, raw_lane_outputs,
         receipts, references,
@@ -4001,6 +4063,32 @@ def parser():
     observe_review.add_argument("--receipts", required=True)
     observe_review.add_argument("--state-dir", required=True)
     observe_review.set_defaults(handler=command_observe_review)
+
+    preserve_review = commands.add_parser(
+        "preserve-review-evidence",
+        help="validate required dm-review coverage and preserve exact run evidence",
+    )
+    preserve_review.add_argument("--run-root", required=True)
+    preserve_review.add_argument("--repository-root", required=True)
+    preserve_review.add_argument("--request", required=True)
+    preserve_review.add_argument("--receipts", required=True)
+    preserve_review.add_argument("--lane-receipts", required=True)
+    preserve_review.add_argument("--raw-lane-outputs", required=True)
+    preserve_review.add_argument("--raw-findings", required=True)
+    preserve_review.add_argument("--decisions", required=True)
+    preserve_review.add_argument("--private-router-directory")
+    preserve_review.add_argument("--report", required=True)
+    preserve_review.set_defaults(handler=command_preserve_review_evidence)
+
+    bind_review = commands.add_parser(
+        "bind-review-source",
+        help="bind an existing review request to the current repository, HEAD, and browser case set",
+    )
+    bind_review.add_argument("--run-root", required=True)
+    bind_review.add_argument("--repository-root", required=True)
+    bind_review.add_argument("--request", required=True)
+    bind_review.add_argument("--required-browser-case", action="append")
+    bind_review.set_defaults(handler=command_bind_review_source)
 
     export_contributions = commands.add_parser(
         "export-review-contributions",

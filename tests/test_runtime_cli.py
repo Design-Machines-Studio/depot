@@ -359,6 +359,20 @@ class RuntimeCliTests(unittest.TestCase):
                 len(list((state_dir / "contribution-inputs").glob("*.json"))), 5,
             )
 
+            repeated_output = root / "repeated-output.json"
+            repeated = self.run_cli(
+                "export-review-contributions", "--request", request,
+                "--decisions", decisions, "--raw-findings", raw_findings,
+                "--lane-receipts", lane_receipts,
+                "--raw-lane-outputs", raw_lane_outputs, "--receipts", output,
+                "--state-dir", state_dir, "--output", repeated_output,
+            )
+            self.assertEqual(repeated.returncode, 0, repeated.stderr)
+            self.assertEqual(
+                json.loads(repeated_output.read_text(encoding="utf-8")), exported,
+            )
+            self.assertEqual(json.loads(repeated.stdout)["exported"], 0)
+
             for name, raw in (
                 ("duplicate", '[{"sequence":0,"sequence":1}]'),
                 ("non-finite", '[{"sequence":NaN}]'),

@@ -429,15 +429,75 @@ class ExactOwnedRun:
             "retained", str(self.root), reason.strip(), contains.strip(), command,
         )
 
+    def _existing_retention(self) -> FinishReport:
+        metadata = _load_metadata(self.root)
+        if len(metadata["resources"]) != 1 or metadata["resources"][0]["kind"] != "diagnostic":
+            raise ValueError("invalid retained owned run")
+        cleanup_path = self.root / _CLEANUP
+        value = os.lstat(cleanup_path)
+        if not stat.S_ISREG(value.st_mode) or stat.S_ISLNK(value.st_mode) or value.st_nlink != 1:
+            raise ValueError("invalid retained owned run")
+        try:
+            lines = cleanup_path.read_text(encoding="utf-8").splitlines()
+        except (OSError, UnicodeError):
+            raise ValueError("invalid retained owned run") from None
+        command = "rm -rf -- " + shlex.quote(str(self.root))
+        if (
+            len(lines) != 4
+            or lines[0] != f"Retained diagnostic root: {self.root}"
+            or not lines[1].startswith("Reason: ")
+            or not lines[2].startswith("Contains: ")
+            or not lines[3].startswith("Cleanup: ")
+            or lines[3] != f"Cleanup: {command}"
+        ):
+            raise ValueError("invalid retained owned run")
+        match = re.fullmatch(
+            r"Contains: (.*) \([0-9]+ file\(s\), [0-9]+ byte\(s\)\)", lines[2],
+        )
+        if match is None:
+            raise ValueError("invalid retained owned run")
+        return FinishReport(
+            "retained", str(self.root), lines[1].removeprefix("Reason: "),
+            match.group(1), command,
+        )
+
     def finish(
         self, outcome: str, *, retain_diagnostics: bool = False,
         reason: str | None = None, contains: str | None = None,
     ) -> FinishReport:
         if outcome not in _OUTCOMES:
             raise ValueError("invalid owned run outcome")
-        if outcome == "succeeded" and retain_diagnostics:
-            raise ValueError("successful runs cannot retain diagnostics")
         with self._lock():
+            self._metadata = _load_metadata(self.root)
+            if os.path.lexists(self.root / _CLEANUP):
+                retained = self._existing_retention()
+                if outcome == "succeeded" and self.workflow in {
+                    "dm-review", "dm-review-loop", "pipeline", "pipeline-run",
+                }:
+                    from .review_closeout import has_preserved_review_evidence
+
+                    diagnostic = next((
+                        self.root / item["relative_path"]
+                        for item in self._metadata["resources"]
+                        if item["kind"] == "diagnostic"
+                    ), None)
+                    if diagnostic is None or not has_preserved_review_evidence(diagnostic):
+                        raise ValueError("retained review evidence is no longer valid")
+                return retained
+            if outcome == "succeeded" and self.workflow in {
+                "dm-review", "dm-review-loop", "pipeline", "pipeline-run",
+            }:
+                if not retain_diagnostics:
+                    raise ValueError("review evidence must be retained before successful cleanup")
+                from .review_closeout import has_preserved_review_evidence
+
+                diagnostic = next((
+                    self.root / item["relative_path"]
+                    for item in self._metadata["resources"]
+                    if item["kind"] == "diagnostic"
+                ), None)
+                if diagnostic is None or not has_preserved_review_evidence(diagnostic):
+                    raise ValueError("required review evidence is not durably validated")
             if retain_diagnostics:
                 return self._retain(reason or outcome, contains or "compact diagnostics")
             return self._remove_root()

@@ -798,8 +798,9 @@ selective_allowlist="$REPO_ROOT/plugins/dm-review/skills/review/references/selec
 require_text "$review_skill" "references/selective-lane-allowlist.md" "review receiver loads the allowlist contract only when the input is present"
 require_text "$selective_allowlist" "never relax this equality check to a subset check" "allowlist contract requires exact selected_full_set equality"
 require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.22.0"' "dm-review requires repository-project planning and strict registry validation"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.83.6"' "pipeline requires the current completion and host-adapter contract"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.24.0"' "dm-review requires review evidence closeout"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.24.0"' "pipeline requires review evidence closeout"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.84.0"' "pipeline requires the current completion and host-adapter contract"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"model-router": ">=0.9.0"' "dm-review requires review recommendation routing"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"model-router": ">=0.9.0"' "pipeline requires the current routing runtime"
 require_text "$review_skill" 'Implementation origin is not a coverage field or eligibility condition.' "dm-review makes implementation origin ineligible as a review filter"
@@ -1514,6 +1515,7 @@ printf "\nGroup 10: compact human output with durable evidence\n"
 voice_check="$REPO_ROOT/plugins/ghostwriter/commands/voice-check.md"
 voice_check_alias="$REPO_ROOT/plugins/ghostwriter/skills/voice-check/SKILL.md"
 review_output="$REPO_ROOT/plugins/dm-review/skills/review/references/output-format.md"
+review_closeout="$REPO_ROOT/plugins/dm-review/skills/review/references/review-closeout-contract.md"
 review_consolidator="$REPO_ROOT/plugins/dm-review/agents/workflow/review-consolidator.md"
 review_command="$REPO_ROOT/plugins/dm-review/commands/dm-review.md"
 review_alias="$REPO_ROOT/plugins/dm-review/skills/dm-review/SKILL.md"
@@ -1567,15 +1569,15 @@ require_text "$review_output" 'Raw output digest' \
   "dm-review evidence index includes raw output digests"
 require_text "$review_output" 'Incomplete required lanes stay visible' \
   "dm-review evidence index keeps incomplete lanes actionable"
-require_text "$review_skill" 'Preserve the complete unified report and all' \
+require_text "$review_closeout" 'Preserve both the final report and its machine' \
   "dm-review preserves complete report evidence"
-require_text "$review_skill" 'write the complete report to `.claude/ux-review/report.md`' \
+require_text "$review_closeout" 'Write the final report to `.claude/ux-review/report.md`' \
   "dm-review always writes the complete report"
-require_before "$review_skill" '### Phase 8: Repository Cleanup' '### Finalize Report and Deliver Handoff' \
-  "dm-review finalizes the report only after mandatory cleanup"
-require_before "$review_skill" '### Phase 8: Repository Cleanup' 'write the complete report to `.claude/ux-review/report.md`' \
-  "dm-review writes the complete report only after cleanup truth exists"
-require_before "$review_skill" 'write the complete report to `.claude/ux-review/report.md`' 'Deliver the compact human handoff' \
+require_before "$review_closeout" 'Before deleting review output' 'After owned-resource cleanup settles' \
+  "dm-review preserves evidence before cleanup"
+require_before "$review_closeout" 'After owned-resource cleanup settles' 'Finish once' \
+  "dm-review validates the final report before successful finish"
+require_before "$review_closeout" 'Preserve both the final report' 'The compact handoff links' \
   "dm-review delivers the compact handoff only after the complete report write"
 require_text "$review_skill" 'Do not write `.claude/ux-review/report.md` or deliver the compact human handoff' \
   "dm-review consolidation explicitly forbids early final delivery"

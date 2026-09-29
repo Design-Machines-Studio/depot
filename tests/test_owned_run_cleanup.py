@@ -22,7 +22,7 @@ class ExactOwnedRunTests(unittest.TestCase):
         self.directory.cleanup()
 
     def test_success_removes_run_root_and_every_nested_disposable_resource(self):
-        run = ExactOwnedRun.start("pipeline", "run-1", base=self.base)
+        run = ExactOwnedRun.start("assembly-build", "run-1", base=self.base)
         run.create_path("temporary-repository", "repository")
         run.create_path("cache", "cache")
         run.create_path("raw-output", "raw")
@@ -64,8 +64,8 @@ class ExactOwnedRunTests(unittest.TestCase):
         ExactOwnedRun.open(run.root).finish("cancelled")
 
     def test_concurrent_runs_have_distinct_roots_and_cannot_remove_each_other(self):
-        first = ExactOwnedRun.start("pipeline", "same-request", base=self.base)
-        second = ExactOwnedRun.start("pipeline", "same-request", base=self.base)
+        first = ExactOwnedRun.start("assembly-build", "same-request", base=self.base)
+        second = ExactOwnedRun.start("assembly-build", "same-request", base=self.base)
         first_root, second_root = first.root, second.root
         self.assertNotEqual(first_root, second_root)
 
@@ -83,7 +83,7 @@ class ExactOwnedRunTests(unittest.TestCase):
         self.assertFalse(root.exists())
 
     def test_resume_retry_reuses_exact_root_and_tolerates_disappeared_resource(self):
-        run = ExactOwnedRun.start("pipeline", "retry", base=self.base)
+        run = ExactOwnedRun.start("assembly-build", "retry", base=self.base)
         vanished = run.create_path("temporary-directory", "attempt-1")
         shutil.rmtree(vanished)
 

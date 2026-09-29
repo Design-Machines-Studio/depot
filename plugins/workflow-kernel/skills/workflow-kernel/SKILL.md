@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, strict existing Docker resource-registry validation, bounded cross-harness observation indexes, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.23.0
+version: 0.24.1
 ---
 
 # Workflow Kernel
@@ -551,6 +551,47 @@ run by `tools/validate-workflow-kernel.py` as part of
 caches, and installed hosts do not self-test. Validate in the depot
 repository before integrating an orchestrator.
 
+
+## Review evidence closeout
+
+dm-review, dm-review-loop, Pipeline, and pipeline-run use one owner for the
+final review closeout. Before reviewer dispatch, the owner calls
+`bind-review-source` on the already materialized request. It writes
+`source_repository`, `source_head`, the selected `required_lanes`, and any
+`required_browser_cases` into that existing request; repeat the source and
+case binding in the authoritative request and coverage receipts. Before the
+owner removes a review worktree or finishes its
+exact-owned root, call `preserve-review-evidence` with the run root, current
+repository root, bound request and authoritative receipts, literal lane
+receipts, raw lane outputs, and the owner's private router receipt directory.
+
+```text
+"$WORKFLOW_KERNEL" bind-review-source \
+  --run-root <exact-run-root> --repository-root <reviewed-repository> \
+  --request <exact-run-root>/review/request.json \
+  [--required-browser-case <case-id> ...]
+```
+
+The command validates that the current repository and HEAD still match the
+request; the final authoritative coverage row accounts for every selected
+lane; each selected lane has matching structured output and a literal receipt;
+all required evidence references resolve to regular files; and required
+browser case IDs and artifact references match completed browser evidence. It
+copies the existing files into a repository-and-head-scoped directory under the exact
+run's registered `diagnostic` child, then reads and validates the copy. It
+returns `complete` only when required coverage is supported. An incomplete
+result still preserves available source files for recovery. A copy or
+verification error leaves every source file intact, and callers must not
+finish or remove the containing worktree.
+
+The retained evidence uses the existing 128-file, 2 MiB diagnostic bounds.
+Successful review owners call `owned-run-finish --outcome succeeded
+--retain-diagnostics`; the kernel revalidates the sealed request, coverage,
+lane receipts, raw outputs, and private router receipts before allowing the
+cleanup. Repeating that terminal call returns the existing cleanup receipt.
+Contribution economics, run-cost summaries, shadow comparison, and
+observation-index export are optional observations and do not participate in
+the required coverage check.
 
 ## Automatic Codex observation metadata
 

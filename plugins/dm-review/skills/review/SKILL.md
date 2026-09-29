@@ -88,15 +88,33 @@ launcher/runtime records `shadow unavailable` and the review continues.
 Before creating any temporary repository/cache or raw lane output, resolve and
 read Workflow Kernel's `exact-owned-cleanup.md`, start one disposable root with
 `owned-run-start --workflow dm-review --run-id <run-id>`, and record every
-nested disposable path through `owned-run-create`. The final report and compact
-machine-readable evidence remain the requested review deliverable; raw lane
-transcripts are disposable.
+nested disposable path through `owned-run-create`. The final report,
+authoritative coverage receipts, structured selected-lane outputs, and their
+real private router receipts support the verdict and must survive closeout.
+Free-form prompts and unselected transcripts remain disposable. A standalone
+review, loop, or Pipeline owner preserves this evidence exactly once before
+removing its source worktree or outputs.
 Translate an explicit `workflowClass` unchanged; when absent use `feature` and
 record `workflow_class_defaulted=true` -- never infer it from diff kind, path,
 finding, or severity. Materialize the request at
 `<exact-run-root>/review/request.json` and the cumulative ordered
 redacted receipt array at `authoritative-receipts.json` beside it. Observe only
 after an authoritative lane/consolidation/cleanup receipt exists.
+
+Before `bind-prediction` or any reviewer dispatch, bind the existing request
+to the exact checkout and selected scope:
+
+```text
+"$WORKFLOW_KERNEL" bind-review-source \
+  --run-root <exact-run-root> \
+  --repository-root <reviewed-repository> \
+  --request <exact-run-root>/review/request.json \
+  [--required-browser-case <selected-case-id> ...]
+```
+
+Repeat the returned `source_repository`, `source_head`, and exact
+`required_browser_cases` in the authoritative request and coverage receipts.
+Never reuse lane or browser evidence when any of those bindings differ.
 
 Produce nonempty independent `review_request` prediction receipts before
 authoritative actions; seal once:
@@ -555,9 +573,11 @@ In **full** mode, follow `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md`
 exactly. Agent files are review criteria only; model-router is the single
 resolution, availability, invocation, fallback, and private-provenance boundary.
 
-As each lane settles, record it with `record-attempt`, its anonymous lane
-companion, and the private router receipt reference. Never copy exact identity
-into another lane's prompt or the ordinary report.
+As each lane settles, persist its structured output, literal lane receipt, and
+real private router receipt under this exact run before recording it with
+`record-attempt` and its anonymous lane companion. Extend the terminal owner's
+ordered private index in selected-lane order, not completion order. Never copy
+exact identity into another lane's prompt or the ordinary report.
 
 ### Phase 4.5: Lane Fallback
 
@@ -599,7 +619,7 @@ Read from `$CONSOLIDATOR_PATH` and follow it exactly:
 5. **Determine merge recommendation** per `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic: any P1 -> "BLOCKS MERGE"; any P2 -> "APPROVE WITH FIXES"; any P3 with no P1 -> "APPROVE WITH FIXES"; zero findings -> "CLEAN".
 6. **Generate the unified report** following `${CLAUDE_SKILL_DIR}/references/output-format.md`, including required P1/P2/P3 detail, `Synthesis Decisions`, and the compact Raw Evidence Index from existing receipts; never copy full reviewer output.
 
-Materialize the decisions, sealed raw-finding inventory, and literal lane receipts as `synthesis-decisions.json`, `raw-finding-inventory.json`, `review-lane-receipts.json`, and `raw-lane-outputs.json`. Then invoke the trusted launcher -- the sole producer of canonical contribution IDs, receipt sequences, and the durable coverage receipt:
+Materialize the decisions, sealed raw-finding inventory, literal lane receipts, and structured output for every selected lane as `synthesis-decisions.json`, `raw-finding-inventory.json`, `review-lane-receipts.json`, and `raw-lane-outputs.json`. Then invoke the trusted launcher -- the sole producer of canonical contribution IDs, receipt sequences, and contribution-coverage economics:
 
 ```bash
 "$WORKFLOW_KERNEL" export-review-contributions \
@@ -613,7 +633,17 @@ Materialize the decisions, sealed raw-finding inventory, and literal lane receip
   --output <exact-run-root>/review/authoritative-receipts.json
 ```
 
-The command rejects credential-shaped content and credential-bearing URIs before hashing or persistence, content-addresses all four canonical inputs and every raw lane output under `contribution-inputs/`, and fails closed unless raw inventory, synthesis decisions, literal lane provenance, finding counts, raw lane-output union, and lane evidence references agree exactly. Exactly one receipt and raw output is required per requested lane, including zero-finding lanes; never hand-author `canonical_finding_id`, `sequence`, `finding_contribution`, or coverage receipts. A zero-finding synthesis still runs the command with count zero and all required lane receipts so missing producer coverage is observable.
+The command rejects credential-shaped content and credential-bearing URIs before hashing or persistence, content-addresses all four canonical inputs and every raw lane output under `contribution-inputs/`, and fails closed unless raw inventory, synthesis decisions, literal lane provenance, finding counts, raw lane-output union, and lane evidence references agree exactly. Exactly one receipt and structured output is required per selected lane, including zero-finding lanes; never hand-author `canonical_finding_id`, `sequence`, `finding_contribution`, or contribution-coverage receipts. Contribution export is observation-only: a missing or failed export produces one concise `contribution economics unavailable` diagnostic and does not alter supported required-lane or browser coverage. Missing source output, literal lane receipt, or required browser evidence still prevents `CLEAN`.
+
+Run contribution export, `observe-review`, `compare`, and `metrics` behind a
+failure-tolerant observer boundary. A non-zero optional command records one
+closed, concise unavailable line in that run's `review/run-receipt.md` and
+continues to finalization; never promote its process exit status to review
+coverage. If the finalizer rejects the required lane, finding, browser, or
+report evidence those inputs are invalid, not an optional observation failure.
+Keep the existing cost-summary, observation-index, and terminal-model-report
+failure lines in their own contracts and locations. Never copy raw observer
+output or private provider data into the report or handoff.
 
 Keep the consolidated report body provisional through the remaining phases. Do not write `.claude/ux-review/report.md` or deliver the compact human handoff yet: mandatory repository cleanup in Phase 8 supplies the report's final cleanup truth.
 
@@ -673,72 +703,19 @@ render. Preserve the exact private directory and index for that owner and keep
 all identity private. Reporting failure records only the contract's one closed
 unavailable line and never changes the review disposition or cleanup sequence.
 
-### Phase 8: Repository Cleanup
+### Phase 8: Repository Cleanup and Final Delivery
 
-Apply `repo-cleanup-contract.md` to browser artifacts; recheck readiness after
-final report/receipt writes.
-
-Apply `repo-cleanup-contract.md`'s task-change delivery requirement for authorized
-repairs before final reporting. Verify the pushed PR head and leave the maintained
-preview on that reviewed feature head. A read-only review creates no repair authority.
-
-Runs in **every mode** (quick and full), on every exit path -- including `REVIEW INCOMPLETE`, `BLOCKS MERGE`, and a stalled convergence loop. Read `${CLAUDE_SKILL_DIR}/references/repo-cleanup-contract.md`; it is authoritative.
-
-Host-created worktrees require explicit creation/handoff metadata and host
-release before removal. Reconcile only this invocation's exact registered refs;
-pre-existing, user, and interrupted Pipeline refs remain foreign. Apply
-`repo-cleanup-contract.md`'s decision table and report every retained ref with a
-follow-up command. Compare `git status --porcelain` against the entry baseline;
-list exact residue. Emit the `### Repository Cleanup` inventory in the report.
-
-If this review created Docker resources for a dev server or review harness, load `${CLAUDE_SKILL_DIR}/references/review-docker-cleanup.md` and follow it exactly: clean only resources registered by this review, after validation, consolidation, and browser evidence are authoritative, writing the complete fresh dependent-node status proof before planning and again before every guarded execute.
-
-After comparison and fresh exact-scope Docker inventory prove zero resources,
-remove the exact `.workflow-kernel/runs/<run-id>/` directory and finish the
-disposable root. Review abort before execution uses outcome `review-aborted`.
-On failure or `SIGINT`/`SIGTERM`, retain nothing unless one compact diagnostic
-root is genuinely useful. Its terminal report must state the exact path, reason,
-contents, and exact removal command; never retain both a kernel run root and a
-dirty worktree. Install this same Phase 8 sequence on every exit path.
-
-Never delete the feature branch under review.
-
-For a standalone owner, preserve the already-generated JSON and Markdown beside
-`run-cost-summary.json` while cleaning its private receipts. In every mode,
-preserve the accepted `.claude/ux-review/observation-index-<run-id>.json`
-companion. A PR review also preserves its bounded external intake and decision
-artifacts. For an enclosing
-owner, defer only that owner's exact private router directory and index; the
-enclosing workflow removes them after its one terminal render.
-
----
-
-### Finalize Report and Deliver Handoff
-
-Only after Phase 8 has completed, add its authoritative repository and Docker cleanup results to the provisional unified report. Then write the complete report to `.claude/ux-review/report.md` -- the existing dm-review artifact flow, not a new report subsystem.
-
-Run `review-next-action.sh` against the base/final-head diff, repository policy,
-required cases, completed coverage, retained findings, and settled PR feedback.
-Record whether the reviewed boundary is dirty; a dirty boundary uses the same commit for
-`baseCommit` and `finalHead` and cannot produce a reusable review command.
-Use its exact `Review`, `Action`, `Why`, and `Reuse` lines. When it emits
-`modelWork: true`, invoke model-router's `operator-recommendation.sh` once as
-`review-coordinator` at the emitted effort/capabilities and place that actual
-`Recommended start` block immediately before `Reuse`. Emit no model
-recommendation when `modelWork: false`.
-
-Deliver the compact human handoff after that write, following `references/output-format.md`. Preserve the complete unified report and all machine-readable companions in the established evidence flow. The compact handoff links `.claude/ux-review/report.md` and names any blocked cleanup requiring operator action. Do not dump the expanded report, provider tables, agent transcripts, synthesis ledger, cleanup inventory, or raw reports into visible chat by default.
-
-When `terminalModelReportOwner` is `dm-review`, append the already-generated
-compact model/cost Markdown, or its one closed unavailable line, after this
-handoff. An enclosing owner receives no identity-bearing report from this
-invocation.
+Load `${CLAUDE_SKILL_DIR}/references/review-closeout-contract.md` and follow
+its single-owner sequence on every path, in full and quick mode. It governs
+coverage validation, evidence preservation, resource cleanup, recovery, report
+publication, and terminal finish. Optional observation failures do not replace
+required lane or browser evidence or change a supported coverage verdict.
 
 ---
 
 ## Reference Files
 
-Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `ui-case-selection.md` (affected/full UI case boundary), `ui-review-readiness.md` (shared source/rendered readiness gate), `repository-browser-target-discovery.md` (established project checkout/domain and bounded author-loop discovery), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (exact worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
+Loaded on demand during review: `reviewer-prompt-template.md` (common reviewer prompt contract, loaded before dispatch in both modes), `ui-case-selection.md` (affected/full UI case boundary), `ui-review-readiness.md` (shared source/rendered readiness gate), `repository-browser-target-discovery.md` (established project checkout/domain and bounded author-loop discovery), `selective-lane-allowlist.md` (only when `review_lane_allowlist` input is present), `severity-mapping.md` (P1/P2/P3 mapping), `agent-registry.md` (agent catalog and triggers), `output-format.md` (report template), `issue-tracking.md` (todo template and GitHub conventions), `guardrails.md` (input/output validation, failure policies), `graceful-degradation.md` (failure classification and merge overrides), `ai-slop-detector.md` (25-point AI output checklist), `ui-design-patterns.md`, `token-discovery.md`, `repo-cleanup-contract.md` (exact worktree/branch registry, safe-to-delete table, feature-branch protection, inventory; shared with pipeline), `review-closeout-contract.md` (single-owner evidence preservation and terminal cleanup; load at Phase 8), and `datastar-pro.md` (Pro attributes/actions, substitution table, bundle-presence rule). All under `${CLAUDE_SKILL_DIR}/references/`.
 
 ## Agent Definition Paths
 

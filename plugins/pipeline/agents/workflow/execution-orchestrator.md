@@ -56,6 +56,14 @@ targeted fixes and perform one affected-lane recheck. Stop after two passes.
 
 Same as single-pass, but `args="full <branch-name>"` for ALL applicable agents.
 
+Pipeline owns a run root it created; a nested loop or dm-review returns
+evidence and never finishes or renders the shared root. At review closeout,
+load `dm-review`'s `review-closeout-contract.md` and finalize once after the
+last affected-lane recheck. It validates required coverage, preserves exact-
+source evidence and report links before cleanup, and keeps optional
+observations outside the verdict. Retry matching retained evidence without
+rerunning settled lanes.
+
 ### Quick final review-fix loop (explicit eligible manifests only)
 
 When `finalReviewMode: quick` survives manifest validation, resolve and read the installed `dm-review-quick` command-skill protocol and run its exact core lanes plus applicable build/UI/domain lanes against the feature branch. If its bounded security-sensitive path check matches, stop quick dispatch and run the full review-fix loop below; record `final_review_mode: quick`, `final_review_effective_mode: full`, `final_review_escalation: security-sensitive-path`.
