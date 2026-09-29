@@ -98,18 +98,19 @@ finding, or severity. Materialize the request at
 redacted receipt array at `authoritative-receipts.json` beside it. Observe only
 after an authoritative lane/consolidation/cleanup receipt exists.
 
-Produce independent prediction receipts before corresponding authoritative actions, then seal them exactly once:
+Produce nonempty independent `review_request` prediction receipts before
+authoritative actions; seal once:
 
 ```text
 "$WORKFLOW_KERNEL" init .workflow-kernel/runs/<run-id> --run-id <run-id> --mode shadow --occurred-at <timezone-aware-ISO-8601>
-"$WORKFLOW_KERNEL" bind-prediction --type review --request <exact-run-root>/review/request.json --prediction-receipts <exact-run-root>/review/independent-prediction-receipts.json --state-dir <exact-run-root>/review
+"$WORKFLOW_KERNEL" bind-prediction --type review --request <exact-run-root>/review/request.json --prediction-receipts <exact-run-root>/review/independent-prediction-receipts.json --state-dir .workflow-kernel/runs/<run-id>
 ```
 
 Use these exact later observation interfaces:
 
 ```text
-"$WORKFLOW_KERNEL" observe-review --request <exact-run-root>/review/request.json --receipts <exact-run-root>/review/authoritative-receipts.json --state-dir <exact-run-root>/review
-"$WORKFLOW_KERNEL" compare --state-dir <exact-run-root>/review --authoritative-receipts <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/shadow-report.json
+"$WORKFLOW_KERNEL" observe-review --request <exact-run-root>/review/request.json --receipts <exact-run-root>/review/authoritative-receipts.json --state-dir .workflow-kernel/runs/<run-id>
+"$WORKFLOW_KERNEL" compare --state-dir .workflow-kernel/runs/<run-id> --authoritative-receipts <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/shadow-report.json
 "$WORKFLOW_KERNEL" metrics --events <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/metrics.json
 if MODEL_MATRIX_ASSET=$("$WORKFLOW_KERNEL" resolve-plugin-asset --plugin openrouter --asset skills/openrouter-delegate/references/model-matrix.json --minimum-version 1.11.0); then :; else MODEL_MATRIX_ASSET=""; fi
 "$WORKFLOW_KERNEL" emit-cost-summary --events <exact-run-root>/review/authoritative-receipts.json --output <exact-run-root>/review/run-cost-summary.json --receipt <exact-run-root>/review/run-receipt.md --matrix "$MODEL_MATRIX_ASSET" --repository-commit "$(git rev-parse HEAD)" $(test -n "$(git status --porcelain)" && echo --dirty-state) \
@@ -608,7 +609,7 @@ Materialize the decisions, sealed raw-finding inventory, and literal lane receip
   --lane-receipts <exact-run-root>/review/review-lane-receipts.json \
   --raw-lane-outputs <exact-run-root>/review/raw-lane-outputs.json \
   --receipts <exact-run-root>/review/authoritative-receipts.json \
-  --state-dir <exact-run-root>/review \
+  --state-dir .workflow-kernel/runs/<run-id> \
   --output <exact-run-root>/review/authoritative-receipts.json
 ```
 

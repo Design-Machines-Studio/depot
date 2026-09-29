@@ -1,7 +1,7 @@
 {
   "name": "ned",
   "description": "Personal knowledge graph, NED operations, preview publication, and session capture for Travis Gertz",
-  "version": "1.9.0",
+  "version": "1.9.1",
   "author": {
     "name": "Design Machines"
   },
