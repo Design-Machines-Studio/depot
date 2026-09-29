@@ -411,7 +411,7 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.24.0",
+      "version": "0.24.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

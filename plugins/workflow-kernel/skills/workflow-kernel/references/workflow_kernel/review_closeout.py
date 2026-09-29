@@ -455,12 +455,13 @@ def required_review_evidence_references(
 
 
 _MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\((<[^>]+>|[^)\s]+)(?:\s+[^)]*)?\)")
+_MARKDOWN_REFERENCE = re.compile(r"^[ \t]{0,3}\[[^\]]+\]:[ \t]*(<[^>]+>|\S+)", re.MULTILINE)
 
 
 def _validate_retained_report(scope: Path) -> None:
     report = _regular_file(scope / "report.md").decode("utf-8")
     root = scope.resolve(strict=True)
-    for match in _MARKDOWN_LINK.finditer(report):
+    for match in (*_MARKDOWN_LINK.finditer(report), *_MARKDOWN_REFERENCE.finditer(report)):
         target = match.group(1)
         if target.startswith("<") and target.endswith(">"):
             target = target[1:-1]
@@ -502,25 +503,34 @@ def validate_review_source_coverage(
         raise ValueError("review evidence repository or head changed")
     if type(receipts_document) is not list:
         raise ValueError("required review receipts are invalid")
+    # Optional contribution observations may sit between review iterations.
+    # Keep every required source row, including later rechecks, while excluding
+    # optional rows whose failed export cannot determine required coverage.
+    source_receipts = []
+    for index, value in enumerate(receipts_document):
+        if type(value) is dict and value.get("stage") in {
+            "finding_contribution", "finding_contribution_coverage",
+        }:
+            continue
+        if type(value) is not dict or value.get("sequence") != index:
+            raise ValueError("required review receipt sequence is invalid")
+        source_receipts.append({**value, "sequence": len(source_receipts)})
     coverage_positions = [
-        index for index, value in enumerate(receipts_document)
-        if type(value) is dict and value.get("stage") == "coverage_matrix"
+        index for index, value in enumerate(source_receipts)
+        if value.get("stage") == "coverage_matrix"
     ]
     if not coverage_positions:
         raise ValueError("required review coverage receipt is missing")
-    # Contribution receipts are optional observation data appended after the
-    # required coverage matrix. Validate the authoritative source prefix only.
-    translate_review_receipts(receipts_document[:coverage_positions[-1] + 1])
+    translate_review_receipts(source_receipts)
     request_rows = [
-        value for value in receipts_document
-        if type(value) is dict and value.get("stage") == "review_request"
+        value for value in source_receipts if value.get("stage") == "review_request"
     ]
     if not request_rows or (
         request_rows[-1].get("source_repository") != request.source_repository
         or request_rows[-1].get("source_head") != request.source_head
     ):
         raise ValueError("review request receipt does not bind this repository and HEAD")
-    final_coverage = receipts_document[coverage_positions[-1]]
+    final_coverage = source_receipts[coverage_positions[-1]]
     expected = final_coverage.get("expected_lanes")
     completed = final_coverage.get("completed_lanes")
     degraded = final_coverage.get("degraded_lanes", [])
@@ -541,9 +551,7 @@ def validate_review_source_coverage(
         request, lane_document, outputs_document,
         findings_document, decisions_document,
     )
-    _validate_browser_coverage(
-        request, receipts_document[:coverage_positions[-1] + 1],
-    )
+    _validate_browser_coverage(request, source_receipts)
     return request
 
 
@@ -728,6 +736,7 @@ def _receipt_append_only(existing: Path, candidate: Path) -> bool:
 def _copy_router_tree(source: Path, target: Path) -> tuple[int, int]:
     if source.is_symlink() or not source.is_dir():
         raise ValueError("private router receipt directory is unsafe")
+    _validate_router_receipts(source)
     files = 0
     size = 0
     for current, directories, names in os.walk(source, followlinks=False):
@@ -749,7 +758,40 @@ def _copy_router_tree(source: Path, target: Path) -> tuple[int, int]:
                 raise ValueError("private router receipts exceed bounded retention limits")
     if not (target / "terminal-receipt-index.json").is_file():
         raise ValueError("private router receipt index is missing")
+    _validate_router_receipts(target)
     return files, size
+
+
+def _validate_router_receipts(directory: Path) -> None:
+    """Require the indexed private dispatch receipts used by terminal reporting."""
+    index = _load_json(directory / "terminal-receipt-index.json")
+    if (
+        type(index) is not dict or set(index) != {"schemaVersion", "receiptFiles"}
+        or type(index["schemaVersion"]) is not int or index["schemaVersion"] != 1
+        or type(index["receiptFiles"]) is not list
+        or not index["receiptFiles"]
+    ):
+        raise ValueError("private router receipt index is invalid")
+    for name in index["receiptFiles"]:
+        if (
+            type(name) is not str
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,126}\.json", name) is None
+            or name == "terminal-receipt-index.json"
+        ):
+            raise ValueError("private router receipt index is invalid")
+        receipt = _load_json(directory / name)
+        if (
+            type(receipt) is not dict or type(receipt.get("schemaVersion")) is not int
+            or receipt["schemaVersion"] != 1
+            or type(receipt.get("receiptId")) is not str
+            or re.fullmatch(r"dispatch-[a-f0-9]{24}", receipt["receiptId"]) is None
+            or type(receipt.get("requested")) is not dict
+            or type(receipt.get("attempts")) is not list
+            or any(type(attempt) is not dict for attempt in receipt["attempts"])
+            or (receipt.get("served") is not None and type(receipt["served"]) is not dict)
+            or type(receipt.get("fallback")) is not bool
+        ):
+            raise ValueError("private router receipt is invalid")
 
 
 def _diagnostic(run: ExactOwnedRun) -> Path:
@@ -942,10 +984,13 @@ def preserve_review_evidence(
             target = staging / relative
             before = target.exists()
             if (
-                before and relative == "review/authoritative-receipts.json"
+                before and relative in {"review/authoritative-receipts.json", "report.md"}
                 and _regular_file(target) != _regular_file(source)
             ):
-                if not _receipt_append_only(target, source):
+                if (
+                    relative == "review/authoritative-receipts.json"
+                    and not _receipt_append_only(target, source)
+                ):
                     raise ValueError("authoritative review receipts changed outside append-only closeout")
                 target.unlink()
                 before = False
@@ -1042,15 +1087,9 @@ def has_preserved_review_evidence(diagnostic: Path) -> bool:
                 continue
             _regular_file(scope / reference)
         private_router = scope / "receipts/private/router"
-        if (
-            not private_router.is_dir() or private_router.is_symlink()
-            or not (private_router / "terminal-receipt-index.json").is_file()
-            or not any(
-                path.is_file() and path.name != "terminal-receipt-index.json"
-                for path in private_router.rglob("*.json")
-            )
-        ):
+        if not private_router.is_dir() or private_router.is_symlink():
             return False
+        _validate_router_receipts(private_router)
         report = scope / "report.md"
         if not _regular_file(report).strip():
             return False

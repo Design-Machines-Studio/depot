@@ -49,10 +49,13 @@ class ReviewCloseoutTests(unittest.TestCase):
         run.create_path("raw-output", "receipts/private")
         router = run.create_path("raw-output", "receipts/private/router")
         (router / "terminal-receipt-index.json").write_text(
-            json.dumps({"receipt_files": ["security.json"]}) + "\n", encoding="utf-8",
+            json.dumps({"schemaVersion": 1, "receiptFiles": ["security.json"]}) + "\n", encoding="utf-8",
         )
         (router / "security.json").write_text(
-            json.dumps({"role": "security", "receipt": "private-test-proof"}) + "\n",
+            json.dumps({
+                "schemaVersion": 1, "receiptId": "dispatch-" + "a" * 24,
+                "requested": {}, "attempts": [], "served": None, "fallback": False,
+            }) + "\n",
             encoding="utf-8",
         )
         repository, head = source_identity(self.repo)
@@ -346,6 +349,30 @@ class ReviewCloseoutTests(unittest.TestCase):
         paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
         self.assertEqual("incomplete", self.preserve(run, paths)["status"])
 
+    def test_completed_browser_case_after_coverage_matrix_is_accepted(self):
+        run, paths = self.make_run("dm-review", "browser-after-coverage")
+        request = json.loads(paths["request"].read_text(encoding="utf-8"))
+        request["required_browser_cases"] = ["home"]
+        paths["request"].write_text(json.dumps(request) + "\n", encoding="utf-8")
+        receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
+        receipts[1]["required_browser_cases"] = ["home"]
+        receipts.append({
+            "run_id": request["run_id"], "sequence": 2,
+            "stage": "browser_verification", "status": "completed",
+            "node_id": "visual", "occurred_at": "2026-09-01T00:02:00Z",
+            "authoritative_receipt": "review/browser.json", "host": "codex",
+            "source_repository": request["source_repository"],
+            "source_head": request["source_head"],
+            "case_ids": ["home"], "evidence_refs": ["browser/case-home.json"],
+        })
+        paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
+        (paths["request"].parent / "browser.json").write_text("{}\n", encoding="utf-8")
+        (self.repo / "browser").mkdir()
+        (self.repo / "browser/case-home.json").write_text("{}\n", encoding="utf-8")
+        result = self.preserve(run, paths)
+        self.assertEqual("complete", result["status"])
+        self.assertTrue(Path(result["evidence_path"], "browser/case-home.json").is_file())
+
     def test_optional_contribution_cost_and_observation_outputs_do_not_gate_coverage(self):
         run, paths = self.make_run()
         self.assertFalse(validate_optional_contribution_coverage([]))
@@ -368,6 +395,36 @@ class ReviewCloseoutTests(unittest.TestCase):
         )
         self.assertEqual(receipts, retained_receipts)
 
+    def test_unvalidated_later_coverage_cannot_override_incomplete_coverage(self):
+        run, paths = self.make_run("dm-review", "malformed-recheck")
+        receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
+        receipts[1]["completed_lanes"] = []
+        receipts[1]["unavailable_lanes"] = ["security"]
+        receipts.append({"stage": "finding_contribution", "status": "failed"})
+        receipts.append({
+            "stage": "coverage_matrix", "expected_lanes": ["security"],
+            "completed_lanes": ["security"], "degraded_lanes": [],
+            "unavailable_lanes": [], "source_repository": receipts[1]["source_repository"],
+            "source_head": receipts[1]["source_head"], "required_browser_cases": [],
+        })
+        paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
+        self.assertEqual("incomplete", self.preserve(run, paths)["status"])
+
+    def test_valid_recheck_after_optional_contribution_can_complete(self):
+        run, paths = self.make_run("dm-review", "valid-recheck")
+        receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
+        receipts[1]["completed_lanes"] = []
+        receipts[1]["unavailable_lanes"] = ["security"]
+        receipts.append({"stage": "finding_contribution", "status": "failed"})
+        final = dict(receipts[1])
+        final.update({
+            "sequence": 3, "occurred_at": "2026-09-01T00:03:00Z",
+            "completed_lanes": ["security"], "unavailable_lanes": [],
+        })
+        receipts.append(final)
+        paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
+        self.assertEqual("complete", self.preserve(run, paths)["status"])
+
     def test_broken_report_link_blocks_successful_preservation_and_keeps_source(self):
         run, paths = self.make_run()
         paths["report"].write_text(
@@ -379,6 +436,41 @@ class ReviewCloseoutTests(unittest.TestCase):
         self.assertTrue(paths["report"].is_file())
         with self.assertRaisesRegex(ValueError, "durably validated"):
             run.finish("succeeded", retain_diagnostics=True)
+
+    def test_corrected_source_report_can_be_preserved_after_link_failure(self):
+        run, paths = self.make_run("dm-review", "corrected-report")
+        paths["report"].write_text("[Missing](review/missing.md).\n", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "retained report link is missing"):
+            self.preserve(run, paths)
+        paths["report"].write_text("[Request](review/request.json).\n", encoding="utf-8")
+        result = self.preserve(run, paths)
+        self.assertEqual("complete", result["status"])
+        self.assertEqual(paths["report"].read_bytes(), (Path(result["evidence_path"]) / "report.md").read_bytes())
+
+    def test_indexed_router_receipt_must_survive_preservation_and_finish(self):
+        run, paths = self.make_run("dm-review", "router-index")
+        paths["router"].joinpath("security.json").unlink()
+        paths["router"].joinpath("unrelated.json").write_text("{}\n", encoding="utf-8")
+        with self.assertRaises((OSError, ValueError)):
+            self.preserve(run, paths)
+        self.assertTrue(run.root.is_dir())
+        paths["router"].joinpath("unrelated.json").unlink()
+        paths["router"].joinpath("security.json").write_text(json.dumps({
+            "schemaVersion": 1, "receiptId": "dispatch-" + "a" * 24,
+            "requested": {}, "attempts": [], "served": None, "fallback": False,
+        }) + "\n", encoding="utf-8")
+        result = self.preserve(run, paths)
+        Path(result["evidence_path"], "receipts/private/router/security.json").unlink()
+        with self.assertRaisesRegex(ValueError, "not durably validated"):
+            run.finish("succeeded", retain_diagnostics=True)
+
+    def test_reference_style_report_link_must_resolve(self):
+        run, paths = self.make_run("dm-review", "reference-link")
+        paths["report"].write_text(
+            "[Lane outputs][lane]\n\n[lane]: review/missing.json\n", encoding="utf-8",
+        )
+        with self.assertRaisesRegex(ValueError, "retained report link is missing"):
+            self.preserve(run, paths)
 
     def test_retained_recovery_retry_reuses_exact_sources_without_lane_rerun(self):
         run, paths = self.make_run("dm-review", "report-retry")
