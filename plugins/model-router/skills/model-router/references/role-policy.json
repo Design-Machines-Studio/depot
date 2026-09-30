@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "matrixSnapshot": "openrouter:2026-09-23",
-  "availability": {"headroomThresholdPct": 8},
+  "availability": {"headroomThresholdPct": 8, "codexHeadroomThresholdPct": 2},
   "benchmarkRoles": ["architect", "plan-critic", "builder-fast", "builder-deep", "review-fast", "review-deep", "security-review", "research-fast", "editorial"],
   "effort": {
     "vocabulary": ["low", "medium", "high", "max"],

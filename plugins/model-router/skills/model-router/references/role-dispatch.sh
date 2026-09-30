@@ -446,7 +446,7 @@ transport_eligibility() {
         fi
         if [ "$allowance_count" -gt 0 ] &&
            printf '%s' "$AVAILABILITY" | jq -e 'all(.codex.allowances[]; .state == "limited" or .state == "exhausted")' >/dev/null; then
-          ELIGIBILITY_REASON="rate_limit_exhausted"
+          ELIGIBILITY_REASON="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.allowances | if any(.[]; .reason == "reserve_threshold_reached") then "reserve_threshold_reached" else "rate_limit_exhausted" end')"
           return 1
         fi
         if [ "$allowance_count" -gt 0 ]; then
@@ -464,6 +464,7 @@ transport_eligibility() {
           return 0
         fi
         ELIGIBILITY_REASON="rate_limit_exhausted"
+        [ "$allowance_reason" != reserve_threshold_reached ] || ELIGIBILITY_REASON="reserve_threshold_reached"
         return 1
       fi
       [ -n "$rate_limit_id" ] || { ELIGIBILITY_REASON="rate_limit_mapping_unknown"; return 1; }
@@ -489,8 +490,10 @@ transport_eligibility() {
         return 1
       fi
       if [ "$state" = limited ] || [ "$state" = exhausted ] ||
-         [ "$allowance_reason" = rate_limit_exhausted ]; then
+         [ "$allowance_reason" = rate_limit_exhausted ] ||
+         [ "$allowance_reason" = reserve_threshold_reached ]; then
         ELIGIBILITY_REASON="rate_limit_exhausted"
+        [ "$allowance_reason" != reserve_threshold_reached ] || ELIGIBILITY_REASON="reserve_threshold_reached"
         return 1
       fi
       if [ "$state" != ok ]; then

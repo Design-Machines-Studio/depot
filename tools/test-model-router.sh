@@ -119,6 +119,9 @@ case "${1:-}:${2:-}" in
           [ "$initialized" -eq 1 ] || exit 91
           case "${MODEL_ROUTER_CODEX_FIXTURE:-legacy}" in
             rate-no-response) : ;;
+            boundary)
+              jq -cn --argjson used "$MODEL_ROUTER_CODEX_USED" --argjson duration "${MODEL_ROUTER_CODEX_WINDOW:-10080}" '{id:7,result:{rateLimits:{primary:{usedPercent:$used,windowDurationMins:$duration}}}}'
+              ;;
             legacy)
               printf '%s\n' '{"id":7,"result":{"rateLimits":{"primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}}}}'
               ;;
@@ -126,13 +129,13 @@ case "${1:-}:${2:-}" in
               printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex","primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"rateLimitsByLimitId":{"codex":{"limitId":"codex","limitName":null,"primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"codex_named":{"limitId":"codex_named","limitName":"Named","primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}},"codex_other":{"limitId":"codex_other","limitName":"Other","primary":{"usedPercent":95,"windowDurationMins":300},"secondary":{"usedPercent":95,"windowDurationMins":10080}}}}}'
               ;;
             exhausted)
-              printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex","primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":95,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}}}}}'
+              printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex","primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":100,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}}}}}'
               ;;
             multiple-no-best)
-              printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex","primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":95,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}},"codex_other":{"limitId":"codex_other","limitName":"Other","primary":{"usedPercent":1,"windowDurationMins":300},"secondary":{"usedPercent":1,"windowDurationMins":10080}}}}}'
+              printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex","primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":100,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}},"codex_other":{"limitId":"codex_other","limitName":"Other","primary":{"usedPercent":1,"windowDurationMins":300},"secondary":{"usedPercent":1,"windowDurationMins":10080}}}}}'
               ;;
             all-exhausted)
-              printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex"},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":95,"windowDurationMins":300},"secondary":{"usedPercent":95,"windowDurationMins":10080}},"codex_other":{"limitId":"codex_other","primary":{"usedPercent":96,"windowDurationMins":300},"secondary":{"usedPercent":97,"windowDurationMins":10080}}}}}'
+              printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex"},"rateLimitsByLimitId":{"codex":{"limitId":"codex","primary":{"usedPercent":100,"windowDurationMins":300},"secondary":{"usedPercent":100,"windowDurationMins":10080}},"codex_other":{"limitId":"codex_other","primary":{"usedPercent":100,"windowDurationMins":300},"secondary":{"usedPercent":100,"windowDurationMins":10080}}}}}'
               ;;
             unknown-mapping)
               printf '%s\n' '{"id":7,"result":{"rateLimits":{"limitId":"codex","primary":null,"secondary":{"usedPercent":25,"windowDurationMins":10080}},"rateLimitsByLimitId":{"codex_other":{"limitId":"codex_other","limitName":"Other","primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}},"codex_extra":{"limitId":"codex_extra","limitName":"Extra","primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":25,"windowDurationMins":10080}}}}}'
@@ -214,6 +217,22 @@ assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_mapping
 assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_response_malformed"' "$TMP/probe-malformed-map.json"
 assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_shape_unsupported"' "$TMP/probe-unsupported.json"
 assert jq -e '.codex.state == "ok" and .codex.reason == "available" and .codex.defaultAllowanceId == "codex"' "$TMP/probe-missing-window.json"
+
+# Both supported windows retain native eligibility above the 2% reserve.
+for window in 300 10080; do
+  for used in 92 97.9 98 99 100; do
+    MODEL_ROUTER_CODEX_FIXTURE=boundary MODEL_ROUTER_CODEX_USED="$used" MODEL_ROUTER_CODEX_WINDOW="$window" \
+      env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE PATH="$TMP/bin:$PATH" \
+      FAKE_CLAUDE_AUTH=none "$PROBE" > "$TMP/probe-boundary-$window-$used.json"
+    case "$used" in
+      92|97.9) expected=available ;;
+      98|99) expected=reserve_threshold_reached ;;
+      100) expected=rate_limit_exhausted ;;
+    esac
+    assert jq -e --arg reason "$expected" '.codex.reason == $reason and .codex.allowances.codex.reason == $reason and .codex.state == (if $reason == "available" then "ok" else "limited" end)' "$TMP/probe-boundary-$window-$used.json"
+  done
+done
+assert jq -e '.claude.allowances.interactive.state == "limited"' "$TMP/probe-subscription.json"
 
 for codex_fixture in init-no-response rate-no-response; do
   started_at="$(date +%s)"
@@ -695,6 +714,21 @@ fixture codex-exhausted
 run_role codex-exhausted-no-attempt builder-fast high --capability read-repository --capability structured-output
 assert jq -e 'all(.attempts[] | select(.transport == "codex-cli"); .outcome == "skipped" and .reason == "rate_limit_exhausted") and .served.transport == "openrouter"' \
   "$TMP/codex-exhausted-no-attempt.receipt"
+
+# Carry real normalized probe results into dispatch; reserve is not exhaustion.
+for used in 92 98 100; do
+  fixture healthy
+  jq --slurpfile probe "$TMP/probe-boundary-10080-$used.json" '.codex=$probe[0].codex' "$TMP/availability.json" > "$TMP/availability.next"
+  mv "$TMP/availability.next" "$TMP/availability.json"
+  run_role "codex-boundary-$used" builder-fast high --capability read-repository --capability structured-output
+  if [ "$used" = 92 ]; then
+    assert jq -e '.served.transport == "codex-cli"' "$TMP/codex-boundary-$used.receipt"
+  else
+    expected=reserve_threshold_reached
+    [ "$used" != 100 ] || expected=rate_limit_exhausted
+    assert jq -e --arg reason "$expected" '.served.transport == "openrouter" and all(.attempts[] | select(.transport == "codex-cli"); .outcome == "skipped" and .reason == $reason)' "$TMP/codex-boundary-$used.receipt"
+  fi
+done
 
 # Model-specific failure advances to the added native reviewer candidate.
 fixture healthy

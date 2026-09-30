@@ -14,7 +14,7 @@ publish estimated remaining capacity or imply verified headroom.
 Availability/fallback reasons are limited to router-authored content-safe codes,
 including `rate_limit_probe_no_response`, `rate_limit_response_malformed`,
 `rate_limit_shape_unsupported`, `rate_limit_mapping_unknown`,
-`required_window_missing`, `rate_limit_exhausted`,
+`required_window_missing`, `rate_limit_exhausted`, `reserve_threshold_reached`,
 `workflow_kernel_unavailable`, `provider_bundle_unavailable`,
 `provider_credential_unavailable`, `provider_availability_unknown`,
 `provider_boundary_declined`, `provider_transport_failed`,
