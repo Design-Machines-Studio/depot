@@ -96,7 +96,7 @@ assert jq -e '
   .recommendedStart.model == "gpt-6-luna" and
   .recommendedStart.harness == "Codex" and
   .recommendedStart.effort == "medium" and
-  .recommendedStart.fallback.model == "gpt-6-sol" and
+  .recommendedStart.fallback.model == "gpt-6.1-sol" and
   (.recommendedStart.fallback | keys | length) == 3
 ' "$TMP/browser-required-recommendation.json"
 
@@ -105,7 +105,7 @@ assert jq -e '
   --capability structured-output --effort low --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/builder.json"
 assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "low"' "$TMP/builder.json"
-assert jq -e '.recommendedStart.fallback.model == "gpt-6-sol" and (.recommendedStart.fallback | keys | length) == 3' "$TMP/builder.json"
+assert jq -e '.recommendedStart.fallback.model == "gpt-6.1-sol" and (.recommendedStart.fallback | keys | length) == 3' "$TMP/builder.json"
 assert jq -e '.recommendedStart.cost.label == "included subscription" and .recommendedStart.cost.apiEquivalent == null and .recommendedStart.cost.apiPrice == null' "$TMP/builder.json"
 
 "$RECOMMEND" --role review-fast --capability read-repository \
@@ -117,12 +117,12 @@ assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.harn
   --capability long-context --capability structured-output --effort medium \
   --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
   --format json > "$TMP/review-coordinator.json"
-assert jq -e '.recommendedStart.model == "gpt-6-sol" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-6-astra"' "$TMP/review-coordinator.json"
+assert jq -e '.recommendedStart.model == "gpt-6.1-sol" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-6-astra"' "$TMP/review-coordinator.json"
 
 "$RECOMMEND" --role design-consultant --capability long-context \
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/fable-design.json"
-assert jq -e '.recommendedStart.model == "gpt-6-sol" and .recommendedStart.harness == "Codex" and .recommendedStart.fallback.model == "qwen/qwen3.8-max"' "$TMP/fable-design.json"
+assert jq -e '.recommendedStart.model == "gpt-6.1-sol" and .recommendedStart.harness == "Codex" and .recommendedStart.fallback.model == "qwen/qwen3.8-max"' "$TMP/fable-design.json"
 
 # The two reported consumer tasks choose economical roles, with concrete native
 # fallbacks even when the host needs tools. These exercise the real renderer.
@@ -130,12 +130,12 @@ assert jq -e '.recommendedStart.model == "gpt-6-sol" and .recommendedStart.harne
   --capability write-repository --capability tool-use --capability structured-output \
   --effort high --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
   --format json > "$TMP/node-policy-repair.json"
-assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.effort == "high" and .recommendedStart.fallback.model == "gpt-6-sol"' "$TMP/node-policy-repair.json"
+assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.effort == "high" and .recommendedStart.fallback.model == "gpt-6.1-sol"' "$TMP/node-policy-repair.json"
 "$RECOMMEND" --role research-fast --capability read-repository \
   --capability tool-use --capability structured-output --effort medium \
   --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
   --format json > "$TMP/publication-readiness.json"
-assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-6-sol"' "$TMP/publication-readiness.json"
+assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-6.1-sol"' "$TMP/publication-readiness.json"
 assert jq -e 'all(.roles[][]; .transport != "claude-cli")' "$POLICY"
 assert jq -e 'all(.chunkKinds.logic,.chunkKinds.ui,.chunkKinds.integration; .executorRole == "builder-fast" and (.executorCapabilities|index("long-context")|not))' "$PIPELINE_POLICY"
 
@@ -169,7 +169,7 @@ jq '.roles["review-fast"] += [
   --capability read-repository --capability long-context \
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/review-long-context.json"
-assert jq -e '.recommendedStart.model == "gpt-6-sol" and .recommendedStart.fallback.model == "qwen/qwen3.8-max"' "$TMP/review-long-context.json"
+assert jq -e '.recommendedStart.model == "gpt-6.1-sol" and .recommendedStart.fallback.model == "qwen/qwen3.8-max"' "$TMP/review-long-context.json"
 
 jq '.roles["review-fast"] |= reverse' "$POLICY" > "$TMP/reordered-policy.json"
 "$RECOMMEND" --policy-file "$TMP/reordered-policy.json" --role review-fast \
@@ -206,7 +206,7 @@ assert jq -e '.recommendedStart.model == "gpt-6-luna" and
   .recommendedStart.availability == "attemptable" and
   .recommendedStart.availabilityReason == "required_window_missing" and
   (.recommendedStart.why | contains("not verified healthy")) and
-  .recommendedStart.fallback.model == "gpt-6-sol" and
+  .recommendedStart.fallback.model == "gpt-6.1-sol" and
   .recommendedStart.cost.apiPrice == null' "$TMP/codex-telemetry-recommendation.json"
 
 # Live recommendations resolve native CLIs before sanitizing PATH, honor

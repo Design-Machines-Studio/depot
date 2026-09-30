@@ -20,8 +20,9 @@ check() {
 
 check 'GPT-6 migration removes retired active candidates and duplicate fallbacks' jq -e '
   all(.roles[][]; (.model | test("gpt-5[.]6-(sol|luna|terra)") | not)) and
+  all(.roles[][]; .model != "gpt-6-sol") and
   all(.roles[]; ([.[].model] | length) == ([.[].model] | unique | length)) and
-  .roles["builder-fast"][1].model == "gpt-6-sol"' "$POLICY"
+  .roles["builder-fast"][1].model == "gpt-6.1-sol"' "$POLICY"
 
 check 'new catalog prices and tiers have fresh model-specific evidence' jq -e '
   ([.models[] | select(.slug == "openai/gpt-6-luna")][0] |
@@ -46,18 +47,18 @@ check 'builder-deep starts on native subscription capacity' jq -e '
   .roles["builder-deep"][0].model == "gpt-6-luna" and
   .roles["builder-deep"][0].billing == "included-subscription"' "$POLICY"
 
-check 'architect begins with Sol; Astra remains escalation' jq -e '
-  .roles.architect[0].model == "gpt-6-sol" and
+check 'architect begins with GPT-6.1 Sol; Astra remains escalation' jq -e '
+  .roles.architect[0].model == "gpt-6.1-sol" and
   .roles.architect[0].transport == "codex-cli"' "$POLICY"
 
 check 'driver policy retains the baseline and distinct specialist workers' jq -e '
   .roles.architect[1].model == "gpt-6-astra" and
-  .roles["builder-deep"][1].model == "gpt-6-sol" and
+  .roles["builder-deep"][1].model == "gpt-6.1-sol" and
   .roles["builder-deep"][2].model == "gpt-6-astra" and
   .roles["review-fast"][0].model == "gpt-6-luna" and
-  .roles["review-fast"][1].model == "gpt-6-sol" and
+  .roles["review-fast"][1].model == "gpt-6.1-sol" and
   .roles["review-fast"][2].transport == "openrouter" and
-  .roles["review-deep"][1].model == "gpt-6-sol" and
+  .roles["review-deep"][1].model == "gpt-6.1-sol" and
   .roles["review-deep"][2].transport == "openrouter" and
   .roles["review-deep"][0].model == "gpt-6-luna"' "$POLICY"
 

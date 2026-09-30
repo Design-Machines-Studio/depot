@@ -72,7 +72,7 @@ class ReviewCloseoutTests(unittest.TestCase):
             "reviewer": "security", "lane": "security",
             "requested_provider": "openai", "attempted_provider": "openai",
             "implemented_by": "codex", "provider": "openai",
-            "model": "gpt-6-sol", "evidence_refs": ["raw/security.md"],
+            "model": "gpt-6.1-sol", "evidence_refs": ["raw/security.md"],
             "implementer_family": "openai", "reviewer_family": "openai",
             "resolution_reason": "same-family-standard-review",
             "raw_output_ref": (
