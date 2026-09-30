@@ -1,5 +1,14 @@
 # Depot Tools
 
+## jev-log-trial.py
+
+Manual, opt-in experiment comparing deterministic verification-log filtering
+with Jev section selection. Produces source-bound baseline/selected packets,
+missed-evidence metrics and provider receipts without changing production
+routing or review decisions. Defaults to offline packet preparation; paid calls
+require an explicit installed Decisions adapter path. See
+[the experiment and initial result](../docs/jev-log-trial.md).
+
 ## generate-agent-plugins-canary.py
 
 Generates and validates the single allowlisted Agent Plugins v1 canary at
