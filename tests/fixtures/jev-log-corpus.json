@@ -1,0 +1,485 @@
+{
+  "schema": "jev-log-corpus-v1",
+  "cases": [
+    {
+      "id": "code-or-test-1",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nFAIL TestSave: expected version 3, got 2\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "code_or_test",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "code-or-test-2",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\npanic: nil pointer in updateRule\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "code_or_test",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "code-or-test-3",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: undefined: NewFixture\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "code_or_test",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "code-or-test-4",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nFAIL: expected status 403, got 200\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "code_or_test",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "code-or-test-5",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nfatal: concurrent map writes\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "code_or_test",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "code-or-test-6",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: template execution: missing Name\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "code_or_test",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "environment-1",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: docker: command not found\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "environment",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "environment-2",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\npermission denied opening Docker socket\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "environment",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "environment-3",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nfatal: connection refused at documented dev URL\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "environment",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "environment-4",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: disk quota exceeded writing test output\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "environment",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "environment-5",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: port already in use\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "environment",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "environment-6",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: executable templ not found\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "environment",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "dependency-1",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: module requires Go 1.26 but installed Go 1.25\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "dependency",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "dependency-2",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nFAIL vulnerability scan: CVE-2026-19534 in undici\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "dependency",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "dependency-3",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: missing go.sum entry for module\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "dependency",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "dependency-4",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: dependency lockfile is out of date\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "dependency",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "dependency-5",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nFAIL: fixture SDK minimum version not satisfied\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "dependency",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "dependency-6",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: checksum mismatch downloading module\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "dependency",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "routing-1",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: OpenRouter HTTP 402 insufficient_credits\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "routing",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "routing-2",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nreview unavailable: required_window_missing\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "routing",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "routing-3",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: no_capability_compatible_candidate\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "routing",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "routing-4",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nFAIL: reviewer source receipt missing; tests passed\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "routing",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "routing-5",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: provider request timed out before model output\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "routing",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "routing-6",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: rate_limit_exhausted before reviewer dispatch\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": 1,
+      "expected_category": "routing",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "unknown-1",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nwarning: prior failure log referenced, current outcome not reported\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": null,
+      "expected_category": "unknown",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "unknown-2",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: process exited 1 without diagnostic output\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": null,
+      "expected_category": "unknown",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "unknown-3",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nFAIL: test assertion plus Docker disconnect; causal order unknown\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": null,
+      "expected_category": "unknown",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "unknown-4",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nwarning: quoted example says error, no execution recorded\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": null,
+      "expected_category": "unknown",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "unknown-5",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nerror: truncated log; root cause omitted\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": null,
+      "expected_category": "unknown",
+      "essential_lines": [
+        31,
+        32
+      ]
+    },
+    {
+      "id": "unknown-6",
+      "kind": "synthetic",
+      "source": {
+        "repository": "Design-Machines-Studio/depot",
+        "revision": "synthetic-v1",
+        "artifact": "hand-authored failure scenario; not a historical log"
+      },
+      "log": "verification started\nprogress 1\nprogress 2\nprogress 3\nprogress 4\nprogress 5\nprogress 6\nprogress 7\nprogress 8\nprogress 9\nwarning: optional theme asset absent; unrelated documentation step continued\nprogress 11\nprogress 12\nprogress 13\nprogress 14\nprogress 15\nprogress 16\nprogress 17\nprogress 18\nprogress 19\nprogress 20\nprogress 21\nprogress 22\nprogress 23\nprogress 24\nprogress 25\nprogress 26\nprogress 27\nprogress 28\nprogress 29\nFAIL: expected failure fixture succeeded; overall command result missing\ndiagnostic context: inspect the exact source and test output before deciding\nprogress 32\nprogress 33\nprogress 34\nprogress 35\nprogress 36\nprogress 37\nprogress 38\nprogress 39\nprogress 40\nprogress 41\nprogress 42\nprogress 43\nprogress 44\nprogress 45\nprogress 46\nprogress 47\nprogress 48\nprogress 49\nverification ended\n",
+      "exit_code": null,
+      "expected_category": "unknown",
+      "essential_lines": [
+        31,
+        32
+      ]
+    }
+  ]
+}
