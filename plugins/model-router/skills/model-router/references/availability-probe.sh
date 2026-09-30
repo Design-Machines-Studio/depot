@@ -37,6 +37,8 @@ fi
 
 THRESHOLD="$(jq -r '.availability.headroomThresholdPct // 8' "$SCRIPT_DIR/role-policy.json" 2>/dev/null)"
 case "$THRESHOLD" in ''|*[!0-9]*) THRESHOLD=8 ;; esac
+CODEX_THRESHOLD="$(jq -r '.availability.codexHeadroomThresholdPct // 2' "$SCRIPT_DIR/role-policy.json" 2>/dev/null)"
+case "$CODEX_THRESHOLD" in ''|*[!0-9]*) CODEX_THRESHOLD=2 ;; esac
 # Portable bash 3.2 watchdog. A wedged CLI must resolve to unknown, not hang
 # the caller forever. No `timeout(1)` on stock macOS, so background + poll.
 run_bounded() {
@@ -250,7 +252,7 @@ codex_app_server_exchange() (
 
 normalize_codex_snapshot() {
   local snapshot="$1"
-  printf '%s' "$snapshot" | jq -c --argjson threshold "$THRESHOLD" '
+  printf '%s' "$snapshot" | jq -c --argjson threshold "$CODEX_THRESHOLD" '
     def closed($reason): {state:"unknown",reason:$reason};
     if type != "object" then closed("rate_limit_response_malformed")
     else
@@ -272,8 +274,10 @@ normalize_codex_snapshot() {
               closed("rate_limit_shape_unsupported")
             elif ($windows | length) == 0 then
               closed("required_window_missing")
-            elif any($windows[]; .remaining <= $threshold) then
+            elif any($windows[]; .remaining == 0) then
               {state:"limited",reason:"rate_limit_exhausted"}
+            elif any($windows[]; .remaining <= $threshold) then
+              {state:"limited",reason:"reserve_threshold_reached"}
             else
               {state:"ok",reason:"available"}
             end
@@ -324,7 +328,7 @@ EOF
         else
           if printf '%s' "$allowances" | jq -e 'all(.[]; .state == "limited")' >/dev/null; then
             state="limited"
-            reason="rate_limit_exhausted"
+            reason="$(printf '%s' "$allowances" | jq -r 'if any(.[]; .reason == "reserve_threshold_reached") then "reserve_threshold_reached" else "rate_limit_exhausted" end')"
           else
             # Bucket ownership remains unknown, but a healthy allowance makes
             # an authenticated candidate attemptable at dispatch time. Do not

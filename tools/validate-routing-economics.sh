@@ -36,7 +36,7 @@ check 'new catalog prices and tiers have fresh model-specific evidence' jq -e '
   (.native_api_equivalent_cost.aliases | has("gpt-6-sol") | not)' "$MATRIX"
 
 check 'router schema and threshold are closed' jq -e '
-  .schemaVersion == 1 and .availability.headroomThresholdPct == 8 and
+  .schemaVersion == 1 and .availability.headroomThresholdPct == 8 and .availability.codexHeadroomThresholdPct == 2 and
   .effort.vocabulary == ["low","medium","high","max"]' "$POLICY"
 
 check 'builder-fast starts with the bounded fast candidate' jq -e '

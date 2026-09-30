@@ -45,7 +45,10 @@ For Codex subscription candidates, authentication and allowance observation
 remain separate. The probe validates that every 0.147 map key matches its
 snapshot `limitId`, parses the 0.146 `rateLimits.primary`/`secondary` and 0.147
 `rateLimitsByLimitId` forms, and evaluates every observed supported window at
-the existing 8% threshold. An absent optional window is not fabricated and
+the Codex-specific 2% reserve threshold. Above 2% remains eligible; at or
+below 2% skips new dispatches with `reserve_threshold_reached`. Zero remaining
+or a real provider quota rejection uses `rate_limit_exhausted`. Claude keeps
+its existing 8% threshold. An absent optional window is not fabricated and
 does not invalidate another observed window. An empty or incomplete snapshot
 stays unknown with its content-safe diagnostic. With confirmed ChatGPT
 subscription authentication, unknown or unavailable allowance telemetry
@@ -54,8 +57,9 @@ verified healthy. An observed applicable exhausted bucket, API-key-only or
 unknown authentication, or missing authentication still closes the native
 candidate. Multiple 0.147 buckets without an authoritative candidate mapping
 remain unattributed; the router does not choose a best bucket. If all
-unattributed buckets are exhausted, Codex is skipped as
-`rate_limit_exhausted`.
+unattributed buckets are limited, Codex is skipped. Report
+`reserve_threshold_reached` when any bucket retains reserved capacity;
+`rate_limit_exhausted` when all are exhausted.
 
 An OpenRouter `insufficient_credits` failure is actionable only from its
 validated provider receipt with its HTTP status. It closes the OpenRouter
