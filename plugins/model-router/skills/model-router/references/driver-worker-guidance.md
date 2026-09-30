@@ -1,6 +1,6 @@
 # Main driver and bounded workers
 
-Human-facing policy, updated 2026-09-23. Optimize total completion cost:
+Human-facing policy, updated 2026-09-30. Optimize total completion cost:
 input (including repeated cached context), output/reasoning, retries, integration
 and review, defects/rework, elapsed time and maintainer attention. Start with the
 lowest capable model for the whole job, not the cheapest token price. A stronger
@@ -12,13 +12,13 @@ Concrete identities here are operator-only; `role-policy.json` owns selection.
 
 | Work | Starting point | Escalation |
 |---|---|---|
-| Evidence gathering, release-readiness checks, routine planning and coordination | `research-fast`; GPT-6 Luna Medium in Codex | GPT-6 Sol Medium when evidence materially conflicts |
+| Evidence gathering, release-readiness checks, routine planning and coordination | `research-fast`; GPT-6 Luna Medium in Codex | GPT-6.1 Sol Medium when evidence materially conflicts |
 | Mechanical/docs changes | `builder-fast`; Luna Low or Medium | Increase only for demonstrated difficulty |
-| Bounded implementation, including settled UI, logic and integration | `builder-fast`; Luna High | Sol after one focused failed attempt or named uncertainty |
-| Complex implementation requiring unresolved judgment | `builder-deep`; Luna Medium | Sol, then Astra only for concrete difficulty |
-| Unresolved architecture | `architect`; GPT-6 Sol Medium | Astra for particularly difficult architecture; not a routine planning default |
-| Standalone review orchestration | `review-coordinator`; GPT-6 Sol Medium | Astra for difficult judgment; do not repeat already valid reviews |
-| Narrow design question | `design-consultant`; Sol with the prototype as authority | Existing eligible specialist fallback, not a redesign mandate |
+| Bounded implementation, including settled UI, logic and integration | `builder-fast`; Luna High | GPT-6.1 Sol after one focused failed attempt or named uncertainty |
+| Complex implementation requiring unresolved judgment | `builder-deep`; Luna Medium | GPT-6.1 Sol, then Astra only for concrete difficulty |
+| Unresolved architecture | `architect`; GPT-6.1 Sol Medium | Astra for particularly difficult architecture; not a routine planning default |
+| Standalone review orchestration | `review-coordinator`; GPT-6.1 Sol Medium | Astra for difficult judgment; do not repeat already valid reviews |
+| Narrow design question | `design-consultant`; GPT-6.1 Sol Medium with the prototype as authority | Existing eligible specialist fallback, not a redesign mandate |
 | Bounded inexpensive or specialized analysis | Eligible OpenRouter participant | Host retains tools, integration and verification unless transport proves otherwise |
 
 Codex drives coding, integration and verification. Claude is excluded from the
@@ -90,7 +90,7 @@ cost measurements stay unavailable in the terminal receipt and never gate a
 required review lane.
 
 Native Codex remains first; OpenRouter eligibility stays in the role policy.
-GPT-6 Sol/Luna catalog evidence was refreshed on 2026-09-23; other catalog rows
+GPT-6.1 Sol/Luna guidance uses the 2026-09-30 OpenAI model cards; other catalog rows
 retain their explicitly dated prior evidence. New native API-equivalent aliases
 remain unavailable until imputation respects long-input tiers. Historical
 GPT-5.6 prices remain historical only, never subscription charges. Published API

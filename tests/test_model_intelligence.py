@@ -822,9 +822,9 @@ class ModelIntelligenceTest(unittest.TestCase):
             case_id="review-zero-deferral", model="gpt-6-luna", transport="codex-cli",
             observed_at="2026-08-29T04:21:00Z", endpoint_provider="openai",
         )
-        rejected["servedIdentity"] = "gpt-6-sol"
-        rejected["fallback"]["attemptedIdentity"] = "gpt-6-sol"
-        rejected["fallback"]["attemptedIdentities"] = ["gpt-6-sol"]
+        rejected["servedIdentity"] = "gpt-6.1-sol"
+        rejected["fallback"]["attemptedIdentity"] = "gpt-6.1-sol"
+        rejected["fallback"]["attemptedIdentities"] = ["gpt-6.1-sol"]
         self.write_attempt(benchmark_root, "allowed-opus-alias", allowed)
         self.write_attempt(benchmark_root, "rejected-cross-model", rejected)
 
@@ -1217,7 +1217,7 @@ class ModelIntelligenceTest(unittest.TestCase):
             evidence_state="incompatible",
         )
         write_validation(
-            "fault", role="architect", candidate="gpt-6-sol", transport="codex-cli",
+            "fault", role="architect", candidate="gpt-6.1-sol", transport="codex-cli",
             comparable=False, conclusion=None, benchmark_fault=True,
             evidence_state="benchmark-faulted",
         )
@@ -1416,10 +1416,11 @@ printf '%s\n' '{event}'
 
     def test_claude_explicit_response_identity_precedes_root_requested_alias(self) -> None:
         expected = {
-            "nextChunk": "depot-role-benchmark",
+            "nextChunk": "depot-benchmark-corpus-scorer",
             "executorRole": "builder-fast",
             "executorCapabilities": ["read-repository", "write-repository", "structured-output"],
-            "rejectedComplexity": ["Issue #86 Floor observation schemas", "daemon", "generic workflow engine"],
+            "rejectedComplexity": ["unsupported infrastructure"],
+            "rejectedScope": ["issue-86-floor-observation-schemas", "daemon-orchestration", "broker-orchestration", "database-or-mcp-infrastructure", "hosted-judge-or-generic-workflow-engine"],
         }
         telemetry = {
             "result": json.dumps(expected, separators=(",", ":")),
@@ -1457,12 +1458,13 @@ printf '%s\n' '{event}'
         self.assertEqual(scored["requestedIdentity"], "opus")
         self.assertEqual(scored["servedIdentity"], "claude-opus-5")
 
-    def test_claude_allowed_identity_closes_missing_fallback_fields(self) -> None:
+    def test_claude_identity_does_not_infer_missing_fallback_fields(self) -> None:
         expected = {
-            "nextChunk": "role-complete benchmark corpus and deterministic scorer",
+            "nextChunk": "depot-benchmark-corpus-scorer",
             "executorRole": "builder-fast",
             "executorCapabilities": ["read-repository", "write-repository", "structured-output"],
-            "rejectedComplexity": ["Issue #86 Floor observation schemas", "daemon", "generic workflow engine"],
+            "rejectedComplexity": ["unsupported infrastructure"],
+            "rejectedScope": ["issue-86-floor-observation-schemas", "daemon-orchestration", "broker-orchestration", "database-or-mcp-infrastructure", "hosted-judge-or-generic-workflow-engine"],
         }
         telemetry = {
             "result": json.dumps(expected, separators=(",", ":")),
@@ -1483,14 +1485,16 @@ printf '%s\n' '{event}'
         )
         self.assertEqual(result.returncode, 0, result.stderr)
         receipt = json.loads((result_dir / "receipt.json").read_text())
-        self.assertFalse(receipt["fallbackUsed"])
-        self.assertEqual(receipt["fallbackProvenance"], "response-model-match")
-        self.assertEqual(receipt["attemptedModel"], "claude-opus-5")
-        self.assertEqual(receipt["attemptedModels"], ["claude-opus-5"])
-        self.assertEqual(receipt["attemptProvenance"], "response_model")
+        self.assertIsNone(receipt["fallbackUsed"])
+        self.assertEqual(receipt["fallbackProvenance"], "not_available")
+        self.assertIsNone(receipt["attemptedModel"])
+        self.assertEqual(receipt["attemptedModels"], [])
+        self.assertEqual(receipt["attemptProvenance"], "not_available")
         scored = json.loads((result_dir / "result.json").read_text())
-        self.assertTrue(scored["comparable"])
-        self.assertTrue(scored["overallSuccess"])
+        self.assertFalse(scored["comparable"])
+        self.assertFalse(scored["overallSuccess"])
+        self.assertEqual(scored["failureStage"], "identity")
+        self.assertIsNone(scored["modelConclusion"])
 
     def test_claude_usage_identity_requires_every_output_counter(self) -> None:
         telemetry = {
@@ -1568,10 +1572,11 @@ printf '%s\n' '{event}'
 
     def test_claude_opus_primary_retains_haiku_as_ancillary(self) -> None:
         raw_response = {
-            "nextChunk": "role-complete benchmark corpus and deterministic scorer",
+            "nextChunk": "depot-benchmark-corpus-scorer",
             "executorRole": "bounded repository architect",
             "executorCapabilities": ["repository reading", "structured results"],
-            "rejectedComplexity": ["hosted judge", "generic workflow engine"],
+            "rejectedComplexity": ["hosted judge and generic workflow engine are out of scope"],
+            "rejectedScope": ["issue-86-floor-observation-schemas", "daemon-orchestration", "broker-orchestration", "database-or-mcp-infrastructure", "hosted-judge-or-generic-workflow-engine"],
         }
         telemetry = {
             "result": json.dumps(raw_response),
@@ -1626,16 +1631,17 @@ printf '%s\n' '{event}'
             receipt["responseModelProvenance"],
             "modelUsage-unique-max-output-tokens",
         )
-        self.assertFalse(receipt["fallbackUsed"])
-        self.assertEqual(receipt["fallbackProvenance"], "response-model-match")
+        self.assertIsNone(receipt["fallbackUsed"])
+        self.assertEqual(receipt["fallbackProvenance"], "not_available")
         scored = json.loads((result_dir / "result.json").read_text())
         self.assertEqual(
             scored["identityStatus"]["provenance"],
             "modelUsage-unique-max-output-tokens",
         )
-        self.assertTrue(scored["comparable"])
-        self.assertTrue(scored["overallSuccess"])
-        self.assertEqual(scored["failureClass"], "none")
+        self.assertFalse(scored["comparable"])
+        self.assertFalse(scored["overallSuccess"])
+        self.assertEqual(scored["failureStage"], "identity")
+        self.assertIsNone(scored["modelConclusion"])
         self.assertEqual((result_dir / "output.json").read_text(), json.dumps(raw_response) + "\n")
         self.assertEqual(json.loads((result_dir / "native-events.json").read_text()), telemetry)
 
@@ -1688,11 +1694,34 @@ printf '%s\n' '{event}'
         self.assertIsNone(scored["servedIdentity"])
         self.assertFalse(scored["comparable"])
 
+    def test_codex_served_identity_does_not_infer_missing_fallback_status(self) -> None:
+        output = '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}'
+        event = '{"type":"turn.completed","model":"gpt-6.1-sol","provider":"openai","usage":{"input_tokens":20,"output_tokens":10}}'
+        stub = self.codex_stub("codex-no-fallback-status-stub", event, output)
+        result_dir = self.root / "codex-no-fallback-status-result"
+        result = self.run_native(
+            case="review-zero-deferral",
+            transport="codex-cli",
+            model="gpt-6.1-sol",
+            result_dir=result_dir,
+            stub=stub,
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        receipt = json.loads((result_dir / "receipt.json").read_text())
+        self.assertEqual(receipt["responseModel"], "gpt-6.1-sol")
+        self.assertIsNone(receipt["fallbackUsed"])
+        self.assertEqual(receipt["fallbackProvenance"], "not_available")
+        scored = json.loads((result_dir / "result.json").read_text())
+        self.assertFalse(scored["comparable"])
+        self.assertEqual(scored["failureStage"], "identity")
+        self.assertEqual(scored["failureOwner"], "operational")
+        self.assertIsNone(scored["modelConclusion"])
+
     def test_codex_cross_model_identity_is_not_credited_to_requested_candidate(self) -> None:
         output = '{"findings":[{"id":"AUTH-1","severity":"P1"},{"id":"ROUTE-2","severity":"P2"},{"id":"DOC-3","severity":"P3"}],"deferred":false}'
         event = json.dumps(
             {
-                "type": "turn.completed", "model": "gpt-6-sol", "provider": "openai",
+                "type": "turn.completed", "model": "gpt-6.1-sol", "provider": "openai",
                 "fallbackUsed": False, "usage": {"input_tokens": 20, "output_tokens": 10},
             },
             separators=(",", ":"),
@@ -1706,7 +1735,7 @@ printf '%s\n' '{event}'
         self.assertEqual(result.returncode, 0, result.stderr)
         receipt = json.loads((result_dir / "receipt.json").read_text())
         self.assertEqual(receipt["requestedModel"], "gpt-6-luna")
-        self.assertEqual(receipt["responseModel"], "gpt-6-sol")
+        self.assertEqual(receipt["responseModel"], "gpt-6.1-sol")
         scored = json.loads((result_dir / "result.json").read_text())
         self.assertFalse(scored["comparable"])
         self.assertFalse(scored["overallSuccess"])
@@ -1753,7 +1782,7 @@ printf '%s\n' '{event}'
                     "model": "gpt-6-luna",
                     "provider": "openai",
                     "fallbackUsed": False,
-                    "attemptedModels": ["gpt-6-luna", "gpt-6-sol"],
+                    "attemptedModels": ["gpt-6-luna", "gpt-6.1-sol"],
                 }
             ],
             "inconsistent-booleans": [
@@ -1794,7 +1823,7 @@ printf '%s\n' '{event}'
                 if name == "false-with-extra-attempt":
                     self.assertEqual(
                         receipt["attemptedModels"],
-                        ["gpt-6-luna", "gpt-6-sol"],
+                        ["gpt-6-luna", "gpt-6.1-sol"],
                     )
                 scored = json.loads((result_dir / "result.json").read_text())
                 self.assertFalse(scored["comparable"])
@@ -1927,9 +1956,11 @@ printf '%s\n' '{event}'
                 self.assertNotEqual(result.returncode, 0)
                 receipt = json.loads((result_dir / "receipt.json").read_text())
                 self.assertEqual(receipt["outcome"], "failed")
-                self.assertEqual(receipt["failureKind"], "malformed-telemetry")
+                self.assertEqual(receipt["failureKind"], "native-cli-telemetry-unavailable")
                 scored = json.loads((result_dir / "result.json").read_text())
                 self.assertFalse(scored["overallSuccess"])
+                self.assertEqual(scored["failureStage"], "transport")
+                self.assertEqual(scored["failureOwner"], "operational")
                 self.assertIsNone(scored["modelConclusion"])
 
     def test_fenced_claude_object_normalizes_without_hiding_strict_failure(self) -> None:
