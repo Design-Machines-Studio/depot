@@ -19,7 +19,7 @@ from pathlib import Path
 
 
 KERNEL_VERSION_FLOOR = (0, 5, 0)
-KERNEL_VERSION = (0, 24, 1)
+KERNEL_VERSION = (0, 24, 2)
 _KERNEL_SEMVER = re.compile(
     r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)"
 )
@@ -310,12 +310,21 @@ def workflow_kernel_runtime_candidates(canonical_plugin_root, *, home=None):
     if not source.is_dir():
         raise ValueError("invalid canonical plugin root")
     roots = []
+    cache_roots = []
     if source.parent.name == "plugins":
         depot = source.parent.parent.resolve(strict=True)
         lexical_depot = Path(os.path.abspath(str(canonical_plugin_root))).parent.parent
         roots.append((lexical_depot / "plugins" / "workflow-kernel", depot, None))
         if home is None:
             home = Path(pwd.getpwuid(os.getuid()).pw_dir)
+        home = Path(home)
+        cache_roots.extend(
+            (
+                home / cache_name / "plugins" / "cache" / "depot" / "workflow-kernel",
+                cache_name[1:],
+            )
+            for cache_name in (".claude", ".codex")
+        )
     else:
         provider = source.parent.parent.parent.parent.parent
         if not (
@@ -323,14 +332,42 @@ def workflow_kernel_runtime_candidates(canonical_plugin_root, *, home=None):
             and source.parent.parent.name == "depot"
             and source.parent.parent.parent.name == "cache"
             and source.parent.parent.parent.parent.name == "plugins"
-            and provider.name in {".claude", ".codex"}
         ):
             raise ValueError("invalid canonical plugin root")
-        if home is None:
-            home = provider.parent
-    home = Path(home)
-    for cache_name in (".claude", ".codex"):
-        cache = home / cache_name / "plugins" / "cache" / "depot" / "workflow-kernel"
+        if provider.name in {".claude", ".codex"}:
+            # Standard host cache: retain cross-host resolution and account
+            # cache ordering for the normal Claude and Codex layouts.
+            account_home = provider.parent if home is None else Path(home)
+            cache_roots.extend(
+                (
+                    account_home / cache_name / "plugins" / "cache" / "depot" / "workflow-kernel",
+                    cache_name[1:],
+                )
+                for cache_name in (".claude", ".codex")
+            )
+        else:
+            # Codex supports custom CODEX_HOME roots. The canonical installed
+            # plugin path is the trust anchor: search only its sibling cache,
+            # never the account's default caches or a caller-selected HOME.
+            configured_codex_home = os.environ.get("CODEX_HOME")
+            try:
+                configured_root = (
+                    Path(configured_codex_home).resolve(strict=True)
+                    if configured_codex_home else None
+                )
+                provider_root = provider.resolve(strict=True)
+            except (OSError, RuntimeError, ValueError):
+                raise ValueError("invalid custom Codex home") from None
+            if configured_root is None or configured_root != provider_root:
+                raise ValueError("custom plugin root does not match CODEX_HOME")
+            codex_manifest = source / ".codex-plugin" / "plugin.json"
+            if not codex_manifest.is_file() or codex_manifest.is_symlink():
+                raise ValueError("invalid installed plugin manifest")
+            cache_roots.append((
+                provider / "plugins" / "cache" / "depot" / "workflow-kernel",
+                "codex",
+            ))
+    for cache, cache_class in cache_roots:
         if not cache.is_dir():
             continue
         candidates = []

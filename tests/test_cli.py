@@ -83,6 +83,29 @@ class CliTests(unittest.TestCase):
             capture_output=True, env=env, check=False,
         )
 
+    def install_custom_codex_home_runtime(self, codex_home, version, main_source):
+        plugin = (
+            Path(codex_home) / "plugins/cache/depot/workflow-kernel" / version
+        )
+        refs = plugin / "skills/workflow-kernel/references"
+        package = refs / "workflow_kernel"
+        package.mkdir(parents=True)
+        (plugin / ".codex-plugin").mkdir()
+        (plugin / ".codex-plugin/plugin.json").write_text(json.dumps({
+            "name": "workflow-kernel", "version": version,
+        }))
+        (package / "__init__.py").write_text("")
+        (package / "__main__.py").write_text(main_source)
+        (package / "runtime_resolution.py").write_text(
+            (KERNEL_REFERENCES / "workflow_kernel/runtime_resolution.py").read_text()
+        )
+        launcher = refs / "workflow-kernel-launcher.sh"
+        launcher.write_text(
+            (KERNEL_REFERENCES / "workflow-kernel-launcher.sh").read_text()
+        )
+        launcher.chmod(0o755)
+        return plugin, refs, launcher
+
     def test_help_lists_commands(self):
         result = self.run_cli("--help")
         self.assertEqual(result.returncode, 0)
@@ -479,6 +502,43 @@ class CliTests(unittest.TestCase):
         self.assertEqual(result.stderr, "")
         self.assertIn("codex-only-runtime", result.stdout)
         self.assertNotIn("caller-runtime", result.stdout)
+
+    def test_installed_launcher_resolves_custom_codex_home_without_crossing_caches(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            codex_home = root / "isolated-codex-home"
+            decoy_home = root / "account-home"
+            plugin, refs, launcher = self.install_custom_codex_home_runtime(
+                codex_home, "0.24.1", "print('custom-codex-home-runtime')\n",
+            )
+            self.install_cached_runtime(
+                decoy_home, ".claude", "0.99.0",
+                "print('account-home-decoy')\n",
+            )
+
+            # The custom host root owns candidate resolution even if a caller
+            # supplies a different account cache containing a newer runtime.
+            with mock.patch.dict(os.environ, {"CODEX_HOME": str(codex_home)}):
+                resolved = cli.resolve_workflow_kernel_runtime(
+                    plugin, home=decoy_home,
+                )
+            self.assertEqual(
+                resolved,
+                refs.resolve(),
+            )
+
+            env = dict(os.environ)
+            env.update({
+                "CODEX_HOME": str(codex_home),
+                "HOME": str(decoy_home),
+            })
+            result = subprocess.run(
+                [str(launcher), "--help"], text=True, capture_output=True,
+                env=env, check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("custom-codex-home-runtime", result.stdout)
+        self.assertNotIn("account-home-decoy", result.stdout)
 
     def test_documented_cache_resolver_skips_incomplete_newer_candidates(self):
         with tempfile.TemporaryDirectory() as directory:

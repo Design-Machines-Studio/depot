@@ -1,5 +1,5 @@
 {
-  "digest": "sha256:5c0fc69eb29dd1b3fda5c0b9a9d2be59c66eaa8f90ae008c6a748a0f33912090",
+  "digest": "sha256:d9882ba069812cd6443c5d0bf5371d2198f54513ae392b414db213941af7a19b",
   "invocation": {
     "first_event_at": "2026-08-09T00:00:00Z",
     "last_event_at": "2026-08-09T00:00:00Z"
@@ -98,7 +98,7 @@
     }
   },
   "versions": {
-    "kernel_version": "0.24.1"
+    "kernel_version": "0.24.2"
   },
   "volatile_fields": [
     "invocation.emitted_at"

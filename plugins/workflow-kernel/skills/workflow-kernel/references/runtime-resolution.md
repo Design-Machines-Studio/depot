@@ -30,9 +30,13 @@ repository's `plugins/workflow-kernel`, in an installed environment the exact
 dependency instance the host selected and manifest-validated. The launcher then
 uses the shared side-effect-free Python resolver to select the newest compatible
 runtime (repository sibling first, then semver-sorted caches under `~/.claude`
-and `~/.codex`). Installed launchers derive that account root from their own
-canonical cache path; repository launchers use the OS account database.
-Caller-supplied `HOME` never selects executable code.
+and `~/.codex`). A launcher in the standard `~/.claude` or `~/.codex` cache
+derives the account root from its canonical cache path. A launcher in a custom
+Codex `CODEX_HOME` is accepted only when that environment path resolves to the
+launcher’s canonical plugin-cache root; it searches only that root's sibling
+plugin cache and never falls back to the account's default caches. Repository
+launchers use the OS account database. Caller-supplied `HOME` never selects
+executable code.
 
 The dependency-neutral `workflow_kernel/runtime_resolution.py` module is the
 single policy owner, and `cli.py` imports the same functions for validation.
