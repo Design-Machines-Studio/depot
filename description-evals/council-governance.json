@@ -19,5 +19,10 @@
   {"query": "I need to set up CI/CD for the Assembly repository. We're using GitHub Actions and want to run go test on every PR", "should_trigger": false},
   {"query": "Can you review this pull request for security vulnerabilities? It adds a new authentication endpoint", "should_trigger": false},
   {"query": "Write me social media copy about the launch of our new governance tool. I need posts for LinkedIn and Bluesky", "should_trigger": false},
-  {"query": "I want to implement OAuth2 for the Assembly admin panel. What Go libraries should I use and how do I set it up?", "should_trigger": false}
+  {"query": "I want to implement OAuth2 for the Assembly admin panel. What Go libraries should I use and how do I set it up?", "should_trigger": false},
+  {"query": "Our co-op needs community rules that clarify delegated authority without making everyone vote on every task.", "should_trigger": true},
+  {"query": "How should our cooperative design conflict systems with mediation, appeals, and support for an overloaded facilitator?", "should_trigger": true},
+  {"query": "A member has a complaint about the usual conflict contact. What alternative process should our co-op provide?", "should_trigger": true},
+  {"query": "Help resolve this Git merge conflict in package-lock.json.", "should_trigger": false},
+  {"query": "My SQL query has conflicting column aliases. How do I fix it?", "should_trigger": false}
 ]

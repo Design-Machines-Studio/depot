@@ -1,7 +1,7 @@
 {
   "name": "council",
   "description": "Worker cooperative governance and decolonial content strategy",
-  "version": "1.11.2",
+  "version": "1.12.0",
   "author": {
     "name": "Design Machines"
   },
@@ -30,7 +30,7 @@
       {
         "id": "governance",
         "name": "Cooperative Governance",
-        "description": "Worker cooperative governance expertise for BC Cooperative Association Act compliance",
+        "description": "Worker cooperative governance, community authority and conflict systems, with BC compliance references",
         "triggers": [
           "quorum requirements",
           "voting threshold for special resolution",
@@ -43,7 +43,10 @@
           "board composition minimum directors",
           "cooperative vs corporation",
           "measurable membership requirement target vs achieved",
-          "track progress toward membership requirement"
+          "track progress toward membership requirement",
+          "community rules and delegated authority",
+          "conflict systems and mediation",
+          "appeals and facilitator capacity"
         ],
         "tags": [
           "governance",
@@ -52,7 +55,9 @@
           "bylaws",
           "voting",
           "compliance",
-          "membership"
+          "membership",
+          "conflict",
+          "delegation"
         ]
       }
     ],
