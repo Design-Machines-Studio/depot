@@ -442,3 +442,17 @@ See `bylaw-analysis.md` for complete checklist:
 
 *Reference v1.0 · February 2026*
 *Part of Co-op OS Discovery Framework*
+
+
+## Community authority and conflict discovery
+
+For a current need, supplement the existing interviews with a short conversation:
+who actually decides, what has been delegated, how an objection is heard, whom
+members approach for help, and what happens if that person is involved or the
+matter exceeds local capacity. Ask about access needs and available facilitator
+time. Record present practice separately from the group's desired arrangement.
+
+Use `community-governance-design.md` for the attributed governance comparison
+and `conflict-systems.md` for proportionate support and review questions. Begin
+with an agreed practice or document; do not assume a new software feature is
+required. This supplements discovery without adding another mandatory workshop.

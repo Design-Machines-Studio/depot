@@ -1,6 +1,6 @@
 ---
 name: governance
-description: Worker cooperative governance expertise for BC Cooperative Association Act compliance, bylaw analysis, discovery processes, and Assembly system design. Use when working with cooperatives, analyzing bylaws, designing governance systems, conducting discovery for Assembly projects, interpreting voting thresholds, patronage allocation, member equity, compliance requirements, or any worker cooperative governance questions. While it specializes in BC, Canada (5-50 member worker co-ops), the decision-making models, red flags, discovery framework, and governance module architecture apply to cooperatives in any jurisdiction. Trigger this skill for ANY cooperative governance question -- voting mechanics, quorum rules, AGM prep, member lifecycle, membership requirements (including measurable requirements that track progress toward a target rather than a boolean done-flag), equity structures, consent-based decisions, board composition -- even if the user doesn't mention BC specifically. Also trigger when discussing TACO, Solid State, or any Assembly pilot, when the user asks about co-op compliance deadlines, or when designing governance UI flows.
+description: Worker cooperative governance expertise for BC Cooperative Association Act compliance, bylaw analysis, discovery processes, and Assembly system design. Use when working with cooperatives, analyzing bylaws, designing governance systems, conducting discovery for Assembly projects, interpreting voting thresholds, patronage allocation, member equity, compliance requirements, or any worker cooperative governance questions, including community rules, delegated authority, conflict systems, mediation, appeals, and facilitator capacity. While it specializes in BC, Canada (5-50 member worker co-ops), the decision-making models, red flags, discovery framework, and governance module architecture apply to cooperatives in any jurisdiction. Trigger this skill for ANY cooperative governance question -- voting mechanics, quorum rules, AGM prep, member lifecycle, membership requirements (including measurable requirements that track progress toward a target rather than a boolean done-flag), equity structures, consent-based decisions, board composition -- even if the user doesn't mention BC specifically. Also trigger when discussing TACO, Solid State, or any Assembly pilot, when the user asks about co-op compliance deadlines, or when designing governance UI flows.
 ---
 
 # Co-op Governance Skill
@@ -70,6 +70,8 @@ Load specific reference files based on needs:
 | **Financial Governance** | `${CLAUDE_SKILL_DIR}/references/financial-governance.md` | Equity, patronage, ICAs |
 | **Compliance Calendar** | `${CLAUDE_SKILL_DIR}/references/compliance-calendar.md` | Annual requirements |
 | **Red Flags & Risks** | `${CLAUDE_SKILL_DIR}/references/red-flags.md` | Warning signs, common issues |
+| **Community Governance Design** | `${CLAUDE_SKILL_DIR}/references/community-governance-design.md` | Delegation, informal power, choosing and adapting governance arrangements |
+| **Conflict Systems** | `${CLAUDE_SKILL_DIR}/references/conflict-systems.md` | Disagreement, harm reports, mediation, appeals, privacy, and facilitator capacity |
 | **UX Testing** | `${CLAUDE_SKILL_DIR}/references/ux-testing.md` | Personas, test scenarios |
 
 ---
@@ -223,21 +225,35 @@ When bylaws conflict with the BC Act:
 
 ## Decision-Making Models
 
-### Model Comparison
-| Model | How It Works | Best For |
-|-------|--------------|----------|
-| **Simple Majority** | 50%+1 passes | Routine decisions, quick choices |
-| **Modified Consensus** | Try consensus, fall back to 75-80% supermajority | Most worker co-ops (recommended default) |
-| **Sociocracy** | Consent-based ("safe enough to try?"), nested circles | Mature co-ops, complex governance |
-| **Pure Consensus** | 100% agreement required | Very small groups, high-trust environments |
+### Choose from the co-op's actual context
 
-### Modified Consensus Process (Recommended)
-1. Proposal presented
-2. Questions for clarification
-3. Discussion/amendment
-4. Response options: **Consent** / **Stand Aside** / **Block**
-5. If blocked: Further discussion or fall back to supermajority vote
-6. If vote: 75-80% passes
+Start with the group's adopted rules, present practice, delegated authority,
+and desired change. No single model is the default for all co-ops. Read
+`references/community-governance-design.md` for the attributed Community Rules
+comparison and practical discovery questions.
+
+| Model | Clarify before recommending it |
+|-------|--------------------------------|
+| Majority voting | Which decisions use it, who is entitled to vote, and which verified threshold applies? |
+| Consensus with a fallback | What counts as an objection, and is the fallback process explicitly authorized? |
+| Consent and circles | What domains are delegated, how are serious objections addressed, and how are overlapping responsibilities handled? |
+| Consensus | What does agreement mean here, are stand-asides permitted, and who implements the result? |
+
+Consensus need not mean enthusiastic unanimity. Consent in a group process is
+not interchangeable with a statutory written consent resolution. Do not invent
+a 75–80% fallback vote when deliberation stalls; use the adopted process and
+verify current governing requirements for legal decisions.
+
+### Conflict is part of governance
+
+Load `references/conflict-systems.md` when the task involves disagreement,
+harm reports, appeals, facilitation, or member consequences. Clarify a private
+contact, an alternative when that person is involved, realistic next steps,
+authorized decision-makers, and the group's limits. A short agreement and
+human support may be sufficient; these books do not create a product roadmap.
+Separate ordinary disagreement from harm and coercion, and do not require
+confrontation or reconciliation. AI can assist preparation, not adjudicate
+credibility or consequences. Apply only the checks relevant to the current task.
 
 ### Decision Categorization for Co-op OS
 | Category | Who Decides | Threshold | Examples |
