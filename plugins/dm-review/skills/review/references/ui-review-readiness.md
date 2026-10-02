@@ -203,11 +203,16 @@ Only
    process or Compose resource.
    Install the same cleanup call on interruption and failure paths.
 
-For a repository-discovered Compose target, helper cleanup returns
-`registry_cleanup_required` and does not claim the resource is pre-existing or
-already clean. The host must then run the exact Workflow Kernel Docker cleanup
-plan referenced by the private readiness state. Only that registry authority
-may report the resource removed.
+For a repository-discovered Compose target, `settle`, `cleanup`, and terminal
+failure/interruption handling run the exact current-run Workflow Kernel cleanup
+sequence from the sealed registry. The helper persists the plan, ordered step
+outcomes, and cleanup receipt beneath the exact run's private review directory.
+It uses one fresh replan when a network was retained while an owned container
+still used it. It never executes the sibling stale-sweep plan. A cleanup result
+is reported separately as `completed`, `retained`, or `incomplete`; a review
+verdict does not imply cleanup success. Retry with the same exact run/node
+identity after repairing the reported prerequisite. Previous attempt evidence
+is retained, and retries plan from fresh exact-ID and consumer evidence.
 
 The private state has a closed `app_ready` -> `ready` -> `settled` lifecycle.
 It snapshots the exact readiness and cleanup argv/timeouts when the process is

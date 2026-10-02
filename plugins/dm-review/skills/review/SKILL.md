@@ -522,6 +522,10 @@ state, also pass the host-retained expected ownership mode; never let mutable
 state select or downgrade its validator, expected identity, or cleanup duty. Never infer
 readiness from changed file extensions or interpret supported viewport/engine
 declarations as a full matrix requirement.
+The readiness helper runs its bounded exact-run Workflow Kernel cleanup on
+settle, explicit cleanup, failure, and interruption. Read cleanup separately
+from coverage and findings; retry retained or incomplete cleanup with the same
+registry run/node identity after addressing its stated prerequisite.
 
 Run the bounded host-interpreted repository pass at its precedence point.
 Use its established-instance maintenance path for the existing service; do not

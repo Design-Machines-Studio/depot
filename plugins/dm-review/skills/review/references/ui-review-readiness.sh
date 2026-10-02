@@ -44,6 +44,13 @@ EXPECTED_REGISTRY_RUN_ID=""
 EXPECTED_REGISTRY_NODE_ID=""
 EXPECTED_RESOURCE_OWNERSHIP=""
 PREPARE_COMPOSE_CLEANUP_PENDING=false
+COMPOSE_CLEANUP_STATE="not_required"
+COMPOSE_CLEANUP_REASON=""
+COMPOSE_CLEANUP_REPORT='[]'
+COMPOSE_REGISTRY_ROOT=""
+COMPOSE_REGISTRY_PATH=""
+COMPOSE_REGISTRY_RUN_ID=""
+COMPOSE_REGISTRY_NODE_ID=""
 
 usage() {
   printf '%s\n' 'ui-review-readiness: invalid invocation' >&2
@@ -106,7 +113,7 @@ else
 fi
 
 emit_closed() {
-  local reason="$1" next_action="$2" compose=false
+  local reason="$1" next_action="$2" compose=false cleanup="$COMPOSE_CLEANUP_STATE"
   if [ "$PREPARE_COMPOSE_CLEANUP_PENDING" = true ] || [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
     compose=true
   elif [ -z "$EXPECTED_RESOURCE_OWNERSHIP" ] && [ -f "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ]; then
@@ -114,12 +121,16 @@ emit_closed() {
   fi
   case "$compose" in true|false) ;; *) compose=false ;; esac
   if [ "$PREPARE_COMPOSE_CLEANUP_PENDING" = true ]; then
-    next_action="$next_action; reconcile the exact host-registered Workflow Kernel Docker resources after restoring registry authority"
+    next_action="$next_action; retry cleanup with the exact host-registered Workflow Kernel run/node identity"
   fi
+  [ "$cleanup" != not_required ] || cleanup=incomplete
   jq -cn --arg reason "$reason" --arg next_action "$next_action" --argjson compose "$compose" \
+    --arg cleanup "$cleanup" --arg cleanup_reason "$COMPOSE_CLEANUP_REASON" \
+    --argjson retained "$COMPOSE_CLEANUP_REPORT" \
     '{state:"closed",dispatchAllowed:false,reason:$reason,nextAction:$next_action,
       reviewDisposition:"REVIEW INCOMPLETE"} +
-      (if $compose then {cleanup:"registry_cleanup_required",registryCleanupPending:true} else {} end)'
+      (if $compose then {cleanup:$cleanup,cleanupPending:($cleanup != "completed"),
+        cleanupReason:$cleanup_reason,retainedResources:$retained} else {} end)'
 }
 
 emit_rendered_gap() {
@@ -131,21 +142,28 @@ emit_rendered_gap() {
     emit_closed "$reason" "$next_action"
     exit 76
   fi
-  local compose=false
+  local compose=false cleanup="$COMPOSE_CLEANUP_STATE"
   if [ "$PREPARE_COMPOSE_CLEANUP_PENDING" = true ] || [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
     compose=true
   elif [ -z "$EXPECTED_RESOURCE_OWNERSHIP" ] && [ -f "$STATE_FILE" ] && [ ! -L "$STATE_FILE" ]; then
     compose="$(jq -r '.targetSource == "repository-declaration" and .repositoryEvidence.resourceOwnership == "review-created-compose"' "$STATE_FILE" 2>/dev/null)"
   fi
   case "$compose" in true|false) ;; *) compose=false ;; esac
+  if [ "$compose" = true ] && [ "$COMPOSE_CLEANUP_STATE" != completed ]; then
+    next_action="$next_action; retry cleanup with the exact host-registered Workflow Kernel run/node identity after restoring registry authority"
+  fi
+  [ "$cleanup" != not_required ] || cleanup=incomplete
   jq -cn --arg reason "$reason" --argjson compose "$compose" \
     --argjson prepare_pending "$PREPARE_COMPOSE_CLEANUP_PENDING" \
+    --arg cleanup "$cleanup" --arg cleanup_reason "$COMPOSE_CLEANUP_REASON" \
+    --arg next_action "$next_action" \
+    --argjson retained "$COMPOSE_CLEANUP_REPORT" \
     '{state:"not_available",dispatchAllowed:false,reason:$reason,
       coverageDisposition:"NOT RUN",reviewDisposition:"completed",
       createdResources:(if $prepare_pending then null elif $compose then 1 else 0 end),
-      nextAction:"none; restore rendered readiness only when browser coverage is needed"} +
-      (if $compose then {cleanup:"registry_cleanup_required",registryCleanupPending:true,
-        nextAction:"reconcile the exact host-registered Workflow Kernel Docker resources after restoring registry authority"} else {} end)'
+      nextAction:(if $compose then $next_action else "none; restore rendered readiness only when browser coverage is needed" end)} +
+      (if $compose then {cleanup:$cleanup,cleanupPending:($cleanup != "completed"),
+        cleanupReason:$cleanup_reason,retainedResources:$retained} else {} end)'
   exit 0
 }
 
@@ -237,26 +255,41 @@ validate_workflow_kernel_registry() {
   return "$status"
 }
 
-validate_compose_registry_state() {
-  local registry_ref registry_run_id registry_node_id registry_root registry_path registry_physical
+resolve_compose_registry_path() {
+  local registry_ref registry_root registry_path registry_physical
   if [ "$ACTION" = prepare ]; then
     [ "$(jq -r '.targetSource == "repository-declaration" and .repositoryEvidence.resourceOwnership == "review-created-compose"' "$STATE_FILE" 2>/dev/null)" = true ] || return 0
   else
     [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ] || return 0
   fi
+  [ "$(jq -r '.repositoryEvidence.resourceRegistryRunId' "$STATE_FILE" 2>/dev/null)" = "$EXPECTED_REGISTRY_RUN_ID" ] &&
+    [ "$(jq -r '.repositoryEvidence.resourceRegistryNodeId' "$STATE_FILE" 2>/dev/null)" = "$EXPECTED_REGISTRY_NODE_ID" ] || return 1
   registry_ref="$(jq -r '.repositoryEvidence.resourceRegistryRef' "$STATE_FILE")"
-  registry_run_id="$(jq -r '.repositoryEvidence.resourceRegistryRunId' "$STATE_FILE")"
-  registry_node_id="$(jq -r '.repositoryEvidence.resourceRegistryNodeId' "$STATE_FILE")"
   registry_root="$(cd "$(dirname "$STATE_FILE")" && pwd -P)" || return 1
   if [ "$registry_ref" = review/resources.jsonl ]; then
     [ "$(basename "$registry_root")" = review ] || return 1
     registry_root="$(cd "$registry_root/.." && pwd -P)" || return 1
+  elif [ "$registry_ref" != resources.jsonl ]; then
+    return 1
   fi
   registry_path="$registry_root/$registry_ref"
   [ -f "$registry_path" ] && [ ! -L "$registry_path" ] || return 1
   registry_physical="$(cd "$(dirname "$registry_path")" && pwd -P)/$(basename "$registry_path")" || return 1
   case "$registry_physical" in "$registry_root"/*) ;; *) return 1 ;; esac
-  validate_workflow_kernel_registry "$registry_physical" "$registry_run_id" "$registry_node_id"
+  COMPOSE_REGISTRY_ROOT="$registry_root"
+  COMPOSE_REGISTRY_PATH="$registry_physical"
+  COMPOSE_REGISTRY_RUN_ID="$(jq -r '.repositoryEvidence.resourceRegistryRunId' "$STATE_FILE")"
+  COMPOSE_REGISTRY_NODE_ID="$(jq -r '.repositoryEvidence.resourceRegistryNodeId' "$STATE_FILE")"
+}
+
+validate_compose_registry_state() {
+  if [ "$ACTION" = prepare ]; then
+    [ "$(jq -r '.targetSource == "repository-declaration" and .repositoryEvidence.resourceOwnership == "review-created-compose"' "$STATE_FILE" 2>/dev/null)" = true ] || return 0
+  else
+    [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ] || return 0
+  fi
+  resolve_compose_registry_path || return 1
+  validate_workflow_kernel_registry "$COMPOSE_REGISTRY_PATH" "$COMPOSE_REGISTRY_RUN_ID" "$COMPOSE_REGISTRY_NODE_ID"
 }
 
 REPOSITORY_EVIDENCE_REASON=""
@@ -475,9 +508,10 @@ validate_state() {
       .repositoryEvidence.targetSource == "repository-declaration" and
       .repositoryEvidence.status == "ready" and
       .repositoryEvidence.targetUrl == .targetUrl and
-      (.createdByReview == false and .cleanupPending == false) and
+      (.createdByReview == false) and
       (.repositoryEvidence.resourceOwnership == "pre-existing" or
        .repositoryEvidence.resourceOwnership == "review-created-compose") and
+      (if .repositoryEvidence.resourceOwnership == "pre-existing" then .cleanupPending == false else true end) and
       .repositoryEvidence.cleanupArgv == .cleanupArgv and
       .repositoryEvidence.cleanupTimeoutSeconds == .cleanupTimeoutSeconds and
       (.repositoryCheckoutFingerprint | type == "string" and test("^[0-9a-f]{64}$"))
@@ -518,16 +552,199 @@ cleanup_owned() {
   CLEANUP_REMOVED=1
 }
 
+write_node_status_witness() {
+  local run_id="$1" output="$2" run_root="$REPOSITORY_ROOT/.workflow-kernel/runs/$run_id"
+  local run_state="$run_root/run-state.json" run_root_physical
+  [ ! -L "$REPOSITORY_ROOT/.workflow-kernel" ] &&
+    [ ! -L "$REPOSITORY_ROOT/.workflow-kernel/runs" ] &&
+    [ -d "$run_root" ] && [ ! -L "$run_root" ] || return 1
+  run_root_physical="$(cd "$run_root" && pwd -P)" || return 1
+  [ "$run_root_physical" = "$run_root" ] || return 1
+  [ -f "$run_state" ] && [ ! -L "$run_state" ] || return 1
+  jq -e --arg run_id "$run_id" '
+    type == "object" and .run_id == $run_id and
+    (.revision | type == "number" and floor == . and . >= 1) and
+    (.updated_at | type == "string") and
+    (.nodes | type == "object" and
+      all(.[]; type == "object" and
+        (.status == "pending" or .status == "ready" or .status == "running" or
+         .status == "waiting" or .status == "succeeded" or .status == "failed" or
+         .status == "blocked" or .status == "skipped")))
+  ' "$run_state" >/dev/null 2>&1 || return 1
+  jq --arg run_id "$run_id" '
+    {schema_version:1,run_id:.run_id,revision:.revision,updated_at:.updated_at,
+     node_statuses:(.nodes | with_entries(.value = .value.status))}
+  ' "$run_state" > "$output"
+}
+
+# Run only the exact current-run sibling of the Kernel's sealed terminal plan
+# set. The separate stale-sweep plan is deliberately never executed here.
+cleanup_compose_registry() {
+  local registry_ref registry_root state_dir run_id node_id artifact_dir attempt_dir
+  local plan_set current_plan stale_plan outcomes next step receipt pass=0 rc=0 record_rc=0 plan_rc=0
+  local kernel_error
+  local cleanup_state="incomplete" reason="Workflow Kernel cleanup did not complete"
+  COMPOSE_CLEANUP_STATE="incomplete"
+  COMPOSE_CLEANUP_REASON="Workflow Kernel cleanup did not complete"
+  validate_state && resolve_compose_registry_path || return 1
+  registry_ref="$(jq -r '.repositoryEvidence.resourceRegistryRef' "$STATE_FILE")"
+  registry_root="$COMPOSE_REGISTRY_ROOT"
+  state_dir="$(cd "$(dirname "$COMPOSE_REGISTRY_PATH")" && pwd -P)" || return 1
+  run_id="$COMPOSE_REGISTRY_RUN_ID"
+  node_id="$COMPOSE_REGISTRY_NODE_ID"
+  artifact_dir="$registry_root/review/docker/$node_id"
+  [ ! -L "$registry_root/review" ] || return 1
+  mkdir -p "$registry_root/review/docker" || return 1
+  [ ! -L "$registry_root/review/docker" ] || return 1
+  mkdir "$artifact_dir" 2>/dev/null || [ -d "$artifact_dir" ] || return 1
+  [ ! -L "$artifact_dir" ] || return 1
+  attempt_dir="$(mktemp -d "$artifact_dir/attempt.XXXXXX")" || return 1
+  plan_set="$attempt_dir/terminal-reconcile-plans.json"
+  current_plan="$attempt_dir/terminal-reconcile-plans.current-run.json"
+  stale_plan="$attempt_dir/terminal-reconcile-plans.stale-sweep.json"
+  outcomes="$attempt_dir/terminal-current-run-outcomes.json"
+  next="$attempt_dir/terminal-current-run-next-step.json"
+  receipt="$attempt_dir/terminal-current-run-receipt.json"
+  while [ "$pass" -lt 2 ]; do
+    if [ "$pass" -eq 1 ]; then
+      attempt_dir="$(mktemp -d "$artifact_dir/attempt.XXXXXX")" || break
+      plan_set="$attempt_dir/terminal-reconcile-plans.json"
+      current_plan="$attempt_dir/terminal-reconcile-plans.current-run.json"
+      stale_plan="$attempt_dir/terminal-reconcile-plans.stale-sweep.json"
+      outcomes="$attempt_dir/terminal-current-run-outcomes.json"
+      next="$attempt_dir/terminal-current-run-next-step.json"
+      receipt="$attempt_dir/terminal-current-run-receipt.json"
+    fi
+    plan_rc=0
+    "$WORKFLOW_KERNEL_INPUT" plan-reconcile --state-dir "$state_dir" \
+      --run-id "$run_id" --ttl-hours 24 --output "$plan_set" >/dev/null 2>"$attempt_dir/terminal-reconcile.err" || plan_rc=$?
+    if [ "$plan_rc" -ne 0 ] && [ "$plan_rc" -ne 3 ]; then
+      kernel_error="$(jq -r '.message // .error.code // "Kernel cleanup planning failed"' "$attempt_dir/terminal-reconcile.err" 2>/dev/null)"
+      reason="Kernel could not create a fresh exact-run cleanup plan ($kernel_error); retry after repairing the registry or runtime"
+      break
+    fi
+    [ -f "$current_plan" ] && [ ! -L "$current_plan" ] &&
+      [ -f "$stale_plan" ] && [ ! -L "$stale_plan" ] || {
+        reason="Kernel cleanup plan set is incomplete; retain the registered resources and retry"
+        break
+      }
+    printf '[]\n' > "$outcomes" || break
+    while :; do
+      if ! "$WORKFLOW_KERNEL_INPUT" next-cleanup-step --state-dir "$state_dir" \
+          --plan "$current_plan" --outcomes "$outcomes" --output "$next" >/dev/null 2>"$attempt_dir/terminal-next-step.err"; then
+        kernel_error="$(jq -r '.message // .error.code // "Kernel step selection failed"' "$attempt_dir/terminal-next-step.err" 2>/dev/null)"
+        reason="Kernel could not select the next guarded cleanup step ($kernel_error); retry from the saved plan and outcomes"
+        rc=1
+        break
+      fi
+      [ "$(jq -r '.complete == true' "$next" 2>/dev/null)" = true ] && break
+      step="$(jq -r '.step_index // empty' "$next" 2>/dev/null)"
+      case "$step" in ''|*[!0-9]*) reason="Kernel returned an invalid cleanup step; retain the saved cleanup record"; rc=1; break ;; esac
+      local node_statuses="$attempt_dir/terminal-node-statuses-step-$step.json"
+      write_node_status_witness "$run_id" "$node_statuses" || {
+        reason="current Workflow Kernel run/node status proof is unavailable or changed; retain resources and retry after restoring exact run state"
+        rc=1
+        break
+      }
+      if ! "$WORKFLOW_KERNEL_INPUT" execute-cleanup-step --state-dir "$state_dir" \
+          --plan "$current_plan" --step-index "$step" --inventory "$current_plan" \
+          --node-statuses "$node_statuses" \
+          --outcomes "$outcomes" --output "$attempt_dir/terminal-current-run-step-$step-outcome.json" >/dev/null 2>"$attempt_dir/terminal-current-run-step-$step.err"; then
+        kernel_error="$(jq -r '.message // .error.code // "guarded execution failed"' "$attempt_dir/terminal-current-run-step-$step.err" 2>/dev/null)"
+        reason="Guarded cleanup step $step failed ($kernel_error); retry after checking the exact registered resource and its current consumers"
+        rc=1
+        break
+      fi
+      jq --slurpfile outcome "$attempt_dir/terminal-current-run-step-$step-outcome.json" \
+        '. + $outcome' "$outcomes" > "$outcomes.tmp" && mv "$outcomes.tmp" "$outcomes" || {
+          reason="Cleanup step $step ran but its outcome could not be added; retry by replanning from fresh exact-ID evidence"
+          rc=1
+          break
+        }
+    done
+    [ "$rc" -eq 0 ] || break
+    record_rc=0
+    "$WORKFLOW_KERNEL_INPUT" record-cleanup --state-dir "$state_dir" \
+      --plan "$current_plan" --outcomes "$outcomes" > "$receipt" \
+      2>"$artifact_dir/terminal-current-run-record.err" || record_rc=$?
+    if [ ! -f "$receipt" ] || ! jq -e 'type == "object" and .schema_version == 1 and (.scope | type == "object") and (.dispositions | type == "array")' "$receipt" >/dev/null 2>&1; then
+      reason="Kernel could not record cleanup outcomes; retain the receipt inputs and retry from fresh exact-ID evidence"
+      rc=1
+      break
+    fi
+    if [ "$record_rc" -ne 0 ] && [ "$record_rc" -ne 3 ]; then
+      reason="Kernel rejected cleanup outcome recording (exit $record_rc); retain the artifacts and repair the exact registry conflict"
+      rc=1
+      break
+    fi
+    if [ "$pass" -eq 0 ] && jq -e '
+      any(.dispositions[]?; .kind == "network" and
+        .disposition == "retained_for_dependency" and .reason == "resource_in_use")
+    ' "$receipt" >/dev/null 2>&1; then
+      pass=1
+      continue
+    fi
+    cleanup_state="$(jq -r '
+      if ([.dispositions[]? | select(.disposition == "blocked")] | length) > 0
+      then "incomplete"
+      elif ([.dispositions[]? | select(.disposition == "foreign" or .disposition == "retained_for_dependency")] | length) > 0
+      then "retained" else "completed" end
+    ' "$receipt" 2>/dev/null)"
+    reason="$(jq -r '[.dispositions[]? | select(.disposition == "blocked" or .disposition == "foreign" or .disposition == "retained_for_dependency") | (.resource_id + ": " + .reason)] | join("; ")' "$receipt" 2>/dev/null)"
+    [ -n "$reason" ] || reason="all exact registered resources are removed or authoritatively absent"
+    COMPOSE_CLEANUP_REPORT="$(jq -c '[.dispositions[]? | select(.disposition == "blocked" or .disposition == "foreign" or .disposition == "retained_for_dependency") | {resource:.resource_id,kind,purpose:(.kind + " owned by this review run"),owner:(.owner.run_id + "/" + .owner.node_id),dependency:(.evidence // []),removableWhen:(.follow_up // ("after " + .reason)),nextAction:(.follow_up // .reason)}]' "$receipt" 2>/dev/null)" || COMPOSE_CLEANUP_REPORT='[]'
+    if [ "$record_rc" -eq 3 ] && [ "$cleanup_state" = completed ]; then
+      cleanup_state="incomplete"
+      reason="Kernel reported an incomplete cleanup receipt; inspect the recorded outcomes and retry"
+    fi
+    rc=0
+    break
+  done
+  COMPOSE_CLEANUP_STATE="$cleanup_state"
+  COMPOSE_CLEANUP_REASON="$reason"
+  { [ "$cleanup_state" = completed ] || [ "$cleanup_state" = retained ]; } && [ "$rc" -eq 0 ]
+}
+
 compose_interrupted() {
-  local exit_code="${1:-130}" next_action
+  local exit_code="${1:-130}" next_action cleanup_rc=1 cleanup_pending=true
   trap - EXIT HUP INT TERM
   next_action='repair the exact Workflow Kernel registry authority before continuing cleanup'
-  if validate_state && validate_compose_registry_state; then
-    next_action='run the exact Workflow Kernel Docker cleanup plan referenced by private readiness state'
+  if validate_state && resolve_compose_registry_path; then
+    cleanup_compose_registry >/dev/null 2>&1 && cleanup_rc=0
+    if [ "$cleanup_rc" -eq 0 ]; then
+      [ "$COMPOSE_CLEANUP_STATE" = completed ] && cleanup_pending=false
+      update_state closed false "$cleanup_pending" >/dev/null 2>&1 || true
+      if [ "$cleanup_pending" = false ]; then
+        emit_closed review_interrupted 'resume the review from its retained authoritative evidence'
+      fi
+    fi
+    update_state closed false true >/dev/null 2>&1 || true
+    next_action="$COMPOSE_CLEANUP_REASON; rerun the exact readiness cleanup action"
   fi
-  update_state closed false false >/dev/null 2>&1 || true
-  emit_closed resource_cleanup_failed "$next_action"
+  emit_closed review_interrupted "$next_action"
   exit "$exit_code"
+}
+
+cleanup_on_unexpected_exit() {
+  local action_rc=$?
+  trap - EXIT HUP INT TERM
+  if [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
+    if validate_state && resolve_compose_registry_path; then
+      if cleanup_compose_registry >/dev/null 2>&1; then
+        local cleanup_pending=false
+        [ "$COMPOSE_CLEANUP_STATE" = completed ] || cleanup_pending=true
+        update_state closed false "$cleanup_pending" >/dev/null 2>&1 || true
+      else
+        update_state closed false true >/dev/null 2>&1 || true
+      fi
+    else
+      validate_state && update_state closed false true >/dev/null 2>&1 || true
+    fi
+  else
+    cleanup_owned >/dev/null 2>&1 || true
+    update_state closed false false >/dev/null 2>&1 || true
+  fi
+  exit "$action_rc"
 }
 
 if [ "$ACTION" = cleanup ]; then
@@ -536,17 +753,34 @@ if [ "$ACTION" = cleanup ]; then
     exit 76
   fi
   if [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
+    trap cleanup_on_unexpected_exit EXIT
     trap 'compose_interrupted 130' HUP INT TERM
-    if ! validate_compose_registry_state; then
-      emit_closed resource_cleanup_failed 'repair the exact Workflow Kernel registry authority before continuing cleanup'
-      exit 76
+    if jq -e '.cleanupPending == false and (.stage == "settled" or .stage == "closed")' "$STATE_FILE" >/dev/null 2>&1; then
+      trap - EXIT HUP INT TERM
+      jq -cn '{state:"already_clean",cleanup:"completed",cleanupPending:false,
+        preexistingUntouched:false,reason:"the exact run cleanup was previously reconciled"}'
+      exit 0
     fi
-    update_state settled false false || exit 76
-    trap - HUP INT TERM
-    jq -cn '{state:"registry_cleanup_required",removedCount:0,
-      preexistingUntouched:false,registryCleanupPending:true,
-      nextAction:"run the exact Workflow Kernel Docker cleanup plan referenced by private readiness state"}'
-    exit 0
+    cleanup_compose_registry || {
+      trap - EXIT HUP INT TERM
+      update_state settled false true || true
+      jq -cn --arg reason "$COMPOSE_CLEANUP_REASON" \
+        --argjson retained "$COMPOSE_CLEANUP_REPORT" \
+        '{state:"cleanup_incomplete",cleanup:"incomplete",cleanupPending:true,reason:$reason,
+          retainedResources:$retained,nextAction:"rerun the exact readiness cleanup action after addressing the reason"}'
+      exit 76
+    }
+    if [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
+      cleanup_pending=false
+      [ "$COMPOSE_CLEANUP_STATE" = completed ] || cleanup_pending=true
+      update_state settled false "$cleanup_pending" || exit 76
+    fi
+    trap - EXIT HUP INT TERM
+    jq -cn --arg cleanup "$COMPOSE_CLEANUP_STATE" --arg reason "$COMPOSE_CLEANUP_REASON" \
+      --argjson retained "$COMPOSE_CLEANUP_REPORT" \
+      '{state:"cleaned",cleanup:$cleanup,cleanupPending:($cleanup != "completed"),reason:$reason,
+        retainedResources:$retained,preexistingUntouched:false}'
+    [ "$COMPOSE_CLEANUP_STATE" = completed ] && exit 0 || exit 76
   fi
   if cleanup_owned; then
     created="$(jq -r '.createdByReview // false' "$STATE_FILE" 2>/dev/null)"
@@ -564,10 +798,11 @@ if [ "$ACTION" = settle ]; then
   validate_state &&
     jq -e '.stage == "ready" and .dispatchAllowed == true' "$STATE_FILE" >/dev/null 2>&1 || usage
   if [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
+    trap cleanup_on_unexpected_exit EXIT
     trap 'compose_interrupted 130' HUP INT TERM
   fi
   if ! validate_compose_registry_state; then
-    update_state settled false false || exit 76
+    update_state settled false true || true
     emit_closed resource_cleanup_failed 'repair the exact Workflow Kernel registry authority before continuing cleanup'
     exit 76
   fi
@@ -594,21 +829,44 @@ if [ "$ACTION" = settle ]; then
   # if the registered cleanup command subsequently fails.
   update_state settled false || exit 76
   cleanup_rc=0
-  cleanup_owned || cleanup_rc=$?
+  if [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
+    cleanup_compose_registry || cleanup_rc=$?
+  else
+    cleanup_owned || cleanup_rc=$?
+  fi
   if [ "$cleanup_rc" -ne 0 ]; then
+    if [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
+      trap - EXIT HUP INT TERM
+      update_state settled false true || true
+      jq -cn --arg reason "$COMPOSE_CLEANUP_REASON" --argjson analysis_valid "$analysis_valid" \
+        --argjson retained "$COMPOSE_CLEANUP_REPORT" \
+        '{state:"completed",reviewDisposition:(if $analysis_valid then "completed" else "REVIEW INCOMPLETE" end),
+          cleanup:"incomplete",cleanupPending:true,cleanupReason:$reason,
+          retainedResources:$retained,
+          nextAction:"rerun the exact readiness cleanup action after addressing the reason"}'
+      exit 76
+    fi
     emit_closed resource_cleanup_failed 'run the registered UI cleanup command and inspect only the recorded review resource'
     exit 76
+  fi
+  if [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
+    cleanup_pending=false
+    [ "$COMPOSE_CLEANUP_STATE" = completed ] || cleanup_pending=true
+    update_state settled false "$cleanup_pending" || exit 76
+  else
+    update_state settled false false || exit 76
   fi
   if [ "$analysis_valid" != true ] || ! jq -e 'all(.lanes[]; .disposition == "completed")' "$ANALYSIS_RESULT_FILE" >/dev/null 2>&1; then
     emit_closed model_participant_unavailable 'restore the unavailable provider-neutral UI analysis participant and reuse the same browser packet'
     exit 76
   fi
   if [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
-    trap - HUP INT TERM
-    jq -cn '{state:"completed",dispatchAllowed:false,reason:"available",
-      reviewDisposition:"completed",cleanup:"registry_cleanup_required",
-      registryCleanupPending:true,
-      nextAction:"run the exact Workflow Kernel Docker cleanup plan referenced by private readiness state"}'
+    trap - EXIT HUP INT TERM
+    jq -cn --arg cleanup "$COMPOSE_CLEANUP_STATE" --arg reason "$COMPOSE_CLEANUP_REASON" \
+      --argjson retained "$COMPOSE_CLEANUP_REPORT" \
+      '{state:"completed",dispatchAllowed:false,reason:"available",
+        reviewDisposition:"completed",cleanup:$cleanup,cleanupPending:($cleanup != "completed"),
+        cleanupReason:$reason,retainedResources:$retained}'
     exit 0
   fi
   jq -cn '{state:"completed",dispatchAllowed:false,reason:"available",
@@ -623,31 +881,36 @@ close_registered_state() {
   if { [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ] ||
        { [ -z "$EXPECTED_RESOURCE_OWNERSHIP" ] &&
          [ "$(jq -r '.targetSource == "repository-declaration" and .repositoryEvidence.resourceOwnership == "review-created-compose"' "$STATE_FILE" 2>/dev/null)" = true ]; }; } &&
-     ! validate_compose_registry_state; then
-    update_state closed false false || exit 76
+     ! resolve_compose_registry_path; then
+    update_state closed false true || true
     emit_closed resource_cleanup_failed 'repair the exact Workflow Kernel registry authority before continuing cleanup'
     exit 76
   fi
-  cleanup_owned || cleanup_rc=$?
+  if [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
+    cleanup_compose_registry || cleanup_rc=$?
+  else
+    cleanup_owned || cleanup_rc=$?
+  fi
   if [ "$cleanup_rc" -ne 0 ]; then
+    if [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
+      update_state closed false true || true
+      emit_closed resource_cleanup_failed "$COMPOSE_CLEANUP_REASON; rerun the exact readiness cleanup action"
+      exit 76
+    fi
     emit_closed resource_cleanup_failed 'run the registered UI cleanup command and inspect only the recorded review resource'
     exit 76
   fi
-  update_state closed false false || exit 76
+  local cleanup_pending=false
+  if [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
+    [ "$COMPOSE_CLEANUP_STATE" = completed ] || cleanup_pending=true
+  fi
+  update_state closed false "$cleanup_pending" || exit 76
   case "$reason" in
     visual_target_unavailable|dev_server_unavailable|browser_transport_unavailable)
       emit_rendered_gap "$reason" "$next_action"
       ;;
     *) emit_closed "$reason" "$next_action"; exit 76 ;;
   esac
-}
-
-cleanup_on_unexpected_exit() {
-  local action_rc=$?
-  trap - EXIT HUP INT TERM
-  cleanup_owned >/dev/null 2>&1 || true
-  update_state closed false false >/dev/null 2>&1 || true
-  exit "$action_rc"
 }
 
 if [ "$ACTION" = prepare ]; then
@@ -668,6 +931,7 @@ if [ "$ACTION" = prepare ]; then
     REGISTERED_CREATED=false
     if [ "$(jq -r '.resourceOwnership' "$REPOSITORY_EVIDENCE_FILE")" = review-created-compose ]; then
       REGISTERED_CREATED=true
+      CLEANUP_PENDING=true
     fi
     write_state "$TARGET_URL" app_ready false "$CREATED" "$CLEANUP_PENDING" '[]' 1 1 \
       "$CLEANUP_ARGV_JSON" "$CLEANUP_TIMEOUT" repository-declaration "$VISUAL_REQUIRED" \
@@ -791,6 +1055,7 @@ if [ "$(jq -r '.createdByReview and .cleanupPending' "$STATE_FILE")" = true ]; t
   trap cleanup_on_unexpected_exit EXIT
   trap 'exit 130' HUP INT TERM
 elif [ "$EXPECTED_RESOURCE_OWNERSHIP" = review-created-compose ]; then
+  trap cleanup_on_unexpected_exit EXIT
   trap 'compose_interrupted 130' HUP INT TERM
 fi
 if [ "$(jq -r '.targetSource' "$STATE_FILE")" = declaration ]; then
