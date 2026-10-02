@@ -2,7 +2,8 @@
 # availability-probe.sh -- private live availability evidence for model-router.
 #
 # Parser baselines: Claude Code 2.1.220 statusLine rate_limits; Codex CLI
-# 0.146.0 and 0.147.0 app-server account/rateLimits/read; curl 8.7.1 against
+# 0.146.0/0.147.0 allowance forms and 0.160.0 CreditsSnapshot from
+# app-server account/rateLimits/read; curl 8.7.1 against
 # OpenRouter /api/v1/credits. Claude subscription telemetry is session-scoped
 # and may be absent before the first response; absence remains distinct from
 # exhaustion.
@@ -256,7 +257,17 @@ normalize_codex_snapshot() {
     def closed($reason): {state:"unknown",reason:$reason};
     if type != "object" then closed("rate_limit_response_malformed")
     else
-      [.primary?, .secondary?]
+      .credits as $credits
+      | (if ($credits | type) == "object"
+            and ($credits.hasCredits | type) == "boolean"
+            and ($credits.unlimited | type) == "boolean"
+            and ($credits.balance == null or ($credits.balance | type) == "string")
+         then ($credits.unlimited == true or
+           ($credits.hasCredits == true and
+             ($credits.balance == null or
+              (try ($credits.balance | tonumber | isfinite and . > 0) catch false))))
+         else false end) as $credit_available
+      | [.primary?, .secondary?]
       | map(select(. != null)) as $raw
       | if any($raw[]; type != "object"
           or (.usedPercent | type) != "number"
@@ -275,7 +286,9 @@ normalize_codex_snapshot() {
             elif ($windows | length) == 0 then
               closed("required_window_missing")
             elif any($windows[]; .remaining == 0) then
-              {state:"limited",reason:"rate_limit_exhausted"}
+              if $credit_available then
+                {state:"ok",reason:"codex_credits_available"}
+              else {state:"limited",reason:"rate_limit_exhausted"} end
             elif any($windows[]; .remaining <= $threshold) then
               {state:"limited",reason:"reserve_threshold_reached"}
             else
