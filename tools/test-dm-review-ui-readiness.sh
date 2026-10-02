@@ -12,6 +12,8 @@ git -C "$REPO" init -q
 printf '%s\n' '.workflow-kernel/' >> "$REPO/.git/info/exclude"
 "$WORKFLOW_KERNEL" init "$REPO/.workflow-kernel/runs/ui-readiness-fixture" \
   --run-id ui-readiness-fixture --occurred-at 2026-09-07T00:00:00Z >/dev/null
+"$WORKFLOW_KERNEL" init "$REPO/.workflow-kernel/runs/fixture-run" \
+  --run-id fixture-run --occurred-at 2026-09-07T00:00:00Z >/dev/null
 STATE_ROOT="$REPO/.workflow-kernel/ui-readiness"
 mkdir -p "$STATE_ROOT"
 REPOSITORY_SCOPE_ID="$(jq -r '.scope_id' "$REPO/.workflow-kernel/repository-scope.json")"
@@ -63,6 +65,12 @@ export TEST_RESOURCE_LOG="$TMP/resources.log"
 run_prepare() {
   local name="$1" rc=0
   shift
+  case "$name" in
+    repository-compose|compose-*)
+      [ ! -f "$STATE_ROOT/resources-valid.jsonl" ] || cp "$STATE_ROOT/resources-valid.jsonl" "$STATE_ROOT/resources.jsonl"
+      [ ! -f "$STATE_ROOT/review/resources-valid.jsonl" ] || cp "$STATE_ROOT/review/resources-valid.jsonl" "$STATE_ROOT/review/resources.jsonl"
+      ;;
+  esac
   rm -f "$STATE_ROOT/$name.state" "$TMP/$name.result"
   "$HELPER" prepare --repository-root "$REPO" --state-file "$STATE_ROOT/$name.state" \
     --applicable-lanes-json '["visual-browser-tester","ux-quality-reviewer","ui-standards-reviewer"]' \
@@ -404,7 +412,7 @@ assert jq -e '.reason == "dev_server_unavailable" and
 compose_repository_rc="$(run_prepare repository-compose --target-source repository-declaration \
   --repository-evidence-file "$TMP/repository-compose-evidence.json" --visual-required true)"
 assert test "$compose_repository_rc" -eq 0
-assert jq -e '.createdByReview == false and .cleanupPending == false and
+assert jq -e '.createdByReview == false and .cleanupPending == true and
   .repositoryEvidence.resourceOwnership == "review-created-compose" and
   .repositoryEvidence.resourceRegistryRef == "resources.jsonl" and
   .cleanupArgv == []' "$STATE_ROOT/repository-compose.state"
@@ -414,7 +422,7 @@ assert jq -e '.createdResources == 1 and
 
 # Later actions bind the host-retained ownership mode. Private state cannot
 # downgrade a review-created Compose resource to pre-existing and bypass its
-# registry validation or cleanup handoff.
+# registry validation or guarded cleanup.
 jq '.repositoryEvidence.resourceOwnership = "pre-existing" |
   .repositoryEvidence.resourceRegistryRef = "" |
   .repositoryEvidence.resourceRegistryRunId = "" |
@@ -444,21 +452,30 @@ JSON
   --expected-resource-ownership review-created-compose \
   --analysis-result-file "$TMP/repository-compose-analysis.json" \
   > "$TMP/repository-compose-settled.json"
-assert jq -e '.state == "completed" and .cleanup == "registry_cleanup_required" and
-  .registryCleanupPending == true' "$TMP/repository-compose-settled.json"
+assert jq -e '.state == "completed" and
+  (.cleanup == "completed" or .cleanup == "retained") and
+  (.cleanupPending == (.cleanup != "completed")) and
+  (.cleanupReason | type == "string" and length > 0)' "$TMP/repository-compose-settled.json"
+# Simulate interruption after Kernel receipt recording but before readiness
+# state clears its retry marker. Fresh plan reconciliation must recover without
+# trying the already absent registered object again.
+jq '.cleanupPending = true' "$STATE_ROOT/repository-compose.state" > "$TMP/repository-compose-retry.state"
+mv "$TMP/repository-compose-retry.state" "$STATE_ROOT/repository-compose.state"
 "$HELPER" cleanup --repository-root "$REPO" --state-file "$STATE_ROOT/repository-compose.state" \
   "${REGISTRY_ARGS[@]}" \
   --expected-resource-ownership review-created-compose \
   > "$TMP/repository-compose-cleanup.json"
-assert jq -e '.state == "registry_cleanup_required" and .removedCount == 0 and
-  .preexistingUntouched == false and .registryCleanupPending == true' \
+assert jq -e '.state == "cleaned" and .cleanup == "completed" and
+  .preexistingUntouched == false and .cleanupPending == false' \
   "$TMP/repository-compose-cleanup.json"
 assert test "$(grep -c '^cleanup$' "$TEST_RESOURCE_LOG")" -eq 0
 
 # The alternate exact-run-root reference resolves from a state nested under
 # <run-root>/review and completes the same readiness/settlement handoff.
 mkdir -p "$STATE_ROOT/review"
-cp "$STATE_ROOT/resources.jsonl" "$STATE_ROOT/review/resources.jsonl"
+cp "$STATE_ROOT/resources-valid.jsonl" "$STATE_ROOT/resources.jsonl"
+cp "$STATE_ROOT/resources-valid.jsonl" "$STATE_ROOT/review/resources.jsonl"
+cp "$STATE_ROOT/resources-valid.jsonl" "$STATE_ROOT/review/resources-valid.jsonl"
 jq '.resourceRegistryRef = "review/resources.jsonl"' "$TMP/repository-compose-evidence.json" \
   > "$TMP/repository-compose-run-root-evidence.json"
 run_root_compose_rc=0
@@ -481,18 +498,19 @@ assert jq -e '.state == "ready" and .createdResources == 1' "$TMP/run-root-compo
   "${REGISTRY_ARGS[@]}" \
   --expected-resource-ownership review-created-compose \
   --analysis-result-file "$TMP/repository-compose-analysis.json" > "$TMP/run-root-compose.settled"
-assert jq -e '.cleanup == "registry_cleanup_required" and .registryCleanupPending == true' \
+assert jq -e '(.cleanup == "completed" or .cleanup == "retained") and
+  (.cleanupPending == (.cleanup != "completed"))' \
   "$TMP/run-root-compose.settled"
 "$HELPER" cleanup --repository-root "$REPO" \
   --state-file "$STATE_ROOT/review/run-root-compose.state" \
   "${REGISTRY_ARGS[@]}" \
   --expected-resource-ownership review-created-compose > "$TMP/run-root-compose-cleanup.json"
-assert jq -e '.state == "registry_cleanup_required" and .registryCleanupPending == true' \
+assert jq -e '.state == "already_clean" and .cleanup == "completed" and .cleanupPending == false' \
   "$TMP/run-root-compose-cleanup.json"
 
 # Registry authority is live evidence, not a prepare-time snapshot. Invalidating
 # the complete journal before browser confirmation closes the review and keeps
-# the registry cleanup requirement visible.
+# the cleanup obligation pending without clearing it.
 cp "$STATE_ROOT/resources-valid.jsonl" "$STATE_ROOT/resources.jsonl"
 revalidate_prepare_rc="$(run_prepare compose-revalidate --target-source repository-declaration \
   --repository-evidence-file "$TMP/repository-compose-evidence.json" --visual-required true)"
@@ -502,8 +520,8 @@ printf '%s\n' '# simultaneous checkout drift' >> "$REPO/AGENTS.md"
 revalidate_browser_rc="$(run_confirm compose-revalidate "$TMP/browser-repository.json" review-created-compose)"
 assert test "$revalidate_browser_rc" -eq 76
 assert jq -e '.reason == "resource_cleanup_failed" and
-  (.nextAction | contains("registry authority")) and
-  .cleanup == "registry_cleanup_required" and .registryCleanupPending == true' \
+  (.cleanupReason | contains("registry")) and
+  .cleanup == "incomplete" and .cleanupPending == true' \
   "$TMP/compose-revalidate.confirmed"
 git -C "$REPO" show HEAD:AGENTS.md > "$REPO/AGENTS.md"
 cp "$STATE_ROOT/resources-valid.jsonl" "$STATE_ROOT/resources.jsonl"
@@ -516,11 +534,12 @@ assert test "$browser_failure_prepare_rc" -eq 0
 browser_failure_rc="$(run_confirm compose-browser-failure "$TMP/missing-browser.json" review-created-compose)"
 assert test "$browser_failure_rc" -eq 76
 assert jq -e '.reason == "browser_transport_unavailable" and
-  .cleanup == "registry_cleanup_required" and .registryCleanupPending == true' \
+  (.cleanup == "completed" or .cleanup == "retained") and
+  (.cleanupPending == (.cleanup != "completed"))' \
   "$TMP/compose-browser-failure.confirmed"
 
-# Signals on Compose paths close the state and preserve the registry cleanup
-# handoff without attempting process cleanup.
+# Signals on Compose paths close the state and keep cleanup retryable when the
+# Kernel cannot complete the exact-run sequence.
 signal_prepare_rc="$(run_prepare compose-interrupted --target-source repository-declaration \
   --repository-evidence-file "$TMP/repository-compose-evidence.json" --visual-required true)"
 assert test "$signal_prepare_rc" -eq 0
@@ -543,15 +562,15 @@ signal_rc=0
   --expected-resource-ownership review-created-compose \
   > "$TMP/compose-interrupted.result" || signal_rc=$?
 assert test "$signal_rc" -eq 130
-assert jq -e '.reason == "resource_cleanup_failed" and
-  .cleanup == "registry_cleanup_required" and .registryCleanupPending == true' \
+assert jq -e '.reason == "review_interrupted" and
+  .cleanup == "incomplete" and .cleanupPending == true' \
   "$TMP/compose-interrupted.result"
 assert jq -e '.stage == "closed" and .dispatchAllowed == false' \
   "$STATE_ROOT/compose-interrupted.state"
 assert test "$(grep -c '^cleanup$' "$TEST_RESOURCE_LOG")" -eq 0
 
 # Optional rendered coverage keeps its ordinary NOT RUN disposition while
-# still surfacing the mandatory Compose registry cleanup handoff.
+# reconciling registered resources independently.
 optional_gap_prepare_rc="$(run_prepare compose-optional-gap --target-source repository-declaration \
   --repository-evidence-file "$TMP/repository-compose-evidence.json")"
 assert test "$optional_gap_prepare_rc" -eq 0
@@ -559,10 +578,10 @@ optional_gap_rc="$(run_confirm compose-optional-gap "$TMP/missing-browser.json" 
 assert test "$optional_gap_rc" -eq 0
 assert jq -e '.state == "not_available" and .coverageDisposition == "NOT RUN" and
   .reviewDisposition == "completed" and .createdResources == 1 and
-  .cleanup == "registry_cleanup_required" and
-  .registryCleanupPending == true' "$TMP/compose-optional-gap.confirmed"
+  (.cleanup == "completed" or .cleanup == "retained") and
+  (.cleanupPending == (.cleanup != "completed"))' "$TMP/compose-optional-gap.confirmed"
 
-# Analysis failure retains the same Compose cleanup handoff.
+# Analysis failure still runs Compose cleanup and reports it separately.
 analysis_failure_prepare_rc="$(run_prepare compose-analysis-failure --target-source repository-declaration \
   --repository-evidence-file "$TMP/repository-compose-evidence.json" --visual-required true)"
 assert test "$analysis_failure_prepare_rc" -eq 0
@@ -580,7 +599,7 @@ analysis_failure_rc=0
   > "$TMP/compose-analysis-failure.settled" || analysis_failure_rc=$?
 assert test "$analysis_failure_rc" -eq 76
 assert jq -e '.reason == "model_participant_unavailable" and
-  .cleanup == "registry_cleanup_required" and .registryCleanupPending == true' \
+  .cleanup == "completed" and .cleanupPending == false' \
   "$TMP/compose-analysis-failure.settled"
 
 # Compose ownership fails closed unless the registry reference is one of the
@@ -637,16 +656,16 @@ missing_registry_rc="$(run_prepare registry-missing --target-source repository-d
 assert test "$missing_registry_rc" -eq 76
 assert jq -e '.reason == "dev_server_unavailable" and
   (.nextAction | contains("resource_registry_unavailable"))' "$TMP/registry-missing.result"
-assert jq -e '.registryCleanupPending == true and .cleanup == "registry_cleanup_required" and
-  (.nextAction | contains("reconcile the exact host-registered"))' "$TMP/registry-missing.result"
+assert jq -e '.cleanupPending == true and .cleanup == "incomplete" and
+  (.nextAction | contains("exact host-registered Workflow Kernel run/node identity"))' "$TMP/registry-missing.result"
 assert test ! -e "$STATE_ROOT/registry-missing.state"
 optional_missing_registry_rc="$(run_prepare registry-missing-optional --target-source repository-declaration \
   --repository-evidence-file "$TMP/repository-compose-evidence.json" --visual-required false)"
 assert test "$optional_missing_registry_rc" -eq 0
 assert jq -e '.dispatchAllowed == false and .reviewDisposition == "completed" and
-  .createdResources == null and .registryCleanupPending == true and
-  .cleanup == "registry_cleanup_required" and
-  (.nextAction | contains("reconcile the exact host-registered"))' "$TMP/registry-missing-optional.result"
+  .createdResources == null and .cleanupPending == true and
+  .cleanup == "incomplete" and
+  (.nextAction | contains("exact host-registered Workflow Kernel run/node identity"))' "$TMP/registry-missing-optional.result"
 assert test ! -e "$STATE_ROOT/registry-missing-optional.state"
 
 # Dirty initialized submodules are rejected because the root dirty marker does
@@ -844,6 +863,8 @@ assert test "$(grep -c '^wrong-cleanup$' "$TEST_RESOURCE_LOG" || true)" -eq 0
 assert test ! -e "$TEST_SERVER_MARKER"
 
 # Cleanup is idempotent and reports what this invocation actually removed.
+assert jq -e '.createdByReview == true and .cleanupPending == false and .stage == "settled"' \
+  "$STATE_ROOT/completed-created.state"
 "$HELPER" cleanup --repository-root "$REPO" --state-file "$STATE_ROOT/completed-created.state" \
   > "$TMP/already-clean.json"
 assert jq -e '.state == "already_clean" and .removedCount == 0' "$TMP/already-clean.json"

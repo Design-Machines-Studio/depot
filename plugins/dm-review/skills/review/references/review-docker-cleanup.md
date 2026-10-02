@@ -34,6 +34,25 @@ The cleanup report includes Docker before/after inventories and `removed|missing
 
 ## Repository lifecycle teardown
 
+For the review-created Compose target in `ui-review-readiness.sh`, `settle`,
+`cleanup`, failure, and interruption invoke the bounded sequence directly.
+Persist each attempt under the exact run's `review/docker/<node-id>/attempt.*`
+directory. Replan from current exact-ID evidence on every invocation; never
+overwrite prior plans, outcomes, or receipts. Before each step, it snapshots
+the exact run-state revision, update time, and node status map into a bounded
+witness; missing or changed state blocks deletion. The helper may use one additional
+fresh plan after a network was retained because an owned container still
+consumed it. From `plan-reconcile`, execute only
+`terminal-reconcile-plans.current-run.json`; do not execute the sibling stale
+sweep. A command outcome that could not be persisted is reconciled through a
+new exact-ID plan, never by replaying the earlier argv.
+
+Emit cleanup separately from review findings and coverage: `completed`,
+`retained`, or `incomplete` with one actionable reason. A retained-resource
+entry includes exact ID, kind/purpose, run/node owner, dependency evidence,
+removal condition, and next action. Preserve the attempt artifacts while
+cleanup is pending so an operator can retry with the same registry identity.
+
 For an instrumented repository author loop, invoke its original clean command
 with the same exact instance, state/run roots, and scoped Docker hook. Intercept
 its Compose teardown request and execute the existing Kernel cleanup sequence
