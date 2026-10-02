@@ -440,6 +440,9 @@ transport_eligibility() {
         }
         if [ "$allowance_count" -gt 0 ] && [ "$healthy_count" -gt 0 ]; then
           BILLING_MODE="included-subscription"
+          if printf '%s' "$AVAILABILITY" | jq -e 'any(.codex.allowances[]; .reason == "codex_credits_available")' >/dev/null; then
+            BILLING_MODE="subscription-headroom-unknown"
+          fi
           ALLOWANCE_WINDOW="mapping-unknown"
           ELIGIBILITY_REASON="attemptable"
           return 0
@@ -512,6 +515,10 @@ transport_eligibility() {
       BILLING_MODE="included-subscription"
       ALLOWANCE_WINDOW="$rate_limit_id"
       ELIGIBILITY_REASON="available"
+      if [ "$allowance_reason" = codex_credits_available ]; then
+        BILLING_MODE="paid-credits"
+        ELIGIBILITY_REASON="codex_credits_available"
+      fi
       ;;
     claude-cli)
       state="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.state // "unknown"')"

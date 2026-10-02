@@ -110,6 +110,7 @@ candidate_status() {
       auth="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.authMode // .codex.auth_mode // "unknown"')"
       [ "$auth" = subscription ] || { printf unavailable; return; }
       rate_limit_id="$(printf '%s' "$candidate" | jq -r '.rateLimitId // empty')"
+      [ -n "$rate_limit_id" ] || rate_limit_id="$(printf '%s' "$AVAILABILITY" | jq -r '.codex.defaultAllowanceId // empty')"
       if [ -n "$rate_limit_id" ]; then
         state="$(printf '%s' "$AVAILABILITY" | jq -r --arg id "$rate_limit_id" '.codex.allowances[$id].state // "unknown"')"
         case "$state" in ok) printf available ;; limited|exhausted) printf unavailable ;; *) printf attemptable ;; esac
@@ -180,7 +181,7 @@ harness_for() {
   case "$1" in codex-cli) printf Codex ;; claude-cli) printf 'Claude Code' ;; openrouter) printf OpenRouter ;; esac
 }
 cost_for() {
-  local candidate="$1" transport model alias price plan paid
+  local candidate="$1" transport model alias price plan paid credit_reason
   transport="$(printf '%s' "$candidate" | jq -r '.transport')"
   model="$(printf '%s' "$candidate" | jq -r '.model')"
   if [ "$transport" = openrouter ]; then
@@ -203,7 +204,17 @@ cost_for() {
   else
     alias="$(jq -r --arg model "$model" '.native_api_equivalent_cost.aliases[$model] // empty' "$MATRIX")"
     price="$(jq -c --arg alias "$alias" '[.native_api_equivalent_cost.models[] | select(.slug == $alias)][0] // null | if . == null then null else {inputUsdPerM:.input_usd_per_m,outputUsdPerM:.output_usd_per_m,snapshotDate:.snapshot_date,basis:.pricing_basis} end' "$MATRIX")"
-    jq -cn --argjson price "$price" '{label:"included subscription",apiPrice:null,apiEquivalent:$price}'
+    credit_reason="$(printf '%s' "$AVAILABILITY" | jq -r --arg id "$(printf '%s' "$candidate" | jq -r '.rateLimitId // empty')" '
+      ($id | if . == "" then null else . end) as $id
+      | .codex as $c | ($id // $c.defaultAllowanceId) as $key
+      | if $key != null then $c.allowances[$key].reason // $c.reason else $c.reason end')"
+    if [ "$credit_reason" = codex_credits_available ]; then
+      jq -cn --argjson price "$price" '{label:"Codex credits; measured charge unavailable",apiPrice:null,apiEquivalent:$price}'
+    elif printf '%s' "$AVAILABILITY" | jq -e 'any(.codex.allowances[]?; .reason == "codex_credits_available")' >/dev/null; then
+      jq -cn --argjson price "$price" '{label:"Codex subscription or credits; bucket mapping unknown",apiPrice:null,apiEquivalent:$price}'
+    else
+      jq -cn --argjson price "$price" '{label:"included subscription",apiPrice:null,apiEquivalent:$price}'
+    fi
   fi
 }
 
@@ -256,7 +267,7 @@ elif [ "$cost_label" = 'paid Claude credits' ]; then
   COST_TEXT="paid Claude credits; $equivalent_text"
 else
   equivalent_text="$(printf '%s' "$RESULT" | jq -r 'if .recommendedStart.cost.apiEquivalent == null then "API-equivalent unavailable in current matrix" else "API-equivalent $" + (.recommendedStart.cost.apiEquivalent.inputUsdPerM|tostring) + "/M input, $" + (.recommendedStart.cost.apiEquivalent.outputUsdPerM|tostring) + "/M output (" + .recommendedStart.cost.apiEquivalent.snapshotDate + ")" end')"
-  COST_TEXT="included subscription; $equivalent_text"
+  COST_TEXT="$cost_label; $equivalent_text"
 fi
 printf 'Recommended start\n\n'
 printf -- '- Model: %s\n' "$PRIMARY_MODEL"

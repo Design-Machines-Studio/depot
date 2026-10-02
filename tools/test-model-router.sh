@@ -119,6 +119,11 @@ case "${1:-}:${2:-}" in
           [ "$initialized" -eq 1 ] || exit 91
           case "${MODEL_ROUTER_CODEX_FIXTURE:-legacy}" in
             rate-no-response) : ;;
+            credits)
+              jq -cn --argjson credits "$MODEL_ROUTER_CODEX_CREDITS" --argjson used "${MODEL_ROUTER_CODEX_USED:-100}" --arg shape "${MODEL_ROUTER_CODEX_SHAPE:-legacy}" '
+                {limitId:"codex",primary:{usedPercent:$used,windowDurationMins:300},credits:$credits} as $snapshot
+                | {id:7,result:(if $shape == "map" then {rateLimitsByLimitId:{codex:$snapshot}} else {rateLimits:$snapshot} end)}'
+              ;;
             boundary)
               jq -cn --argjson used "$MODEL_ROUTER_CODEX_USED" --argjson duration "${MODEL_ROUTER_CODEX_WINDOW:-10080}" '{id:7,result:{rateLimits:{primary:{usedPercent:$used,windowDurationMins:$duration}}}}'
               ;;
@@ -217,6 +222,31 @@ assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_mapping
 assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_response_malformed"' "$TMP/probe-malformed-map.json"
 assert jq -e '.codex.state == "unknown" and .codex.reason == "rate_limit_shape_unsupported"' "$TMP/probe-unsupported.json"
 assert jq -e '.codex.state == "ok" and .codex.reason == "available" and .codex.defaultAllowanceId == "codex"' "$TMP/probe-missing-window.json"
+
+# Credit telemetry is scoped to each allowance, never persisted as a balance.
+for shape in legacy map; do
+  for credit_case in positive unlimited absent-balance zero negative malformed missing contradictory; do
+    case "$credit_case" in
+      positive) credits='{"hasCredits":true,"unlimited":false,"balance":"500"}'; expected=codex_credits_available ;;
+      unlimited) credits='{"hasCredits":false,"unlimited":true,"balance":null}'; expected=codex_credits_available ;;
+      absent-balance) credits='{"hasCredits":true,"unlimited":false}'; expected=codex_credits_available ;;
+      zero) credits='{"hasCredits":true,"unlimited":false,"balance":"0"}'; expected=rate_limit_exhausted ;;
+      negative) credits='{"hasCredits":true,"unlimited":false,"balance":"-1"}'; expected=rate_limit_exhausted ;;
+      malformed) credits='{"hasCredits":"true","unlimited":false,"balance":"500"}'; expected=rate_limit_exhausted ;;
+      missing) credits=null; expected=rate_limit_exhausted ;;
+      contradictory) credits='{"hasCredits":false,"unlimited":false,"balance":"500"}'; expected=rate_limit_exhausted ;;
+    esac
+    MODEL_ROUTER_CODEX_FIXTURE=credits MODEL_ROUTER_CODEX_CREDITS="$credits" MODEL_ROUTER_CODEX_SHAPE="$shape" \
+      env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE PATH="$TMP/bin:$PATH" \
+      FAKE_CLAUDE_AUTH=none "$PROBE" > "$TMP/probe-credits-$shape-$credit_case.json"
+    assert jq -e --arg reason "$expected" '.codex.reason == $reason and .codex.allowances.codex.reason == $reason' "$TMP/probe-credits-$shape-$credit_case.json"
+    assert jq -e '.codex | tostring | test("hasCredits|balance|unlimited|500") | not' "$TMP/probe-credits-$shape-$credit_case.json"
+  done
+done
+MODEL_ROUTER_CODEX_FIXTURE=credits MODEL_ROUTER_CODEX_CREDITS='{"hasCredits":true,"unlimited":false,"balance":"500"}' MODEL_ROUTER_CODEX_USED=98 \
+  env -u OPENROUTER_API_KEY -u OPENROUTER_API_KEY_FILE PATH="$TMP/bin:$PATH" \
+  FAKE_CLAUDE_AUTH=none "$PROBE" > "$TMP/probe-credit-reserve.json"
+assert jq -e '.codex.reason == "reserve_threshold_reached"' "$TMP/probe-credit-reserve.json"
 
 # Both supported windows retain native eligibility above the 2% reserve.
 for window in 300 10080; do
@@ -798,6 +828,19 @@ run_role all-buckets-exhausted builder-deep high \
   --capability read-repository --capability long-context
 assert jq -e '.served.transport == "openrouter" and ([.attempts[] | select(.transport == "codex-cli" and .reason == "rate_limit_exhausted")] | length) == 3' \
   "$TMP/all-buckets-exhausted.receipt"
+
+# Exhausted included allowance plus usable credits reaches native review.
+fixture healthy
+jq -s '.[0] as $base | .[1].codex as $codex | $base | .codex = $codex' \
+  "$TMP/availability.json" "$TMP/probe-credits-map-positive.json" > "$TMP/availability.next"
+mv "$TMP/availability.next" "$TMP/availability.json"
+run_role credit-backed-review review-fast medium --capability read-repository --capability tool-use
+assert jq -e '.served.transport == "codex-cli" and .served.billingMode == "paid-credits" and (.attempts | length) == 1' "$TMP/credit-backed-review.receipt"
+"$ROOT/plugins/model-router/skills/model-router/references/operator-recommendation.sh" \
+  --role review-fast --effort medium --capability read-repository --capability tool-use \
+  --matrix-file "$ROOT/plugins/openrouter/skills/openrouter-delegate/references/model-matrix.json" \
+  --availability-file "$TMP/availability.json" --format json > "$TMP/credit-recommendation.json"
+assert jq -e '.recommendedStart.harness == "Codex" and (.recommendedStart.cost.label | startswith("Codex credits"))' "$TMP/credit-recommendation.json"
 
 # When authoritative policy metadata does name the applicable 0.147 bucket,
 # the same response becomes eligible without comparing it with other buckets.

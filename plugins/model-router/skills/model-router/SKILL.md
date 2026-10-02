@@ -45,16 +45,25 @@ For Codex subscription candidates, authentication and allowance observation
 remain separate. The probe validates that every 0.147 map key matches its
 snapshot `limitId`, parses the 0.146 `rateLimits.primary`/`secondary` and 0.147
 `rateLimitsByLimitId` forms, and evaluates every observed supported window at
-the Codex-specific 2% reserve threshold. Above 2% remains eligible; at or
-below 2% skips new dispatches with `reserve_threshold_reached`. Zero remaining
-or a real provider quota rejection uses `rate_limit_exhausted`. Claude keeps
+the Codex-specific 2% reserve threshold. Above 2% remains eligible; positive
+headroom at or below 2% skips new dispatches with `reserve_threshold_reached`.
+At zero remaining, inspect that same allowance snapshot's Codex `credits`
+first: validated `unlimited: true`, or `hasCredits: true` with an absent or
+positive numeric-string balance, keeps native Codex eligible. This is
+`codex_credits_available`, with credit-backed billing reported separately;
+never claim it is free included usage or invent a measured charge. These are
+Codex account credits, not OpenAI API or OpenRouter balances. A missing,
+malformed, contradictory or exhausted credit snapshot does not establish
+usable credits. A real provider quota rejection still closes the attempt.
+The positive 2% subscription reserve remains unchanged. Claude keeps
 its existing 8% threshold. An absent optional window is not fabricated and
 does not invalidate another observed window. An empty or incomplete snapshot
 stays unknown with its content-safe diagnostic. With confirmed ChatGPT
 subscription authentication, unknown or unavailable allowance telemetry
 permits one bounded native attempt and is labelled `attemptable`, never
-verified healthy. An observed applicable exhausted bucket, API-key-only or
-unknown authentication, or missing authentication still closes the native
+verified healthy. An observed applicable exhausted bucket without confirmed
+usable credits, API-key-only or unknown authentication, or missing
+authentication still closes the native
 candidate. Multiple 0.147 buckets without an authoritative candidate mapping
 remain unattributed; the router does not choose a best bucket. If all
 unattributed buckets are limited, Codex is skipped. Report
