@@ -47,7 +47,7 @@ and `dm-review:dm-review-fix`.
 
 ## Plugins
 
-19 plugins | 43 domain-facing skills + 2 internal infrastructure skills = 45 total skills | 35 generated Codex command-skill aliases | 38 agents | 35 commands
+19 plugins | 43 domain-facing skills + 2 internal infrastructure skills = 45 total skills | 36 generated Codex command-skill aliases | 38 agents | 36 commands
 
 ### ned
 

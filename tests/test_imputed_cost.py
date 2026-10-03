@@ -404,7 +404,11 @@ class ImputedCostTests(unittest.TestCase):
         oracle = json.loads((
             Path(__file__).parent / "fixtures/run-cost-summary-no-matrix-v1.json"
         ).read_text(encoding="utf-8"))
-        with tempfile.TemporaryDirectory() as directory:
+        # Keep historical oracle bytes independent of a release version bump.
+        # test_openrouter_usage separately checks runtime/manifest version parity.
+        with mock.patch("workflow_kernel.cost_summary._kernel_version_string",
+                        return_value=oracle["versions"]["kernel_version"]), \
+                tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             events = root / "events.json"
             events.write_text(

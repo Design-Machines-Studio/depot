@@ -113,7 +113,7 @@ For plugin anatomy, Agent Card capabilities schema, dependency declarations, orc
 
 ## The Plugins
 
-19 plugins | 43 domain-facing skills + 2 internal infrastructure skills = 45 total skills | 35 generated Codex command-skill aliases | 38 agent cards | 35 commands
+19 plugins | 43 domain-facing skills + 2 internal infrastructure skills = 45 total skills | 36 generated Codex command-skill aliases | 38 agent cards | 36 commands
 
 The generated search index counts every manifest-discovered surface, including
 the internal model-router and kernel skills: 45 skills and 38 agents.
@@ -149,3 +149,17 @@ the internal model-router and kernel skills: 45 skills and 38 agents.
 - Reference files live in `references/` subdirectories.
 - Agent files are categorized: `review/` for code review agents, `workflow/` for automation agents.
 - Plugin JSON requires `name`, `description`, `version`, `author`, and `capabilities`.
+
+## Agent board coordination
+
+For a configured local board, use Project Manager's `agent-message-board` skill
+and its shared `references/consumer-instructions.md` contract. At task start/resume
+check the actionable inbox for the confirmed canonical repository and bounded
+next-session context; also check relevant dependency checkpoints. Do not poll.
+Continue independently authorized work while waiting. A missing reply is neither
+approval nor a new approval gate. Informational owner notifications do not require
+an answer; genuine shared-resource conflicts retain repository protections.
+Link replies/completion updates/corrections explicitly and verify source evidence
+before clearing dependencies. Only operator/host-verified session bindings permit
+targeted notification. Posting or queueing is not proof that a recipient saw it.
+Use bounded `list` as the fallback if an installed runtime lacks the new inbox.

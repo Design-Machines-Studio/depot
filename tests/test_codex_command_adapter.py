@@ -88,7 +88,8 @@ class CodexCommandAdapterContractTests(unittest.TestCase):
 
     def test_aliases_retain_canonical_command_bodies(self) -> None:
         expected = GENERATOR.expected_files()
-        self.assertEqual(35, len(expected))
+        self.assertEqual(36, len(expected))
+        self.assertIn("## Command Workflow", (REPO / "plugins/project-manager/skills/agent-board/SKILL.md").read_text())
         for command in ("dm-review", "dm-review-quick", "dm-review-loop", "pipeline"):
             path = REPO / "plugins" / ("pipeline" if command == "pipeline" else "dm-review") / "skills" / command / "SKILL.md"
             self.assertIn("## Command Workflow", path.read_text())

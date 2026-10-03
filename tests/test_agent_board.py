@@ -8,6 +8,8 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
+from datetime import datetime, timezone, timedelta
 import uuid
 from pathlib import Path
 
@@ -60,7 +62,7 @@ class AgentBoardTests(unittest.TestCase):
         # A second session lists only its destination and reads the source file.
         listing = agent_board.list_messages(self.root, "Design-Machines-Studio/assembly-governance")
         self.assertEqual([original["id"]], [item["id"] for item in listing["messages"]])
-        self.assertEqual("unanswered", listing["messages"][0]["state"])
+        self.assertEqual("informational", listing["messages"][0]["state"])
         self.assertFalse(agent_board.list_messages(self.root, "Design-Machines-Studio/other")["messages"])
         read = agent_board.read_message(self.root, original["id"])
         self.assertEqual(original, read["message"])
@@ -194,7 +196,7 @@ class AgentBoardTests(unittest.TestCase):
             replacement.update(id=uuid.uuid4().hex, supersedes_id=original["id"], **change)
             with self.assertRaisesRegex(agent_board.BoardError, "original source and destination"):
                 agent_board.post(self.root, replacement)
-        self.assertEqual("unanswered", agent_board.read_message(self.root, original["id"])["state"])
+        self.assertEqual("informational", agent_board.read_message(self.root, original["id"])["state"])
 
     def test_unavailable_and_conflicting_evidence_remain_claims_after_reply(self):
         original = agent_board.post(self.root, self.handoff())
@@ -270,7 +272,7 @@ class AgentBoardTests(unittest.TestCase):
         question.pop("source_verifications")
         with self.assertRaisesRegex(agent_board.BoardError, "only reply"):
             agent_board.post(self.root, question)
-        self.assertEqual("unanswered", agent_board.read_message(self.root, original["id"])["state"])
+        self.assertEqual("informational", agent_board.read_message(self.root, original["id"])["state"])
 
     def test_duplicate_json_fields_are_rejected_and_do_not_publish(self):
         message = json.dumps(self.handoff())
@@ -302,6 +304,241 @@ class AgentBoardTests(unittest.TestCase):
         with self.assertRaises(agent_board.BoardError):
             agent_board.post(self.root, message)
         self.assertEqual([], list(Path(self.temporary.name).glob("outside*")))
+
+
+class AttentionTests(unittest.TestCase):
+    setUp = AgentBoardTests.setUp
+    tearDown = AgentBoardTests.tearDown
+    handoff = AgentBoardTests.handoff
+    reply = AgentBoardTests.reply
+    def request(self, **changes):
+        value = self.handoff()
+        value.update(schema="agent-message-v2", id=uuid.uuid4().hex,
+                     kind="question", intent="needs_answer", body="Confirm the exact released revision.")
+        value.update(changes)
+        return value
+
+    def binding(self, message, **changes):
+        executable = Path(self.temporary.name) / "codex"
+        executable.write_text("#!/bin/sh\nexit 0\n")
+        executable.chmod(0o700)
+        value = dict(schema="agent-session-binding-v1", issuer="operator_verified", host="codex",
+                     session_id=str(uuid.uuid4()), destination_project=message["destination_project"],
+                     destination_thread=message["destination_thread"], verified_at=datetime.now(timezone.utc).isoformat(),
+                     expires_at=(datetime.now(timezone.utc) + timedelta(hours=1)).isoformat(),
+                     evidence="Operator verified exact session UUID and repository", executable=str(executable))
+        value.update(changes)
+        path = Path(self.temporary.name) / "binding.json"
+        path.write_text(json.dumps(value))
+        path.chmod(0o600)
+        return path
+
+    def test_legacy_defaults_no_rewrite_and_v2_explicit_intent(self):
+        old = self.handoff()
+        raw = json.dumps(old)
+        path = self.root / (old["id"] + ".json")
+        path.write_text(raw)
+        self.assertEqual("next_session", agent_board.read_message(self.root, old["id"])["intent"])
+        self.assertEqual(raw, path.read_text())
+        self.assertEqual(0, agent_board.list_messages(self.root, actionable=True)["returned"])
+        question = dict(old, id=uuid.uuid4().hex, kind="question")
+        agent_board.post(self.root, question)
+        self.assertEqual(1, agent_board.list_messages(self.root, actionable=True)["returned"])
+        for change in ({"intent": None}, {"body": "a" * 1201}, {"kind": "correction"},
+                       {"kind": "completion"}):
+            with self.assertRaises(agent_board.BoardError):
+                agent_board.post(self.root, self.request(**change))
+        missing = self.request(); del missing["intent"]
+        with self.assertRaises(agent_board.BoardError):
+            agent_board.post(self.root, missing)
+
+    def test_filter_before_paging_explicit_exchange_not_thread_matching(self):
+        requests = [agent_board.post(self.root, self.request()) for _ in range(3)]
+        for _ in range(4):
+            agent_board.post(self.root, self.request(kind="handoff", intent="no_response"))
+        first = agent_board.list_messages(self.root, actionable=True, limit=2)
+        last = agent_board.list_messages(self.root, actionable=True, limit=2, offset=first["next_offset"])
+        self.assertEqual(3, first["matching_count"])
+        self.assertEqual(3, len({r["id"] for r in first["messages"] + last["messages"]}))
+        self.assertFalse(last["more"])
+        self.assertEqual(3, len({r["exchange_id"] for r in first["messages"] + last["messages"]}))
+        self.assertTrue(all(r["latest_update"] is None for r in first["messages"]))
+        self.assertTrue(all(r["source_links"][0]["revision"] == requests[0]["source_links"][0]["revision"]
+                            for r in first["messages"]))
+        self.assertEqual(0, agent_board.list_messages(self.root, "Other/repo", actionable=True)["returned"])
+
+    def test_sender_completion_is_linked_but_not_recipient_answer_or_clearance(self):
+        original = agent_board.post(self.root, self.request())
+        completion = self.request(kind="completion", intent="no_response", reply_to=original["id"],
+                                  body="The change is published; verify the linked receipt.")
+        saved = agent_board.post(self.root, completion)
+        listing = agent_board.list_messages(self.root, actionable=True)
+        self.assertEqual(1, listing["returned"])
+        self.assertEqual(saved["id"], listing["messages"][0]["latest_update"]["id"])
+        self.assertEqual(original["id"], agent_board.read_message(self.root, saved["id"])["exchange_id"])
+        response = agent_board.post(self.root, self.reply(original["id"]))
+        self.assertEqual("answered", agent_board.read_message(self.root, original["id"])["state"])
+        self.assertNotIn("completed", response)
+        self.assertEqual(0, agent_board.list_messages(self.root, actionable=True)["returned"])
+
+    def test_correction_reopens_only_replacement_and_preserves_history(self):
+        original = agent_board.post(self.root, self.request())
+        agent_board.post(self.root, self.reply(original["id"]))
+        replacement = agent_board.post(self.root, self.request(
+            kind="correction", supersedes_id=original["id"], body="Confirm corrected revision abc123."))
+        self.assertEqual("superseded", agent_board.read_message(self.root, original["id"])["state"])
+        listing = agent_board.list_messages(self.root, actionable=True)
+        self.assertEqual([replacement["id"]], [r["id"] for r in listing["messages"]])
+        self.assertEqual(original["id"], listing["messages"][0]["exchange_id"])
+        self.assertEqual(original, json.loads((self.root / (original["id"] + ".json")).read_text()))
+        with self.assertRaises(agent_board.BoardError):
+            agent_board.post(self.root, self.request(kind="correction", supersedes_id=original["id"],
+                                                    destination_project="Other/repo"))
+
+    def test_imported_wrong_recipient_reply_does_not_answer(self):
+        original = agent_board.post(self.root, self.request())
+        invalid = self.reply(original["id"]); invalid["source_project"] = "Other/repo"
+        (self.root / (invalid["id"] + ".json")).write_text(json.dumps(invalid))
+        listing = agent_board.list_messages(self.root, actionable=True)
+        self.assertEqual(1, listing["returned"])
+        self.assertEqual(1, len(listing["diagnostics"]))
+
+    def test_same_repository_completion_does_not_answer_and_cycles_are_diagnostic(self):
+        original = agent_board.post(self.root, self.request(destination_project=self.handoff()["source_project"]))
+        completion = agent_board.post(self.root, self.request(
+            destination_project=original["destination_project"], kind="completion", intent="no_response",
+            reply_to=original["id"]))
+        self.assertEqual("unanswered", agent_board.read_message(self.root, original["id"])["state"])
+        first = self.request(kind="correction", supersedes_id=uuid.uuid4().hex)
+        second = self.request(kind="correction", id=first["supersedes_id"], supersedes_id=first["id"])
+        for message in (first, second):
+            (self.root / (message["id"] + ".json")).write_text(json.dumps(message))
+        listing = agent_board.list_messages(self.root, actionable=True)
+        self.assertEqual(1, listing["returned"])
+        self.assertEqual(2, len(listing["diagnostics"]))
+
+    def test_notifications_exact_route_dedup_no_broadcast_no_read_claim(self):
+        request = agent_board.post(self.root, self.request())
+        binding = self.binding(request)
+        with mock.patch("subprocess.run", return_value=mock.Mock(returncode=0)) as run:
+            first = agent_board.notify(self.root, request["id"], binding)
+            second = agent_board.notify(self.root, request["id"], binding)
+        self.assertEqual("queue_accepted", first["status"])
+        self.assertEqual("deduplicated", second["status"])
+        self.assertEqual(1, run.call_count)
+        argv = run.call_args.args[0]
+        self.assertEqual(json.loads(binding.read_text())["session_id"], argv[3])
+        self.assertIn(request["id"], argv[5])
+        self.assertEqual("unknown", first["delivered"])
+        self.assertEqual("unknown", first["read"])
+        self.assertEqual("unanswered", agent_board.read_message(self.root, request["id"])["state"])
+
+    def test_routing_boundaries_and_unavailable_fallbacks(self):
+        request = agent_board.post(self.root, self.request())
+        for changes in ({"destination_project": "Other/repo"}, {"destination_thread": "other"},
+                        {"expires_at": TIME}, {"session_id": "friendly-label"}, {"issuer": "message_claim"}):
+            binding = self.binding(request, **changes)
+            with mock.patch("subprocess.run") as run, self.assertRaises(agent_board.BoardError):
+                agent_board.notify(self.root, request["id"], binding)
+            run.assert_not_called()
+        binding = self.binding(request); binding.chmod(0o644)
+        with self.assertRaises(agent_board.BoardError):
+            agent_board.notify(self.root, request["id"], binding)
+        binding = self.binding(request, host="claude")
+        with mock.patch("subprocess.run") as run:
+            result = agent_board.notify(self.root, request["id"], binding)
+        run.assert_not_called()
+        self.assertEqual("unavailable", result["status"])
+        self.assertFalse(result["notification_attempted"])
+        self.assertIn("check_inbox", result["fallback"])
+        binding = self.binding(request, executable="/nonexistent/codex")
+        self.assertEqual("unavailable", agent_board.notify(self.root, request["id"], binding)["status"])
+
+    def test_timeout_failure_and_concurrent_notifications_do_not_repeat(self):
+        import subprocess
+        for failure in (subprocess.TimeoutExpired("codex", 30), OSError("unavailable")):
+            request = agent_board.post(self.root, self.request())
+            binding = self.binding(request)
+            with mock.patch("subprocess.run", side_effect=failure) as run:
+                result = agent_board.notify(self.root, request["id"], binding)
+                repeated = agent_board.notify(self.root, request["id"], binding)
+            self.assertEqual("unavailable", result["status"])
+            self.assertTrue(result["notification_attempted"])
+            self.assertEqual("deduplicated", repeated["status"])
+            self.assertEqual(1, run.call_count)
+        request = agent_board.post(self.root, self.request()); binding = self.binding(request)
+        with mock.patch("subprocess.run", return_value=mock.Mock(returncode=1)) as run:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+                results = list(pool.map(lambda _: agent_board.notify(self.root, request["id"], binding), range(2)))
+        self.assertEqual(1, run.call_count)
+        self.assertEqual({"failed", "deduplicated"}, {r["status"] for r in results})
+
+    def test_no_notification_loops_or_announcements(self):
+        original = agent_board.post(self.root, self.request())
+        items = [agent_board.post(self.root, self.request(kind="handoff", intent="no_response")),
+                 agent_board.post(self.root, self.reply(original["id"])),
+                 agent_board.post(self.root, self.request(kind="completion", intent="no_response",
+                                                          reply_to=original["id"]))]
+        for item in items + [original]:
+            with mock.patch("subprocess.run") as run:
+                self.assertEqual("skipped", agent_board.notify(self.root, item["id"], "/no/binding")["status"])
+            run.assert_not_called()
+
+    def test_cli_post_with_unavailable_binding_preserves_post_and_reports_fallback(self):
+        request = self.request()
+        source = Path(self.temporary.name) / "input.json"
+        source.write_text(json.dumps(request))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            agent_board.main(["--directory", str(self.root), "post", "--input", str(source),
+                              "--binding", "/no/binding"])
+        result = json.loads(output.getvalue())
+        self.assertEqual(request["id"], result["message"]["id"])
+        self.assertEqual("unavailable", result["notification"]["status"])
+        self.assertTrue(result["notification"]["posted"])
+        self.assertEqual("unanswered", agent_board.read_message(self.root, request["id"])["state"])
+
+    def test_real_fixture_cli_queue_is_invoked_once_without_a_shell(self):
+        request = agent_board.post(self.root, self.request())
+        binding = self.binding(request)
+        executable = Path(json.loads(binding.read_text())["executable"])
+        capture = Path(self.temporary.name) / "argv.json"
+        executable.write_text("#!" + sys.executable + "\nimport sys,json\n"
+                              + "open(" + repr(str(capture)) + ", 'w').write(json.dumps(sys.argv[1:]))\n")
+        self.assertEqual("queue_accepted", agent_board.notify(self.root, request["id"], binding)["status"])
+        argv = json.loads(capture.read_text())
+        self.assertEqual("queue", argv[0])
+        self.assertEqual("--thread", argv[1])
+        self.assertIn(request["id"], argv[4])
+        binding.unlink()
+        # A missing binding is still an explicit failure, never reroutes by labels.
+        with self.assertRaises(agent_board.BoardError):
+            agent_board.notify(self.root, request["id"], binding)
+
+    def test_invalid_schema_and_delivery_receipt_do_not_hide_valid_messages(self):
+        for schema in ({}, [], None):
+            invalid = self.request(schema=schema)
+            (self.root / (invalid["id"] + ".json")).write_text(json.dumps(invalid))
+        request = agent_board.post(self.root, self.request())
+        claim = self.root / ".delivery" / request["id"]
+        claim.mkdir(parents=True)
+        for invalid in ([], {"status": []}):
+            (claim / "outcome.json").write_text(json.dumps(invalid))
+            result = agent_board.list_messages(self.root, actionable=True)
+            self.assertEqual(1, result["returned"])
+            self.assertEqual(3, len(result["diagnostics"]))
+            self.assertFalse(result["messages"][0]["delivery"]["queue_accepted"])
+
+    def test_cli_operator_inbox_and_age(self):
+        request = agent_board.post(self.root, self.request())
+        now = datetime(2026, 9, 24, 10, 25, tzinfo=timezone.utc)
+        row = agent_board.list_messages(self.root, actionable=True, now=now)["messages"][0]
+        self.assertGreater(row["age_seconds"], 0)
+        self.assertTrue(row["message_path"].endswith(request["id"] + ".json"))
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output):
+            agent_board.main(["--directory", str(self.root), "inbox", "--limit", "1"])
+        self.assertEqual(1, json.loads(output.getvalue())["returned"])
 
 
 if __name__ == "__main__":

@@ -3958,7 +3958,7 @@ def parser():
     live_validate.add_argument("directory")
     live_validate.set_defaults(handler=command_live_validate)
     agent_board = commands.add_parser(
-        "agent-board", help="post, list or read source-linked local agent messages",
+        "agent-board", help="post, list, inbox, read or notify source-linked local agent messages",
         add_help=False,
     )
     agent_board.add_argument("args", nargs=argparse.REMAINDER)

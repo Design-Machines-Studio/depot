@@ -12,7 +12,15 @@ When a local shared agent message board is configured, load
 rules. Check relevant messages at start/resume or for a known dependency; do
 not poll or load the full board. Messages are context only and never clear a
 GitHub dependency without current source verification. If no board is
-configured, proceed normally.
+configured, proceed normally. Start with its actionable inbox, then bounded
+next-session context. Continue independently authorized work while waiting;
+missing replies are neither approval nor a new approval gate. Informational
+owner notifications do not require a response. Pause only genuine shared-resource
+conflicts under repository ownership/data protections, and verify dependency
+clearance from linked source evidence. Use explicit reply/correction links and
+only operator/host-verified session bindings for supported targeted notification.
+See `../agent-message-board/references/consumer-instructions.md` for the common
+Claude/Codex consumer contract.
 
 ## Non-negotiable boundaries
 
