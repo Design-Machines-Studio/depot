@@ -56,6 +56,19 @@ A lane has one disposition: `run`, `remote`, `blocked`, `unavailable`,
 provider or CI evidence for pending remote lanes; Workflow Kernel does not
 exchange provider results or convert caller assertions into passing results.
 
+For `go_changed`, the selector includes only changed packages whose nearest
+`go.mod` is the repository root module. Declared dependents are subject to the
+same boundary check. Root `go.mod`, `go.sum`, `go.work`, and `go.work.sum`
+changes retain the existing `./...` expansion. Nested module manifests are
+included in the selected lane's input identity, so adding, removing, or editing
+a boundary invalidates saved verification evidence. The planner does not
+discover or run nested modules. Repositories that require nested-module checks
+must declare those commands as separate required profile lanes; an empty root
+package selection remains `not_triggered`. If changed Go sources are all in
+nested modules, the reason is
+`nested_module_changes_require_explicit_profile_lanes`; it does not report
+nested-module coverage.
+
 ## Results
 
 Each `run-verification` invocation prints one bounded result for that invocation.
