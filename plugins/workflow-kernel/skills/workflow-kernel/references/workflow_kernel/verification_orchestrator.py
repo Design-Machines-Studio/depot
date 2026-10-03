@@ -10,7 +10,8 @@ from .verification_execution import execution_environment, run_local_command
 from .verification_contract import digest
 from .verification_planning import build_plan, validate_plan_identity
 from .verification_repository import (
-    execution_digest, input_digests, validate_profile,
+    execution_digest, go_package_input_paths, input_digests,
+    validate_profile,
 )
 
 
@@ -160,7 +161,11 @@ def execute_plan(profile_document, repository_root, plan, *, environment=None):
                 lane["id"]: lane for lane in refreshed["lanes"]
             }
     final_patterns = {
-        tuple(profile_by_id[lane_id]["input_paths"])
+        (
+            go_package_input_paths(profile_by_id[lane_id])
+            if profile_by_id[lane_id]["package_selector"] == "go_changed"
+            else tuple(profile_by_id[lane_id]["input_paths"])
+        )
         for lane_id, current in current_by_id.items()
         if current["input_digest"] is not None
         and profile_by_id[lane_id]["input_paths"]
@@ -170,7 +175,11 @@ def execute_plan(profile_document, repository_root, plan, *, environment=None):
         lane_id for lane_id, current in current_by_id.items()
         if current["input_digest"] is not None
         and profile_by_id[lane_id]["input_paths"]
-        and final_digests[tuple(profile_by_id[lane_id]["input_paths"])]
+        and final_digests[
+            go_package_input_paths(profile_by_id[lane_id])
+            if profile_by_id[lane_id]["package_selector"] == "go_changed"
+            else tuple(profile_by_id[lane_id]["input_paths"])
+        ]
         != current["input_digest"]
     ]
     if stale_final_inputs:
