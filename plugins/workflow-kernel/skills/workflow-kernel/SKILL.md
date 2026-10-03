@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, strict existing Docker resource-registry validation, bounded cross-harness observation indexes, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.24.2
+version: 0.25.0
 ---
 
 # Workflow Kernel
@@ -90,7 +90,17 @@ command.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
-0.23.0 surface adds `agent-board post|list|read`, a small optional local
+0.25.0 surface adds `agent-board inbox` and explicit v2 intent/completion/correction
+relationships, with v1 read compatibility. `agent-board notify` and optional
+`post --binding` support one-shot targeted local Codex queueing only with a
+trusted operator/host-issued, verified, expiring session binding. Delivery/read
+remain unknown without host evidence. No Claude transport or automatic discovery
+is available; use the bounded inbox fallback at start/resume/dependency checkpoints.
+The board's explicitly requested local CLI notification is a contained stdlib
+subprocess exception to the otherwise API-free mechanics contract; it starts no
+service and installs no dependency. See Project Manager's
+`agent-message-board/references/delivery.md` for routing/deduplication boundaries.
+The 0.23.0 surface adds `agent-board post|list|read`, a small optional local
 message exchange. It requires an explicitly configured existing directory,
 publishes each validated message as an immutable JSON file, and reports
 malformed entries as diagnostics. It does not track task state or verify cited

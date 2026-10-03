@@ -616,3 +616,23 @@ To compare two runs:
 
 The artifact is designed so a later session can compute this table without
 reading kernel source.
+
+## Agent-board attention and exchanges (0.25.0)
+
+The immutable local board accepts v1 history and new v2 messages with explicit
+Needs an answer / For your next session / No response needed intent. Completion
+updates and corrections link original messages; replies never establish task
+completion or dependency clearance. The bounded operator `agent-board inbox`
+filters actionable unanswered exchanges before paging and includes destinations,
+age, latest linked updates, message paths, source revisions, and delivery evidence.
+Thread labels do not establish relationships or live session addresses.
+
+Targeted local Codex queue notification requires an operator/host-verified,
+expiring exact session binding; atomic per-message attempt claims prevent repeats
+and response loops. Queue acceptance does not prove delivery or reading. Claude,
+unbound/unavailable hosts and ambiguous attempts use the honest inbox/manual-nudge
+fallback. No service, polling loop, external messaging dependency, or cache update
+is introduced. The runtime remains stdlib-only. See the canonical Project Manager
+[board skill](../plugins/project-manager/skills/agent-message-board/SKILL.md),
+[delivery contract](../plugins/project-manager/skills/agent-message-board/references/delivery.md),
+and [consumer instructions](../plugins/project-manager/skills/agent-message-board/references/consumer-instructions.md).

@@ -102,6 +102,9 @@ contains the asset, it emits the kernel's structured
   `>=0.22.0`; dm-review and Pipeline consumers of review-source binding,
   required review-evidence closeout, and successful bounded retention require
   `>=0.24.0`.
+  Agent-board consumers using v2 intent, inbox, completion/correction kinds or
+  targeted notification require `>=0.25.0`; older consumers retain v1/list/read
+  compatibility.
   Candidates are ordered by their parsed semver
   path segment, newest first, and the plugin manifest's declared name and
   version must match. Reject symlink escapes, project-cwd/PATH discovery,
