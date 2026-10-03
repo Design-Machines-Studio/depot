@@ -14,7 +14,8 @@ from workflow_kernel.verification_errors import VerificationPlannerError
 from workflow_kernel.verification_execution import run_bounded_capture
 from workflow_kernel.verification_orchestrator import execute_plan
 from workflow_kernel.verification_repository import (
-    git_changed_paths, input_digests, tree_input_digests, validate_profile,
+    _go_packages, _expanded_argv, git_changed_paths, input_digests,
+    tree_input_digests, validate_profile,
 )
 from workflow_kernel.verification_planning import build_plan as kernel_build_plan
 
@@ -348,6 +349,7 @@ class RepositoryVerificationTests(unittest.TestCase):
                 profile, repository, ".dm/verification.json",
                 ["internal/source/source.go"], "chunk", "medium",
             )
+            result, outcome = execute(profile, repository, plan)
         lanes = {lane["id"]: lane for lane in plan["lanes"]}
         self.assertEqual(
             lanes["go-focused"]["packages"],
@@ -356,6 +358,285 @@ class RepositoryVerificationTests(unittest.TestCase):
         self.assertEqual(lanes["go-focused"]["disposition"], "run")
         self.assertEqual(lanes["go-full"]["disposition"], "not_scheduled")
         self.assertEqual(lanes["go-race"]["disposition"], "not_scheduled")
+        self.assertEqual(outcome, "complete")
+
+    def test_go_changed_keeps_root_packages_and_excludes_nested_modules(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, profile = self.repository(directory)
+            (repository / "nested/deep").mkdir(parents=True)
+            (repository / "nested/go.mod").write_text(
+                "module example.invalid/nested\n",
+            )
+            (repository / "nested/deep/deep.go").write_text(
+                "package deep\n",
+            )
+            packages = _go_packages(
+                repository,
+                ["internal/source/source.go", "nested/deep/deep.go"],
+                profile["lanes"][1]["declared_dependents"],
+            )
+        self.assertEqual(
+            packages, ["./internal/dependent", "./internal/source"],
+        )
+
+    def test_deeper_nested_module_paths_are_excluded_and_nested_only_is_not_run(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, profile = self.repository(directory)
+            (repository / "vendor/third_party/nested/deep").mkdir(parents=True)
+            (repository / "vendor/third_party/nested/go.mod").write_text(
+                "module example.invalid/deep\n",
+            )
+            (repository / "vendor/third_party/nested/deep/deep.go").write_text(
+                "package deep\n",
+            )
+            lane = validate_profile(profile)["lanes"][1]
+            self.assertEqual(
+                _expanded_argv(
+                    lane, ["vendor/third_party/nested/deep/deep.go"],
+                    repository,
+                ),
+                ([], []),
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "add", "."], check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "commit", "-m", "nested module"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "update-ref", BASE_REF, "HEAD"],
+                check=True,
+            )
+            source = repository / "vendor/third_party/nested/deep/deep.go"
+            source.write_text("package deep\n// changed\n")
+            base, head = prepare_candidate(
+                repository, ["vendor/third_party/nested/deep/deep.go"],
+            )
+            nested_only = kernel_build_plan(
+                profile, repository, ".dm/verification.json", None,
+                "chunk", "medium", base_commit=base, head_commit=head,
+                environment=TEST_ENVIRONMENT,
+            )
+        selected = {item["id"]: item for item in nested_only["lanes"]}[
+            "go-focused"
+        ]
+        self.assertEqual(selected["disposition"], "not_triggered")
+        self.assertEqual(
+            selected["reason"],
+            "nested_module_changes_require_explicit_profile_lanes",
+        )
+        self.assertEqual(selected["argv"], [])
+        self.assertEqual(selected["packages"], [])
+
+    def test_root_files_templates_and_manifest_changes_keep_root_selection(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, profile = self.repository(directory)
+            (repository / "root.go").write_text("package project\n")
+            (repository / "internal/source/view.templ").write_text("templ\n")
+            (repository / "go.sum").write_text("")
+            (repository / "go.work").write_text("go 1.23\n")
+            (repository / "nested").mkdir()
+            (repository / "nested/go.mod").write_text(
+                "module example.invalid/nested\n",
+            )
+            dependent_map = profile["lanes"][1]["declared_dependents"]
+            self.assertEqual(
+                _go_packages(repository, ["root.go"], dependent_map), ["."],
+            )
+            self.assertEqual(
+                _go_packages(
+                    repository, ["internal/source/view.templ"], dependent_map,
+                ), ["./internal/dependent", "./internal/source"],
+            )
+            for root_manifest in (
+                "go.mod", "go.sum", "go.work", "go.work.sum",
+            ):
+                with self.subTest(manifest=root_manifest):
+                    self.assertEqual(
+                        _go_packages(repository, [root_manifest], {}), ["./..."],
+                    )
+            self.assertEqual(_go_packages(repository, ["nested/go.mod"], {}), [])
+
+    def test_nested_declared_dependents_are_filtered_but_root_dependents_remain(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, profile = self.repository(directory)
+            (repository / "nested/dependent").mkdir(parents=True)
+            (repository / "nested/go.mod").write_text(
+                "module example.invalid/nested\n",
+            )
+            (repository / "nested/dependent/dependent.go").write_text(
+                "package dependent\n",
+            )
+            profile["lanes"][1]["declared_dependents"]["./internal/source"] = [
+                "./internal/dependent", "./nested/dependent",
+            ]
+            packages = _go_packages(
+                repository, ["internal/source/source.go"],
+                profile["lanes"][1]["declared_dependents"],
+            )
+        self.assertEqual(
+            packages, ["./internal/dependent", "./internal/source"],
+        )
+
+    def test_go_module_boundaries_are_part_of_lane_input_identity(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, profile = self.repository(directory)
+            (repository / "nested/deep").mkdir(parents=True)
+            (repository / "nested/deep/deep.go").write_text("package deep\n")
+            subprocess.run(
+                ["git", "-C", str(repository), "add", "."], check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "commit", "-m", "nested source"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "update-ref", BASE_REF, "HEAD"],
+                check=True,
+            )
+            source = repository / "internal/source/source.go"
+            source.write_text("package source\n// changed\n")
+            base, head = prepare_candidate(
+                repository, ["internal/source/source.go"],
+            )
+            without_boundary = kernel_build_plan(
+                profile, repository, ".dm/verification.json", None,
+                "chunk", "medium", base_commit=base, head_commit=head,
+                include_worktree=True, environment=TEST_ENVIRONMENT,
+            )
+            (repository / "nested/go.mod").write_text(
+                "module example.invalid/nested\n",
+            )
+            with_boundary = kernel_build_plan(
+                profile, repository, ".dm/verification.json", None,
+                "chunk", "medium", base_commit=base, head_commit=head,
+                include_worktree=True, environment=TEST_ENVIRONMENT,
+            )
+            with self.assertRaises(VerificationPlannerError):
+                execute_plan(
+                    profile, repository, without_boundary,
+                    environment=TEST_ENVIRONMENT,
+                )
+            current_result = execute_plan(
+                profile, repository, with_boundary,
+                environment=TEST_ENVIRONMENT,
+            )
+            self.assertEqual(current_result["status"], "complete")
+        old = {item["id"]: item for item in without_boundary["lanes"]}[
+            "go-focused"
+        ]
+        new = {item["id"]: item for item in with_boundary["lanes"]}[
+            "go-focused"
+        ]
+        self.assertNotEqual(old["input_digest"], new["input_digest"])
+        self.assertEqual(old["argv"], new["argv"])
+
+    def test_removing_a_nested_module_boundary_invalidates_saved_plan(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, profile = self.repository(directory)
+            (repository / "nested/deep").mkdir(parents=True)
+            (repository / "nested/go.mod").write_text(
+                "module example.invalid/nested\n",
+            )
+            source = repository / "nested/deep/deep.go"
+            source.write_text("package deep\n")
+            base, head = prepare_candidate(
+                repository, ["nested/deep/deep.go"],
+            )
+            with_boundary = kernel_build_plan(
+                profile, repository, ".dm/verification.json", None,
+                "chunk", "medium", base_commit=base, head_commit=head,
+                include_worktree=True, environment=TEST_ENVIRONMENT,
+            )
+            (repository / "nested/go.mod").unlink()
+            with self.assertRaises(VerificationPlannerError):
+                execute_plan(
+                    profile, repository, with_boundary,
+                    environment=TEST_ENVIRONMENT,
+                )
+
+    def test_required_nested_module_lane_failure_blocks_completion(self):
+        document = profile_document()
+        document["lanes"].append({
+            "id": "external-module",
+            "tier": "focused",
+            "cadences": ["chunk", "revision_batch"],
+            "owner": "local",
+            "argv": [sys.executable, "-c", "raise SystemExit(9)"],
+            "changed_paths": ["external/**/*.go"],
+            "input_paths": ["external/**/*.go", "external/**/go.mod"],
+            "execution_paths": [".dm/verification.json"],
+            "required_environment": ["DM_VERIFICATION_SUBSTRATE"],
+            "execution_environment": ["DM_VERIFICATION_SUBSTRATE"],
+            "required": True,
+        })
+        with tempfile.TemporaryDirectory() as directory:
+            repository, profile = self.repository(directory, document)
+            (repository / "external/module/deep").mkdir(parents=True)
+            (repository / "external/module/go.mod").write_text(
+                "module example.invalid/external\n",
+            )
+            (repository / "external/module/deep/external.go").write_text(
+                "package deep\n",
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "add", "."], check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "commit", "-m", "external module"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "update-ref", BASE_REF, "HEAD"],
+                check=True,
+            )
+            source = repository / "external/module/deep/external.go"
+            source.write_text("package deep\n// changed\n")
+            base, head = prepare_candidate(
+                repository, ["external/module/deep/external.go"],
+            )
+            plan = kernel_build_plan(
+                profile, repository, ".dm/verification.json", None,
+                "chunk", "medium", base_commit=base, head_commit=head,
+                environment=TEST_ENVIRONMENT,
+            )
+            result = execute_plan(
+                profile, repository, plan, environment=TEST_ENVIRONMENT,
+            )
+        planned_lanes = {item["id"]: item for item in plan["lanes"]}
+        lanes = {item["lane_id"]: item for item in result["lanes"]}
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(
+            planned_lanes["go-focused"]["disposition"], "not_triggered",
+        )
+        self.assertEqual(
+            planned_lanes["go-focused"]["reason"],
+            "nested_module_changes_require_explicit_profile_lanes",
+        )
+        self.assertEqual(lanes["external-module"]["status"], "failed")
+
+    def test_symlinked_module_boundary_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, profile = self.repository(directory)
+            (repository / "nested/deep").mkdir(parents=True)
+            with tempfile.TemporaryDirectory() as outside_directory:
+                outside = Path(outside_directory) / "go.mod"
+                outside.write_text("module example.invalid/outside\n")
+                (repository / "nested/go.mod").symlink_to(outside)
+                with self.assertRaises(VerificationPlannerError):
+                    _go_packages(
+                        repository, ["nested/deep/deep.go"], {},
+                    )
+
+    def test_missing_root_module_evidence_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, profile = self.repository(directory)
+            (repository / "go.mod").unlink()
+            with self.assertRaises(VerificationPlannerError):
+                _go_packages(
+                    repository, ["internal/source/source.go"], {},
+                )
 
     def test_documentation_change_does_not_trigger_go_lanes(self):
         with tempfile.TemporaryDirectory() as directory:

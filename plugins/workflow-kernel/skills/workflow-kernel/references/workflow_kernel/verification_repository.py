@@ -354,7 +354,52 @@ def _resolve_commit(repository, value, label):
     return commit
 
 
-def _go_packages(changed_paths, dependents):
+def _go_module_for_path(repository_root, relative_directory):
+    """Return the nearest Go module root for a repository-relative directory."""
+    repository = Path(repository_root).resolve(strict=True)
+    current = repository
+    ancestors = [repository]
+    for part in Path(relative_directory).parts:
+        current = current / part
+        try:
+            metadata = current.lstat()
+        except FileNotFoundError:
+            break
+        except OSError:
+            raise VerificationPlannerError(
+                "unable to inspect Go module boundary",
+            ) from None
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+            raise VerificationPlannerError(
+                "Go package paths may not traverse symlinks or non-directories",
+            )
+        ancestors.append(current)
+
+    for directory in reversed(ancestors):
+        manifest = directory / "go.mod"
+        try:
+            metadata = manifest.lstat()
+        except FileNotFoundError:
+            continue
+        except OSError:
+            raise VerificationPlannerError(
+                "unable to inspect Go module boundary",
+            ) from None
+        if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISREG(metadata.st_mode):
+            raise VerificationPlannerError(
+                "Go module manifests must be regular files",
+            )
+        return directory
+    return None
+
+
+def go_package_input_paths(lane):
+    """Bind module-boundary manifests into the existing lane input identity."""
+    return tuple(sorted(set(lane["input_paths"]) | {"go.mod", "**/go.mod"}))
+
+
+def _go_packages(repository_root, changed_paths, dependents):
+    repository = Path(repository_root).resolve(strict=True)
     if any(path in {"go.mod", "go.sum", "go.work", "go.work.sum"} for path in changed_paths):
         return ["./..."]
     packages = set()
@@ -362,21 +407,38 @@ def _go_packages(changed_paths, dependents):
         if not path.endswith((".go", ".templ")):
             continue
         parent = str(Path(path).parent).replace("\\", "/")
+        module_root = _go_module_for_path(repository, parent)
+        if module_root is None:
+            raise VerificationPlannerError(
+                "unable to establish Go module membership for changed package",
+            )
+        if module_root != repository:
+            continue
         packages.add("." if parent == "." else "./" + parent)
     pending = list(packages)
     while pending:
         package = pending.pop()
         for dependent in dependents.get(package, []):
+            dependent_directory = dependent.removeprefix("./")
+            module_root = _go_module_for_path(repository, dependent_directory)
+            if module_root is None:
+                raise VerificationPlannerError(
+                    "unable to establish Go module membership for declared dependent",
+                )
+            if module_root != repository:
+                continue
             if dependent not in packages:
                 packages.add(dependent)
                 pending.append(dependent)
     return sorted(packages)
 
 
-def _expanded_argv(lane, changed_paths):
+def _expanded_argv(lane, changed_paths, repository_root):
     packages = []
     if lane["package_selector"] == "go_changed":
-        packages = _go_packages(changed_paths, lane["declared_dependents"])
+        packages = _go_packages(
+            repository_root, changed_paths, lane["declared_dependents"],
+        )
         if not packages:
             return [], []
     argv = []

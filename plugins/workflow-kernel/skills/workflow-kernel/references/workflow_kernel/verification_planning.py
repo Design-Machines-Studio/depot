@@ -10,7 +10,7 @@ from .verification_contract import BOUNDARIES, digest
 from .verification_errors import VerificationPlannerError
 from .verification_repository import (
     PLAN_SCHEMA_VERSION, RISKS, execution_digest, execution_patterns,
-    expanded_argv, git_changed_paths, input_digests,
+    expanded_argv, git_changed_paths, go_package_input_paths, input_digests,
     matches, normalize_changed_paths, repository_file,
     repository_scope_digest, resolve_commit,
     tree_input_digests, validate_profile,
@@ -47,7 +47,7 @@ def checkout_changed_paths(
     return complete if include_worktree else committed
 
 
-def _select_lane(lane, changed_paths, boundary, risk):
+def _select_lane(lane, changed_paths, boundary, risk, repository):
     if boundary not in lane["cadences"] or risk not in lane["risks"]:
         return "not_scheduled", "cadence_mismatch", [], []
     terminal_required = (
@@ -60,9 +60,14 @@ def _select_lane(lane, changed_paths, boundary, risk):
         )
     ):
         return "not_triggered", "changed_paths_do_not_match", [], []
-    argv, packages = expanded_argv(lane, changed_paths)
+    argv, packages = expanded_argv(lane, changed_paths, repository)
     if lane["package_selector"] == "go_changed" and not packages:
-        return "not_triggered", "no_changed_go_packages", [], []
+        reason = (
+            "nested_module_changes_require_explicit_profile_lanes"
+            if any(path.endswith((".go", ".templ")) for path in changed_paths)
+            else "no_changed_go_packages"
+        )
+        return "not_triggered", reason, [], []
     return "selected", "lane_selected", argv, packages
 
 
@@ -154,11 +159,15 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
     environment = dict(os.environ if environment is None else environment)
     profile_digest = digest(profile)
     selections = [
-        (lane, *_select_lane(lane, changed_paths, boundary, risk))
+        (lane, *_select_lane(lane, changed_paths, boundary, risk, repository))
         for lane in profile["lanes"]
     ]
     pattern_sets = {
-        tuple(lane["input_paths"])
+        (
+            go_package_input_paths(lane)
+            if lane["package_selector"] == "go_changed"
+            else tuple(lane["input_paths"])
+        )
         for lane, disposition, _reason, _argv, _packages in selections
         if disposition == "selected" and lane["input_paths"]
     }
@@ -185,7 +194,11 @@ def build_plan(profile_document, repository_root, profile_ref, changed_paths,
     blocked = False
     for lane, disposition, reason, argv, packages in selections:
         if disposition == "selected":
-            input_key = tuple(lane["input_paths"])
+            input_key = (
+                go_package_input_paths(lane)
+                if lane["package_selector"] == "go_changed"
+                else tuple(lane["input_paths"])
+            )
             input_digest = (
                 input_digest_map[input_key] if input_key else digest([])
             )
