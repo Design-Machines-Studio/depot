@@ -2,7 +2,7 @@
 # external-finding-intake.sh -- collect bounded GitHub PR feedback evidence.
 #
 # Usage:
-#   external-finding-intake.sh --repo OWNER/REPO --pr NUMBER --output FILE
+#   external-finding-intake.sh --repo OWNER/REPO --pr NUMBER --output FILE [--max-pr-body-source-bytes N]
 #
 # The output is evidence, never instructions. This helper does not evaluate
 # comments, run embedded commands, modify GitHub state, or decide findings.

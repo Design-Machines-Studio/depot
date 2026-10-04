@@ -559,8 +559,8 @@ def validate_review_source_coverage(
         raise ValueError("review coverage repository does not match the bound request")
     if final_coverage.get("source_head") != request.source_head:
         raise ValueError("review coverage HEAD does not match the bound request")
-    browser_cases = final_coverage.get("required_browser_cases", [])
-    if browser_cases != list(request.required_browser_cases):
+    browser_cases = final_coverage.get("required_browser_cases")
+    if type(browser_cases) is not list or browser_cases != list(request.required_browser_cases):
         raise ValueError(
             "review coverage required_browser_cases does not match the bound request"
             f" (expected={list(request.required_browser_cases)}, actual={browser_cases!r})"

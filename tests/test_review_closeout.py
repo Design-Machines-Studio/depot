@@ -201,6 +201,22 @@ class ReviewCloseoutTests(unittest.TestCase):
         )
         self.assertEqual(original, retained.read_bytes())
 
+    def test_omitted_browser_coverage_is_rejected_and_preserved(self):
+        run, paths = self.make_run("dm-review", "omitted-browser-cases")
+        receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
+        del receipts[-1]["required_browser_cases"]
+        original = (json.dumps(receipts) + "\n").encode()
+        paths["receipts"].write_bytes(original)
+
+        result = self.preserve(run, paths)
+        self.assertEqual("incomplete", result["status"])
+        self.assertTrue(any(
+            "required_browser_cases" in reason and "actual=None" in reason
+            for reason in result["missing"]
+        ), result)
+        retained = Path(result["evidence_path"]) / "review/authoritative-receipts.json"
+        self.assertEqual(original, retained.read_bytes())
+
     def test_required_evidence_survives_successful_closeout_and_worktree_removal(self):
         run, paths = self.make_run()
         result = self.preserve(run, paths)
