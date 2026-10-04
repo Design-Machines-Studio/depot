@@ -190,6 +190,17 @@ class ReviewCloseoutTests(unittest.TestCase):
         self.assertEqual("incomplete", retry["status"])
         self.assertEqual(original, retained.read_bytes())
 
+        corrected = json.loads(paths["receipts"].read_text(encoding="utf-8"))
+        corrected[-1]["required_browser_cases"] = []
+        paths["receipts"].write_text(json.dumps(corrected) + "\n", encoding="utf-8")
+        altered_retry = self.preserve(run, paths)
+        self.assertEqual("incomplete", altered_retry["status"])
+        self.assertIn(
+            "authoritative review receipts changed outside append-only closeout",
+            altered_retry["missing"],
+        )
+        self.assertEqual(original, retained.read_bytes())
+
     def test_required_evidence_survives_successful_closeout_and_worktree_removal(self):
         run, paths = self.make_run()
         result = self.preserve(run, paths)

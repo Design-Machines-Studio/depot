@@ -1010,7 +1010,13 @@ def preserve_review_evidence(
                     relative == "review/authoritative-receipts.json"
                     and not _receipt_append_only(target, source)
                 ):
-                    raise ValueError("authoritative review receipts changed outside append-only closeout")
+                    # Keep the first copied receipt immutable and return the
+                    # recoverable scope instead of surfacing the CLI's generic
+                    # unsafe-payload error for this expected retry conflict.
+                    missing.append(
+                        "authoritative review receipts changed outside append-only closeout"
+                    )
+                    continue
                 target.unlink()
                 before = False
             copied_bytes += _copy_file(source, target)

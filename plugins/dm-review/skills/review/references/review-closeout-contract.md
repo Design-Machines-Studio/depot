@@ -55,6 +55,11 @@ retry from it; existing contribution receipts and settled lane outputs are
 reused without duplication or redispatch. Keep resource cleanup separate from
 evidence destruction.
 
+An incomplete retained copy also fixes the authoritative receipt bytes. A
+retry may append a valid closeout receipt, but changing an existing review or
+coverage receipt is rejected and reported as an incomplete recovery; correct
+the caller input in a new owned replay rather than rewriting the first copy.
+
 After owned-resource cleanup settles, update `<evidence_path>/report.md` with
 the actual cleanup inventory and revalidate all local links. Write the final report to `.claude/ux-review/report.md` while its checkout remains available.
 Finish once, after fresh exact-scope Docker inventory proves zero run-owned
