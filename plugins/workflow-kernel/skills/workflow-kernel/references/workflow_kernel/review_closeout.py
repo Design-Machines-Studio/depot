@@ -535,17 +535,36 @@ def validate_review_source_coverage(
     completed = final_coverage.get("completed_lanes")
     degraded = final_coverage.get("degraded_lanes", [])
     unavailable = final_coverage.get("unavailable_lanes", [])
-    if (
-        type(expected) is not list or set(expected) != set(request.required_lanes)
-        or type(completed) is not list or type(degraded) is not list
-        or type(unavailable) is not list
-        or set(completed) | set(degraded) != set(expected)
-        or unavailable
-        or final_coverage.get("source_repository") != request.source_repository
-        or final_coverage.get("source_head") != request.source_head
-        or final_coverage.get("required_browser_cases", []) != list(request.required_browser_cases)
+    if type(expected) is not list or any(type(lane) is not str for lane in expected):
+        raise ValueError("required review coverage expected_lanes must be a string list")
+    if set(expected) != set(request.required_lanes):
+        missing_lanes = sorted(set(request.required_lanes) - set(expected))
+        extra_lanes = sorted(set(expected) - set(request.required_lanes))
+        raise ValueError(
+            "required review lane coverage mismatch"
+            f" (missing={missing_lanes}, unexpected={extra_lanes})"
+        )
+    if any(
+        type(values) is not list or any(type(lane) is not str for lane in values)
+        for values in (completed, degraded, unavailable)
     ):
-        raise ValueError("required review lane coverage is incomplete")
+        raise ValueError("required review coverage completed/degraded/unavailable lanes must be string lists")
+    if set(completed) | set(degraded) != set(expected) or unavailable:
+        missing_lanes = sorted(set(expected) - set(completed) - set(degraded))
+        raise ValueError(
+            "required review lanes are incomplete"
+            f" (missing={missing_lanes}, degraded={sorted(degraded)}, unavailable={sorted(unavailable)})"
+        )
+    if final_coverage.get("source_repository") != request.source_repository:
+        raise ValueError("review coverage repository does not match the bound request")
+    if final_coverage.get("source_head") != request.source_head:
+        raise ValueError("review coverage HEAD does not match the bound request")
+    browser_cases = final_coverage.get("required_browser_cases")
+    if type(browser_cases) is not list or browser_cases != list(request.required_browser_cases):
+        raise ValueError(
+            "review coverage required_browser_cases does not match the bound request"
+            f" (expected={list(request.required_browser_cases)}, actual={browser_cases!r})"
+        )
     _validate_lane_source_coverage(request, lane_document, outputs_document)
     _validate_finding_result_sources(
         request, lane_document, outputs_document,
@@ -921,8 +940,8 @@ def preserve_review_evidence(
             )
             if request.run_id != run.run_id:
                 raise ValueError("review request does not match its exact-owned run")
-        except (TypeError, ValueError):
-            missing.append("required lane, browser, repository, or head coverage")
+        except (TypeError, ValueError) as exc:
+            missing.append(str(exc)[:240] or "required review coverage is invalid")
 
     if request is not None:
         try:
@@ -991,7 +1010,13 @@ def preserve_review_evidence(
                     relative == "review/authoritative-receipts.json"
                     and not _receipt_append_only(target, source)
                 ):
-                    raise ValueError("authoritative review receipts changed outside append-only closeout")
+                    # Keep the first copied receipt immutable and return the
+                    # recoverable scope instead of surfacing the CLI's generic
+                    # unsafe-payload error for this expected retry conflict.
+                    missing.append(
+                        "authoritative review receipts changed outside append-only closeout"
+                    )
+                    continue
                 target.unlink()
                 before = False
             copied_bytes += _copy_file(source, target)

@@ -285,7 +285,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.84.1",
+      "version": "1.84.2",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -411,7 +411,7 @@
     {
       "name": "workflow-kernel",
       "source": "./plugins/workflow-kernel",
-      "version": "0.25.0",
+      "version": "0.25.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

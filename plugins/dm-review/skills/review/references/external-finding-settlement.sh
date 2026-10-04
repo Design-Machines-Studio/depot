@@ -30,13 +30,38 @@ done
 [ -f "$INTAKE" ] && [ ! -L "$INTAKE" ] && [ -f "$DECISIONS" ] && [ ! -L "$DECISIONS" ] || usage
 printf '%s' "$CURRENT_HEAD" | grep -Eq '^[0-9a-f]{40}$' || usage
 command -v jq >/dev/null 2>&1 || exit 76
+command -v shasum >/dev/null 2>&1 || exit 76
 
 jq -e --arg head "$CURRENT_HEAD" '
   .schema_version == 1 and .artifact_role == "external_finding_intake" and
   .collection_status == "complete" and .inspected_head == $head and
+  .pull_request.source_snapshot_status == "complete" and
+  .pull_request.body.source.status == "complete" and
   (.instructions_policy == "untrusted_evidence_only") and
   ([.pull_request.source_id, .surfaces[].items[].source_id] as $ids | ($ids | length) == ($ids | unique | length))
 ' "$INTAKE" >/dev/null || { printf '%s\n' 'external-finding-settlement: intake incomplete or head changed' >&2; exit 1; }
+
+body_source="$(jq -er '.pull_request.body.source.path' "$INTAKE")" || {
+  printf '%s\n' 'external-finding-settlement: complete PR body source reference is missing' >&2
+  exit 1
+}
+case "$body_source" in
+  */*|.|..) printf '%s\n' 'external-finding-settlement: PR body source path is unsafe' >&2; exit 1 ;;
+esac
+body_source_file="$(dirname "$INTAKE")/$body_source"
+[ -f "$body_source_file" ] && [ ! -L "$body_source_file" ] || {
+  printf '%s\n' 'external-finding-settlement: complete PR body source artifact is missing' >&2
+  exit 1
+}
+body_source_bytes="$(wc -c < "$body_source_file" | tr -d '[:space:]')"
+body_source_sha256="$(shasum -a 256 < "$body_source_file" | cut -d ' ' -f1)"
+jq -e --arg digest "sha256:$body_source_sha256" --argjson bytes "$body_source_bytes" '
+  .pull_request.body.source.sha256 == $digest and
+  .pull_request.body.source.bytes == $bytes
+' "$INTAKE" >/dev/null || {
+  printf '%s\n' 'external-finding-settlement: PR body source bytes do not match intake identity' >&2
+  exit 1
+}
 
 jq -e --arg head "$CURRENT_HEAD" --slurpfile intake "$INTAKE" '
   def source_ids: [$intake[0].pull_request.source_id, $intake[0].surfaces[].items[].source_id];

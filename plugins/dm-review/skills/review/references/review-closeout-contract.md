@@ -13,6 +13,10 @@ required lane and browser-case coverage, then bind `request.json` to the exact
 repository, HEAD, selected lanes, and browser cases. Keep the durable finding,
 coverage, and result inputs. Call the trusted Kernel command:
 
+Write required_browser_cases as an explicit list in the final coverage
+receipt. Use an empty list when the bound request has no browser cases;
+omission or null is not an empty, settled browser scope.
+
 ```text
 "$WORKFLOW_KERNEL" preserve-review-evidence \
   --run-root <exact-run-root> \
@@ -50,6 +54,11 @@ finalization then fails, retain one bounded exact-owned recovery directory and
 retry from it; existing contribution receipts and settled lane outputs are
 reused without duplication or redispatch. Keep resource cleanup separate from
 evidence destruction.
+
+An incomplete retained copy also fixes the authoritative receipt bytes. A
+retry may append a valid closeout receipt, but changing an existing review or
+coverage receipt is rejected and reported as an incomplete recovery; correct
+the caller input in a new owned replay rather than rewriting the first copy.
 
 After owned-resource cleanup settles, update `<evidence_path>/report.md` with
 the actual cleanup inventory and revalidate all local links. Write the final report to `.claude/ux-review/report.md` while its checkout remains available.

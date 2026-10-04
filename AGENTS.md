@@ -109,6 +109,10 @@ Shared requests stay provider-neutral: ask for a closed role, required capabilit
 
 ## Full Documentation
 
+For T3 browser work, follow CLAUDE.md's **T3 browser fallback** rule: try the
+collaborative preview first, then use available Playwright when T3 automation
+is absent or explicitly unsupported/unavailable, including phone-started threads.
+
 For plugin anatomy, Agent Card capabilities schema, dependency declarations, orchestration patterns, versioning rules, pipeline enforcement, known failure modes, and the post-implementation checklist, see CLAUDE.md. All of that applies identically to Codex -- only the manifest paths differ as documented above.
 
 ## The Plugins
