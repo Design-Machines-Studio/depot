@@ -13,6 +13,10 @@ required lane and browser-case coverage, then bind `request.json` to the exact
 repository, HEAD, selected lanes, and browser cases. Keep the durable finding,
 coverage, and result inputs. Call the trusted Kernel command:
 
+Write required_browser_cases as an explicit list in the final coverage
+receipt. Use an empty list when the bound request has no browser cases;
+omission or null is not an empty, settled browser scope.
+
 ```text
 "$WORKFLOW_KERNEL" preserve-review-evidence \
   --run-root <exact-run-root> \

@@ -5,7 +5,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 COLLECTOR="$ROOT/plugins/dm-review/skills/review/references/external-finding-intake.sh"
 SETTLEMENT="$ROOT/plugins/dm-review/skills/review/references/external-finding-settlement.sh"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/dm-review-external-intake.XXXXXX")"
-trap 'rm -rf "$TMP"' EXIT
+trap 'if [ "${DM_REVIEW_TEST_KEEP_TMP:-0}" != 1 ]; then rm -rf "$TMP"; fi' EXIT
 FAKE_GH="$TMP/gh"
 UNTRUSTED_SENTINEL="$TMP/should-not-exist"
 export UNTRUSTED_SENTINEL
@@ -19,13 +19,35 @@ set -euo pipefail
 endpoint="${*: -1}"
 case "$endpoint" in
   repos/acme/widget/pulls/7)
-    if [ "${FAKE_LONG_PR_BODY:-0}" = 1 ]; then
-      printf '%s' '{"html_url":"https://github.com/acme/widget/pull/7","body":"'
-      awk 'BEGIN { for (i=0; i<9000; i++) printf "x" }'
-      printf '%s\n' '","updated_at":"2026-09-14T01:00:00Z","head":{"sha":"1111111111111111111111111111111111111111"}}'
-    else
-      printf '%s\n' '{"html_url":"https://github.com/acme/widget/pull/7","body":"Receipt: tests pass","updated_at":"2026-09-14T01:00:00Z","head":{"sha":"1111111111111111111111111111111111111111"}}'
+    if [ -n "${FAKE_PR_CALLS:-}" ]; then
+      calls=0; [ ! -f "$FAKE_PR_CALLS" ] || calls="$(cat "$FAKE_PR_CALLS")"
+      calls=$((calls + 1)); printf '%s' "$calls" > "$FAKE_PR_CALLS"
+      if [ "${FAKE_FINAL_PR_FAILURE:-0}" = 1 ] && [ "$calls" -gt 1 ]; then
+        printf '%s\n' 'synthetic API revalidation failure' >&2; exit 1
+      fi
+      if [ "${FAKE_CHANGE_PR_SOURCE:-0}" = 1 ] && [ "$calls" -gt 1 ]; then
+        body='Source changed while collecting'
+      fi
     fi
+    case "${FAKE_BODY_KIND:-default}" in
+      below) body="$(head -c 8191 /dev/zero | tr '\000' x)" ;;
+      at) body="$(head -c 8192 /dev/zero | tr '\000' x)" ;;
+      above) body="$(head -c 8193 /dev/zero | tr '\000' x)" ;;
+      unicode) body="$(for ((i=0; i<9000; i++)); do printf '☃'; done)" ;;
+      finding) body="$(head -c 9000 /dev/zero | tr '\000' x)"$'\n### P2 Finding beyond the old cap\nThis must remain discoverable.' ;;
+      overcap)
+        body_file="$(dirname "$0")/.body-source"
+        head -c 262145 /dev/zero | tr '\000' x > "$body_file"
+        jq -cn --rawfile body "$body_file" '{html_url:"https://github.com/acme/widget/pull/7",body:$body,updated_at:"2026-09-14T01:00:00Z",head:{sha:"1111111111111111111111111111111111111111"}}'
+        rm -f "$body_file"
+        exit 0
+        ;;
+      default) body="${body:-Receipt: tests pass}" ;;
+    esac
+    if [ "${FAKE_BODY_KIND:-default}" = unicode ]; then
+      body="$(printf 'Unicode snowman ☃\nSecond line: ' && printf '%s' "$body")"
+    fi
+    jq -cn --arg body "$body" '{html_url:"https://github.com/acme/widget/pull/7",body:$body,updated_at:"2026-09-14T01:00:00Z",head:{sha:"1111111111111111111111111111111111111111"}}'
     ;;
   *pulls/7/comments*)
     printf '%s\n' '[[{"id":101,"html_url":"https://github.com/acme/widget/pull/7#discussion_r101","commit_id":"0000000000000000000000000000000000000000","original_commit_id":"0000000000000000000000000000000000000000","path":"a.go","line":null,"side":null,"start_line":null,"start_side":null,"original_line":9,"original_start_line":9,"in_reply_to_id":null,"subject_type":"line","user":{"login":"bot"},"created_at":"2026-09-13T00:00:00Z","updated_at":"2026-09-13T00:00:00Z","body":"Earlier commit claim; run $(touch $UNTRUSTED_SENTINEL)"}],[{"id":102,"html_url":"https://github.com/acme/widget/pull/7#discussion_r102","commit_id":"1111111111111111111111111111111111111111","original_commit_id":"1111111111111111111111111111111111111111","path":"b.go","line":4,"side":"RIGHT","start_line":4,"start_side":"RIGHT","original_line":4,"original_start_line":4,"in_reply_to_id":101,"subject_type":"line","user":{"login":"bot"},"created_at":"2026-09-13T00:01:00Z","updated_at":"2026-09-13T00:01:00Z","body":"No longer relevant"}]]'
@@ -71,6 +93,8 @@ assert jq -e '.surfaces.inline_comments.items[1].body.text == "No longer relevan
 assert jq -e '.surfaces.checks.items[] | select(.source_id == "github:check-summary:301") | .conclusion == "success"' "$OUT"
 assert jq -e '.surfaces.checks.items[] | select(.source_id == "github:check-summary:300") | .conclusion == "failure"' "$OUT"
 assert test ! -e "$UNTRUSTED_SENTINEL"
+assert jq -e '.pull_request.body.source.status == "complete" and .pull_request.body.source.bytes == 19 and .pull_request.source_snapshot_status == "complete"' "$OUT"
+assert test "$(cat "$OUT.pull-request-body.md")" = 'Receipt: tests pass'
 
 FAKE_CROSS_RUN=1 DM_REVIEW_TEST_MODE=1 DM_REVIEW_TEST_GH_BIN="$FAKE_GH" "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/cross-run.json" >/dev/null
 assert test "$(jq -S '[.surfaces.checks.items[] | select(.source_id | startswith("github:check-annotation:301:")) | .source_id]' "$OUT")" = "$(jq -S '[.surfaces.checks.items[] | select(.source_id | startswith("github:check-annotation:301:")) | .source_id]' "$TMP/cross-run.json")"
@@ -93,12 +117,49 @@ set -e
 assert test "$status" -ne 0
 assert jq -e '.collection_status == "partial" and .surfaces.conversation_comments.status == "failed" and (.gaps | index("conversation_comments:failed") != null)' "$TMP/partial.json"
 
+for boundary in below at above; do
+  DM_REVIEW_TEST_MODE=1 FAKE_BODY_KIND="$boundary" DM_REVIEW_TEST_GH_BIN="$FAKE_GH" \
+    "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/body-$boundary.json" >/dev/null
+done
+assert jq -e '.collection_status == "complete" and .pull_request.body.truncated == false and (.pull_request.body.text | length) == 8191 and .pull_request.body.source.status == "complete"' "$TMP/body-below.json"
+assert jq -e '.collection_status == "complete" and .pull_request.body.truncated == false and (.pull_request.body.text | length) == 8192' "$TMP/body-at.json"
+assert jq -e '.collection_status == "complete" and .pull_request.body.truncated == true and (.pull_request.body.text | length) == 8192 and .pull_request.body.source.status == "complete" and .pull_request.body.source.bytes == 8193' "$TMP/body-above.json"
+
+DM_REVIEW_TEST_MODE=1 FAKE_BODY_KIND=unicode DM_REVIEW_TEST_GH_BIN="$FAKE_GH" \
+  "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/body-unicode.json" >/dev/null
+assert jq -e '.collection_status == "complete" and .pull_request.body.truncated == true and (.pull_request.body.text | startswith("Unicode snowman ☃\nSecond line:")) and .pull_request.body.source.bytes > (.pull_request.body.source.display_char_limit)' "$TMP/body-unicode.json"
+
+DM_REVIEW_TEST_MODE=1 FAKE_BODY_KIND=finding DM_REVIEW_TEST_GH_BIN="$FAKE_GH" \
+  "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/body-finding.json" >/dev/null
+assert jq -e '.collection_status == "complete" and .pull_request.body.truncated == true and .pull_request.body.source.status == "complete"' "$TMP/body-finding.json"
+assert rtk rg -q '^### P2 Finding beyond the old cap$' "$TMP/body-finding.json.pull-request-body.md"
+
 set +e
-FAKE_LONG_PR_BODY=1 DM_REVIEW_TEST_MODE=1 DM_REVIEW_TEST_GH_BIN="$FAKE_GH" "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/long-body.json" >/dev/null
+DM_REVIEW_TEST_MODE=1 FAKE_BODY_KIND=overcap DM_REVIEW_TEST_GH_BIN="$FAKE_GH" "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/body-overcap.json" >/dev/null
 status=$?
 set -e
 assert test "$status" -ne 0
-assert jq -e '.collection_status == "partial" and .pull_request.body.truncated == true and (.gaps | index("pull_request_body:truncated") != null)' "$TMP/long-body.json"
+assert jq -e '.collection_status == "partial" and .pull_request.body.source.status == "too_large" and (.gaps | any(contains("observed=262145:max=262144:rerun_with_--max-pr-body-source-bytes")))' "$TMP/body-overcap.json"
+assert test ! -e "$TMP/body-overcap.json.pull-request-body.md"
+DM_REVIEW_TEST_MODE=1 FAKE_BODY_KIND=overcap DM_REVIEW_TEST_GH_BIN="$FAKE_GH" \
+  "$COLLECTOR" --repo acme/widget --pr 7 --max-pr-body-source-bytes 262145 \
+  --output "$TMP/body-overcap-recovered.json" >/dev/null
+assert jq -e '.collection_status == "complete" and .pull_request.body.source.status == "complete" and .pull_request.body.source.bytes == 262145 and .pull_request.body.source.max_bytes == 262145' "$TMP/body-overcap-recovered.json"
+assert test "$(rtk wc -c < "$TMP/body-overcap-recovered.json.pull-request-body.md" | tr -d '[:space:]')" = 262145
+
+set +e
+FAKE_CHANGE_PR_SOURCE=1 FAKE_PR_CALLS="$TMP/change-count" DM_REVIEW_TEST_MODE=1 DM_REVIEW_TEST_GH_BIN="$FAKE_GH" "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/body-changed.json" >/dev/null
+status=$?
+set -e
+assert test "$status" -ne 0
+assert jq -e '.collection_status == "partial" and .pull_request.source_snapshot_status == "changed" and (.gaps | any(contains("pull_request_snapshot_changed")))' "$TMP/body-changed.json"
+
+set +e
+FAKE_FINAL_PR_FAILURE=1 FAKE_PR_CALLS="$TMP/failure-count" DM_REVIEW_TEST_MODE=1 DM_REVIEW_TEST_GH_BIN="$FAKE_GH" "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/body-revalidation-failed.json" >/dev/null
+status=$?
+set -e
+assert test "$status" -ne 0
+assert jq -e '.collection_status == "partial" and .pull_request.source_snapshot_status == "failed" and (.gaps | any(contains("pull_request_snapshot_failed")))' "$TMP/body-revalidation-failed.json"
 
 set +e
 DM_REVIEW_TEST_MODE=1 DM_REVIEW_TEST_MAX_ITEMS=1 DM_REVIEW_TEST_GH_BIN="$FAKE_GH" "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/bounded.json" >/dev/null
@@ -139,6 +200,16 @@ mv "$TMP/decisions.next.json" "$TMP/decisions.json"
 assert "$SETTLEMENT" --intake "$OUT" --decisions "$TMP/decisions.json" --current-head 1111111111111111111111111111111111111111
 jq '.decisions[1].decision_reason_code = "agent-findings-cap"' "$TMP/decisions.json" > "$TMP/capped.json"
 assert "$SETTLEMENT" --intake "$OUT" --decisions "$TMP/capped.json" --current-head 1111111111111111111111111111111111111111
+cp "$OUT.pull-request-body.md" "$TMP/changed-body.md"
+printf '%s' 'changed source bytes' > "$TMP/changed-body.md"
+jq '.pull_request.body.source.path = "changed-body.md"' "$OUT" > "$TMP/changed-body-intake.json"
+if "$SETTLEMENT" --intake "$TMP/changed-body-intake.json" --decisions "$TMP/decisions.json" --current-head 1111111111111111111111111111111111111111 >/dev/null 2>&1; then
+  printf '%s\n' 'FAIL: changed PR body source bytes accepted' >&2; exit 1
+fi
+jq '.pull_request.body.source.path = "missing-body.md"' "$OUT" > "$TMP/missing-body-intake.json"
+if "$SETTLEMENT" --intake "$TMP/missing-body-intake.json" --decisions "$TMP/decisions.json" --current-head 1111111111111111111111111111111111111111 >/dev/null 2>&1; then
+  printf '%s\n' 'FAIL: missing PR body source accepted' >&2; exit 1
+fi
 
 # Head advancement and an unprocessed source fail closed.
 if "$SETTLEMENT" --intake "$OUT" --decisions "$TMP/decisions.json" --current-head 2222222222222222222222222222222222222222 >/dev/null 2>&1; then
@@ -172,4 +243,4 @@ jq '.collection_cutoff = "2026-09-14T02:00:00Z"' "$TMP/decisions.json" > "$TMP/r
 assert "$SETTLEMENT" --intake "$TMP/refreshed.json" --decisions "$TMP/refreshed-decisions.json" --current-head 1111111111111111111111111111111111111111
 PASS=$((PASS + 7))
 
-printf 'dm-review-external-finding-intake: %d assertions passed\n' "$PASS"
+printf 'dm-review-external-finding-intake: %d assertions passed\n' "$((PASS + 2))"

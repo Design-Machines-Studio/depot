@@ -35,6 +35,27 @@ source commits, locations, and timestamps. Each surface is `successful`,
 was unavailable. Successful empty differs from unavailable. Any incomplete
 surface is one external-coverage gap but does not stop ordinary diff review.
 
+The PR body has two separate representations. **pull_request.body.text** is an
+8,192-character presentation excerpt; **truncated: true** only means that
+display excerpt is shortened. For a body up to the bounded 256 KiB source
+limit, the helper writes the complete authenticated body beside the intake
+JSON as **<intake filename>.pull-request-body.md**. The intake records its
+relative path, byte count, and SHA-256 in **pull_request.body.source**. Intake
+can remain **complete** when that reference is complete and the PR's head/body
+snapshot stayed stable during pagination. Read the referenced source when
+identifying findings; do not infer completeness from the presentation text.
+
+Settlement verifies that the referenced body artifact exists, is a regular
+non-symlink file beside the intake, and matches its recorded byte count and
+digest. A missing or changed artifact is rejected. Bodies beyond the explicit
+source bound, an unavailable PR metadata request, a failed final snapshot
+check, or a changed head/body/updated timestamp remain partial with distinct
+gaps. A source-limit gap reports the observed byte count and includes the
+supported `--max-pr-body-source-bytes N` retry path. The default is 256 KiB;
+the per-run override is capped at 1 MiB and the helper re-fetches the PR
+metadata before claiming a complete snapshot. An existing unrelated file
+cannot upgrade intake.
+
 For a branch, use authenticated `gh pr list --head <branch>` and intake one
 unambiguous open PR. With none, report `not applicable -- no associated PR`
 and continue. Ambiguity is unavailable, not permission to choose.

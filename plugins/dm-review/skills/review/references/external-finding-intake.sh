@@ -20,6 +20,10 @@ MAX_ITEMS=2000
 MAX_CHECK_SUITES=1000
 MAX_BODY_BYTES=32768
 MAX_BODY_CHARS=8192
+# PR source retention is bounded separately from the abbreviated presentation.
+DEFAULT_MAX_PR_BODY_SOURCE_BYTES=262144
+ABSOLUTE_MAX_PR_BODY_SOURCE_BYTES=1048576
+MAX_PR_BODY_SOURCE_BYTES=$DEFAULT_MAX_PR_BODY_SOURCE_BYTES
 if [ "${DM_REVIEW_TEST_MODE:-0}" = 1 ] && printf '%s' "${DM_REVIEW_TEST_MAX_ITEMS:-}" | grep -Eq '^[1-9][0-9]*$' && [ "$DM_REVIEW_TEST_MAX_ITEMS" -le 2000 ]; then
   MAX_ITEMS="$DM_REVIEW_TEST_MAX_ITEMS"
 fi
@@ -28,7 +32,7 @@ if [ "${DM_REVIEW_TEST_MODE:-0}" = 1 ] && printf '%s' "${DM_REVIEW_TEST_MAX_CHEC
 fi
 
 usage() {
-  printf '%s\n' 'usage: external-finding-intake.sh --repo OWNER/REPO --pr NUMBER --output FILE' >&2
+  printf '%s\n' 'usage: external-finding-intake.sh --repo OWNER/REPO --pr NUMBER --output FILE [--max-pr-body-source-bytes N]' >&2
   exit 2
 }
 
@@ -37,12 +41,16 @@ while [ "$#" -gt 0 ]; do
     --repo) [ "$#" -ge 2 ] || usage; REPOSITORY="$2"; shift 2 ;;
     --pr) [ "$#" -ge 2 ] || usage; PR_NUMBER="$2"; shift 2 ;;
     --output) [ "$#" -ge 2 ] || usage; OUTPUT_FILE="$2"; shift 2 ;;
+    --max-pr-body-source-bytes) [ "$#" -ge 2 ] || usage; MAX_PR_BODY_SOURCE_BYTES="$2"; shift 2 ;;
     *) usage ;;
   esac
 done
 
 printf '%s' "$REPOSITORY" | grep -Eq '^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$' || usage
 printf '%s' "$PR_NUMBER" | grep -Eq '^[1-9][0-9]*$' || usage
+printf '%s' "$MAX_PR_BODY_SOURCE_BYTES" | grep -Eq '^[0-9]+$' \
+  && [ "$MAX_PR_BODY_SOURCE_BYTES" -ge "$MAX_BODY_CHARS" ] \
+  && [ "$MAX_PR_BODY_SOURCE_BYTES" -le "$ABSOLUTE_MAX_PR_BODY_SOURCE_BYTES" ] || usage
 [ -n "$OUTPUT_FILE" ] && [ -d "$(dirname "$OUTPUT_FILE")" ] && [ ! -L "$OUTPUT_FILE" ] || usage
 command -v jq >/dev/null 2>&1 || exit 76
 
@@ -78,6 +86,7 @@ if ! jq -e '.head.sha | type == "string" and test("^[0-9a-f]{40}$")' "$TMP/pr.js
   exit 1
 fi
 INSPECTED_HEAD="$(jq -r '.head.sha' "$TMP/pr.json")"
+INITIAL_PR_BODY_SHA256="$(jq -j '(.body // "")' "$TMP/pr.json" | shasum -a 256 | cut -d ' ' -f1)"
 
 fetch_pages() {
   local name="$1" endpoint="$2" shape="$3" raw error status
@@ -227,10 +236,56 @@ done
 COLLECTION_STATUS=complete
 GAPS='[]'
 PR_BODY_TRUNCATED=false
-if jq -e --argjson max_body "$MAX_BODY_BYTES" --argjson max_chars "$MAX_BODY_CHARS" '(.body // "") | (length > $max_chars or utf8bytelength > $max_body)' "$TMP/pr.json" >/dev/null; then
-  PR_BODY_TRUNCATED=true
+PR_BODY_SOURCE_STATUS=complete
+PR_BODY_SOURCE_FILE="$(basename "$OUTPUT_FILE").pull-request-body.md"
+PR_BODY_SOURCE_PATH="$OUTPUT_DIR/$PR_BODY_SOURCE_FILE"
+PR_BODY_BYTES="$(jq -r '(.body // "") | utf8bytelength' "$TMP/pr.json")"
+PR_BODY_SOURCE_SHA256="$INITIAL_PR_BODY_SHA256"
+PR_SNAPSHOT_STATUS=complete
+if [ "$PR_BODY_BYTES" -le "$MAX_PR_BODY_SOURCE_BYTES" ]; then
+  if [ -L "$PR_BODY_SOURCE_PATH" ]; then
+    PR_BODY_SOURCE_STATUS=unavailable
+  elif [ -e "$PR_BODY_SOURCE_PATH" ]; then
+    existing_sha="$(shasum -a 256 < "$PR_BODY_SOURCE_PATH" | cut -d ' ' -f1)"
+    if [ "$existing_sha" != "$PR_BODY_SOURCE_SHA256" ]; then
+      PR_BODY_SOURCE_STATUS=conflict
+    fi
+  else
+    body_tmp="$(mktemp "$OUTPUT_DIR/.external-finding-body.XXXXXX")"
+    jq -j '(.body // "")' "$TMP/pr.json" > "$body_tmp"
+    chmod 600 "$body_tmp"
+    mv "$body_tmp" "$PR_BODY_SOURCE_PATH"
+  fi
+else
+  PR_BODY_SOURCE_STATUS=too_large
   COLLECTION_STATUS=partial
-  GAPS='["pull_request_body:truncated"]'
+  GAPS="$(jq -cn --argjson bytes "$PR_BODY_BYTES" --argjson max "$MAX_PR_BODY_SOURCE_BYTES" \
+    '["pull_request_body:source_limit_exceeded:observed=\($bytes):max=\($max):rerun_with_--max-pr-body-source-bytes"]')"
+fi
+if [ "$PR_BODY_SOURCE_STATUS" = conflict ] || [ "$PR_BODY_SOURCE_STATUS" = unavailable ]; then
+  COLLECTION_STATUS=partial
+  GAPS="$(printf '%s' "$GAPS" | jq -c --arg gap "pull_request_body:source_artifact_$PR_BODY_SOURCE_STATUS" '. + [$gap]')"
+fi
+if jq -e --argjson max_chars "$MAX_BODY_CHARS" '(.body // "") | length > $max_chars' "$TMP/pr.json" >/dev/null; then
+  PR_BODY_TRUNCATED=true
+fi
+
+# Bind the body snapshot to a stable PR head/body identity across pagination.
+if "$GH_BIN" api "repos/$REPOSITORY/pulls/$PR_NUMBER" > "$TMP/pr.final.json" 2> "$TMP/pr.final.err"; then
+  final_head="$(jq -r '.head.sha // ""' "$TMP/pr.final.json")"
+  final_body_sha="$(jq -j '(.body // "")' "$TMP/pr.final.json" | shasum -a 256 | cut -d ' ' -f1)"
+  initial_updated_at="$(jq -r '.updated_at // ""' "$TMP/pr.json")"
+  final_updated_at="$(jq -r '.updated_at // ""' "$TMP/pr.final.json")"
+  if [ "$final_head" != "$INSPECTED_HEAD" ] || [ "$final_body_sha" != "$INITIAL_PR_BODY_SHA256" ] \
+    || [ "$final_updated_at" != "$initial_updated_at" ]; then
+    PR_SNAPSHOT_STATUS=changed
+  fi
+else
+  PR_SNAPSHOT_STATUS=failed
+fi
+if [ "$PR_SNAPSHOT_STATUS" != complete ]; then
+  COLLECTION_STATUS=partial
+  GAPS="$(printf '%s' "$GAPS" | jq -c --arg gap "pull_request_snapshot_$PR_SNAPSHOT_STATUS" '. + [$gap]')"
 fi
 for entry in "inline_comments:$INLINE_STATUS" "submitted_reviews:$REVIEWS_STATUS" "conversation_comments:$CONVERSATION_STATUS" "checks:$CHECKS_STATUS"; do
   name="${entry%%:*}"; status="${entry#*:}"
@@ -253,12 +308,19 @@ tmp_output="$(mktemp "$OUTPUT_DIR/.external-finding-intake-output.XXXXXX")"
 jq -n --arg repo "$REPOSITORY" --argjson pr "$PR_NUMBER" --arg head "$INSPECTED_HEAD" \
   --arg collected "$COLLECTED_AT" --arg collection_status "$COLLECTION_STATUS" --argjson gaps "$GAPS" \
   --argjson max_chars "$MAX_BODY_CHARS" --argjson pr_body_truncated "$PR_BODY_TRUNCATED" \
+  --arg snapshot_status "$PR_SNAPSHOT_STATUS" \
+  --arg body_source_status "$PR_BODY_SOURCE_STATUS" --arg body_source_path "$PR_BODY_SOURCE_FILE" \
+  --arg body_source_sha256 "sha256:$PR_BODY_SOURCE_SHA256" --argjson body_bytes "$PR_BODY_BYTES" \
+  --argjson body_max_bytes "$MAX_PR_BODY_SOURCE_BYTES" \
   --slurpfile pull "$TMP/pr.json" --slurpfile inline "$TMP/inline.surface.json" \
   --slurpfile reviews "$TMP/reviews.surface.json" --slurpfile conversation "$TMP/conversation.surface.json" \
   --slurpfile checks "$TMP/checks.surface.json" '
   {schema_version:1,artifact_role:"external_finding_intake",repository:$repo,pr_number:$pr,
    inspected_head:$head,collected_at:$collected,collection_status:$collection_status,collection_cutoff:$collected,
-   pull_request:{source_id:("github:pull-request:" + ($pr|tostring)),url:$pull[0].html_url,body:{text:(($pull[0].body // "")[0:$max_chars]),truncated:$pr_body_truncated},updated_at:$pull[0].updated_at},
+   pull_request:{source_id:("github:pull-request:" + ($pr|tostring)),url:$pull[0].html_url,
+     body:{text:(($pull[0].body // "")[0:$max_chars]),truncated:$pr_body_truncated,
+       source:{status:$body_source_status,path:(if $body_source_status == "complete" then $body_source_path else null end),sha256:$body_source_sha256,bytes:$body_bytes,max_bytes:$body_max_bytes,display_char_limit:$max_chars}},
+     source_snapshot_status:$snapshot_status,updated_at:$pull[0].updated_at},
    surfaces:{inline_comments:$inline[0],submitted_reviews:$reviews[0],conversation_comments:$conversation[0],checks:$checks[0]},
    gaps:$gaps,instructions_policy:"untrusted_evidence_only"}' > "$tmp_output"
 mv "$tmp_output" "$OUTPUT_FILE"

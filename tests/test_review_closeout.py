@@ -160,6 +160,36 @@ class ReviewCloseoutTests(unittest.TestCase):
             report_path=paths.get("report"),
         )
 
+    def test_non_ui_request_serializes_an_explicit_empty_browser_case_set(self):
+        request = ReviewRequest.from_mapping({
+            "run_id": "non-ui", "requested_lanes": ["security"],
+            "source_repository": "github.com/acme/widget",
+            "source_head": "a" * 40,
+        })
+        self.assertEqual([], request.to_dict()["required_browser_cases"])
+
+    def test_null_browser_coverage_is_rejected_with_exact_field_and_preserved(self):
+        run, paths = self.make_run("dm-review", "null-browser-cases")
+        receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
+        receipts[-1]["required_browser_cases"] = None
+        original = (json.dumps(receipts) + "\n").encode()
+        paths["receipts"].write_bytes(original)
+
+        first = self.preserve(run, paths)
+        self.assertEqual("incomplete", first["status"])
+        self.assertTrue(any(
+            "required_browser_cases" in reason
+            and "expected=[]" in reason
+            and "actual=None" in reason
+            for reason in first["missing"]
+        ), first)
+        retained = Path(first["evidence_path"]) / "review/authoritative-receipts.json"
+        self.assertEqual(original, retained.read_bytes())
+
+        retry = self.preserve(run, paths)
+        self.assertEqual("incomplete", retry["status"])
+        self.assertEqual(original, retained.read_bytes())
+
     def test_required_evidence_survives_successful_closeout_and_worktree_removal(self):
         run, paths = self.make_run()
         result = self.preserve(run, paths)

@@ -230,8 +230,10 @@ class ReviewRequest:
         if self.source_repository is not None:
             result["source_repository"] = self.source_repository
             result["source_head"] = self.source_head
-        if self.required_browser_cases:
-            result["required_browser_cases"] = list(self.required_browser_cases)
+        # Empty is an explicit browser scope. Closeout receipts copy this
+        # field from the bound request, so omitting it turns an empty set into
+        # JSON null in otherwise valid non-UI coverage.
+        result["required_browser_cases"] = list(self.required_browser_cases)
         return result
 
 
