@@ -295,10 +295,23 @@ content; a metadata source path plus a reachable URL is insufficient after edits
 A build receipt and unchanged snapshot are usable proof; status output alone
 must not be described as exact-commit proof when it does not report a commit.
 
-Try the session's actual T3 tools first. If T3 cannot complete the required
-interaction, discover and try an available appropriate host browser transport.
+Try the session's actual T3 tools first: call `preview_status`, then
+`preview_open` when no automation-capable preview is attached. An initially
+closed preview or an actionable argument error is not transport exhaustion;
+correct the arguments and retry. If T3 preview tools are absent, or opening or
+using the preview explicitly reports unsupported/unavailable automation, use
+the available host Playwright transport against the same verified target.
+Threads started from a phone may have no automation-capable T3 preview; do not
+require the operator to reconnect from desktop before trying Playwright.
+
+Discover callable Playwright MCP tools first. If no MCP transport is available,
+use an established repository-owned Playwright harness when one exists, under
+the same source, persona, viewport, and case requirements. Do not install a new
+browser stack or guess a harness. Only report `browser_transport_unavailable`
+after the applicable T3 and Playwright paths cannot complete the required case.
 A missing routed browser participant says nothing about host tool availability.
-Keep the T3 failure and the chosen fallback in the browser evidence.
+Keep the T3 failure, selected fallback, and actual navigation/interaction
+outcome in the browser evidence; a fallback attempt alone is not a pass.
 
 An app sign-in failure is `application_authentication_unavailable`, with the
 specific missing supported sign-in prerequisite; do not relabel it as a server

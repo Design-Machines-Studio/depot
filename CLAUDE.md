@@ -164,6 +164,17 @@ The eval covers only **trigger accuracy** (axis 1). Discipline skills -- those t
 
 ## Common Operations
 
+### T3 browser fallback
+
+For browser work in T3 Code, try `preview_status` and `preview_open` first.
+If preview automation is absent or explicitly unsupported/unavailable, use
+available Playwright MCP tools or the established repository Playwright harness
+against the same verified target. This applies to threads started from a phone;
+do not stop to require a desktop connection. Correct actionable tool errors
+before switching transports, preserve failed and recovered attempts, and claim
+browser success only from actual navigation and the required interactions.
+Follow dm-review's `repository-browser-target-discovery.md` for the full rule.
+
 Install the marketplace and plugins:
 ```shell
 /plugin marketplace add Design-Machines-Studio/depot

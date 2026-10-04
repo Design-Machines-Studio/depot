@@ -154,6 +154,23 @@ set -e
 assert test "$status" -ne 0
 assert jq -e '.collection_status == "partial" and .pull_request.source_snapshot_status == "changed" and (.gaps | any(contains("pull_request_snapshot_changed")))' "$TMP/body-changed.json"
 
+# Retry the same run/output after a body edit: replace only its verified source.
+DM_REVIEW_TEST_MODE=1 FAKE_BODY_KIND=below DM_REVIEW_TEST_GH_BIN="$FAKE_GH" \
+  "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/body-changed.json" >/dev/null
+assert jq -e '.collection_status == "complete" and .pull_request.body.source.bytes == 8191' "$TMP/body-changed.json"
+assert test "$(wc -c < "$TMP/body-changed.json.pull-request-body.md" | tr -d '[:space:]')" = 8191
+
+# An unrelated source at the expected name is never overwritten on first use.
+printf '%s' 'unrelated evidence' > "$TMP/body-conflict.json.pull-request-body.md"
+set +e
+DM_REVIEW_TEST_MODE=1 DM_REVIEW_TEST_GH_BIN="$FAKE_GH" \
+  "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/body-conflict.json" >/dev/null
+status=$?
+set -e
+assert test "$status" -ne 0
+assert jq -e '.collection_status == "partial" and .pull_request.body.source.status == "conflict"' "$TMP/body-conflict.json"
+assert test "$(cat "$TMP/body-conflict.json.pull-request-body.md")" = 'unrelated evidence'
+
 set +e
 FAKE_FINAL_PR_FAILURE=1 FAKE_PR_CALLS="$TMP/failure-count" DM_REVIEW_TEST_MODE=1 DM_REVIEW_TEST_GH_BIN="$FAKE_GH" "$COLLECTOR" --repo acme/widget --pr 7 --output "$TMP/body-revalidation-failed.json" >/dev/null
 status=$?

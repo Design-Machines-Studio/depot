@@ -56,6 +56,11 @@ the per-run override is capped at 1 MiB and the helper re-fetches the PR
 metadata before claiming a complete snapshot. An existing unrelated file
 cannot upgrade intake.
 
+A same-output refresh may replace the collector's prior body artifact only
+when the previous intake identifies the same repository, PR, relative path,
+and existing digest. This permits retry after a body edit during pagination;
+an unrelated or changed artifact remains a conflict.
+
 For a branch, use authenticated `gh pr list --head <branch>` and intake one
 unambiguous open PR. With none, report `not applicable -- no associated PR`
 and continue. Ambiguity is unavailable, not permission to choose.

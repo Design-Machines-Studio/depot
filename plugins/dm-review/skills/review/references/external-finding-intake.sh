@@ -248,7 +248,24 @@ if [ "$PR_BODY_BYTES" -le "$MAX_PR_BODY_SOURCE_BYTES" ]; then
   elif [ -e "$PR_BODY_SOURCE_PATH" ]; then
     existing_sha="$(shasum -a 256 < "$PR_BODY_SOURCE_PATH" | cut -d ' ' -f1)"
     if [ "$existing_sha" != "$PR_BODY_SOURCE_SHA256" ]; then
-      PR_BODY_SOURCE_STATUS=conflict
+      # A refresh may replace only the exact artifact verified by this output's
+      # previous intake. Unrelated files remain conflicts, even at this name.
+      if [ -f "$OUTPUT_FILE" ] && jq -e \
+        --arg repo "$REPOSITORY" --argjson pr "$PR_NUMBER" \
+        --arg path "$PR_BODY_SOURCE_FILE" --arg digest "sha256:$existing_sha" '
+        .schema_version == 1 and .artifact_role == "external_finding_intake" and
+        .repository == $repo and .pr_number == $pr and
+        .pull_request.body.source.status == "complete" and
+        .pull_request.body.source.path == $path and
+        .pull_request.body.source.sha256 == $digest
+      ' "$OUTPUT_FILE" >/dev/null 2>&1; then
+        body_tmp="$(mktemp "$OUTPUT_DIR/.external-finding-body.XXXXXX")"
+        jq -j '(.body // "")' "$TMP/pr.json" > "$body_tmp"
+        chmod 600 "$body_tmp"
+        mv "$body_tmp" "$PR_BODY_SOURCE_PATH"
+      else
+        PR_BODY_SOURCE_STATUS=conflict
+      fi
     fi
   else
     body_tmp="$(mktemp "$OUTPUT_DIR/.external-finding-body.XXXXXX")"

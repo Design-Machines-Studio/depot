@@ -155,8 +155,12 @@ consumer is sufficient.
    `prepare` as a ready target.
 5. On the host, inspect actual callable browser tools. In T3 Code, call
    `preview_status`; if no automation-capable preview is attached, call
-   `preview_open`, then navigate the exact declared target. A tool name or
-   generic `tool-use` is not readiness evidence.
+   `preview_open`, then navigate the exact declared target. If T3 automation is
+   absent or explicitly unsupported/unavailable, try the host Playwright
+   fallback in `repository-browser-target-discovery.md` before declaring a
+   transport gap. This includes phone-started threads. Correct actionable tool
+   errors and retry before switching transports. A tool name or generic
+   `tool-use` is not readiness evidence.
 6. Materialize one private bounded browser evidence file only after successful
    local navigation:
 
