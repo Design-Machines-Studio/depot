@@ -4,7 +4,7 @@ import subprocess
 from pathlib import Path
 
 import unittest
-import test_review_closeout as fixture
+from tests import test_review_closeout as fixture
 from workflow_kernel.review_closeout import source_identity
 
 
@@ -45,7 +45,9 @@ class AutoReviewCandidateTests(unittest.TestCase):
         # Evidence survives disposable-output cleanup; foreign ignored data in
         # the product checkout is not swept.
         foreign = self.repo / ".foreign-ignored"
+        (self.repo / ".git/info/exclude").write_text(".foreign-ignored\n")
         foreign.write_text("another owner's data\n")
+        subprocess.run(["git", "-C", str(self.repo), "check-ignore", "--quiet", foreign.name], check=True)
         recheck.finish("succeeded", retain_diagnostics=True)
         self.assertTrue((retained / "review/raw-lane-outputs.json").is_file())
         self.assertTrue(foreign.is_file())

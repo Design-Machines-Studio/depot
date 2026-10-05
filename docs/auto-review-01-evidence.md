@@ -25,7 +25,11 @@ mechanics in isolated repositories with local bare remotes. Both repair, commit,
 push, verify the remote head, reject stale-head evidence, preserve fresh validated
 closeout evidence, reuse unchanged evidence, and preserve foreign checkout data.
 These are fixture paths, not autonomous model execution of a generated consumer
-prompt or a full installed Pipeline campaign.
+prompt or a full installed Pipeline campaign. The source task also exercises
+candidate direct closeout on [PR #163](https://github.com/Design-Machines-Studio/depot/pull/163):
+automatic quick review after push, one retained P2 for the runtime router version
+floor, repair/push, and affected-lane recheck. Final validated receipts are linked
+from the PR; this source session remains distinct from installed consumer proof.
 
 `tools/test-review-next-action.sh` covers quick/full, sensitive, rendered-only,
 retained findings, unchanged reviewed heads and dirty boundaries.

@@ -304,7 +304,7 @@ require_text "$guardrails" "cross-ID dispute links; flattened" "guardrails rejec
 require_text "$guardrails" "severity-derived IDs" "guardrails reject severity-derived IDs"
 require_text "$guardrails" "missing raw refs" "guardrails reject missing raw references"
 require_text "$guardrails" 'Synthesis Decisions' "guardrails reject missing synthesis section"
-require_text "$review_skill" "Per chunk during pipeline execution" "ordinary Pipeline chunks remain quick-tier"
+require_text "$review_skill" "Ordinary chunk during Pipeline execution" "ordinary Pipeline chunks remain focused"
 reject_text "$review_skill" "Per chunk during pipeline execution** | full \`dm-review\`" "ordinary Pipeline chunks do not require full review"
 require_text "$issue_tracking" '{id}-{status}-{priority}-{slug}.md' "todo filename contract remains compatible"
 require_text "$issue_tracking" 'source_agents:' "todo source_agents metadata remains compatible"
@@ -395,10 +395,10 @@ for zero_deferral_surface in \
   reject_text "$zero_deferral_surface" 'P3 advisories' "${zero_deferral_surface#$REPO_ROOT/} rejects deferred P3 evidence"
   reject_text "$zero_deferral_surface" 'P3 stays advisory' "${zero_deferral_surface#$REPO_ROOT/} rejects clean-with-P3 policy"
 done
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.84.2"' "canonical dm-review version is 1.84.2"
-require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.84.2"' "generated dm-review version is 1.84.2"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.70.0"' "canonical Pipeline version is 1.70.0"
-require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.84.0"' "generated Pipeline dependency floor is current"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.85.0"' "canonical dm-review version is 1.85.0"
+require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.85.0"' "generated dm-review version is 1.85.0"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.71.0"' "canonical Pipeline version is 1.71.0"
+require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.85.0"' "generated Pipeline dependency floor is current"
 
 printf "Synthesis identity fixtures\n"
 base_id=$(fixture_finding_id \
