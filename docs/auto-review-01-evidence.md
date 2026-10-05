@@ -20,12 +20,14 @@ No event trigger covers arbitrary GitHub PR creation outside these sessions.
 
 ## Candidate proof and limits
 
-`tests/test_auto_review_candidate.py` exercises direct-loop and Pipeline owner
-mechanics in isolated repositories with local bare remotes. Both repair, commit,
+`tests/test_auto_review_candidate.py` exercises shared Kernel closeout persistence
+in isolated repositories with local bare remotes, under `dm-review-loop` and
+`pipeline` workflow labels. Both cases use the same fixture to repair, commit,
 push, verify the remote head, reject stale-head evidence, preserve fresh validated
 closeout evidence, reuse unchanged evidence, and preserve foreign checkout data.
-These are fixture paths, not autonomous model execution of a generated consumer
-prompt or a full installed Pipeline campaign. The source task also exercises
+The tests do not invoke either workflow owner or its review/repair dispatch.
+Generated consumer prompt execution and installed Pipeline campaigns remain
+unverified. The source task also exercises
 candidate direct closeout on [PR #163](https://github.com/Design-Machines-Studio/depot/pull/163):
 automatic quick review after push, one retained P2 for the runtime router version
 floor, repair/push, and affected-lane recheck. Final validated receipts are linked
