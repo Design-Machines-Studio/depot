@@ -70,11 +70,12 @@ check 'settled UI uses Luna-high while unresolved deep work and mechanical defau
   .reviewRoles.security.effort == "high"' "$ROOT/plugins/pipeline/references/routing-policy.json"
 
 check 'declared native aliases bind to exact approved served identities' jq -e '
-  all(.roles[][]; .transport != "claude-cli") and
+  all(.roles | to_entries[] | select(.key != "design-consultant"); all(.value[]; .transport != "claude-cli")) and
+  (.roles["design-consultant"] | length == 1 and .[0].model == "claude-opus-5-5" and .[0].servedIdentities == ["claude-opus-5-5"]) and
   all(.roles[][]; if has("servedIdentities") then
     .transport == "claude-cli" and (.servedIdentities | type) == "array" and
     (.servedIdentities | length) == 1 and
-    all(.servedIdentities[]; test("^claude-(fable|opus)-[0-9]+$"))
+    all(.servedIdentities[]; test("^claude-opus-5-5$"))
   else true end)' "$POLICY"
 
 check 'security head is isolated from ordinary roles' jq -e '
