@@ -142,7 +142,8 @@ Prepare a copy-paste prompt only when requested. Prefer a direct implementation 
 Direct prompts require dm-review's `automatic-implementation-closeout.md`:
 automatic proportional review/repair after verified PR push, ending in validated
 final-head evidence or a precise blocker. Pipeline retains its existing final
-gate. Prompt preparation does not execute closeout.
+gate. Require Playwright for formal browser checks, T3 for operator handoff.
+Preparation stays planning-only.
 
 Every prompt must state:
 

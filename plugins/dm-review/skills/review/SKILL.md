@@ -360,7 +360,7 @@ COUNCIL_BUNDLE_ROOT=""
 for PLUGIN in dm-review accessibility-compliance live-wires ghostwriter council; do
   case "$PLUGIN" in
     dm-review)
-      PLUGIN_MINIMUM_VERSION="1.83.0"
+      PLUGIN_MINIMUM_VERSION="1.85.0"
       REQUIRED_ASSETS=("${DM_REVIEW_REQUIRED_ASSETS[@]}")
       ;;
     accessibility-compliance)
@@ -510,7 +510,8 @@ dispatch. Load `repository-browser-target-discovery.md` before choosing the
 target. Prefer an explicit override, then the established project domain and
 canonical checkout with the feature branch selected. Optional declarations,
 exact-head packet reuse and a source-verified attached preview follow in that
-contract's order. T3 is a browser transport, not authority for the target URL.
+contract's order. Playwright runs checks; T3 provides operator handoff and
+verified target context.
 Start a stopped raw process only through the structured `.dm/ui-review.json`
 helper path, which snapshots and supervises cleanup. Start a repository-
 discovered isolated Compose consumer only through Workflow Kernel's Docker creation

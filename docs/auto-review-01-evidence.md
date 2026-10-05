@@ -79,3 +79,28 @@ Installed consumer prompt/Pipeline canaries, rendered UI acceptance, real extern
 blocker Issue creation, account-wide monthly budget enforcement, and arbitrary
 out-of-workflow PR events. Existing Issue search/reuse policy remains mandatory;
 no external dependency was discovered in this source change.
+
+## Playwright review transport follow-up
+
+Formal dm-review and Pipeline review/parity browser checks now require host
+Playwright. T3 remains available for operator design handoff and verified target
+context; missing T3 tabs or phone automation never gate Playwright startup.
+The existing MCP/repository-harness and engine recovery paths remain bounded.
+No new browser stack or development target is installed.
+
+Readiness inputs and reusable browser packets use version 2 with required
+`automationTransport: "playwright"`. T3, unknown and legacy packets are rejected
+rather than relabeled; actual Playwright recapture is required. Typed fixtures
+cover both readiness rejection and packet creation/reuse rejection, retaining
+source/head/case/artifact validation and cleanup protections.
+
+A live isolated Firefox Playwright MCP canary opened `about:blank`, captured an
+accessibility snapshot, clicked a snapshot-provided button and observed its live
+status change, while T3 reported no attached preview. A screenshot initially hit the MCP output-root restriction; a unique filename
+succeeded. Its exact returned source-checkout copy was retained, byte-verified
+and removed immediately. This proves the host transport, interaction and
+artifact path; it is not consumer application or persona proof.
+
+Depot Issue #162 is a separately owned Kernel package-selector repair at
+`fix/162-deleted-go-packages`. This change does not modify its checkout or Kernel
+runtime; normal integration of its manifest change remains a release step.

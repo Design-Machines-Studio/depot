@@ -253,7 +253,7 @@ require_text "$prototype_authority" "no prototype counterpart" "source-proven mi
 require_text "$prototype_authority" "source parity" "parity map distinguishes source evidence"
 require_text "$prototype_authority" "rendered parity" "parity map distinguishes rendered evidence"
 require_text "$prototype_authority" "intentional divergence" "parity map preserves approved production differences"
-require_text "$prototype_authority" "T3 Code" "prototype browser proof prefers T3 collaborative preview"
+require_text "$prototype_authority" "host Playwright transport" "prototype browser proof uses Playwright"
 require_text "$ux_protocol" "In T3 Code, use the collaborative" "assessment protocol selects T3 collaborative preview first"
 require_text "$prototype_authority" "a target-only" "prototype render cannot be replaced by target-only evidence"
 require_text "$prototype_authority" "screenshots cannot prove source hierarchy" "browser and source evidence are complementary"

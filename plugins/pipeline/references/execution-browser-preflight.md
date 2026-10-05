@@ -5,21 +5,16 @@ Loaded at Step 0b only when the manifest has at least one chunk with validated
 
 ### 2. Check host browser availability
 
-Try actual T3 preview status/open first. If it cannot perform the selected
-case, try an available suitable host browser fallback. A missing routed browser
-participant does not imply host browser tools are unavailable.
-
-Check Playwright MCP availability when T3 cannot complete the case.
-
-ToolSearch for both naming variants and Chrome DevTools MCP:
-
-- `mcp__plugin_compound-engineering_pw__browser_take_screenshot`
-- `mcp__plugin_playwright_playwright__browser_take_screenshot`
-- `mcp__plugin_chrome-devtools-mcp_chrome-devtools__take_screenshot`
+Use dm-review's formal Playwright transport contract in
+`repository-browser-target-discovery.md`. Discover the host's Playwright MCP
+variants or the established repository-owned Playwright harness. T3 is for
+operator handoff and verified target context; its status/open failures never
+gate automated checks. A missing routed participant does not imply missing
+host browser tools.
 
 ### 3. Decision gate
 
-Rendered-surface chunks > 0 AND no browser MCP tools found: treat as the first failed required-browser attempt. Quit primary, retry fresh primary, then a different configured engine. If exhausted, BLOCKED and record `human_help_required`. Do not offer curl or a skip. Merge recommendation remains `BLOCKED PENDING CALLER VERIFICATION`. If tools are available, log availability and proceed.
+Rendered-surface chunks > 0 AND no supported Playwright transport found: treat as the first failed required-browser attempt. Quit primary, retry fresh primary, then a different configured engine. If exhausted, BLOCKED and record `human_help_required`. Do not offer curl or a skip. Merge recommendation remains `BLOCKED PENDING CALLER VERIFICATION`. If tools are available, log availability and proceed.
 
 ### 4. Exact target check
 

@@ -27,7 +27,7 @@ cat > "$TMP/ready.json" <<'JSON'
 {"reason":"available","evidenceRef":"review/browser/live-navigation.json"}
 JSON
 cat > "$TMP/accepted.json" <<'JSON'
-{"status":"accepted","evidenceRef":"plans/feature/evidence/browser/final-review/browser-evidence-v1.json"}
+{"status":"accepted","evidenceRef":"plans/feature/evidence/browser/final-review/browser-evidence-v2.json"}
 JSON
 
 "$HELPER" plan --request "$TMP/ordinary.json" --readiness-result "$TMP/no-target.json" > "$TMP/ordinary-result.json"
@@ -196,7 +196,7 @@ assert scaffold.count("## Existing Development Site") == 2
 for phrase in ("status commands", "detached exact-head", "ui-case-selection.md", "generated AGENTS.md", "Source binding:", "Status command:", "Check incompatible migrations"):
     assert phrase in scaffold, phrase
 preflight=read("plugins/pipeline/references/execution-browser-preflight.md")
-for phrase in ("T3 preview status/open first", "repository-browser-target-discovery.md", "unrelated attached tab", "served-source verification"):
+for phrase in ("formal Playwright transport contract", "repository-browser-target-discovery.md", "unrelated attached tab", "served-source verification"):
     assert phrase in preflight, phrase
 ux=read("plugins/dm-review/agents/review/ux-quality-reviewer.md")
 for phrase in ("external Assembly prototype", "not execution or real-user research", "not an automatic finding", "does not assign a severity"):

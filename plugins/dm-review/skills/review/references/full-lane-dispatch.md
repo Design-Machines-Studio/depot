@@ -79,7 +79,8 @@ process uses `ui-review-readiness.sh`. Verify reachability independently, then
 prove actual local browser navigation independently.
 
 Current routed transports do not receive the host's local interactive browser.
-Keep browser interaction host-owned and materialize one bounded set of
+Keep browser interaction host-owned through the formal Playwright contract in
+`repository-browser-target-discovery.md` and materialize one bounded set of
 screenshots, accessibility snapshots, console summaries, selected
 route/viewport case IDs, interaction observations, and computed-style evidence.
 Share the same evidence reference with every applicable provider-neutral UI

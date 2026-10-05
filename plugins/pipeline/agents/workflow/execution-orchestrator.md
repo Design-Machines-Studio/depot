@@ -268,7 +268,7 @@ CLEANUP_ACTIVE_HOST_ARGS=()
 if ! CONTRACT=$("$WORKFLOW_KERNEL" resolve-plugin-asset \
   --plugin dm-review \
   --asset skills/review/references/repo-cleanup-contract.md \
-  --minimum-version 1.72.0 \
+  --minimum-version 1.85.0 \
   "${CLEANUP_ACTIVE_HOST_ARGS[@]}"); then
   echo "ERROR: required dm-review cleanup contract unavailable" >&2
   exit 1

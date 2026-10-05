@@ -118,11 +118,11 @@ Do not reset shared data or use real member records to manufacture evidence.
 
 Resolve each app's established review domain and canonical checkout through
 dm-review's `repository-browser-target-discovery.md` before browser navigation.
-In T3 Code, use the collaborative preview as the browser transport: inspect
-status, open it when needed, then navigate to those verified targets and capture
-the matched cases. An attached tab does not establish the correct target. Follow the existing
-browser recovery ladder before any supported fallback. Curl, a target-only
-screenshot, or `looks close` never completes required prototype browser proof.
+Use that contract's host Playwright transport for matched cases;
+T3 remains the operator design handoff. An attached tab does not establish the
+correct target or formal coverage. Follow the existing Playwright engine
+recovery ladder. Curl, a target-only screenshot, or `looks close` never completes
+required prototype browser proof.
 If the prototype render is temporarily unavailable, preserve completed source
 work and report rendered parity `human_help_required`; do not claim rendered
 parity complete.

@@ -51,7 +51,8 @@ and canonical checkout: select the feature branch safely, run the existing
 documented build/restart as needed, and verify the served source. Follow the
 shared order for optional declarations, exact-head packet reuse, and a
 source-verified attached preview when no established target is declared.
-T3 is the preferred browser transport, not authority for which app to review.
+Use the shared formal Playwright transport contract for automated checks;
+T3 is available for operator design handoff and verified target context.
 Do not invent a new harness, scan ports, or reconfigure the domain/environment.
 
 This command explicitly requires rendered evidence. Run the shared helper with
@@ -154,7 +155,10 @@ verdict. Leave the maintained preview running. Then suggest next steps:
 
 ## Playwright MCP Tools
 
-This skill uses the Playwright MCP tools prefixed `mcp__plugin_compound-engineering_pw__browser_*`. Load them with `ToolSearch` before use:
+Discover the host's callable Playwright MCP tools; prefixes vary between
+`mcp__plugin_compound-engineering_pw__browser_*`,
+`mcp__plugin_playwright_playwright__browser_*`, and engine-specific servers.
+When ToolSearch exists, load the matching tools before use:
 
 ```
 ToolSearch query: "+pw browser_navigate"

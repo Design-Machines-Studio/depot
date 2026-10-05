@@ -155,7 +155,8 @@ Treat approximately 40 tool calls as an exploration checkpoint, not a terminatio
 
 Apply dm-review's `automatic-implementation-closeout.md`: direct tasks continue
 automatically after PR push; Pipeline workers return to their existing owner.
-Finish with validated final-head evidence or a precise blocker. No merge.
+Use Playwright for formal browser checks; T3 for operator handoff.
+Validated final-head evidence or blocker; no merge.
 
 ## Ambiguity Protocol
 
