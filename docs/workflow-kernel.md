@@ -8,7 +8,8 @@ decisions, and cleanup policy remain in their canonical Markdown workflows.
 
 Version 0.25.2 keeps deleted and source-less Go package paths in dependent
 impact traversal while excluding them from runnable focused command arguments.
-Only surviving root-module directories with Go or Templ sources are selected.
+Concrete package paths require surviving root-module directories with Go or
+Templ sources; declared Go package patterns remain in command arguments.
 Deletion-only changes with no surviving focused package remain
 `not_triggered` with reason `no_surviving_go_packages`.
 

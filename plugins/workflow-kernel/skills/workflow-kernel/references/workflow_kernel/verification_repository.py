@@ -477,7 +477,7 @@ def _go_packages(repository_root, changed_paths, dependents):
                 pending.append(dependent)
     return sorted(
         package for package in impacted
-        if _go_package_has_sources(repository, package)
+        if "..." in package or _go_package_has_sources(repository, package)
     )
 
 

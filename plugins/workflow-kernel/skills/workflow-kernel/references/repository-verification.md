@@ -65,8 +65,10 @@ a boundary invalidates saved verification evidence. The planner does not
 discover or run nested modules. Repositories that require nested-module checks
 must declare those commands as separate required profile lanes; an empty root
 package selection remains `not_triggered`. Deleted or source-less root package
-paths can still seed declared-dependent traversal, but only surviving package
-directories with Go or Templ source files enter the command arguments. When a
+paths can still seed declared-dependent traversal, but concrete package paths
+enter command arguments only when their directories retain Go or Templ source
+files. Declared Go package patterns such as `./...` and `./internal/...` remain
+in command arguments after module-boundary validation. When a
 root-module Go change has no surviving focused package, the lane reason is
 `no_surviving_go_packages`. If changed Go sources are all in nested modules,
 the reason is

@@ -456,6 +456,43 @@ class RepositoryVerificationTests(unittest.TestCase):
             )
         self.assertEqual(packages, ["./internal/source"])
 
+    def test_go_changed_preserves_declared_package_patterns(self):
+        for pattern in ("./...", "./internal/...", "./internal/depend..."):
+            with self.subTest(pattern=pattern), tempfile.TemporaryDirectory() as directory:
+                repository, profile = self.repository(directory)
+                profile["lanes"][1]["declared_dependents"] = {
+                    "./internal/source": [pattern],
+                }
+                lane = validate_profile(profile)["lanes"][1]
+                argv, packages = _expanded_argv(
+                    lane, ["internal/source/source.go"], repository,
+                )
+                expected = sorted([pattern, "./internal/source"])
+                self.assertEqual(packages, expected)
+                self.assertEqual(argv[-len(expected):], expected)
+
+    def test_deleted_package_can_select_a_declared_pattern(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, _profile = self.repository(directory)
+            packages = _go_packages(
+                repository, ["internal/deleted/old.go"],
+                {"./internal/deleted": ["./internal/..."]},
+            )
+        self.assertEqual(packages, ["./internal/..."])
+
+    def test_nested_declared_patterns_remain_excluded(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, _profile = self.repository(directory)
+            (repository / "nested").mkdir()
+            (repository / "nested/go.mod").write_text(
+                "module example.invalid/nested\n",
+            )
+            packages = _go_packages(
+                repository, ["internal/source/source.go"],
+                {"./internal/source": ["./nested/..."]},
+            )
+        self.assertEqual(packages, ["./internal/source"])
+
     def test_deleted_dependents_do_not_weaken_declared_path_validation(self):
         document = profile_document()
         document["lanes"][1]["declared_dependents"]["./internal/source"] = [
