@@ -101,6 +101,8 @@ succeeded. Its exact returned source-checkout copy was retained, byte-verified
 and removed immediately. This proves the host transport, interaction and
 artifact path; it is not consumer application or persona proof.
 
-Depot Issue #162 is a separately owned Kernel package-selector repair at
-`fix/162-deleted-go-packages`. This change does not modify its checkout or Kernel
-runtime; normal integration of its manifest change remains a release step.
+Depot Issue #162’s separately owned repair merged through PR #164 at
+`f03b64af292c219550d136c75718e34e39b5b876`. This branch incorporates that main
+revision and Workflow Kernel 0.25.2 without modifying its implementation.
+Kernel is an upstream dependency here; the four changed-plugin versions remain
+those listed above. This is source integration, not installed-consumer proof.
