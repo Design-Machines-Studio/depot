@@ -9,7 +9,8 @@ from pathlib import Path
 from .verification_contract import BOUNDARIES, digest
 from .verification_errors import VerificationPlannerError
 from .verification_repository import (
-    PLAN_SCHEMA_VERSION, RISKS, execution_digest, execution_patterns,
+    PLAN_SCHEMA_VERSION, RISKS, _go_module_for_path, execution_digest,
+    execution_patterns,
     expanded_argv, git_changed_paths, go_package_input_paths, input_digests,
     matches, normalize_changed_paths, repository_file,
     repository_scope_digest, resolve_commit,
@@ -62,11 +63,24 @@ def _select_lane(lane, changed_paths, boundary, risk, repository):
         return "not_triggered", "changed_paths_do_not_match", [], []
     argv, packages = expanded_argv(lane, changed_paths, repository)
     if lane["package_selector"] == "go_changed" and not packages:
-        reason = (
-            "nested_module_changes_require_explicit_profile_lanes"
-            if any(path.endswith((".go", ".templ")) for path in changed_paths)
-            else "no_changed_go_packages"
-        )
+        source_paths = [
+            path for path in changed_paths
+            if path.endswith((".go", ".templ"))
+        ]
+        if source_paths:
+            has_root_module_changes = any(
+                _go_module_for_path(
+                    repository, str(Path(path).parent).replace("\\", "/"),
+                ) == Path(repository).resolve(strict=True)
+                for path in source_paths
+            )
+            reason = (
+                "no_surviving_go_packages"
+                if has_root_module_changes
+                else "nested_module_changes_require_explicit_profile_lanes"
+            )
+        else:
+            reason = "no_changed_go_packages"
         return "not_triggered", reason, [], []
     return "selected", "lane_selected", argv, packages
 

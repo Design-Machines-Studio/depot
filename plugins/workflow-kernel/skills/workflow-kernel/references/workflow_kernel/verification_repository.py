@@ -398,11 +398,56 @@ def go_package_input_paths(lane):
     return tuple(sorted(set(lane["input_paths"]) | {"go.mod", "**/go.mod"}))
 
 
+def _go_package_has_sources(repository, package):
+    """Return whether a candidate package directory still has Go sources."""
+    directory = repository if package == "." else repository / package[2:]
+    try:
+        metadata = directory.lstat()
+    except FileNotFoundError:
+        return False
+    except OSError:
+        raise VerificationPlannerError(
+            "unable to inspect Go package directory",
+        ) from None
+    if stat.S_ISLNK(metadata.st_mode) or not stat.S_ISDIR(metadata.st_mode):
+        raise VerificationPlannerError(
+            "Go package paths may not traverse symlinks or non-directories",
+        )
+    try:
+        with os.scandir(directory) as scan:
+            entries = [
+                entry for entry in scan
+                if entry.name.endswith((".go", ".templ"))
+            ]
+    except OSError:
+        raise VerificationPlannerError(
+            "unable to inspect Go package sources",
+        ) from None
+    has_sources = False
+    for entry in entries:
+        if entry.is_symlink():
+            raise VerificationPlannerError(
+                "Go package sources may not be symlinks",
+            )
+        try:
+            source = entry.stat(follow_symlinks=False)
+        except OSError:
+            raise VerificationPlannerError(
+                "unable to inspect Go package sources",
+            ) from None
+        if not stat.S_ISREG(source.st_mode):
+            raise VerificationPlannerError(
+                "Go package sources must be regular files",
+            )
+        has_sources = True
+    return has_sources
+
+
 def _go_packages(repository_root, changed_paths, dependents):
     repository = Path(repository_root).resolve(strict=True)
     if any(path in {"go.mod", "go.sum", "go.work", "go.work.sum"} for path in changed_paths):
         return ["./..."]
-    packages = set()
+    impacted = set()
     for path in changed_paths:
         if not path.endswith((".go", ".templ")):
             continue
@@ -414,8 +459,8 @@ def _go_packages(repository_root, changed_paths, dependents):
             )
         if module_root != repository:
             continue
-        packages.add("." if parent == "." else "./" + parent)
-    pending = list(packages)
+        impacted.add("." if parent == "." else "./" + parent)
+    pending = list(impacted)
     while pending:
         package = pending.pop()
         for dependent in dependents.get(package, []):
@@ -427,10 +472,13 @@ def _go_packages(repository_root, changed_paths, dependents):
                 )
             if module_root != repository:
                 continue
-            if dependent not in packages:
-                packages.add(dependent)
+            if dependent not in impacted:
+                impacted.add(dependent)
                 pending.append(dependent)
-    return sorted(packages)
+    return sorted(
+        package for package in impacted
+        if _go_package_has_sources(repository, package)
+    )
 
 
 def _expanded_argv(lane, changed_paths, repository_root):

@@ -6,6 +6,12 @@ bounded cross-harness observation indexes, and owned-resource cleanup. Pipeline 
 depends on no Depot plugin. Domain judgment, routing, review findings, merge
 decisions, and cleanup policy remain in their canonical Markdown workflows.
 
+Version 0.25.2 keeps deleted and source-less Go package paths in dependent
+impact traversal while excluding them from runnable focused command arguments.
+Only surviving root-module directories with Go or Templ sources are selected.
+Deletion-only changes with no surviving focused package remain
+`not_triggered` with reason `no_surviving_go_packages`.
+
 Version 0.22.0 adds `validate-resource-registry`, a strict read-only check of
 one existing registry's active Docker records for an exact repository
 scope/run/node. It rejects empty, truncated, malformed, or ambiguous journals

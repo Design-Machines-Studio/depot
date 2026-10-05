@@ -379,6 +379,128 @@ class RepositoryVerificationTests(unittest.TestCase):
             packages, ["./internal/dependent", "./internal/source"],
         )
 
+    def test_go_changed_excludes_deleted_packages_but_expands_dependents(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, _profile = self.repository(directory)
+            packages = _go_packages(
+                repository, ["internal/deleted/old.go"],
+                {"./internal/deleted": ["./internal/source"]},
+            )
+        self.assertEqual(packages, ["./internal/source"])
+
+    def test_go_changed_excludes_an_entire_deleted_root_package(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, _profile = self.repository(directory)
+            (repository / "internal/deleted").mkdir()
+            (repository / "internal/deleted/old.go").write_text(
+                "package deleted\n",
+            )
+            (repository / "internal/deleted/old.go").unlink()
+            (repository / "internal/deleted").rmdir()
+            packages = _go_packages(
+                repository, ["internal/deleted/old.go"], {},
+            )
+        self.assertEqual(packages, [])
+
+    def test_go_changed_keeps_package_after_one_source_file_is_deleted(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, profile = self.repository(directory)
+            (repository / "internal/source/second.go").write_text(
+                "package source\n",
+            )
+            (repository / "internal/source/source.go").unlink()
+            packages = _go_packages(
+                repository, ["internal/source/source.go"],
+                profile["lanes"][1]["declared_dependents"],
+            )
+        self.assertEqual(
+            packages, ["./internal/dependent", "./internal/source"],
+        )
+
+    def test_go_changed_ignores_directory_left_without_sources(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, _profile = self.repository(directory)
+            (repository / "internal/empty").mkdir()
+            (repository / "internal/empty/README.md").write_text("retained\n")
+            (repository / "internal/empty/old.templ").write_text("templ\n")
+            (repository / "internal/empty/old.templ").unlink()
+            packages = _go_packages(
+                repository, ["internal/empty/old.templ"], {},
+            )
+        self.assertEqual(packages, [])
+
+    def test_go_changed_rename_selects_destination_and_old_dependents(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, _profile = self.repository(directory)
+            (repository / "internal/old").mkdir()
+            (repository / "internal/old/old.go").write_text("package old\n")
+            (repository / "internal/old/old.go").unlink()
+            (repository / "internal/new").mkdir()
+            (repository / "internal/new/new.go").write_text("package new\n")
+            packages = _go_packages(
+                repository,
+                ["internal/old/old.go", "internal/new/new.go"],
+                {"./internal/old": ["./internal/source"]},
+            )
+        self.assertEqual(packages, ["./internal/new", "./internal/source"])
+
+    def test_go_changed_traverses_deleted_intermediate_to_surviving_dependent(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, _profile = self.repository(directory)
+            packages = _go_packages(
+                repository, ["internal/removed/old.go"],
+                {
+                    "./internal/removed": ["./internal/intermediate"],
+                    "./internal/intermediate": ["./internal/source"],
+                },
+            )
+        self.assertEqual(packages, ["./internal/source"])
+
+    def test_deleted_dependents_do_not_weaken_declared_path_validation(self):
+        document = profile_document()
+        document["lanes"][1]["declared_dependents"]["./internal/source"] = [
+            "../outside",
+        ]
+        with self.assertRaises(VerificationPlannerError):
+            validate_profile(document)
+
+    def test_deleted_only_selection_is_not_reported_as_nested_module(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, profile = self.repository(directory)
+            deleted = repository / "internal/only/old.go"
+            deleted.parent.mkdir()
+            deleted.write_text("package only\n")
+            subprocess.run(
+                ["git", "-C", str(repository), "add", "--all"], check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "commit", "-m", "add package"],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "update-ref", BASE_REF, "HEAD"],
+                check=True,
+            )
+            deleted.unlink()
+            (deleted.parent / "README.md").write_text("retained\n")
+            subprocess.run(
+                ["git", "-C", str(repository), "add", "--all"], check=True,
+            )
+            subprocess.run(
+                ["git", "-C", str(repository), "commit", "-m", "delete package"],
+                check=True, capture_output=True,
+            )
+            plan = kernel_build_plan(
+                profile, repository, ".dm/verification.json", None,
+                "chunk", "medium", base_commit=git_commit(repository, BASE_REF),
+                head_commit=git_commit(repository), environment=TEST_ENVIRONMENT,
+            )
+        lane = {item["id"]: item for item in plan["lanes"]}["go-focused"]
+        self.assertEqual(lane["disposition"], "not_triggered")
+        self.assertEqual(lane["reason"], "no_surviving_go_packages")
+        self.assertEqual(lane["argv"], [])
+        self.assertEqual(lane["packages"], [])
+
     def test_deeper_nested_module_paths_are_excluded_and_nested_only_is_not_run(self):
         with tempfile.TemporaryDirectory() as directory:
             repository, profile = self.repository(directory)
@@ -627,6 +749,18 @@ class RepositoryVerificationTests(unittest.TestCase):
                 with self.assertRaises(VerificationPlannerError):
                     _go_packages(
                         repository, ["nested/deep/deep.go"], {},
+                    )
+
+    def test_symlinked_go_source_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            repository, _profile = self.repository(directory)
+            with tempfile.TemporaryDirectory() as outside_directory:
+                outside = Path(outside_directory) / "source.go"
+                outside.write_text("package source\n")
+                (repository / "internal/source/linked.go").symlink_to(outside)
+                with self.assertRaises(VerificationPlannerError):
+                    _go_packages(
+                        repository, ["internal/source/deleted.go"], {},
                     )
 
     def test_missing_root_module_evidence_is_rejected(self):

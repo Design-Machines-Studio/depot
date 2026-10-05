@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, strict existing Docker resource-registry validation, bounded cross-harness observation indexes, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.25.0
+version: 0.25.2
 ---
 
 # Workflow Kernel
@@ -90,7 +90,11 @@ command.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
-0.25.0 surface adds `agent-board inbox` and explicit v2 intent/completion/correction
+0.25.2 surface fixes `go_changed` selection to traverse deleted or source-less
+packages for declared dependents while passing only surviving source packages
+to focused commands. A root-module change with no surviving package remains
+`not_triggered` as `no_surviving_go_packages`. The 0.25.0 surface adds
+`agent-board inbox` and explicit v2 intent/completion/correction
 relationships, with v1 read compatibility. `agent-board notify` and optional
 `post --binding` support one-shot targeted local Codex queueing only with a
 trusted operator/host-issued, verified, expiring session binding. Delivery/read

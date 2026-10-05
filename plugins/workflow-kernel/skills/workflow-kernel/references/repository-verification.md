@@ -64,10 +64,17 @@ included in the selected lane's input identity, so adding, removing, or editing
 a boundary invalidates saved verification evidence. The planner does not
 discover or run nested modules. Repositories that require nested-module checks
 must declare those commands as separate required profile lanes; an empty root
-package selection remains `not_triggered`. If changed Go sources are all in
-nested modules, the reason is
+package selection remains `not_triggered`. Deleted or source-less root package
+paths can still seed declared-dependent traversal, but only surviving package
+directories with Go or Templ source files enter the command arguments. When a
+root-module Go change has no surviving focused package, the lane reason is
+`no_surviving_go_packages`. If changed Go sources are all in nested modules,
+the reason is
 `nested_module_changes_require_explicit_profile_lanes`; it does not report
-nested-module coverage.
+nested-module coverage. Declared-dependent keys and targets still pass the
+closed relative-package-path validation; a valid but deleted or source-less
+target remains traversal-only, so its surviving downstream dependents remain
+eligible.
 
 ## Results
 
