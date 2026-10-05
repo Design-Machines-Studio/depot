@@ -67,6 +67,13 @@ For a verified external blocker, follow the review skill's
 pending finding, and continue independent local repairs. Never ask the user to
 choose tracking or treat issue creation as resolution.
 
+For affected front-facing design fixes, request `design-consultant` following
+model-router's `design-consultation.md` for the bounded repair draft/decision.
+Supply the exact prototype and existing host browser evidence; integrate its
+accepted patch on the host and rerun required interaction/persona and functional,
+security and accessibility checks. Unavailable required design participation
+remains a coverage blocker, never an ordinary builder substitution.
+
 For each finding:
 
 1. Implement the smallest adequate repair described in the todo file

@@ -38,13 +38,18 @@ Use that same root for implementation, review, repair and verification.
 
 1. **Inject the checkpoint contract into every implementation subagent prompt.** Implementation subagents inherit the invariant Tool-Call Exploration Checkpoint block from the promptcraft template; review agents keep the hard read-only limits in their own frontmatter. Hand-authored implementation prompts treat approximately 40 tool calls as an exploration checkpoint: stop new research, broad exploration, speculative refactoring, scope expansion, and unrelated improvements, then move directly to closeout. The checkpoint never prohibits calls to inspect the current diff and status, run proportionate focused verification, perform targeted repair and rerun the failing check, commit coherent work, push the branch, create or update the PR, or provide the final report. After at most two targeted repair-and-recheck cycles, report any remaining failure honestly and push a coherent recoverable branch or draft PR. Keep mandatory `NOT-COVERED:` / `COMMANDS-RUN:` sections; transparency does not replace delivery. **Reaching the exploration checkpoint is never, by itself, a valid reason to leave implemented work unverified, uncommitted, unpushed, or unreported.**
 
-   **Legacy generated prompts:** If an already-generated chunk prompt still imposes a hard 40-tool-call cap, read it as the exploration checkpoint above. Verification, targeted repair, commit, push, PR creation or update, and final reporting calls are exempt from the legacy cap. Do not regenerate an otherwise valid plan solely to update this wording.
+   **Legacy generated prompts:** Treat old hard caps as the exploration
+   checkpoint above. Verification, targeted repair, commit, push, PR creation or update, and final reporting calls are exempt from the legacy cap.
 
 2. **A dead subagent is never relaunched.** When a dispatched subagent dies or returns empty/truncated output: do not relaunch against the same failure (cap/usage-limit cascade descent is a reroute, not a relaunch). Write the receipt from whatever returned, add a `NOT-COVERED:` entry, continue.
 
 ## CRITICAL: How to Run Review Gates
 
-Slash commands (`/dm-review-loop`, `/dm-review-quick`, `/dm-review`, `/dm-review-fix`) are not callable from a subagent. Use the `Skill` tool: `dm-review:review`. Never report "dm-review-loop slash command not callable".
+Load dm-review's `automatic-implementation-closeout.md`. Invoke review through
+the active harness's supported skill entry point; Codex reads and executes the
+command-skill protocol when no Skill tool exists. A missing slash-command UI
+never permits informal substitution or moving the whole workflow to another
+harness. Pipeline owns its existing final review/repair sequence and root.
 
 ### Focused role review (ordinary chunks)
 
@@ -66,54 +71,19 @@ rerunning settled lanes.
 
 ### Quick final review-fix loop (explicit eligible manifests only)
 
-When `finalReviewMode: quick` survives manifest validation, resolve and read the installed `dm-review-quick` command-skill protocol and run its exact core lanes plus applicable build/UI/domain lanes against the feature branch. If its bounded security-sensitive path check matches, stop quick dispatch and run the full review-fix loop below; record `final_review_mode: quick`, `final_review_effective_mode: full`, `final_review_escalation: security-sensitive-path`.
-
-For an ordinary eligible quick result: collect the complete P1/P2/P3 finding set, apply one revision batch, run affected repository verification, re-run the affected quick lanes once. Every retained finding must reach zero. Record `final_review_mode: quick`, `final_review_effective_mode: quick`, the approved rationale, selected lanes, and any unavailable required lane. Never substitute a single generic reviewer for the installed quick protocol.
+Use the installed `dm-review-quick` command-skill protocol through Step 4.
+Sensitive escalation records `final_review_effective_mode: full`.
+Preserve the requested/effective mode, rationale, selected lanes and unavailable
+coverage in receipts. Never replace the quick protocol with a generic reviewer.
 
 ### Full review-fix loop (sensitive chunks and full final review)
 
-Bind `<review-root>` once: `CHUNK_ROOT` for a sensitive chunk.
-Final feature review uses the existing physical checkout of
-`<featureBranch>`, verified through Git worktree registrations and branch.
-Use it for todos, edits, commits, checks and re-review after chunk cleanup.
-
-```text
-prior_signature = null
-for iteration in 1..max_iterations (default 2):
-  for a chunk: capture CHUNK_END_HEAD and set review_args = "full <review-root> --base-commit <CHUNK_START_HEAD> --head-commit <CHUNK_END_HEAD>"
-  for the final feature review: set review_args = "full <featureBranch>"
-  invoke the review from <review-root>
-  Skill(skill="dm-review:review", args=review_args)
-
-  pending = ls <review-root>/todos/*-pending-*.md
-  current_signature = sorted basenames of pending
-
-  if pending is empty:
-    report "Clean after {iteration} iteration(s)"
-    break
-
-  if current_signature == prior_signature:
-    report "Convergence stalled at iteration {iteration}. {count} finding(s) unchanged. Manual review required."
-    list pending todos
-    break  -- do not loop forever on the same findings
-
-  prior_signature = current_signature
-
-  for each pending todo file:
-    read finding (file path, line, severity, suggested fix)
-    apply the fix to the cited file in <review-root> via Edit/Write
-    rename pending -> done
-
-  stage and commit the complete repair batch in <review-root> using Step 3d's scoped commit protocol
-  run the required affected verification in <review-root> before re-review
-  for a sequential chunk, rerun Step 3e's commit check using the original CHUNK_START_HEAD
-
-  if iteration == max_iterations:
-    refresh review_args with the repaired end head for a chunk; keep full feature scope for the final gate
-    Skill(skill="dm-review:review", args=review_args)  -- final verify
-    if pending after final: report NEEDS ATTENTION with each remaining finding
-      and stop; do not mark the chunk clean or merge it
-```
+Bind `<review-root>` to CHUNK_ROOT for sensitive chunks or the registered
+feature checkout for final review. Use Step 4's repair/recheck sequence and
+`selective-lane-allowlist.md` with `dm-review-loop` convergence limits. Retain
+the original chunk base; refresh its repaired end head. Commit/push repairs,
+verify remote head and rerun affected checks/lanes. Stop on a cap, stalled
+evidence or blocker with recoverable incomplete coverage.
 
 ### Per-chunk review tier (focused by default; escalate sensitive paths)
 
@@ -796,7 +766,8 @@ For `renderedSurface: required`, run Datastar/markup static checks and one brows
 
 **Per-chunk review uses role dispatch.** dm-review is reserved for Step 4. Every per-chunk review receives the approved requirements and compact alignment context, never concrete participant identity. Flag as P1/P2/P3: work outside approved scope; conflict with project constraints; unnecessary architecture; changes owned by another repository; or correct work that misses the chunk's approved outcome. Reject adjacent useful work that does not repair an observable defect in the approved scope.
 
-**UI and Logic:** Request `review-deep` at high effort. If findings: collect the complete set; apply all accepted fixes as one revision batch; do not test after each individual edit; on the profile path invoke the planner once with `revision_batch`; on the repository-native path run only affected focused checks from the approved prompt. Re-run the affected role once. Max 2 iterations.
+**UI:** Request `design-consultant` for design judgment; functional/accessibility
+checks remain mandatory. **Logic:** Request `review-deep` at high effort. If findings: collect the complete set; apply all accepted fixes as one revision batch; do not test after each individual edit; on the profile path invoke the planner once with `revision_batch`; on the repository-native path run only affected focused checks from the approved prompt. Re-run the affected role once. Max 2 iterations.
 
 **Integration:** Same, then verify cross-chunk wiring (routes, imports, connections).
 
@@ -886,6 +857,12 @@ LEVEL_VERIFICATION: <level> | passed: <N> | failed: <N>
 
 **THIS STEP IS MANDATORY.** After ALL chunks are merged, run exactly the validated final dm-review mode. `full` runs the full fan-out. `quick` runs the installed dm-review-quick protocol only when consequence is not high and the final diff has no bounded security-sensitive path; otherwise escalate to full.
 
+Before dispatching the review, commit/push the integrated implementation,
+create or update its PR, and verify the remote candidate head. Continue into
+this existing review automatically under `automatic-implementation-closeout.md`;
+no second operator prompt and no additional standalone loop. Resume the same
+owner and reuse validated unchanged-head coverage when available.
+
 Before dispatching the review, verify the exact integrated feature-branch tree.
 On the profile path, invoke the repository planner with boundary
 `merge_candidate` and run its selected lanes. It materializes every required
@@ -969,7 +946,8 @@ If P1/P2/P3 issues are found:
 
 1. Collect the complete finding set and fix it as one revision batch.
 2. Stage with `git add -A -- <dir>`, verify `git diff --cached --stat`, commit with `git commit -F <file>`.
-3. On the profile path, invoke `revision_batch` once, then `merge_candidate`
+3. Push the repair batch to the existing PR and verify its remote head before
+   closeout. On the profile path, invoke `revision_batch` once, then `merge_candidate`
    once. On the repository-native path, an irrelevant repair may carry forward
    prior canonical-command evidence only with bounded diff proof that no
    relevant verification input changed. If a relevant input changed or
@@ -1338,7 +1316,7 @@ Mark `FINAL 6. Present summary report` complete.
 
 - Pipeline-blocking (stop after Step 5b cleanup): worktree creation, manifest validation, or feature branch creation fails.
 - Chunk-blocking (skip chunk and dependents): subagent fails, build fails, complex merge conflicts.
-- Degraded: if `dm-review:review` is unavailable, dispatch general-purpose review subagents and flag Degraded. NEVER report "slash command not callable".
+- If the supported dm-review protocol is unavailable, preserve work and report REVIEW INCOMPLETE with the exact missing asset. Never substitute general-purpose review or infer unavailability from slash-command UI.
 
 ## Constraints
 

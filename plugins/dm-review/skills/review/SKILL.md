@@ -56,7 +56,7 @@ Default to the cheapest tier that fits.
 
 | When | Tier | What runs |
 |------|------|-----------|
-| Per chunk during pipeline execution | `dm-review-quick` | 2 core judgment lanes + applicable UI/build/domain lanes |
+| Ordinary chunk during Pipeline execution | focused role | One independent role; sensitive chunks retain full review |
 | Pre-merge, once per PR | full `dm-review` | All applicable agents + consolidation + optional memory enrichment when callable |
 | Bulk second opinions / large-diff first pass | fixed lane-to-role mapping | Security analysis plus style, duplication, pattern, and doc lanes; eligible diff sections only; mandatory full-diff security sign-off |
 | Bounded repair review | full + one repair | One repair batch and one affected-lane recheck; repeat broad review only when the original was incomplete or the repair changed a real sensitive boundary |

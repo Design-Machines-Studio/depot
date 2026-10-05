@@ -74,6 +74,12 @@ explicitly receipted replacement. Project rich feedback into kernel
 `reason_code: deterministic_validation_failure`, and safe receipt evidence
 references.
 
+**Automatic closeout:** Load dm-review's `automatic-implementation-closeout.md`.
+Push and verify the integrated PR head, then continue through the existing final
+gate without another prompt or standalone loop. Repair pushes advance this owner
+and cause affected rechecks, never recursive review. Preserve final-head evidence
+before cleanup or report the exact blocker.
+
 **Review adapter:** Codex sessions do not expose a generic nested `Skill(skill="dm-review:review", ...)` callable. Use this risk-tiered contract in the current orchestrator context:
 
 - For ordinary non-sensitive chunks, request one focused read-only

@@ -69,8 +69,7 @@
       {"model": "qwen/qwen3.8-max", "provider": "openrouter", "transport": "openrouter", "family": "qwen", "billing": "api", "capabilities": ["long-context", "structured-output"]}
     ],
     "design-consultant": [
-      {"model": "gpt-6.1-sol", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output"]},
-      {"model": "qwen/qwen3.8-max", "provider": "openrouter", "transport": "openrouter", "family": "qwen", "billing": "api", "capabilities": ["long-context", "structured-output"]}
+      {"model": "claude-opus-5-5", "servedIdentities": ["claude-opus-5-5"], "provider": "anthropic", "transport": "claude-cli", "family": "anthropic", "billing": "subscription-or-local-paid-credits", "capabilities": ["read-repository", "long-context", "structured-output"]}
     ]
   }
 }

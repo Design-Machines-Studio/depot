@@ -18,7 +18,13 @@ filters candidate eligibility.
 | tests/build analysis | `review-fast` | `read-repository`, `structured-output` | `medium` |
 | second perspective | `plan-critic` | `read-repository`, `long-context`, `structured-output` | `high` |
 | triggered domain lane | `review-deep` | explicit required capabilities only | `high` |
-| triggered UI analysis lane | `review-deep` | `read-repository`, `long-context`, `structured-output` | `high` |
+| triggered UI/UX design judgment lane | `design-consultant` | `read-repository`, `long-context`, `structured-output` | `high` |
+
+UX-quality, UI-standards and visual design judgment use `design-consultant`.
+Accessibility and CSS correctness retain `review-deep`; they remain mandatory.
+Load model-router's `design-consultation.md` for design authority and bounded
+repair drafting. Required unavailable design judgment blocks coverage, with no
+substitution; browser availability is a separate prerequisite.
 
 Keep the complete selected roster. Role mapping does not drop a required lane.
 Quick mode keeps its existing smaller roster but uses the same role mapping.
@@ -130,7 +136,9 @@ section must still settle.
 ## Optional design consultation
 
 For one unresolved consequential design question, load model-router's
-`design-consultation.md`. It is optional advice, not a review lane or authority.
+`design-consultation.md`. Its design authority and availability rules also apply to required UI/UX
+lanes and front-facing design repair drafts; optional consultation does not add
+a new lane when the selected design judgment already settles the question.
 
 ## Diff scoping per lane
 

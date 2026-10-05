@@ -117,11 +117,11 @@ small local preference for retiring a candidate such as `opus`; it filters both
 dispatch and human recommendation without changing shared policy or retrying an
 exhausted Claude rail.
 
-For one narrow unresolved UI/design question, load
+For applicable UI/UX judgment and front-facing design repair drafting, load
 `${CLAUDE_SKILL_DIR}/references/design-consultation.md` and request
-`design-consultant`. The default candidate is native Codex. Claude candidates are excluded from
-automatic routing; an explicitly configured Fable consultation still requires
-that bounded native-Claude contract. It is not a repository-wide reviewer or builder.
+`design-consultant`. This required policy participant has no substitute; missing
+availability leaves required design coverage incomplete. Other roles retain
+their ordinary candidate policy. Browser evidence remains host-owned.
 
 For a coordinator preparing a human copy-paste execution prompt, use
 `${CLAUDE_SKILL_DIR}/references/operator-recommendation.sh`. This read-only

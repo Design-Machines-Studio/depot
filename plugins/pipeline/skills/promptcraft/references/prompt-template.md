@@ -151,6 +151,12 @@ Treat approximately 40 tool calls as an exploration checkpoint, not a terminatio
   - `NOT-COVERED:` -- acceptance criteria, files, or checks the budget did not reach.
   - `COMMANDS-RUN:` -- the build/test/search commands you actually ran.
 
+## Automatic review closeout
+
+Apply dm-review's `automatic-implementation-closeout.md`: direct tasks continue
+automatically after PR push; Pipeline workers return to their existing owner.
+Finish with validated final-head evidence or a precise blocker. No merge.
+
 ## Ambiguity Protocol
 
 This block is one of three layers in the pipeline's ambiguity defence. Sibling layers: `plan-adversary.md` adversarial scope review (catches structural ambiguity at prompt-review time, cheapest) and `execution-orchestrator.md` Ambiguity Handling (autonomous-mode commit-trailer fallback). Keep the wording here in sync with those two.
