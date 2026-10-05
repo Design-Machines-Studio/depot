@@ -153,20 +153,18 @@ consumer is sufficient.
    `visual_target_unavailable`; an actual declared command failure yields
    `dev_server_unavailable` with that evidence and does not proceed to
    `prepare` as a ready target.
-5. On the host, inspect actual callable browser tools. In T3 Code, call
-   `preview_status`; if no automation-capable preview is attached, call
-   `preview_open`, then navigate the exact declared target. If T3 automation is
-   absent or explicitly unsupported/unavailable, try the host Playwright
-   fallback in `repository-browser-target-discovery.md` before declaring a
-   transport gap. This includes phone-started threads. Correct actionable tool
-   errors and retry before switching transports. A tool name or generic
-   `tool-use` is not readiness evidence.
+5. Run host Playwright through the transport contract in
+   `repository-browser-target-discovery.md`. T3 supports operator design handoff
+   and target context; its availability never gates these checks. Discover MCP
+   tools or use the existing repository-owned Playwright harness, with bounded
+   engine recovery. Tool names alone are not readiness evidence.
 6. Materialize one private bounded browser evidence file only after successful
    local navigation:
 
    ```json
    {
-     "schemaVersion": 1,
+     "schemaVersion": 2,
+     "automationTransport": "playwright",
      "status": "ready",
      "transportClass": "local-interactive",
      "localNavigation": "confirmed",

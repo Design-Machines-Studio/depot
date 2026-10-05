@@ -56,7 +56,7 @@ Default to the cheapest tier that fits.
 
 | When | Tier | What runs |
 |------|------|-----------|
-| Per chunk during pipeline execution | `dm-review-quick` | 2 core judgment lanes + applicable UI/build/domain lanes |
+| Ordinary chunk during Pipeline execution | focused role | One independent role; sensitive chunks retain full review |
 | Pre-merge, once per PR | full `dm-review` | All applicable agents + consolidation + optional memory enrichment when callable |
 | Bulk second opinions / large-diff first pass | fixed lane-to-role mapping | Security analysis plus style, duplication, pattern, and doc lanes; eligible diff sections only; mandatory full-diff security sign-off |
 | Bounded repair review | full + one repair | One repair batch and one affected-lane recheck; repeat broad review only when the original was incomplete or the repair changed a real sensitive boundary |
@@ -360,7 +360,7 @@ COUNCIL_BUNDLE_ROOT=""
 for PLUGIN in dm-review accessibility-compliance live-wires ghostwriter council; do
   case "$PLUGIN" in
     dm-review)
-      PLUGIN_MINIMUM_VERSION="1.83.0"
+      PLUGIN_MINIMUM_VERSION="1.85.0"
       REQUIRED_ASSETS=("${DM_REVIEW_REQUIRED_ASSETS[@]}")
       ;;
     accessibility-compliance)
@@ -510,7 +510,8 @@ dispatch. Load `repository-browser-target-discovery.md` before choosing the
 target. Prefer an explicit override, then the established project domain and
 canonical checkout with the feature branch selected. Optional declarations,
 exact-head packet reuse and a source-verified attached preview follow in that
-contract's order. T3 is a browser transport, not authority for the target URL.
+contract's order. Playwright runs checks; T3 provides operator handoff and
+verified target context.
 Start a stopped raw process only through the structured `.dm/ui-review.json`
 helper path, which snapshots and supervises cleanup. Start a repository-
 discovered isolated Compose consumer only through Workflow Kernel's Docker creation

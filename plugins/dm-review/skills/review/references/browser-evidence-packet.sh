@@ -81,8 +81,8 @@ if [ -n "$PROTOTYPE_ROOT" ]; then
 fi
 
 safe_packet_shape='type == "object" and
-  (keys | sort) == (["artifacts","completionStatus","consoleAccessibilitySummary","domClassCopyActionObservations","layoutComputedStyleObservations","prototypeCommit","prototypeRepository","repositoryCommit","repositoryIdentity","repositoryState","schemaVersion","selectedCaseIds"] | sort) and
-  .schemaVersion == 1 and .completionStatus == "completed" and
+  (keys | sort) == (["automationTransport","artifacts","completionStatus","consoleAccessibilitySummary","domClassCopyActionObservations","layoutComputedStyleObservations","prototypeCommit","prototypeRepository","repositoryCommit","repositoryIdentity","repositoryState","schemaVersion","selectedCaseIds"] | sort) and
+  .schemaVersion == 2 and .automationTransport == "playwright" and .completionStatus == "completed" and
   (.repositoryIdentity | test("^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")) and
   (.repositoryCommit | test("^[0-9a-f]{40}$")) and (.repositoryState == "clean" or .repositoryState == "dirty") and
   ((.prototypeRepository == null and .prototypeCommit == null) or
@@ -108,8 +108,8 @@ if [ "$ACTION" = create ]; then
   [ -f "$CAPTURE_FILE" ] && [ ! -L "$CAPTURE_FILE" ] || usage
   jq -e '
     type == "object" and
-    (keys | sort) == (["artifactRefs","completionStatus","consoleAccessibilitySummary","domClassCopyActionObservations","layoutComputedStyleObservations","localNavigationConfirmed","schemaVersion","selectedCaseIds"] | sort) and
-    .schemaVersion == 1 and .completionStatus == "completed" and .localNavigationConfirmed == true and
+    (keys | sort) == (["automationTransport","artifactRefs","completionStatus","consoleAccessibilitySummary","domClassCopyActionObservations","layoutComputedStyleObservations","localNavigationConfirmed","schemaVersion","selectedCaseIds"] | sort) and
+    .schemaVersion == 2 and .automationTransport == "playwright" and .completionStatus == "completed" and .localNavigationConfirmed == true and
     (.selectedCaseIds | type == "array" and length > 0 and length <= 64 and length == (unique | length) and all(.[]; type == "string" and test("^[A-Za-z0-9][A-Za-z0-9_.:/-]{0,127}$"))) and
     (.artifactRefs | type == "array" and length > 0 and length <= 64 and length == (unique | length) and all(.[]; type == "string" and test("^[A-Za-z0-9][A-Za-z0-9._/-]{0,255}\\.(png|jpe?g|webp|json)$") and (contains("..") | not))) and
     ([.domClassCopyActionObservations,.layoutComputedStyleObservations] | all(.[]; type == "array" and length <= 40 and all(.[]; type == "string" and length > 0 and length <= 512))) and
@@ -132,7 +132,7 @@ if [ "$ACTION" = create ]; then
     --argjson dom "$(jq -c '.domClassCopyActionObservations' "$CAPTURE_FILE")" \
     --argjson layout "$(jq -c '.layoutComputedStyleObservations' "$CAPTURE_FILE")" \
     --arg summary "$(jq -r '.consoleAccessibilitySummary' "$CAPTURE_FILE")" \
-    '{schemaVersion:1,repositoryIdentity:$repository_identity,repositoryCommit:$repository_commit,
+    '{schemaVersion:2,automationTransport:"playwright",repositoryIdentity:$repository_identity,repositoryCommit:$repository_commit,
       repositoryState:$repository_state,prototypeRepository:$prototype_repository,prototypeCommit:$prototype_commit,
       selectedCaseIds:$selected_case_ids,artifacts:$artifacts,domClassCopyActionObservations:$dom,
       layoutComputedStyleObservations:$layout,consoleAccessibilitySummary:$summary,completionStatus:"completed"}' > "$tmp"

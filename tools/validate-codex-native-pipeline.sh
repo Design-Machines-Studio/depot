@@ -120,13 +120,13 @@ git -C "$CHUNK_ROOT" commit -qm repair-two
 bash "$TMP/check.sh"
 test "$(git -C "$CHUNK_ROOT" rev-list --count "$CHUNK_START_HEAD..HEAD")" -eq 2
 test "$(git -C "$CHUNK_ROOT" diff --name-only "$CHUNK_START_HEAD..HEAD")" = repair.txt
-require_text "$orchestrator" 'stage and commit the complete repair batch in <review-root>' "review repairs commit before the sequential gate"
-require_text "$orchestrator" 'Final feature review uses the existing physical checkout of' "final repair binds the integrated feature checkout"
-require_text "$orchestrator" 'pending = ls <review-root>/todos/' "finding lookup uses the bound review root"
-require_text "$orchestrator" 'apply the fix to the cited file in <review-root>' "repairs use the bound review root"
+require_text "$orchestrator" 'Commit/push repairs,' "review repairs commit before the sequential gate"
+require_text "$orchestrator" 'feature checkout for final review.' "final repair binds the integrated feature checkout"
+require_text "$orchestrator" 'Bind `<review-root>` to CHUNK_ROOT' "finding lookup uses the bound review root"
+require_text "$orchestrator" "Use Step 4's repair/recheck sequence" "repairs use the bound review root"
 require_text "$orchestrator" 'Supply both heads, that inventory and that diff as' "per-chunk review receives the explicit commit boundary"
 require_text "$orchestrator" 'Every Step 3g repair batch, including focused UI/Logic, Integration and Trivial' "ordinary review repairs use the commit protocol"
-require_text "$orchestrator" 'args=review_args' "nested review consumes its selected arguments"
+require_text "$orchestrator" 'full  -> Skill(skill="dm-review:review", args="full <feature-branch>")' "nested review consumes its selected arguments"
 require_text "$orchestrator" '--base-commit <CHUNK_START_HEAD> --head-commit <CHUNK_END_HEAD>' "nested chunk review passes the supported commit range"
 
 sed -n '/^# chunk-end-head:start$/,/^# chunk-end-head:end$/p' \

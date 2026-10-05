@@ -96,8 +96,7 @@ infer that a production/customer deployment is a branch-switchable review app.
    HTTP response alone is insufficient; retain a build receipt plus an
    application-visible source/build marker or content/asset observation tied to
    that unchanged fingerprint.
-6. Navigate the established domain with the available host browser, using T3
-   first when supported. Verify the served artifact and assets against the
+6. Navigate the established domain with host Playwright automation. Verify the served artifact and assets against the
    intended source and exercise the selected cases. Bind helper evidence to the
    actual serving checkout, not merely the worktree used for source analysis.
    Record domain, source branch/head, build proof and actual observations.
@@ -249,7 +248,7 @@ Before browser navigation, confirm again that:
    checkout/commit; and
 4. the exact URL belongs to that identified target.
 
-Only then may host-owned T3-first automation navigate and create exact-head
+Only then may host-owned Playwright automation navigate and create exact-head
 browser proof. Browser transport failure remains
 `browser_transport_unavailable`; it never changes a successful dev-server
 attempt into `dev_server_unavailable`.
@@ -295,23 +294,28 @@ content; a metadata source path plus a reachable URL is insufficient after edits
 A build receipt and unchanged snapshot are usable proof; status output alone
 must not be described as exact-commit proof when it does not report a commit.
 
-Try the session's actual T3 tools first: call `preview_status`, then
-`preview_open` when no automation-capable preview is attached. An initially
-closed preview or an actionable argument error is not transport exhaustion;
-correct the arguments and retry. If T3 preview tools are absent, or opening or
-using the preview explicitly reports unsupported/unavailable automation, use
-the available host Playwright transport against the same verified target.
-Threads started from a phone may have no automation-capable T3 preview; do not
-require the operator to reconnect from desktop before trying Playwright.
+## Formal review browser transport
 
-Discover callable Playwright MCP tools first. If no MCP transport is available,
-use an established repository-owned Playwright harness when one exists, under
-the same source, persona, viewport, and case requirements. Do not install a new
-browser stack or guess a harness. Only report `browser_transport_unavailable`
-after the applicable T3 and Playwright paths cannot complete the required case.
-A missing routed browser participant says nothing about host tool availability.
-Keep the T3 failure, selected fallback, and actual navigation/interaction
-outcome in the browser evidence; a fallback attempt alone is not a pass.
+All automated dm-review browser checks, including Pipeline review/parity cases,
+use host-owned Playwright. Discover callable Playwright MCP tools first; their
+prefix depends on the harness. If MCP is unavailable, use the established
+repository-owned Playwright harness under the same source, persona, engine,
+viewport and case requirements. Do not install a new stack or invent a harness.
+Apply the existing quit/fresh-primary/different-engine recovery ladder within
+Playwright. Only report `browser_transport_unavailable` after applicable
+Playwright paths are exhausted; keep each actual attempt and case outcome.
+
+T3 remains available for presenting designs and the maintained preview to the
+operator. Its attached URL may provide verified target context, but T3 status,
+opening failures, missing tabs, phone limitations and screenshots neither gate
+Playwright startup nor satisfy formal browser coverage. Do not substitute T3
+or curl when Playwright cannot complete required cases. A missing routed
+participant says nothing about host browser availability.
+
+Record `automationTransport: "playwright"` from the actual host capture in
+readiness evidence and reusable packets. Never relabel T3 or legacy evidence.
+Old packets without that provenance require a fresh Playwright capture; model
+identity and browser availability remain separate.
 
 An app sign-in failure is `application_authentication_unavailable`, with the
 specific missing supported sign-in prerequisite; do not relabel it as a server

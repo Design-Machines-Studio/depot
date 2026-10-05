@@ -104,7 +104,7 @@ assert test "$required_rc" -eq 76
 assert jq -e '.reason == "visual_target_unavailable" and .reviewDisposition == "REVIEW INCOMPLETE"' "$TMP/required-no-target.result"
 
 cat > "$TMP/browser-preview.json" <<'JSON'
-{"schemaVersion":1,"status":"ready","transportClass":"local-interactive","localNavigation":"confirmed","targetUrl":"http://localhost:9090/preview","evidenceRef":"review/browser/preview.json"}
+{"schemaVersion":2,"automationTransport":"playwright","status":"ready","transportClass":"local-interactive","localNavigation":"confirmed","targetUrl":"http://localhost:9090/preview","evidenceRef":"review/browser/preview.json"}
 JSON
 
 # An attached automation-capable T3 preview precedes optional repository
@@ -119,7 +119,7 @@ assert jq -e '.state == "ready" and .dispatchAllowed == true' "$TMP/attached-pre
 assert jq -e '.state == "already_clean" and .removedCount == 0' "$TMP/attached-preview-cleanup.json"
 
 cat > "$TMP/browser-remote.json" <<'JSON'
-{"schemaVersion":1,"status":"ready","transportClass":"local-interactive","localNavigation":"confirmed","targetUrl":"https://preview.example.com/review","evidenceRef":"review/browser/remote.json"}
+{"schemaVersion":2,"automationTransport":"playwright","status":"ready","transportClass":"local-interactive","localNavigation":"confirmed","targetUrl":"https://preview.example.com/review","evidenceRef":"review/browser/remote.json"}
 JSON
 
 # Invocation-supplied URLs may point at staging or other remote HTTP(S) hosts;
@@ -134,7 +134,7 @@ assert jq -e '.state == "ready" and .dispatchAllowed == true' "$TMP/remote-expli
 assert jq -e '.state == "already_clean" and .removedCount == 0' "$TMP/remote-explicit-cleanup.json"
 
 cat > "$TMP/browser-repository.json" <<'JSON'
-{"schemaVersion":1,"status":"ready","transportClass":"local-interactive","localNavigation":"confirmed","targetUrl":"http://127.0.0.1:49173/review","evidenceRef":"review/browser/repository.json"}
+{"schemaVersion":2,"automationTransport":"playwright","status":"ready","transportClass":"local-interactive","localNavigation":"confirmed","targetUrl":"http://127.0.0.1:49173/review","evidenceRef":"review/browser/repository.json"}
 JSON
 
 # Host interpretation remains distinct from helper discovery. The helper
@@ -725,11 +725,29 @@ assert jq -e '.reason == "dev_server_unavailable" and .dispatchAllowed == false'
 git -C "$REPO" show HEAD:.dm/ui-review.json > "$REPO/.dm/ui-review.json"
 
 cat > "$TMP/browser-ready.json" <<'JSON'
-{"schemaVersion":1,"status":"ready","transportClass":"local-interactive","localNavigation":"confirmed","targetUrl":"http://localhost:8080/review","evidenceRef":"review/browser/navigation.json"}
+{"schemaVersion":2,"automationTransport":"playwright","status":"ready","transportClass":"local-interactive","localNavigation":"confirmed","targetUrl":"http://localhost:8080/review","evidenceRef":"review/browser/navigation.json"}
 JSON
 cat > "$TMP/browser-web-search.json" <<'JSON'
-{"schemaVersion":1,"status":"ready","transportClass":"remote-web-search","localNavigation":"confirmed","targetUrl":"http://localhost:8080/review","evidenceRef":"review/browser/navigation.json"}
+{"schemaVersion":2,"automationTransport":"playwright","status":"ready","transportClass":"remote-web-search","localNavigation":"confirmed","targetUrl":"http://localhost:8080/review","evidenceRef":"review/browser/navigation.json"}
 JSON
+
+# T3 and legacy evidence cannot settle a formal check, even at the right URL.
+touch "$TEST_SERVER_MARKER"
+for provenance_case in t3 legacy; do
+  if [ "$provenance_case" = t3 ]; then
+    jq '.automationTransport="t3"' "$TMP/browser-ready.json" > "$TMP/browser-$provenance_case.json"
+  else
+    jq 'del(.automationTransport) | .schemaVersion=1' "$TMP/browser-ready.json" > "$TMP/browser-$provenance_case.json"
+  fi
+  provenance_prepare="$(run_prepare provenance-$provenance_case --visual-required true)"
+  assert test "$provenance_prepare" -eq 0
+  provenance_rc="$(run_confirm provenance-$provenance_case "$TMP/browser-$provenance_case.json")"
+  assert test "$provenance_rc" -eq 76
+  assert jq -e '.reason == "browser_transport_unavailable" and .dispatchAllowed == false' "$TMP/provenance-$provenance_case.confirmed"
+done
+assert test -e "$TEST_SERVER_MARKER"
+rm -f "$TEST_SERVER_MARKER"
+: > "$TEST_RESOURCE_LOG"
 
 # A server started by the review is cleaned immediately when the local browser
 # is unavailable. Remote web search never satisfies the browser gate.

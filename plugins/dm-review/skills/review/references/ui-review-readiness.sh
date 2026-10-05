@@ -1083,13 +1083,13 @@ fi
 if [ ! -f "$BROWSER_EVIDENCE_FILE" ] || [ -L "$BROWSER_EVIDENCE_FILE" ] ||
    ! jq -e --arg target_url "$TARGET_URL" '
      type == "object" and
-     (keys | sort) == (["evidenceRef","localNavigation","schemaVersion","status","targetUrl","transportClass"] | sort) and
-     .schemaVersion == 1 and .status == "ready" and
+     (keys | sort) == (["automationTransport","evidenceRef","localNavigation","schemaVersion","status","targetUrl","transportClass"] | sort) and
+     .schemaVersion == 2 and .automationTransport == "playwright" and .status == "ready" and
      .transportClass == "local-interactive" and .localNavigation == "confirmed" and
      .targetUrl == $target_url and
      (.evidenceRef | type) == "string" and (.evidenceRef | test("^[a-z0-9][a-z0-9._/-]{0,255}$"))
    ' "$BROWSER_EVIDENCE_FILE" >/dev/null 2>&1; then
-  close_registered_state browser_transport_unavailable 'attach a local interactive browser, navigate the selected target, and rerun'
+  close_registered_state browser_transport_unavailable 'use host Playwright to navigate the selected target and rerun; T3 evidence is handoff-only'
 fi
 update_state ready true || exit 76
 trap - EXIT HUP INT TERM
@@ -1103,7 +1103,7 @@ EVIDENCE_REF="$(jq -r '.evidenceRef' "$BROWSER_EVIDENCE_FILE")"
 if [ "$(jq -r '.targetSource' "$STATE_FILE")" = repository-declaration ]; then
   jq -cn --arg evidence_ref "$EVIDENCE_REF" --argjson created "$CREATED" \
     '{state:"ready",dispatchAllowed:true,reason:"available",targetRef:"private-readiness-state",
-      browserTransport:"local-interactive",browserEvidence:"bounded-host-evidence",evidenceRef:$evidence_ref,
+      browserTransport:"local-interactive",automationTransport:"playwright",browserEvidence:"bounded-host-evidence",evidenceRef:$evidence_ref,
       createdResources:(if $created then 1 else 0 end),
       nextAction:(if $created then
         "dispatch provider-neutral UI analysis without browser capability, then run the exact Workflow Kernel Docker cleanup plan referenced by private readiness state"
@@ -1112,7 +1112,7 @@ if [ "$(jq -r '.targetSource' "$STATE_FILE")" = repository-declaration ]; then
 else
   jq -cn --arg target_url "$TARGET_URL" --arg evidence_ref "$EVIDENCE_REF" --argjson created "$CREATED" \
     '{state:"ready",dispatchAllowed:true,reason:"available",targetUrl:$target_url,
-      browserTransport:"local-interactive",browserEvidence:"bounded-host-evidence",evidenceRef:$evidence_ref,
+      browserTransport:"local-interactive",automationTransport:"playwright",browserEvidence:"bounded-host-evidence",evidenceRef:$evidence_ref,
       createdResources:(if $created then 1 else 0 end),
       nextAction:"dispatch provider-neutral UI analysis without browser capability"}'
 fi

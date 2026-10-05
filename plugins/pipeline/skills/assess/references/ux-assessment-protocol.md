@@ -1,28 +1,22 @@
 # UX Assessment Protocol
 
-Browser-based evaluation of current UX state. In T3 Code, use the collaborative
-preview first; otherwise use the configured browser tools and existing recovery
-fallbacks. Evaluate what exists now, not what changed.
+Evaluate current UX through host Playwright using dm-review’s
+`repository-browser-target-discovery.md` transport, target/source verification
+and bounded recovery contract. T3 supports operator handoff and verified target
+context; it cannot replace required browser proof.
 
 ## Prerequisites
 
-- T3 collaborative preview available in T3 Code, or configured Playwright MCP
-  tools elsewhere (primary:
-  `mcp__plugin_compound-engineering_pw__browser_*`, fallback:
-  `mcp__plugin_playwright_playwright__browser_*`)
-- Dev server running and accessible
+- Callable Playwright MCP tools or an established repository-owned Playwright harness
+- A source-verified maintained development target
 
 ### Dev Server Detection
 
-Check for a running dev server:
-1. Try common ports: 8080, 3000, 4000, 5173, 1313
-2. Check for `docker compose` services
-3. Look for `Procfile`, `Makefile`, or scripts that start dev servers
-4. If no server is found and a declared prototype counterpart or another
-   approved requirement makes rendered evidence mandatory, preserve completed
-   source evidence and return `human_help_required` naming the unavailable
-   prototype or target render. Otherwise skip UX assessment with a note for
-   genuinely non-rendered scope.
+Use the shared repository target discovery order and documented maintenance
+path. Do not scan ports or invent a harness. If required prototype or target
+rendering is unavailable, preserve source evidence and return
+`human_help_required` naming the missing render. Genuinely non-rendered scope
+may skip UX assessment with a note.
 
 ## Step 1: Navigate to Affected Area
 

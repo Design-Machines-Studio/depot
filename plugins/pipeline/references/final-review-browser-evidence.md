@@ -7,7 +7,8 @@ add a browser broker, evidence service, or Workflow Kernel capability.
 ## Capture once at the integrated head
 
 After the integrated feature branch and selected browser cases are final,
-capture those cases once with the existing host-owned browser protocol. Do not
+capture those cases once through dm-review's formal host Playwright contract in
+`repository-browser-target-discovery.md`. T3 handoff does not satisfy capture. Do not
 reuse a chunk packet from an earlier commit. Store bounded artifacts under the
 current ignored owned run location:
 
@@ -19,13 +20,14 @@ Write the explicit selected case IDs to `selected-cases.json` and the bounded
 host capture projection to `capture.json`. The capture projection contains only
 artifact references, compact DOM/class/copy/action observations, compact
 layout/computed-style observations, console/accessibility summary, successful
-completion, and the local-navigation confirmation. It contains no credentials,
+completion, `schemaVersion: 2`, `automationTransport: "playwright"`, and the
+local-navigation confirmation. It contains no credentials,
 private endpoints, browser storage, complete HTML, or unbounded logs.
 
 Resolve `browser-evidence-packet.sh` from the same coherent dm-review bundle
 that the final review will use. Invoke `create` with the exact repository root,
 explicit `capture.json`, explicit output
-`browser-evidence-v1.json`, and exact prototype root when applicable. Creation
+`browser-evidence-v2.json`, and exact prototype root when applicable. Creation
 is permitted only after successful host capture. The helper records repository
 identity, exact commit, clean/dirty state, prototype identity/commit, selected
 case IDs, artifact references/hashes, compact observations, and completion.
@@ -35,7 +37,7 @@ case IDs, artifact references/hashes, compact observations, and completion.
 Pass these exact paths in the enclosing final dm-review invocation:
 
 ```text
-uiBrowserEvidencePacket: plans/<feature-slug>/evidence/browser/final-review/browser-evidence-v1.json
+uiBrowserEvidencePacket: plans/<feature-slug>/evidence/browser/final-review/browser-evidence-v2.json
 uiBrowserSelectedCases: plans/<feature-slug>/evidence/browser/final-review/selected-cases.json
 ```
 
@@ -43,7 +45,7 @@ Never search plans, run roots, screenshots, or timestamps for a packet. Never
 choose a `latest` file. Nested dm-review validates the explicitly passed packet
 against its current selected cases before application readiness.
 
-An exact match replaces a second capture and feeds the same packet to
+Only a version-2 Playwright-provenance packet may replace a second capture and feeds the same packet to
 visual-browser, UX-quality, and UI-standards analysis. Repository identity or
 commit, clean/dirty state, prototype identity or commit, selected case set,
 completion, missing artifact, or hash mismatch rejects reuse. On rejection,

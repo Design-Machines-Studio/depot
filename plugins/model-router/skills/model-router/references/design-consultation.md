@@ -1,20 +1,50 @@
-# Bounded design consultation
+# Bounded design participation
 
-Use role `design-consultant` only for one unresolved UI or design judgment that
-the prototype and current rendered evidence do not already settle. The default
-policy uses native Codex with an eligible OpenRouter fallback. Claude is excluded
-from automatic routing. A consultant is never the design authority or builder.
+The operator requires Opus 5.5 for applicable UI/UX judgment and front-facing
+design repair drafting. `design-consultant` has exactly one candidate in
+`role-policy.json`: `claude-opus-5-5` over native `claude-cli`, with an exact
+served-identity check. There is no substitute candidate. This supersedes the
+prior Fable preference and Claude exclusion only for this role. Other roles
+retain economical routing; Codex owns orchestration, backend work, integration
+and verification.
 
-The caller supplies exactly one question, the relevant prototype excerpt or
-screenshots, the matching implementation evidence, and the constraints needed
-to answer it. Do not grant repository exploration or write capabilities. Ask
-for one decision, a reason, and at most three implementation implications.
-Use the existing one-shot dispatcher and native/OpenRouter timeouts. Output
-brevity is advisory where the selected transport has no enforceable output cap. Do not repeat the consultation after a completed
-answer. The cheaper routed builder implements the resulting settled decision.
+## Current identity/catalog evidence
 
-For separately configured native Claude use only: if Claude is missing, exhausted,
-locally disabled, or returns a provider-side
-identity outside `servedIdentities`, retain the router receipt and use the one
-normal fallback. Never retry an exhausted Claude rail, buy Claude overage
-automatically, or claim an unobserved served identity.
+Verified 2026-10-05 against Anthropic's [model overview](https://platform.claude.com/docs/en/models/opus-5-5/overview)
+and [Claude Code model configuration](https://support.claude.com/en/articles/11940350-claude-code-model-configuration):
+`claude-opus-5-5` is the documented identifier and Claude Code supports native
+selection. This is catalog/transport evidence, not proof of this account's
+model access or remaining subscription allowance. Dispatch checks current auth,
+subscription/credit eligibility and allowance evidence and validates the served
+identity. Unknown allowance stays unknown; one bounded eligible attempt may
+establish actual availability. Paid credits remain disabled unless the existing
+local operator preference explicitly enables them. No automatic overage.
+
+## Bounded packet and authority
+
+Use this role for selected UX-quality, UI-standards and visual design judgment,
+and for affected front-facing design repair decisions/patch drafts. Accessibility,
+security and functional lanes retain their ordinary roles and mandatory gates.
+Pass the affected surfaces and required interaction/persona cases, approved
+requirements, exact prototype source, HTML hierarchy, Live Wires class strings,
+Datastar events, save semantics and matched screenshots/DOM/interaction evidence.
+One completed decision per affected repair batch is enough; do not commission
+an unrelated design sweep or repeat settled judgments.
+
+The participant has final design judgment among agents, subject to the
+operator's explicit decisions and approved prototype. It cannot redesign a
+settled prototype choice or waive accessibility, security or functionality.
+Ask for the smallest adequate patch/decision, rationale and verification cases.
+The native transport is prompt-only (`--tools ""`): the host supplies sufficient
+source and browser evidence, applies the accepted patch, commits/pushes and
+verifies it. Do not advertise write/tool/browser capabilities or move the whole
+implementation workflow into Claude. Model identity and browser availability
+are separate: use dm-review's existing browser evidence handoff when direct
+browser tools are absent.
+
+Unavailable, disabled, exhausted, missing identity or provider substitution
+returns the existing role-level `model_participant_unavailable` result. Retain
+its exact private reason and report required design coverage as incomplete;
+never silently substitute another model. Concrete identity is operator-visible
+through the existing recommendation/terminal report, outside ordinary participant
+packets. No new account budget service or organization ceiling is claimed.

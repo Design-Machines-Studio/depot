@@ -18,13 +18,12 @@ Concrete identities here are operator-only; `role-policy.json` owns selection.
 | Complex implementation requiring unresolved judgment | `builder-deep`; Luna Medium | GPT-6.1 Sol, then Astra only for concrete difficulty |
 | Unresolved architecture | `architect`; GPT-6.1 Sol Medium | Astra for particularly difficult architecture; not a routine planning default |
 | Standalone review orchestration | `review-coordinator`; GPT-6.1 Sol Medium | Astra for difficult judgment; do not repeat already valid reviews |
-| Narrow design question | `design-consultant`; GPT-6.1 Sol Medium with the prototype as authority | Existing eligible specialist fallback, not a redesign mandate |
+| Applicable UI/UX judgment and front-facing design fixes | `design-consultant`; Opus 5.5 Medium, bounded to affected surfaces | No substitution; unavailable required design coverage blocks closeout |
 | Bounded inexpensive or specialized analysis | Eligible OpenRouter participant | Host retains tools, integration and verification unless transport proves otherwise |
 
-Codex drives coding, integration and verification. Claude is excluded from the
-default candidate policy, including design consultations; available Claude
-credentials do not restore automatic eligibility. Native Claude transport remains
-compatible for separately configured use, without any paid-overage default.
+Codex drives orchestration, backend coding, integration and verification.
+The required design role uses native Claude under `design-consultation.md`;
+Claude availability does not route other coding or review lanes to that rail.
 
 Do not add delegation automatically. For a small settled task, packet preparation,
 duplicate context and synthesis may cost more than direct execution. When useful,

@@ -44,7 +44,7 @@ For a declared counterpart, navigate prototype and target at the same
 meaningful routes, states, and viewports. Capture affected screenshots,
 accessibility/DOM snapshots, targeted hierarchy, actual class lists, visible
 copy/action order, and only the computed layout/spacing values needed to explain
-a mismatch. Use T3 collaborative preview first in T3 Code. A target-only
+a mismatch. Use dm-review's formal Playwright transport contract. A target-only
 screenshot, curl, or `looks close` is incomplete prototype evidence.
 
 For each affected interaction, perform the same action in both apps. Inspect

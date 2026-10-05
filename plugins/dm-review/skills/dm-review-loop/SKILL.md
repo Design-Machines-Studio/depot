@@ -20,6 +20,11 @@ argument-hint: "[optional: --full, --max-iterations N, PR number, branch, or pat
 
 Automates the cycle of reviewing code, fixing required findings, and re-reviewing affected lanes until clean.
 
+Implementation callers load `references/automatic-implementation-closeout.md`.
+Resume the attributable owner and existing evidence before initialization;
+Pipeline-owned sequences use their existing root and final gate. Repair pushes
+advance this loop and never recursively invoke another loop.
+
 ## Zero-Deferral Finding Policy
 
 Every retained P1, P2, and P3 finding enters the fix queue and must be resolved.

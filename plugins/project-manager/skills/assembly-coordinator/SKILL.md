@@ -139,6 +139,12 @@ If no lane is safe, say `None`.
 
 Prepare a copy-paste prompt only when requested. Prefer a direct implementation prompt for narrow work. Use `/pipeline`, `/pipeline-run`, `/pipeline-fix`, or `/dm-review-loop` only when that workflow is proportional to the task; preparing a prompt does not authorize running it.
 
+Direct prompts require dm-review's `automatic-implementation-closeout.md`:
+automatic proportional review/repair after verified PR push, ending in validated
+final-head evidence or a precise blocker. Pipeline retains its existing final
+gate. Require Playwright for formal browser checks, T3 for operator handoff.
+Preparation stays planning-only.
+
 Every prompt must state:
 
 - repository and exact base;

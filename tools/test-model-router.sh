@@ -939,9 +939,23 @@ fixture second-eligible-operator
 run_role architect-b architect medium --capability read-repository --capability structured-output
 assert jq -e '.served.model == "gpt-6.1-sol" and .served.billingMode == "included-subscription"' "$TMP/architect-b.receipt"
 
-# Default policy excludes Claude even when its subscription is healthy.
-assert jq -e 'all(.roles[][]; .transport != "claude-cli")' "$(dirname "$ROUTER")/role-policy.json"
+# Claude is reserved for the required design role.
+assert jq -e 'all(.roles | to_entries[] | select(.key != "design-consultant"); all(.value[]; .transport != "claude-cli"))' "$(dirname "$ROUTER")/role-policy.json"
 assert jq -e 'all(.roles[][]; .model != "gpt-6-sol") and any(.roles[][]; .model == "gpt-6.1-sol")' "$(dirname "$ROUTER")/role-policy.json"
+# Required design participant: exact identity, no fallback to other rails.
+fixture healthy
+printf '%s\n' '{"model":"claude-opus-5-5"}' > "$TMP/opus55.json"
+MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/opus55.json" \
+  run_role required-design design-consultant medium --capability read-repository --capability structured-output
+assert jq -e '.served.model == "claude-opus-5-5" and .served.servedIdentity == "claude-opus-5-5" and .served.transport == "claude-cli" and .fallback == false' "$TMP/required-design.receipt"
+printf '%s\n' '{"model":"claude-sonnet-5-5"}' > "$TMP/substitute.json"
+MODEL_ROUTER_STUB_PROVIDER_RECEIPT="$TMP/substitute.json" \
+  run_role required-design-substitution design-consultant medium --capability structured-output || assert test "$?" -eq 76
+assert jq -e '.served == null and (.attempts | length) == 1 and .attempts[0].reason == "provider_model_substitution"' "$TMP/required-design-substitution.receipt"
+fixture fable-exhausted
+run_role required-design-unavailable design-consultant medium --capability structured-output || assert test "$?" -eq 76
+assert jq -e '.served == null and (.attempts | length) == 1 and .attempts[0].outcome == "skipped"' "$TMP/required-design-unavailable.receipt"
+fixture healthy
 # Preserve transport compatibility coverage using an explicitly configured policy.
 DEFAULT_ROUTER="$ROUTER"
 cp -R "$(dirname "$ROUTER")" "$TMP/claude-opt-in-router"
@@ -1239,7 +1253,7 @@ run_role review-coordinator review-coordinator medium --capability read-reposito
 assert jq -e '.served.model == "gpt-6.1-sol" and .served.transport == "codex-cli" and .normalizedEffort == "medium"' "$TMP/review-coordinator.receipt"
 # Opt-in transport identity tests do not re-enable Claude in the shipped policy.
 ROUTER="$TMP/claude-opt-in-router/role-dispatch.sh"
-jq '.roles["design-consultant"] |= ([{model:"fable",servedIdentities:["claude-fable-5"],provider:"anthropic",transport:"claude-cli",family:"anthropic",billing:"subscription-or-local-paid-credits",capabilities:["long-context","structured-output"]}] + .)' \
+jq '.roles["design-consultant"] = ([{model:"fable",servedIdentities:["claude-fable-5"],provider:"anthropic",transport:"claude-cli",family:"anthropic",billing:"subscription-or-local-paid-credits",capabilities:["long-context","structured-output"]},{model:"gpt-6.1-sol",provider:"openai",transport:"codex-cli",family:"openai",billing:"included-subscription",capabilities:["long-context","structured-output"]}])' \
   "$TMP/claude-opt-in-router/role-policy.json" > "$TMP/claude-design-policy.json"
 mv "$TMP/claude-design-policy.json" "$TMP/claude-opt-in-router/role-policy.json"
 printf '%s\n' '{}' > "$TMP/fable-missing-identity.json"

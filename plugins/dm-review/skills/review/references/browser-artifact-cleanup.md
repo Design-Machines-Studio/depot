@@ -2,9 +2,11 @@
 
 Before browser capture, the host selects one absolute evidence directory in the
 repository's documented ignored artifact area (verify with `git check-ignore`)
-or its existing external run-artifact location. Never use the repository root
-or a bare screenshot filename. Pass this destination to every browser tool and
-worker; record exact returned paths for screenshots, snapshots, traces, videos,
+or its existing external run-artifact location. Never use the repository root. Pass this destination to browser tools and
+workers. When a tool explicitly restricts output roots, use a unique run-owned
+filename under its permitted artifact root, then copy and verify the bytes into
+the selected evidence directory before packet creation. This path restriction
+is an actionable capture error, not browser unavailability. Record exact returned paths for screenshots, snapshots, traces, videos,
 and console dumps in the existing run ownership records. Include captures made
 in the maintained serving checkout, not only the implementation worktree.
 
