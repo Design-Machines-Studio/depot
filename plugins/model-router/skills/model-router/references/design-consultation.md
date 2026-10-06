@@ -3,10 +3,10 @@
 The operator requires Opus 5.5 for applicable UI/UX judgment and front-facing
 design repair drafting. `design-consultant` has exactly one candidate in
 `role-policy.json`: `claude-opus-5-5` over native `claude-cli`, with an exact
-served-identity check. There is no substitute candidate. This supersedes the
-prior Fable preference and Claude exclusion only for this role. Other roles
-retain economical routing; Codex owns orchestration, backend work, integration
-and verification.
+served-identity check. There is no substitute candidate. This exact identity requirement applies only to this role. Other roles
+follow the shared policy: Fable leads architecture/deep review and Opus/Sol
+implements substantive changes. The design consultant remains a bounded
+evidence-only participant.
 
 ## Current identity/catalog evidence
 
@@ -37,8 +37,9 @@ settled prototype choice or waive accessibility, security or functionality.
 Ask for the smallest adequate patch/decision, rationale and verification cases.
 The native transport is prompt-only (`--tools ""`): the host supplies sufficient
 source and browser evidence, applies the accepted patch, commits/pushes and
-verifies it. Do not advertise write/tool/browser capabilities or move the whole
-implementation workflow into Claude. Model identity and browser availability
+verifies it. Do not advertise write/tool/browser capabilities for `design-consultant`.
+The separate `builder-deep` role supports native Claude implementation tools;
+its permissions do not expand this consultation role. Model identity and browser availability
 are separate: use dm-review's existing browser evidence handoff when direct
 browser tools are absent.
 

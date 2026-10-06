@@ -295,7 +295,9 @@ candidate_has_capabilities() {
     ($requested - ["independent-family"]) as $needed
     | all($needed[]; . as $cap | $candidate.capabilities | index($cap) != null)
     and (($requested | index("read-repository") | not)
-      or $candidate.transport == "codex-cli" or $evidence != "")'
+      or $candidate.transport == "codex-cli"
+      or ($candidate.transport == "claude-cli" and ($candidate.capabilities | index("tool-use") != null))
+      or $evidence != "")'
 }
 
 closed_openrouter_failure_reason() {
@@ -625,7 +627,18 @@ invoke_candidate() {
         printf '\n\n--- bound behavioral contract ---\ncontract_digest: %s\ncontract_revision: %s\n' \
           "$CONTRACT_DIGEST" "$CONTRACT_REVISION" >> "$prompt_copy"
       fi
-      argv=("$ROUTER_CLAUDE_CLI" -p --model "$model" --effort "$effective" --tools "" --no-session-persistence --output-format json)
+      argv=("$ROUTER_CLAUDE_CLI" -p --model "$model" --effort "$effective" --no-session-persistence --output-format json)
+      # The required design consultant remains evidence-only. Coding candidates
+      # can inspect files; only a bound write request receives mutation tools.
+      if printf '%s' "$candidate" | jq -e '.capabilities | index("tool-use") != null' >/dev/null; then
+        if [ "$WRITE_REQUEST" -eq 1 ]; then
+          argv+=(--tools "Read,Glob,Grep,Edit,Write,Bash" --allowedTools "Read,Glob,Grep,Edit,Write,Bash")
+        else
+          argv+=(--tools "Read,Glob,Grep" --allowedTools "Read,Glob,Grep")
+        fi
+      else
+        argv+=(--tools "")
+      fi
       ATTEMPT_TRANSMITTED_EFFORT="$effective"
       ATTEMPT_EFFORT_STATUS="transmitted"
       ATTEMPT_EFFORT_EVIDENCE="native-cli-argument"
@@ -964,7 +977,7 @@ while IFS= read -r candidate; do
   fi
   if [ "$reason" = quota-exhausted ] || [ "$reason" = rate_limit_exhausted ] ||
      { [ "$transport" = openrouter ] && [ "$reason" = insufficient_credits ]; }; then
-    if [ "$transport" = codex-cli ] ||
+    if [ "$transport" = codex-cli ] || [ "$transport" = claude-cli ] ||
        { [ "$transport" = openrouter ] && [ "$reason" = insufficient_credits ]; }; then
       EXHAUSTED_TRANSPORTS="$(printf '%s' "$EXHAUSTED_TRANSPORTS" | jq -c --arg value "$transport" '. + [$value] | unique')"
     else

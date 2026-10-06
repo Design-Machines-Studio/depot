@@ -240,8 +240,10 @@ per-operator subscription and billing eligibility, availability, fallback,
 family independence, and exact private receipts. Operational agent cards use
 `model: inherit`; their frontmatter never selects a routed participant.
 
-Codex drives coding and verification, with eligible OpenRouter support. Claude
-is excluded from default routing; native transport compatibility remains. No
+Eligible native Claude and Codex subscriptions share implementation and review.
+Opus leads substantive implementation and required design judgment; Fable leads
+architecture and deep review, with Sol as an implementation fallback. Luna
+handles mechanical work and bounded evidence gathering. No
 tracked policy contains a developer identity, allocation, plan, quota, or paid
 credit preference. OpenRouter remains the authority for its credential loading,
 provider catalog, wrapper, response provenance, provider receipt, and direct

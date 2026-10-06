@@ -54,18 +54,20 @@ A chunk is a logically complete unit (one feature aspect, one migration, one com
    Then derive `executorRole`, `executorCapabilities`, and `executorEffort` from
    `plugins/pipeline/references/routing-policy.json`:
    - bounded config, docs, and mechanical work -> `builder-fast`;
-   - settled bounded UI with exact prototype/acceptance evidence ->
-     `builder-fast` at `high`; named unresolved design or complex logic
-     -> `builder-deep` at `medium`;
+   - substantive logic, UI and integration, including implementation of an
+     exact prototype -> `builder-deep` at `high`; prototype evidence settles
+     requirements but does not remove implementation judgment;
+   - use a `bounded-mechanical-work` override for a genuinely mechanical edit
+     inside those file types; small file count alone is not enough;
    - add `tool-use`, `long-context`, or `structured-output` only when the
      worker actually requires that capability, using the closed routing override
      when the policy default differs;
    - `browser` requires worker interaction, not rendered acceptance. Host-owned
      browser evidence never adds it to `executorCapabilities`.
 
-   The driver owns design, integration and final review. `builder-fast` at `high`
-   requires settled requirements, owned files and verifiable acceptance; `max`
-   requires demonstrated difficulty. Keep mechanical work lower. Use
+   The driver owns design, integration and final review. `builder-fast` requires
+   mechanical scope, owned files and verifiable acceptance; `max` requires
+   named exceptional difficulty. Keep mechanical work lower. Use
    `bounded-mechanical-work` only when true; unresolved judgment uses `builder-deep`.
    Workers never inherit driver effort. Effort changes neither review lanes nor
    verification. Validate this workflow hypothesis on real chunks.

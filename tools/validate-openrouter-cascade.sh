@@ -6,5 +6,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 "$ROOT/tools/test-model-router.sh"
+"$ROOT/tools/test-model-router-quality.sh"
+"$ROOT/tools/test-assembly-coordinator-recommendation.sh"
 "$ROOT/tools/validate-provider-neutral-routing.sh"
 printf '%s\n' 'OK    provider-neutral model-router boundary valid'

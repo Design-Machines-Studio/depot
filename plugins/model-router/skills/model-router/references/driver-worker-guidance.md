@@ -1,6 +1,6 @@
 # Main driver and bounded workers
 
-Human-facing policy, updated 2026-09-30. Optimize total completion cost:
+Human-facing policy, updated 2026-10-07. Optimize total completion cost:
 input (including repeated cached context), output/reasoning, retries, integration
 and review, defects/rework, elapsed time and maintainer attention. Start with the
 lowest capable model for the whole job, not the cheapest token price. A stronger
@@ -14,16 +14,24 @@ Concrete identities here are operator-only; `role-policy.json` owns selection.
 |---|---|---|
 | Evidence gathering, release-readiness checks, routine planning and coordination | `research-fast`; GPT-6 Luna Medium in Codex | GPT-6.1 Sol Medium when evidence materially conflicts |
 | Mechanical/docs changes | `builder-fast`; Luna Low or Medium | Increase only for demonstrated difficulty |
-| Bounded implementation, including settled UI, logic and integration | `builder-fast`; Luna High | GPT-6.1 Sol after one focused failed attempt or named uncertainty |
-| Complex implementation requiring unresolved judgment | `builder-deep`; Luna Medium | GPT-6.1 Sol, then Astra only for concrete difficulty |
-| Unresolved architecture | `architect`; GPT-6.1 Sol Medium | Astra for particularly difficult architecture; not a routine planning default |
+| Mechanical implementation with exact acceptance | `builder-fast`; Luna Low/Medium, High for extra care | GPT-6.1 Sol when judgment is needed |
+| Substantive UI, logic, integration and significant code changes | `builder-deep`; Opus 5.5 High | GPT-6.1 Sol, then Astra under current availability |
+| Unresolved architecture and deep code/architecture review | `architect` / `review-deep`; Fable High | Opus 5.5, then eligible native Sol |
 | Standalone review orchestration | `review-coordinator`; GPT-6.1 Sol Medium | Astra for difficult judgment; do not repeat already valid reviews |
 | Applicable UI/UX judgment and front-facing design fixes | `design-consultant`; Opus 5.5 Medium, bounded to affected surfaces | No substitution; unavailable required design coverage blocks closeout |
 | Bounded inexpensive or specialized analysis | Eligible OpenRouter participant | Host retains tools, integration and verification unless transport proves otherwise |
 
-Codex drives orchestration, backend coding, integration and verification.
-The required design role uses native Claude under `design-consultation.md`;
-Claude availability does not route other coding or review lanes to that rail.
+Fable leads architecture and review; Opus/Sol implements. Luna remains useful
+for mechanical changes, bounded research and routine checks. Do not assign
+substantive work to a fast role merely because requirements are settled or
+weekly allowance is plentiful. Pipeline provides structure; it does not turn
+a weaker executor into a substitute for design judgment. These preferences
+reflect operator experience, not a new benchmark claim.
+
+Coordinator prompts invoke Pipeline for nontrivial implementation and select
+the existing run/fix entrypoint when artifacts already exist. Direct execution
+is reserved for low-impact mechanical edits. The required design role keeps
+its exact identity contract under `design-consultation.md`.
 
 Do not add delegation automatically. For a small settled task, packet preparation,
 duplicate context and synthesis may cost more than direct execution. When useful,
@@ -88,7 +96,7 @@ credential. A 429 `rate_limited` response remains distinct. Missing token or
 cost measurements stay unavailable in the terminal receipt and never gate a
 required review lane.
 
-Native Codex remains first; OpenRouter eligibility stays in the role policy.
+Native subscription order follows the role; OpenRouter eligibility stays in the role policy.
 GPT-6.1 Sol/Luna guidance uses the 2026-09-30 OpenAI model cards; other catalog rows
 retain their explicitly dated prior evidence. New native API-equivalent aliases
 remain unavailable until imputation respects long-input tiers. Historical

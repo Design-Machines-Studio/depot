@@ -1,4 +1,4 @@
-# Claude Non-Coding Tuning
+# Claude Effort Tuning
 
 Claude host effort compatibility. For current cross-harness driver/worker guidance,
 see [driver-worker guidance](../plugins/model-router/skills/model-router/references/driver-worker-guidance.md).
@@ -64,7 +64,8 @@ not choose a routed participant.
 
 ## Fable availability
 
-Fable is a normal router-owned `architect` and `editorial` candidate. Never pin
+Fable leads router-owned `architect`, `plan-critic` and `review-deep` lanes.
+Opus/Sol implements significant code changes; Fable does not receive write roles. Never pin
 it in agent frontmatter or orchestration prompts. Each dispatch checks current
 Claude CLI authentication, positively reported subscription type, observable
 interactive or Agent SDK headroom, bounded invocation results, and the ignored

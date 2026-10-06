@@ -8,6 +8,12 @@ KERNEL="$ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow
 FIXTURES="$ROOT/plugins/model-router/skills/model-router/tests/availability-fixtures.json"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/model-router-tests.XXXXXX")"
 trap 'rm -rf "$TMP"' EXIT
+# Transport/provenance regression cases use a fixed candidate roster. Current
+# production role choices are exercised by test-model-router-quality.sh and
+# test-assembly-coordinator-recommendation.sh.
+cp -R "$(dirname "$ROUTER")" "$TMP/mechanics-router"
+cp "$ROOT/tests/fixtures/model-router-mechanics-policy.json" "$TMP/mechanics-router/role-policy.json"
+ROUTER="$TMP/mechanics-router/role-dispatch.sh"
 export MODEL_ROUTER_TEST_MODE=1
 
 pass=0
@@ -460,7 +466,7 @@ assert jq -e '.requested.role == "builder-fast" and .requested.effort == "medium
   ([.attempts[] | select(.transport == "openrouter")][0].providerFailureEvidence.httpStatus == 402) and
   .served.tokens == null and .served.billedCostUsd == null' "$TMP/real-credits.receipt"
 assert test "$(cat "$credit_fallback_repo/tracked.txt")" = initial
-ROUTER="$ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh"
+ROUTER="$TMP/mechanics-router/role-dispatch.sh"
 
 real_success_repo="$(run_real_write_case real-success success)"
 assert test "$(cat "$TMP/real-success.rc")" -eq 0
@@ -939,7 +945,7 @@ fixture second-eligible-operator
 run_role architect-b architect medium --capability read-repository --capability structured-output
 assert jq -e '.served.model == "gpt-6.1-sol" and .served.billingMode == "included-subscription"' "$TMP/architect-b.receipt"
 
-# Claude is reserved for the required design role.
+# The fixed mechanics roster reserves Claude for the required design role.
 assert jq -e 'all(.roles | to_entries[] | select(.key != "design-consultant"); all(.value[]; .transport != "claude-cli"))' "$(dirname "$ROUTER")/role-policy.json"
 assert jq -e 'all(.roles[][]; .model != "gpt-6-sol") and any(.roles[][]; .model == "gpt-6.1-sol")' "$(dirname "$ROUTER")/role-policy.json"
 # Required design participant: exact identity, no fallback to other rails.
@@ -1251,7 +1257,7 @@ assert jq -e '.fallback == true and .fallbackReason == "content-refusal" and .se
 fixture healthy
 run_role review-coordinator review-coordinator medium --capability read-repository --capability long-context --capability structured-output
 assert jq -e '.served.model == "gpt-6.1-sol" and .served.transport == "codex-cli" and .normalizedEffort == "medium"' "$TMP/review-coordinator.receipt"
-# Opt-in transport identity tests do not re-enable Claude in the shipped policy.
+# Synthetic role order isolates transport identity tests from production preferences.
 ROUTER="$TMP/claude-opt-in-router/role-dispatch.sh"
 jq '.roles["design-consultant"] = ([{model:"fable",servedIdentities:["claude-fable-5"],provider:"anthropic",transport:"claude-cli",family:"anthropic",billing:"subscription-or-local-paid-credits",capabilities:["long-context","structured-output"]},{model:"gpt-6.1-sol",provider:"openai",transport:"codex-cli",family:"openai",billing:"included-subscription",capabilities:["long-context","structured-output"]}])' \
   "$TMP/claude-opt-in-router/role-policy.json" > "$TMP/claude-design-policy.json"

@@ -137,7 +137,22 @@ If no lane is safe, say `None`.
 
 ## Prepare execution prompts proportionally
 
-Prepare a copy-paste prompt only when requested. Prefer a direct implementation prompt for narrow work. Use `/pipeline`, `/pipeline-run`, `/pipeline-fix`, or `/dm-review-loop` only when that workflow is proportional to the task; preparing a prompt does not authorize running it.
+Prepare a copy-paste prompt only when requested. Default nontrivial product
+implementation to an explicit Pipeline invocation inside the copy-paste block:
+`/pipeline` for a feature or change needing planning, `/pipeline-run` with the
+exact existing manifest for prepared execution, or `/pipeline-fix` with the
+numbered findings for a repair pass. Review-only work uses `/dm-review-loop`.
+Tell the executor to load and invoke the named plugin, not imitate its phases.
+Preparing the prompt does not authorize this coordinator to run it.
+
+Direct implementation is the exception for genuinely mechanical, low-impact
+edits with settled acceptance (for example, a typo or literal config update).
+State why that exception applies. A bounded branch, small file count, known
+prototype, or cheaper executor does not make substantive behavior, UI or
+integration work mechanical. Pipeline supplies execution and review structure
+for every executor; it does not compensate for unresolved design judgment.
+If the selected plugin is unavailable at execution time, report the missing
+workflow instead of silently substituting an unstructured implementation.
 
 Direct prompts require dm-review's `automatic-implementation-closeout.md`:
 automatic proportional review/repair after verified PR push, ending in validated
@@ -172,17 +187,20 @@ Every prompt must state:
 - terminal handoff, including what must remain unmerged or unchanged.
 - `executorRole`, `executorCapabilities`, and `executorEffort` for every
   implementation or review lane. Start with `research-fast` at `medium` for evidence gathering, release-readiness
-  checks and routine planning; `builder-fast` for settled implementation, including
-  logic, UI and integration; and the matching review role. File type, file count,
-  UI or integration labels alone never justify `builder-deep` or an architect.
+  checks and routine planning; `builder-fast` for mechanical implementation;
+  `builder-deep` for substantive logic, UI, integration and significant code
+  changes; and the matching review role. Use `architect` for unresolved
+  architecture, `review-deep` for architectural/code judgment, and
+  `design-consultant` for applicable design review. File count alone is not a
+  measure of difficulty. A settled prototype still requires execution judgment.
   `executorCapabilities` are worker-only; `browser` requires supported
   transport, not rendered acceptance. Host owns browser work/evidence; setup gaps
   do not imply unavailability.
-  For a bounded implementation with settled requirements, exact file ownership,
-  and verifiable acceptance criteria, use `builder-fast` at `high`; reserve
-  `max` for a demonstrated difficulty and keep mechanical tasks lower. Use
-  `builder-deep` at `medium` for demanding design or integration, escalating
-  only when the task warrants it. The main driver retains design decisions,
+  Use `builder-fast` at `low` or `medium` for mechanical tasks, and at `high`
+  only for a bounded settled task needing extra care. Start `builder-deep`,
+  architecture and deep review at `high`; reserve `max` for named exceptional
+  difficulty. Do not require a failed cheap-model attempt before choosing the
+  role the task needs. The main driver retains design decisions,
   integration, and final review; workers do not inherit its model or effort.
 
 If dm-review is absent, continue prompt preparation from the current user
@@ -210,9 +228,10 @@ A diagnosed Node builder policy repair with owned files and objective scans is
 `research-fast`/`medium`. Security judgment or conflicting publication evidence
 can justify escalation; the topic name alone cannot.
 
-Codex owns execution and verification; cheap or specialized OpenRouter support
-is optional, never an automatic extra agent. Use current model-router policy;
-Claude availability must not reinstate retired coding recommendations. Keep
+Use current model-router policy for eligible Claude, Codex and OpenRouter
+participants. Stronger architecture, implementation and review roles are
+justified by substantive judgment; do not optimize for weekly mileage at the
+expense of accepted quality. Additional participants remain proportional. Keep
 exact models outside participant packets, and distinguish text-only analysis or
 patch drafting from autonomous tool-capable work.
 
@@ -227,7 +246,7 @@ a source PR alone does not update other planning threads.
 
 Whenever this coordinator produces an implementation or review copy-paste
 prompt, resolve one coherent model-router bundle through Workflow Kernel at
-minimum version `0.9.0`, requiring
+minimum version `0.12.0`, requiring
 `skills/model-router/references/operator-recommendation.sh`, `role-policy.json`,
 and `availability-probe.sh`. Resolve the current OpenRouter
 `model-matrix.json` through Workflow Kernel without changing it. Invoke the
@@ -255,7 +274,9 @@ matrix prices. Never hardcode a favourite or prose price here. Preserve an
 explicit unknown availability label. Native marginal cost is `included
 subscription`; its separately labeled API-equivalent estimate remains planning
 evidence, never billed subscription spend. OpenRouter prices come from the
-fresh checked-in matrix. Return one primary and one fallback, not a menu.
+fresh checked-in matrix. Return one primary and one fallback, not a menu. The required `design-consultant`
+is the explicit exception: report no substitute when the renderer returns a
+null fallback.
 
 The renderer and runtime dispatcher consume the same live host evidence
 semantics. Native CLI paths are resolved from the coordinator caller before the
@@ -291,7 +312,8 @@ Return a compact, outcome-first report containing:
 9. when the opinion path ran, `Plan A`, `Plan B` or its unavailable state, and
    one bounded synthesis;
 10. immediately before each requested copy-paste execution prompt, one
-    concrete `Recommended start` projection and exactly one fallback;
+    concrete `Recommended start` projection and one fallback (or the required
+    design role’s explicit no-substitute result);
 11. one complete copy-paste execution prompt when requested, with
     provider-neutral role, capabilities, and effort;
 12. only when the opinion path actually dispatched a role, the already-
