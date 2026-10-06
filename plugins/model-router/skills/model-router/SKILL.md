@@ -119,12 +119,14 @@ exhausted Claude rail.
 
 For applicable UI/UX judgment and front-facing design repair drafting, load
 `${CLAUDE_SKILL_DIR}/references/design-consultation.md` and request
-`design-consultant`. This required policy participant has no substitute; missing
-availability leaves required design coverage incomplete. Other roles follow the current candidate policy: Fable leads architecture
-and deep review; Opus/Sol implements substantive changes; fast roles retain
+`design-consultant`. Opus 5.5 falls back to Sol 6.1 for this required review;
+only exhaustion of both candidates leaves required design coverage incomplete.
+Other roles follow the current candidate policy: Fable leads architecture
+and deep review with Astra as its immediate fallback; Opus 5.5 uses Sol 6.1
+as its immediate fallback and implements substantive changes; fast roles retain
 bounded mechanical work. Claude coding candidates can use Read/Glob/Grep;
-a bound write request also enables Edit/Write/Bash. Evidence-only candidates,
-including `design-consultant`, keep tools disabled. Browser evidence remains
+a bound write request also enables Edit/Write/Bash. Evidence-only Claude candidates,
+including the primary `design-consultant`, keep tools disabled. Browser evidence remains
 host-owned. Read-only Claude lanes cannot execute shell-based tests; those
 checks remain host-owned or use a separately suitable verification lane.
 

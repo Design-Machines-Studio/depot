@@ -132,7 +132,7 @@ candidate_status() {
       paid="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.paidCreditsEnabled // empty')"
       [ -n "$paid" ] || paid="$PAID_CLAUDE_CREDITS"
       [ "$auth" = subscription ] || { printf unavailable; return; }
-      if [ "$model" = fable ] && [ "$(printf '%s' "$AVAILABILITY" | jq -r '.claude.fable // "unknown"')" = exhausted ]; then
+      if [ "$model" = fable ] && printf '%s' "$AVAILABILITY" | jq -e '.claude.fable == "exhausted" or .claude.fable == "unavailable"' >/dev/null; then
         printf unavailable
       elif [ "$plan" = credits-only ]; then
         if [ "$paid" = true ] && [ "$state" != unavailable ]; then printf attemptable
@@ -172,14 +172,10 @@ PRIMARY="$(printf '%s' "$CANDIDATES" | jq -c '([.[] | select(.availability == "a
 }
 PRIMARY_MODEL="$(printf '%s' "$PRIMARY" | jq -r '.model')"
 FALLBACK="$(printf '%s' "$CANDIDATES" | jq -c --arg model "$PRIMARY_MODEL" '([.[] | select(.model != $model and (.availability == "available" or .availability == "attemptable"))][0] // [.[] | select(.model != $model and .availability == "unknown")][0] // [.[] | select(.model != $model and .availability == "unavailable")][0]) // empty')"
-if [ -z "$FALLBACK" ] || [ "$FALLBACK" = null ]; then
-  if [ "$ROLE" = design-consultant ]; then
-    FALLBACK=null # Exact required participant; policy deliberately forbids substitution.
-  else
-    jq -cn --arg role "$ROLE" '{recommendedStart:null,reason:"no_concrete_fallback",role:$role}'
-    exit 76
-  fi
-fi
+[ -n "$FALLBACK" ] && [ "$FALLBACK" != null ] || {
+  jq -cn --arg role "$ROLE" '{recommendedStart:null,reason:"no_concrete_fallback",role:$role}'
+  exit 76
+}
 
 harness_for() {
   case "$1" in codex-cli) printf Codex ;; claude-cli) printf 'Claude Code' ;; openrouter) printf OpenRouter ;; esac
@@ -257,7 +253,7 @@ RESULT="$(jq -cn --arg model "$PRIMARY_MODEL" --arg harness "$PRIMARY_HARNESS" \
   --arg fallback_harness "$FALLBACK_HARNESS" --arg fallback_availability "$FALLBACK_AVAILABILITY" \
   --arg snapshot "$SNAPSHOT" --argjson cost "$PRIMARY_COST" \
   '{recommendedStart:{model:$model,harness:$harness,effort:$effort,availability:$availability,availabilityReason:(if $availability_reason == "" then null else $availability_reason end),why:$why,cost:$cost,
-    fallback:(if $fallback_model == "null" then null else {model:$fallback_model,harness:$fallback_harness,availability:$fallback_availability} end),matrixEvidence:$snapshot}}')"
+    fallback:{model:$fallback_model,harness:$fallback_harness,availability:$fallback_availability},matrixEvidence:$snapshot}}')"
 
 if [ "$FORMAT" = json ]; then
   printf '%s\n' "$RESULT"
@@ -281,9 +277,5 @@ printf -- '- Harness/rail: %s\n' "$PRIMARY_HARNESS"
 printf -- '- Effort: %s\n' "$EFFECTIVE_EFFORT"
 printf -- '- Why: %s\n' "$WHY"
 printf -- '- Cost: %s\n' "$COST_TEXT"
-if [ "$FALLBACK" = null ]; then
-  printf '%s\n' '- Fallback: none; required design participant has no substitute'
-else
-  printf -- '- Fallback: %s via %s (availability: %s)\n' "$(printf '%s' "$FALLBACK" | jq -r '.model')" "$FALLBACK_HARNESS" "$FALLBACK_AVAILABILITY"
-fi
+printf -- '- Fallback: %s via %s (availability: %s)\n' "$(printf '%s' "$FALLBACK" | jq -r '.model')" "$FALLBACK_HARNESS" "$FALLBACK_AVAILABILITY"
 printf -- '- Matrix evidence: %s\n' "$SNAPSHOT"

@@ -16,9 +16,9 @@ Concrete identities here are operator-only; `role-policy.json` owns selection.
 | Mechanical/docs changes | `builder-fast`; Luna Low or Medium | Increase only for demonstrated difficulty |
 | Mechanical implementation with exact acceptance | `builder-fast`; Luna Low/Medium, High for extra care | GPT-6.1 Sol when judgment is needed |
 | Substantive UI, logic, integration and significant code changes | `builder-deep`; Opus 5.5 High | GPT-6.1 Sol, then Astra under current availability |
-| Unresolved architecture and deep code/architecture review | `architect` / `review-deep`; Fable High | Opus 5.5, then eligible native Sol |
+| Unresolved architecture and deep code/architecture review | `architect` / `review-deep`; Fable High | GPT-6 Astra; later candidates follow current availability |
 | Standalone review orchestration | `review-coordinator`; GPT-6.1 Sol Medium | Astra for difficult judgment; do not repeat already valid reviews |
-| Applicable UI/UX judgment and front-facing design fixes | `design-consultant`; Opus 5.5 Medium, bounded to affected surfaces | No substitution; unavailable required design coverage blocks closeout |
+| Applicable UI/UX judgment and front-facing design fixes | `design-consultant`; Opus 5.5 Medium, bounded to affected surfaces | GPT-6.1 Sol; coverage is incomplete only if both are unavailable |
 | Bounded inexpensive or specialized analysis | Eligible OpenRouter participant | Host retains tools, integration and verification unless transport proves otherwise |
 
 Fable leads architecture and review; Opus/Sol implements. Luna remains useful
@@ -31,7 +31,7 @@ reflect operator experience, not a new benchmark claim.
 Coordinator prompts invoke Pipeline for nontrivial implementation and select
 the existing run/fix entrypoint when artifacts already exist. Direct execution
 is reserved for low-impact mechanical edits. The required design role keeps
-its exact identity contract under `design-consultation.md`.
+its candidate identity and fallback contract under `design-consultation.md`.
 
 Do not add delegation automatically. For a small settled task, packet preparation,
 duplicate context and synthesis may cost more than direct execution. When useful,

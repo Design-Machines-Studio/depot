@@ -274,9 +274,7 @@ matrix prices. Never hardcode a favourite or prose price here. Preserve an
 explicit unknown availability label. Native marginal cost is `included
 subscription`; its separately labeled API-equivalent estimate remains planning
 evidence, never billed subscription spend. OpenRouter prices come from the
-fresh checked-in matrix. Return one primary and one fallback, not a menu. The required `design-consultant`
-is the explicit exception: report no substitute when the renderer returns a
-null fallback.
+fresh checked-in matrix. Return one primary and one fallback, not a menu.
 
 The renderer and runtime dispatcher consume the same live host evidence
 semantics. Native CLI paths are resolved from the coordinator caller before the
@@ -312,8 +310,7 @@ Return a compact, outcome-first report containing:
 9. when the opinion path ran, `Plan A`, `Plan B` or its unavailable state, and
    one bounded synthesis;
 10. immediately before each requested copy-paste execution prompt, one
-    concrete `Recommended start` projection and one fallback (or the required
-    design role’s explicit no-substitute result);
+    concrete `Recommended start` projection and one concrete fallback;
 11. one complete copy-paste execution prompt when requested, with
     provider-neutral role, capabilities, and effort;
 12. only when the opinion path actually dispatched a role, the already-

@@ -122,7 +122,7 @@ assert jq -e '.recommendedStart.model == "gpt-6.1-sol" and .recommendedStart.har
 "$RECOMMEND" --role design-consultant --capability long-context \
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/fable-design.json"
-assert jq -e '.recommendedStart.model == "claude-opus-5-5" and .recommendedStart.harness == "Claude Code" and .recommendedStart.fallback == null' "$TMP/fable-design.json"
+assert jq -e '.recommendedStart.model == "claude-opus-5-5" and .recommendedStart.harness == "Claude Code" and .recommendedStart.fallback.model == "gpt-6.1-sol"' "$TMP/fable-design.json"
 
 # The two reported consumer tasks choose economical roles, with concrete native
 # fallbacks even when the host needs tools. These exercise the real renderer.

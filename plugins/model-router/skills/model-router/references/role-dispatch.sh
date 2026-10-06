@@ -532,7 +532,9 @@ transport_eligibility() {
       paid="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.paidCreditsEnabled // empty')"
       [ -n "$paid" ] || paid="$PAID_CLAUDE_CREDITS"
       [ "$state" != unavailable ] && [ "$auth_mode" = subscription ] || return 1
-      if [ "$model" = fable ] && [ "$fable_state" = exhausted ]; then return 1; fi
+      if [ "$model" = fable ]; then
+        case "$fable_state" in exhausted|unavailable) return 1 ;; esac
+      fi
       case "$plan" in
         max|pro|team-premium|enterprise-premium|included|unknown)
           if [ "$sdk_observed" = true ] &&

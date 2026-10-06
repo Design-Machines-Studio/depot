@@ -1,12 +1,12 @@
 # Bounded design participation
 
-The operator requires Opus 5.5 for applicable UI/UX judgment and front-facing
-design repair drafting. `design-consultant` has exactly one candidate in
-`role-policy.json`: `claude-opus-5-5` over native `claude-cli`, with an exact
-served-identity check. There is no substitute candidate. This exact identity requirement applies only to this role. Other roles
-follow the shared policy: Fable leads architecture/deep review and Opus/Sol
-implements substantive changes. The design consultant remains a bounded
-evidence-only participant.
+Prefer Opus 5.5 for applicable UI/UX judgment and front-facing design repair
+drafting. `design-consultant` routes to `claude-opus-5-5` over native Claude,
+then `gpt-6.1-sol` over Codex when Opus is unavailable. Validate the identity of
+the selected candidate; never accept a provider silently substituting a model.
+The design review remains required, and either eligible candidate can supply it.
+Fable leads architecture/deep review with Astra as its immediate fallback;
+Opus/Sol implements substantive changes.
 
 ## Current identity/catalog evidence
 
@@ -35,17 +35,18 @@ The participant has final design judgment among agents, subject to the
 operator's explicit decisions and approved prototype. It cannot redesign a
 settled prototype choice or waive accessibility, security or functionality.
 Ask for the smallest adequate patch/decision, rationale and verification cases.
-The native transport is prompt-only (`--tools ""`): the host supplies sufficient
-source and browser evidence, applies the accepted patch, commits/pushes and
-verifies it. Do not advertise write/tool/browser capabilities for `design-consultant`.
+The Claude design participant is prompt-only (`--tools ""`); the Codex fallback
+can inspect source with its read-only sandbox. The host supplies browser evidence,
+applies accepted patches, commits/pushes and verifies them. Do not request
+write/tool/browser capabilities for `design-consultant`.
 The separate `builder-deep` role supports native Claude implementation tools;
 its permissions do not expand this consultation role. Model identity and browser availability
 are separate: use dm-review's existing browser evidence handoff when direct
 browser tools are absent.
 
 Unavailable, disabled, exhausted, missing identity or provider substitution
-returns the existing role-level `model_participant_unavailable` result. Retain
-its exact private reason and report required design coverage as incomplete;
-never silently substitute another model. Concrete identity is operator-visible
+advances to the configured fallback. If both candidates fail, return the existing
+role-level `model_participant_unavailable` result with its exact private reason
+and report required design coverage as incomplete. Concrete identity is operator-visible
 through the existing recommendation/terminal report, outside ordinary participant
 packets. No new account budget service or organization ceiling is claimed.

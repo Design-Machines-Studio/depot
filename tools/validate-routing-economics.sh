@@ -52,14 +52,14 @@ check 'architect begins with Fable; native fallbacks remain available' jq -e '
   .roles.architect[0].transport == "claude-cli"' "$POLICY"
 
 check 'driver policy retains the baseline and distinct specialist workers' jq -e '
-  .roles.architect[3].model == "gpt-6-astra" and
+  .roles.architect[1].model == "gpt-6-astra" and
   .roles["builder-deep"][1].model == "gpt-6.1-sol" and
   .roles["builder-deep"][2].model == "gpt-6-astra" and
   .roles["review-fast"][0].model == "gpt-6-luna" and
   .roles["review-fast"][1].model == "gpt-6.1-sol" and
   .roles["review-fast"][2].transport == "openrouter" and
-  .roles["review-deep"][2].model == "gpt-6.1-sol" and
-  .roles["review-deep"][3].transport == "openrouter" and
+  .roles["review-deep"][3].model == "gpt-6.1-sol" and
+  .roles["review-deep"][4].transport == "openrouter" and
   .roles["review-deep"][0].model == "fable"' "$POLICY"
 
 check 'substantive UI, logic and integration use deep roles; mechanical work stays fast' jq -e '
@@ -70,7 +70,7 @@ check 'substantive UI, logic and integration use deep roles; mechanical work sta
   .reviewRoles.security.effort == "high"' "$ROOT/plugins/pipeline/references/routing-policy.json"
 
 check 'declared native aliases bind to exact approved served identities' jq -e '
-  (.roles["design-consultant"] | length == 1 and .[0].model == "claude-opus-5-5" and .[0].servedIdentities == ["claude-opus-5-5"]) and
+  (.roles["design-consultant"] | length == 2 and .[1].model == "gpt-6.1-sol" and .[0].model == "claude-opus-5-5" and .[0].servedIdentities == ["claude-opus-5-5"]) and
   all(.roles[][]; if has("servedIdentities") then
     .transport == "claude-cli" and (.servedIdentities | type) == "array" and
     (.servedIdentities | length) == 1 and

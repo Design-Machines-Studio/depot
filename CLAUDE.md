@@ -242,7 +242,8 @@ family independence, and exact private receipts. Operational agent cards use
 
 Eligible native Claude and Codex subscriptions share implementation and review.
 Opus leads substantive implementation and required design judgment; Fable leads
-architecture and deep review, with Sol as an implementation fallback. Luna
+architecture and deep review with Astra as its immediate fallback. Opus 5.5
+uses Sol 6.1 as its immediate fallback, including design review. Luna
 handles mechanical work and bounded evidence gathering. No
 tracked policy contains a developer identity, allocation, plan, quota, or paid
 credit preference. OpenRouter remains the authority for its credential loading,
