@@ -31,9 +31,9 @@ omission or null is not an empty, settled browser scope.
   --report <unified-review-report>
 ```
 
-The report contains the verdict, findings, and evidence index. Every local
-link must resolve inside the retained copy; use its returned `evidence_path`
-for stable report links. Only `status: complete` supports `CLEAN` or source
+The report contains verdict, findings, and an evidence index. Local links must
+resolve in the retained scope; use `review/<artifact>` or `browser/<artifact>`
+and returned `evidence_path`. Only `status: complete` supports `CLEAN` or source
 worktree removal. The copy contains the request, authoritative coverage,
 selected outputs and literal receipts, synthesis artifacts, report, real
 private router receipts, and required evidence references. Kernel bounds it to

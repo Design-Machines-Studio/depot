@@ -29,12 +29,65 @@ from .owned_run import (
     ExactOwnedRun, _MAX_DIAGNOSTIC_BYTES, _MAX_DIAGNOSTIC_FILES,
     _bounded_diagnostic,
 )
+from .schema import (
+    ErrorMessage,
+)
 from ._translation import safe_reference
+from .redaction import contains_secret_shape
 
 
 _REVIEW_WORKFLOWS = frozenset({"dm-review", "dm-review-loop", "pipeline", "pipeline-run"})
 _HEAD_RE = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
 _REVIEW_SCOPE_RE = re.compile(r"repo-[0-9a-f]{12}-head-(?:[0-9a-f]{40}|[0-9a-f]{64})")
+
+
+_REPORT_LINK_FAILURES = {
+    "review_report_link_missing": (
+        "missing_evidence", ErrorMessage.REVIEW_REPORT_LINK_MISSING.value,
+    ),
+    "review_report_link_unsupported": (
+        "invalid_schema", ErrorMessage.REVIEW_REPORT_LINK_UNSUPPORTED.value,
+    ),
+    "review_report_link_escapes_scope": (
+        "unsafe_payload", ErrorMessage.REVIEW_REPORT_LINK_ESCAPES_SCOPE.value,
+    ),
+    "review_report_link_target_unsafe": (
+        "unsafe_payload", ErrorMessage.REVIEW_REPORT_LINK_UNSAFE.value,
+    ),
+}
+
+
+class ReviewCloseoutValidationError(ValueError):
+    """Closed, redacted report-link failure for the preservation CLI."""
+
+    def __init__(self, reason_code: str, reference: str | None = None):
+        if reason_code not in _REPORT_LINK_FAILURES:
+            raise ValueError("unknown review report validation reason")
+        self.reason_code = reason_code
+        self.code, self.message = _REPORT_LINK_FAILURES[reason_code]
+        self.reference = None
+        if reference is not None:
+            try:
+                normalized = safe_reference(reference)
+            except (TypeError, ValueError):
+                pass
+            else:
+                if not contains_secret_shape(normalized):
+                    self.reference = normalized
+        super().__init__(self.message)
+
+    def to_dict(self) -> dict[str, object]:
+        details: dict[str, object] = {
+            "reason_code": self.reason_code,
+            "field": "report.md",
+        }
+        if self.reference is not None:
+            details["path"] = self.reference
+        return {"error": {
+            "code": self.code,
+            "message": self.message,
+            "details": details,
+        }}
 
 
 def _git(repository_root: Path, *args: str) -> str:
@@ -461,13 +514,19 @@ _MARKDOWN_REFERENCE = re.compile(r"^[ \t]{0,3}\[[^\]]+\]:[ \t]*(<[^>]+>|\S+)", r
 def _validate_retained_report(scope: Path) -> None:
     report = _regular_file(scope / "report.md").decode("utf-8")
     root = scope.resolve(strict=True)
+
     for match in (*_MARKDOWN_LINK.finditer(report), *_MARKDOWN_REFERENCE.finditer(report)):
         target = match.group(1)
         if target.startswith("<") and target.endswith(">"):
             target = target[1:-1]
         if target.startswith("#"):
             continue
-        parsed = urlsplit(target)
+        try:
+            parsed = urlsplit(target)
+        except ValueError:
+            raise ReviewCloseoutValidationError(
+                "review_report_link_unsupported",
+            ) from None
         if (
             parsed.scheme == "mailto"
             or parsed.scheme in {"http", "https"} and parsed.netloc
@@ -475,15 +534,30 @@ def _validate_retained_report(scope: Path) -> None:
         ):
             continue
         if parsed.scheme or parsed.netloc:
-            raise ValueError("retained report contains an unsupported link")
+            raise ReviewCloseoutValidationError(
+                "review_report_link_unsupported",
+            )
         path = unquote(parsed.path) or "report.md"
         try:
             linked = (scope / path).resolve(strict=True)
         except OSError:
-            raise ValueError("retained report link is missing") from None
+            raise ReviewCloseoutValidationError(
+                "review_report_link_missing", path,
+            ) from None
+        except ValueError:
+            raise ReviewCloseoutValidationError(
+                "review_report_link_target_unsafe", path,
+            ) from None
         if not linked.is_relative_to(root):
-            raise ValueError("retained report link escapes its evidence scope")
-        _regular_file(linked)
+            raise ReviewCloseoutValidationError(
+                "review_report_link_escapes_scope",
+            )
+        try:
+            _regular_file(linked)
+        except (OSError, ValueError):
+            raise ReviewCloseoutValidationError(
+                "review_report_link_target_unsafe", path,
+            ) from None
 
 
 def validate_review_source_coverage(
