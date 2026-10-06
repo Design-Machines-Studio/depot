@@ -202,12 +202,11 @@ Apply the merge recommendation logic from `${CLAUDE_SKILL_DIR}/references/output
 ### Step 5: Generate Report
 
 Follow the complete-report template in `references/output-format.md`. Produce a
-provisional report body preserving the header, merge recommendation, P1/P2/P3
-findings, `Synthesis Decisions`, Raw Evidence Index, agent summary, and coverage
-gaps. Project the index from existing lane and coverage receipts; never paste
-reviewer output or create a transcript. Leave cleanup pending for Phase 8.
-Every retained finding keeps stable ID, source IDs, provenance, evidence, and
-raw refs.
+provisional report body preserving required sections, stable IDs, provenance,
+evidence, raw refs, and an evidence index. Project the index from existing
+receipts without copying reviewer output. Resolve local links from the retained
+root (`review/<artifact>` or `browser/<artifact>`), link only existing artifacts,
+and leave cleanup pending for Phase 8.
 
 Do not write `.claude/ux-review/report.md` and do not deliver or project the
 compact human handoff. The top-level review skill owns both actions after

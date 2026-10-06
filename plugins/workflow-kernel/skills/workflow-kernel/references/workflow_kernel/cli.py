@@ -1397,20 +1397,26 @@ def command_observe_review(args):
 
 
 def command_preserve_review_evidence(args):
-    from .review_closeout import preserve_review_evidence
-
-    result = preserve_review_evidence(
-        run_root=args.run_root,
-        repository_root=args.repository_root,
-        request_path=args.request,
-        receipts_path=args.receipts,
-        lane_receipts_path=args.lane_receipts,
-        raw_lane_outputs_path=args.raw_lane_outputs,
-        raw_findings_path=args.raw_findings,
-        decisions_path=args.decisions,
-        private_router_directory=args.private_router_directory,
-        report_path=args.report,
+    from .review_closeout import (
+        ReviewCloseoutValidationError, preserve_review_evidence,
     )
+
+    try:
+        result = preserve_review_evidence(
+            run_root=args.run_root,
+            repository_root=args.repository_root,
+            request_path=args.request,
+            receipts_path=args.receipts,
+            lane_receipts_path=args.lane_receipts,
+            raw_lane_outputs_path=args.raw_lane_outputs,
+            raw_findings_path=args.raw_findings,
+            decisions_path=args.decisions,
+            private_router_directory=args.private_router_directory,
+            report_path=args.report,
+        )
+    except ReviewCloseoutValidationError as exc:
+        _emit(exc.to_dict(), sys.stderr)
+        return EXIT_INVALID
     _emit(result)
     return 0 if result["status"] == "complete" else 3
 

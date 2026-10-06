@@ -90,7 +90,9 @@ command.
 
 Use `workflow-kernel-launcher.sh --help` (or `python3 -m workflow_kernel
 --help` in a repository checkout) for the complete command inventory. The
-0.25.2 surface fixes `go_changed` selection to traverse deleted or source-less
+0.25.3 surface reports retained-review link failures with a closed reason and
+safe relative reference, while preserving path, source, and report-link checks.
+The 0.25.2 surface fixes `go_changed` selection to traverse deleted or source-less
 packages for declared dependents while passing surviving concrete source
 packages and declared Go package patterns to focused commands. A root-module
 change with no surviving package or declared pattern remains

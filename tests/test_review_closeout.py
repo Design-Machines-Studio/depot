@@ -18,10 +18,12 @@ from workflow_kernel.dm_review_adapter import (
 from workflow_kernel.cli import _validated_existing_review_contributions
 from workflow_kernel.owned_run import ExactOwnedRun
 from workflow_kernel.review_closeout import (
+    ReviewCloseoutValidationError,
     bind_review_source,
     preserve_review_evidence,
     source_identity,
 )
+from workflow_kernel.schema import ErrorMessage
 
 
 class ReviewCloseoutTests(unittest.TestCase):
@@ -320,6 +322,77 @@ class ReviewCloseoutTests(unittest.TestCase):
         self.assertEqual("incomplete", result["status"])
         self.assertTrue(any("raw/security.md" in item for item in result["missing"]))
 
+    def test_mismatched_lane_output_digest_cannot_complete_closeout(self):
+        run, paths = self.make_run("dm-review", "mismatched-lane-digest")
+        lane_document = json.loads(paths["lane_receipts"].read_text(encoding="utf-8"))
+        lane_document["lanes"][0]["raw_output_digest"] = "sha256:" + "0" * 64
+        paths["lane_receipts"].write_text(
+            json.dumps(lane_document) + "\n", encoding="utf-8",
+        )
+        result = self.preserve(run, paths)
+        self.assertEqual("incomplete", result["status"])
+        self.assertTrue(result["missing"])
+
+    def test_symlinked_review_evidence_reference_cannot_complete_closeout(self):
+        run, paths = self.make_run("dm-review", "symlink-evidence-ref")
+        external = self.root / "external-review-evidence.md"
+        external.write_text("external evidence\n", encoding="utf-8")
+        (run.root / "review" / "linked-evidence.md").symlink_to(external)
+        lane_document = json.loads(paths["lane_receipts"].read_text(encoding="utf-8"))
+        lane_document["lanes"][0]["evidence_refs"] = ["review/linked-evidence.md"]
+        paths["lane_receipts"].write_text(
+            json.dumps(lane_document) + "\n", encoding="utf-8",
+        )
+        result = self.preserve(run, paths)
+        self.assertEqual("incomplete", result["status"])
+        self.assertIn("required evidence reference: review/linked-evidence.md", result["missing"])
+        self.assertFalse(Path(result["evidence_path"], "review/linked-evidence.md").exists())
+
+    def test_report_link_escape_and_foreign_owned_run_remain_rejected(self):
+        run, paths = self.make_run("dm-review", "report-escape")
+        (run.root / "outside-report-target.md").write_text("outside\n", encoding="utf-8")
+        paths["report"].write_text(
+            "[Outside](../../../outside-report-target.md).\n", encoding="utf-8",
+        )
+        with self.assertRaises(ReviewCloseoutValidationError) as caught:
+            self.preserve(run, paths)
+        error = caught.exception.to_dict()["error"]
+        self.assertEqual("unsafe_payload", error["code"])
+        self.assertEqual("review_report_link_escapes_scope", error["details"]["reason_code"])
+        self.assertNotIn("path", error["details"])
+
+        foreign = self.root / "foreign-run-root"
+        foreign.mkdir()
+        with self.assertRaises(OSError):
+            preserve_review_evidence(
+                run_root=foreign,
+                repository_root=self.repo,
+                request_path=paths["request"],
+                receipts_path=paths["receipts"],
+                lane_receipts_path=paths["lane_receipts"],
+                raw_lane_outputs_path=paths["raw_lane_outputs"],
+                raw_findings_path=paths["raw_findings"],
+                decisions_path=paths["decisions"],
+                private_router_directory=paths["router"],
+                report_path=paths["report"],
+            )
+
+    def test_nul_encoded_report_link_has_closed_unsafe_target_error(self):
+        run, paths = self.make_run("dm-review", "report-nul-link")
+        paths["report"].write_text(
+            "[Invalid](%00target.md).\n", encoding="utf-8",
+        )
+        with self.assertRaises(ReviewCloseoutValidationError) as caught:
+            self.preserve(run, paths)
+        error = caught.exception.to_dict()["error"]
+        self.assertEqual("unsafe_payload", error["code"])
+        self.assertEqual(
+            "review_report_link_target_unsafe",
+            error["details"]["reason_code"],
+        )
+        self.assertEqual("report.md", error["details"]["field"])
+        self.assertNotIn("path", error["details"])
+
     def test_source_binding_rejects_changed_head_without_rewriting_the_request(self):
         run, paths = self.make_run("dm-review", "stale-source")
         before = paths["request"].read_bytes()
@@ -488,16 +561,81 @@ class ReviewCloseoutTests(unittest.TestCase):
             "## CLEAN\n\n[Missing evidence](review/missing.md).\n",
             encoding="utf-8",
         )
-        with self.assertRaisesRegex(ValueError, "retained report"):
+        with self.assertRaises(ReviewCloseoutValidationError) as caught:
             self.preserve(run, paths)
+        error = caught.exception.to_dict()["error"]
+        self.assertEqual("missing_evidence", error["code"])
+        self.assertEqual("review_report_link_missing", error["details"]["reason_code"])
+        self.assertEqual("report.md", error["details"]["field"])
+        self.assertEqual("review/missing.md", error["details"]["path"])
+        self.assertEqual(ErrorMessage.REVIEW_REPORT_LINK_MISSING.value, error["message"])
         self.assertTrue(paths["report"].is_file())
         with self.assertRaisesRegex(ValueError, "durably validated"):
             run.finish("succeeded", retain_diagnostics=True)
 
+    def test_report_links_resolve_from_retained_scope_root_and_retry_idempotently(self):
+        run, paths = self.make_run("dm-review", "retained-report-layout")
+        review_source = run.root / "review"
+        for name, text in (
+            ("pattern-review.md", "Pattern lane output.\n"),
+            ("simplicity-review.md", "Simplicity lane output.\n"),
+        ):
+            (review_source / name).write_text(text, encoding="utf-8")
+        lane_document = json.loads(paths["lane_receipts"].read_text(encoding="utf-8"))
+        lane_document["lanes"][0]["evidence_refs"] = [
+            "review/pattern-review.md", "review/simplicity-review.md",
+        ]
+        paths["lane_receipts"].write_text(
+            json.dumps(lane_document) + "\n", encoding="utf-8",
+        )
+        paths["report"].write_text(
+            "[Pattern](review/pattern-review.md) and "
+            "[Simplicity](review/simplicity-review.md).\n",
+            encoding="utf-8",
+        )
+
+        first = self.preserve(run, paths)
+        self.assertEqual("complete", first["status"], first)
+        report = Path(first["evidence_path"]) / "report.md"
+        report_bytes = report.read_bytes()
+        second = self.preserve(run, paths)
+        self.assertEqual("complete", second["status"], second)
+        self.assertEqual(report_bytes, report.read_bytes())
+
+    def test_cli_reports_missing_retained_link_with_closed_sanitized_details(self):
+        run, paths = self.make_run("dm-review", "cli-report-link")
+        paths["report"].write_text(
+            "[Missing](review/pattern-review.md).\n", encoding="utf-8",
+        )
+        environment = os.environ.copy()
+        references = Path(__file__).resolve().parents[1] / "plugins/workflow-kernel/skills/workflow-kernel/references"
+        environment["PYTHONPATH"] = str(references) + os.pathsep + environment.get("PYTHONPATH", "")
+        completed = subprocess.run(
+            (
+                sys.executable, "-m", "workflow_kernel", "preserve-review-evidence",
+                "--run-root", str(run.root), "--repository-root", str(self.repo),
+                "--request", str(paths["request"]), "--receipts", str(paths["receipts"]),
+                "--lane-receipts", str(paths["lane_receipts"]),
+                "--raw-lane-outputs", str(paths["raw_lane_outputs"]),
+                "--raw-findings", str(paths["raw_findings"]),
+                "--decisions", str(paths["decisions"]),
+                "--private-router-directory", str(paths["router"]),
+                "--report", str(paths["report"]),
+            ), env=environment, capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(2, completed.returncode)
+        error = json.loads(completed.stderr)["error"]
+        self.assertEqual("missing_evidence", error["code"])
+        self.assertEqual(ErrorMessage.REVIEW_REPORT_LINK_MISSING.value, error["message"])
+        self.assertEqual("review_report_link_missing", error["details"]["reason_code"])
+        self.assertEqual("report.md", error["details"]["field"])
+        self.assertEqual("review/pattern-review.md", error["details"]["path"])
+        self.assertNotIn("Traceback", completed.stderr)
+
     def test_corrected_source_report_can_be_preserved_after_link_failure(self):
         run, paths = self.make_run("dm-review", "corrected-report")
         paths["report"].write_text("[Missing](review/missing.md).\n", encoding="utf-8")
-        with self.assertRaisesRegex(ValueError, "retained report link is missing"):
+        with self.assertRaisesRegex(ValueError, "retained review report link is missing"):
             self.preserve(run, paths)
         paths["report"].write_text("[Request](review/request.json).\n", encoding="utf-8")
         result = self.preserve(run, paths)
@@ -526,7 +664,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         paths["report"].write_text(
             "[Lane outputs][lane]\n\n[lane]: review/missing.json\n", encoding="utf-8",
         )
-        with self.assertRaisesRegex(ValueError, "retained report link is missing"):
+        with self.assertRaisesRegex(ValueError, "retained review report link is missing"):
             self.preserve(run, paths)
 
     def test_retained_recovery_retry_reuses_exact_sources_without_lane_rerun(self):
@@ -535,7 +673,7 @@ class ReviewCloseoutTests(unittest.TestCase):
             "## CLEAN\n\n[Missing evidence](review/missing.md).\n",
             encoding="utf-8",
         )
-        with self.assertRaisesRegex(ValueError, "retained report"):
+        with self.assertRaisesRegex(ValueError, "retained review report"):
             self.preserve(run, paths)
         evidence = next((run.root / "diagnostic/review").iterdir())
         retained = run.finish(
