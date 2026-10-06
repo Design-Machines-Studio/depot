@@ -93,8 +93,8 @@ assert grep -Fq 'browser evidence/setup gap' "$TMP/browser-required-prompt.md"
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/browser-required-recommendation.json"
 assert jq -e '
-  .recommendedStart.model == "gpt-6-luna" and
-  .recommendedStart.harness == "Codex" and
+  .recommendedStart.model == "claude-opus-5-5" and
+  .recommendedStart.harness == "Claude Code" and
   .recommendedStart.effort == "medium" and
   .recommendedStart.fallback.model == "gpt-6.1-sol" and
   (.recommendedStart.fallback | keys | length) == 3
@@ -104,7 +104,7 @@ assert jq -e '
   --capability write-repository --capability tool-use --capability long-context \
   --capability structured-output --effort low --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/builder.json"
-assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "low"' "$TMP/builder.json"
+assert jq -e '.recommendedStart.model == "claude-opus-5-5" and .recommendedStart.harness == "Claude Code" and .recommendedStart.effort == "low"' "$TMP/builder.json"
 assert jq -e '.recommendedStart.fallback.model == "gpt-6.1-sol" and (.recommendedStart.fallback | keys | length) == 3' "$TMP/builder.json"
 assert jq -e '.recommendedStart.cost.label == "included subscription" and .recommendedStart.cost.apiEquivalent == null and .recommendedStart.cost.apiPrice == null' "$TMP/builder.json"
 
@@ -122,7 +122,7 @@ assert jq -e '.recommendedStart.model == "gpt-6.1-sol" and .recommendedStart.har
 "$RECOMMEND" --role design-consultant --capability long-context \
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/fable-design.json"
-assert jq -e '.recommendedStart.model == "claude-opus-5-5" and .recommendedStart.harness == "Claude Code"' "$TMP/fable-design.json"
+assert jq -e '.recommendedStart.model == "claude-opus-5-5" and .recommendedStart.harness == "Claude Code" and .recommendedStart.fallback.model == "gpt-6.1-sol"' "$TMP/fable-design.json"
 
 # The two reported consumer tasks choose economical roles, with concrete native
 # fallbacks even when the host needs tools. These exercise the real renderer.
@@ -136,14 +136,14 @@ assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.effo
   --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
   --format json > "$TMP/publication-readiness.json"
 assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-6.1-sol"' "$TMP/publication-readiness.json"
-assert jq -e 'all(.roles | to_entries[] | select(.key != "design-consultant"); all(.value[]; .transport != "claude-cli"))' "$POLICY"
-assert jq -e 'all(.chunkKinds.logic,.chunkKinds.ui,.chunkKinds.integration; .executorRole == "builder-fast" and (.executorCapabilities|index("long-context")|not))' "$PIPELINE_POLICY"
+assert jq -e '.roles.architect[0].model == "fable" and .roles["builder-deep"][0].model == "claude-opus-5-5" and .roles["review-deep"][0].model == "fable"' "$POLICY"
+assert jq -e 'all(.chunkKinds.logic,.chunkKinds.ui,.chunkKinds.integration; .executorRole == "builder-deep" and .executorEffort == "high")' "$PIPELINE_POLICY"
 
 # The ignored common-checkout profile can retire Opus without changing shared
 # policy or user-level configuration; both dispatch and recommendation read it.
 mkdir -p "$TMP/profile-repo/.dm"
 git -C "$TMP/profile-repo" init -q
-printf '%s\n' '{"disabledCandidates":["opus"]}' > "$TMP/profile-repo/.dm/model-router.local.json"
+printf '%s\n' '{"disabledCandidates":["fable","claude-opus-5-5"]}' > "$TMP/profile-repo/.dm/model-router.local.json"
 jq '.codex.state="unavailable" | .codex.authMode="api" | .claude.state="ok" | .claude.authMode="subscription" | .openrouter.state="ok"' \
   "$TMP/healthy.json" > "$TMP/profile-availability.json"
 (
@@ -185,7 +185,7 @@ jq '.codex.state="unavailable" | .codex.authMode="api"' "$TMP/healthy.json" > "$
   --availability-file "$TMP/no-codex.json" --format json > "$TMP/priced.json"
 assert jq -e '.recommendedStart.cost.apiPrice.inputUsdPerM == 9.99 and .recommendedStart.cost.apiPrice.outputUsdPerM == 8.88' "$TMP/priced.json"
 
-jq '.codex={state:"unknown",authMode:"subscription",reason:"rate_limit_mapping_unknown",allowances:{a:{state:"limited"},b:{state:"ok"}}} | .openrouter.state="unavailable"' "$TMP/healthy.json" > "$TMP/unmapped.json"
+jq '.claude.state="unavailable" | .codex={state:"unknown",authMode:"subscription",reason:"rate_limit_mapping_unknown",allowances:{a:{state:"limited"},b:{state:"ok"}}} | .openrouter.state="unavailable"' "$TMP/healthy.json" > "$TMP/unmapped.json"
 "$RECOMMEND" --role builder-deep --capability read-repository \
   --capability write-repository --capability tool-use --capability long-context \
   --capability structured-output --effort high --matrix-file "$MATRIX" \
@@ -195,10 +195,10 @@ assert jq -e '.recommendedStart.availability == "attemptable" and (.recommendedS
 # Confirmed Codex subscription with missing allowance telemetry stays an
 # attemptable recommendation and retains its diagnostic without inventing
 # remaining capacity. The review role keeps its native Sol fallback.
-jq '.codex={state:"unknown",authMode:"subscription",reason:"required_window_missing"} | .openrouter.state="unavailable"' \
+jq '.claude.state="unavailable" | .codex={state:"unknown",authMode:"subscription",reason:"required_window_missing"} | .openrouter.state="unavailable"' \
   "$TMP/healthy.json" > "$TMP/codex-telemetry-unknown.json"
-"$RECOMMEND" --role review-deep --capability read-repository \
-  --capability long-context --capability structured-output --effort high \
+"$RECOMMEND" --role review-fast --capability read-repository \
+  --capability structured-output --effort high \
   --matrix-file "$MATRIX" --availability-file "$TMP/codex-telemetry-unknown.json" \
   --format json > "$TMP/codex-telemetry-recommendation.json"
 assert jq -e '.recommendedStart.model == "gpt-6-luna" and
@@ -299,8 +299,8 @@ assert grep -Fq 'add `tool-use`, `long-context`, or `structured-output` only whe
 assert grep -Fq 'using the closed routing override' "$PROMPTCRAFT"
 assert grep -Fq 'not rendered acceptance' "$PROMPTCRAFT"
 assert grep -Fq 'Host owns browser evidence;' "$PROMPT_TEMPLATE"
-assert grep -Fq 'A missing routed browser' "$PREFLIGHT"
-assert grep -Fq 'participant does not imply host browser tools are unavailable.' "$PREFLIGHT"
+assert grep -Fq 'A missing routed participant does not imply missing' "$PREFLIGHT"
+assert grep -Fq 'host browser tools.' "$PREFLIGHT"
 assert grep -Fq 'model_participant_unavailable' "$FULL_LANE"
 assert jq -e 'all(.chunkKinds[]; (.executorCapabilities | index("browser") | not))' "$PIPELINE_POLICY"
 assert sh -c "! grep -Eq 'gpt-[0-9]|deepseek/|qwen/|x-ai/|moonshotai/|Recommended start' '$OPINIONS' '$REVIEW_PROMPT'"

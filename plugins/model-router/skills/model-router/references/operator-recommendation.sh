@@ -132,7 +132,7 @@ candidate_status() {
       paid="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.paidCreditsEnabled // empty')"
       [ -n "$paid" ] || paid="$PAID_CLAUDE_CREDITS"
       [ "$auth" = subscription ] || { printf unavailable; return; }
-      if [ "$model" = fable ] && [ "$(printf '%s' "$AVAILABILITY" | jq -r '.claude.fable // "unknown"')" = exhausted ]; then
+      if [ "$model" = fable ] && printf '%s' "$AVAILABILITY" | jq -e '.claude.fable == "exhausted" or .claude.fable == "unavailable"' >/dev/null; then
         printf unavailable
       elif [ "$plan" = credits-only ]; then
         if [ "$paid" = true ] && [ "$state" != unavailable ]; then printf attemptable
@@ -232,6 +232,8 @@ EFFECTIVE_EFFORT="$(jq -r --arg transport "$PRIMARY_TRANSPORT" --arg effort "$EF
 CAPABILITY_TEXT="$(printf '%s' "$CAPABILITIES_JSON" | jq -r 'join(", ")')"
 if [ "$PRIMARY_AVAILABILITY" = unknown ]; then
   WHY="Availability is unknown; this is the first current policy candidate for $ROLE matching $CAPABILITY_TEXT."
+elif [ "$PRIMARY_AVAILABILITY" = attemptable ] && [ "$PRIMARY_TRANSPORT" = claude-cli ]; then
+  WHY="Current Claude eligibility permits one attempt for $ROLE; invocation will settle model availability."
 elif [ "$PRIMARY_AVAILABILITY" = attemptable ]; then
   if [ "$PRIMARY_TRANSPORT" = codex-cli ]; then
     WHY="Confirmed Codex subscription; allowance telemetry is unknown ($PRIMARY_DIAGNOSTIC), so this $ROLE candidate is attemptable once without attributing an allowance bucket and is not verified healthy."

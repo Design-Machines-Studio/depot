@@ -17,7 +17,7 @@ jq -e '
   (.roles | keys | sort) == (["architect","builder-deep","builder-fast","design-consultant","editorial","plan-critic","research-fast","review-coordinator","review-deep","review-fast","security-review"] | sort) and
   (.effort.vocabulary == ["low","medium","high","max"]) and
   all(.roles | to_entries[] | select(.key != "design-consultant"); any(.value[]; .transport == "openrouter")) and
-  (.roles["design-consultant"] | length == 1 and .[0].model == "claude-opus-5-5" and .[0].transport == "claude-cli" and .[0].servedIdentities == ["claude-opus-5-5"]) and
+  (.roles["design-consultant"] | length == 2 and .[1].model == "gpt-6.1-sol" and .[0].model == "claude-opus-5-5" and .[0].transport == "claude-cli" and .[0].servedIdentities == ["claude-opus-5-5"]) and
   ([.roles[][] | .capabilities[] | select(IN("read-repository","write-repository","tool-use","browser","long-context","structured-output","independent-family") | not)] | length == 0) and
   ([.roles | to_entries[] | .key as $role | .value[]
     | select(.model | test("glm";"i"))

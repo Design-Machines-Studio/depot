@@ -44,12 +44,12 @@ check 'builder-fast starts with the bounded fast candidate' jq -e '
   .roles["builder-fast"][0].transport == "codex-cli"' "$POLICY"
 
 check 'builder-deep starts on native subscription capacity' jq -e '
-  .roles["builder-deep"][0].model == "gpt-6-luna" and
-  .roles["builder-deep"][0].billing == "included-subscription"' "$POLICY"
+  .roles["builder-deep"][0].model == "claude-opus-5-5" and
+  .roles["builder-deep"][0].billing == "subscription-or-local-paid-credits"' "$POLICY"
 
-check 'architect begins with GPT-6.1 Sol; Astra remains escalation' jq -e '
-  .roles.architect[0].model == "gpt-6.1-sol" and
-  .roles.architect[0].transport == "codex-cli"' "$POLICY"
+check 'architect begins with Fable; native fallbacks remain available' jq -e '
+  .roles.architect[0].model == "fable" and
+  .roles.architect[0].transport == "claude-cli"' "$POLICY"
 
 check 'driver policy retains the baseline and distinct specialist workers' jq -e '
   .roles.architect[1].model == "gpt-6-astra" and
@@ -58,28 +58,27 @@ check 'driver policy retains the baseline and distinct specialist workers' jq -e
   .roles["review-fast"][0].model == "gpt-6-luna" and
   .roles["review-fast"][1].model == "gpt-6.1-sol" and
   .roles["review-fast"][2].transport == "openrouter" and
-  .roles["review-deep"][1].model == "gpt-6.1-sol" and
-  .roles["review-deep"][2].transport == "openrouter" and
-  .roles["review-deep"][0].model == "gpt-6-luna"' "$POLICY"
+  .roles["review-deep"][3].model == "gpt-6.1-sol" and
+  .roles["review-deep"][4].transport == "openrouter" and
+  .roles["review-deep"][0].model == "fable"' "$POLICY"
 
-check 'settled UI uses Luna-high while unresolved deep work and mechanical defaults stay distinct' jq -e '
-  all(.chunkKinds | to_entries[] | select(.key | IN("logic","integration")); .value.executorRole == "builder-fast" and .value.executorEffort == "high") and
-  .chunkKinds.ui.executorRole == "builder-fast" and .chunkKinds.ui.executorEffort == "high" and
+check 'substantive UI, logic and integration use deep roles; mechanical work stays fast' jq -e '
+  all(.chunkKinds | to_entries[] | select(.key | IN("logic","integration")); .value.executorRole == "builder-deep" and .value.executorEffort == "high") and
+  .chunkKinds.ui.executorRole == "builder-deep" and .chunkKinds.ui.executorEffort == "high" and
   .chunkKinds.docs.executorEffort == "low" and
   .chunkKinds["mechanical-logic"].executorEffort == "medium" and
   .reviewRoles.security.effort == "high"' "$ROOT/plugins/pipeline/references/routing-policy.json"
 
 check 'declared native aliases bind to exact approved served identities' jq -e '
-  all(.roles | to_entries[] | select(.key != "design-consultant"); all(.value[]; .transport != "claude-cli")) and
-  (.roles["design-consultant"] | length == 1 and .[0].model == "claude-opus-5-5" and .[0].servedIdentities == ["claude-opus-5-5"]) and
+  (.roles["design-consultant"] | length == 2 and .[1].model == "gpt-6.1-sol" and .[0].model == "claude-opus-5-5" and .[0].servedIdentities == ["claude-opus-5-5"]) and
   all(.roles[][]; if has("servedIdentities") then
     .transport == "claude-cli" and (.servedIdentities | type) == "array" and
     (.servedIdentities | length) == 1 and
-    all(.servedIdentities[]; test("^claude-opus-5-5$"))
+    all(.servedIdentities[]; test("^claude-(opus-5-5|fable-5)$"))
   else true end)' "$POLICY"
 
 check 'security head is isolated from ordinary roles' jq -e '
-  .roles["security-review"][0].model == "gpt-6-luna" and
+  .roles["security-review"][0].model == "gpt-6.1-sol" and
   .roles["security-review"][1].model == "moonshotai/kimi-k3" and
   ([.roles | to_entries[] | select(.key != "security-review") | .value[].model | select(test("kimi";"i"))] | length == 0)' "$POLICY"
 
@@ -151,6 +150,7 @@ check 'live model-intelligence report uses v2 no-conclusion semantics' sh -c \
    ! grep -Fq 'parsed_successes' '$LATEST' && ! grep -Fq 'depot-role-v1' '$LATEST'"
 
 check 'provider-neutral drift and leak validator passes' "$ROOT/tools/validate-provider-neutral-routing.sh"
+check 'current quality routing and Claude tool boundaries pass' "$ROOT/tools/test-model-router-quality.sh"
 check 'resolver economics fixtures pass' "$ROOT/tools/test-model-router.sh"
 check 'benchmark evidence contract fixtures pass' "$ROOT/tools/test-benchmark-evidence-contract.sh"
 check 'Depot role benchmark fixtures pass' "$ROOT/tools/test-openrouter-role-benchmark.sh"

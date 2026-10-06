@@ -13,17 +13,12 @@
   },
   "roles": {
     "architect": [
-      {"model": "fable", "servedIdentities": ["claude-fable-5"], "provider": "anthropic", "transport": "claude-cli", "family": "anthropic", "billing": "subscription-or-local-paid-credits", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]},
-      {"model": "gpt-6-astra", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]},
-      {"model": "claude-opus-5-5", "servedIdentities": ["claude-opus-5-5"], "provider": "anthropic", "transport": "claude-cli", "family": "anthropic", "billing": "subscription-or-local-paid-credits", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]},
       {"model": "gpt-6.1-sol", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output"]},
+      {"model": "gpt-6-astra", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output"]},
       {"model": "qwen/qwen3.8-max", "provider": "openrouter", "transport": "openrouter", "family": "qwen", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output"]}
     ],
     "plan-critic": [
-      {"model": "fable", "servedIdentities": ["claude-fable-5"], "provider": "anthropic", "transport": "claude-cli", "family": "anthropic", "billing": "subscription-or-local-paid-credits", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]},
-      {"model": "gpt-6-astra", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]},
-      {"model": "claude-opus-5-5", "servedIdentities": ["claude-opus-5-5"], "provider": "anthropic", "transport": "claude-cli", "family": "anthropic", "billing": "subscription-or-local-paid-credits", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]},
-      {"model": "gpt-6.1-sol", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]},
+      {"model": "gpt-6-luna", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]},
       {"model": "deepseek/deepseek-v4-pro-0813", "provider": "openrouter", "transport": "openrouter", "family": "deepseek", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output", "independent-family"]},
       {"model": "qwen/qwen3.8-max", "provider": "openrouter", "transport": "openrouter", "family": "qwen", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output", "independent-family"]},
       {"model": "x-ai/grok-4.6", "provider": "openrouter", "transport": "openrouter", "family": "x-ai", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output", "independent-family"]}
@@ -35,7 +30,7 @@
       {"model": "z-ai/glm-5.3-flash", "provider": "openrouter", "transport": "openrouter", "family": "z-ai", "billing": "api", "capabilities": ["read-repository", "write-repository", "structured-output"]}
     ],
     "builder-deep": [
-      {"model": "claude-opus-5-5", "servedIdentities": ["claude-opus-5-5"], "provider": "anthropic", "transport": "claude-cli", "family": "anthropic", "billing": "subscription-or-local-paid-credits", "capabilities": ["read-repository", "write-repository", "tool-use", "long-context", "structured-output"]},
+      {"model": "gpt-6-luna", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "write-repository", "tool-use", "long-context", "structured-output"]},
       {"model": "gpt-6.1-sol", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "write-repository", "tool-use", "long-context", "structured-output"]},
       {"model": "gpt-6-astra", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "write-repository", "tool-use", "long-context", "structured-output"]},
       {"model": "deepseek/deepseek-v4-pro-0813", "provider": "openrouter", "transport": "openrouter", "family": "deepseek", "billing": "api", "capabilities": ["read-repository", "write-repository", "long-context", "structured-output"]},
@@ -48,9 +43,7 @@
       {"model": "z-ai/glm-5.3-flash", "provider": "openrouter", "transport": "openrouter", "family": "z-ai", "billing": "api", "capabilities": ["read-repository", "structured-output"]}
     ],
     "review-deep": [
-      {"model": "fable", "servedIdentities": ["claude-fable-5"], "provider": "anthropic", "transport": "claude-cli", "family": "anthropic", "billing": "subscription-or-local-paid-credits", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]},
-      {"model": "gpt-6-astra", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]},
-      {"model": "claude-opus-5-5", "servedIdentities": ["claude-opus-5-5"], "provider": "anthropic", "transport": "claude-cli", "family": "anthropic", "billing": "subscription-or-local-paid-credits", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]},
+      {"model": "gpt-6-luna", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output"]},
       {"model": "gpt-6.1-sol", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output"]},
       {"model": "deepseek/deepseek-v4-pro-0813", "provider": "openrouter", "transport": "openrouter", "family": "deepseek", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output"]},
       {"model": "qwen/qwen3.8-max", "provider": "openrouter", "transport": "openrouter", "family": "qwen", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output"]}
@@ -61,7 +54,7 @@
       {"model": "qwen/qwen3.8-max", "provider": "openrouter", "transport": "openrouter", "family": "qwen", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output"]}
     ],
     "security-review": [
-      {"model": "gpt-6.1-sol", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]},
+      {"model": "gpt-6-luna", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output", "independent-family"]},
       {"model": "moonshotai/kimi-k3", "provider": "openrouter", "transport": "openrouter", "family": "moonshotai", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output", "independent-family"]},
       {"model": "x-ai/grok-4.6", "provider": "openrouter", "transport": "openrouter", "family": "x-ai", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output", "independent-family"]},
       {"model": "qwen/qwen3.8-max", "provider": "openrouter", "transport": "openrouter", "family": "qwen", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output", "independent-family"]}
@@ -76,8 +69,7 @@
       {"model": "qwen/qwen3.8-max", "provider": "openrouter", "transport": "openrouter", "family": "qwen", "billing": "api", "capabilities": ["long-context", "structured-output"]}
     ],
     "design-consultant": [
-      {"model": "claude-opus-5-5", "servedIdentities": ["claude-opus-5-5"], "provider": "anthropic", "transport": "claude-cli", "family": "anthropic", "billing": "subscription-or-local-paid-credits", "capabilities": ["read-repository", "long-context", "structured-output"]},
-      {"model": "gpt-6.1-sol", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "long-context", "structured-output"]}
+      {"model": "claude-opus-5-5", "servedIdentities": ["claude-opus-5-5"], "provider": "anthropic", "transport": "claude-cli", "family": "anthropic", "billing": "subscription-or-local-paid-credits", "capabilities": ["read-repository", "long-context", "structured-output"]}
     ]
   }
 }

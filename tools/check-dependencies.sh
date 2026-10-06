@@ -280,8 +280,8 @@ if dm_review_floor != ">=1.85.0":
 
 router_floors = {
     "dm-review": ("pluginDependencies", ">=0.11.0"),
-    "pipeline": ("pluginDependencies", ">=0.11.0"),
-    "project-manager": ("optionalPluginDependencies", ">=0.9.0"),
+    "pipeline": ("pluginDependencies", ">=0.12.0"),
+    "project-manager": ("optionalPluginDependencies", ">=0.12.0"),
 }
 for consumer, (dependency_kind, expected) in router_floors.items():
     manifest = manifests.get(consumer)
