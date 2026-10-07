@@ -22,6 +22,19 @@ only operator/host-verified session bindings for supported targeted notification
 See `../agent-message-board/references/consumer-instructions.md` for the common
 Claude/Codex consumer contract.
 
+## Human-facing communication
+
+Lead with the decision in plain English and explain its practical effect. Use
+short, complete sentences, familiar words and concrete verbs. Remove repetition,
+jargon and process narration. Use simplified technical English principles loosely,
+without a controlled vocabulary. Prefer a small diagram or table when it explains
+a dependency or choice better than prose. Keep routine answers short.
+
+State what is complete, what remains unresolved and one next action. Keep material
+evidence gaps visible; link detailed logs, hashes and inventories. Preserve the
+required model recommendation and complete execution prompt. Already-authorized
+work proceeds without a new permission question.
+
 ## Non-negotiable boundaries
 
 - Keep this a planning-only session. Do not patch product code, run Pipeline or dm-review, merge, close, reassign, or substantially rewrite native Issues or PRs unless the user separately authorizes that action.
@@ -137,8 +150,9 @@ If no lane is safe, say `None`.
 
 ## Prepare execution prompts proportionally
 
-Prepare a copy-paste prompt only when requested. Default nontrivial product
-implementation to an explicit Pipeline invocation inside the copy-paste block:
+Prepare a complete copy-paste prompt when requested or when the recommended
+next action requires a fresh execution session. Do not ask whether to write it.
+Default nontrivial product implementation to an explicit Pipeline invocation inside the copy-paste block:
 `/pipeline` for a feature or change needing planning, `/pipeline-run` with the
 exact existing manifest for prepared execution, or `/pipeline-fix` with the
 numbered findings for a repair pass. Review-only work uses `/dm-review-loop`.
@@ -309,9 +323,10 @@ Return a compact, outcome-first report containing:
 8. planning commits or PRs created, or `None`;
 9. when the opinion path ran, `Plan A`, `Plan B` or its unavailable state, and
    one bounded synthesis;
-10. immediately before each requested copy-paste execution prompt, one
+10. immediately before each prepared copy-paste execution prompt, one
     concrete `Recommended start` projection and one concrete fallback;
-11. one complete copy-paste execution prompt when requested, with
+11. one complete copy-paste execution prompt when requested or needed for a
+    fresh execution session, with
     provider-neutral role, capabilities, and effort;
 12. only when the opinion path actually dispatched a role, the already-
     generated terminal model/cost Markdown after the recommendation and
