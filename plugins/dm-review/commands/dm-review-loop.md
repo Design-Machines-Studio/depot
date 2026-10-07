@@ -238,8 +238,8 @@ while iteration < max_iterations:
     full_review_baseline_complete = true
 
   coverage_selected_set = exact logical lane IDs selected by the coverage receipt
-  lanes_rerun = exact logical lane IDs in the coverage receipt's ATTEMPTED rows;
-    ATTEMPTED means dispatch began, regardless of success or failure
+  lanes_rerun = receiver-confirmed ATTEMPTED lanes with completed inspection,
+    excluding pending lanes
   if fallback_reason is non-null:
     rerun_reasons = every lane in lanes_rerun -> ["selection_fail_open"]
   else:
@@ -248,10 +248,10 @@ while iteration < max_iterations:
     lanes_skipped = coverage_selected_set minus the applied allowlist
   else:
     lanes_skipped = []
-  A lane selected for a full fan-out or allowlisted for a selective pass that
-    fails before dispatch is not "skipped". Its absence from ATTEMPTED makes the
-    nested review REVIEW INCOMPLETE; record it in optional lanes_pending
-    (absent means []). Rerun/skipped/pending must be disjoint and partition
+  lanes_pending (absent means []) = selected lanes with unresolved/incomplete
+    inspection, including attempted lanes and required lanes absent from ATTEMPTED.
+    These make the nested review REVIEW INCOMPLETE, never skipped.
+    Rerun/skipped/pending must be disjoint and partition
     coverage_selected_set; rule (a)/(b) lanes must be rerun or pending.
     Pending cannot be CLEAN or unchanged-source carry.
   `full_fanout_override: true` and `promoted_to_full: true` receipts always

@@ -44,7 +44,7 @@ class ReviewCloseoutTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def make_run(self, workflow="dm-review", run_id="closeout", *, legacy=False):
+    def make_run(self, workflow="dm-review", run_id="closeout", *, legacy=False, synthetic=False):
         run = ExactOwnedRun.start(workflow, run_id, base=self.state)
         source = run.create_path("raw-output", "review")
         run.create_path("raw-output", "receipts")
@@ -147,6 +147,17 @@ class ReviewCloseoutTests(unittest.TestCase):
         )
         paths["report"] = report
         if not legacy:
+            # Production-shaped test data exercises the production boundary;
+            # it is never external participant proof. Explicit synthetic
+            # assembler fixtures keep their separate, honest provenance.
+            if not synthetic:
+                (router / "security.json").write_text(json.dumps({
+                    "schemaVersion": 1, "receiptId": "dispatch-" + "a" * 24,
+                    "requested": {}, "fallback": False,
+                    "served": {"model": lane_receipt["model"], "provider": lane_receipt["provider"], "family": lane_receipt["reviewer_family"]},
+                    "attempts": [{"status": "completed"}],
+                    "publication": {"output": "published"}, "transportStub": False,
+                }) + "\n")
             paths["receipts"].write_text("[]\n")
             for key in ("lane_receipts", "raw_lane_outputs", "raw_findings", "decisions"):
                 paths[key].unlink()
@@ -161,19 +172,19 @@ class ReviewCloseoutTests(unittest.TestCase):
                 "inspected": {"paths": ["source.txt"], "basis": "repository", "limitations": [], "missing_evidence_refs": []},
                 "literal": {"output_ref": "raw/security.md", "dispatch_receipt_ref": "receipts/private/router/security.json", "companion_ref": "review/companion.json"},
                 "result": {"status": "no_findings", "findings": [], "incomplete_reasons": []},
-                "provenance": {"kind": "synthetic_test", "executed_at": None, "source_refs": ["review/prompt.md"]},
+                "provenance": {"kind": "synthetic_test" if synthetic else "live", "executed_at": None if synthetic else "2026-09-01T00:01:00Z", "source_refs": ["review/prompt.md"]},
                 "recheck": {"prior_record_ref": None, "selection_ref": None, "repair_refs": []},
             }
             paths["input"] = source / "lane-input.json"
             paths["input"].write_text(json.dumps(lane_input) + "\n")
-            lane_result = assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths["request"], receipts_path=paths["receipts"], input_path=paths["input"], test_harness=True)
+            lane_result = assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths["request"], receipts_path=paths["receipts"], input_path=paths["input"], test_harness=synthetic)
             paths["record_ref"] = lane_result["record_ref"]
             coverage = {"schema_version": 1, "operation": "coverage", "run_id": run_id, "pass_id": "initial",
                         "selection": [{"lane": "security", "record_ref": lane_result["record_ref"], "history_refs": [], "transition_refs": []}],
                         "decisions": [], "occurred_at": "2026-09-01T00:01:30Z", "required_case_refs": [], "resolutions": []}
             paths["coverage_input"] = source / "coverage-input.json"
             paths["coverage_input"].write_text(json.dumps(coverage) + "\n")
-            assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths["request"], receipts_path=paths["receipts"], input_path=paths["coverage_input"], test_harness=True)
+            assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths["request"], receipts_path=paths["receipts"], input_path=paths["coverage_input"], test_harness=synthetic)
         return run, paths
 
     def preserve(self, run, paths):
@@ -472,6 +483,43 @@ class ReviewCloseoutTests(unittest.TestCase):
         with self.assertRaises(EvidenceAssemblyError) as caught:
             assemble_review_evidence(**dict(arguments, input_path=run.root / "review/linked-input.json"))
         self.assertEqual({"stage": "lane_input", "reason": "unsafe_path", "path": "review/evidence.json"}, caught.exception.detail())
+
+    def test_preservation_diagnostics_use_actual_safe_inputs_and_keep_destination_atomic(self):
+        run, paths = self.make_run(run_id="preserve-input-paths")
+        first = self.preserve(run, paths)
+        destination = Path(first["evidence_path"])
+        original = {p.relative_to(destination): p.read_bytes()
+                    for p in destination.rglob("*") if p.is_file()}
+        for key, path, reason, role in (
+            ("request", run.root / "review/absent-final-request.json", "missing_evidence", "review/absent-final-request.json"),
+            ("lane_receipts", run.root / "review/absent-pass-lanes.json", "missing_evidence", "review/absent-pass-lanes.json"),
+            ("receipts", run.root / "review/absent-final-receipts.json", "missing_evidence", "review/absent-final-receipts.json"),
+            ("raw_lane_outputs", run.root / "review/absent-pass-outputs.json", "missing_evidence", "review/absent-pass-outputs.json"),
+            ("raw_findings", run.root / "review/absent-pass-findings.json", "missing_evidence", "review/absent-pass-findings.json"),
+            ("decisions", run.root / "review/absent-pass-decisions.json", "missing_evidence", "review/absent-pass-decisions.json"),
+            ("report", run.root / "review/absent-final-report.md", "missing_evidence", "review/absent-final-report.md"),
+            ("report", self.repo / "review/absent-final-report.md", "missing_evidence", "review/absent-final-report.md"),
+            ("request", self.root / "secret-foreign-request.json", "unsafe_path", "review/request.json"),
+            ("request", run.root / "review/ghp_abcdefgh12345678.json", "missing_evidence", "review/evidence.json"),
+        ):
+            with self.subTest(key=key, role=role):
+                result = self.preserve(run, dict(paths, **{key: path}))
+                self.assertEqual("incomplete", result["status"])
+                self.assertIn({"stage": "preservation_input", "reason": reason, "path": role}, result["diagnostics"])
+                self.assertNotIn(str(self.root), json.dumps(result["diagnostics"]))
+                self.assertNotIn("secret-foreign", json.dumps(result["diagnostics"]))
+                self.assertEqual(original, {p.relative_to(destination): p.read_bytes()
+                                           for p in destination.rglob("*") if p.is_file()})
+        # Pass-specific source names still bind canonical retained destinations.
+        copied = dict(paths)
+        for key in ("request", "lane_receipts", "report"):
+            copied[key] = run.root / ("review/final-" + paths[key].name)
+            shutil.copyfile(paths[key], copied[key])
+        result = self.preserve(run, copied)
+        self.assertEqual("complete", result["status"])
+        self.assertEqual(first["evidence_path"], result["evidence_path"])
+        self.assertEqual(paths["request"].read_bytes(), (destination / "review/request.json").read_bytes())
+        self.assertEqual(paths["lane_receipts"].read_bytes(), (destination / "review/review-lane-receipts.json").read_bytes())
 
     def test_missing_router_directory_names_its_relative_path(self):
         run, paths = self.make_run("dm-review", "absent-router")

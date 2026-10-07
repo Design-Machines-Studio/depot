@@ -64,16 +64,18 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
     """Synthetic CLI lifecycle, distinct from live and installed consumer proof."""
     setUp = fixture.ReviewCloseoutTests.setUp
     tearDown = fixture.ReviewCloseoutTests.tearDown
-    make_run = fixture.ReviewCloseoutTests.make_run
     preserve = fixture.ReviewCloseoutTests.preserve
+
+    def make_run(self, workflow="dm-review", run_id="closeout", *, synthetic=True, **options):
+        return fixture.ReviewCloseoutTests.make_run(self, workflow, run_id, synthetic=synthetic, **options)
 
     def write(self, path, value):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(value) + "\n")
         return path
 
-    def prepare(self, lanes=("security",)):
-        run, paths = self.make_run("dm-review-loop", "producer")
+    def prepare(self, lanes=("security",), *, synthetic=True):
+        run, paths = self.make_run("dm-review-loop", "producer", synthetic=synthetic)
         request = json.loads(paths["request"].read_text())
         request["required_lanes"] = list(lanes)
         self.write(paths["request"], request)
@@ -92,7 +94,7 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
             paths["lanes"][lane] = self.write(run.root / f"review/{lane}-input.json", value)
         return run, paths
 
-    def cli(self, run, paths, input_path):
+    def cli(self, run, paths, input_path, *, test_harness=True):
         import os
         import sys
         from tests import KERNEL_REFERENCES
@@ -100,15 +102,75 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
             sys.executable, "-m", "workflow_kernel", "assemble-review-evidence",
             "--run-root", str(run.root), "--repository-root", str(self.repo),
             "--request", str(paths["request"]), "--receipts", str(paths["receipts"]),
-            "--input", str(input_path), "--test-harness",
-        ], env=dict(os.environ, PYTHONPATH=str(KERNEL_REFERENCES)), capture_output=True, text=True)
+            "--input", str(input_path), *(["--test-harness"] if test_harness else []),
+        ], env=dict(os.environ, PYTHONPATH=str(KERNEL_REFERENCES)), capture_output=True, text=True, timeout=15)
 
-    def lane(self, run, paths, lane="security"):
-        result = self.cli(run, paths, paths["lanes"][lane])
+    def export_cli(self, run, paths, output):
+        import os
+        import sys
+        from tests import KERNEL_REFERENCES
+        return subprocess.run([
+            sys.executable, "-m", "workflow_kernel", "export-review-contributions",
+            "--request", str(paths["request"]), "--receipts", str(paths["receipts"]),
+            "--decisions", str(paths["decisions"]), "--raw-findings", str(paths["raw_findings"]),
+            "--lane-receipts", str(paths["lane_receipts"]), "--raw-lane-outputs", str(paths["raw_lane_outputs"]),
+            "--state-dir", str(run.root), "--output", str(output),
+        ], env=dict(os.environ, PYTHONPATH=str(KERNEL_REFERENCES)), capture_output=True, text=True, timeout=15)
+
+    def test_contribution_export_cli_preserves_conflicting_existing_output(self):
+        run, paths = self.make_run(run_id="export-conflict")
+        output = run.root / "review/contributions.json"
+        output.write_text('[{"stage":"foreign-owned-receipt"}]\n')
+        before, receipts = output.read_bytes(), paths["receipts"].read_bytes()
+        result = self.export_cli(run, paths, output)
+        self.assertNotEqual(0, result.returncode, result.stdout)
+        self.assertEqual(before, output.read_bytes())
+        self.assertEqual(receipts, paths["receipts"].read_bytes())
+        self.assertFalse((run.root / "contribution-inputs").exists())
+
+    def test_contribution_export_cli_serializes_with_authoritative_append(self):
+        import fcntl
+        from concurrent.futures import ThreadPoolExecutor
+        from workflow_kernel.cli import _open_receipt_stream_lock
+        run, paths = self.make_run(run_id="export-append")
+        before = json.loads(paths["receipts"].read_text())
+        value = json.loads(paths["input"].read_text())
+        value.update(pass_id="same-source-retry", attempt=2)
+        input_path = self.write(run.root / "review/retry-input.json", value)
+        # Queue actual CLI processes behind the authoritative stream lock.
+        descriptor = _open_receipt_stream_lock(paths["receipts"])
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        try:
+            with ThreadPoolExecutor(max_workers=3) as pool:
+                exports = [pool.submit(self.export_cli, run, paths, output) for output in
+                           (paths["receipts"], run.root / "review/optional-contributions.json")]
+                append = pool.submit(self.cli, run, paths, input_path)
+                import time
+                time.sleep(0.2)
+                self.assertTrue(all(not future.done() for future in [*exports, append]))
+                self.assertEqual(before, json.loads(paths["receipts"].read_text()))
+                fcntl.flock(descriptor, fcntl.LOCK_UN)
+                results = [future.result(timeout=20) for future in [*exports, append]]
+        finally:
+            import os
+            os.close(descriptor)
+        for result in results:
+            self.assertEqual(0, result.returncode, result.stderr)
+        final = json.loads(paths["receipts"].read_text())
+        self.assertEqual(before, final[:len(before)])
+        self.assertEqual(list(range(len(final))), [row["sequence"] for row in final])
+        self.assertEqual(2, sum(row["stage"] == "review_lane_evidence" for row in final))
+        self.assertEqual(1, sum(row["stage"] == "finding_contribution_coverage" for row in final))
+        optional = json.loads((run.root / "review/optional-contributions.json").read_text())
+        self.assertEqual(before, optional[:len(before)])
+        self.assertEqual(1, sum(row["stage"] == "finding_contribution_coverage" for row in optional))
+
+    def lane(self, run, paths, lane="security", *, test_harness=True):
+        result = self.cli(run, paths, paths["lanes"][lane], test_harness=test_harness)
         self.assertEqual(0, result.returncode, result.stderr)
         return json.loads(result.stdout)["record_ref"]
 
-    def coverage(self, run, paths, records, **overrides):
+    def coverage(self, run, paths, records, *, test_harness=True, **overrides):
         value = {"schema_version": 1, "operation": "coverage", "run_id": run.run_id,
                  "pass_id": "initial", "selection": [
                      {"lane": lane, "record_ref": record, "history_refs": [], "transition_refs": []}
@@ -116,7 +178,7 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
                  "decisions": [], "occurred_at": "2026-09-01T00:02:00Z", "required_case_refs": [], "resolutions": []}
         value.update(overrides)
         path = self.write(run.root / "review/aggregate-input.json", value)
-        return self.cli(run, paths, path)
+        return self.cli(run, paths, path, test_harness=test_harness)
 
     def test_zero_findings_cli_completion_retry_and_missing_companion_reconstruction(self):
         run, paths = self.prepare()
@@ -132,8 +194,18 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         self.assertEqual(0, retry.returncode, retry.stderr)
         self.assertTrue(json.loads(retry.stdout)["reused"])
         self.assertEqual(before, paths["receipts"].read_bytes())
-        self.assertEqual("complete", self.preserve(run, paths)["status"])
-        run.finish("succeeded", retain_diagnostics=True)
+        self.assert_synthetic_terminal_rejected(run, paths)
+
+    def assert_synthetic_terminal_rejected(self, run, paths):
+        from workflow_kernel.review_closeout import has_preserved_review_evidence
+        raw = (run.root / "raw/security.md").read_bytes()
+        result = self.preserve(run, paths)
+        self.assertEqual("incomplete", result["status"], result)
+        self.assertFalse(has_preserved_review_evidence(run.root / "diagnostic"))
+        with self.assertRaises(ValueError):
+            run.finish("succeeded", retain_diagnostics=True)
+        self.assertEqual(raw, (run.root / "raw/security.md").read_bytes())
+        return result
 
     def test_successful_dispatch_cannot_settle_incomplete_inspection(self):
         run, paths = self.prepare()
@@ -359,7 +431,7 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         final = self.coverage(replay, current, {}, pass_id="final", selection=final_selection, resolutions=[{"source_finding_id": finding["source_finding_id"], "repair_ref": patch_ref, "verification_record_ref": new_record}])
         self.assertEqual(0, final.returncode, final.stderr)
         result = self.preserve(replay, current)
-        self.assertEqual("complete", result["status"], result)
+        self.assertEqual("incomplete", result["status"], result)
         retained = Path(result["evidence_path"])
         self.assertEqual(before["head"], json.loads((retained / records[next(lane for lane in lanes if lane != "security")]).read_text())["input"]["source"]["head"])
         self.assertEqual(original_output, (retained / record["bindings"]["raw/security.md"]["retained_ref"]).read_bytes())
@@ -374,9 +446,11 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
                 self.assertEqual((run.root / ref).read_bytes(), (retained / ref).read_bytes())
             retained_record = json.loads((retained / new_record).read_text())
             self.assertEqual(common, (retained / retained_record["bindings"][common_ref]["retained_ref"]).read_bytes())
-            self.assertTrue(has_preserved_review_evidence(replay.root / "diagnostic"))
-            print(f"SYNTHETIC scaling lifecycle: 8 logical lanes; 1159 paths; 146742 metadata bytes; {len(common_patch)} actual fixture diff bytes; retained {count}/128 files, {size}/2097152 bytes; original history/output and shared input unchanged.")
-        replay.finish("succeeded", retain_diagnostics=True)
+            self.assertFalse(has_preserved_review_evidence(replay.root / "diagnostic"))
+            print(f"SYNTHETIC scaling lifecycle: 8 logical completions + repair/recheck/carry; production INCOMPLETE; 1159 paths; 146742 metadata bytes; {len(common_patch)} actual fixture diff bytes; retained {count}/128 files, {size}/2097152 bytes; original history/output and shared input unchanged; successful cleanup rejected.")
+        with self.assertRaises(ValueError):
+            replay.finish("succeeded", retain_diagnostics=True)
+        self.assertEqual(original_output, (replay.root / "raw/security.md").read_bytes())
 
     def test_shared_snapshot_missing_tampered_malformed_and_wrong_head_rejected(self):
         from workflow_kernel.review_closeout import _seal_evidence, _seal_record
@@ -431,16 +505,17 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         self.assertEqual(1, json.loads(original)["schema_version"])
         self.assertEqual(0, self.coverage(run, paths, {"security": ref}).returncode)
         retained = self.preserve(run, paths)
-        self.assertEqual("complete", retained["status"])
+        self.assertEqual("incomplete", retained["status"])
         self.assertEqual(original, (Path(retained["evidence_path"]) / ref).read_bytes())
         self.assertEqual(ref, self.lane(run, paths))
-        run.finish("succeeded", retain_diagnostics=True)
+        with self.assertRaises(ValueError):
+            run.finish("succeeded", retain_diagnostics=True)
 
     def test_terminal_revalidates_shared_snapshot_closure(self):
         from workflow_kernel.review_closeout import has_preserved_review_evidence
-        run, paths = self.prepare()
-        ref = self.lane(run, paths)
-        self.assertEqual(0, self.coverage(run, paths, {"security": ref}).returncode)
+        run, paths = self.prepare(synthetic=False)
+        ref = self.lane(run, paths, test_harness=False)
+        self.assertEqual(0, self.coverage(run, paths, {"security": ref}, test_harness=False).returncode)
         result = self.preserve(run, paths)
         self.assertEqual("complete", result["status"])
         retained = Path(result["evidence_path"])
@@ -493,6 +568,227 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
             assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths['request'], receipts_path=paths['receipts'], input_path=paths['lanes']['security'])
         self.assertEqual('incomplete_inspection', caught.exception.reason)
         self.assertEqual([], json.loads(paths['receipts'].read_text()))
+
+    def test_test_mode_requires_durable_synthetic_provenance_through_retention(self):
+        run, paths = self.prepare()
+        value = json.loads(paths["lanes"]["security"].read_text())
+        for kind in ("live", "recovery"):
+            with self.subTest(kind=kind):
+                value["provenance"]["kind"] = kind
+                self.write(paths["lanes"]["security"], value)
+                result = self.cli(run, paths, paths["lanes"]["security"])
+                self.assertEqual(3, result.returncode, result.stderr)
+                self.assertEqual("incomplete_inspection", json.loads(result.stderr)["error"]["details"]["reason"])
+                self.assertEqual([], json.loads(paths["receipts"].read_text()))
+                self.assertEqual("incomplete", self.preserve(run, paths)["status"])
+        value["provenance"]["kind"] = "synthetic_test"
+        self.write(paths["lanes"]["security"], value)
+        record = self.lane(run, paths)
+        result = self.cli(run, paths, paths["lanes"]["security"], test_harness=False)
+        self.assertEqual(3, result.returncode, result.stderr)  # Committed retry also rejects.
+        coverage = self.write(run.root / "review/aggregate-input.json", {
+            "schema_version": 1, "operation": "coverage", "run_id": run.run_id, "pass_id": "initial",
+            "selection": [{"lane": "security", "record_ref": record, "history_refs": [], "transition_refs": []}],
+            "decisions": [], "occurred_at": "2026-09-01T00:02:00Z", "required_case_refs": [], "resolutions": [],
+        })
+        before = paths["receipts"].read_bytes()
+        result = self.cli(run, paths, coverage, test_harness=False)
+        self.assertEqual(3, result.returncode, result.stderr)
+        self.assertEqual(before, paths["receipts"].read_bytes())
+        self.assertEqual("incomplete", self.preserve(run, paths)["status"])
+        result = self.cli(run, paths, coverage)
+        self.assertEqual(0, result.returncode, result.stderr)
+        retained = Path(self.preserve(run, paths)["evidence_path"])
+        self.assertEqual("synthetic_test", json.loads((retained / record).read_text())["input"]["provenance"]["kind"])
+        retained_paths = dict(paths, request=retained / "review/request.json", receipts=retained / "review/authoritative-receipts.json")
+        retained_input = self.write(retained / "review/coverage-retry.json", json.loads(coverage.read_text()))
+        before = retained_paths["receipts"].read_bytes()
+        result = self.cli(run, retained_paths, retained_input, test_harness=False)
+        self.assertEqual(3, result.returncode, result.stderr)
+        self.assertEqual("incomplete_inspection", json.loads(result.stderr)["error"]["details"]["reason"])
+        self.assertEqual(before, retained_paths["receipts"].read_bytes())
+
+    def test_production_dispatch_keeps_original_source_for_live_and_recovery(self):
+        """Production-shaped fixture receipts; no external participant claims."""
+        from workflow_kernel.review_closeout import _source_snapshot, _changed_paths, _git_patch
+        run, paths = self.prepare()
+        value = json.loads(paths["lanes"]["security"].read_text())
+        original_head = value["source"]["head"]
+        companion = json.loads((run.root / value["literal"]["companion_ref"]).read_text())
+        dispatch = json.loads((run.root / value["literal"]["dispatch_receipt_ref"]).read_text())
+        dispatch.update(served={"model": companion["model"], "provider": companion["provider"], "family": companion["reviewer_family"]},
+                        attempts=[{"status": "completed"}], publication={"output": "published"}, transportStub=False)
+        self.write(run.root / value["literal"]["dispatch_receipt_ref"], dispatch)
+        original_dispatch = (run.root / value["literal"]["dispatch_receipt_ref"]).read_bytes()
+        value["provenance"].update(kind="live", executed_at="2026-09-01T00:01:00Z")
+        self.write(paths["lanes"]["security"], value)
+        initial = self.cli(run, paths, paths["lanes"]["security"], test_harness=False)
+        self.assertEqual(0, initial.returncode, initial.stderr)
+        original_record = json.loads(initial.stdout)["record_ref"]
+        retry = self.cli(run, paths, paths["lanes"]["security"], test_harness=False)
+        self.assertEqual(0, retry.returncode, retry.stderr)
+        self.assertTrue(json.loads(retry.stdout)["reused"])
+        before = _source_snapshot(self.repo, original_head)
+        (self.repo / "source.txt").write_text("actual changed fixture source\n")
+        subprocess.run(["git", "-C", str(self.repo), "add", "source.txt"], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "--quiet", "-m", "fixture repair"], check=True)
+        _, head = source_identity(self.repo)
+        after = _source_snapshot(self.repo, head)
+        request = json.loads(paths["request"].read_text())
+        request["source_head"] = head
+        current = dict(paths, request=self.write(run.root / "review/final-request.json", request))
+        receipts_before = paths["receipts"].read_bytes()
+        for kind in ("live", "recovery"):
+            relabelled = json.loads(json.dumps(value))
+            relabelled.update(pass_id="relabelled-" + kind, attempt=2)
+            relabelled["source"].update(head=head, base=head, request_ref="review/final-request.json")
+            relabelled["provenance"]["kind"] = kind
+            result = self.cli(run, current, self.write(run.root / f"review/relabelled-{kind}.json", relabelled), test_harness=False)
+            self.assertEqual(3, result.returncode, result.stderr)
+            self.assertEqual("source_scope_mismatch", json.loads(result.stderr)["error"]["details"]["reason"])
+            self.assertEqual(receipts_before, paths["receipts"].read_bytes())
+            self.assertEqual("incomplete", self.preserve(run, current)["status"])
+        # Original historical recovery and its identical retry remain valid.
+        historical = json.loads(json.dumps(value))
+        historical.update(pass_id="historical-recovery", attempt=2)
+        historical["provenance"]["kind"] = "recovery"
+        historical_path = self.write(run.root / "review/historical-input.json", historical)
+        result = self.cli(run, paths, historical_path, test_harness=False)
+        self.assertEqual(0, result.returncode, result.stderr)
+        historical_record = json.loads(result.stdout)["record_ref"]
+        retry = self.cli(run, paths, historical_path, test_harness=False)
+        self.assertTrue(json.loads(retry.stdout)["reused"])
+        # A distinct original receipt can also be recovered at its historical HEAD.
+        dispatch["receiptId"] = "dispatch-" + "b" * 24
+        historical["literal"]["dispatch_receipt_ref"] = "receipts/private/router/historical.json"
+        self.write(run.root / historical["literal"]["dispatch_receipt_ref"], dispatch)
+        historical.update(pass_id="distinct-history", attempt=3)
+        result = self.cli(run, paths, self.write(run.root / "review/distinct-history.json", historical), test_harness=False)
+        self.assertEqual(0, result.returncode, result.stderr)
+        # Current inspection needs a distinct dispatch and explicit predecessor.
+        patch_ref, selection_ref = "review/repair.patch", "review/selection.json"
+        (run.root / patch_ref).write_bytes(_git_patch(self.repo, original_head, head))
+        iteration = {"run_id": run.run_id, "sequence": 0, "stage": "review_iteration", "status": "complete",
+                     "occurred_at": "2026-09-01T00:03:00Z", "authoritative_receipt": selection_ref,
+                     "selective_rerun": False, "promoted_to_full": False, "full_fanout_override": False,
+                     "lanes_rerun": ["security"], "lanes_skipped": [], "rerun_reasons": {"security": ["initial_full_fanout"]}, "selection_fallback_reason": None}
+        self.write(run.root / selection_ref, {"schema_version": 1, "selected_full_set": ["security"], "applied": True,
+            "iteration": iteration, "finding_owner_lanes": [], "file_trigger_lanes": ["security"],
+            "from_source": before, "to_source": after, "changed_paths": _changed_paths(before, after), "patch_ref": patch_ref, "worktree_ref": None})
+        fresh = json.loads(json.dumps(value))
+        fresh.update(pass_id="current-recheck", attempt=4)
+        fresh["source"].update(head=head, base=original_head, request_ref="review/final-request.json")
+        fresh["literal"]["dispatch_receipt_ref"] = "receipts/private/router/current.json"
+        dispatch["receiptId"] = "dispatch-" + "c" * 24
+        self.write(run.root / fresh["literal"]["dispatch_receipt_ref"], dispatch)
+        fresh["recheck"] = {"prior_record_ref": historical_record, "selection_ref": selection_ref, "repair_refs": [patch_ref]}
+        fresh["requested"]["evidence_refs"].append(patch_ref)
+        fresh["requested"]["required_evidence_refs"].append(patch_ref)
+        fresh_path = self.write(run.root / "review/current-input.json", fresh)
+        result = self.cli(run, current, fresh_path, test_harness=False)
+        self.assertEqual(0, result.returncode, result.stderr)
+        fresh_record = json.loads(result.stdout)["record_ref"]
+        coverage = self.write(run.root / "review/production-coverage.json", {
+            "schema_version": 1, "operation": "coverage", "run_id": run.run_id, "pass_id": "final",
+            "selection": [{"lane": "security", "record_ref": fresh_record, "history_refs": [historical_record], "transition_refs": []}],
+            "decisions": [], "occurred_at": "2026-09-01T00:04:00Z", "required_case_refs": [], "resolutions": [],
+        })
+        result = self.cli(run, current, coverage, test_harness=False)
+        self.assertEqual(0, result.returncode, result.stderr)
+        retained = Path(self.preserve(run, current)["evidence_path"])
+        retained_paths = dict(current, request=retained / "review/request.json", receipts=retained / "review/authoritative-receipts.json")
+        retained_input = self.write(retained / "review/production-retry.json", fresh)
+        result = self.cli(run, retained_paths, retained_input, test_harness=False)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertTrue(json.loads(result.stdout)["reused"])
+        self.assertEqual(original_dispatch, (run.root / value["literal"]["dispatch_receipt_ref"]).read_bytes())
+        self.assertEqual(original_head, json.loads((retained / original_record).read_text())["input"]["source"]["head"])
+
+    def test_production_coverage_rejects_synthetic_predecessor_history(self):
+        from workflow_kernel.review_closeout import _source_snapshot
+        run, paths = self.prepare()
+        self.write_dispatch(run, paths, stub=False)  # Provenance alone must reject.
+        synthetic_record = self.lane(run, paths)
+        value = json.loads(paths["lanes"]["security"].read_text())
+        snapshot = _source_snapshot(self.repo, value["source"]["head"])
+        patch_ref, selection_ref = "review/confirmation.patch", "review/confirmation-selection.json"
+        (run.root / patch_ref).write_bytes(b"")
+        self.write(run.root / selection_ref, {"schema_version": 1, "selected_full_set": ["security"], "applied": True,
+            "iteration": {"run_id": run.run_id, "sequence": 0, "stage": "review_iteration", "status": "complete",
+                          "occurred_at": "2026-09-01T00:03:00Z", "authoritative_receipt": selection_ref,
+                          "selective_rerun": False, "promoted_to_full": False, "full_fanout_override": False,
+                          "lanes_rerun": ["security"], "lanes_skipped": [], "rerun_reasons": {"security": ["initial_full_fanout"]}, "selection_fallback_reason": None},
+            "finding_owner_lanes": [], "file_trigger_lanes": [], "from_source": snapshot, "to_source": snapshot,
+            "changed_paths": [], "patch_ref": patch_ref, "worktree_ref": None})
+        companion = json.loads((run.root / value["literal"]["companion_ref"]).read_text())
+        value.update(pass_id="production-confirmation", attempt=2)
+        value["provenance"].update(kind="live", executed_at="2026-09-01T00:03:00Z")
+        value["literal"]["dispatch_receipt_ref"] = "receipts/private/router/confirmation.json"
+        self.write(run.root / value["literal"]["dispatch_receipt_ref"], {
+            "schemaVersion": 1, "receiptId": "dispatch-" + "d" * 24, "requested": {}, "fallback": False,
+            "served": {"model": companion["model"], "provider": companion["provider"], "family": companion["reviewer_family"]},
+            "attempts": [{"status": "completed"}], "publication": {"output": "published"}, "transportStub": False})
+        value["recheck"] = {"prior_record_ref": synthetic_record, "selection_ref": selection_ref, "repair_refs": [patch_ref]}
+        result = self.cli(run, paths, self.write(run.root / "review/confirmation.json", value), test_harness=False)
+        self.assertEqual(0, result.returncode, result.stderr)
+        record = json.loads(result.stdout)["record_ref"]
+        coverage = self.write(run.root / "review/confirmation-coverage.json", {
+            "schema_version": 1, "operation": "coverage", "run_id": run.run_id, "pass_id": "final",
+            "selection": [{"lane": "security", "record_ref": record, "history_refs": [synthetic_record], "transition_refs": []}],
+            "decisions": [], "occurred_at": "2026-09-01T00:04:00Z", "required_case_refs": [], "resolutions": []})
+        before = paths["receipts"].read_bytes()
+        result = self.cli(run, paths, coverage, test_harness=False)
+        self.assertEqual(3, result.returncode, result.stderr)
+        self.assertEqual("incomplete_inspection", json.loads(result.stderr)["error"]["details"]["reason"])
+        self.assertEqual(before, paths["receipts"].read_bytes())
+        self.assertEqual("incomplete", self.preserve(run, paths)["status"])
+        # Coverage already sealed by the test-mode assembler stays ineligible.
+        self.assertEqual(0, self.cli(run, paths, coverage).returncode)
+        self.assert_sealed_production_rejected(run, paths, paths["lanes"]["security"], coverage)
+
+    def assert_sealed_production_rejected(self, run, paths, lane_input, coverage_input):
+        """Production retry, coverage, preservation and cleanup all refuse."""
+        before = paths["receipts"].read_bytes()
+        for path in (lane_input, coverage_input):
+            result = self.cli(run, paths, path, test_harness=False)
+            self.assertEqual(3, result.returncode, result.stderr)
+            self.assertEqual("incomplete_inspection", json.loads(result.stderr)["error"]["details"]["reason"])
+            self.assertEqual(before, paths["receipts"].read_bytes())
+        self.assert_synthetic_terminal_rejected(run, paths)
+
+    def write_dispatch(self, run, paths, *, stub):
+        """Production-shaped fixture dispatch; only `stub` differs."""
+        value = json.loads(paths["lanes"]["security"].read_text())
+        companion = json.loads((run.root / value["literal"]["companion_ref"]).read_text())
+        self.write(run.root / value["literal"]["dispatch_receipt_ref"], {
+            "schemaVersion": 1, "receiptId": "dispatch-" + "e" * 24, "requested": {}, "fallback": False,
+            "served": {"model": companion["model"], "provider": companion["provider"], "family": companion["reviewer_family"]},
+            "attempts": [{"status": "completed"}], "publication": {"output": "published"}, "transportStub": stub})
+        return value
+
+    def test_sealed_synthetic_selected_coverage_rejected_by_production(self):
+        run, paths = self.prepare()
+        self.write_dispatch(run, paths, stub=False)  # Provenance alone must reject.
+        record = self.lane(run, paths)
+        self.assertEqual(0, self.coverage(run, paths, {"security": record}).returncode)
+        self.assert_sealed_production_rejected(run, paths, paths["lanes"]["security"], run.root / "review/aggregate-input.json")
+
+    def test_sealed_old_live_labelled_stub_record_rejected_by_production(self):
+        """Synthetic historical bypass fixture, not a live claim: simulates a
+        record sealed by older code with a live label over a stub dispatch."""
+        from workflow_kernel.review_closeout import _document_digest, _seal_record
+        run, paths = self.prepare()
+        value = self.write_dispatch(run, paths, stub=True)
+        record = json.loads((run.root / self.lane(run, paths)).read_text())
+        value["provenance"].update(kind="live", executed_at="2026-09-01T00:01:00Z")
+        record.update(input=value, input_digest=_document_digest(value))
+        ref = _seal_record(run.root, "lane", record)
+        receipts = json.loads(paths["receipts"].read_text())
+        receipts[-1]["authoritative_receipt"] = ref
+        self.write(paths["receipts"], receipts)
+        self.write(paths["lanes"]["security"], value)
+        self.assertEqual(0, self.coverage(run, paths, {"security": ref}).returncode)
+        self.assert_sealed_production_rejected(run, paths, paths["lanes"]["security"], run.root / "review/aggregate-input.json")
 
     def test_worktree_inspection_retains_content_and_changed_retry_cannot_relabel_it(self):
         from workflow_kernel.review_closeout import _working_patch
@@ -554,7 +850,7 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         first.write_bytes(sealed)
         result = self.coverage(run, paths, {}, pass_id="final", selection=selection)
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual("complete", self.preserve(run, paths)["status"])
+        self.assert_synthetic_terminal_rejected(run, paths)
 
     def test_nine_lane_pending_two_pass_producer_and_closeout(self):
         """Synthetic 939 -> e605 baseline, then actual e605 -> 64 -> DD."""
@@ -773,8 +1069,8 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         selection_path.write_bytes(saved_selection)
         result = self.coverage(run, paths, {}, pass_id="final", selection=final_rows)
         self.assertEqual(0, result.returncode, result.stderr)
-        preserved = self.preserve(run, paths)
-        self.assertEqual("complete", preserved["status"], preserved)
+        # Test-mode coverage settles; production preservation stays incomplete.
+        preserved = self.assert_synthetic_terminal_rejected(run, paths)
         retained = Path(preserved["evidence_path"])
         for ref, data in original_bytes.items():
             self.assertEqual(data, (retained / ref).read_bytes())
@@ -849,17 +1145,17 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         record = self.lane(run, paths)
         result = self.coverage(run, paths, {'security': record})
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual('complete', self.preserve(run, paths)['status'])
+        self.assert_synthetic_terminal_rejected(run, paths)
 
     def test_committed_coverage_reconstruction_works_from_retained_scope(self):
-        from workflow_kernel.review_closeout import assemble_review_evidence, ReviewCloseoutValidationError
+        from workflow_kernel.review_closeout import assemble_review_evidence
         run, paths = self.prepare()
         record = self.lane(run, paths)
         result = self.coverage(run, paths, {'security': record})
         self.assertEqual(0, result.returncode, result.stderr)
-        paths['report'].write_text('[Missing](review/absent.md).\n')
-        with self.assertRaises(ReviewCloseoutValidationError):
-            self.preserve(run, paths)
+        # Production preservation keeps the synthetic scope as INCOMPLETE
+        # diagnostics; only test-mode assembly reconstructs from it below.
+        self.assert_synthetic_terminal_rejected(run, paths)
         scope = next((run.root / 'diagnostic/review').iterdir())
         run.finish('failed', retain_diagnostics=True, reason='synthetic report repair', contains='committed source-bound history')
         input_value = json.loads((run.root / 'diagnostic/review' / scope.name / json.loads((scope / 'review/authoritative-receipts.json').read_text())[-1]['authoritative_receipt']).read_text())['input']
@@ -883,7 +1179,7 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         for receipt in json.loads(paths['receipts'].read_text()):
             for field in ('workflow_class', 'workflow_class_defaulted', 'execution_mode', 'decision_profile', 'decision_profile_defaulted'):
                 self.assertEqual(request[field], receipt[field])
-        self.assertEqual('complete', self.preserve(run, paths)['status'])
+        self.assert_synthetic_terminal_rejected(run, paths)
 
     def test_router_public_companion_is_consumed_without_hand_materialized_lane_row(self):
         run, paths = self.prepare()
@@ -902,4 +1198,4 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         record = self.lane(run, paths)
         result = self.coverage(run, paths, {'security': record})
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual('complete', self.preserve(run, paths)['status'])
+        self.assert_synthetic_terminal_rejected(run, paths)
