@@ -190,6 +190,84 @@ class ReviewCloseoutTests(unittest.TestCase):
             report_path=paths.get("report"),
         )
 
+    def test_actual_preservation_limits_are_closed_and_atomic(self):
+        from tests import KERNEL_REFERENCES
+        from workflow_kernel.owned_run import _MAX_DIAGNOSTIC_BYTES, _MAX_DIAGNOSTIC_FILES
+        from workflow_kernel.review_closeout import has_preserved_review_evidence
+
+        for kind in ("staging_files", "staging_bytes", "router_files", "router_bytes", "single_file_bytes"):
+            for prior in (False, True):
+                with self.subTest(kind=kind, prior=prior):
+                    run, paths = self.make_run(run_id=f"limit-{kind.replace('_', '-')}-{int(prior)}")
+                    first = self.preserve(run, paths)
+                    destination = Path(first["evidence_path"])
+                    original = {p.relative_to(destination): p.read_bytes()
+                                for p in destination.rglob("*") if p.is_file()}
+                    if not prior:
+                        shutil.rmtree(destination)
+                    if kind.endswith("files"):
+                        count = (_MAX_DIAGNOSTIC_FILES - first["files"] + 1
+                                 if kind == "staging_files" else _MAX_DIAGNOSTIC_FILES + 1)
+                        for index in range(count):
+                            (paths["router"] / f"extra-{index}.json").write_text("{}")
+                    elif kind == "single_file_bytes":
+                        paths["report"].write_bytes(b"x" * (_MAX_DIAGNOSTIC_BYTES + 1))
+                    else:
+                        size = (_MAX_DIAGNOSTIC_BYTES - first["bytes"] + 1
+                                if kind == "staging_bytes" else _MAX_DIAGNOSTIC_BYTES + 1)
+                        for index, amount in enumerate((size // 2, size - size // 2)):
+                            (paths["router"] / f"extra-{index}.json").write_bytes(b"{}" + b" " * (amount - 2))
+                    source_bytes = {p.relative_to(run.root): p.read_bytes()
+                                    for p in run.root.rglob("*") if p.is_file()}
+                    environment = os.environ.copy()
+                    environment["PYTHONPATH"] = str(KERNEL_REFERENCES) + os.pathsep + environment.get("PYTHONPATH", "")
+                    completed = subprocess.run(
+                        (sys.executable, "-m", "workflow_kernel", "preserve-review-evidence",
+                         "--run-root", str(run.root), "--repository-root", str(self.repo),
+                         "--request", str(paths["request"]), "--receipts", str(paths["receipts"]),
+                         "--lane-receipts", str(paths["lane_receipts"]),
+                         "--raw-lane-outputs", str(paths["raw_lane_outputs"]),
+                         "--raw-findings", str(paths["raw_findings"]), "--decisions", str(paths["decisions"]),
+                         "--private-router-directory", str(paths["router"]), "--report", str(paths["report"])),
+                        env=environment, capture_output=True, text=True, check=False,
+                    )
+                    self.assertEqual(3, completed.returncode, completed.stderr)
+                    self.assertEqual("", completed.stdout)
+                    self.assertEqual({"error": {
+                        "code": "evidence_limit_exceeded",
+                        "message": "required review evidence failed validation",
+                        "details": {"stage": "preservation_input", "reason": "retention_limit",
+                                    "path": "review/evidence.json"},
+                    }}, json.loads(completed.stderr))
+                    self.assertFalse(list(destination.parent.glob("review-stage-*")))
+                    self.assertEqual(prior, destination.exists())
+                    if prior:
+                        self.assertEqual(original, {p.relative_to(destination): p.read_bytes()
+                                                   for p in destination.rglob("*") if p.is_file()})
+                    else:
+                        self.assertFalse(has_preserved_review_evidence(run.root / "diagnostic"))
+                        with self.assertRaises(ValueError):
+                            run.finish("succeeded", retain_diagnostics=True)
+                    for relative, data in source_bytes.items():
+                        self.assertEqual(data, (run.root / relative).read_bytes())
+
+    def test_bound_guard_distinguishes_unsafe_entries_from_exhaustion(self):
+        from workflow_kernel.owned_run import BoundedDiagnosticLimitError, _bounded_diagnostic
+        from workflow_kernel.review_closeout import _check_evidence_bound
+        directory = self.root / "unsafe-diagnostic"
+        directory.mkdir()
+        (directory / "link").symlink_to(self.repo / "source.txt")
+        with self.assertRaises(ValueError) as caught:
+            _bounded_diagnostic(directory)
+        self.assertNotIsInstance(caught.exception, BoundedDiagnosticLimitError)
+        for stage in ("retained_validation", "preservation_input"):
+            with self.assertRaises(EvidenceAssemblyError) as caught:
+                _check_evidence_bound(directory, stage)
+            self.assertEqual(3, caught.exception.exit_code)
+            self.assertEqual("unsafe_payload", caught.exception.code)
+            self.assertEqual({"stage": stage, "reason": "unsafe_path", "path": "review/evidence.json"},
+                             caught.exception.detail())
+
     def test_absent_companion_is_classified_and_other_inputs_preserved(self):
         run, paths = self.make_run("dm-review", "absent-lane")
         paths["lane_receipts"].unlink()

@@ -18,7 +18,7 @@ argument-hint: "[optional: --full, --max-iterations N, PR number, branch, or pat
 
 # Review-Fix Convergence Loop
 
-Automates the cycle of reviewing code, fixing required findings, and re-reviewing affected lanes until clean.
+Reviews code, repairs required findings, and rechecks affected lanes until clean.
 
 Implementation callers load `references/automatic-implementation-closeout.md`.
 Resume the attributable owner and existing evidence before initialization;
@@ -447,6 +447,6 @@ or its one closed unavailable line. The JSON and Markdown remain beside
 
 ## Integration
 
-This command composes existing dm-review commands -- it does not reimplement review or fix logic. It simply runs them in a loop with a convergence check.
+This command loops existing dm-review commands with a convergence check; review and fix logic stay in those commands.
 
 Used by the pipeline plugin's execution-orchestrator agent for post-chunk review-fix loops, but useful standalone for any "fix it until it's clean" workflow.
