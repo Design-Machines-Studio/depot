@@ -323,9 +323,10 @@ Return a compact, outcome-first report containing:
 8. planning commits or PRs created, or `None`;
 9. when the opinion path ran, `Plan A`, `Plan B` or its unavailable state, and
    one bounded synthesis;
-10. immediately before each requested copy-paste execution prompt, one
+10. immediately before each prepared copy-paste execution prompt, one
     concrete `Recommended start` projection and one concrete fallback;
-11. one complete copy-paste execution prompt when requested, with
+11. one complete copy-paste execution prompt when requested or needed for a
+    fresh execution session, with
     provider-neutral role, capabilities, and effort;
 12. only when the opinion path actually dispatched a role, the already-
     generated terminal model/cost Markdown after the recommendation and
