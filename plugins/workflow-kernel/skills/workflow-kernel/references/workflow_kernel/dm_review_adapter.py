@@ -744,7 +744,10 @@ def validate_evidence_input(value: object, request: ReviewRequest) -> dict:
         "recheck": {"prior_record_ref", "selection_ref", "repair_refs"},
     }
     for key, expected in groups.items():
-        if type(value[key]) is not dict or set(value[key]) != expected:
+        actual = set(value[key]) if type(value[key]) is dict else set()
+        if key == "recheck":
+            actual -= {"pending_transition_refs"}
+        if type(value[key]) is not dict or actual != expected:
             raise ValueError("invalid lane envelope")
     source = value["source"]
     if source["repository"] != request.source_repository or source["head"] != request.source_head:
@@ -807,6 +810,9 @@ def validate_evidence_input(value: object, request: ReviewRequest) -> dict:
     if (recheck["prior_record_ref"] is None) != (recheck["selection_ref"] is None):
         raise ValueError("incomplete recheck linkage")
     _evidence_list(recheck["repair_refs"], references=True)
+    _evidence_list(recheck.get("pending_transition_refs", []), references=True)
+    if recheck.get("pending_transition_refs") and recheck["prior_record_ref"] is None:
+        raise ValueError("incomplete recheck linkage")
     return value
 
 

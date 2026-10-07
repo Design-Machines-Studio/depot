@@ -21,7 +21,8 @@ copies original inputs there byte-for-byte; original resources stay intact.
 ### Lane input
 
 `lane` adds `lane`, positive `attempt`, `reviewer`, and these exact groups.
-Every listed key is required, including explicit nulls and empty lists.
+Every listed key is required, including explicit nulls and empty lists, except
+the optional recheck field described below. Absence never rewrites sealed input.
 
 | Group | Exact fields |
 | --- | --- |
@@ -31,7 +32,7 @@ Every listed key is required, including explicit nulls and empty lists.
 | `literal` | `output_ref`, actual private `dispatch_receipt_ref`, existing anonymous public `companion_ref` |
 | `result` | `status: findings|no_findings|incomplete`, existing raw-shape `findings`, `incomplete_reasons` |
 | `provenance` | `kind: live|recovery|synthetic_test`, nullable original `executed_at`, `source_refs` |
-| `recheck` | nullable `prior_record_ref`, nullable `selection_ref`, `repair_refs` |
+| `recheck` | nullable `prior_record_ref`, nullable `selection_ref`, `repair_refs`; optional `pending_transition_refs` (absent means `[]`) |
 
 Paths/references are unique relative filenames. `companion_ref` names the
 router's existing anonymous completion companion. Kernel derives private lane
@@ -105,6 +106,27 @@ receipt), `finding_owner_lanes`, `file_trigger_lanes`, `from_source`,
 owner-before-repair, committed plus uncommitted file triggers, ancestry guards,
 full-fan-out fallback and receiver-confirmation rules. Rechecks appear in
 `lanes_rerun`; reuse appears in `lanes_skipped`.
+
+`iteration.lanes_pending` is optional (absent means `[]`). Rerun, skipped and
+pending lists must be disjoint and partition the exact selected roster.
+Finding-owner and file-trigger lanes must be rerun or pending, never skipped.
+Pending means incomplete inspection and cannot establish terminal CLEAN or
+unchanged-source carry. An intermediate selection can record completed reruns
+while other affected lanes remain pending; final coverage must settle every
+required lane with eligible inspection evidence.
+
+A fresh recheck may supply ordered `pending_transition_refs` from its immutable
+original predecessor snapshot to exactly its actual selection's `from_source`.
+Every intervening receiver-confirmed selection must place this lane in pending;
+the actual final selection must place it in rerun. The same strict transition,
+source-seal, binary-patch, hash and reference-closure checks apply. Retain the
+original predecessor, base, cumulative requested/inspected paths, full actual
+binary patch for those paths, receipts and literal outputs. Ordinary coverage
+`transition_refs` continue to require skipped/unaffected semantics. Do not
+rewrite valid sealed history, relabel old output, infer coverage from ancestry
+or success text, or invent historical applied events/timestamps. Recovery
+selections are current receiver-confirmed reconstructions with explicit retained
+provenance; unknown historical execution time stays unknown.
 
 Host supplies existing synthesis decisions using retained finding evidence
 references from the selected record's bindings. Kernel constructs all four

@@ -556,6 +556,185 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         self.assertEqual(0, result.returncode, result.stderr)
         self.assertEqual("complete", self.preserve(run, paths)["status"])
 
+    def test_nine_lane_pending_two_pass_producer_and_closeout(self):
+        """Synthetic e605 -> 64 -> DD shape; no Governance consumer claim."""
+        from workflow_kernel.review_closeout import _source_snapshot, _changed_paths, _git_patch, _seal_evidence
+        code = ["patterns", "simplicity", "testcoverage", "gobuild"]
+        carried = ["security", "architecture", "second"]
+        docs = ["docsync", "voice"]
+        lanes = code + carried + docs
+        doc_paths = ["readiness.md", "receipt.md"]
+        for path in doc_paths:
+            (self.repo / path).write_text("original documentation\n")
+        subprocess.run(["git", "-C", str(self.repo), "add", *doc_paths], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "--quiet", "-m", "synthetic documentation foundation"], check=True)
+        run, paths = self.prepare(lanes)
+        original_head = source_identity(self.repo)[1]
+        originals = {}
+        for lane in lanes:
+            value = json.loads(paths["lanes"][lane].read_text())
+            value["source"]["base"] = original_head
+            scope = doc_paths if lane in docs else ["source.txt"]
+            value["requested"].update(designation="scoped", paths=scope)
+            value["inspected"]["paths"] = scope
+            self.write(paths["lanes"][lane], value)
+            originals[lane] = self.lane(run, paths, lane)
+        original_bytes = {ref: (run.root / ref).read_bytes() for ref in originals.values()}
+        before = _source_snapshot(self.repo, original_head)
+
+        def transition(number, before, rerun, skipped, pending, changed):
+            for path in changed:
+                (self.repo / path).write_text(f"synthetic repair {number}\n")
+            subprocess.run(["git", "-C", str(self.repo), "add", *changed], check=True)
+            subprocess.run(["git", "-C", str(self.repo), "commit", "--quiet", "-m", f"synthetic repair {number}"], check=True)
+            head = source_identity(self.repo)[1]
+            after = _source_snapshot(self.repo, head)
+            request = json.loads(paths["request"].read_text())
+            request["source_head"] = head
+            paths["request"] = self.write(run.root / f"review/request-{number}.json", request)
+            patch_ref = f"review/patch-{number}.bin"
+            (run.root / patch_ref).write_bytes(_git_patch(self.repo, before["head"], head))
+            selection_ref = f"review/selection-{number}.json"
+            iteration = {"run_id": run.run_id, "sequence": 0, "stage": "review_iteration", "status": "complete", "occurred_at": "2026-09-01T00:03:00Z", "authoritative_receipt": selection_ref, "selective_rerun": True, "promoted_to_full": False, "full_fanout_override": False, "lanes_rerun": rerun, "lanes_skipped": skipped, "lanes_pending": pending, "rerun_reasons": {lane: ["b_fix_file_trigger"] for lane in rerun}, "selection_fallback_reason": None}
+            sources = {"from_source": {"snapshot_ref": _seal_evidence(run.root, "source", before)}, "to_source": {"snapshot_ref": _seal_evidence(run.root, "source", after)}}
+            common = dict(schema_version=2, **sources, changed_paths=_changed_paths(before, after), patch_ref=patch_ref, worktree_ref=None)
+            self.write(run.root / selection_ref, dict(common, selected_full_set=lanes, applied=True, iteration=iteration, finding_owner_lanes=pending, file_trigger_lanes=rerun + pending))
+            ref = f"review/transition-{number}.json"
+            self.write(run.root / ref, dict(common, selection_ref=selection_ref))
+            return after, selection_ref, ref
+
+        def recheck(lane, number, selection_ref, pending_refs):
+            value = json.loads(paths["lanes"][lane].read_text())
+            value.update(pass_id=f"recheck-{number}", attempt=2)
+            value["source"].update(head=source_identity(self.repo)[1], request_ref=paths["request"].relative_to(run.root).as_posix())
+            output_ref = f"raw/{lane}-{number}.md"
+            (run.root / output_ref).write_text(f"Synthetic fresh {lane} judgment at pass {number}.\n")
+            value["literal"]["output_ref"] = output_ref
+            patch_ref = f"review/{lane}-{number}-cumulative.bin"
+            (run.root / patch_ref).write_bytes(_git_patch(self.repo, original_head, value["source"]["head"], value["requested"]["paths"]))
+            value["requested"].update(patch_ref=patch_ref)
+            value["requested"]["evidence_refs"].append(patch_ref)
+            value["requested"]["required_evidence_refs"].append(patch_ref)
+            value["inspected"]["basis"] = "patch"
+            value["recheck"] = dict(prior_record_ref=originals[lane], selection_ref=selection_ref, repair_refs=[patch_ref], pending_transition_refs=pending_refs)
+            path = self.write(run.root / f"review/{lane}-{number}.json", value)
+            result = self.cli(run, paths, path)
+            self.assertEqual(0, result.returncode, result.stderr)
+            return json.loads(result.stdout)["record_ref"], path, value
+
+        middle, first_selection, first_transition = transition(1, before, code, carried, docs, ["source.txt", *doc_paths])
+        current = {lane: recheck(lane, 1, first_selection, [])[0] for lane in code}
+        # Pending documentation cannot be carried as skipped, even with CLEAN prose.
+        partial = [{"lane": lane, "record_ref": current.get(lane, originals[lane]), "history_refs": [originals[lane]] if lane in code else [], "transition_refs": [] if lane in code else [first_transition]} for lane in lanes]
+        result = self.coverage(run, paths, {}, pass_id="unsettled", selection=partial)
+        self.assertEqual(3, result.returncode)
+        # Selection partition, trigger and overlap invariants fail before append.
+        selection_path = run.root / first_selection
+        saved_selection = selection_path.read_bytes()
+        from workflow_kernel.review_closeout import _validate_selection
+        for mutation in ({"lanes_pending": []}, {"lanes_pending": docs + [code[0]]}, {"lanes_skipped": carried + docs, "lanes_pending": []}, {"lanes_pending": docs + ["foreign"]}):
+            with self.subTest(mutation=mutation):
+                bad = json.loads(saved_selection)
+                bad["iteration"].update(mutation)
+                self.write(selection_path, bad)
+                with self.assertRaises(ValueError):
+                    _validate_selection(run.root, first_selection, lanes, before=before, after=middle, repository=self.repo)
+        selection_path.write_bytes(saved_selection)
+        final, final_selection, final_transition = transition(2, middle, docs, code + carried, [], doc_paths)
+        # A valid skipped/unaffected selection is still invalid in a pending chain.
+        from workflow_kernel.review_closeout import _transition_chain
+        skipped_doc = json.loads(saved_selection)
+        skipped_doc["iteration"].update(lanes_pending=[], lanes_skipped=carried + docs)
+        skipped_doc.update(finding_owner_lanes=[], file_trigger_lanes=code)
+        self.write(selection_path, skipped_doc)
+        with self.assertRaises(ValueError):
+            _transition_chain(run.root, [first_transition], before, middle, docs[0], lanes, self.repo, None, pending=True)
+        selection_path.write_bytes(saved_selection)
+        current_docs = {}
+        for lane in docs:
+            record, input_path, value = recheck(lane, 2, final_selection, [first_transition])
+            current_docs[lane] = record
+            receipt_bytes = paths["receipts"].read_bytes()
+            # Same logical attempt with a changed pending chain is an append conflict.
+            value["recheck"]["pending_transition_refs"] = []
+            self.write(input_path, value)
+            rejected = self.cli(run, paths, input_path)
+            self.assertEqual("append_conflict", json.loads(rejected.stderr)["error"]["details"]["reason"])
+            self.assertEqual(receipt_bytes, paths["receipts"].read_bytes())
+            # A fresh attempt cannot omit, reverse, duplicate or carry a pending chain.
+            for refs in ([final_transition], [first_transition, final_transition], [first_transition, first_transition]):
+                bad = json.loads(json.dumps(value))
+                bad.update(pass_id="invalid-pending", attempt=3)
+                bad["recheck"]["pending_transition_refs"] = refs
+                rejected = self.cli(run, paths, self.write(input_path, bad))
+                self.assertEqual(2 if len(refs) != len(set(refs)) else 3, rejected.returncode, rejected.stderr)
+                self.assertEqual(receipt_bytes, paths["receipts"].read_bytes())
+            for mutation in ("wrong_selection", "wrong_base", "reduced_scope"):
+                with self.subTest(mutation=mutation):
+                    bad = json.loads(json.dumps(value))
+                    bad.update(pass_id="invalid-pending-" + mutation, attempt=3)
+                    bad["recheck"]["pending_transition_refs"] = [first_transition]
+                    if mutation == "wrong_selection":
+                        bad["recheck"]["selection_ref"] = first_selection
+                    elif mutation == "wrong_base":
+                        bad["source"]["base"] = middle["head"]
+                    else:
+                        bad["requested"]["paths"] = bad["inspected"]["paths"] = doc_paths[:1]
+                    rejected = self.cli(run, paths, self.write(input_path, bad))
+                    self.assertEqual(3, rejected.returncode, rejected.stderr)
+                    self.assertEqual(receipt_bytes, paths["receipts"].read_bytes())
+        final_rows = [{"lane": lane, "record_ref": current_docs.get(lane, current.get(lane, originals[lane])), "history_refs": [originals[lane]] if lane in code + docs else [], "transition_refs": [] if lane in docs else [final_transition] if lane in code else [first_transition, final_transition]} for lane in lanes]
+        # Neither a partial roster nor an unresolved original judgment can settle.
+        self.assertEqual(2, self.coverage(run, paths, {}, pass_id="final", selection=final_rows[:-1]).returncode)
+        unresolved = json.loads(json.dumps(final_rows))
+        unresolved[-1].update(record_ref=originals[docs[-1]], history_refs=[], transition_refs=[first_transition, final_transition])
+        self.assertEqual(3, self.coverage(run, paths, {}, pass_id="final", selection=unresolved).returncode)
+        # Sealed pending dependencies remain hash-bound even after lane append.
+        transition_path = run.root / first_transition
+        saved_transition = transition_path.read_bytes()
+        transition_path.write_bytes(saved_transition + b"\n")
+        rejected = self.coverage(run, paths, {}, pass_id="final", selection=final_rows)
+        self.assertEqual("digest_mismatch", json.loads(rejected.stderr)["error"]["details"]["reason"])
+        transition_path.write_bytes(saved_transition)
+        result = self.coverage(run, paths, {}, pass_id="final", selection=final_rows)
+        self.assertEqual(0, result.returncode, result.stderr)
+        preserved = self.preserve(run, paths)
+        self.assertEqual("complete", preserved["status"], preserved)
+        retained = Path(preserved["evidence_path"])
+        for ref, data in original_bytes.items():
+            self.assertEqual(data, (retained / ref).read_bytes())
+        self.assertEqual(saved_transition, (retained / first_transition).read_bytes())
+        for ref in current_docs.values():
+            record = json.loads((retained / ref).read_text())
+            self.assertEqual(original_head, record["input"]["source"]["base"])
+            self.assertEqual(doc_paths, record["input"]["inspected"]["paths"])
+            for binding in record["bindings"].values():
+                self.assertEqual(binding["digest"], "sha256:" + hashlib.sha256((retained / binding["retained_ref"]).read_bytes()).hexdigest())
+        print("SYNTHETIC pending lifecycle: nine lanes; rerun4/skipped3/pending2 then rerun2/skipped7; original bytes retained; no live Governance claim.")
+
+    def test_pending_optional_fields_leave_original_envelopes_unchanged(self):
+        from workflow_kernel.dm_review_adapter import validate_evidence_input, ReviewRequest, translate_review_receipts
+        run, paths = self.prepare()
+        value = json.loads(paths["lanes"]["security"].read_text())
+        original = json.loads(json.dumps(value))
+        request = ReviewRequest.from_mapping(json.loads(paths["request"].read_text()))
+        validate_evidence_input(value, request)
+        self.assertEqual(original, value)
+        value["recheck"]["pending_transition_refs"] = []
+        validate_evidence_input(value, request)
+        value["recheck"]["pending_transition_refs"] = ["review/transition.json"]
+        with self.assertRaises(ValueError):
+            validate_evidence_input(value, request)
+        iteration = {"run_id": run.run_id, "sequence": 0, "stage": "review_iteration", "status": "complete", "occurred_at": "2026-09-01T00:03:00Z", "authoritative_receipt": "review/selection.json", "selective_rerun": True, "promoted_to_full": False, "full_fanout_override": False, "lanes_rerun": ["code"], "lanes_skipped": ["security"], "rerun_reasons": {"code": ["b_fix_file_trigger"]}, "selection_fallback_reason": None}
+        translate_review_receipts([iteration])
+        self.assertNotIn("lanes_pending", iteration)
+        pending = dict(iteration, lanes_pending=["docs"])
+        events = translate_review_receipts([pending])
+        self.assertEqual(("docs",), events[0].payload["lanes_pending"])
+        for lanes_pending in (["code"], ["security"], ["docs", "docs"], None, "docs"):
+            with self.subTest(lanes_pending=lanes_pending), self.assertRaises(ValueError):
+                translate_review_receipts([dict(iteration, lanes_pending=lanes_pending)])
+
     def test_interruption_after_append_reconstructs_missing_companions(self):
         from unittest import mock
         from workflow_kernel.review_closeout import assemble_review_evidence, EvidenceAssemblyError

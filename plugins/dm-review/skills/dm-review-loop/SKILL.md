@@ -262,9 +262,12 @@ while iteration < max_iterations:
     lanes_skipped = []
   A lane selected for a full fan-out or allowlisted for a selective pass that
     fails before dispatch is not "skipped". Its absence from ATTEMPTED makes the
-    nested review REVIEW INCOMPLETE; it appears in neither lanes_rerun nor
-    lanes_skipped. Therefore `full_fanout_override: true` and
-    `promoted_to_full: true` receipts always carry an empty skip set.
+    nested review REVIEW INCOMPLETE; record it in optional lanes_pending
+    (absent means []). Rerun/skipped/pending must be disjoint and partition
+    coverage_selected_set; rule (a)/(b) lanes must be rerun or pending.
+    Pending cannot be CLEAN or unchanged-source carry.
+  `full_fanout_override: true` and `promoted_to_full: true` receipts always
+    carry an empty skip set.
   For each lane in lanes_skipped, record reason "no_rule_a_or_b_match".
   Do not issue a kernel record-attempt call for any lane in lanes_skipped.
 
@@ -272,9 +275,14 @@ while iteration < max_iterations:
   After the coverage receipt validates, atomically emit iteration_receipt with
     explicit booleans `selective_rerun`, `promoted_to_full`, and
     `full_fanout_override` on every pass, plus `lanes_rerun`, `lanes_skipped`,
+    optional `lanes_pending` (absent means []),
     `rerun_reasons`, and `selection_fallback_reason`, then append it to authoritative-receipts.json
     BEFORE invoking observe-review. The persisted receipt field
     `selection_fallback_reason` is the loop-local fallback_reason value.
+  Later fresh lane judgments spanning pending selections may supply optional
+    recheck.pending_transition_refs (absent means []) in their lane input per
+    the Kernel source-bound evidence contract; preserve the original
+    predecessor, cumulative scope and all source/receipt/output bytes.
 
   # Check for required findings. Every retained severity participates.
   required_finding_files = todos/*-pending-p1-*.md plus todos/*-pending-p2-*.md plus todos/*-pending-p3-*.md;
