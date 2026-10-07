@@ -1733,7 +1733,41 @@ def _lane_companion(companion, dispatch, value):
     return row
 
 
-def _aggregate_documents(root, request, value, receipts, target, repository):
+def _validate_production_lane(root, record, receipts):
+    """Recheck original sealed provenance and dispatch before granting coverage."""
+    value = record["input"]
+    if value["provenance"]["kind"] == "synthetic_test":
+        raise EvidenceAssemblyError("lane_validation", "incomplete_inspection")
+    dispatch_ref = value["literal"]["dispatch_receipt_ref"]
+    dispatch_bytes = _bound_bytes(root, record, dispatch_ref)
+    dispatch = _evidence_json_from_bytes(dispatch_bytes)
+    if (type(dispatch) is not dict or dispatch.get("schemaVersion") != 1
+            or type(dispatch.get("served")) is not dict or not dispatch["served"]
+            or not dispatch.get("attempts")
+            or dispatch.get("publication") != {"output": "published"}
+            or dispatch.get("transportStub") is not False):
+        raise EvidenceAssemblyError("lane_validation", "incomplete_inspection")
+    companion = _lane_companion(
+        _evidence_json_from_bytes(_bound_bytes(root, record, value["literal"]["companion_ref"])),
+        dispatch, value,
+    )
+    if (companion["model"] != dispatch["served"].get("model")
+            or companion["provider"] != dispatch["served"].get("provider")
+            or companion["reviewer_family"] != dispatch["served"].get("family")):
+        raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
+    for row in receipts:
+        if row.get("stage") != "review_lane_evidence":
+            continue
+        original = _read_source_record(root, row["authoritative_receipt"], "lane")
+        original_ref = original["input"]["literal"]["dispatch_receipt_ref"]
+        if original_ref in original["bindings"] and (
+                _byte_digest(_bound_bytes(root, original, original_ref)) == _byte_digest(dispatch_bytes)
+                and original["source_snapshot"] != record["source_snapshot"]):
+            raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
+    return companion
+
+
+def _aggregate_documents(root, request, value, receipts, target, repository, *, test_harness=False):
     def worktree(snapshot):
         # Only the final target is compared with the live checkout. An earlier
         # dirty snapshot must match the patch sealed by a lane that inspected it.
@@ -1767,6 +1801,8 @@ def _aggregate_documents(root, request, value, receipts, target, repository):
             if item["input"]["lane"] != selected["lane"] or item["input"]["recheck"]["prior_record_ref"] != expected:
                 raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
         for item in chain:
+            if not test_harness:
+                companion = _validate_production_lane(root, item, receipts)
             recheck = item["input"]["recheck"]
             refs = _transition_references(root, recheck.get("pending_transition_refs", []))
             if recheck["selection_ref"]:
@@ -1778,10 +1814,11 @@ def _aggregate_documents(root, request, value, receipts, target, repository):
             if index:
                 _validate_recheck(root, item["input"], chain[index - 1], item["source_snapshot"], request.required_lanes, repository, worktree)
         _transition_chain(root, selected["transition_refs"], record["source_snapshot"], target, selected["lane"], request.required_lanes, repository, worktree)
-        companion = _lane_companion(
-            _evidence_json_from_bytes(_bound_bytes(root, record, extraction["literal"]["companion_ref"])),
-            _evidence_json_from_bytes(_bound_bytes(root, record, extraction["literal"]["dispatch_receipt_ref"])), extraction,
-        )
+        if test_harness:
+            companion = _lane_companion(
+                _evidence_json_from_bytes(_bound_bytes(root, record, extraction["literal"]["companion_ref"])),
+                _evidence_json_from_bytes(_bound_bytes(root, record, extraction["literal"]["dispatch_receipt_ref"])), extraction,
+            )
         findings, refs = [], set()
         for item in chain:
             refs.update(binding["retained_ref"] for binding in item["bindings"].values())
@@ -1994,6 +2031,8 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
                     raise EvidenceAssemblyError("lane_validation", "append_conflict")
                 for original in previous[1]["bindings"]:
                     _bound_bytes(root, previous[1], original)
+                if not test_harness and previous[1]["eligible"]:
+                    _validate_production_lane(root, _record(root, previous[0], receipts), receipts)
                 return {"status": "complete" if previous[1]["eligible"] else "incomplete", "record_ref": previous[0], "reused": True, "missing": missing}
             live = value["provenance"]["kind"] != "recovery"
             repository_identity, head = source_identity(repository)
@@ -2005,16 +2044,6 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
                 if predecessor["input"]["lane"] != value["lane"] or predecessor["input"]["source"]["repository"] != request.source_repository:
                     raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
                 _validate_recheck(root, value, predecessor, snapshot, request.required_lanes, repository, lambda source: _working_patch(repository, source["head"]))
-            if not synthetic and value["literal"]["dispatch_receipt_ref"] in bindings:
-                dispatch_digest = bindings[value["literal"]["dispatch_receipt_ref"]]["digest"]
-                for row in receipts:
-                    if row.get("stage") != "review_lane_evidence":
-                        continue
-                    old_record = _read_source_record(root, row["authoritative_receipt"], "lane")
-                    old_ref = old_record["input"]["literal"]["dispatch_receipt_ref"]
-                    old_binding = old_record["bindings"].get(old_ref)
-                    if old_binding and old_binding["digest"] == dispatch_digest and old_record["source_snapshot"] != snapshot:
-                        raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
             source_content = {}
             if live:
                 for changed_path in _changed_paths(_source_snapshot(repository, request.source_head), snapshot):
@@ -2048,12 +2077,8 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
                 bound_request = _evidence_json_from_bytes(_bound_bytes(root, {"bindings": bindings}, value["source"]["request_ref"]))
                 if ReviewRequest.from_mapping(bound_request) != request:
                     raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
-                dispatch = _evidence_json_from_bytes(_bound_bytes(root, {"bindings": bindings}, value["literal"]["dispatch_receipt_ref"]))
-                if not test_harness and (type(dispatch) is not dict or dispatch.get("schemaVersion") != 1 or not dispatch.get("served") or not dispatch.get("attempts") or dispatch.get("publication") != {"output": "published"} or dispatch.get("transportStub") is not False):
-                    raise EvidenceAssemblyError("lane_validation", "incomplete_inspection")
                 if not test_harness:
-                    if companion["model"] != dispatch["served"].get("model") or companion["provider"] != dispatch["served"].get("provider") or companion["reviewer_family"] != dispatch["served"].get("family"):
-                        raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
+                    _validate_production_lane(root, {"input": value, "bindings": bindings, "source_snapshot": snapshot}, receipts)
                 if not _bound_bytes(root, {"bindings": bindings}, value["literal"]["output_ref"]).strip():
                     eligible = False
             record = {"schema_version": 2, "input": value, "input_digest": _document_digest(value), "request": request.to_dict(), "source_snapshot": {"snapshot_ref": _seal_evidence(root, "source", snapshot)}, "source_content": source_content, "bindings": bindings, "eligible": eligible, "missing": missing, "assembled_at": now}
@@ -2066,13 +2091,11 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
                     "diagnostics": [] if eligible else (
                         [EvidenceAssemblyError("lane_input", "missing_evidence", ref).detail() for ref in sorted(set(missing) & required)]
                         or [{"stage": "lane_validation", "reason": "incomplete_inspection", "path": "review/evidence.json"}]), "proof_level": "synthetic" if test_harness else value["provenance"]["kind"]}
-        if not test_harness and any(_record(root, ref, receipts)["input"]["provenance"]["kind"] == "synthetic_test" for row in value["selection"] for ref in (*row["history_refs"], row["record_ref"])):
-            raise EvidenceAssemblyError("aggregate_validation", "incomplete_inspection")
         repository_identity, head = source_identity(repository)
         if (repository_identity, head) != (request.source_repository, request.source_head):
             raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
         target = _source_snapshot(repository, head, live=True)
-        documents = _aggregate_documents(root, request, value, receipts, target, repository)
+        documents = _aggregate_documents(root, request, value, receipts, target, repository, test_harness=test_harness)
         aggregate_refs = set(value["required_case_refs"]) | {item["repair_ref"] for item in value["resolutions"]}
         for selected in value["selection"]:
             aggregate_refs.update(_transition_references(root, selected["transition_refs"]))

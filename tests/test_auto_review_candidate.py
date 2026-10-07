@@ -64,16 +64,18 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
     """Synthetic CLI lifecycle, distinct from live and installed consumer proof."""
     setUp = fixture.ReviewCloseoutTests.setUp
     tearDown = fixture.ReviewCloseoutTests.tearDown
-    make_run = fixture.ReviewCloseoutTests.make_run
     preserve = fixture.ReviewCloseoutTests.preserve
+
+    def make_run(self, workflow="dm-review", run_id="closeout", *, synthetic=True, **options):
+        return fixture.ReviewCloseoutTests.make_run(self, workflow, run_id, synthetic=synthetic, **options)
 
     def write(self, path, value):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(value) + "\n")
         return path
 
-    def prepare(self, lanes=("security",)):
-        run, paths = self.make_run("dm-review-loop", "producer")
+    def prepare(self, lanes=("security",), *, synthetic=True):
+        run, paths = self.make_run("dm-review-loop", "producer", synthetic=synthetic)
         request = json.loads(paths["request"].read_text())
         request["required_lanes"] = list(lanes)
         self.write(paths["request"], request)
@@ -163,12 +165,12 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         self.assertEqual(before, optional[:len(before)])
         self.assertEqual(1, sum(row["stage"] == "finding_contribution_coverage" for row in optional))
 
-    def lane(self, run, paths, lane="security"):
-        result = self.cli(run, paths, paths["lanes"][lane])
+    def lane(self, run, paths, lane="security", *, test_harness=True):
+        result = self.cli(run, paths, paths["lanes"][lane], test_harness=test_harness)
         self.assertEqual(0, result.returncode, result.stderr)
         return json.loads(result.stdout)["record_ref"]
 
-    def coverage(self, run, paths, records, **overrides):
+    def coverage(self, run, paths, records, *, test_harness=True, **overrides):
         value = {"schema_version": 1, "operation": "coverage", "run_id": run.run_id,
                  "pass_id": "initial", "selection": [
                      {"lane": lane, "record_ref": record, "history_refs": [], "transition_refs": []}
@@ -176,7 +178,7 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
                  "decisions": [], "occurred_at": "2026-09-01T00:02:00Z", "required_case_refs": [], "resolutions": []}
         value.update(overrides)
         path = self.write(run.root / "review/aggregate-input.json", value)
-        return self.cli(run, paths, path)
+        return self.cli(run, paths, path, test_harness=test_harness)
 
     def test_zero_findings_cli_completion_retry_and_missing_companion_reconstruction(self):
         run, paths = self.prepare()
@@ -192,8 +194,18 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         self.assertEqual(0, retry.returncode, retry.stderr)
         self.assertTrue(json.loads(retry.stdout)["reused"])
         self.assertEqual(before, paths["receipts"].read_bytes())
-        self.assertEqual("complete", self.preserve(run, paths)["status"])
-        run.finish("succeeded", retain_diagnostics=True)
+        self.assert_synthetic_terminal_rejected(run, paths)
+
+    def assert_synthetic_terminal_rejected(self, run, paths):
+        from workflow_kernel.review_closeout import has_preserved_review_evidence
+        raw = (run.root / "raw/security.md").read_bytes()
+        result = self.preserve(run, paths)
+        self.assertEqual("incomplete", result["status"], result)
+        self.assertFalse(has_preserved_review_evidence(run.root / "diagnostic"))
+        with self.assertRaises(ValueError):
+            run.finish("succeeded", retain_diagnostics=True)
+        self.assertEqual(raw, (run.root / "raw/security.md").read_bytes())
+        return result
 
     def test_successful_dispatch_cannot_settle_incomplete_inspection(self):
         run, paths = self.prepare()
@@ -419,7 +431,7 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         final = self.coverage(replay, current, {}, pass_id="final", selection=final_selection, resolutions=[{"source_finding_id": finding["source_finding_id"], "repair_ref": patch_ref, "verification_record_ref": new_record}])
         self.assertEqual(0, final.returncode, final.stderr)
         result = self.preserve(replay, current)
-        self.assertEqual("complete", result["status"], result)
+        self.assertEqual("incomplete", result["status"], result)
         retained = Path(result["evidence_path"])
         self.assertEqual(before["head"], json.loads((retained / records[next(lane for lane in lanes if lane != "security")]).read_text())["input"]["source"]["head"])
         self.assertEqual(original_output, (retained / record["bindings"]["raw/security.md"]["retained_ref"]).read_bytes())
@@ -434,9 +446,11 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
                 self.assertEqual((run.root / ref).read_bytes(), (retained / ref).read_bytes())
             retained_record = json.loads((retained / new_record).read_text())
             self.assertEqual(common, (retained / retained_record["bindings"][common_ref]["retained_ref"]).read_bytes())
-            self.assertTrue(has_preserved_review_evidence(replay.root / "diagnostic"))
-            print(f"SYNTHETIC scaling lifecycle: 8 logical lanes; 1159 paths; 146742 metadata bytes; {len(common_patch)} actual fixture diff bytes; retained {count}/128 files, {size}/2097152 bytes; original history/output and shared input unchanged.")
-        replay.finish("succeeded", retain_diagnostics=True)
+            self.assertFalse(has_preserved_review_evidence(replay.root / "diagnostic"))
+            print(f"SYNTHETIC scaling lifecycle: 8 logical completions + repair/recheck/carry; production INCOMPLETE; 1159 paths; 146742 metadata bytes; {len(common_patch)} actual fixture diff bytes; retained {count}/128 files, {size}/2097152 bytes; original history/output and shared input unchanged; successful cleanup rejected.")
+        with self.assertRaises(ValueError):
+            replay.finish("succeeded", retain_diagnostics=True)
+        self.assertEqual(original_output, (replay.root / "raw/security.md").read_bytes())
 
     def test_shared_snapshot_missing_tampered_malformed_and_wrong_head_rejected(self):
         from workflow_kernel.review_closeout import _seal_evidence, _seal_record
@@ -491,16 +505,17 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         self.assertEqual(1, json.loads(original)["schema_version"])
         self.assertEqual(0, self.coverage(run, paths, {"security": ref}).returncode)
         retained = self.preserve(run, paths)
-        self.assertEqual("complete", retained["status"])
+        self.assertEqual("incomplete", retained["status"])
         self.assertEqual(original, (Path(retained["evidence_path"]) / ref).read_bytes())
         self.assertEqual(ref, self.lane(run, paths))
-        run.finish("succeeded", retain_diagnostics=True)
+        with self.assertRaises(ValueError):
+            run.finish("succeeded", retain_diagnostics=True)
 
     def test_terminal_revalidates_shared_snapshot_closure(self):
         from workflow_kernel.review_closeout import has_preserved_review_evidence
-        run, paths = self.prepare()
-        ref = self.lane(run, paths)
-        self.assertEqual(0, self.coverage(run, paths, {"security": ref}).returncode)
+        run, paths = self.prepare(synthetic=False)
+        ref = self.lane(run, paths, test_harness=False)
+        self.assertEqual(0, self.coverage(run, paths, {"security": ref}, test_harness=False).returncode)
         result = self.preserve(run, paths)
         self.assertEqual("complete", result["status"])
         retained = Path(result["evidence_path"])

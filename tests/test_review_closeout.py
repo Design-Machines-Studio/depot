@@ -44,7 +44,7 @@ class ReviewCloseoutTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def make_run(self, workflow="dm-review", run_id="closeout", *, legacy=False):
+    def make_run(self, workflow="dm-review", run_id="closeout", *, legacy=False, synthetic=False):
         run = ExactOwnedRun.start(workflow, run_id, base=self.state)
         source = run.create_path("raw-output", "review")
         run.create_path("raw-output", "receipts")
@@ -147,6 +147,17 @@ class ReviewCloseoutTests(unittest.TestCase):
         )
         paths["report"] = report
         if not legacy:
+            # Production-shaped test data exercises the production boundary;
+            # it is never external participant proof. Explicit synthetic
+            # assembler fixtures keep their separate, honest provenance.
+            if not synthetic:
+                (router / "security.json").write_text(json.dumps({
+                    "schemaVersion": 1, "receiptId": "dispatch-" + "a" * 24,
+                    "requested": {}, "fallback": False,
+                    "served": {"model": lane_receipt["model"], "provider": lane_receipt["provider"], "family": lane_receipt["reviewer_family"]},
+                    "attempts": [{"status": "completed"}],
+                    "publication": {"output": "published"}, "transportStub": False,
+                }) + "\n")
             paths["receipts"].write_text("[]\n")
             for key in ("lane_receipts", "raw_lane_outputs", "raw_findings", "decisions"):
                 paths[key].unlink()
@@ -161,19 +172,19 @@ class ReviewCloseoutTests(unittest.TestCase):
                 "inspected": {"paths": ["source.txt"], "basis": "repository", "limitations": [], "missing_evidence_refs": []},
                 "literal": {"output_ref": "raw/security.md", "dispatch_receipt_ref": "receipts/private/router/security.json", "companion_ref": "review/companion.json"},
                 "result": {"status": "no_findings", "findings": [], "incomplete_reasons": []},
-                "provenance": {"kind": "synthetic_test", "executed_at": None, "source_refs": ["review/prompt.md"]},
+                "provenance": {"kind": "synthetic_test" if synthetic else "live", "executed_at": None if synthetic else "2026-09-01T00:01:00Z", "source_refs": ["review/prompt.md"]},
                 "recheck": {"prior_record_ref": None, "selection_ref": None, "repair_refs": []},
             }
             paths["input"] = source / "lane-input.json"
             paths["input"].write_text(json.dumps(lane_input) + "\n")
-            lane_result = assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths["request"], receipts_path=paths["receipts"], input_path=paths["input"], test_harness=True)
+            lane_result = assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths["request"], receipts_path=paths["receipts"], input_path=paths["input"], test_harness=synthetic)
             paths["record_ref"] = lane_result["record_ref"]
             coverage = {"schema_version": 1, "operation": "coverage", "run_id": run_id, "pass_id": "initial",
                         "selection": [{"lane": "security", "record_ref": lane_result["record_ref"], "history_refs": [], "transition_refs": []}],
                         "decisions": [], "occurred_at": "2026-09-01T00:01:30Z", "required_case_refs": [], "resolutions": []}
             paths["coverage_input"] = source / "coverage-input.json"
             paths["coverage_input"].write_text(json.dumps(coverage) + "\n")
-            assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths["request"], receipts_path=paths["receipts"], input_path=paths["coverage_input"], test_harness=True)
+            assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths["request"], receipts_path=paths["receipts"], input_path=paths["coverage_input"], test_harness=synthetic)
         return run, paths
 
     def preserve(self, run, paths):
