@@ -18,7 +18,7 @@ from workflow_kernel.dm_review_adapter import (
 from workflow_kernel.cli import _validated_existing_review_contributions
 from workflow_kernel.owned_run import ExactOwnedRun
 from workflow_kernel.review_closeout import (
-    ReviewCloseoutValidationError,
+    ReviewCloseoutValidationError, RetainedReviewValidationError,
     bind_review_source,
     preserve_review_evidence,
     source_identity, assemble_review_evidence, EvidenceAssemblyError,
@@ -380,7 +380,7 @@ class ReviewCloseoutTests(unittest.TestCase):
     def test_premature_success_cleanup_cannot_delete_review_evidence(self):
         run, paths = self.make_run()
         original = paths["raw_lane_outputs"].read_bytes()
-        with self.assertRaisesRegex(ValueError, "review evidence must be retained"):
+        with self.assertRaises(RetainedReviewValidationError):
             run.finish("succeeded")
         self.assertTrue(run.root.is_dir())
         self.assertEqual(original, paths["raw_lane_outputs"].read_bytes())
@@ -776,7 +776,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         self.assertEqual("review/missing.md", error["details"]["path"])
         self.assertEqual(ErrorMessage.REVIEW_REPORT_LINK_MISSING.value, error["message"])
         self.assertTrue(paths["report"].is_file())
-        with self.assertRaisesRegex(ValueError, "durably validated"):
+        with self.assertRaises(RetainedReviewValidationError):
             run.finish("succeeded", retain_diagnostics=True)
 
     def test_report_links_resolve_from_retained_scope_root_and_retry_idempotently(self):
@@ -856,7 +856,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         }) + "\n", encoding="utf-8")
         result = self.preserve(run, paths)
         Path(result["evidence_path"], "receipts/private/router/security.json").unlink()
-        with self.assertRaisesRegex(ValueError, "not durably validated"):
+        with self.assertRaises(RetainedReviewValidationError):
             run.finish("succeeded", retain_diagnostics=True)
 
     def test_reference_style_report_link_must_resolve(self):
@@ -925,7 +925,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
         result = self.preserve(run, paths)
         self.assertEqual("incomplete", result["status"])
-        with self.assertRaisesRegex(ValueError, "durably validated"):
+        with self.assertRaises(RetainedReviewValidationError):
             run.finish("succeeded", retain_diagnostics=True)
 
     def test_supported_cli_seals_and_reports_the_durable_evidence_path(self):

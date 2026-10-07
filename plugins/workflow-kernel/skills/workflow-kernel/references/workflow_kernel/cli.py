@@ -3933,15 +3933,27 @@ def command_owned_run_create(args):
 
 def command_owned_run_finish(args):
     from .owned_run import ExactOwnedRun
+    from .review_closeout import RetainedReviewValidationError
 
     root = Path(os.path.abspath(args.run_root))
-    if not os.path.lexists(root):
-        _emit({"schema_version": 1, "status": "missing", "path": str(root)})
-        return 0
-    report = ExactOwnedRun.open(root).finish(
-        args.outcome, retain_diagnostics=args.retain_diagnostics,
-        reason=args.reason, contains=args.contains,
-    )
+    try:
+        if not os.path.lexists(root):
+            if args.historical_review_digests is not None:
+                raise RetainedReviewValidationError("historical_retention_required", "owner-metadata")
+            _emit({"schema_version": 1, "status": "missing", "path": str(root)})
+            return 0
+        try:
+            run = ExactOwnedRun.open(root)
+        except (OSError, TypeError, ValueError):
+            raise RetainedReviewValidationError("unsafe_path", "owner-metadata") from None
+        report = run.finish(
+            args.outcome, retain_diagnostics=args.retain_diagnostics,
+            reason=args.reason, contains=args.contains,
+            historical_review_digests=args.historical_review_digests,
+        )
+    except RetainedReviewValidationError as exc:
+        _emit(exc.to_dict(), sys.stderr)
+        return exc.exit_code
     _emit({"schema_version": 1, **report.to_dict()})
     return 0
 
@@ -4403,6 +4415,7 @@ def parser():
     owned_finish.add_argument("--retain-diagnostics", action="store_true")
     owned_finish.add_argument("--reason")
     owned_finish.add_argument("--contains")
+    owned_finish.add_argument("--historical-review-digests", help="existing pinned inventory for terminal validation of the supported retained historical run")
     owned_finish.set_defaults(handler=command_owned_run_finish)
 
     owned_exec = commands.add_parser(
