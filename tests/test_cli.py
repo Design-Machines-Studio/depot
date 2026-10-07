@@ -116,7 +116,7 @@ class CliTests(unittest.TestCase):
             result = fixture.cli(run, paths, missing)
             self.assertEqual(3, result.returncode)
             error = json.loads(result.stderr)["error"]
-            self.assertEqual({"stage": "lane_input", "reason": "missing_evidence", "path": "review/evidence.json"}, error["details"])
+            self.assertEqual({"stage": "lane_input", "reason": "missing_evidence", "path": "review/absent-input.json"}, error["details"])
             self.assertNotIn(str(run.root), result.stderr)
             foreign = fixture.root / "foreign-absent.json"
             result = fixture.cli(run, paths, foreign)

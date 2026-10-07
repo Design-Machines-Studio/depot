@@ -162,6 +162,19 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         self.assertEqual("invalid_evidence", json.loads(result.stderr)["error"]["details"]["reason"])
         self.assertNotIn(str(run.root), result.stderr)
 
+    def test_absent_required_patch_diagnostic_names_its_safe_path(self):
+        run, paths = self.prepare()
+        value = json.loads(paths["lanes"]["security"].read_text())
+        value["requested"]["evidence_refs"].append("review/absent-required.patch")
+        value["requested"]["required_evidence_refs"].append("review/absent-required.patch")
+        self.write(paths["lanes"]["security"], value)
+        result = self.cli(run, paths, paths["lanes"]["security"])
+        self.assertEqual(3, result.returncode, result.stderr)
+        output = json.loads(result.stdout)
+        self.assertEqual("incomplete", output["status"])
+        self.assertEqual(["review/absent-required.patch"], output["missing"])
+        self.assertEqual([{"stage": "lane_input", "reason": "missing_evidence", "path": "review/absent-required.patch"}], output["diagnostics"])
+
     def test_committed_identity_conflict_and_retained_digest_failure(self):
         run, paths = self.prepare()
         record = self.lane(run, paths)

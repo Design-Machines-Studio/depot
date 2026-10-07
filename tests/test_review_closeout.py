@@ -365,10 +365,43 @@ class ReviewCloseoutTests(unittest.TestCase):
     def test_missing_required_lane_evidence_reference_cannot_complete_closeout(self):
         run, paths = self.make_run("dm-review", "missing-evidence-ref")
         record = json.loads((run.root / paths["record_ref"]).read_text())
-        (run.root / record["bindings"]["raw/security.md"]["retained_ref"]).unlink()
+        retained_ref = record["bindings"]["raw/security.md"]["retained_ref"]
+        (run.root / retained_ref).unlink()
         result = self.preserve(run, paths)
         self.assertEqual("incomplete", result["status"])
         self.assertIn("missing_evidence", result["missing"])
+        self.assertIn({"stage": "retained_validation", "reason": "missing_evidence",
+                       "path": retained_ref}, result["diagnostics"])
+
+    def test_assembler_missing_paths_name_safe_relative_files_only(self):
+        run, paths = self.make_run("dm-review", "assembler-missing-paths")
+        arguments = dict(run_root=run.root, repository_root=self.repo, request_path=paths["request"],
+                         receipts_path=paths["receipts"], input_path=paths["input"], test_harness=True)
+        for key, path, reason, role in (
+            ("request_path", run.root / "review/absent-request.json", "missing_evidence", "review/absent-request.json"),
+            ("input_path", run.root / "review/absent-input.json", "missing_evidence", "review/absent-input.json"),
+            ("receipts_path", run.root / "review/absent-receipts.json", "missing_evidence", "review/absent-receipts.json"),
+            ("input_path", run.root / "review/ghp_abcdefgh12345678.json", "missing_evidence", "review/evidence.json"),
+            ("input_path", self.root / "outside-input.json", "unsafe_path", "review/evidence.json"),
+        ):
+            with self.subTest(key=key, path=path.name):
+                with self.assertRaises(EvidenceAssemblyError) as caught:
+                    assemble_review_evidence(**dict(arguments, **{key: path}))
+                self.assertEqual({"stage": "lane_input", "reason": reason, "path": role}, caught.exception.detail())
+        external = self.root / "external-input.json"
+        external.write_text("{}\n")
+        (run.root / "review/linked-input.json").symlink_to(external)
+        with self.assertRaises(EvidenceAssemblyError) as caught:
+            assemble_review_evidence(**dict(arguments, input_path=run.root / "review/linked-input.json"))
+        self.assertEqual({"stage": "lane_input", "reason": "unsafe_path", "path": "review/evidence.json"}, caught.exception.detail())
+
+    def test_missing_router_directory_names_its_relative_path(self):
+        run, paths = self.make_run("dm-review", "absent-router")
+        shutil.rmtree(paths["router"])
+        result = self.preserve(run, paths)
+        self.assertEqual("incomplete", result["status"])
+        self.assertIn({"stage": "preservation_input", "reason": "missing_evidence",
+                       "path": "receipts/private/router"}, result["diagnostics"])
 
     def test_mismatched_lane_output_digest_cannot_complete_closeout(self):
         run, paths = self.make_run("dm-review", "mismatched-lane-digest")
@@ -685,8 +718,10 @@ class ReviewCloseoutTests(unittest.TestCase):
         run, paths = self.make_run("dm-review", "router-index")
         paths["router"].joinpath("security.json").unlink()
         paths["router"].joinpath("unrelated.json").write_text("{}\n", encoding="utf-8")
-        with self.assertRaises((OSError, ValueError)):
+        with self.assertRaises(EvidenceAssemblyError) as caught:
             self.preserve(run, paths)
+        self.assertEqual({"stage": "preservation_input", "reason": "missing_evidence",
+                          "path": "receipts/private/router/security.json"}, caught.exception.detail())
         self.assertTrue(run.root.is_dir())
         paths["router"].joinpath("unrelated.json").unlink()
         paths["router"].joinpath("security.json").write_text(json.dumps({

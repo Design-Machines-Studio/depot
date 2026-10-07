@@ -1013,7 +1013,7 @@ def _preserve_review_evidence_locked(
             router_source = router_candidate.resolve(strict=True)
         except FileNotFoundError:
             missing.append("private model-router receipts")
-            diagnostics.append({"stage": "preservation_input", "reason": "missing_evidence", "path": "review/evidence.json"})
+            diagnostics.append(EvidenceAssemblyError("preservation_input", "missing_evidence", relative.as_posix()).detail())
         if router_source is not None and not router_source.is_relative_to(run.root):
             raise ValueError("private router receipts are outside the owned run")
     else:
@@ -1101,7 +1101,7 @@ def _preserve_review_evidence_locked(
                     sources.setdefault(reference, _source_path(evidence_source_root / reference, run.root))
                 except FileNotFoundError:
                     missing.append("missing_evidence")
-                    diagnostics.append({"stage": "retained_validation", "reason": "missing_evidence", "path": "review/evidence.json"})
+                    diagnostics.append(EvidenceAssemblyError("retained_validation", "missing_evidence", reference).detail())
                 except (OSError, ValueError):
                     missing.append("unsafe_path")
                     diagnostics.append({"stage": "retained_validation", "reason": "unsafe_path", "path": "review/evidence.json"})
@@ -1158,8 +1158,8 @@ def _preserve_review_evidence_locked(
         if router_source is not None:
             try:
                 _copy_router_tree(router_source, staging / router_source.relative_to(run.root))
-            except FileNotFoundError:
-                raise EvidenceAssemblyError("preservation_input", "missing_evidence") from None
+            except FileNotFoundError as exc:
+                raise EvidenceAssemblyError("preservation_input", "missing_evidence", _relative_role(exc.filename, run.root)) from None
             except (OSError, ValueError):
                 raise EvidenceAssemblyError("preservation_input", "invalid_evidence") from None
         copied_files, copied_bytes = _bounded_diagnostic(staging)
@@ -1315,6 +1315,14 @@ def preserve_review_evidence(**arguments):
         return _preserve_review_evidence_locked(**arguments)
     finally:
         os.close(descriptor)
+
+
+def _relative_role(path, root):
+    """Root-relative diagnostic role; EvidenceAssemblyError sanitizes the text."""
+    try:
+        return Path(path).absolute().relative_to(root).as_posix()
+    except (TypeError, ValueError):
+        return "review/evidence.json"
 
 
 def _evidence_bytes(root, reference, stage):
@@ -1795,14 +1803,14 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
     if run.workflow not in _REVIEW_WORKFLOWS:
         raise EvidenceAssemblyError("lane_input", "unsafe_path")
     root, repository = run.root, Path(repository_root).resolve(strict=True)
-    try:
-        request_file = _source_path(request_path, root)
-        input_file = _source_path(input_path, root)
-        receipt_file = _source_path(receipts_path, root)
-    except FileNotFoundError:
-        raise EvidenceAssemblyError("lane_input", "missing_evidence") from None
-    except (OSError, ValueError):
-        raise EvidenceAssemblyError("lane_input", "unsafe_path") from None
+    def owned(path):
+        try:
+            return _source_path(path, root)
+        except FileNotFoundError:
+            raise EvidenceAssemblyError("lane_input", "missing_evidence", _relative_role(path, root)) from None
+        except (OSError, ValueError):
+            raise EvidenceAssemblyError("lane_input", "unsafe_path") from None
+    request_file, input_file, receipt_file = owned(request_path), owned(input_path), owned(receipts_path)
     # Retained retries use the committed scope beneath the registered
     # diagnostic child; references retain their original scope-relative names.
     if receipt_file.parent.name == "review" and request_file.parent == receipt_file.parent:
@@ -1931,7 +1939,9 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
             _check_evidence_bound(root / "review/evidence")
             _append_receipts_locked(receipt_file, "assemble-review-evidence", [body], run.run_id, now)
             return {"status": body["status"], "record_ref": reference, "reused": False, "missing": missing,
-                    "diagnostics": [] if eligible else [{"stage": "lane_input" if set(missing) & required else "lane_validation", "reason": "missing_evidence" if set(missing) & required else "incomplete_inspection", "path": "review/evidence.json"}], "proof_level": "synthetic" if test_harness else value["provenance"]["kind"]}
+                    "diagnostics": [] if eligible else (
+                        [EvidenceAssemblyError("lane_input", "missing_evidence", ref).detail() for ref in sorted(set(missing) & required)]
+                        or [{"stage": "lane_validation", "reason": "incomplete_inspection", "path": "review/evidence.json"}]), "proof_level": "synthetic" if test_harness else value["provenance"]["kind"]}
         if not test_harness and any(_record(root, row["record_ref"], receipts)["input"]["provenance"]["kind"] == "synthetic_test" for row in value["selection"]):
             raise EvidenceAssemblyError("aggregate_validation", "incomplete_inspection")
         repository_identity, head = source_identity(repository)
