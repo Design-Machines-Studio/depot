@@ -106,6 +106,25 @@ class CliTests(unittest.TestCase):
         launcher.chmod(0o755)
         return plugin, refs, launcher
 
+    def test_assemble_missing_input_has_closed_diagnostic(self):
+        from tests.test_auto_review_candidate import ReviewEvidenceProducerTests
+        fixture = ReviewEvidenceProducerTests()
+        fixture.setUp()
+        try:
+            run, paths = fixture.prepare()
+            missing = run.root / "review/absent-input.json"
+            result = fixture.cli(run, paths, missing)
+            self.assertEqual(3, result.returncode)
+            error = json.loads(result.stderr)["error"]
+            self.assertEqual({"stage": "lane_input", "reason": "missing_evidence", "path": "review/evidence.json"}, error["details"])
+            self.assertNotIn(str(run.root), result.stderr)
+            foreign = fixture.root / "foreign-absent.json"
+            result = fixture.cli(run, paths, foreign)
+            self.assertEqual(3, result.returncode)
+            self.assertEqual("unsafe_path", json.loads(result.stderr)["error"]["details"]["reason"])
+        finally:
+            fixture.tearDown()
+
     def test_help_lists_commands(self):
         result = self.run_cli("--help")
         self.assertEqual(result.returncode, 0)

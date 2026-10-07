@@ -9,8 +9,9 @@ evidence; they never finish the shared root or render its terminal report.
 ## Preserve Before Cleanup
 
 Before deleting review output or a worktree containing evidence, settle
-required lane and browser-case coverage, then bind `request.json` to the exact
-repository, HEAD, selected lanes, and browser cases. Keep the durable finding,
+required coverage through the producer. Bind each request before inspection;
+final requests name the target HEAD while lane records keep their original
+source. Never rebind old output to a repaired HEAD. Keep the durable finding,
 coverage, and result inputs. Call the trusted Kernel command:
 
 Write required_browser_cases as an explicit list in the final coverage
@@ -44,7 +45,7 @@ verdict `REVIEW INCOMPLETE`; narrative and passing CI cannot fill a gap. Search
 only this exact run and retained scope for attributable evidence. If it cannot
 be recovered, rerun only the genuinely missing required lanes/cases at the
 same repository, HEAD, and scope. Never rerun settled lanes to rebuild
-closeout. Changed source or scope rejects reuse.
+closeout. Changed source or scope requires the producer's supported recheck or non-impact chain; unsupported reuse is rejected.
 
 If preservation or validation fails, leave the original evidence and its
 worktree intact and report the exact run-root path. Do not finish the root.
@@ -112,3 +113,23 @@ required coverage. Missing lane output, literal lane receipt, required browser
 evidence, or invalid source binding remains `REVIEW INCOMPLETE`. Report one
 terminal verdict only; do not pair a formal status with an informal clean
 approval.
+
+
+## Source-bound repair and retry
+
+Before preservation, invoke `assemble-review-evidence` operation `coverage`
+with explicit committed record selection. Rechecks append new attempts linked
+to predecessors and applied selection/repair evidence. Reuse retains original
+records plus every intervening actual changed-path/source/non-impact proof.
+Equal HEAD with changed dirty bytes and ancestry alone both fail coverage.
+Keep earlier findings and synthesis; clean rechecks need explicit resolutions.
+Use Kernel's `review-evidence-contract.md` closed producer schema.
+
+The stream identifies the committed snapshot; missing derived companions can
+be reconstructed without redispatch. Conflicting retained companions require
+a new owned replay carrying the original stream/history. Preservation locks
+that snapshot and retains all referenced records and bindings within existing
+bounds. Missing/unsafe inputs produce closed stage/reason diagnostics; lexical
+containment and symlinks are checked before absence. Preserve safe available
+inputs and all originals on failure. Nested reviews return evidence; only the
+existing creator finishes the root.

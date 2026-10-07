@@ -21,7 +21,7 @@ from workflow_kernel.review_closeout import (
     ReviewCloseoutValidationError,
     bind_review_source,
     preserve_review_evidence,
-    source_identity,
+    source_identity, assemble_review_evidence, EvidenceAssemblyError,
 )
 from workflow_kernel.schema import ErrorMessage
 
@@ -44,7 +44,7 @@ class ReviewCloseoutTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def make_run(self, workflow="dm-review", run_id="closeout"):
+    def make_run(self, workflow="dm-review", run_id="closeout", *, legacy=False):
         run = ExactOwnedRun.start(workflow, run_id, base=self.state)
         source = run.create_path("raw-output", "review")
         run.create_path("raw-output", "receipts")
@@ -112,7 +112,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         }
         paths["request"].write_text(json.dumps(request) + "\n", encoding="utf-8")
         (source / "coverage.json").write_text("{}\n", encoding="utf-8")
-        referenced = self.repo / "raw" / "security.md"
+        referenced = run.root / "raw" / "security.md"
         referenced.parent.mkdir(parents=True, exist_ok=True)
         referenced.write_text("Security lane evidence.\n", encoding="utf-8")
         receipts[0]["source_repository"] = repository
@@ -146,6 +146,34 @@ class ReviewCloseoutTests(unittest.TestCase):
             encoding="utf-8",
         )
         paths["report"] = report
+        if not legacy:
+            paths["receipts"].write_text("[]\n")
+            for key in ("lane_receipts", "raw_lane_outputs", "raw_findings", "decisions"):
+                paths[key].unlink()
+            paths["request"].write_text(json.dumps(ReviewRequest.from_mapping(request).to_dict()) + "\n")
+            (source / "companion.json").write_text(json.dumps(lane_receipt) + "\n")
+            (source / "prompt.md").write_text("Inspect source.txt in the disposable repository.\n")
+            lane_input = {
+                "schema_version": 1, "operation": "lane", "run_id": run_id,
+                "pass_id": "initial", "lane": "security", "attempt": 1, "reviewer": "security",
+                "source": {"repository": repository, "head": head, "base": head, "worktree_ref": None, "request_ref": "review/request.json"},
+                "requested": {"designation": "full", "patch_ref": None, "paths": ["source.txt"], "evidence_refs": ["review/prompt.md"], "required_evidence_refs": ["review/prompt.md"]},
+                "inspected": {"paths": ["source.txt"], "basis": "repository", "limitations": [], "missing_evidence_refs": []},
+                "literal": {"output_ref": "raw/security.md", "dispatch_receipt_ref": "receipts/private/router/security.json", "companion_ref": "review/companion.json"},
+                "result": {"status": "no_findings", "findings": [], "incomplete_reasons": []},
+                "provenance": {"kind": "synthetic_test", "executed_at": None, "source_refs": ["review/prompt.md"]},
+                "recheck": {"prior_record_ref": None, "selection_ref": None, "repair_refs": []},
+            }
+            paths["input"] = source / "lane-input.json"
+            paths["input"].write_text(json.dumps(lane_input) + "\n")
+            lane_result = assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths["request"], receipts_path=paths["receipts"], input_path=paths["input"], test_harness=True)
+            paths["record_ref"] = lane_result["record_ref"]
+            coverage = {"schema_version": 1, "operation": "coverage", "run_id": run_id, "pass_id": "initial",
+                        "selection": [{"lane": "security", "record_ref": lane_result["record_ref"], "history_refs": [], "transition_refs": []}],
+                        "decisions": [], "occurred_at": "2026-09-01T00:01:30Z", "required_case_refs": [], "resolutions": []}
+            paths["coverage_input"] = source / "coverage-input.json"
+            paths["coverage_input"].write_text(json.dumps(coverage) + "\n")
+            assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths["request"], receipts_path=paths["receipts"], input_path=paths["coverage_input"], test_harness=True)
         return run, paths
 
     def preserve(self, run, paths):
@@ -161,6 +189,21 @@ class ReviewCloseoutTests(unittest.TestCase):
             private_router_directory=paths["router"],
             report_path=paths.get("report"),
         )
+
+    def test_absent_companion_is_classified_and_other_inputs_preserved(self):
+        run, paths = self.make_run("dm-review", "absent-lane")
+        paths["lane_receipts"].unlink()
+        result = self.preserve(run, paths)
+        self.assertEqual("incomplete", result["status"])
+        self.assertIn({"stage": "preservation_input", "reason": "missing_evidence",
+                       "path": "review/review-lane-receipts.json"}, result["diagnostics"])
+        self.assertTrue(Path(result["evidence_path"], "review/request.json").is_file())
+
+    def test_legacy_companions_cannot_establish_new_terminal_coverage(self):
+        run, paths = self.make_run("dm-review", "legacy-terminal", legacy=True)
+        result = self.preserve(run, paths)
+        self.assertEqual("incomplete", result["status"])
+        self.assertTrue(paths["raw_lane_outputs"].is_file())
 
     def test_non_ui_request_serializes_an_explicit_empty_browser_case_set(self):
         request = ReviewRequest.from_mapping({
@@ -179,12 +222,7 @@ class ReviewCloseoutTests(unittest.TestCase):
 
         first = self.preserve(run, paths)
         self.assertEqual("incomplete", first["status"])
-        self.assertTrue(any(
-            "required_browser_cases" in reason
-            and "expected=[]" in reason
-            and "actual=None" in reason
-            for reason in first["missing"]
-        ), first)
+        self.assertEqual("invalid_evidence", first["diagnostics"][0]["reason"])
         retained = Path(first["evidence_path"]) / "review/authoritative-receipts.json"
         self.assertEqual(original, retained.read_bytes())
 
@@ -212,10 +250,7 @@ class ReviewCloseoutTests(unittest.TestCase):
 
         result = self.preserve(run, paths)
         self.assertEqual("incomplete", result["status"])
-        self.assertTrue(any(
-            "required_browser_cases" in reason and "actual=None" in reason
-            for reason in result["missing"]
-        ), result)
+        self.assertEqual("invalid_evidence", result["diagnostics"][0]["reason"])
         retained = Path(result["evidence_path"]) / "review/authoritative-receipts.json"
         self.assertEqual(original, retained.read_bytes())
 
@@ -233,7 +268,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         self.assertTrue((evidence / "review/authoritative-receipts.json").is_file())
         self.assertTrue((evidence / "review/raw-lane-outputs.json").is_file())
         self.assertTrue((evidence / "receipts/private/router/security.json").is_file())
-        self.assertTrue((evidence / "raw/security.md").is_file())
+        self.assertTrue(list((evidence / "review/evidence").glob("literal-*.bin")))
         self.assertEqual(
             "## CLEAN\n\nRequired review coverage is complete. "
             "[Lane outputs](review/raw-lane-outputs.json).\n",
@@ -305,7 +340,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         self.assertEqual("complete", first["status"])
         self.assertEqual(first["evidence_path"], second["evidence_path"])
         receipts = json.loads((Path(second["evidence_path"]) / "review/authoritative-receipts.json").read_text())
-        self.assertEqual(2, len(receipts))
+        self.assertEqual(3, len(receipts))
         self.assertEqual(1, len(list((Path(second["evidence_path"]) / "receipts/private/router").glob("*.json"))) - 1)
 
     def test_changed_head_cannot_complete_closeout(self):
@@ -317,10 +352,11 @@ class ReviewCloseoutTests(unittest.TestCase):
 
     def test_missing_required_lane_evidence_reference_cannot_complete_closeout(self):
         run, paths = self.make_run("dm-review", "missing-evidence-ref")
-        (self.repo / "raw/security.md").unlink()
+        record = json.loads((run.root / paths["record_ref"]).read_text())
+        (run.root / record["bindings"]["raw/security.md"]["retained_ref"]).unlink()
         result = self.preserve(run, paths)
         self.assertEqual("incomplete", result["status"])
-        self.assertTrue(any("raw/security.md" in item for item in result["missing"]))
+        self.assertIn("missing_evidence", result["missing"])
 
     def test_mismatched_lane_output_digest_cannot_complete_closeout(self):
         run, paths = self.make_run("dm-review", "mismatched-lane-digest")
@@ -345,7 +381,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         )
         result = self.preserve(run, paths)
         self.assertEqual("incomplete", result["status"])
-        self.assertIn("required evidence reference: review/linked-evidence.md", result["missing"])
+        self.assertIn("digest_mismatch", result["missing"])
         self.assertFalse(Path(result["evidence_path"], "review/linked-evidence.md").exists())
 
     def test_report_link_escape_and_foreign_owned_run_remain_rejected(self):
@@ -456,16 +492,16 @@ class ReviewCloseoutTests(unittest.TestCase):
         lane_document["lanes"].append(visual_receipt)
         paths["lane_receipts"].write_text(json.dumps(lane_document) + "\n", encoding="utf-8")
         receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        receipts[0]["requested_lanes"] = ["security", "visual"]
-        receipts[0]["source_repository"] = repository
-        receipts[0]["source_head"] = head
-        receipts[1]["expected_lanes"] = ["security", "visual"]
-        receipts[1]["completed_lanes"] = ["security", "visual"]
+        receipts[1]["requested_lanes"] = ["security", "visual"]
         receipts[1]["source_repository"] = repository
         receipts[1]["source_head"] = head
-        receipts[1]["required_browser_cases"] = ["home", "settings"]
+        receipts[2]["expected_lanes"] = ["security", "visual"]
+        receipts[2]["completed_lanes"] = ["security", "visual"]
+        receipts[2]["source_repository"] = repository
+        receipts[2]["source_head"] = head
+        receipts[2]["required_browser_cases"] = ["home", "settings"]
         receipts.append({
-            "run_id": request["run_id"], "sequence": 2,
+            "run_id": request["run_id"], "sequence": 3,
             "stage": "browser_verification", "status": "completed",
             "node_id": "visual", "occurred_at": "2026-09-01T00:02:00Z",
             "authoritative_receipt": "review/browser.json", "host": "codex",
@@ -479,15 +515,15 @@ class ReviewCloseoutTests(unittest.TestCase):
         paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
         self.assertEqual("incomplete", self.preserve(run, paths)["status"])
 
-    def test_completed_browser_case_after_coverage_matrix_is_accepted(self):
+    def test_browser_case_relabel_without_new_aggregate_is_rejected(self):
         run, paths = self.make_run("dm-review", "browser-after-coverage")
         request = json.loads(paths["request"].read_text(encoding="utf-8"))
         request["required_browser_cases"] = ["home"]
         paths["request"].write_text(json.dumps(request) + "\n", encoding="utf-8")
         receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        receipts[1]["required_browser_cases"] = ["home"]
+        receipts[2]["required_browser_cases"] = ["home"]
         receipts.append({
-            "run_id": request["run_id"], "sequence": 2,
+            "run_id": request["run_id"], "sequence": 3,
             "stage": "browser_verification", "status": "completed",
             "node_id": "visual", "occurred_at": "2026-09-01T00:02:00Z",
             "authoritative_receipt": "review/browser.json", "host": "codex",
@@ -500,8 +536,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         (self.repo / "browser").mkdir()
         (self.repo / "browser/case-home.json").write_text("{}\n", encoding="utf-8")
         result = self.preserve(run, paths)
-        self.assertEqual("complete", result["status"])
-        self.assertTrue(Path(result["evidence_path"], "browser/case-home.json").is_file())
+        self.assertEqual("incomplete", result["status"])
 
     def test_optional_contribution_cost_and_observation_outputs_do_not_gate_coverage(self):
         run, paths = self.make_run()
@@ -516,7 +551,7 @@ class ReviewCloseoutTests(unittest.TestCase):
     def test_failed_optional_contribution_receipt_does_not_downgrade_coverage(self):
         run, paths = self.make_run()
         receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        receipts.append({"sequence": 2, "stage": "finding_contribution", "status": "failed"})
+        receipts.append({"sequence": 3, "stage": "finding_contribution", "status": "failed"})
         paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
         result = self.preserve(run, paths)
         self.assertEqual("complete", result["status"])
@@ -528,14 +563,14 @@ class ReviewCloseoutTests(unittest.TestCase):
     def test_unvalidated_later_coverage_cannot_override_incomplete_coverage(self):
         run, paths = self.make_run("dm-review", "malformed-recheck")
         receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        receipts[1]["completed_lanes"] = []
-        receipts[1]["unavailable_lanes"] = ["security"]
+        receipts[2]["completed_lanes"] = []
+        receipts[2]["unavailable_lanes"] = ["security"]
         receipts.append({"stage": "finding_contribution", "status": "failed"})
         receipts.append({
             "stage": "coverage_matrix", "expected_lanes": ["security"],
             "completed_lanes": ["security"], "degraded_lanes": [],
-            "unavailable_lanes": [], "source_repository": receipts[1]["source_repository"],
-            "source_head": receipts[1]["source_head"], "required_browser_cases": [],
+            "unavailable_lanes": [], "source_repository": receipts[2]["source_repository"],
+            "source_head": receipts[2]["source_head"], "required_browser_cases": [],
         })
         paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
         self.assertEqual("incomplete", self.preserve(run, paths)["status"])
@@ -543,12 +578,12 @@ class ReviewCloseoutTests(unittest.TestCase):
     def test_valid_recheck_after_optional_contribution_can_complete(self):
         run, paths = self.make_run("dm-review", "valid-recheck")
         receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        receipts[1]["completed_lanes"] = []
-        receipts[1]["unavailable_lanes"] = ["security"]
+        receipts[2]["completed_lanes"] = []
+        receipts[2]["unavailable_lanes"] = ["security"]
         receipts.append({"stage": "finding_contribution", "status": "failed"})
-        final = dict(receipts[1])
+        final = dict(receipts[2])
         final.update({
-            "sequence": 3, "occurred_at": "2026-09-01T00:03:00Z",
+            "sequence": 4, "occurred_at": "2026-09-01T00:03:00Z",
             "completed_lanes": ["security"], "unavailable_lanes": [],
         })
         receipts.append(final)
@@ -581,18 +616,10 @@ class ReviewCloseoutTests(unittest.TestCase):
             ("simplicity-review.md", "Simplicity lane output.\n"),
         ):
             (review_source / name).write_text(text, encoding="utf-8")
-        lane_document = json.loads(paths["lane_receipts"].read_text(encoding="utf-8"))
-        lane_document["lanes"][0]["evidence_refs"] = [
-            "review/pattern-review.md", "review/simplicity-review.md",
-        ]
-        paths["lane_receipts"].write_text(
-            json.dumps(lane_document) + "\n", encoding="utf-8",
-        )
-        paths["report"].write_text(
-            "[Pattern](review/pattern-review.md) and "
-            "[Simplicity](review/simplicity-review.md).\n",
-            encoding="utf-8",
-        )
+        record = json.loads((run.root / paths["record_ref"]).read_text())
+        output_ref = record["bindings"]["raw/security.md"]["retained_ref"]
+        prompt_ref = record["bindings"]["review/prompt.md"]["retained_ref"]
+        paths["report"].write_text(f"[Output]({output_ref}) and [Prompt]({prompt_ref}).\n")
 
         first = self.preserve(run, paths)
         self.assertEqual("complete", first["status"], first)
@@ -701,12 +728,12 @@ class ReviewCloseoutTests(unittest.TestCase):
         self.assertEqual("complete", retry["status"], retry)
         self.assertEqual(before, (evidence / "review/raw-lane-outputs.json").read_bytes())
         receipt_values = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        self.assertEqual(2, len(receipt_values))
+        self.assertEqual(3, len(receipt_values))
         finished = ExactOwnedRun.open(run.root).finish("succeeded", retain_diagnostics=True)
         self.assertEqual("retained", finished.status)
         self.assertTrue((evidence / "report.md").is_file())
 
-    def test_repaired_head_recheck_can_complete_with_the_new_exact_scope(self):
+    def test_aggregate_only_head_rewrite_cannot_relabel_old_lane_output(self):
         run, paths = self.make_run("dm-review", "rechecked")
         (self.repo / "source.txt").write_text("repaired source\n", encoding="utf-8")
         subprocess.run(("git", "-C", str(self.repo), "add", "source.txt"), check=True)
@@ -717,18 +744,16 @@ class ReviewCloseoutTests(unittest.TestCase):
         request["source_head"] = head
         paths["request"].write_text(json.dumps(request) + "\n", encoding="utf-8")
         receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        receipts[0]["source_repository"] = repository
-        receipts[0]["source_head"] = head
         receipts[1]["source_repository"] = repository
         receipts[1]["source_head"] = head
-        receipts[1]["required_browser_cases"] = []
+        receipts[2]["source_repository"] = repository
+        receipts[2]["source_head"] = head
+        receipts[2]["required_browser_cases"] = []
         paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
         result = self.preserve(run, paths)
-        self.assertEqual("complete", result["status"])
-        run.finish(
-            "succeeded", retain_diagnostics=True,
-            reason="rechecked evidence sealed", contains="repaired head coverage",
-        )
+        self.assertEqual("incomplete", result["status"])
+        with self.assertRaisesRegex(ValueError, "durably validated"):
+            run.finish("succeeded", retain_diagnostics=True)
 
     def test_supported_cli_seals_and_reports_the_durable_evidence_path(self):
         run, paths = self.make_run("dm-review", "cli-closeout")

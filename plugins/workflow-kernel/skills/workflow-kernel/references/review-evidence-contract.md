@@ -1,0 +1,118 @@
+# Source-bound review evidence (>=0.26.0)
+
+
+`assemble-review-evidence` constructs required evidence. dm-review owns
+extraction from `reviewer-output-contract.md`, inspection judgments, selection,
+synthesis and repairs. Kernel never dispatches a model or parses Markdown.
+
+```text
+"$WORKFLOW_KERNEL" assemble-review-evidence \
+  --run-root <exact-owned-root> --repository-root <reviewed-checkout> \
+  --request <bound-request.json> --receipts <authoritative-receipts.json> \
+  --input <host-structured-input.json>
+```
+
+Inputs have exactly `schema_version: 1`, `operation: lane|coverage`, `run_id`
+and `pass_id`, plus the operation's fields below. IDs are stable anonymous
+identities. Caller supplies neither authoritative digests nor receipt sequences.
+All referenced files are contained regular files under the owned root. Recovery
+copies original inputs there byte-for-byte; original resources stay intact.
+
+### Lane input
+
+`lane` adds `lane`, positive `attempt`, `reviewer`, and these exact groups.
+Every listed key is required, including explicit nulls and empty lists.
+
+| Group | Exact fields |
+| --- | --- |
+| `source` | `repository`, original `head`, `base`, nullable `worktree_ref`, `request_ref` |
+| `requested` | `designation: full|scoped`, nonempty `paths`, `evidence_refs`, nonempty `required_evidence_refs`, nullable `patch_ref` |
+| `inspected` | `paths`, `basis: repository|patch|host_evidence`, `limitations`, `missing_evidence_refs` |
+| `literal` | `output_ref`, actual private `dispatch_receipt_ref`, existing anonymous public `companion_ref` |
+| `result` | `status: findings|no_findings|incomplete`, existing raw-shape `findings`, `incomplete_reasons` |
+| `provenance` | `kind: live|recovery|synthetic_test`, nullable original `executed_at`, `source_refs` |
+| `recheck` | nullable `prior_record_ref`, nullable `selection_ref`, `repair_refs` |
+
+Paths/references are unique relative filenames. `companion_ref` names the
+router's existing anonymous completion companion. Kernel derives private lane
+provenance from the actual dispatch receipt and recomputes digests/counts.
+Historical structured private companions also remain readable when bound by
+new lane records. Unknown implementation origin stays unknown; it never gates
+inspection. Exact identities remain private.
+`patch_ref` is mandatory for patch inspection: retain exact `git diff --binary
+<base> <head> -- <requested paths>` bytes and list it in required evidence.
+Full scope includes every changed path in that boundary. Live dirty inspection
+also supplies exact `git diff --binary <head>` as `worktree_ref`. Kernel binds
+actual tracked/untracked content and modes and retains dirty file bytes; equal HEAD never proves equal
+source. Recovery cannot manufacture unknown dirty-source facts.
+
+Missing required evidence or incomplete inspection preserves an incomplete
+record without settling coverage. Missing auxiliary material limits dependent
+claims; express limitations explicitly. Unknown original execution timestamps
+stay null; `assembled_at` records assembly time. A router receipt's null
+revision stays unknown: source attribution comes from request/prompt/patch and
+host extraction. Production lanes require published served dispatch and reject
+transport stubs. `--test-harness` explicitly marks disposable synthetic proof;
+production coverage rejects `synthetic_test` records. Never claim this as live
+or installed consumer verification.
+
+The command retains literal bytes, extraction and a content-addressed record
+under `review/evidence/`, then appends `review_lane_evidence` under the shared
+receipt lock. Dispatch/attempt receipts retain their original meaning. Returned
+`record_ref` settles inspection only after append. Identical run/pass/lane/
+attempt retries verify bytes and reuse the record; changed inputs conflict.
+Corrections use new linked attempts. Uncommitted partial files confer no
+coverage; interrupted retries reuse matching sealed files.
+
+### Coverage input and source transitions
+
+`coverage` adds exactly `selection`, `decisions`, `occurred_at`,
+`required_case_refs`, and `resolutions`. `selection` has exactly one row per
+request lane in request order, with `lane`, `record_ref`, ordered full
+`history_refs`, and `transition_refs`. Kernel never picks the latest filename.
+Affected rechecks supply their predecessor chain. Unaffected reuse supplies
+all intervening non-impact transitions.
+
+Each transition has exactly `schema_version: 1`, `from_source`, `to_source`,
+actual `changed_paths`, `patch_ref`, nullable `worktree_ref`, and `selection_ref`.
+Copy source snapshots (`head` and `files` with mode/blob identities) from sealed
+records; Kernel verifies actual changed paths, ancestry, binary patch bytes,
+dirty content and final live source. Ancestry alone is insufficient.
+
+`selection_ref` has exactly `schema_version: 1`, exact `selected_full_set`,
+receiver-confirmed `applied: true`, `iteration` (existing `review_iteration`
+receipt), `finding_owner_lanes`, `file_trigger_lanes`, `from_source`,
+`to_source`, `changed_paths`, `patch_ref`, nullable `worktree_ref`. Keep existing
+owner-before-repair, committed plus uncommitted file triggers, ancestry guards,
+full-fan-out fallback and receiver-confirmation rules. Rechecks appear in
+`lanes_rerun`; reuse appears in `lanes_skipped`.
+
+Host supplies existing synthesis decisions using retained finding evidence
+references from the selected record's bindings. Kernel constructs all four
+companions, validates exact effective finding/decision union through the
+existing exporter in memory, seals the aggregate, then appends request/coverage.
+Lane receipts schema 2 adds exactly `evidence_record_ref`, `evidence_history`,
+`transition_refs` to schema-1 rows. The other three companions remain schema 1.
+Legacy contributions remain readable for history/economics; they cannot
+establish new terminal coverage.
+
+An effective clean recheck describes its own inspection. Prior findings remain
+in immutable history and synthesis snapshots. Every historical finding in a
+recheck chain needs one explicit resolution with exactly `source_finding_id`,
+`repair_ref`, `verification_record_ref`. Kernel checks accounting/links; the
+host owns supported repair judgments.
+
+Append is the commit point. Retry reconstructs missing derived companions
+without dispatch. Conflicting fixed files cannot be replaced: use a new
+exact-owned replay with the original committed stream/history. Preservation
+reads the same locked snapshot and retains referenced history within existing
+128-file/2 MiB limits. Optional contribution writers use that lock too;
+economics and observations never settle or revoke required coverage.
+
+Closed failure stages are `lane_input`, `lane_validation`,
+`aggregate_validation`, `preservation_input`, `retained_validation`. Reasons
+distinguish missing/invalid evidence, digest disagreement, source/scope
+mismatch, unsafe paths, conflicts and retention limits, using safe artifact-role
+filenames. Schema exits 2, incomplete/unsafe evidence 3, conflicts 6. Preserve
+safe available inputs and originals on failure. #165 report-link behavior stays
+unchanged.

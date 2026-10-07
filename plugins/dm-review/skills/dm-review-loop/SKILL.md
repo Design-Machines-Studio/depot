@@ -223,6 +223,17 @@ while iteration < max_iterations:
       with workflowClass and workflow_class_defaulted forwarded unchanged,
       the loop-private router directory/index, and terminal reporting suppressed
 
+  Immediately assemble each affected lane through assemble-review-evidence,
+    operation lane, with its original bound request, literal output/private
+    receipt and predecessor/applied selection/repair refs.
+  Before convergence, assemble operation coverage with the final bound request,
+    one committed record per lane, full recheck histories, every intervening
+    unaffected non-impact comparison, host synthesis and explicit resolutions.
+  Use Kernel review-evidence-contract.md's closed envelopes. Required failure blocks
+    coverage. Never hand-materialize companions or relabel an old inspection.
+  Changed sealed companions use a new owned replay; identical retry and missing
+    derived files reuse committed evidence without dispatch.
+
   Consume and validate the nested review's authoritative coverage receipt: one
     row per selected lane with requested, attempted, implemented-by, status,
     finding count, and evidence reference, plus its REVIEW INCOMPLETE result.

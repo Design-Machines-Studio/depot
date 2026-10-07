@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, strict existing Docker resource-registry validation, bounded cross-harness observation indexes, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.25.2
+version: 0.26.0
 ---
 
 # Workflow Kernel
@@ -621,3 +621,16 @@ state and observation-index-v1. See [Codex configuration](references/codex-live-
 required asset before configuration. Source development is not installed proof.
 One-time project hook configuration can observe normally started sessions on
 supported launch paths. It does not establish automatic visibility for all runs.
+
+
+## Required review evidence producer
+
+Version 0.26.0 adds `assemble-review-evidence --run-root <owned-root>
+--repository-root <checkout> --request <bound-request> --receipts <stream>
+--input <closed-envelope>`. Read `references/review-evidence-contract.md` for exact
+lane/coverage inputs, source/recheck/reuse bindings and failure exits. dm-review
+owns extraction/synthesis; Kernel seals literal bytes, lane records and
+aggregate snapshots, then appends through the shared lock. Only committed
+eligible source-bound records establish new terminal coverage. Legacy
+contributions remain readable, economics remains optional and bounded
+preservation/terminal ownership stay unchanged.

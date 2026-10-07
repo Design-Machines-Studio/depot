@@ -94,6 +94,7 @@ BEHAVIORAL_CLI_CASES = {
     ),
     "observe-review": ("--request", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
     "export-review-contributions": ("--request", "<missing>", "--decisions", "<missing>", "--raw-findings", "<missing>", "--lane-receipts", "<missing>", "--raw-lane-outputs", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>", "--output", "<output>"),
+    "assemble-review-evidence": ("--run-root", "<missing>", "--repository-root", "<missing>", "--request", "<missing>", "--receipts", "<missing>", "--input", "<missing>"),
     "bind-review-source": (
         "--run-root", "<missing>", "--repository-root", "<missing>",
         "--request", "<missing>",
@@ -544,7 +545,7 @@ def check_cli(context):
         "bind-verification-contract",
         "observe-pipeline", "reconcile-legacy-browser", "observe-review",
         "export-review-contributions", "bind-review-source",
-        "preserve-review-evidence",
+        "preserve-review-evidence", "assemble-review-evidence",
         "compare", "metrics", "emit-observation-index", "run-cost-summary", "emit-cost-summary",
         "openrouter-usage",
         "lane-input-bytes", "record-attempt",
@@ -800,6 +801,20 @@ def check_cli(context):
             "--raw-lane-outputs", raw_lane_outputs, "--receipts", review_prefix,
             "--state-dir", root, "--output", contributed,
         )
+        from tests.test_auto_review_candidate import ReviewEvidenceProducerTests
+        producer_fixture = ReviewEvidenceProducerTests()
+        producer_fixture.setUp()
+        try:
+            producer_run, producer_paths = producer_fixture.prepare()
+            successful("assemble-review-evidence", "--run-root", producer_run.root,
+                       "--repository-root", producer_fixture.repo,
+                       "--request", producer_paths["request"], "--receipts", producer_paths["receipts"],
+                       "--input", producer_paths["lanes"]["security"], "--test-harness")
+            producer_record = json.loads(producer_paths["receipts"].read_text())[0]["authoritative_receipt"]
+            producer_coverage = producer_fixture.coverage(producer_run, producer_paths, {"security": producer_record})
+            require(producer_coverage.returncode == 0, "producer coverage fixture failed")
+        finally:
+            producer_fixture.tearDown()
         contributed_receipts = json.loads(contributed.read_text(encoding="utf-8"))
         terminal = {**review_receipts[-1], "sequence": len(contributed_receipts)}
         authoritative_review = root / "review-authoritative.json"

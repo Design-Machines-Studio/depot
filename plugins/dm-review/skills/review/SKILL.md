@@ -578,9 +578,21 @@ In **full** mode, follow `${CLAUDE_SKILL_DIR}/references/full-lane-dispatch.md`
 exactly. Agent files are review criteria only; model-router is the single
 resolution, availability, invocation, fallback, and private-provenance boundary.
 
-As each lane settles, persist its structured output, literal lane receipt, and
-real private router receipt under this exact run before recording it with
-`record-attempt` and its anonymous lane companion. Extend the terminal owner's
+As each lane returns, retain literal output, actual private dispatch receipt,
+prompt/patch and anonymous companion. Extract the closed `lane` envelope from
+the existing findings/NOT-COVERED/COMMANDS-RUN contract, then invoke:
+
+```text
+"$WORKFLOW_KERNEL" assemble-review-evidence \
+  --run-root <exact-run-root> --repository-root <reviewed-repository> \
+  --request <bound-request.json> --receipts <exact-run-root>/review/authoritative-receipts.json \
+  --input <exact-run-root>/review/<pass>-<lane>-<attempt>-input.json
+```
+
+Read Kernel's `review-evidence-contract.md` producer schema. Only an eligible
+committed `record_ref` settles inspection. Required failure blocks coverage;
+dispatch or zero findings cannot fill an inspection gap. Keep `record-attempt`
+for dispatch/measurement and its anonymous companion. Extend the terminal owner's
 ordered private index in selected-lane order, not completion order. Never copy
 exact identity into another lane's prompt or the ordinary report.
 
@@ -617,14 +629,35 @@ RECORDER_PATH="$DM_REVIEW_BUNDLE_ROOT/agents/workflow/review-memory-recorder.md"
 
 Read from `$CONSOLIDATOR_PATH` and follow it exactly:
 
-1. **Collect** all findings, including entries excluded from canonical counts by output guardrails, assigning each an addressable ID and recording its literal lane, role, anonymous participant, evidence, and `raw_ref`. Raw reviewer artifacts remain untouched and are never replaced by the summary.
-2. **Assign stable identity** as `finding-v1:sha256(<normalized-key>)`: lowercase POSIX path + smallest stable structural anchor (normalized line span only if no anchor exists) + normalized issue category + whitespace-collapsed root-cause invariant, excluding reviewer/participant/role/severity/remediation/discovery order. Input reorder preserves IDs; severity disagreement changes the ledger, not identity.
-3. **Classify and decide** using `agreement: unique|corroborated|disputed` independently from `finding_disposition: retained|merged|discarded`, each with a rationale and a closed reason code. Preserve contradictions, source severities, selected severity, and evidence rationale; exact duplicates do not inflate counts and distinct root causes stay separate but receive sorted reciprocal cross-ID dispute links when positions contradict. A linked root-cause position is disputed, never unique. Reproducible test/runtime evidence outranks direct HEAD evidence, diff/context evidence, standards-based reasoning, and reviewer consensus.
-4. **Map severity** per `${CLAUDE_SKILL_DIR}/references/severity-mapping.md`.
-5. **Determine merge recommendation** per `${CLAUDE_SKILL_DIR}/references/output-format.md` §Merge Recommendation Logic: any P1 -> "BLOCKS MERGE"; any P2 -> "APPROVE WITH FIXES"; any P3 with no P1 -> "APPROVE WITH FIXES"; zero findings -> "CLEAN".
-6. **Generate the unified report** following `${CLAUDE_SKILL_DIR}/references/output-format.md`, including required P1/P2/P3 detail, `Synthesis Decisions`, and the compact Raw Evidence Index from existing receipts; never copy full reviewer output.
+The canonical consolidator owns collection, stable identity, evidence ordering,
+disputes, deduplication and synthesis; apply its rules exactly. Preserve all raw
+findings, including guardrail-excluded entries, with addressable IDs, literal
+lane/role, anonymous participant, evidence and `raw_ref`. Raw artifacts remain
+untouched. Derive `finding-v1:sha256(<normalized-key>)` from path, structural
+anchor, category and root cause; exclude participant, severity and discovery
+order. Decide `agreement: unique|corroborated|disputed` independently from
+`finding_disposition: retained|merged|discarded`, with rationale and closed
+reason codes. Preserve contradictions and evidence precedence under that
+contract. Map severity using `severity-mapping.md`; follow `output-format.md`
+for the recommendation and provisional report. Include P1/P2/P3 details,
+`Synthesis Decisions` and the compact Raw Evidence Index; never copy full reviewer output. Missing required coverage prevents `CLEAN`.
 
-Materialize the decisions, sealed raw-finding inventory, literal lane receipts, and structured output for every selected lane as `synthesis-decisions.json`, `raw-finding-inventory.json`, `review-lane-receipts.json`, and `raw-lane-outputs.json`. Then invoke the trusted launcher -- the sole producer of canonical contribution IDs, receipt sequences, and contribution-coverage economics:
+Supply host synthesis, explicit committed record selection, recheck histories,
+justified non-impact transitions and required-case references in the closed
+`coverage` envelope. Invoke the same producer:
+
+```text
+"$WORKFLOW_KERNEL" assemble-review-evidence \
+  --run-root <exact-run-root> --repository-root <reviewed-repository> \
+  --request <final-bound-request.json> --receipts <exact-run-root>/review/authoritative-receipts.json \
+  --input <exact-run-root>/review/<pass>-coverage-input.json
+```
+
+Kernel constructs the four companions from retained records, validates the
+exact union/decisions in memory, seals the snapshot and commits request/coverage
+receipts. Required failure keeps `REVIEW INCOMPLETE`. Never hand-materialize
+companions or relabel old inspection HEADs. After required assembly succeeds,
+optional contribution economics may invoke:
 
 ```bash
 "$WORKFLOW_KERNEL" export-review-contributions \
@@ -638,7 +671,7 @@ Materialize the decisions, sealed raw-finding inventory, literal lane receipts, 
   --output <exact-run-root>/review/authoritative-receipts.json
 ```
 
-The command rejects credential-shaped content and credential-bearing URIs before hashing or persistence, content-addresses all four canonical inputs and every raw lane output under `contribution-inputs/`, and fails closed unless raw inventory, synthesis decisions, literal lane provenance, finding counts, raw lane-output union, and lane evidence references agree exactly. Exactly one receipt and structured output is required per selected lane, including zero-finding lanes; never hand-author `canonical_finding_id`, `sequence`, `finding_contribution`, or contribution-coverage receipts. Contribution export is observation-only: a missing or failed export produces one concise `contribution economics unavailable` diagnostic and does not alter supported required-lane or browser coverage. Missing source output, literal lane receipt, or required browser evidence still prevents `CLEAN`.
+Contribution export is observation-only: a missing or failed export produces one concise `contribution economics unavailable` diagnostic and does not alter supported required-lane or browser coverage. Never hand-author canonical contribution IDs or sequences. Required assembly validates exact output/finding/decision agreement independently; missing source output, literal lane receipt, or required browser evidence still prevents `CLEAN`.
 
 Run contribution export, `observe-review`, `compare`, and `metrics` behind a
 failure-tolerant observer boundary. A non-zero optional command records one
@@ -654,7 +687,7 @@ Keep the consolidated report body provisional through the remaining phases. Do n
 
 #### Coverage receipt and shadow observation
 
-Emit an authoritative coverage receipt after consolidation with one row per selected lane and per required verification case: role, requested/effective effort, anonymous participant, fallback/reason, completed/degraded/unavailable status, finding count, and evidence reference. A source-only UI-standards or UX-quality row is completed for its declared scope and explicitly excludes rendered claims. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report. One readiness cause produces one browser coverage row, not three lane failures.
+The producer commits authoritative coverage after consolidation. Supply supported judgments with one effective row per selected lane and per required verification case: role, requested/effective effort, anonymous participant, fallback/reason, completed/degraded/unavailable status, finding count, and evidence reference. A source-only UI-standards or UX-quality row is completed for its declared scope and explicitly excludes rendered claims. Required browser rows bind persona, scenario, concrete route, engine, viewport, authentication state, evaluation, attempt, and recovery receipt. Missing or failed required rows keep the review `REVIEW INCOMPLETE` or blocked; they are never omitted from a clean report. One readiness cause produces one browser coverage row, not three lane failures.
 
 The receipt also records whether `review_lane_allowlist` was received and its disposition (`APPLIED`, `DISCARDED`, or `ABSENT`; a discarded input records the exact closed-set reason). It records the exact set of logical lanes actually `DISPATCHED` on this pass and the exact set in the recomputed selected full set that were deliberately `NOT_DISPATCHED` because an applied allowlist omitted them. The caller verifies the restriction against this receipt rather than assuming it was honored. Deliberately not-dispatched lanes under an applied allowlist are distinct from missing or failed required rows and do not by themselves make the review `REVIEW INCOMPLETE`; a dispatched lane that does not complete still does. Implementation origin is not a coverage field or eligibility condition.
 

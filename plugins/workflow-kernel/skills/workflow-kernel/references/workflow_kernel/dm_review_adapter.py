@@ -25,7 +25,7 @@ REVIEW_STAGES = frozenset({
     "repository_cleanup", "review_terminal",
     "finding_contribution", "finding_contribution_coverage",
     "attempt_usage", "browser_recovery",
-    "review_iteration",
+    "review_iteration", "review_lane_evidence",
 })
 REVIEW_MODES = frozenset({"full", "quick", "visual", "loop"})
 _CONTRIBUTION_DECISION_FIELDS = frozenset({
@@ -48,6 +48,7 @@ _LANE_FIELDS = frozenset({
     "raw_output_ref", "raw_output_digest", "finding_count",
     "implementer_family", "reviewer_family", "resolution_reason",
 })
+_LANE_V2_FIELDS = _LANE_FIELDS | frozenset({"evidence_record_ref", "evidence_history", "transition_refs"})
 _RAW_LANE_OUTPUT_FIELDS = frozenset({"reviewer", "lane", "findings"})
 _DIGEST = "sha256:"
 
@@ -348,7 +349,7 @@ def export_finding_contributions(
     if set(lane_receipts_document) != {
         "schema_version", "artifact_role", "run_id", "lanes",
     } or (
-        lane_receipts_document["schema_version"] != 1
+        lane_receipts_document["schema_version"] not in {1, 2}
         or lane_receipts_document["artifact_role"] != "review_lane_receipts"
         or lane_receipts_document["run_id"] != request.run_id
         or type(lane_receipts_document["lanes"]) is not list
@@ -429,8 +430,12 @@ def export_finding_contributions(
     lanes = {}
     seen_lane_names = set()
     for lane_receipt in lane_receipts_document["lanes"]:
-        if type(lane_receipt) is not dict or set(lane_receipt) != _LANE_FIELDS:
+        if type(lane_receipt) is not dict or set(lane_receipt) != (_LANE_FIELDS if lane_receipts_document["schema_version"] == 1 else _LANE_V2_FIELDS):
             raise ValueError("invalid review lane receipt")
+        if lane_receipts_document["schema_version"] == 2:
+            safe_reference(lane_receipt["evidence_record_ref"])
+            _evidence_list(lane_receipt["evidence_history"], references=True)
+            _evidence_list(lane_receipt["transition_refs"], references=True)
         for field in _LANE_FIELDS - {
             "evidence_refs", "finding_count", "raw_output_digest",
         }:
@@ -679,3 +684,138 @@ def require_browser_recovery_profile_binding(
                 or recovery.declared_route_digest != case.declared_route_digest
             ):
                 raise ValueError("invalid browser recovery contract binding")
+
+
+# The host extracts this closed envelope from reviewer-output-contract.md.
+# No model invocation or Markdown interpretation belongs in the kernel.
+_LANE_INPUT_FIELDS = frozenset({
+    "schema_version", "operation", "run_id", "pass_id", "lane", "attempt",
+    "reviewer", "source", "requested", "inspected", "literal", "result",
+    "provenance", "recheck",
+})
+_COVERAGE_INPUT_FIELDS = frozenset({
+    "schema_version", "operation", "run_id", "pass_id", "selection",
+    "decisions", "occurred_at", "required_case_refs", "resolutions",
+})
+
+
+def validate_evidence_input(value: object, request: ReviewRequest) -> dict:
+    """Validate extraction shape and internal agreement, never infer inspection."""
+    if type(value) is not dict or type(value.get("schema_version")) is not int or value["schema_version"] != 1:
+        raise ValueError("invalid evidence envelope")
+    operation = value.get("operation")
+    fields = _LANE_INPUT_FIELDS if operation == "lane" else _COVERAGE_INPUT_FIELDS if operation == "coverage" else ()
+    if set(value) != fields or value["run_id"] != request.run_id:
+        raise ValueError("invalid evidence envelope")
+    require_secret_safe_contribution_inputs(value)
+    for field in ("run_id", "pass_id"):
+        if re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}", required_text(value[field], field)) is None:
+            raise ValueError("invalid evidence identity")
+    if operation == "coverage":
+        if any(type(value[field]) is not list for field in ("selection", "decisions", "required_case_refs", "resolutions")):
+            raise ValueError("invalid coverage envelope")
+        for row in value["selection"]:
+            if type(row) is not dict or set(row) != {"lane", "record_ref", "history_refs", "transition_refs"}:
+                raise ValueError("invalid evidence selection")
+            safe_reference(row["record_ref"])
+            for field in ("history_refs", "transition_refs"):
+                _evidence_list(row[field], references=True)
+        if [row["lane"] for row in value["selection"]] != list(request.required_lanes):
+            raise ValueError("invalid evidence selection")
+        _evidence_list(value["required_case_refs"], references=True)
+        required_text(value["occurred_at"], "occurred at")
+        for resolution in value["resolutions"]:
+            if type(resolution) is not dict or set(resolution) != {"source_finding_id", "repair_ref", "verification_record_ref"}:
+                raise ValueError("invalid finding resolution")
+            required_text(resolution["source_finding_id"], "source finding")
+            safe_reference(resolution["repair_ref"])
+            safe_reference(resolution["verification_record_ref"])
+        return value
+    if value["lane"] not in request.required_lanes or type(value["attempt"]) is not int or value["attempt"] < 1:
+        raise ValueError("invalid evidence identity")
+    required_text(value["reviewer"], "reviewer")
+    groups = {
+        "source": {"repository", "head", "base", "worktree_ref", "request_ref"},
+        "requested": {"designation", "paths", "evidence_refs", "required_evidence_refs", "patch_ref"},
+        "inspected": {"paths", "basis", "limitations", "missing_evidence_refs"},
+        "literal": {"output_ref", "dispatch_receipt_ref", "companion_ref"},
+        "result": {"status", "findings", "incomplete_reasons"},
+        "provenance": {"kind", "executed_at", "source_refs"},
+        "recheck": {"prior_record_ref", "selection_ref", "repair_refs"},
+    }
+    for key, expected in groups.items():
+        if type(value[key]) is not dict or set(value[key]) != expected:
+            raise ValueError("invalid lane envelope")
+    source = value["source"]
+    if source["repository"] != request.source_repository or source["head"] != request.source_head:
+        raise ValueError("lane source mismatch")
+    if any(type(source[field]) is not str or re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", source[field]) is None for field in ("head", "base")):
+        raise ValueError("invalid lane source")
+    safe_reference(source["request_ref"])
+    if source["worktree_ref"] is not None:
+        safe_reference(source["worktree_ref"])
+    requested, inspected = value["requested"], value["inspected"]
+    if requested["designation"] not in {"full", "scoped"} or inspected["basis"] not in {"repository", "patch", "host_evidence"}:
+        raise ValueError("invalid inspection scope")
+    from .verification_repository import _relative_path
+    for group in (requested, inspected):
+        _evidence_list(group["paths"])
+        for path in group["paths"]:
+            _relative_path(path, "reviewed path")
+    for group, field in ((requested, "evidence_refs"), (requested, "required_evidence_refs"), (inspected, "missing_evidence_refs")):
+        _evidence_list(group[field], references=True)
+    if not requested["paths"] or not requested["required_evidence_refs"] or not set(requested["required_evidence_refs"]) <= set(requested["evidence_refs"]):
+        raise ValueError("invalid required inspection")
+    if requested["patch_ref"] is not None:
+        safe_reference(requested["patch_ref"])
+        if requested["patch_ref"] not in requested["required_evidence_refs"]:
+            raise ValueError("patch must be required evidence")
+    if inspected["basis"] == "patch" and requested["patch_ref"] is None:
+        raise ValueError("missing required patch")
+    _evidence_list(inspected["limitations"])
+    for reference in value["literal"].values():
+        safe_reference(reference)
+    result = value["result"]
+    _evidence_list(result["incomplete_reasons"])
+    if result["status"] not in {"findings", "no_findings", "incomplete"} or type(result["findings"]) is not list:
+        raise ValueError("invalid lane result")
+    for finding in result["findings"]:
+        if type(finding) is not dict or set(finding) != _RAW_FINDING_FIELDS:
+            raise ValueError("invalid raw finding")
+        for field in _RAW_FINDING_FIELDS:
+            required_text(finding[field], field)
+        if finding["lane"] != value["lane"] or finding["reviewer"] != value["reviewer"]:
+            raise ValueError("invalid raw finding")
+        safe_reference(finding["evidence_ref"])
+    if result["status"] == "findings" and not result["findings"] or result["status"] == "no_findings" and result["findings"]:
+        raise ValueError("invalid lane result")
+    if result["status"] != "incomplete" and (result["incomplete_reasons"] or inspected["missing_evidence_refs"] or not set(requested["paths"]) <= set(inspected["paths"])):
+        raise ValueError("incomplete required inspection")
+    provenance = value["provenance"]
+    if provenance["kind"] not in {"live", "recovery", "synthetic_test"}:
+        raise ValueError("invalid evidence provenance")
+    if provenance["executed_at"] is not None:
+        from datetime import datetime
+        timestamp = datetime.fromisoformat(provenance["executed_at"].replace("Z", "+00:00"))
+        if timestamp.tzinfo is None:
+            raise ValueError("invalid original timestamp")
+    _evidence_list(provenance["source_refs"], references=True)
+    recheck = value["recheck"]
+    for field in ("prior_record_ref", "selection_ref"):
+        if recheck[field] is not None:
+            safe_reference(recheck[field])
+    if (recheck["prior_record_ref"] is None) != (recheck["selection_ref"] is None):
+        raise ValueError("incomplete recheck linkage")
+    _evidence_list(recheck["repair_refs"], references=True)
+    return value
+
+
+def _evidence_list(value: object, *, references: bool = False) -> None:
+    if type(value) is not list or len(value) > 1024 or any(type(item) is not str or not item for item in value) or len(value) != len(set(value)):
+        raise ValueError("invalid evidence list")
+    for item in value:
+        if references:
+            if safe_reference(item) != item or item.startswith(("sha256:", "url-sha256:")):
+                raise ValueError("evidence requires retained file bytes")
+        else:
+            required_text(item, "inspection limitation")

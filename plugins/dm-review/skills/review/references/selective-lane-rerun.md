@@ -72,3 +72,16 @@ Lanes re-run:
 Lanes skipped (no_rule_a_or_b_match):
 - architecture-reviewer, second-perspective, doc-sync-reviewer, pattern-recognition-specialist, security-auditor
 ```
+
+
+## Evidence carried across the selected pass
+
+The selection rules above remain unchanged. Retain pre-repair finding owners,
+exact selected_full_set, committed plus uncommitted paths, source comparison,
+selection receipt and receiver-confirmed application. Supply Kernel's closed
+selection envelope. Immediately assemble each affected completion as a new
+immutable lane record, preserving actual request/HEAD/scope and predecessor.
+Carry skipped lanes by original record plus every intervening non-impact ref.
+Bind dirty patch/content; equal HEAD never proves unchanged source. Assemble
+final coverage with explicit history/reuse and host repair/verification
+resolutions. Nested reviews return evidence to the existing terminal owner.

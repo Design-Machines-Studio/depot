@@ -184,3 +184,15 @@ Use model-router's public disposition in the lane coverage receipt. Exact
 model/provider/transport/billing/token/cost identity remains in its content-free
 private receipt and may be consumed only by operator metrics. Preserve current
 Workflow Kernel attempt recording without asking it to choose a role or model.
+
+
+## Durable completion boundary
+
+Immediately after each lane returns, retain literal output and actual private
+dispatch receipt unchanged and invoke `assemble-review-evidence` with the closed
+`lane` extraction envelope. Phase 4 supplies the invocation; Kernel's
+`review-evidence-contract.md` supplies the schema. Host extracts findings,
+NOT-COVERED and COMMANDS-RUN; Kernel performs no Markdown parsing. Dispatch
+publication/measurement never proves inspection. Missing required patch/scope
+keeps a lane incomplete; absent auxiliary context limits dependent claims.
+Recovery preserves original source and unknown timestamps separately.

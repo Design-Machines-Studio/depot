@@ -1396,9 +1396,24 @@ def command_observe_review(args):
     return 0
 
 
+def command_assemble_review_evidence(args):
+    from .review_closeout import EvidenceAssemblyError, assemble_review_evidence
+    try:
+        result = assemble_review_evidence(
+            run_root=args.run_root, repository_root=args.repository_root,
+            request_path=args.request, receipts_path=args.receipts, input_path=args.input,
+            test_harness=args.test_harness,
+        )
+    except EvidenceAssemblyError as exc:
+        _emit(exc.to_dict(), sys.stderr)
+        return exc.exit_code
+    _emit(result)
+    return 0 if result["status"] == "complete" else 3
+
+
 def command_preserve_review_evidence(args):
     from .review_closeout import (
-        ReviewCloseoutValidationError, preserve_review_evidence,
+        ReviewCloseoutValidationError, EvidenceAssemblyError, preserve_review_evidence,
     )
 
     try:
@@ -1417,8 +1432,11 @@ def command_preserve_review_evidence(args):
     except ReviewCloseoutValidationError as exc:
         _emit(exc.to_dict(), sys.stderr)
         return EXIT_INVALID
+    except EvidenceAssemblyError as exc:
+        _emit(exc.to_dict(), sys.stderr)
+        return exc.exit_code
     _emit(result)
-    return 0 if result["status"] == "complete" else 3
+    return 0 if result["status"] == "complete" else result["failure_exit"]
 
 
 def command_bind_review_source(args):
@@ -1438,6 +1456,26 @@ def command_bind_review_source(args):
 
 
 def command_export_review_contributions(args):
+    _reject_symlinked_components(args.receipts)
+    _reject_symlinked_components(args.output)
+    descriptors = []
+    try:
+        for path in sorted({os.path.abspath(args.receipts), os.path.abspath(args.output)}):
+            descriptor = _open_receipt_stream_lock(path)
+            descriptors.append(descriptor)
+            fcntl.flock(descriptor, fcntl.LOCK_EX)
+        if os.path.abspath(args.receipts) != os.path.abspath(args.output) and Path(args.output).exists():
+            output_values = _load_json(args.output, strict=True)
+            source_values = _load_json(args.receipts, strict=True)
+            if type(output_values) is not list or type(source_values) is not list or output_values[:len(source_values)] != source_values or any(row.get("stage") not in {"finding_contribution", "finding_contribution_coverage"} for row in output_values[len(source_values):]):
+                raise ValueError("optional contribution output conflicts with its source")
+        return _command_export_review_contributions_locked(args)
+    finally:
+        for descriptor in reversed(descriptors):
+            os.close(descriptor)
+
+
+def _command_export_review_contributions_locked(args):
     from .dm_review_adapter import (
         ReviewRequest, export_finding_contributions,
         require_secret_safe_contribution_inputs,
@@ -4069,6 +4107,14 @@ def parser():
     observe_review.add_argument("--receipts", required=True)
     observe_review.add_argument("--state-dir", required=True)
     observe_review.set_defaults(handler=command_observe_review)
+
+    assemble_review = commands.add_parser(
+        "assemble-review-evidence", help="seal source-bound lane evidence or construct required coverage",
+    )
+    for argument in ("run-root", "repository-root", "request", "receipts", "input"):
+        assemble_review.add_argument("--" + argument, required=True)
+    assemble_review.add_argument("--test-harness", action="store_true", help="explicit disposable synthetic fixture boundary")
+    assemble_review.set_defaults(handler=command_assemble_review_evidence)
 
     preserve_review = commands.add_parser(
         "preserve-review-evidence",

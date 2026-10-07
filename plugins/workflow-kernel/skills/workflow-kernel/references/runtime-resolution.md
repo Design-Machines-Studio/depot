@@ -1,9 +1,7 @@
 # Workflow Kernel Runtime Resolution
 
-This is the single security-sensitive resolution contract for every consumer
-(pipeline, dm-review, and any future orchestrator). Do not copy this contract
-into consuming plugins; link here and keep only plugin-specific artifact paths
-inline.
+This security-sensitive resolution contract governs every consumer. Link here;
+keep only plugin-specific artifact paths inline.
 
 ## The launcher is the only entry point
 
@@ -38,8 +36,7 @@ plugin cache and never falls back to the account's default caches. Repository
 launchers use the OS account database. Caller-supplied `HOME` never selects
 executable code.
 
-The dependency-neutral `workflow_kernel/runtime_resolution.py` module is the
-single policy owner, and `cli.py` imports the same functions for validation.
+`workflow_kernel/runtime_resolution.py` owns policy; `cli.py` shares its validators.
 The launcher runs its trusted copy in Python isolated mode, receives only fully
 canonical candidate paths, probes them in order, and validates the manifest,
 references directory, package, every package symlink, bootstrap resolver,
@@ -66,11 +63,9 @@ executable assets must additionally have executable mode and access. The
 resolver evaluates completeness before ranking, so a broken higher version is
 skipped and the next compatible complete version may win. It never combines
 assets across roots. Semantic version outranks mtime, and active host breaks
-only equal-version ties. The result exposes a home-relative ephemeral root plus
-durable cache class, version, and reason.
+only equal-version ties. Results expose a home-relative ephemeral root, durable cache class, version and reason.
 
-For one asset rather than bundle metadata, use the same coherent selection
-boundary through `resolve-plugin-asset`:
+For one asset, use `resolve-plugin-asset`:
 
 ```sh
 "$WORKFLOW_KERNEL" resolve-plugin-asset \
@@ -78,9 +73,8 @@ boundary through `resolve-plugin-asset`:
   [--minimum-version <semver>] [--active-host <claude|codex>]
 ```
 
-It applies the same containment, completeness, semantic-version, manifest, and
-host-tie-break rules, then prints the selected asset's canonical absolute path
-followed by one newline. It never combines roots or falls back to the project,
+It applies the same bundle rules and prints the asset's canonical absolute path
+with a newline. It never combines roots or falls back to the project,
 `PATH`, or caller-selected cache directories. If no compatible coherent bundle
 contains the asset, it emits the kernel's structured
 `plugin_bundle_unavailable` error and exits nonzero.
@@ -105,9 +99,8 @@ contains the asset, it emits the kernel's structured
   Agent-board consumers using v2 intent, inbox, completion/correction kinds or
   targeted notification require `>=0.25.0`; older consumers retain v1/list/read
   compatibility.
-  Candidates are ordered by their parsed semver
-  path segment, newest first, and the plugin manifest's declared name and
-  version must match. Reject symlink escapes, project-cwd/PATH discovery,
+  Candidates follow parsed path semver, newest first;
+  the manifest's declared name and version must match. Reject symlink escapes, project-cwd/PATH discovery,
   and incompatible plugin name/version metadata.
 - Initialize each run at `.workflow-kernel/runs/<run-id>`; the kernel derives
   the nearest real Git repository from the state directory and binds the
@@ -126,3 +119,7 @@ contains the asset, it emits the kernel's structured
   input/schema, `3` unsafe/blocked/required verification failed or pending,
   `4` unavailable/incompatible, `5` parity gap, and `6` write/state conflict.
   None authorizes changing the canonical result.
+
+Source-bound review producers require `>=0.26.0`. Load
+[review-evidence-contract.md](review-evidence-contract.md) only when assembling
+lane/coverage evidence.
