@@ -1297,8 +1297,9 @@ def _terminal_read(path, root, role, *, document=False):
 
 def _historical_inventory(run, inventory_path):
     """Input locates pinned bytes; fresh matching hashes confer no authority."""
-    if run.workflow not in _REVIEW_WORKFLOWS or not (run.root / "CLEANUP.txt").exists():
+    if run.workflow not in _REVIEW_WORKFLOWS or not os.path.lexists(run.root / "CLEANUP.txt"):
         raise RetainedReviewValidationError("historical_retention_required", "cleanup-receipt")
+    _terminal_read(run.root / "CLEANUP.txt", run.root, "cleanup-receipt")
     try:
         run._existing_retention()
     except (OSError, TypeError, ValueError):

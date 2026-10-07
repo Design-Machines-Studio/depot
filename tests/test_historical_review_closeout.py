@@ -139,6 +139,36 @@ class HistoricalReviewCloseoutTests(unittest.TestCase):
                     reason = {"missing": "missing_evidence", "symlink": "unsafe_path", "hardlink": "unsafe_path", "inventory": "historical_baseline_missing"}.get(mutation, "digest_mismatch")
                     self.assert_reason(reason, lambda: run.finish("succeeded", historical_review_digests=inventory))
 
+    def test_unsafe_cleanup_identity_keeps_its_terminal_category(self):
+        for historical in (True, False):
+            for kind in ("symlink", "dangling-symlink", "hardlink"):
+                with self.subTest(historical=historical, kind=kind):
+                    if historical:
+                        run, _scope, inventory = self.historical()
+                    else:
+                        run, paths = self.make_run("pipeline", "cleanup-" + kind)
+                        self.assertEqual("complete", self.preserve(run, paths)["status"])
+                        run.finish("blocked", retain_diagnostics=True)
+                        inventory = self.saved_inventory(run)
+                    cleanup = run.root / "CLEANUP.txt"
+                    external = self.root / ("cleanup-target-" + str(historical) + kind)
+                    external.write_bytes(cleanup.read_bytes())
+                    cleanup.unlink()
+                    if kind == "hardlink":
+                        os.link(external, cleanup)
+                    else:
+                        cleanup.symlink_to(external)
+                        if kind == "dangling-symlink":
+                            external.unlink()
+                    with self.pinned_fixture(run, inventory):
+                        arguments = {"historical_review_digests": inventory} if historical else {}
+                        error = self.assert_reason("unsafe_path", lambda: run.finish("succeeded", **arguments))
+                        self.assertEqual(3, error.exit_code)
+                        self.assertEqual("cleanup-receipt", error.role)
+                    self.assertTrue(os.path.lexists(cleanup))
+                    if kind != "hardlink":
+                        self.assertTrue(cleanup.is_symlink())
+
     def test_original_contract_still_rejects_bad_digest_scope_coverage_and_browser(self):
         # Pin deliberately invalid SANITIZED snapshots to prove the common
         # contract still checks semantics after inventory continuity succeeds.

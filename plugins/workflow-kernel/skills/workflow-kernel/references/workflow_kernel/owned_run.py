@@ -526,6 +526,9 @@ class ExactOwnedRun:
                     diagnostic, run=self, historical_review_digests=historical_review_digests,
                 )
             if retained:
+                if outcome == "succeeded" and review:
+                    from .review_closeout import _terminal_read
+                    _terminal_read(self.root / _CLEANUP, self.root, "cleanup-receipt")
                 try:
                     report = self._existing_retention()
                 except (OSError, TypeError, ValueError):
