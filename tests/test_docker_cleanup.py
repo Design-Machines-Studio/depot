@@ -1095,6 +1095,62 @@ class DockerLifecycleTests(unittest.TestCase):
         self.assertEqual((), inventory.absent)
         self.assertFalse(inventory.resources[0].inspect_ok)
 
+    def test_exact_docker_volume_absence_reconciles_registered_records(self):
+        names = (
+            "depot-parity-1118-20261007-a-docker-builder_go-build-cache",
+            "depot-parity-1118-20261007-a-docker-builder_go-mod-cache",
+        )
+        for name in names:
+            with self.subTest(name=name):
+                value = resource(name, kind=ResourceKind.VOLUME)
+                self.registry.register(ResourceRecord(
+                    name, ResourceKind.VOLUME, "run-1", "node-1", "chunk",
+                    "stop-remove", NOW, labels=value.labels,
+                ))
+                inspect = ("docker", "volume", "inspect", name)
+                result = CommandResult(
+                    inspect, 1, "[]\n",
+                    "Error response from daemon: get " + name + ": no such volume\n",
+                )
+                runner = FakeRunner((result,))
+                adapter = DockerAdapter(
+                    runner, now=lambda: NOW, repository_scope_id=SCOPE_ID,
+                )
+                before = adapter.inventory_registered(
+                    tuple(self.registry.resources_for("run-1", "node-1")),
+                )
+                self.assertEqual(((ResourceKind.VOLUME, name),), before.absent)
+                plan = adapter.plan_chunk_cleanup(self.registry, before, "run-1", "node-1")
+                self.assertEqual((), plan.actions)
+                self.assertEqual(CleanupDisposition.MISSING, plan.dispositions[0].disposition)
+                authority = self.registry.observe_guarded_absence(adapter, plan, 0, runner.run)
+                receipt = self.registry.record_guarded_results(
+                    adapter, plan, (authority,), before, before,
+                )
+                self.assertEqual(CleanupDisposition.MISSING, receipt.dispositions[0].disposition)
+                self.assertEqual((), self.registry.resources_for("run-1", "node-1"))
+                self.assertTrue(all(call == inspect for call in runner.calls))
+                with self.assertRaises(InvalidSchemaError):
+                    self.registry.record_guarded_results(adapter, plan, (authority,), before, before)
+
+    def test_volume_absence_rejects_inexact_or_failed_inspection(self):
+        name = "registered-volume"
+        argv = ("docker", "volume", "inspect", name)
+        message = "Error response from daemon: get " + name + ": no such volume"
+        variants = (
+            CommandResult(argv, 0, "[]\n", message),
+            CommandResult(argv, 2, "[]\n", message),
+            CommandResult(argv, 1, '[{"Name":"registered-volume"}]', message),
+            CommandResult(argv, 1, "[]\n", message.replace(name, "another-volume")),
+            CommandResult(argv, 1, "[]\n", message + "\nCannot connect to Docker"),
+            CommandResult(argv, 1, "[]\n", "Cannot connect: no such file or directory"),
+            CommandResult(argv + ("another-volume",), 1, "[]\n", message),
+            CommandResult(("docker", "network", "inspect", name), 1, "[]\n", message),
+        )
+        for result in variants:
+            with self.subTest(result=result):
+                self.assertFalse(resource_models._is_exact_not_found(ResourceKind.VOLUME, name, result))
+
     def test_caller_claimed_absence_and_mutated_receipt_cannot_retire(self):
         value, _ = self.register()
         key = ((ResourceKind.CONTAINER, value.resource_id),)

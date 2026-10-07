@@ -136,6 +136,10 @@ def _is_exact_not_found(
         messages.add(
             "Error response from daemon: network " + resource_id + " not found"
         )
+    if kind is ResourceKind.VOLUME:
+        messages.add(
+            "Error response from daemon: get " + resource_id + ": no such volume"
+        )
     return result.stderr.strip() in messages
 
 
