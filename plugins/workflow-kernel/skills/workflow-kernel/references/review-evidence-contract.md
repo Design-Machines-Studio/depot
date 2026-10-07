@@ -64,6 +64,18 @@ attempt retries verify bytes and reuse the record; changed inputs conflict.
 Corrections use new linked attempts. Uncommitted partial files confer no
 coverage; interrupted retries reuse matching sealed files.
 
+New sealed lane and coverage records use `schema_version: 2`. Their existing
+`source_snapshot` / `target_source` fields contain exactly
+`{"snapshot_ref":"review/evidence/source-sha256-<digest>.json"}`. The source
+seal contains the original `head` and complete `files` inventory; its name uses
+the existing canonical document digest. Identical source inventories share one
+seal through the existing helper. Required reference closure retains and
+revalidates these seals, including historical, repair and reuse sources, before
+terminal cleanup. Missing, malformed, unsafe or altered seals fail closed;
+source heads must match the original record request. No current-HEAD inference
+is permitted. Schema-1 inline records remain valid and immutable; resolution is
+in memory and never rewrites their bytes or grants legacy terminal coverage.
+
 ### Coverage input and source transitions
 
 `coverage` adds exactly `selection`, `decisions`, `occurred_at`,
@@ -78,6 +90,13 @@ actual `changed_paths`, `patch_ref`, nullable `worktree_ref`, and `selection_ref
 Copy source snapshots (`head` and `files` with mode/blob identities) from sealed
 records; Kernel verifies actual changed paths, ancestry, binary patch bytes,
 dirty content and final live source. Ancestry alone is insufficient.
+
+For larger inventories, transitions and selection documents may instead use
+`schema_version: 2`, with the same exact fields and rules, but `from_source`
+and `to_source` each contain the explicit `snapshot_ref` object above. Retain
+both original source seals, sharing the lane/coverage seals when identical.
+Schema-1 transitions and selections keep their actual inline inventories.
+Never embed repeated complete inventories into schema-2 repair/reuse records.
 
 `selection_ref` has exactly `schema_version: 1`, exact `selected_full_set`,
 receiver-confirmed `applied: true`, `iteration` (existing `review_iteration`

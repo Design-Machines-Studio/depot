@@ -1414,6 +1414,46 @@ def _read_seal(root, reference, role, stage="retained_validation"):
     return value
 
 
+def _resolve_snapshot(root, value, *, head=None, shared=False):
+    """Resolve an explicit seal without changing any historical document bytes."""
+    if shared:
+        if type(value) is not dict or set(value) != {"snapshot_ref"}:
+            raise EvidenceAssemblyError("retained_validation", "invalid_evidence")
+        value = _read_seal(root, value["snapshot_ref"], "source")
+    if type(value) is not dict or set(value) != {"head", "files"}:
+        raise EvidenceAssemblyError("retained_validation", "invalid_evidence")
+    if type(value["head"]) is not str or _HEAD_RE.fullmatch(value["head"]) is None or type(value["files"]) is not dict:
+        raise EvidenceAssemblyError("retained_validation", "invalid_evidence")
+    from .verification_repository import _relative_path
+    for path, identity in value["files"].items():
+        try:
+            _relative_path(path, "reviewed path")
+        except (TypeError, ValueError):
+            raise EvidenceAssemblyError("retained_validation", "invalid_evidence") from None
+        if type(identity) is not dict or set(identity) != {"mode", "oid"} or type(identity["mode"]) is not str or identity["mode"] not in {"100644", "100755", "120000"} or type(identity["oid"]) is not str or re.fullmatch(r"[0-9a-f]{" + str(len(value["head"])) + r"}", identity["oid"]) is None:
+            raise EvidenceAssemblyError("retained_validation", "invalid_evidence")
+    if head is not None and value["head"] != head:
+        raise EvidenceAssemblyError("retained_validation", "source_scope_mismatch")
+    return value
+
+
+def _read_source_record(root, reference, role):
+    value = _read_seal(root, reference, role)
+    if type(value) is not dict or type(value.get("schema_version")) is not int or value["schema_version"] not in {1, 2}:
+        raise EvidenceAssemblyError("retained_validation", "invalid_evidence")
+    if type(value.get("request")) is not dict or type(value["request"].get("source_head")) is not str or _HEAD_RE.fullmatch(value["request"]["source_head"]) is None:
+        raise EvidenceAssemblyError("retained_validation", "invalid_evidence")
+    field = "source_snapshot" if role == "lane" else "target_source"
+    return dict(value, **{field: _resolve_snapshot(root, value.get(field), head=value["request"]["source_head"], shared=value["schema_version"] == 2)})
+
+
+def _read_transition(root, reference):
+    value = _evidence_json(root, reference, "aggregate_validation")
+    if type(value) is not dict or type(value.get("schema_version")) is not int or value["schema_version"] not in {1, 2}:
+        raise EvidenceAssemblyError("aggregate_validation", "invalid_evidence")
+    return dict(value, **{field: _resolve_snapshot(root, value.get(field), shared=value["schema_version"] == 2) for field in ("from_source", "to_source")})
+
+
 def _source_snapshot(repository, head, *, live=False):
     """Compare source bytes/modes, including dirty and untracked source paths."""
     if type(head) is not str or _HEAD_RE.fullmatch(head) is None:
@@ -1508,7 +1548,7 @@ def _record(root, reference, receipts):
     rows = [row for row in receipts if row.get("stage") == "review_lane_evidence" and row.get("authoritative_receipt") == reference]
     if len(rows) != 1:
         raise EvidenceAssemblyError("retained_validation", "missing_evidence")
-    record = _read_seal(root, reference, "lane")
+    record = _read_source_record(root, reference, "lane")
     if type(record) is not dict or set(record) != {"schema_version", "input", "input_digest", "request", "source_snapshot", "source_content", "bindings", "eligible", "missing", "assembled_at"}:
         raise EvidenceAssemblyError("retained_validation", "invalid_evidence")
     request = ReviewRequest.from_mapping(record["request"])
@@ -1535,10 +1575,10 @@ def _evidence_json_from_bytes(data):
 
 
 def _validate_selection(root, reference, lanes, *, before=None, after=None, repository=None, worktree=None):
-    document = _evidence_json(root, reference, "aggregate_validation")
+    document = _read_transition(root, reference)
     # The caller owns rule (a)/(b) semantics. Require its retained receipt and
     # explicit receiver-confirmed application, plus actual transition bytes.
-    if type(document) is not dict or set(document) != {"schema_version", "selected_full_set", "applied", "iteration", "finding_owner_lanes", "file_trigger_lanes", "from_source", "to_source", "changed_paths", "patch_ref", "worktree_ref"} or document["schema_version"] != 1 or document["selected_full_set"] != list(lanes) or document["applied"] is not True:
+    if set(document) != {"schema_version", "selected_full_set", "applied", "iteration", "finding_owner_lanes", "file_trigger_lanes", "from_source", "to_source", "changed_paths", "patch_ref", "worktree_ref"} or document["selected_full_set"] != list(lanes) or document["applied"] is not True:
         raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
     if before is not None and (document["from_source"] != before or document["to_source"] != after):
         raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
@@ -1568,8 +1608,8 @@ def _validate_selection(root, reference, lanes, *, before=None, after=None, repo
 def _transition_chain(root, references, original, target, lane, lanes, repository, worktree):
     current = original
     for reference in references:
-        proof = _evidence_json(root, reference, "aggregate_validation")
-        if type(proof) is not dict or set(proof) != {"schema_version", "from_source", "to_source", "changed_paths", "patch_ref", "worktree_ref", "selection_ref"} or proof["schema_version"] != 1 or proof["from_source"] != current:
+        proof = _read_transition(root, reference)
+        if set(proof) != {"schema_version", "from_source", "to_source", "changed_paths", "patch_ref", "worktree_ref", "selection_ref"} or proof["from_source"] != current:
             raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
         after = proof["to_source"]
         if type(after) is not dict or set(after) != {"head", "files"} or proof["changed_paths"] != _changed_paths(current, after):
@@ -1729,7 +1769,7 @@ def _aggregate_documents(root, request, value, receipts, target, repository):
 
 def _validate_committed_coverage(request, receipts, lane_document, outputs, findings, decisions, root, repository):
     coverage = [row for row in receipts if row.get("stage") == "coverage_matrix"][-1]
-    snapshot = _read_seal(root, coverage["authoritative_receipt"], "coverage")
+    snapshot = _read_source_record(root, coverage["authoritative_receipt"], "coverage")
     if type(snapshot) is not dict or set(snapshot) != {"schema_version", "input", "request", "target_source", "documents", "bindings", "assembled_at"} or snapshot["request"] != request.to_dict():
         raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
     value = validate_evidence_input(snapshot["input"], request)
@@ -1749,12 +1789,28 @@ def _validate_committed_coverage(request, receipts, lane_document, outputs, find
 
 def _committed_references(receipts, root):
     references = set()
+
+    def sources(document, fields):
+        for field in fields:
+            value = document[field]
+            _resolve_snapshot(root, value, shared=document["schema_version"] == 2)
+            if document["schema_version"] == 2:
+                references.add(value["snapshot_ref"])
+
+    def include_transition(reference):
+        document = _evidence_json(root, reference, "retained_validation")
+        _read_transition(root, reference)
+        sources(document, ("from_source", "to_source"))
+        references.update(document[field] for field in ("patch_ref", "worktree_ref") if document[field] is not None)
+
     for row in receipts:
         if type(row) is not dict:
             continue
         if row.get("stage") == "review_lane_evidence":
             reference = row["authoritative_receipt"]
             record = _read_seal(root, reference, "lane")
+            _read_source_record(root, reference, "lane")
+            sources(record, ("source_snapshot",))
             references.add(reference)
             references.update(binding["retained_ref"] for binding in record["bindings"].values())
             references.update(binding["retained_ref"] for binding in record["source_content"].values())
@@ -1762,13 +1818,14 @@ def _committed_references(receipts, root):
             if record["input"]["recheck"]["selection_ref"]:
                 selection_ref = record["input"]["recheck"]["selection_ref"]
                 references.add(selection_ref)
-                selection = _evidence_json(root, selection_ref, "retained_validation")
-                references.update(selection[field] for field in ("patch_ref", "worktree_ref") if selection[field] is not None)
+                include_transition(selection_ref)
         elif row.get("stage") == "review_request" and row.get("authoritative_receipt", "").startswith("review/evidence/request-"):
             references.add(row["authoritative_receipt"])
         elif row.get("stage") == "coverage_matrix" and row.get("authoritative_receipt", "").startswith("review/evidence/coverage-"):
             reference = row["authoritative_receipt"]
             snapshot = _read_seal(root, reference, "coverage")
+            _read_source_record(root, reference, "coverage")
+            sources(snapshot, ("target_source",))
             references.add(reference)
             references.update(snapshot["bindings"])
             references.update(binding["retained_ref"] for binding in snapshot["bindings"].values())
@@ -1777,6 +1834,10 @@ def _committed_references(receipts, root):
                 for transition in selected["transition_refs"]:
                     proof = _evidence_json(root, transition, "retained_validation")
                     references.update(proof[field] for field in ("patch_ref", "selection_ref", "worktree_ref") if proof[field] is not None)
+                    sources(proof, ("from_source", "to_source"))
+                    selection = _evidence_json(root, proof["selection_ref"], "retained_validation")
+                    _read_transition(root, proof["selection_ref"])
+                    sources(selection, ("from_source", "to_source"))
             references.update(snapshot["input"]["required_case_refs"])
             references.update(row["repair_ref"] for row in snapshot["input"]["resolutions"])
     return sorted(references)
@@ -1859,7 +1920,7 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
         for row in receipts:
             if row.get("stage") != stage or not row.get("authoritative_receipt", "").startswith("review/evidence/"):
                 continue
-            candidate = _read_seal(root, row["authoritative_receipt"], "lane" if stage == "review_lane_evidence" else "coverage")
+            candidate = _read_source_record(root, row["authoritative_receipt"], "lane" if stage == "review_lane_evidence" else "coverage")
             old = candidate["input"]
             if (old["operation"], old["run_id"], old["pass_id"], old.get("lane"), old.get("attempt")) == identity:
                 if old != value or candidate["request"] != request.to_dict():
@@ -1886,7 +1947,7 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
                 for row in receipts:
                     if row.get("stage") != "review_lane_evidence":
                         continue
-                    old_record = _read_seal(root, row["authoritative_receipt"], "lane")
+                    old_record = _read_source_record(root, row["authoritative_receipt"], "lane")
                     old_ref = old_record["input"]["literal"]["dispatch_receipt_ref"]
                     old_binding = old_record["bindings"].get(old_ref)
                     if old_binding and old_binding["digest"] == dispatch_digest and old_record["source_snapshot"] != snapshot:
@@ -1932,7 +1993,7 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
                         raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
                 if not _bound_bytes(root, {"bindings": bindings}, value["literal"]["output_ref"]).strip():
                     eligible = False
-            record = {"schema_version": 1, "input": value, "input_digest": _document_digest(value), "request": request.to_dict(), "source_snapshot": snapshot, "source_content": source_content, "bindings": bindings, "eligible": eligible, "missing": missing, "assembled_at": now}
+            record = {"schema_version": 2, "input": value, "input_digest": _document_digest(value), "request": request.to_dict(), "source_snapshot": {"snapshot_ref": _seal_evidence(root, "source", snapshot)}, "source_content": source_content, "bindings": bindings, "eligible": eligible, "missing": missing, "assembled_at": now}
             reference = _seal_record(root, "lane", record)
             body = {"stage": stage, "status": "complete" if eligible else "incomplete", "authoritative_receipt": reference, "lane": value["lane"], "reviewer": value["reviewer"], "attempt": value["attempt"], "finding_count": len(value["result"]["findings"])}
             body.update(_review_receipt_context(request))
@@ -1974,7 +2035,7 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
             if snapshot["documents"] != documents or snapshot["target_source"] != target or snapshot["bindings"] != aggregate_bindings:
                 raise EvidenceAssemblyError("aggregate_validation", "append_conflict")
         else:
-            snapshot = {"schema_version": 1, "input": value, "request": request.to_dict(), "target_source": target, "documents": documents, "bindings": aggregate_bindings, "assembled_at": now}
+            snapshot = {"schema_version": 2, "input": value, "request": request.to_dict(), "target_source": {"snapshot_ref": _seal_evidence(root, "source", target)}, "documents": documents, "bindings": aggregate_bindings, "assembled_at": now}
             reference = _seal_record(root, "coverage", snapshot)
             bound_ref = _seal_evidence(root, "request", request.to_dict())
             bodies = [
