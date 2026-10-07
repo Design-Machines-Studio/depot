@@ -707,6 +707,7 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
     def test_production_coverage_rejects_synthetic_predecessor_history(self):
         from workflow_kernel.review_closeout import _source_snapshot
         run, paths = self.prepare()
+        self.write_dispatch(run, paths, stub=False)  # Provenance alone must reject.
         synthetic_record = self.lane(run, paths)
         value = json.loads(paths["lanes"]["security"].read_text())
         snapshot = _source_snapshot(self.repo, value["source"]["head"])
@@ -741,6 +742,53 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         self.assertEqual("incomplete_inspection", json.loads(result.stderr)["error"]["details"]["reason"])
         self.assertEqual(before, paths["receipts"].read_bytes())
         self.assertEqual("incomplete", self.preserve(run, paths)["status"])
+        # Coverage already sealed by the test-mode assembler stays ineligible.
+        self.assertEqual(0, self.cli(run, paths, coverage).returncode)
+        self.assert_sealed_production_rejected(run, paths, paths["lanes"]["security"], coverage)
+
+    def assert_sealed_production_rejected(self, run, paths, lane_input, coverage_input):
+        """Production retry, coverage, preservation and cleanup all refuse."""
+        before = paths["receipts"].read_bytes()
+        for path in (lane_input, coverage_input):
+            result = self.cli(run, paths, path, test_harness=False)
+            self.assertEqual(3, result.returncode, result.stderr)
+            self.assertEqual("incomplete_inspection", json.loads(result.stderr)["error"]["details"]["reason"])
+            self.assertEqual(before, paths["receipts"].read_bytes())
+        self.assert_synthetic_terminal_rejected(run, paths)
+
+    def write_dispatch(self, run, paths, *, stub):
+        """Production-shaped fixture dispatch; only `stub` differs."""
+        value = json.loads(paths["lanes"]["security"].read_text())
+        companion = json.loads((run.root / value["literal"]["companion_ref"]).read_text())
+        self.write(run.root / value["literal"]["dispatch_receipt_ref"], {
+            "schemaVersion": 1, "receiptId": "dispatch-" + "e" * 24, "requested": {}, "fallback": False,
+            "served": {"model": companion["model"], "provider": companion["provider"], "family": companion["reviewer_family"]},
+            "attempts": [{"status": "completed"}], "publication": {"output": "published"}, "transportStub": stub})
+        return value
+
+    def test_sealed_synthetic_selected_coverage_rejected_by_production(self):
+        run, paths = self.prepare()
+        self.write_dispatch(run, paths, stub=False)  # Provenance alone must reject.
+        record = self.lane(run, paths)
+        self.assertEqual(0, self.coverage(run, paths, {"security": record}).returncode)
+        self.assert_sealed_production_rejected(run, paths, paths["lanes"]["security"], run.root / "review/aggregate-input.json")
+
+    def test_sealed_old_live_labelled_stub_record_rejected_by_production(self):
+        """Synthetic historical bypass fixture, not a live claim: simulates a
+        record sealed by older code with a live label over a stub dispatch."""
+        from workflow_kernel.review_closeout import _document_digest, _seal_record
+        run, paths = self.prepare()
+        value = self.write_dispatch(run, paths, stub=True)
+        record = json.loads((run.root / self.lane(run, paths)).read_text())
+        value["provenance"].update(kind="live", executed_at="2026-09-01T00:01:00Z")
+        record.update(input=value, input_digest=_document_digest(value))
+        ref = _seal_record(run.root, "lane", record)
+        receipts = json.loads(paths["receipts"].read_text())
+        receipts[-1]["authoritative_receipt"] = ref
+        self.write(paths["receipts"], receipts)
+        self.write(paths["lanes"]["security"], value)
+        self.assertEqual(0, self.coverage(run, paths, {"security": ref}).returncode)
+        self.assert_sealed_production_rejected(run, paths, paths["lanes"]["security"], run.root / "review/aggregate-input.json")
 
     def test_worktree_inspection_retains_content_and_changed_retry_cannot_relabel_it(self):
         from workflow_kernel.review_closeout import _working_patch
@@ -802,7 +850,7 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         first.write_bytes(sealed)
         result = self.coverage(run, paths, {}, pass_id="final", selection=selection)
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual("complete", self.preserve(run, paths)["status"])
+        self.assert_synthetic_terminal_rejected(run, paths)
 
     def test_nine_lane_pending_two_pass_producer_and_closeout(self):
         """Synthetic 939 -> e605 baseline, then actual e605 -> 64 -> DD."""
@@ -1021,8 +1069,8 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         selection_path.write_bytes(saved_selection)
         result = self.coverage(run, paths, {}, pass_id="final", selection=final_rows)
         self.assertEqual(0, result.returncode, result.stderr)
-        preserved = self.preserve(run, paths)
-        self.assertEqual("complete", preserved["status"], preserved)
+        # Test-mode coverage settles; production preservation stays incomplete.
+        preserved = self.assert_synthetic_terminal_rejected(run, paths)
         retained = Path(preserved["evidence_path"])
         for ref, data in original_bytes.items():
             self.assertEqual(data, (retained / ref).read_bytes())
@@ -1097,17 +1145,17 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         record = self.lane(run, paths)
         result = self.coverage(run, paths, {'security': record})
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual('complete', self.preserve(run, paths)['status'])
+        self.assert_synthetic_terminal_rejected(run, paths)
 
     def test_committed_coverage_reconstruction_works_from_retained_scope(self):
-        from workflow_kernel.review_closeout import assemble_review_evidence, ReviewCloseoutValidationError
+        from workflow_kernel.review_closeout import assemble_review_evidence
         run, paths = self.prepare()
         record = self.lane(run, paths)
         result = self.coverage(run, paths, {'security': record})
         self.assertEqual(0, result.returncode, result.stderr)
-        paths['report'].write_text('[Missing](review/absent.md).\n')
-        with self.assertRaises(ReviewCloseoutValidationError):
-            self.preserve(run, paths)
+        # Production preservation keeps the synthetic scope as INCOMPLETE
+        # diagnostics; only test-mode assembly reconstructs from it below.
+        self.assert_synthetic_terminal_rejected(run, paths)
         scope = next((run.root / 'diagnostic/review').iterdir())
         run.finish('failed', retain_diagnostics=True, reason='synthetic report repair', contains='committed source-bound history')
         input_value = json.loads((run.root / 'diagnostic/review' / scope.name / json.loads((scope / 'review/authoritative-receipts.json').read_text())[-1]['authoritative_receipt']).read_text())['input']
@@ -1131,7 +1179,7 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         for receipt in json.loads(paths['receipts'].read_text()):
             for field in ('workflow_class', 'workflow_class_defaulted', 'execution_mode', 'decision_profile', 'decision_profile_defaulted'):
                 self.assertEqual(request[field], receipt[field])
-        self.assertEqual('complete', self.preserve(run, paths)['status'])
+        self.assert_synthetic_terminal_rejected(run, paths)
 
     def test_router_public_companion_is_consumed_without_hand_materialized_lane_row(self):
         run, paths = self.prepare()
@@ -1150,4 +1198,4 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         record = self.lane(run, paths)
         result = self.coverage(run, paths, {'security': record})
         self.assertEqual(0, result.returncode, result.stderr)
-        self.assertEqual('complete', self.preserve(run, paths)['status'])
+        self.assert_synthetic_terminal_rejected(run, paths)
