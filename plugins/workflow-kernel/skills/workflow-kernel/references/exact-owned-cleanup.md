@@ -31,9 +31,8 @@ resources or volatile private `docker inspect` stdout such as rotating health
 history. The Kernel still revalidates the live resource before executing the
 sealed action. This closes the demonstrated plan-to-execution gap while
 replacing dm-review-owned registry parsing or a second Compose cleanup
-authority. Exact absence also accepts the current Docker CLI's paired `[]`
-response with its exact-ID container or network not-found message, while
-rejecting every other stdout or stderr shape.
+authority. Exact absence accepts empty stdout or `[]\n` with an exact-ID
+container, network or volume not-found message, rejecting other response shapes.
 
 Git namespaces include the unique run ID, not only a feature slug:
 
