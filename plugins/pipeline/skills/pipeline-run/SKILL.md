@@ -25,6 +25,9 @@ subagents, reviews, fixes, merges, and delivers a clean feature branch.
 
 ## Human-Facing Completion
 
+Use plain English and useful visuals. Explain the practical result. Supply complete
+continuation prompts; continue authorized work without asking again.
+
 Present the orchestrator's compact summary, not its durable ledgers. Start with
 exactly `Done`, `Needs fixes`, or `Blocked`; state what changed or stopped, the
 verification result, branch or PR, and one recommended next action. Link the
