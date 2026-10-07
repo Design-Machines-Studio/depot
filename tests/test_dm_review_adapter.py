@@ -18,6 +18,26 @@ FIXTURES = Path(__file__).parent / "fixtures" / "receipts"
 
 
 class DmReviewAdapterTests(unittest.TestCase):
+    def test_evidence_envelope_rejects_caller_digest_and_incomplete_scope(self):
+        from tests.test_auto_review_candidate import ReviewEvidenceProducerTests
+        from workflow_kernel.dm_review_adapter import validate_evidence_input
+        fixture = ReviewEvidenceProducerTests()
+        fixture.setUp()
+        try:
+            run, paths = fixture.prepare()
+            request = ReviewRequest.from_mapping(json.loads(paths["request"].read_text()))
+            value = json.loads(paths["lanes"]["security"].read_text())
+            self.assertEqual(value, validate_evidence_input(value, request))
+            value["input_digest"] = "sha256:" + "0" * 64
+            with self.assertRaises(ValueError):
+                validate_evidence_input(value, request)
+            value.pop("input_digest")
+            value["inspected"]["paths"] = []
+            with self.assertRaisesRegex(ValueError, "incomplete required inspection"):
+                validate_evidence_input(value, request)
+        finally:
+            fixture.tearDown()
+
     def family_export_documents(
         self, reviewer_family="z-ai", model="z-ai/glm-5.2",
     ):

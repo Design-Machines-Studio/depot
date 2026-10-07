@@ -57,8 +57,9 @@ Each pass report carries:
 - `selective_rerun: true` on a pass whose coverage receipt proves a narrowed lane set was applied; `selective_rerun: false` on iteration 1, on any full fan-out, on any fail-open fallback, and whenever a passed selective input was absent, invalid, or not applied. The value describes the pass that emitted it, never a sibling pass.
 - `promoted_to_full` and `full_fanout_override` are explicit booleans on every pass, including `false`; they are never omitted as present-when-true fields.
 - `promoted_to_full: true` only when an incomplete prior full review or a security-boundary repair requires another full fan-out.
-- `lanes_rerun` -- the exact logical lane IDs from the coverage receipt's ATTEMPTED rows, not the loop's intended set. A receiver that silently drops an intended lane therefore cannot falsely report it as re-run.
-- `lanes_skipped` -- for a proven selective pass only, `coverage_selected_set` minus the applied allowlist: the lanes deliberately omitted by narrowing. Each skipped lane records `no_rule_a_or_b_match` and receives no kernel `record-attempt` call. Every non-selective full fan-out reports an empty skip set. A lane selected or allowlisted but missing from ATTEMPTED because dispatch never began is neither re-run nor skipped; the nested review reports `REVIEW INCOMPLETE`.
+- `lanes_rerun` -- exact logical IDs with ATTEMPTED rows and completed inspection, excluding pending lanes; derive from receiver coverage, never intended selection.
+- `lanes_skipped` -- for a proven selective pass only, `coverage_selected_set` minus the applied allowlist: the lanes deliberately omitted by narrowing. Each skipped lane records `no_rule_a_or_b_match` and receives no kernel `record-attempt` call. Every non-selective full fan-out reports an empty skip set.
+- Optional `lanes_pending` (absent means `[]`) -- selected lanes with unresolved/incomplete inspection, including attempted lanes and allowlisted lanes missing from ATTEMPTED. Rerun/skipped/pending must be disjoint and partition the selected roster; rule (a)/(b) lanes belong to rerun or pending. Pending is `REVIEW INCOMPLETE`, never skipped, CLEAN or unchanged-source reuse. Later fresh judgments may link the immutable original predecessor through `recheck.pending_transition_refs` (absent means `[]`) using the Kernel [source-bound evidence contract](../../../../workflow-kernel/skills/workflow-kernel/references/review-evidence-contract.md); each intervening selection must mark that lane pending and the actual final selection must rerun it. Caller supplies selection `pending_scope_paths` (absent means `{}`), keyed by exactly the pending lanes with nonempty unique safe paths from actual `changed_paths` and original inspected scope. Caller owns rule (a)/(b) mapping; Kernel makes no domain inference. Fresh base is the original predecessor's inspected head; both fresh requested and inspected paths include the mapped union across pending transitions. Retain original baseline scope/bytes in history and exact cumulative patch for fresh scope; final coverage resolves every required lane.
 - `rerun_reasons` -- a per-lane map using only `a_prior_unresolved_finding`, `b_fix_file_trigger`, `initial_full_fanout`, and `selection_fail_open`. The stable `a_prior_unresolved_finding` receipt value covers a prior P1/P2/P3 finding owner whether the finding was repaired or remains unresolved. A lane selected by more than one rule records every applicable reason. Full fan-outs use `initial_full_fanout`; fail-open full fan-outs use `selection_fail_open`.
 - `selection_fallback_reason: <reason>` whenever selection failed open to a full fan-out or the receiver rejected or ignored selective input, and `full_fanout_override: true` whenever `DM_REVIEW_LOOP_FULL_FANOUT=1` disabled selection. `selection_fallback_reason` is the persisted receipt field for the loop-local `fallback_reason`. The local variable resets at the start of every iteration so a fail-open on one iteration never leaks into the next iteration's receipt.
 
@@ -72,3 +73,16 @@ Lanes re-run:
 Lanes skipped (no_rule_a_or_b_match):
 - architecture-reviewer, second-perspective, doc-sync-reviewer, pattern-recognition-specialist, security-auditor
 ```
+
+
+## Evidence carried across the selected pass
+
+The selection rules above remain unchanged. Retain pre-repair finding owners,
+exact selected_full_set, committed plus uncommitted paths, source comparison,
+selection receipt and receiver-confirmed application. Supply Kernel's closed
+selection envelope. Immediately assemble each affected completion as a new
+immutable lane record, preserving actual request/HEAD/scope and predecessor.
+Carry skipped lanes by original record plus every intervening non-impact ref.
+Bind dirty patch/content; equal HEAD never proves unchanged source. Assemble
+final coverage with explicit history/reuse and host repair/verification
+resolutions. Nested reviews return evidence to the existing terminal owner.

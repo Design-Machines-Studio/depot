@@ -90,7 +90,7 @@ COMMON_RECEIPT_FIELDS = frozenset({
     "reconciliation_reason",
     "matrix_snapshot_date", "rung_rationale", "diff_scope",
     "full_diff_override", "slice_status",
-    "selective_rerun", "lanes_rerun", "lanes_skipped", "rerun_reasons",
+    "selective_rerun", "lanes_rerun", "lanes_skipped", "lanes_pending", "rerun_reasons",
     "selection_fallback_reason", "promoted_to_full", "full_fanout_override",
 })
 # Documented camelCase receipt spellings (pipeline and dm-review instruct
@@ -207,7 +207,7 @@ _REVIEW_RERUN_REASONS = frozenset({
     "initial_full_fanout", "selection_fail_open",
 })
 _REVIEW_ITERATION_FIELDS = frozenset({
-    "selective_rerun", "lanes_rerun", "lanes_skipped", "rerun_reasons",
+    "selective_rerun", "lanes_rerun", "lanes_skipped", "lanes_pending", "rerun_reasons",
     "selection_fallback_reason", "promoted_to_full", "full_fanout_override",
 })
 _DIFF_SCOPE = re.compile(r"scoped\(([1-9][0-9]*) files of ([1-9][0-9]*)\)\Z")
@@ -878,8 +878,8 @@ def _validate_observation_receipt(
         if any(type(receipt.get(field)) is not bool for field in boolean_fields):
             raise ValueError("invalid review iteration selection")
         lanes = {}
-        for field in ("lanes_rerun", "lanes_skipped"):
-            values = receipt.get(field)
+        for field in ("lanes_rerun", "lanes_skipped", "lanes_pending"):
+            values = receipt.get(field, [] if field == "lanes_pending" else None)
             if (
                 type(values) is not list
                 or any(type(value) is not str or not value for value in values)
@@ -887,7 +887,7 @@ def _validate_observation_receipt(
             ):
                 raise ValueError("invalid review iteration lanes")
             lanes[field] = values
-        if set(lanes["lanes_rerun"]) & set(lanes["lanes_skipped"]):
+        if sum(len(values) for values in lanes.values()) != len(set().union(*lanes.values())):
             raise ValueError("invalid review iteration lanes")
         reasons = receipt.get("rerun_reasons")
         if type(reasons) is not dict or set(reasons) != set(lanes["lanes_rerun"]):

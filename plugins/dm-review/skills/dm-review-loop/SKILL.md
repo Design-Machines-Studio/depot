@@ -18,7 +18,7 @@ argument-hint: "[optional: --full, --max-iterations N, PR number, branch, or pat
 
 # Review-Fix Convergence Loop
 
-Automates the cycle of reviewing code, fixing required findings, and re-reviewing affected lanes until clean.
+Reviews code, repairs required findings, and rechecks affected lanes until clean.
 
 Implementation callers load `references/automatic-implementation-closeout.md`.
 Resume the attributable owner and existing evidence before initialization;
@@ -223,6 +223,17 @@ while iteration < max_iterations:
       with workflowClass and workflow_class_defaulted forwarded unchanged,
       the loop-private router directory/index, and terminal reporting suppressed
 
+  Immediately assemble each affected lane through assemble-review-evidence,
+    operation lane, with its original bound request, literal output/private
+    receipt and predecessor/applied selection/repair refs.
+  Before convergence, assemble operation coverage with the final bound request,
+    one committed record per lane, full recheck histories, every intervening
+    unaffected non-impact comparison, host synthesis and explicit resolutions.
+  Use Kernel review-evidence-contract.md's closed envelopes. Required failure blocks
+    coverage. Never hand-materialize companions or relabel an old inspection.
+  Changed sealed companions use a new owned replay; identical retry and missing
+    derived files reuse committed evidence without dispatch.
+
   Consume and validate the nested review's authoritative coverage receipt: one
     row per selected lane with requested, attempted, implemented-by, status,
     finding count, and evidence reference, plus its REVIEW INCOMPLETE result.
@@ -239,8 +250,8 @@ while iteration < max_iterations:
     full_review_baseline_complete = true
 
   coverage_selected_set = exact logical lane IDs selected by the coverage receipt
-  lanes_rerun = exact logical lane IDs in the coverage receipt's ATTEMPTED rows;
-    ATTEMPTED means dispatch began, regardless of success or failure
+  lanes_rerun = receiver-confirmed ATTEMPTED lanes with completed inspection,
+    excluding pending lanes
   if fallback_reason is non-null:
     rerun_reasons = every lane in lanes_rerun -> ["selection_fail_open"]
   else:
@@ -249,11 +260,14 @@ while iteration < max_iterations:
     lanes_skipped = coverage_selected_set minus the applied allowlist
   else:
     lanes_skipped = []
-  A lane selected for a full fan-out or allowlisted for a selective pass that
-    fails before dispatch is not "skipped". Its absence from ATTEMPTED makes the
-    nested review REVIEW INCOMPLETE; it appears in neither lanes_rerun nor
-    lanes_skipped. Therefore `full_fanout_override: true` and
-    `promoted_to_full: true` receipts always carry an empty skip set.
+  lanes_pending (absent means []) = selected lanes with unresolved/incomplete
+    inspection, including attempted lanes and required lanes absent from ATTEMPTED.
+    These make the nested review REVIEW INCOMPLETE, never skipped.
+    Rerun/skipped/pending must be disjoint and partition
+    coverage_selected_set; rule (a)/(b) lanes must be rerun or pending.
+    Pending cannot be CLEAN or unchanged-source carry.
+  `full_fanout_override: true` and `promoted_to_full: true` receipts always
+    carry an empty skip set.
   For each lane in lanes_skipped, record reason "no_rule_a_or_b_match".
   Do not issue a kernel record-attempt call for any lane in lanes_skipped.
 
@@ -261,9 +275,14 @@ while iteration < max_iterations:
   After the coverage receipt validates, atomically emit iteration_receipt with
     explicit booleans `selective_rerun`, `promoted_to_full`, and
     `full_fanout_override` on every pass, plus `lanes_rerun`, `lanes_skipped`,
+    optional `lanes_pending` (absent means []),
     `rerun_reasons`, and `selection_fallback_reason`, then append it to authoritative-receipts.json
     BEFORE invoking observe-review. The persisted receipt field
     `selection_fallback_reason` is the loop-local fallback_reason value.
+  Later fresh lane judgments spanning pending selections may supply optional
+    recheck.pending_transition_refs (absent means []) in their lane input per
+    the Kernel source-bound evidence contract; preserve the original
+    predecessor, cumulative scope and all source/receipt/output bytes.
 
   # Check for required findings. Every retained severity participates.
   required_finding_files = todos/*-pending-p1-*.md plus todos/*-pending-p2-*.md plus todos/*-pending-p3-*.md;
@@ -428,6 +447,6 @@ or its one closed unavailable line. The JSON and Markdown remain beside
 
 ## Integration
 
-This command composes existing dm-review commands -- it does not reimplement review or fix logic. It simply runs them in a loop with a convergence check.
+This command loops existing dm-review commands with a convergence check; review and fix logic stay in those commands.
 
 Used by the pipeline plugin's execution-orchestrator agent for post-chunk review-fix loops, but useful standalone for any "fix it until it's clean" workflow.

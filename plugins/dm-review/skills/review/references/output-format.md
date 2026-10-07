@@ -331,3 +331,16 @@ else:
   recommendation = "CLEAN"
   summary = "No issues found. Ready to merge."
 ```
+
+
+## Producer authority
+
+Host supplies extraction/synthesis; `assemble-review-evidence` constructs the
+four companions and committed snapshot. Lane receipts schema 2 adds exactly
+`evidence_record_ref`, `evidence_history`, `transition_refs` to the row fields
+above. Other companions retain schema 1. Legacy companions remain historical
+contribution inputs; they cannot establish new terminal coverage. Never label
+an incomplete committed attempt clean or duplicate an effective lane. Recheck
+findings describe that inspection; prior findings/decisions remain in sealed
+history with repair/verification resolutions. Required union validation runs
+independently of optional economics.

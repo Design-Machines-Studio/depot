@@ -21,7 +21,7 @@ from workflow_kernel.review_closeout import (
     ReviewCloseoutValidationError,
     bind_review_source,
     preserve_review_evidence,
-    source_identity,
+    source_identity, assemble_review_evidence, EvidenceAssemblyError,
 )
 from workflow_kernel.schema import ErrorMessage
 
@@ -44,7 +44,7 @@ class ReviewCloseoutTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def make_run(self, workflow="dm-review", run_id="closeout"):
+    def make_run(self, workflow="dm-review", run_id="closeout", *, legacy=False, synthetic=False):
         run = ExactOwnedRun.start(workflow, run_id, base=self.state)
         source = run.create_path("raw-output", "review")
         run.create_path("raw-output", "receipts")
@@ -112,7 +112,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         }
         paths["request"].write_text(json.dumps(request) + "\n", encoding="utf-8")
         (source / "coverage.json").write_text("{}\n", encoding="utf-8")
-        referenced = self.repo / "raw" / "security.md"
+        referenced = run.root / "raw" / "security.md"
         referenced.parent.mkdir(parents=True, exist_ok=True)
         referenced.write_text("Security lane evidence.\n", encoding="utf-8")
         receipts[0]["source_repository"] = repository
@@ -146,6 +146,45 @@ class ReviewCloseoutTests(unittest.TestCase):
             encoding="utf-8",
         )
         paths["report"] = report
+        if not legacy:
+            # Production-shaped test data exercises the production boundary;
+            # it is never external participant proof. Explicit synthetic
+            # assembler fixtures keep their separate, honest provenance.
+            if not synthetic:
+                (router / "security.json").write_text(json.dumps({
+                    "schemaVersion": 1, "receiptId": "dispatch-" + "a" * 24,
+                    "requested": {}, "fallback": False,
+                    "served": {"model": lane_receipt["model"], "provider": lane_receipt["provider"], "family": lane_receipt["reviewer_family"]},
+                    "attempts": [{"status": "completed"}],
+                    "publication": {"output": "published"}, "transportStub": False,
+                }) + "\n")
+            paths["receipts"].write_text("[]\n")
+            for key in ("lane_receipts", "raw_lane_outputs", "raw_findings", "decisions"):
+                paths[key].unlink()
+            paths["request"].write_text(json.dumps(ReviewRequest.from_mapping(request).to_dict()) + "\n")
+            (source / "companion.json").write_text(json.dumps(lane_receipt) + "\n")
+            (source / "prompt.md").write_text("Inspect source.txt in the disposable repository.\n")
+            lane_input = {
+                "schema_version": 1, "operation": "lane", "run_id": run_id,
+                "pass_id": "initial", "lane": "security", "attempt": 1, "reviewer": "security",
+                "source": {"repository": repository, "head": head, "base": head, "worktree_ref": None, "request_ref": "review/request.json"},
+                "requested": {"designation": "full", "patch_ref": None, "paths": ["source.txt"], "evidence_refs": ["review/prompt.md"], "required_evidence_refs": ["review/prompt.md"]},
+                "inspected": {"paths": ["source.txt"], "basis": "repository", "limitations": [], "missing_evidence_refs": []},
+                "literal": {"output_ref": "raw/security.md", "dispatch_receipt_ref": "receipts/private/router/security.json", "companion_ref": "review/companion.json"},
+                "result": {"status": "no_findings", "findings": [], "incomplete_reasons": []},
+                "provenance": {"kind": "synthetic_test" if synthetic else "live", "executed_at": None if synthetic else "2026-09-01T00:01:00Z", "source_refs": ["review/prompt.md"]},
+                "recheck": {"prior_record_ref": None, "selection_ref": None, "repair_refs": []},
+            }
+            paths["input"] = source / "lane-input.json"
+            paths["input"].write_text(json.dumps(lane_input) + "\n")
+            lane_result = assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths["request"], receipts_path=paths["receipts"], input_path=paths["input"], test_harness=synthetic)
+            paths["record_ref"] = lane_result["record_ref"]
+            coverage = {"schema_version": 1, "operation": "coverage", "run_id": run_id, "pass_id": "initial",
+                        "selection": [{"lane": "security", "record_ref": lane_result["record_ref"], "history_refs": [], "transition_refs": []}],
+                        "decisions": [], "occurred_at": "2026-09-01T00:01:30Z", "required_case_refs": [], "resolutions": []}
+            paths["coverage_input"] = source / "coverage-input.json"
+            paths["coverage_input"].write_text(json.dumps(coverage) + "\n")
+            assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths["request"], receipts_path=paths["receipts"], input_path=paths["coverage_input"], test_harness=synthetic)
         return run, paths
 
     def preserve(self, run, paths):
@@ -161,6 +200,111 @@ class ReviewCloseoutTests(unittest.TestCase):
             private_router_directory=paths["router"],
             report_path=paths.get("report"),
         )
+
+    def test_actual_preservation_limits_are_closed_and_atomic(self):
+        from tests import KERNEL_REFERENCES
+        from workflow_kernel.owned_run import _MAX_DIAGNOSTIC_BYTES, _MAX_DIAGNOSTIC_FILES
+        from workflow_kernel.review_closeout import has_preserved_review_evidence
+
+        for kind in ("staging_files", "staging_bytes", "router_files", "router_bytes", "single_file_bytes"):
+            for prior in (False, True):
+                with self.subTest(kind=kind, prior=prior):
+                    run, paths = self.make_run(run_id=f"limit-{kind.replace('_', '-')}-{int(prior)}")
+                    first = self.preserve(run, paths)
+                    destination = Path(first["evidence_path"])
+                    original = {p.relative_to(destination): p.read_bytes()
+                                for p in destination.rglob("*") if p.is_file()}
+                    if not prior:
+                        shutil.rmtree(destination)
+                    if kind.endswith("files"):
+                        count = (_MAX_DIAGNOSTIC_FILES - first["files"] + 1
+                                 if kind == "staging_files" else _MAX_DIAGNOSTIC_FILES + 1)
+                        for index in range(count):
+                            (paths["router"] / f"extra-{index}.json").write_text("{}")
+                    elif kind == "single_file_bytes":
+                        paths["report"].write_bytes(b"x" * (_MAX_DIAGNOSTIC_BYTES + 1))
+                    else:
+                        size = (_MAX_DIAGNOSTIC_BYTES - first["bytes"] + 1
+                                if kind == "staging_bytes" else _MAX_DIAGNOSTIC_BYTES + 1)
+                        for index, amount in enumerate((size // 2, size - size // 2)):
+                            (paths["router"] / f"extra-{index}.json").write_bytes(b"{}" + b" " * (amount - 2))
+                    source_bytes = {p.relative_to(run.root): p.read_bytes()
+                                    for p in run.root.rglob("*") if p.is_file()}
+                    environment = os.environ.copy()
+                    environment["PYTHONPATH"] = str(KERNEL_REFERENCES) + os.pathsep + environment.get("PYTHONPATH", "")
+                    completed = subprocess.run(
+                        (sys.executable, "-m", "workflow_kernel", "preserve-review-evidence",
+                         "--run-root", str(run.root), "--repository-root", str(self.repo),
+                         "--request", str(paths["request"]), "--receipts", str(paths["receipts"]),
+                         "--lane-receipts", str(paths["lane_receipts"]),
+                         "--raw-lane-outputs", str(paths["raw_lane_outputs"]),
+                         "--raw-findings", str(paths["raw_findings"]), "--decisions", str(paths["decisions"]),
+                         "--private-router-directory", str(paths["router"]), "--report", str(paths["report"])),
+                        env=environment, capture_output=True, text=True, check=False,
+                    )
+                    self.assertEqual(3, completed.returncode, completed.stderr)
+                    self.assertEqual("", completed.stdout)
+                    self.assertEqual({"error": {
+                        "code": "evidence_limit_exceeded",
+                        "message": "required review evidence failed validation",
+                        "details": {"stage": "preservation_input", "reason": "retention_limit",
+                                    "path": "review/evidence.json"},
+                    }}, json.loads(completed.stderr))
+                    self.assertFalse(list(destination.parent.glob("review-stage-*")))
+                    self.assertEqual(prior, destination.exists())
+                    if prior:
+                        self.assertEqual(original, {p.relative_to(destination): p.read_bytes()
+                                                   for p in destination.rglob("*") if p.is_file()})
+                    else:
+                        self.assertFalse(has_preserved_review_evidence(run.root / "diagnostic"))
+                        with self.assertRaises(ValueError):
+                            run.finish("succeeded", retain_diagnostics=True)
+                    for relative, data in source_bytes.items():
+                        self.assertEqual(data, (run.root / relative).read_bytes())
+
+    def test_bound_guard_distinguishes_unsafe_entries_from_exhaustion(self):
+        from workflow_kernel.owned_run import BoundedDiagnosticLimitError, _bounded_diagnostic
+        from workflow_kernel.review_closeout import _check_evidence_bound
+        directory = self.root / "unsafe-diagnostic"
+        directory.mkdir()
+        (directory / "link").symlink_to(self.repo / "source.txt")
+        with self.assertRaises(ValueError) as caught:
+            _bounded_diagnostic(directory)
+        self.assertNotIsInstance(caught.exception, BoundedDiagnosticLimitError)
+        for stage in ("retained_validation", "preservation_input"):
+            with self.assertRaises(EvidenceAssemblyError) as caught:
+                _check_evidence_bound(directory, stage)
+            self.assertEqual(3, caught.exception.exit_code)
+            self.assertEqual("unsafe_payload", caught.exception.code)
+            self.assertEqual({"stage": stage, "reason": "unsafe_path", "path": "review/evidence.json"},
+                             caught.exception.detail())
+
+    def test_absent_companion_is_classified_and_other_inputs_preserved(self):
+        run, paths = self.make_run("dm-review", "absent-lane")
+        paths["lane_receipts"].unlink()
+        result = self.preserve(run, paths)
+        self.assertEqual("incomplete", result["status"])
+        self.assertIn({"stage": "preservation_input", "reason": "missing_evidence",
+                       "path": "review/review-lane-receipts.json"}, result["diagnostics"])
+        self.assertTrue(Path(result["evidence_path"], "review/request.json").is_file())
+
+    def test_missing_evidence_diagnostic_keeps_only_safe_filenames(self):
+        from workflow_kernel.review_closeout import _evidence_bytes
+        for reference, reason, path in (
+            ("review/absent-required.patch", "missing_evidence", "review/absent-required.patch"),
+            ("../absent-required.patch", "unsafe_path", "review/evidence.json"),
+        ):
+            with self.subTest(reference=reference):
+                with self.assertRaises(EvidenceAssemblyError) as caught:
+                    _evidence_bytes(self.state, reference, "lane_input")
+                self.assertEqual({"stage": "lane_input", "reason": reason, "path": path}, caught.exception.detail())
+        self.assertEqual("review/evidence.json", EvidenceAssemblyError("lane_input", "missing_evidence", "/etc/passwd").role)
+
+    def test_legacy_companions_cannot_establish_new_terminal_coverage(self):
+        run, paths = self.make_run("dm-review", "legacy-terminal", legacy=True)
+        result = self.preserve(run, paths)
+        self.assertEqual("incomplete", result["status"])
+        self.assertTrue(paths["raw_lane_outputs"].is_file())
 
     def test_non_ui_request_serializes_an_explicit_empty_browser_case_set(self):
         request = ReviewRequest.from_mapping({
@@ -179,12 +323,7 @@ class ReviewCloseoutTests(unittest.TestCase):
 
         first = self.preserve(run, paths)
         self.assertEqual("incomplete", first["status"])
-        self.assertTrue(any(
-            "required_browser_cases" in reason
-            and "expected=[]" in reason
-            and "actual=None" in reason
-            for reason in first["missing"]
-        ), first)
+        self.assertEqual("invalid_evidence", first["diagnostics"][0]["reason"])
         retained = Path(first["evidence_path"]) / "review/authoritative-receipts.json"
         self.assertEqual(original, retained.read_bytes())
 
@@ -212,10 +351,7 @@ class ReviewCloseoutTests(unittest.TestCase):
 
         result = self.preserve(run, paths)
         self.assertEqual("incomplete", result["status"])
-        self.assertTrue(any(
-            "required_browser_cases" in reason and "actual=None" in reason
-            for reason in result["missing"]
-        ), result)
+        self.assertEqual("invalid_evidence", result["diagnostics"][0]["reason"])
         retained = Path(result["evidence_path"]) / "review/authoritative-receipts.json"
         self.assertEqual(original, retained.read_bytes())
 
@@ -233,7 +369,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         self.assertTrue((evidence / "review/authoritative-receipts.json").is_file())
         self.assertTrue((evidence / "review/raw-lane-outputs.json").is_file())
         self.assertTrue((evidence / "receipts/private/router/security.json").is_file())
-        self.assertTrue((evidence / "raw/security.md").is_file())
+        self.assertTrue(list((evidence / "review/evidence").glob("literal-*.bin")))
         self.assertEqual(
             "## CLEAN\n\nRequired review coverage is complete. "
             "[Lane outputs](review/raw-lane-outputs.json).\n",
@@ -305,7 +441,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         self.assertEqual("complete", first["status"])
         self.assertEqual(first["evidence_path"], second["evidence_path"])
         receipts = json.loads((Path(second["evidence_path"]) / "review/authoritative-receipts.json").read_text())
-        self.assertEqual(2, len(receipts))
+        self.assertEqual(3, len(receipts))
         self.assertEqual(1, len(list((Path(second["evidence_path"]) / "receipts/private/router").glob("*.json"))) - 1)
 
     def test_changed_head_cannot_complete_closeout(self):
@@ -317,10 +453,81 @@ class ReviewCloseoutTests(unittest.TestCase):
 
     def test_missing_required_lane_evidence_reference_cannot_complete_closeout(self):
         run, paths = self.make_run("dm-review", "missing-evidence-ref")
-        (self.repo / "raw/security.md").unlink()
+        record = json.loads((run.root / paths["record_ref"]).read_text())
+        retained_ref = record["bindings"]["raw/security.md"]["retained_ref"]
+        (run.root / retained_ref).unlink()
         result = self.preserve(run, paths)
         self.assertEqual("incomplete", result["status"])
-        self.assertTrue(any("raw/security.md" in item for item in result["missing"]))
+        self.assertIn("missing_evidence", result["missing"])
+        self.assertIn({"stage": "retained_validation", "reason": "missing_evidence",
+                       "path": retained_ref}, result["diagnostics"])
+
+    def test_assembler_missing_paths_name_safe_relative_files_only(self):
+        run, paths = self.make_run("dm-review", "assembler-missing-paths")
+        arguments = dict(run_root=run.root, repository_root=self.repo, request_path=paths["request"],
+                         receipts_path=paths["receipts"], input_path=paths["input"], test_harness=True)
+        for key, path, reason, role in (
+            ("request_path", run.root / "review/absent-request.json", "missing_evidence", "review/absent-request.json"),
+            ("input_path", run.root / "review/absent-input.json", "missing_evidence", "review/absent-input.json"),
+            ("receipts_path", run.root / "review/absent-receipts.json", "missing_evidence", "review/absent-receipts.json"),
+            ("input_path", run.root / "review/ghp_abcdefgh12345678.json", "missing_evidence", "review/evidence.json"),
+            ("input_path", self.root / "outside-input.json", "unsafe_path", "review/evidence.json"),
+        ):
+            with self.subTest(key=key, path=path.name):
+                with self.assertRaises(EvidenceAssemblyError) as caught:
+                    assemble_review_evidence(**dict(arguments, **{key: path}))
+                self.assertEqual({"stage": "lane_input", "reason": reason, "path": role}, caught.exception.detail())
+        external = self.root / "external-input.json"
+        external.write_text("{}\n")
+        (run.root / "review/linked-input.json").symlink_to(external)
+        with self.assertRaises(EvidenceAssemblyError) as caught:
+            assemble_review_evidence(**dict(arguments, input_path=run.root / "review/linked-input.json"))
+        self.assertEqual({"stage": "lane_input", "reason": "unsafe_path", "path": "review/evidence.json"}, caught.exception.detail())
+
+    def test_preservation_diagnostics_use_actual_safe_inputs_and_keep_destination_atomic(self):
+        run, paths = self.make_run(run_id="preserve-input-paths")
+        first = self.preserve(run, paths)
+        destination = Path(first["evidence_path"])
+        original = {p.relative_to(destination): p.read_bytes()
+                    for p in destination.rglob("*") if p.is_file()}
+        for key, path, reason, role in (
+            ("request", run.root / "review/absent-final-request.json", "missing_evidence", "review/absent-final-request.json"),
+            ("lane_receipts", run.root / "review/absent-pass-lanes.json", "missing_evidence", "review/absent-pass-lanes.json"),
+            ("receipts", run.root / "review/absent-final-receipts.json", "missing_evidence", "review/absent-final-receipts.json"),
+            ("raw_lane_outputs", run.root / "review/absent-pass-outputs.json", "missing_evidence", "review/absent-pass-outputs.json"),
+            ("raw_findings", run.root / "review/absent-pass-findings.json", "missing_evidence", "review/absent-pass-findings.json"),
+            ("decisions", run.root / "review/absent-pass-decisions.json", "missing_evidence", "review/absent-pass-decisions.json"),
+            ("report", run.root / "review/absent-final-report.md", "missing_evidence", "review/absent-final-report.md"),
+            ("report", self.repo / "review/absent-final-report.md", "missing_evidence", "review/absent-final-report.md"),
+            ("request", self.root / "secret-foreign-request.json", "unsafe_path", "review/request.json"),
+            ("request", run.root / "review/ghp_abcdefgh12345678.json", "missing_evidence", "review/evidence.json"),
+        ):
+            with self.subTest(key=key, role=role):
+                result = self.preserve(run, dict(paths, **{key: path}))
+                self.assertEqual("incomplete", result["status"])
+                self.assertIn({"stage": "preservation_input", "reason": reason, "path": role}, result["diagnostics"])
+                self.assertNotIn(str(self.root), json.dumps(result["diagnostics"]))
+                self.assertNotIn("secret-foreign", json.dumps(result["diagnostics"]))
+                self.assertEqual(original, {p.relative_to(destination): p.read_bytes()
+                                           for p in destination.rglob("*") if p.is_file()})
+        # Pass-specific source names still bind canonical retained destinations.
+        copied = dict(paths)
+        for key in ("request", "lane_receipts", "report"):
+            copied[key] = run.root / ("review/final-" + paths[key].name)
+            shutil.copyfile(paths[key], copied[key])
+        result = self.preserve(run, copied)
+        self.assertEqual("complete", result["status"])
+        self.assertEqual(first["evidence_path"], result["evidence_path"])
+        self.assertEqual(paths["request"].read_bytes(), (destination / "review/request.json").read_bytes())
+        self.assertEqual(paths["lane_receipts"].read_bytes(), (destination / "review/review-lane-receipts.json").read_bytes())
+
+    def test_missing_router_directory_names_its_relative_path(self):
+        run, paths = self.make_run("dm-review", "absent-router")
+        shutil.rmtree(paths["router"])
+        result = self.preserve(run, paths)
+        self.assertEqual("incomplete", result["status"])
+        self.assertIn({"stage": "preservation_input", "reason": "missing_evidence",
+                       "path": "receipts/private/router"}, result["diagnostics"])
 
     def test_mismatched_lane_output_digest_cannot_complete_closeout(self):
         run, paths = self.make_run("dm-review", "mismatched-lane-digest")
@@ -345,7 +552,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         )
         result = self.preserve(run, paths)
         self.assertEqual("incomplete", result["status"])
-        self.assertIn("required evidence reference: review/linked-evidence.md", result["missing"])
+        self.assertIn("digest_mismatch", result["missing"])
         self.assertFalse(Path(result["evidence_path"], "review/linked-evidence.md").exists())
 
     def test_report_link_escape_and_foreign_owned_run_remain_rejected(self):
@@ -456,16 +663,16 @@ class ReviewCloseoutTests(unittest.TestCase):
         lane_document["lanes"].append(visual_receipt)
         paths["lane_receipts"].write_text(json.dumps(lane_document) + "\n", encoding="utf-8")
         receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        receipts[0]["requested_lanes"] = ["security", "visual"]
-        receipts[0]["source_repository"] = repository
-        receipts[0]["source_head"] = head
-        receipts[1]["expected_lanes"] = ["security", "visual"]
-        receipts[1]["completed_lanes"] = ["security", "visual"]
+        receipts[1]["requested_lanes"] = ["security", "visual"]
         receipts[1]["source_repository"] = repository
         receipts[1]["source_head"] = head
-        receipts[1]["required_browser_cases"] = ["home", "settings"]
+        receipts[2]["expected_lanes"] = ["security", "visual"]
+        receipts[2]["completed_lanes"] = ["security", "visual"]
+        receipts[2]["source_repository"] = repository
+        receipts[2]["source_head"] = head
+        receipts[2]["required_browser_cases"] = ["home", "settings"]
         receipts.append({
-            "run_id": request["run_id"], "sequence": 2,
+            "run_id": request["run_id"], "sequence": 3,
             "stage": "browser_verification", "status": "completed",
             "node_id": "visual", "occurred_at": "2026-09-01T00:02:00Z",
             "authoritative_receipt": "review/browser.json", "host": "codex",
@@ -479,15 +686,15 @@ class ReviewCloseoutTests(unittest.TestCase):
         paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
         self.assertEqual("incomplete", self.preserve(run, paths)["status"])
 
-    def test_completed_browser_case_after_coverage_matrix_is_accepted(self):
+    def test_browser_case_relabel_without_new_aggregate_is_rejected(self):
         run, paths = self.make_run("dm-review", "browser-after-coverage")
         request = json.loads(paths["request"].read_text(encoding="utf-8"))
         request["required_browser_cases"] = ["home"]
         paths["request"].write_text(json.dumps(request) + "\n", encoding="utf-8")
         receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        receipts[1]["required_browser_cases"] = ["home"]
+        receipts[2]["required_browser_cases"] = ["home"]
         receipts.append({
-            "run_id": request["run_id"], "sequence": 2,
+            "run_id": request["run_id"], "sequence": 3,
             "stage": "browser_verification", "status": "completed",
             "node_id": "visual", "occurred_at": "2026-09-01T00:02:00Z",
             "authoritative_receipt": "review/browser.json", "host": "codex",
@@ -500,8 +707,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         (self.repo / "browser").mkdir()
         (self.repo / "browser/case-home.json").write_text("{}\n", encoding="utf-8")
         result = self.preserve(run, paths)
-        self.assertEqual("complete", result["status"])
-        self.assertTrue(Path(result["evidence_path"], "browser/case-home.json").is_file())
+        self.assertEqual("incomplete", result["status"])
 
     def test_optional_contribution_cost_and_observation_outputs_do_not_gate_coverage(self):
         run, paths = self.make_run()
@@ -516,7 +722,7 @@ class ReviewCloseoutTests(unittest.TestCase):
     def test_failed_optional_contribution_receipt_does_not_downgrade_coverage(self):
         run, paths = self.make_run()
         receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        receipts.append({"sequence": 2, "stage": "finding_contribution", "status": "failed"})
+        receipts.append({"sequence": 3, "stage": "finding_contribution", "status": "failed"})
         paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
         result = self.preserve(run, paths)
         self.assertEqual("complete", result["status"])
@@ -528,14 +734,14 @@ class ReviewCloseoutTests(unittest.TestCase):
     def test_unvalidated_later_coverage_cannot_override_incomplete_coverage(self):
         run, paths = self.make_run("dm-review", "malformed-recheck")
         receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        receipts[1]["completed_lanes"] = []
-        receipts[1]["unavailable_lanes"] = ["security"]
+        receipts[2]["completed_lanes"] = []
+        receipts[2]["unavailable_lanes"] = ["security"]
         receipts.append({"stage": "finding_contribution", "status": "failed"})
         receipts.append({
             "stage": "coverage_matrix", "expected_lanes": ["security"],
             "completed_lanes": ["security"], "degraded_lanes": [],
-            "unavailable_lanes": [], "source_repository": receipts[1]["source_repository"],
-            "source_head": receipts[1]["source_head"], "required_browser_cases": [],
+            "unavailable_lanes": [], "source_repository": receipts[2]["source_repository"],
+            "source_head": receipts[2]["source_head"], "required_browser_cases": [],
         })
         paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
         self.assertEqual("incomplete", self.preserve(run, paths)["status"])
@@ -543,12 +749,12 @@ class ReviewCloseoutTests(unittest.TestCase):
     def test_valid_recheck_after_optional_contribution_can_complete(self):
         run, paths = self.make_run("dm-review", "valid-recheck")
         receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        receipts[1]["completed_lanes"] = []
-        receipts[1]["unavailable_lanes"] = ["security"]
+        receipts[2]["completed_lanes"] = []
+        receipts[2]["unavailable_lanes"] = ["security"]
         receipts.append({"stage": "finding_contribution", "status": "failed"})
-        final = dict(receipts[1])
+        final = dict(receipts[2])
         final.update({
-            "sequence": 3, "occurred_at": "2026-09-01T00:03:00Z",
+            "sequence": 4, "occurred_at": "2026-09-01T00:03:00Z",
             "completed_lanes": ["security"], "unavailable_lanes": [],
         })
         receipts.append(final)
@@ -581,18 +787,10 @@ class ReviewCloseoutTests(unittest.TestCase):
             ("simplicity-review.md", "Simplicity lane output.\n"),
         ):
             (review_source / name).write_text(text, encoding="utf-8")
-        lane_document = json.loads(paths["lane_receipts"].read_text(encoding="utf-8"))
-        lane_document["lanes"][0]["evidence_refs"] = [
-            "review/pattern-review.md", "review/simplicity-review.md",
-        ]
-        paths["lane_receipts"].write_text(
-            json.dumps(lane_document) + "\n", encoding="utf-8",
-        )
-        paths["report"].write_text(
-            "[Pattern](review/pattern-review.md) and "
-            "[Simplicity](review/simplicity-review.md).\n",
-            encoding="utf-8",
-        )
+        record = json.loads((run.root / paths["record_ref"]).read_text())
+        output_ref = record["bindings"]["raw/security.md"]["retained_ref"]
+        prompt_ref = record["bindings"]["review/prompt.md"]["retained_ref"]
+        paths["report"].write_text(f"[Output]({output_ref}) and [Prompt]({prompt_ref}).\n")
 
         first = self.preserve(run, paths)
         self.assertEqual("complete", first["status"], first)
@@ -646,8 +844,10 @@ class ReviewCloseoutTests(unittest.TestCase):
         run, paths = self.make_run("dm-review", "router-index")
         paths["router"].joinpath("security.json").unlink()
         paths["router"].joinpath("unrelated.json").write_text("{}\n", encoding="utf-8")
-        with self.assertRaises((OSError, ValueError)):
+        with self.assertRaises(EvidenceAssemblyError) as caught:
             self.preserve(run, paths)
+        self.assertEqual({"stage": "preservation_input", "reason": "missing_evidence",
+                          "path": "receipts/private/router/security.json"}, caught.exception.detail())
         self.assertTrue(run.root.is_dir())
         paths["router"].joinpath("unrelated.json").unlink()
         paths["router"].joinpath("security.json").write_text(json.dumps({
@@ -701,12 +901,12 @@ class ReviewCloseoutTests(unittest.TestCase):
         self.assertEqual("complete", retry["status"], retry)
         self.assertEqual(before, (evidence / "review/raw-lane-outputs.json").read_bytes())
         receipt_values = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        self.assertEqual(2, len(receipt_values))
+        self.assertEqual(3, len(receipt_values))
         finished = ExactOwnedRun.open(run.root).finish("succeeded", retain_diagnostics=True)
         self.assertEqual("retained", finished.status)
         self.assertTrue((evidence / "report.md").is_file())
 
-    def test_repaired_head_recheck_can_complete_with_the_new_exact_scope(self):
+    def test_aggregate_only_head_rewrite_cannot_relabel_old_lane_output(self):
         run, paths = self.make_run("dm-review", "rechecked")
         (self.repo / "source.txt").write_text("repaired source\n", encoding="utf-8")
         subprocess.run(("git", "-C", str(self.repo), "add", "source.txt"), check=True)
@@ -717,18 +917,16 @@ class ReviewCloseoutTests(unittest.TestCase):
         request["source_head"] = head
         paths["request"].write_text(json.dumps(request) + "\n", encoding="utf-8")
         receipts = json.loads(paths["receipts"].read_text(encoding="utf-8"))
-        receipts[0]["source_repository"] = repository
-        receipts[0]["source_head"] = head
         receipts[1]["source_repository"] = repository
         receipts[1]["source_head"] = head
-        receipts[1]["required_browser_cases"] = []
+        receipts[2]["source_repository"] = repository
+        receipts[2]["source_head"] = head
+        receipts[2]["required_browser_cases"] = []
         paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
         result = self.preserve(run, paths)
-        self.assertEqual("complete", result["status"])
-        run.finish(
-            "succeeded", retain_diagnostics=True,
-            reason="rechecked evidence sealed", contains="repaired head coverage",
-        )
+        self.assertEqual("incomplete", result["status"])
+        with self.assertRaisesRegex(ValueError, "durably validated"):
+            run.finish("succeeded", retain_diagnostics=True)
 
     def test_supported_cli_seals_and_reports_the_durable_evidence_path(self):
         run, paths = self.make_run("dm-review", "cli-closeout")
