@@ -1579,7 +1579,7 @@ def _validate_selection(root, reference, lanes, *, before=None, after=None, repo
     document = _read_transition(root, reference)
     # The caller owns rule (a)/(b) semantics. Require its retained receipt and
     # explicit receiver-confirmed application, plus actual transition bytes.
-    if set(document) != {"schema_version", "selected_full_set", "applied", "iteration", "finding_owner_lanes", "file_trigger_lanes", "from_source", "to_source", "changed_paths", "patch_ref", "worktree_ref"} or document["selected_full_set"] != list(lanes) or document["applied"] is not True:
+    if set(document) - {"pending_scope_paths"} != {"schema_version", "selected_full_set", "applied", "iteration", "finding_owner_lanes", "file_trigger_lanes", "from_source", "to_source", "changed_paths", "patch_ref", "worktree_ref"} or document["selected_full_set"] != list(lanes) or document["applied"] is not True:
         raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
     if before is not None and (document["from_source"] != before or document["to_source"] != after):
         raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
@@ -1599,6 +1599,14 @@ def _validate_selection(root, reference, lanes, *, before=None, after=None, repo
     iteration = document["iteration"]
     translate_review_receipts([dict(iteration, sequence=0)])
     pending = set(iteration.get("lanes_pending", []))
+    scopes = document.get("pending_scope_paths", {})
+    if type(scopes) is not dict or set(scopes) != pending:
+        raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
+    from .dm_review_adapter import _evidence_list
+    for paths in scopes.values():
+        _evidence_list(paths, references=True)
+        if not paths or not set(paths) <= set(document["changed_paths"]):
+            raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
     if iteration.get("stage") != "review_iteration" or set(iteration["lanes_rerun"]) | set(iteration["lanes_skipped"]) | pending != set(lanes):
         raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
     owners, triggers = document["finding_owner_lanes"], document["file_trigger_lanes"]
@@ -1628,6 +1636,7 @@ def _transition_references(root, references):
 
 def _transition_chain(root, references, original, target, lane, lanes, repository, worktree, *, pending=False):
     current = original
+    affected = set()
     for reference in references:
         proof = _read_transition(root, reference)
         if set(proof) != {"schema_version", "from_source", "to_source", "changed_paths", "patch_ref", "worktree_ref", "selection_ref"} or proof["from_source"] != current:
@@ -1638,6 +1647,8 @@ def _transition_chain(root, references, original, target, lane, lanes, repositor
         iteration = _validate_selection(root, proof["selection_ref"], lanes, before=current, after=after, repository=repository, worktree=worktree)
         if lane not in iteration.get("lanes_pending" if pending else "lanes_skipped", []):
             raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
+        if pending:
+            affected.update(_read_transition(root, proof["selection_ref"])["pending_scope_paths"][lane])
         _evidence_bytes(root, proof["patch_ref"], "aggregate_validation")
         if repository is not None:
             before_head, after_head = current["head"], after["head"]
@@ -1652,6 +1663,7 @@ def _transition_chain(root, references, original, target, lane, lanes, repositor
         current = after
     if current != target:
         raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
+    return affected
 
 
 def _validate_recheck(root, value, predecessor, target, lanes, repository, worktree):
@@ -1660,13 +1672,15 @@ def _validate_recheck(root, value, predecessor, target, lanes, repository, workt
     before = predecessor["source_snapshot"]
     if pending_refs:
         selection_source = _read_transition(root, recheck["selection_ref"])["from_source"]
-        _transition_chain(root, pending_refs, before, selection_source, value["lane"], lanes, repository, worktree, pending=True)
+        affected = _transition_chain(root, pending_refs, before, selection_source, value["lane"], lanes, repository, worktree, pending=True)
         before = selection_source
-        # The fresh judgment still inspects the cumulative original boundary.
+        # Historical baseline scope remains sealed; fresh scope covers the
+        # explicitly mapped affected union at the actual cumulative boundary.
         if (
-            value["source"]["base"] != predecessor["input"]["source"]["base"]
-            or not set(predecessor["input"]["requested"]["paths"]) <= set(value["requested"]["paths"])
-            or not set(predecessor["input"]["inspected"]["paths"]) <= set(value["inspected"]["paths"])
+            value["source"]["base"] != predecessor["source_snapshot"]["head"]
+            or not affected <= set(predecessor["input"]["inspected"]["paths"])
+            or not affected <= set(value["requested"]["paths"])
+            or not affected <= set(value["inspected"]["paths"])
         ):
             raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
     selection = _validate_selection(root, recheck["selection_ref"], lanes, before=before, after=target, repository=repository, worktree=worktree)

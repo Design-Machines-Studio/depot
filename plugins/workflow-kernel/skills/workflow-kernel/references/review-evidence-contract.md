@@ -115,13 +115,27 @@ unchanged-source carry. An intermediate selection can record completed reruns
 while other affected lanes remain pending; final coverage must settle every
 required lane with eligible inspection evidence.
 
+Selections optionally add `pending_scope_paths` (absent means `{}`), mapping
+exactly the pending lane IDs to nonempty, unique, safe relative path lists.
+Each path must belong to that selection's actual `changed_paths` and, when
+rechecking the lane, its original predecessor's inspected scope. The caller
+owns rule (a)/(b) semantics and supplies this explicit source-bound map; Kernel
+does not infer domains from extensions or parse Markdown. Different pending
+lanes may share affected paths. The existing selection seal/reference closure
+retains the map without rewriting historical selections.
+
 A fresh recheck may supply ordered `pending_transition_refs` from its immutable
 original predecessor snapshot to exactly its actual selection's `from_source`.
 Every intervening receiver-confirmed selection must place this lane in pending;
 the actual final selection must place it in rerun. The same strict transition,
 source-seal, binary-patch, hash and reference-closure checks apply. Retain the
-original predecessor, base, cumulative requested/inspected paths, full actual
-binary patch for those paths, receipts and literal outputs. Ordinary coverage
+original predecessor and its baseline scope in history. Fresh `source.base`
+must equal that predecessor's `source_snapshot.head`, not its older input base
+or the intermediate selection head. The union of this lane's mapped paths
+across pending transitions must appear in both fresh requested and inspected
+paths; unchanged baseline paths need no fresh inspection claim. Retain the
+exact cumulative binary patch for the fresh requested paths, receipts and
+literal outputs. Ordinary coverage
 `transition_refs` continue to require skipped/unaffected semantics. Do not
 rewrite valid sealed history, relabel old output, infer coverage from ancestry
 or success text, or invent historical applied events/timestamps. Recovery

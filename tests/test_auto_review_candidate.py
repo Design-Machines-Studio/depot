@@ -557,25 +557,32 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         self.assertEqual("complete", self.preserve(run, paths)["status"])
 
     def test_nine_lane_pending_two_pass_producer_and_closeout(self):
-        """Synthetic e605 -> 64 -> DD shape; no Governance consumer claim."""
+        """Synthetic 939 -> e605 baseline, then actual e605 -> 64 -> DD."""
         from workflow_kernel.review_closeout import _source_snapshot, _changed_paths, _git_patch, _seal_evidence
         code = ["patterns", "simplicity", "testcoverage", "gobuild"]
         carried = ["security", "architecture", "second"]
         docs = ["docsync", "voice"]
         lanes = code + carried + docs
         doc_paths = ["readiness.md", "receipt.md"]
-        for path in doc_paths:
+        voice_paths = doc_paths + ["guide.md"]
+        full_paths = ["main_test.go", *voice_paths, "source.txt", "one.txt", "two.txt", "three.txt"]
+        for path in full_paths:
+            (self.repo / path).write_text("older baseline\n")
+        subprocess.run(["git", "-C", str(self.repo), "add", *full_paths], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "commit", "--quiet", "-m", "synthetic older 939 baseline"], check=True)
+        older_base = source_identity(self.repo)[1]
+        for path in full_paths:
             (self.repo / path).write_text("original documentation\n")
-        subprocess.run(["git", "-C", str(self.repo), "add", *doc_paths], check=True)
+        subprocess.run(["git", "-C", str(self.repo), "add", *full_paths], check=True)
         subprocess.run(["git", "-C", str(self.repo), "commit", "--quiet", "-m", "synthetic documentation foundation"], check=True)
         run, paths = self.prepare(lanes)
         original_head = source_identity(self.repo)[1]
         originals = {}
         for lane in lanes:
             value = json.loads(paths["lanes"][lane].read_text())
-            value["source"]["base"] = original_head
-            scope = doc_paths if lane in docs else ["source.txt"]
-            value["requested"].update(designation="scoped", paths=scope)
+            value["source"]["base"] = older_base
+            scope = full_paths if lane == "docsync" else voice_paths if lane == "voice" else ["main_test.go"]
+            value["requested"].update(designation="full" if lane == "docsync" else "scoped", paths=scope)
             value["inspected"]["paths"] = scope
             self.write(paths["lanes"][lane], value)
             originals[lane] = self.lane(run, paths, lane)
@@ -598,7 +605,10 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
             iteration = {"run_id": run.run_id, "sequence": 0, "stage": "review_iteration", "status": "complete", "occurred_at": "2026-09-01T00:03:00Z", "authoritative_receipt": selection_ref, "selective_rerun": True, "promoted_to_full": False, "full_fanout_override": False, "lanes_rerun": rerun, "lanes_skipped": skipped, "lanes_pending": pending, "rerun_reasons": {lane: ["b_fix_file_trigger"] for lane in rerun}, "selection_fallback_reason": None}
             sources = {"from_source": {"snapshot_ref": _seal_evidence(run.root, "source", before)}, "to_source": {"snapshot_ref": _seal_evidence(run.root, "source", after)}}
             common = dict(schema_version=2, **sources, changed_paths=_changed_paths(before, after), patch_ref=patch_ref, worktree_ref=None)
-            self.write(run.root / selection_ref, dict(common, selected_full_set=lanes, applied=True, iteration=iteration, finding_owner_lanes=pending, file_trigger_lanes=rerun + pending))
+            selection = dict(common, selected_full_set=lanes, applied=True, iteration=iteration, finding_owner_lanes=pending, file_trigger_lanes=rerun + pending)
+            if pending:
+                selection["pending_scope_paths"] = {lane: doc_paths for lane in pending}
+            self.write(run.root / selection_ref, selection)
             ref = f"review/transition-{number}.json"
             self.write(run.root / ref, dict(common, selection_ref=selection_ref))
             return after, selection_ref, ref
@@ -606,7 +616,10 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         def recheck(lane, number, selection_ref, pending_refs):
             value = json.loads(paths["lanes"][lane].read_text())
             value.update(pass_id=f"recheck-{number}", attempt=2)
-            value["source"].update(head=source_identity(self.repo)[1], request_ref=paths["request"].relative_to(run.root).as_posix())
+            value["source"].update(head=source_identity(self.repo)[1], base=original_head, request_ref=paths["request"].relative_to(run.root).as_posix())
+            scope = doc_paths if lane in docs else ["main_test.go"]
+            value["requested"].update(designation="scoped", paths=scope)
+            value["inspected"]["paths"] = scope
             output_ref = f"raw/{lane}-{number}.md"
             (run.root / output_ref).write_text(f"Synthetic fresh {lane} judgment at pass {number}.\n")
             value["literal"]["output_ref"] = output_ref
@@ -622,7 +635,7 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
             self.assertEqual(0, result.returncode, result.stderr)
             return json.loads(result.stdout)["record_ref"], path, value
 
-        middle, first_selection, first_transition = transition(1, before, code, carried, docs, ["source.txt", *doc_paths])
+        middle, first_selection, first_transition = transition(1, before, code, carried, docs, ["main_test.go", *doc_paths])
         current = {lane: recheck(lane, 1, first_selection, [])[0] for lane in code}
         # Pending documentation cannot be carried as skipped, even with CLEAN prose.
         partial = [{"lane": lane, "record_ref": current.get(lane, originals[lane]), "history_refs": [originals[lane]] if lane in code else [], "transition_refs": [] if lane in code else [first_transition]} for lane in lanes]
@@ -640,17 +653,53 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     _validate_selection(run.root, first_selection, lanes, before=before, after=middle, repository=self.repo)
         selection_path.write_bytes(saved_selection)
-        final, final_selection, final_transition = transition(2, middle, docs, code + carried, [], doc_paths)
+        # Exact pending map, safe unique paths and actual source changes are
+        # mechanical requirements; cross-lane path overlap is intentional.
+        valid_map = {lane: doc_paths for lane in docs}
+        for mapping in (None, {}, {"docsync": doc_paths}, dict(valid_map, patterns=doc_paths),
+                        dict(valid_map, foreign=doc_paths), {"docsync": [], "voice": doc_paths},
+                        {"docsync": [*doc_paths, "receipt.md"], "voice": doc_paths},
+                        {"docsync": ["../receipt.md"], "voice": doc_paths},
+                        {"docsync": ["/receipt.md"], "voice": doc_paths},
+                        {"docsync": ["guide.md"], "voice": doc_paths}):
+            with self.subTest(mapping=mapping):
+                bad = json.loads(saved_selection)
+                if mapping is None:
+                    bad.pop("pending_scope_paths")
+                else:
+                    bad["pending_scope_paths"] = mapping
+                self.write(selection_path, bad)
+                with self.assertRaises(ValueError):
+                    _validate_selection(run.root, first_selection, lanes, before=before, after=middle, repository=self.repo)
+        selection_path.write_bytes(saved_selection)
+        final, final_selection, final_transition = transition(2, middle, docs, code + carried, [], ["receipt.md"])
+        self.assertEqual(["receipt.md"], _changed_paths(middle, final))
         # A valid skipped/unaffected selection is still invalid in a pending chain.
         from workflow_kernel.review_closeout import _transition_chain
         skipped_doc = json.loads(saved_selection)
         skipped_doc["iteration"].update(lanes_pending=[], lanes_skipped=carried + docs)
+        skipped_doc.pop("pending_scope_paths")
         skipped_doc.update(finding_owner_lanes=[], file_trigger_lanes=code)
         self.write(selection_path, skipped_doc)
         with self.assertRaises(ValueError):
             _transition_chain(run.root, [first_transition], before, middle, docs[0], lanes, self.repo, None, pending=True)
         selection_path.write_bytes(saved_selection)
         current_docs = {}
+        # A longer pending chain accumulates each actual selection's affected
+        # paths, rather than taking only the last transition's scope.
+        first_map = json.loads(saved_selection)
+        first_map["pending_scope_paths"] = {lane: ["readiness.md"] for lane in docs}
+        self.write(selection_path, first_map)
+        final_selection_path = run.root / final_selection
+        saved_final_selection = final_selection_path.read_bytes()
+        next_pending = json.loads(saved_final_selection)
+        next_pending["iteration"].update(lanes_rerun=[], lanes_skipped=code + carried, lanes_pending=docs, rerun_reasons={})
+        next_pending.update(pending_scope_paths={lane: ["receipt.md"] for lane in docs}, file_trigger_lanes=docs)
+        self.write(final_selection_path, next_pending)
+        for lane in docs:
+            self.assertEqual(set(doc_paths), _transition_chain(run.root, [first_transition, final_transition], before, final, lane, lanes, self.repo, None, pending=True))
+        selection_path.write_bytes(saved_selection)
+        final_selection_path.write_bytes(saved_final_selection)
         for lane in docs:
             record, input_path, value = recheck(lane, 2, final_selection, [first_transition])
             current_docs[lane] = record
@@ -669,20 +718,40 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
                 rejected = self.cli(run, paths, self.write(input_path, bad))
                 self.assertEqual(2 if len(refs) != len(set(refs)) else 3, rejected.returncode, rejected.stderr)
                 self.assertEqual(receipt_bytes, paths["receipts"].read_bytes())
-            for mutation in ("wrong_selection", "wrong_base", "reduced_scope"):
+            for mutation in ("wrong_selection", "older_base", "middle_base", "relabelled_source",
+                             "requested_readiness", "requested_receipt", "inspected_readiness", "inspected_receipt",
+                             "outside_baseline", "wrong_patch"):
                 with self.subTest(mutation=mutation):
                     bad = json.loads(json.dumps(value))
                     bad.update(pass_id="invalid-pending-" + mutation, attempt=3)
                     bad["recheck"]["pending_transition_refs"] = [first_transition]
                     if mutation == "wrong_selection":
                         bad["recheck"]["selection_ref"] = first_selection
-                    elif mutation == "wrong_base":
-                        bad["source"]["base"] = middle["head"]
-                    else:
-                        bad["requested"]["paths"] = bad["inspected"]["paths"] = doc_paths[:1]
+                    elif mutation in {"older_base", "middle_base"}:
+                        bad["source"]["base"] = older_base if mutation == "older_base" else middle["head"]
+                        (run.root / bad["requested"]["patch_ref"]).write_bytes(_git_patch(self.repo, bad["source"]["base"], final["head"], doc_paths))
+                    elif mutation == "relabelled_source":
+                        bad["source"]["head"] = middle["head"]
+                    elif mutation.startswith(("requested_", "inspected_")):
+                        field, omitted = mutation.split("_")
+                        bad[field]["paths"] = [path for path in doc_paths if path != omitted + ".md"]
+                        (run.root / bad["requested"]["patch_ref"]).write_bytes(_git_patch(self.repo, original_head, final["head"], bad["requested"]["paths"]))
+                        from workflow_kernel.review_closeout import _validate_recheck, _read_source_record
+                        with self.assertRaises(ValueError):
+                            _validate_recheck(run.root, bad, _read_source_record(run.root, originals[lane], "lane"), final, lanes, self.repo, None)
+                    elif mutation == "outside_baseline":
+                        if lane != "voice":
+                            continue
+                        mapped = json.loads(saved_selection)
+                        mapped["pending_scope_paths"][lane] = ["main_test.go"]
+                        self.write(selection_path, mapped)
+                    elif mutation == "wrong_patch":
+                        (run.root / bad["requested"]["patch_ref"]).write_bytes(_git_patch(self.repo, middle["head"], final["head"], doc_paths))
                     rejected = self.cli(run, paths, self.write(input_path, bad))
-                    self.assertEqual(3, rejected.returncode, rejected.stderr)
+                    self.assertEqual(2 if mutation.startswith("inspected_") else 3, rejected.returncode, rejected.stderr)
                     self.assertEqual(receipt_bytes, paths["receipts"].read_bytes())
+                    selection_path.write_bytes(saved_selection)
+                    (run.root / bad["requested"]["patch_ref"]).write_bytes(_git_patch(self.repo, original_head, final["head"], doc_paths))
         final_rows = [{"lane": lane, "record_ref": current_docs.get(lane, current.get(lane, originals[lane])), "history_refs": [originals[lane]] if lane in code + docs else [], "transition_refs": [] if lane in docs else [final_transition] if lane in code else [first_transition, final_transition]} for lane in lanes]
         # Neither a partial roster nor an unresolved original judgment can settle.
         self.assertEqual(2, self.coverage(run, paths, {}, pass_id="final", selection=final_rows[:-1]).returncode)
@@ -696,6 +765,12 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         rejected = self.coverage(run, paths, {}, pass_id="final", selection=final_rows)
         self.assertEqual("digest_mismatch", json.loads(rejected.stderr)["error"]["details"]["reason"])
         transition_path.write_bytes(saved_transition)
+        altered_map = json.loads(saved_selection)
+        altered_map["pending_scope_paths"]["voice"] = ["receipt.md"]
+        self.write(selection_path, altered_map)
+        rejected = self.coverage(run, paths, {}, pass_id="final", selection=final_rows)
+        self.assertEqual("digest_mismatch", json.loads(rejected.stderr)["error"]["details"]["reason"])
+        selection_path.write_bytes(saved_selection)
         result = self.coverage(run, paths, {}, pass_id="final", selection=final_rows)
         self.assertEqual(0, result.returncode, result.stderr)
         preserved = self.preserve(run, paths)
@@ -704,6 +779,11 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         for ref, data in original_bytes.items():
             self.assertEqual(data, (retained / ref).read_bytes())
         self.assertEqual(saved_transition, (retained / first_transition).read_bytes())
+        self.assertEqual(saved_selection, (retained / first_selection).read_bytes())
+        for lane in docs:
+            original = json.loads((retained / originals[lane]).read_text())
+            self.assertEqual(older_base, original["input"]["source"]["base"])
+            self.assertEqual(full_paths if lane == "docsync" else voice_paths, original["input"]["inspected"]["paths"])
         for ref in current_docs.values():
             record = json.loads((retained / ref).read_text())
             self.assertEqual(original_head, record["input"]["source"]["base"])
