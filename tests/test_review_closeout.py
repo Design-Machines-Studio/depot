@@ -473,6 +473,43 @@ class ReviewCloseoutTests(unittest.TestCase):
             assemble_review_evidence(**dict(arguments, input_path=run.root / "review/linked-input.json"))
         self.assertEqual({"stage": "lane_input", "reason": "unsafe_path", "path": "review/evidence.json"}, caught.exception.detail())
 
+    def test_preservation_diagnostics_use_actual_safe_inputs_and_keep_destination_atomic(self):
+        run, paths = self.make_run(run_id="preserve-input-paths")
+        first = self.preserve(run, paths)
+        destination = Path(first["evidence_path"])
+        original = {p.relative_to(destination): p.read_bytes()
+                    for p in destination.rglob("*") if p.is_file()}
+        for key, path, reason, role in (
+            ("request", run.root / "review/absent-final-request.json", "missing_evidence", "review/absent-final-request.json"),
+            ("lane_receipts", run.root / "review/absent-pass-lanes.json", "missing_evidence", "review/absent-pass-lanes.json"),
+            ("receipts", run.root / "review/absent-final-receipts.json", "missing_evidence", "review/absent-final-receipts.json"),
+            ("raw_lane_outputs", run.root / "review/absent-pass-outputs.json", "missing_evidence", "review/absent-pass-outputs.json"),
+            ("raw_findings", run.root / "review/absent-pass-findings.json", "missing_evidence", "review/absent-pass-findings.json"),
+            ("decisions", run.root / "review/absent-pass-decisions.json", "missing_evidence", "review/absent-pass-decisions.json"),
+            ("report", run.root / "review/absent-final-report.md", "missing_evidence", "review/absent-final-report.md"),
+            ("report", self.repo / "review/absent-final-report.md", "missing_evidence", "review/absent-final-report.md"),
+            ("request", self.root / "secret-foreign-request.json", "unsafe_path", "review/request.json"),
+            ("request", run.root / "review/ghp_abcdefgh12345678.json", "missing_evidence", "review/evidence.json"),
+        ):
+            with self.subTest(key=key, role=role):
+                result = self.preserve(run, dict(paths, **{key: path}))
+                self.assertEqual("incomplete", result["status"])
+                self.assertIn({"stage": "preservation_input", "reason": reason, "path": role}, result["diagnostics"])
+                self.assertNotIn(str(self.root), json.dumps(result["diagnostics"]))
+                self.assertNotIn("secret-foreign", json.dumps(result["diagnostics"]))
+                self.assertEqual(original, {p.relative_to(destination): p.read_bytes()
+                                           for p in destination.rglob("*") if p.is_file()})
+        # Pass-specific source names still bind canonical retained destinations.
+        copied = dict(paths)
+        for key in ("request", "lane_receipts", "report"):
+            copied[key] = run.root / ("review/final-" + paths[key].name)
+            shutil.copyfile(paths[key], copied[key])
+        result = self.preserve(run, copied)
+        self.assertEqual("complete", result["status"])
+        self.assertEqual(first["evidence_path"], result["evidence_path"])
+        self.assertEqual(paths["request"].read_bytes(), (destination / "review/request.json").read_bytes())
+        self.assertEqual(paths["lane_receipts"].read_bytes(), (destination / "review/review-lane-receipts.json").read_bytes())
+
     def test_missing_router_directory_names_its_relative_path(self):
         run, paths = self.make_run("dm-review", "absent-router")
         shutil.rmtree(paths["router"])

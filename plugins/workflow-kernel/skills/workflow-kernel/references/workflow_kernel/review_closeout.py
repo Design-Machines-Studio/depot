@@ -966,9 +966,10 @@ def _preserve_review_evidence_locked(
                 repository=repository,
             )
         except FileNotFoundError:
-            diagnostics.append({"stage": "preservation_input", "reason": "missing_evidence", "path": name})
+            boundary = repository if name == "report.md" and not Path(path).absolute().is_relative_to(run.root) else run.root
+            diagnostics.append(EvidenceAssemblyError("preservation_input", "missing_evidence", _relative_role(path, boundary)).detail())
         except (OSError, ValueError):
-            diagnostics.append({"stage": "preservation_input", "reason": "unsafe_path", "path": name})
+            diagnostics.append(EvidenceAssemblyError("preservation_input", "unsafe_path", name).detail())
 
     evidence_source_root = sources.get("review/request.json", run.root / "review/request.json").parent.parent
     parsed: dict[str, object] = {}
@@ -989,7 +990,7 @@ def _preserve_review_evidence_locked(
                 raise
             except (UnicodeError, json.JSONDecodeError, RecursionError, ValueError):
                 parsed[name] = None
-                diagnostics.append({"stage": "preservation_input", "reason": "invalid_evidence", "path": name})
+                diagnostics.append(EvidenceAssemblyError("preservation_input", "invalid_evidence", _relative_role(path, run.root)).detail())
 
     missing: list[str] = [item["path"] for item in diagnostics]
     for name in (
@@ -1984,6 +1985,9 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
                 previous = (row["authoritative_receipt"], candidate)
         now = datetime.now(timezone.utc).isoformat()
         if value["operation"] == "lane":
+            synthetic = value["provenance"]["kind"] == "synthetic_test"
+            if synthetic != test_harness:
+                raise EvidenceAssemblyError("lane_validation", "incomplete_inspection")
             bindings, missing = _lane_bindings(root, value, previous[1] if previous is not None else None)
             if previous is not None:
                 if bindings != previous[1]["bindings"] or missing != previous[1]["missing"]:
@@ -1992,8 +1996,6 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
                     _bound_bytes(root, previous[1], original)
                 return {"status": "complete" if previous[1]["eligible"] else "incomplete", "record_ref": previous[0], "reused": True, "missing": missing}
             live = value["provenance"]["kind"] != "recovery"
-            if value["provenance"]["kind"] == "synthetic_test" and not test_harness:
-                raise EvidenceAssemblyError("lane_validation", "incomplete_inspection")
             repository_identity, head = source_identity(repository)
             if repository_identity != request.source_repository or live and head != request.source_head:
                 raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
@@ -2003,7 +2005,7 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
                 if predecessor["input"]["lane"] != value["lane"] or predecessor["input"]["source"]["repository"] != request.source_repository:
                     raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
                 _validate_recheck(root, value, predecessor, snapshot, request.required_lanes, repository, lambda source: _working_patch(repository, source["head"]))
-            if value["provenance"]["kind"] == "live" and value["literal"]["dispatch_receipt_ref"] in bindings:
+            if not synthetic and value["literal"]["dispatch_receipt_ref"] in bindings:
                 dispatch_digest = bindings[value["literal"]["dispatch_receipt_ref"]]["digest"]
                 for row in receipts:
                     if row.get("stage") != "review_lane_evidence":
@@ -2064,7 +2066,7 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
                     "diagnostics": [] if eligible else (
                         [EvidenceAssemblyError("lane_input", "missing_evidence", ref).detail() for ref in sorted(set(missing) & required)]
                         or [{"stage": "lane_validation", "reason": "incomplete_inspection", "path": "review/evidence.json"}]), "proof_level": "synthetic" if test_harness else value["provenance"]["kind"]}
-        if not test_harness and any(_record(root, row["record_ref"], receipts)["input"]["provenance"]["kind"] == "synthetic_test" for row in value["selection"]):
+        if not test_harness and any(_record(root, ref, receipts)["input"]["provenance"]["kind"] == "synthetic_test" for row in value["selection"] for ref in (*row["history_refs"], row["record_ref"])):
             raise EvidenceAssemblyError("aggregate_validation", "incomplete_inspection")
         repository_identity, head = source_identity(repository)
         if (repository_identity, head) != (request.source_repository, request.source_head):
