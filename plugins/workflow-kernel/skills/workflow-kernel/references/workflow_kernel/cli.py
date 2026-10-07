@@ -3932,7 +3932,7 @@ def command_owned_run_create(args):
 
 
 def command_owned_run_finish(args):
-    from .owned_run import ExactOwnedRun
+    from .owned_run import CorruptOwnedRunMetadataError, ExactOwnedRun
     from .review_closeout import RetainedReviewValidationError
 
     root = Path(os.path.abspath(args.run_root))
@@ -3944,6 +3944,10 @@ def command_owned_run_finish(args):
             return 0
         try:
             run = ExactOwnedRun.open(root)
+        except FileNotFoundError:
+            raise RetainedReviewValidationError("missing_evidence", "owner-metadata") from None
+        except CorruptOwnedRunMetadataError:
+            raise RetainedReviewValidationError("corrupt_evidence", "owner-metadata") from None
         except (OSError, TypeError, ValueError):
             raise RetainedReviewValidationError("unsafe_path", "owner-metadata") from None
         report = run.finish(

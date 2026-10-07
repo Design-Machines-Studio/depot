@@ -270,6 +270,117 @@ class HistoricalReviewCloseoutTests(unittest.TestCase):
         self.assertTrue(error["details"]["next_action"])
         self.assertNotIn(str(self.root), result.stderr)
 
+    def cli_finish(self, root, *extra):
+        output, errors = [], []
+        def emit(value, stream=None):
+            (errors if stream is sys.stderr else output).append(value)
+        with mock.patch("workflow_kernel.cli._emit", side_effect=emit):
+            status = main(["owned-run-finish", "--run-root", str(root), "--outcome", "succeeded", *extra])
+        return status, output, "" if not errors else json.dumps(errors[0])
+
+    def test_missing_retained_lock_is_never_recreated(self):
+        run, scope, inventory = self.historical()
+        lock = run.root / ".depot-owned-run.lock"
+        lock.unlink()
+        original = self.bytes_of(run.root)
+        with self.pinned_fixture(run, inventory):
+            for finish in (lambda: run.finish("succeeded", historical_review_digests=inventory),
+                           lambda: run.finish("succeeded")):
+                error = self.assert_reason("missing_evidence", finish)
+                self.assertEqual("owner-metadata", error.role)
+                self.assertFalse(os.path.lexists(lock))
+            status, _, error = self.cli_finish(run.root, "--historical-review-digests", str(inventory))
+        self.assertEqual(3, status)
+        detail = json.loads(error)["error"]["details"]
+        self.assertEqual(("missing_evidence", "owner-metadata"), (detail["reason"], detail["artifact_role"]))
+        self.assertTrue(detail["next_action"])
+        self.assertNotIn(str(self.root), error)
+        self.assertFalse(os.path.lexists(lock))
+        self.assertEqual(original, self.bytes_of(run.root))
+
+    def test_unsafe_retained_lock_reports_closed_reason(self):
+        for mutation in ("symlink", "hardlink"):
+            with self.subTest(mutation=mutation):
+                run, scope, inventory = self.historical()
+                lock = run.root / ".depot-owned-run.lock"
+                external = self.root / ("external-" + mutation + ".lock")
+                external.write_bytes(b"")
+                lock.unlink()
+                lock.symlink_to(external) if mutation == "symlink" else os.link(external, lock)
+                original = self.bytes_of(run.root)
+                with self.pinned_fixture(run, inventory):
+                    error = self.assert_reason("unsafe_path",
+                        lambda: run.finish("succeeded", historical_review_digests=inventory))
+                    self.assertEqual("owner-metadata", error.role)
+                    status, _, error = self.cli_finish(run.root, "--historical-review-digests", str(inventory))
+                self.assertEqual(3, status)
+                detail = json.loads(error)["error"]["details"]
+                self.assertEqual(("unsafe_path", "owner-metadata"), (detail["reason"], detail["artifact_role"]))
+                self.assertTrue(detail["next_action"])
+                self.assertNotIn(str(self.root), error)
+                self.assertEqual(original, self.bytes_of(run.root))
+                self.assertEqual(b"", external.read_bytes())
+
+    def test_retained_lock_contention_remains_a_state_conflict(self):
+        from workflow_kernel._files import LockContentionError, LockHandle, bind_durable_path
+        run, scope, inventory = self.historical()
+        held = LockHandle.acquire_bound(bind_durable_path(run.root / ".depot-owned-run.lock"), create=False)
+        try:
+            with self.pinned_fixture(run, inventory), self.assertRaises(LockContentionError):
+                run.finish("succeeded", historical_review_digests=inventory)
+        finally:
+            held.release()
+        with self.pinned_fixture(run, inventory):
+            self.assertEqual("retained", run.finish("succeeded", historical_review_digests=inventory).status)
+
+    def test_cli_owner_metadata_missing_corrupt_and_unsafe_are_distinct(self):
+        cases = (("missing", "missing_evidence", 3), ("json", "corrupt_evidence", 2),
+                 ("schema", "corrupt_evidence", 2), ("unhashable", "corrupt_evidence", 2),
+                 ("symlink", "unsafe_path", 3), ("hardlink", "unsafe_path", 3))
+        for mutation, reason, expected_exit in cases:
+            with self.subTest(mutation=mutation):
+                run, scope, inventory = self.historical()
+                metadata = run.root / ".depot-owned-run.json"
+                value = json.loads(metadata.read_text())
+                if mutation == "missing":
+                    metadata.unlink()
+                elif mutation == "json":
+                    metadata.write_text("{")
+                elif mutation == "schema":
+                    value["version"] = 99
+                    metadata.write_text(json.dumps(value))
+                elif mutation == "unhashable":
+                    value["resources"][0]["kind"] = ["diagnostic"]
+                    metadata.write_text(json.dumps(value))
+                else:
+                    external = self.root / ("metadata-" + mutation + ".json")
+                    external.write_bytes(metadata.read_bytes())
+                    metadata.unlink()
+                    metadata.symlink_to(external) if mutation == "symlink" else os.link(external, metadata)
+                original = self.bytes_of(run.root)
+                status, output, error = self.cli_finish(run.root, "--historical-review-digests", str(inventory))
+                self.assertEqual(expected_exit, status)
+                self.assertEqual([], output)
+                detail = json.loads(error)["error"]["details"]
+                self.assertEqual((reason, "owner-metadata"), (detail["reason"], detail["artifact_role"]))
+                self.assertTrue(detail["next_action"])
+                self.assertNotIn(str(self.root), error)
+                self.assertEqual(original, self.bytes_of(run.root))
+                self.assertTrue(os.path.lexists(run.root / ".depot-owned-run.lock"))
+
+    def test_ordinary_lock_creation_defaults_are_unchanged(self):
+        from workflow_kernel._files import LockHandle, bind_durable_path
+        path = self.root / "ordinary.lock"
+        with self.assertRaises(FileNotFoundError):
+            LockHandle.acquire_bound(bind_durable_path(path), create=False)
+        self.assertFalse(os.path.lexists(path))
+        LockHandle.acquire_bound(bind_durable_path(path)).release()
+        self.assertTrue(path.is_file())
+        run = ExactOwnedRun.start("ordinary", "lock-default", base=self.root / "runs")
+        (run.root / ".depot-owned-run.lock").unlink()
+        self.assertEqual("removed", run.finish("succeeded").status)
+        self.assertFalse(run.root.exists())
+
     def test_current_source_bound_run_and_boolean_wrapper_bind_run_id(self):
         run, paths = self.make_run()
         result = self.preserve(run, paths)

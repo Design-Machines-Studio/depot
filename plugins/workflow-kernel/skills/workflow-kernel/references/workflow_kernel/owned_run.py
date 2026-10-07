@@ -18,7 +18,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from ._files import LockHandle, PinnedDirectory, bind_durable_path
+from ._files import LockContentionError, LockHandle, PinnedDirectory, bind_durable_path
+
+
+class CorruptOwnedRunMetadataError(ValueError):
+    """Owner metadata bytes failed parsing or schema validation."""
 
 
 _METADATA = ".depot-owned-run.json"
@@ -127,7 +131,7 @@ def _load_metadata(root: Path) -> dict[str, object]:
                     break
                 total += len(chunk)
                 if total > _MAX_METADATA_BYTES:
-                    raise ValueError("owned run metadata too large")
+                    raise CorruptOwnedRunMetadataError("owned run metadata too large")
                 chunks.append(chunk)
             directory.require_identity(descriptor, _METADATA)
         finally:
@@ -135,7 +139,19 @@ def _load_metadata(root: Path) -> dict[str, object]:
     try:
         value = json.loads(b"".join(chunks).decode("utf-8"))
     except (UnicodeError, json.JSONDecodeError, RecursionError):
-        raise ValueError("invalid owned run metadata") from None
+        raise CorruptOwnedRunMetadataError("invalid owned run metadata") from None
+    try:
+        _validate_metadata_schema(value, root)
+    except (TypeError, ValueError):
+        raise CorruptOwnedRunMetadataError("invalid owned run metadata") from None
+    if _identity(root) != tuple(value["root_identity"]):
+        raise ValueError("owned run root identity changed")
+    if _identity(root.parent) != tuple(value["base_identity"]):
+        raise ValueError("owned run base identity changed")
+    return value
+
+
+def _validate_metadata_schema(value, root: Path) -> None:
     required = {
         "version", "workflow", "run_id", "root", "root_identity",
         "base_identity", "resources",
@@ -167,11 +183,6 @@ def _load_metadata(root: Path) -> dict[str, object]:
         if relative in seen:
             raise ValueError("duplicate owned run resource")
         seen.add(relative)
-    if _identity(root) != tuple(value["root_identity"]):
-        raise ValueError("owned run root identity changed")
-    if _identity(root.parent) != tuple(value["base_identity"]):
-        raise ValueError("owned run base identity changed")
-    return value
 
 
 def _remove_entry(path: Path) -> None:
@@ -289,8 +300,21 @@ class ExactOwnedRun:
         return self._metadata["run_id"]
 
     @contextmanager
-    def _lock(self):
-        handle = LockHandle.acquire_bound(bind_durable_path(self.root / _LOCK))
+    def _lock(self, *, create: bool = True, review_closeout: bool = False):
+        try:
+            handle = LockHandle.acquire_bound(bind_durable_path(self.root / _LOCK), create=create)
+        except LockContentionError:
+            raise
+        except FileNotFoundError:
+            if not review_closeout:
+                raise
+            from .review_closeout import RetainedReviewValidationError
+            raise RetainedReviewValidationError("missing_evidence", "owner-metadata") from None
+        except OSError:
+            if not review_closeout:
+                raise
+            from .review_closeout import RetainedReviewValidationError
+            raise RetainedReviewValidationError("unsafe_path", "owner-metadata") from None
         try:
             yield handle
         finally:
@@ -475,10 +499,14 @@ class ExactOwnedRun:
     ) -> FinishReport:
         if outcome not in _OUTCOMES:
             raise ValueError("invalid owned run outcome")
-        with self._lock():
+        review = self.workflow in {"dm-review", "dm-review-loop", "pipeline", "pipeline-run"}
+        # Retained or historical review closeout must never recreate its lock.
+        preserved = review and (
+            historical_review_digests is not None or os.path.lexists(self.root / _CLEANUP)
+        )
+        with self._lock(create=not preserved, review_closeout=review):
             self._metadata = _load_metadata(self.root)
             retained = os.path.lexists(self.root / _CLEANUP)
-            review = self.workflow in {"dm-review", "dm-review-loop", "pipeline", "pipeline-run"}
             from .review_closeout import (
                 validate_preserved_review_evidence, RetainedReviewValidationError,
             )
