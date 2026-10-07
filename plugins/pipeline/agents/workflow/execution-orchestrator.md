@@ -1294,10 +1294,12 @@ handoff:` line internally for the caller and do not display a model report yet.
 
 Omit `Attempt result` when no provider attempt failed. Keep the visible summary roughly 250 words unless there are P1/P2/P3 findings or a blocker.
 
-Successful-run specimen: Done. Tests and review passed. Review PR #123.
+Opening fragments only; complete the template above.
+
+Successful-run specimen: Done. Review PR #123.
 
 Blocked-run specimen: Required Safari evidence for `member-form-mobile` could not run.
-Run that case on a Safari-capable host; resume from the linked receipt.
+Run on a Safari-capable host; resume from the receipt.
 
 Mark `FINAL 6. Present summary report` complete.
 
