@@ -36,6 +36,8 @@ Lean skips Phase 4 (chunking, manifest, prompts) and iterative review loops, kee
 ## Human-Facing Output
 
 Keep phase gates, blocked-run messages, and delivery summaries compact; durable artifacts carry process detail.
+Use plain English and useful visuals. Supply complete continuation prompts.
+Continue authorized work without asking again; preserve required evidence.
 
 - At a human gate, state the ready package, the decision needed, one recommended next action, and the artifact path. Do not paste the full assessment, research, plan, requirements map, prompt inventory, or receipts.
 - Terminal summaries start with exactly `Done`, `Needs fixes`, or `Blocked`, then what changed or stopped, verification, branch or PR, one recommended next action, and paths to receipt, requirements crosscheck, postmortem, and detailed review when present.

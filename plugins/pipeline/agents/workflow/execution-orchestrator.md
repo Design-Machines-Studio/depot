@@ -1252,7 +1252,14 @@ If `campaignSlug` is present, write `.campaign/state.json` per `plugins/pipeline
 
 ## Step 6: Summary Report
 
-Before presenting the summary, use the terminal comparison and metrics result captured in Step 5b before any semantic-match cleanup. Report the semantic parity category and reasons without changing the authoritative merge, review, role, browser, or cleanup result; if unavailable, report the attempted resolver source and safe reason. The stable comparison vocabulary is `match`, `explained_host_difference`, `missing_authoritative_evidence`, `unexpected_authoritative_transition`, `kernel_prediction_gap`, and `unsafe_to_promote`; diagnostics such as `semantic_receipts_required` and `run_spec_receipt_context_mismatch` belong only in `differences`.
+Use plain English and useful visuals. Explain reason codes in human terms;
+keep exact codes in evidence. Supply complete continuation prompts when needed.
+
+Report Step 5b's terminal comparison and metrics without changing authoritative
+outcomes. If unavailable, name the resolver source and reason. Categories:
+`match`, `explained_host_difference`, `missing_authoritative_evidence`,
+`unexpected_authoritative_transition`, `kernel_prediction_gap`, `unsafe_to_promote`.
+Keep `semantic_receipts_required` and `run_spec_receipt_context_mismatch` in `differences`.
 
 Present this compact report. Populate every evidence path that exists; omit a nonexistent optional artifact rather than inventing one:
 
@@ -1287,28 +1294,12 @@ handoff:` line internally for the caller and do not display a model report yet.
 
 Omit `Attempt result` when no provider attempt failed. Keep the visible summary roughly 250 words unless there are P1/P2/P3 findings or a blocker.
 
-Successful-run specimen:
+Opening fragments only; complete the template above.
 
-```markdown
-## Done
-The membership validation change is committed and ready for review.
-**Verification:** Unit tests and the approved final review passed; no P1/P2/P3 findings remain.
-**Branch or PR:** `enhance/member-validation` -- PR #123
-**Recommended next action:** Review and merge PR #123.
-**Evidence:** receipt, requirements crosscheck, postmortem, and detailed review under `plans/member-validation/`.
-```
+Successful-run specimen: Done. Review PR #123.
 
-Blocked-run specimen:
-
-```markdown
-## Blocked
-Required Safari evidence for `member-form-mobile` could not run because no Safari-capable host is available.
-**Verification:** Code tests passed; the final review remains blocked on that browser case.
-**Branch or PR:** `enhance/member-form`
-**Recommended next action:** Run `member-form-mobile` on a Safari-capable host and attach the result.
-**Resumable work:** `enhance/member-form`; receipts and the pending case are preserved under `plans/member-form/`.
-**Evidence:** `plans/member-form/receipt.md` and `plans/member-form/final-requirements-crosscheck.md`.
-```
+Blocked-run specimen: Required Safari evidence for `member-form-mobile` could not run.
+Run on a Safari-capable host; resume from the receipt.
 
 Mark `FINAL 6. Present summary report` complete.
 

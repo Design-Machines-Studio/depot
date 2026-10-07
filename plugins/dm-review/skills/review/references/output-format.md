@@ -1,5 +1,9 @@
 # Review Output Format
 
+Use plain English and useful visuals. Explain blockers in human terms. Preserve
+verdicts, coverage gaps and evidence validation. End with one action and a complete
+continuation prompt if needed. Continue authorized repairs without asking again.
+
 The canonical unified report and compact human handoff produced by the
 review-consolidator after all agents complete. The handoff is a projection of
 the complete report, never a replacement for it.
