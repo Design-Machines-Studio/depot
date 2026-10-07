@@ -27,7 +27,7 @@ from .dm_review_adapter import (
 )
 from .owned_run import (
     ExactOwnedRun, _MAX_DIAGNOSTIC_BYTES, _MAX_DIAGNOSTIC_FILES,
-    _bounded_diagnostic,
+    _bounded_diagnostic, BoundedDiagnosticLimitError,
 )
 from .schema import (
     ErrorMessage,
@@ -153,7 +153,7 @@ def _regular_file(path: Path) -> bytes:
                 break
             total += len(chunk)
             if total > _MAX_DIAGNOSTIC_BYTES:
-                raise ValueError("review evidence exceeds bounded retention limits")
+                raise BoundedDiagnosticLimitError("review evidence exceeds bounded retention limits")
             chunks.append(chunk)
         final = os.fstat(descriptor)
         if (final.st_dev, final.st_ino) != (value.st_dev, value.st_ino):
@@ -871,7 +871,7 @@ def _copy_router_tree(source: Path, target: Path) -> tuple[int, int]:
             files += 1
             size += copied
             if files > _MAX_DIAGNOSTIC_FILES or size > _MAX_DIAGNOSTIC_BYTES:
-                raise ValueError("private router receipts exceed bounded retention limits")
+                raise BoundedDiagnosticLimitError("private router receipts exceed bounded retention limits")
     if not (target / "terminal-receipt-index.json").is_file():
         raise ValueError("private router receipt index is missing")
     _validate_router_receipts(target)
@@ -985,6 +985,8 @@ def _preserve_review_evidence_locked(
                 continue
             try:
                 parsed[name] = _load_json(path)
+            except BoundedDiagnosticLimitError:
+                raise
             except (UnicodeError, json.JSONDecodeError, RecursionError, ValueError):
                 parsed[name] = None
                 diagnostics.append({"stage": "preservation_input", "reason": "invalid_evidence", "path": name})
@@ -1158,13 +1160,13 @@ def _preserve_review_evidence_locked(
         if router_source is not None:
             try:
                 _copy_router_tree(router_source, staging / router_source.relative_to(run.root))
+            except BoundedDiagnosticLimitError:
+                raise
             except FileNotFoundError as exc:
                 raise EvidenceAssemblyError("preservation_input", "missing_evidence", _relative_role(exc.filename, run.root)) from None
             except (OSError, ValueError):
                 raise EvidenceAssemblyError("preservation_input", "invalid_evidence") from None
-        copied_files, copied_bytes = _bounded_diagnostic(staging)
-        if copied_files > _MAX_DIAGNOSTIC_FILES or copied_bytes > _MAX_DIAGNOSTIC_BYTES:
-            raise ValueError("review evidence exceeds bounded retention limits")
+        copied_files, copied_bytes = _check_evidence_bound(staging, "preservation_input")
         if destination.exists():
             _merge_staged_evidence(staging, destination)
             shutil.rmtree(staging)
@@ -1273,7 +1275,7 @@ class EvidenceAssemblyError(ValueError):
         "source_scope_mismatch": (3, "unsafe_payload"),
         "unsafe_path": (3, "unsafe_payload"),
         "append_conflict": (6, "state_conflict"),
-        "retention_limit": (3, "unsafe_payload"),
+        "retention_limit": (3, "evidence_limit_exceeded"),
     }
 
     def __init__(self, stage, reason, role="review/evidence.json"):
@@ -1313,6 +1315,8 @@ def preserve_review_evidence(**arguments):
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
         return _preserve_review_evidence_locked(**arguments)
+    except BoundedDiagnosticLimitError:
+        raise EvidenceAssemblyError("preservation_input", "retention_limit") from None
     finally:
         os.close(descriptor)
 
@@ -1333,6 +1337,8 @@ def _evidence_bytes(root, reference, stage):
         return _regular_file(_source_path(root / reference, root))
     except FileNotFoundError:
         raise EvidenceAssemblyError(stage, "missing_evidence", reference) from None
+    except BoundedDiagnosticLimitError:
+        raise EvidenceAssemblyError(stage, "retention_limit") from None
     except (OSError, TypeError, ValueError):
         raise EvidenceAssemblyError(stage, "unsafe_path") from None
 
@@ -1384,11 +1390,13 @@ def _seal_evidence(root, role, value, *, literal=False):
     return reference
 
 
-def _check_evidence_bound(directory):
+def _check_evidence_bound(directory, stage="retained_validation"):
     try:
-        _bounded_diagnostic(directory)
+        return _bounded_diagnostic(directory)
+    except BoundedDiagnosticLimitError:
+        raise EvidenceAssemblyError(stage, "retention_limit") from None
     except (OSError, ValueError):
-        raise EvidenceAssemblyError("retained_validation", "retention_limit") from None
+        raise EvidenceAssemblyError(stage, "unsafe_path") from None
 
 
 def _seal_record(root, role, value):

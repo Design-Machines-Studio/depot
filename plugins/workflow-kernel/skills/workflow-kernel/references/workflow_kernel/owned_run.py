@@ -185,6 +185,10 @@ def _remove_entry(path: Path) -> None:
         os.unlink(path)
 
 
+class BoundedDiagnosticLimitError(ValueError):
+    """Actual diagnostic file/byte exhaustion; compatible with ValueError callers."""
+
+
 def _bounded_diagnostic(path: Path) -> tuple[int, int]:
     files = 0
     size = 0
@@ -203,7 +207,7 @@ def _bounded_diagnostic(path: Path) -> tuple[int, int]:
             files += 1
             size += value.st_size
             if files > _MAX_DIAGNOSTIC_FILES or size > _MAX_DIAGNOSTIC_BYTES:
-                raise ValueError("diagnostic root exceeds bounded retention limits")
+                raise BoundedDiagnosticLimitError("diagnostic root exceeds bounded retention limits")
     return files, size
 
 
