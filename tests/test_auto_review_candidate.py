@@ -338,6 +338,49 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         self.assertEqual(3, result.returncode)
         self.assertEqual('source_scope_mismatch', json.loads(result.stderr)['error']['details']['reason'])
 
+    def test_multiple_uncommitted_repairs_validate_history_against_sealed_patches(self):
+        from workflow_kernel.review_closeout import _source_snapshot, _changed_paths, _working_patch
+        run, paths = self.prepare(("security", "patterns"))
+        records = {lane: self.lane(run, paths, lane) for lane in ("security", "patterns")}
+        _, head = source_identity(self.repo)
+        snapshots = [json.loads((run.root / records["security"]).read_text())["source_snapshot"]]
+        chain, transitions = [records["security"]], []
+        for number in (1, 2):
+            (self.repo / "source.txt").write_text(f"uncommitted repair {number}\n")
+            snapshots.append(_source_snapshot(self.repo, head, live=True))
+            before, after = snapshots[-2], snapshots[-1]
+            worktree_ref, patch_ref = f"review/worktree-{number}.patch", f"review/commit-{number}.patch"
+            (run.root / worktree_ref).write_bytes(_working_patch(self.repo, head))
+            (run.root / patch_ref).write_bytes(b"")
+            selection_ref = f"review/selection-{number}.json"
+            iteration = {"run_id": run.run_id, "sequence": 0, "stage": "review_iteration", "status": "complete", "occurred_at": "2026-09-01T00:03:00Z", "authoritative_receipt": selection_ref, "selective_rerun": True, "promoted_to_full": False, "full_fanout_override": False, "lanes_rerun": ["security"], "lanes_skipped": ["patterns"], "rerun_reasons": {"security": ["a_prior_unresolved_finding", "b_fix_file_trigger"]}, "selection_fallback_reason": None}
+            self.write(run.root / selection_ref, {"schema_version": 1, "selected_full_set": ["security", "patterns"], "applied": True, "iteration": iteration, "finding_owner_lanes": ["security"], "file_trigger_lanes": ["security"], "from_source": before, "to_source": after, "changed_paths": _changed_paths(before, after), "patch_ref": patch_ref, "worktree_ref": worktree_ref})
+            transitions.append(f"review/transition-{number}.json")
+            self.write(run.root / transitions[-1], {"schema_version": 1, "from_source": before, "to_source": after, "changed_paths": _changed_paths(before, after), "patch_ref": patch_ref, "selection_ref": selection_ref, "worktree_ref": worktree_ref})
+            recheck = json.loads(paths["lanes"]["security"].read_text())
+            recheck.update(pass_id=f"recheck-{number}", attempt=number + 1)
+            recheck["source"]["worktree_ref"] = worktree_ref
+            recheck["literal"]["output_ref"] = f"raw/security-recheck-{number}.md"
+            (run.root / recheck["literal"]["output_ref"]).write_text(f"No findings after repair {number}.\n")
+            recheck["recheck"] = {"prior_record_ref": chain[-1], "selection_ref": selection_ref, "repair_refs": [worktree_ref]}
+            result = self.cli(run, paths, self.write(run.root / f"review/recheck-{number}.json", recheck))
+            self.assertEqual(0, result.returncode, result.stderr)
+            chain.append(json.loads(result.stdout)["record_ref"])
+        selection = [{"lane": "security", "record_ref": chain[-1], "history_refs": chain[:-1], "transition_refs": []},
+                     {"lane": "patterns", "record_ref": records["patterns"], "history_refs": [], "transition_refs": transitions}]
+        # The first dirty repair is no longer live; tampering with its patch must
+        # still be caught against the bytes sealed when it was inspected.
+        first = run.root / "review/worktree-1.patch"
+        sealed = first.read_bytes()
+        first.write_bytes(_working_patch(self.repo, head))
+        result = self.coverage(run, paths, {}, pass_id="final", selection=selection)
+        self.assertEqual(3, result.returncode)
+        self.assertEqual("source_scope_mismatch", json.loads(result.stderr)["error"]["details"]["reason"])
+        first.write_bytes(sealed)
+        result = self.coverage(run, paths, {}, pass_id="final", selection=selection)
+        self.assertEqual(0, result.returncode, result.stderr)
+        self.assertEqual("complete", self.preserve(run, paths)["status"])
+
     def test_interruption_after_append_reconstructs_missing_companions(self):
         from unittest import mock
         from workflow_kernel.review_closeout import assemble_review_evidence, EvidenceAssemblyError

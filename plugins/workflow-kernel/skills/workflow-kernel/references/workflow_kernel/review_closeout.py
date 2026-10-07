@@ -1280,7 +1280,15 @@ class EvidenceAssemblyError(ValueError):
         if stage not in {"lane_input", "lane_validation", "aggregate_validation", "preservation_input", "retained_validation"} or reason not in self.REASONS:
             raise ValueError("invalid evidence diagnostic")
         self.stage, self.reason = stage, reason
-        self.role = role if role in {"review/evidence.json", "review/request.json", "review/authoritative-receipts.json", "review/review-lane-receipts.json", "review/raw-lane-outputs.json", "review/coverage.json"} else "review/evidence.json"
+        if role not in {"review/evidence.json", "review/request.json", "review/authoritative-receipts.json", "review/review-lane-receipts.json", "review/raw-lane-outputs.json", "review/coverage.json"}:
+            # Keep a validated relative reference; unsafe text gets the placeholder.
+            try:
+                normalized = safe_reference(role)
+            except (TypeError, ValueError):
+                normalized = None
+            if normalized != role or role.startswith(("sha256:", "url-sha256:")) or contains_secret_shape(role):
+                role = "review/evidence.json"
+        self.role = role
         self.exit_code, self.code = self.REASONS[reason]
         super().__init__("required review evidence failed validation")
 
@@ -1316,7 +1324,7 @@ def _evidence_bytes(root, reference, stage):
             raise ValueError
         return _regular_file(_source_path(root / reference, root))
     except FileNotFoundError:
-        raise EvidenceAssemblyError(stage, "missing_evidence") from None
+        raise EvidenceAssemblyError(stage, "missing_evidence", reference) from None
     except (OSError, TypeError, ValueError):
         raise EvidenceAssemblyError(stage, "unsafe_path") from None
 
@@ -1518,7 +1526,7 @@ def _evidence_json_from_bytes(data):
         raise EvidenceAssemblyError("lane_validation", "invalid_evidence") from None
 
 
-def _validate_selection(root, reference, lanes, *, before=None, after=None, repository=None):
+def _validate_selection(root, reference, lanes, *, before=None, after=None, repository=None, worktree=None):
     document = _evidence_json(root, reference, "aggregate_validation")
     # The caller owns rule (a)/(b) semantics. Require its retained receipt and
     # explicit receiver-confirmed application, plus actual transition bytes.
@@ -1536,7 +1544,8 @@ def _validate_selection(root, reference, lanes, *, before=None, after=None, repo
             raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
         committed = _source_snapshot(repository, new_head)
         if after != committed:
-            if document["worktree_ref"] is None or _evidence_bytes(root, document["worktree_ref"], "aggregate_validation") != _working_patch(repository, new_head):
+            expected = worktree(after) if worktree is not None else _working_patch(repository, new_head)
+            if document["worktree_ref"] is None or _evidence_bytes(root, document["worktree_ref"], "aggregate_validation") != expected:
                 raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
     iteration = document["iteration"]
     translate_review_receipts([dict(iteration, sequence=0)])
@@ -1548,7 +1557,7 @@ def _validate_selection(root, reference, lanes, *, before=None, after=None, repo
     return iteration
 
 
-def _transition_chain(root, references, original, target, lane, lanes, repository):
+def _transition_chain(root, references, original, target, lane, lanes, repository, worktree):
     current = original
     for reference in references:
         proof = _evidence_json(root, reference, "aggregate_validation")
@@ -1557,7 +1566,7 @@ def _transition_chain(root, references, original, target, lane, lanes, repositor
         after = proof["to_source"]
         if type(after) is not dict or set(after) != {"head", "files"} or proof["changed_paths"] != _changed_paths(current, after):
             raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
-        iteration = _validate_selection(root, proof["selection_ref"], lanes, before=current, after=after, repository=repository)
+        iteration = _validate_selection(root, proof["selection_ref"], lanes, before=current, after=after, repository=repository, worktree=worktree)
         if lane not in iteration["lanes_skipped"]:
             raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
         _evidence_bytes(root, proof["patch_ref"], "aggregate_validation")
@@ -1569,7 +1578,7 @@ def _transition_chain(root, references, original, target, lane, lanes, repositor
                 raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
             committed = _source_snapshot(repository, after_head)
             if after != committed:
-                if after != target or proof["worktree_ref"] is None or _evidence_bytes(root, proof["worktree_ref"], "aggregate_validation") != _working_patch(repository, after_head):
+                if proof["worktree_ref"] is None or _evidence_bytes(root, proof["worktree_ref"], "aggregate_validation") != worktree(after):
                     raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
         current = after
     if current != target:
@@ -1613,6 +1622,19 @@ def _lane_companion(companion, dispatch, value):
 
 
 def _aggregate_documents(root, request, value, receipts, target, repository):
+    def worktree(snapshot):
+        # Only the final target is compared with the live checkout. An earlier
+        # dirty snapshot must match the patch sealed by a lane that inspected it.
+        if snapshot == target:
+            return _working_patch(repository, snapshot["head"])
+        for selected in value["selection"]:
+            for ref in (*selected["history_refs"], selected["record_ref"]):
+                item = _record(root, ref, receipts)
+                sealed = item["input"]["source"]["worktree_ref"]
+                if item["source_snapshot"] == snapshot and sealed is not None:
+                    return _bound_bytes(root, item, sealed)
+        raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
+
     lanes, outputs, all_findings = [], [], []
     seen = set()
     for selected in value["selection"]:
@@ -1639,12 +1661,12 @@ def _aggregate_documents(root, request, value, receipts, target, repository):
         for index, item in enumerate(history):
             if index:
                 _validate_selection(root, item["input"]["recheck"]["selection_ref"], request.required_lanes,
-                                    before=history[index - 1]["source_snapshot"], after=item["source_snapshot"], repository=repository)
+                                    before=history[index - 1]["source_snapshot"], after=item["source_snapshot"], repository=repository, worktree=worktree)
         if predecessor:
-            selection = _validate_selection(root, extraction["recheck"]["selection_ref"], request.required_lanes, before=history[-1]["source_snapshot"], after=record["source_snapshot"], repository=repository)
+            selection = _validate_selection(root, extraction["recheck"]["selection_ref"], request.required_lanes, before=history[-1]["source_snapshot"], after=record["source_snapshot"], repository=repository, worktree=worktree)
             if selected["lane"] not in selection["lanes_rerun"] or not extraction["recheck"]["repair_refs"]:
                 raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
-        _transition_chain(root, selected["transition_refs"], record["source_snapshot"], target, selected["lane"], request.required_lanes, repository)
+        _transition_chain(root, selected["transition_refs"], record["source_snapshot"], target, selected["lane"], request.required_lanes, repository, worktree)
         companion = _lane_companion(
             _evidence_json_from_bytes(_bound_bytes(root, record, extraction["literal"]["companion_ref"])),
             _evidence_json_from_bytes(_bound_bytes(root, record, extraction["literal"]["dispatch_receipt_ref"])), extraction,

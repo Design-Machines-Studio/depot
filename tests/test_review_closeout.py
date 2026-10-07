@@ -199,6 +199,18 @@ class ReviewCloseoutTests(unittest.TestCase):
                        "path": "review/review-lane-receipts.json"}, result["diagnostics"])
         self.assertTrue(Path(result["evidence_path"], "review/request.json").is_file())
 
+    def test_missing_evidence_diagnostic_keeps_only_safe_filenames(self):
+        from workflow_kernel.review_closeout import _evidence_bytes
+        for reference, reason, path in (
+            ("review/absent-required.patch", "missing_evidence", "review/absent-required.patch"),
+            ("../absent-required.patch", "unsafe_path", "review/evidence.json"),
+        ):
+            with self.subTest(reference=reference):
+                with self.assertRaises(EvidenceAssemblyError) as caught:
+                    _evidence_bytes(self.state, reference, "lane_input")
+                self.assertEqual({"stage": "lane_input", "reason": reason, "path": path}, caught.exception.detail())
+        self.assertEqual("review/evidence.json", EvidenceAssemblyError("lane_input", "missing_evidence", "/etc/passwd").role)
+
     def test_legacy_companions_cannot_establish_new_terminal_coverage(self):
         run, paths = self.make_run("dm-review", "legacy-terminal", legacy=True)
         result = self.preserve(run, paths)
