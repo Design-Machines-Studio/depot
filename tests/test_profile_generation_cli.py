@@ -89,6 +89,15 @@ class ProfileGenerationCliTests(unittest.TestCase):
         self.assertEqual(first.stdout, second.stdout)
         self.assertNotIn("private-host", first.stdout + first.stderr + self.output.read_text())
 
+    def test_platform_symlink_ancestor_preserves_project_and_output_boundaries(self):
+        # Like macOS /var -> /private/var, the alias sits above the workspace.
+        alias = self.root / "platform-alias"
+        alias.symlink_to(self.root, target_is_directory=True)
+        project = alias / "project"
+        result = self.generate(project=project, output=project / "plans/profile.json")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(behavioral_contract.load_profile(self.output), self.discover().to_dict())
+
     def test_suite_default_and_explicit_task_union_override(self):
         self.second_task(future=True)
         suites = self.ux / "suites"

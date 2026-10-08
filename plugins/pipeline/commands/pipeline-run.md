@@ -127,17 +127,9 @@ The canonical shadow inputs are `plans/<feature>/manifest.json` plus the cumulat
 
 Load `plugins/pipeline/references/execution-verification-profile.md` after
 `run.started` for generation, candidate/final selection and reload/binding checks.
-Resolve/read Kernel >=0.27.0:
+Read the reference's resolved Kernel contract (>=0.27.0).
 
-```sh
-"$WORKFLOW_KERNEL" kernel-info --minimum-version 0.27.0
-VERIFICATION_CONTRACT=$("$WORKFLOW_KERNEL" resolve-plugin-asset \
-  --plugin workflow-kernel \
-  --asset skills/workflow-kernel/references/verification-contract.md \
-  --minimum-version 0.27.0) || exit "$?"
-```
-
-Generate all combinations of the approved task union:
+Required work:
 
 ```sh
 "$WORKFLOW_KERNEL" generate-verification-profile \
@@ -147,14 +139,16 @@ Generate all combinations of the approved task union:
   > plans/<feature>/verification-profile-generation.json
 ```
 
-Repeat tasks; focused subsets require candidate/reload then exact approved case
-IDs, retaining required primitives. No whole-app sweep. Check receipt ID/full
-digest, states/required IDs and reload proof; no browser proof.
-Non-rendered skips profiles: nulls, empty arrays, retained N/A rationales.
-Bind approved requirements/criteria:
-`--verification-profile plans/<feature>/verification-profile.json` only for required work:
+Pass `--task-id` once per task. Focused cases use exact approved candidate IDs
+after reload. Check the ID/full digest, required IDs and reload receipt; this is a plan.
+Non-rendered work skips profiles: nulls, empty arrays and N/A rationales.
+Bind the approved contract:
 
 ```text
+# One or more required rendered chunks:
+"$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature>/verification-contract.json --verification-profile plans/<feature>/verification-profile.json > plans/<feature>/verification-contract-binding.json
+
+# Zero required rendered chunks:
 "$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature>/verification-contract.json > plans/<feature>/verification-contract-binding.json
 ```
 

@@ -429,13 +429,14 @@ def command_generate_verification_profile(args):
 
     project = Path(os.path.abspath(args.project_root))
     output = Path(os.path.abspath(args.output))
-    # Check lexical ancestors before canonical durable binding erases symlinks.
-    _owned_path(project, Path(project.anchor), directory=True)
+    # OS-managed ancestors may be links; reject links at our selected boundary.
+    _reject_symlinked_components(project)
+    _owned_path(project, project, directory=True)
     _reject_symlinked_components(output)
     ancestor = output.parent
     while not ancestor.exists() and not ancestor.is_symlink():
         ancestor = ancestor.parent
-    _owned_path(ancestor, Path(ancestor.anchor), directory=True)
+    _owned_path(ancestor, ancestor, directory=True)
     binding = bind_durable_path(output)
     if binding.parent_identity is not None:
         with binding.pin_parent() as directory:
