@@ -1296,11 +1296,12 @@ Retain manifest, terminal/lifecycle/authoritative receipts, attempts, metrics,
 verification, reconciliation, bundle resolutions and contribution/private
 reference receipts until caller terminal observation binding. Return exact
 paths/existence in `Observation index source handoff:`, without contents.
-After cost-summary, caller creates `plans/<feature-slug>/observation-index-input.json`
+The caller, after its cost-summary, creates `plans/<feature-slug>/observation-index-input.json`
 with `producer.name: pipeline`, source `role: producer`, then `emit-observation-index`.
-Failure records one unavailable line in the durable receipt; never changes
-workflow/review/cleanup/merge outcomes or appears per lane/phase or in compact
-chat. Disclose reasons only for requested diagnostics/index deliverables.
+Observation never changes authoritative completion, review, cleanup or merge
+outcomes. Failure is recorded once as unavailable in the durable receipt,
+never per lane or phase or in the normal compact chat handoff. Disclose reasons
+only for requested observability diagnostics/index deliverables.
 
 After caller observation binding, remove eligible shadow inputs and record
 disposition separately without rewriting cleanup receipts.

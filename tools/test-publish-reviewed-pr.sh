@@ -38,7 +38,7 @@ printf '%s\n' "$*" >> "$GH_LOG"
 case "$1 ${2:-}" in
   'pr create') printf 'https://github.com/Fixture/consumer/pull/42\n' ;;
   'pr ready') ;;
-  'pr view') jq -cn --arg head "$PR_HEAD" '{headRefOid:$head,headRefName:"candidate",state:"OPEN",isDraft:true,reviewDecision:env.REVIEW_DECISION}' ;;
+  'pr view') jq -cn --arg head "$PR_HEAD" --arg base "${PR_BASE:-main}" '{headRefOid:$head,headRefName:"candidate",baseRefName:$base,state:"OPEN",isDraft:true,reviewDecision:env.REVIEW_DECISION}' ;;
   'pr checks')
     required=false
     for arg in "$@"; do [ "$arg" != --required ] || required=true; done
@@ -58,7 +58,40 @@ case "$1 ${2:-}" in
     esac
     jq -cn --arg bucket "${PR_BUCKET:-pass}" '[{name:"actual CI",bucket:$bucket,link:"https://example.test/ci"}]' ;;
 
-  'api graphql') jq -cn --arg head "$PR_HEAD" '{data:{repository:{pullRequest:{headRefOid:$head,reviewThreads:{nodes:[{isResolved:(env.UNRESOLVED!="true")}],pageInfo:{hasNextPage:(env.MORE_THREADS=="true")}}}}}}' ;;
+  'api graphql')
+    if [[ "$*" = *branchProtectionRule* ]]; then
+      [[ "$*" = *"ref=refs/heads/${PR_BASE:-main}"* ]] || exit 2
+      case "${CLASSIC_MODE:-checks}" in
+        lookup-failure) printf 'API unavailable\n' >&2; exit 1 ;;
+        malformed) printf '{\n'; exit 0 ;;
+        incomplete) printf '{"data":{"repository":{"ref":{"name":"main"}}}}\n'; exit 0 ;;
+      esac
+      jq -cn --arg base "${PR_BASE:-main}" --arg mode "${CLASSIC_MODE:-checks}" '
+        {data:{repository:{ref:{name:(if $mode=="wrong-base" then "foreign" else $base end),
+          branchProtectionRule:(if $mode=="none" then null else
+            {requiresStatusChecks:($mode!="empty"),requiredStatusChecks:(if $mode=="empty" then [] else
+              [{context:(if $mode=="absent" then "missing CI" else "actual CI" end),app:(if $mode=="app-bound" then {id:"App1"} else null end)}] end)} end)}}}} |
+        if $mode=="partial-error" then .errors=[{message:"not accessible"}] else . end'
+    else
+      jq -cn --arg head "$PR_HEAD" '{data:{repository:{pullRequest:{headRefOid:$head,reviewThreads:{nodes:[{isResolved:(env.UNRESOLVED!="true")}],pageInfo:{hasNextPage:(env.MORE_THREADS=="true")}}}}}}'
+    fi ;;
+  'api --paginate')
+    BASE_ENCODED="$(jq -rn --arg base "${PR_BASE:-main}" '$base|@uri')"
+    [ "$*" = "api --paginate --slurp repos/Fixture/consumer/rules/branches/$BASE_ENCODED?per_page=100" ] || exit 2
+    case "${RULES_MODE:-none}" in
+      lookup-failure) printf 'API unavailable\n' >&2; exit 1 ;;
+      malformed) printf '{\n'; exit 0 ;;
+      incomplete) printf '[[],null]\n'; exit 0 ;;
+      none) printf '[[]]\n'; exit 0 ;;
+    esac
+    jq -cn --arg mode "$RULES_MODE" '
+      {type:(if $mode=="workflow" then "workflows" elif $mode=="unknown" then "future_required_rule" else "required_status_checks" end),
+        ruleset_id:73,ruleset_source_type:"Organization",ruleset_source:"Fixture",
+        parameters:(if $mode=="workflow" then {workflows:[{path:".github/workflows/required.yml",repository_id:42,ref:"refs/heads/main"}]}
+          elif $mode=="missing-parameters" then {} else
+            {required_status_checks:[{context:(if $mode=="absent" or $mode=="second-page" then "missing CI" else "actual CI" end)}]} |
+              if $mode=="app-bound" then .required_status_checks[0].integration_id=123 else . end end)} |
+      if $mode=="second-page" then [[],[.]] else [[.]] end' ;;
   *) exit 2 ;;
 esac
 SH
@@ -240,10 +273,10 @@ fixture pr-failed
 export PR_BUCKET=fail
 reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
 unset PR_BUCKET
-# Optional skipped checks remain visible without being called passed. The
-# no-required diagnostic is accepted only with its exact successful lookup shape.
+# Optional skipped checks remain visible without being called passed. Both
+# classic protection and every applicable rules page must verify no requirements.
 fixture optional-skipped
-export PR_BUCKET=skipping REQUIRED_MODE=none
+export PR_BUCKET=skipping REQUIRED_MODE=none CLASSIC_MODE=none
 publish ready --pr https://github.com/Fixture/consumer/pull/42 > "$TMP/optional.out"
 assert grep -Fxq '## Ready to merge' "$TMP/optional.out"
 assert grep -Fxq -- '- actual CI: optional check skipped.' "$TMP/optional.out"
@@ -254,14 +287,51 @@ assert grep -Fxq 'pr ready https://github.com/Fixture/consumer/pull/42 --repo Fi
 fixture declared-required-skip
 change_readiness '.readiness.checks += [{name:"actual CI",stage:"pr",status:"pending",link:null}]'
 reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
-unset REQUIRED_MODE
+unset REQUIRED_MODE CLASSIC_MODE
 fixture required-skipped
 reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
 unset PR_BUCKET
 fixture no-required
-export REQUIRED_MODE=none
+export REQUIRED_MODE=none CLASSIC_MODE=empty
 assert publish ready --pr https://github.com/Fixture/consumer/pull/42
-unset REQUIRED_MODE
+export REQUIRED_MODE=empty-success
+assert publish ready --pr https://github.com/Fixture/consumer/pull/42
+unset REQUIRED_MODE CLASSIC_MODE
+# An absent required workflow alongside an optional skip can never become ready,
+# even with empty classic protection and no caller-declared PR rows.
+fixture absent-workflow-optional-skip
+export PR_BUCKET=skipping REQUIRED_MODE=none CLASSIC_MODE=none RULES_MODE=workflow
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+cat "$TMP/rejected.out"
+assert grep -Fq 'base main: unmappable applicable requirement' "$TMP/rejected.out"
+assert grep -Fq '.github/workflows/required.yml' "$TMP/rejected.out"
+assert test "$(grep -o 'Next action:' "$TMP/rejected.out" | wc -l | tr -d ' ')" = 1
+unset PR_BUCKET REQUIRED_MODE RULES_MODE CLASSIC_MODE
+for classic in lookup-failure malformed incomplete partial-error wrong-base app-bound absent; do
+  fixture "classic-$classic"
+  export CLASSIC_MODE="$classic" REQUIRED_MODE=none PR_BUCKET=skipping
+  reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+  assert grep -Fq 'Next action:' "$TMP/rejected.out"
+  unset CLASSIC_MODE REQUIRED_MODE PR_BUCKET
+done
+for rules in lookup-failure malformed incomplete missing-parameters unknown app-bound absent second-page; do
+  fixture "rules-$rules"
+  export CLASSIC_MODE=none RULES_MODE="$rules" REQUIRED_MODE=none PR_BUCKET=skipping
+  reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+  assert grep -Fq 'Next action:' "$TMP/rejected.out"
+  unset CLASSIC_MODE RULES_MODE REQUIRED_MODE PR_BUCKET
+done
+# Reported passing required results must cover configuration, not just each
+# other. A passing classic check cannot hide an absent organization requirement.
+fixture missing-rules-required-with-reported-check
+export RULES_MODE=second-page
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+unset RULES_MODE
+fixture rules-reported-required
+export CLASSIC_MODE=none RULES_MODE=checks PR_BASE=release/topic
+assert publish ready --pr https://github.com/Fixture/consumer/pull/42
+assert grep -Fq 'rules/branches/release%2Ftopic?per_page=100' "$GH_LOG"
+unset CLASSIC_MODE RULES_MODE PR_BASE
 for lookup in missing lookup-failure empty-error empty-success diagnostic-extra wrong-branch; do
   fixture "required-$lookup"
   export REQUIRED_MODE="$lookup"
