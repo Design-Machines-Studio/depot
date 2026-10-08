@@ -573,7 +573,7 @@ def _validate_retained_report(scope: Path) -> None:
             ) from None
 
 
-def validate_review_source_coverage(
+def _validate_review_common_contract(
     request_document: object,
     receipts_document: object,
     lane_document: object,
@@ -583,10 +583,8 @@ def validate_review_source_coverage(
     *,
     repository: str,
     head: str,
-    evidence_root: Path | None = None,
-    repository_root: Path | None = None,
 ) -> ReviewRequest:
-    """Validate required source coverage independently of optional observers."""
+    """Shared pre-0.26 coverage contract, without the new provenance gate."""
     request = ReviewRequest.from_mapping(request_document)  # type: ignore[arg-type]
     if request.source_repository != repository or request.source_head != head:
         raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch", "review/request.json")
@@ -603,6 +601,8 @@ def validate_review_source_coverage(
             continue
         if type(value) is not dict or value.get("sequence") != index:
             raise ValueError("required review receipt sequence is invalid")
+        if value.get("run_id") != request.run_id:
+            raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch", "review/authoritative-receipts.json")
         source_receipts.append({**value, "sequence": len(source_receipts)})
     coverage_positions = [
         index for index, value in enumerate(source_receipts)
@@ -660,6 +660,19 @@ def validate_review_source_coverage(
         findings_document, decisions_document,
     )
     _validate_browser_coverage(request, source_receipts)
+    return request
+
+
+def validate_review_source_coverage(
+    request_document, receipts_document, lane_document, outputs_document,
+    findings_document, decisions_document, *, repository, head,
+    evidence_root=None, repository_root=None,
+) -> ReviewRequest:
+    """New assembly and preservation always require committed provenance."""
+    request = _validate_review_common_contract(
+        request_document, receipts_document, lane_document, outputs_document,
+        findings_document, decisions_document, repository=repository, head=head,
+    )
     if lane_document["schema_version"] != 2 or evidence_root is None:
         raise EvidenceAssemblyError("aggregate_validation", "missing_source_provenance", "review/review-lane-receipts.json")
     _validate_committed_coverage(request, receipts_document, lane_document, outputs_document,
@@ -1215,53 +1228,218 @@ def _preserve_review_evidence_locked(
     }
 
 
-def has_preserved_review_evidence(diagnostic: Path) -> bool:
-    """Revalidate the sealed required evidence before successful root cleanup."""
-    review_root = diagnostic / "review"
-    if not review_root.is_dir() or review_root.is_symlink():
-        return False
-    scopes = [path for path in review_root.iterdir() if path.is_dir() and not path.is_symlink()]
-    if len(scopes) != 1:
-        return False
-    scope = scopes[0]
+# Sole independently established retention baseline, not a registry.
+_HISTORICAL_REVIEW = (
+    "b33733a078242d51f12968fe57214d313b5f09e85c963268cc3f41db33328981",
+    "pipeline", "parity-1118-20261007-a",
+    "github.com/Design-Machines-Studio/assembly-baseplate",
+    "768532b154251d86ea585b730184629594e1ac5d",
+)
+
+
+class RetainedReviewValidationError(ValueError):
+    """Closed terminal reasons with safe artifact roles and one next action."""
+    REASONS = {
+        "retention_required": (3, "missing_evidence", "Review evidence must be retained before successful cleanup.",
+            "Use strict preserve-review-evidence and retain diagnostics before terminal cleanup."),
+        "historical_baseline_missing": (3, "review_compatibility", "The independently established original retention baseline is missing.",
+            "Keep retained evidence and use source-bound recovery from existing outputs with assemble-review-evidence."),
+        "historical_retention_required": (3, "review_compatibility", "Historical validation requires an already-retained exact-owned review run.",
+            "Keep existing evidence and use strict preserve-review-evidence before terminal cleanup."),
+        "missing_source_provenance": (3, "review_compatibility", "The retained review lacks current source-bound provenance.",
+            "Use assemble-review-evidence recovery from existing outputs with actual source and inspection evidence."),
+        "missing_evidence": (3, "missing_evidence", "Required retained review evidence is missing.",
+            "Restore the missing artifact from original retained evidence before retrying terminal cleanup."),
+        "corrupt_evidence": (2, "invalid_schema", "Retained review evidence is corrupt or incomplete.",
+            "Restore the original retained artifact before retrying terminal cleanup."),
+        "digest_mismatch": (3, "unsafe_payload", "Retained review bytes differ from the original saved digest.",
+            "Restore the original retained bytes before retrying terminal cleanup."),
+        "source_scope_mismatch": (3, "unsafe_payload", "Retained review run, repository, head or scope does not match its owner.",
+            "Use the exact-owned run containing the original matching retained review evidence."),
+        "unsafe_path": (3, "unsafe_payload", "A retained review artifact has an unsafe path or file identity.",
+            "Restore contained regular files from original retained evidence before retrying terminal cleanup."),
+        "retention_limit": (3, "evidence_limit_exceeded", "Retained review evidence exceeds supported retention limits.",
+            "Keep original evidence and remove only unrelated diagnostic additions before retrying terminal cleanup."),
+    }
+    ROLES = frozenset({"retained-review", "retention-inventory", "owner-metadata", "cleanup-receipt",
+        "review-request", "review-receipts", "lane-receipts", "lane-outputs", "finding-inventory",
+        "synthesis-decisions", "review-coverage", "review-reference", "router-receipts", "review-report"})
+
+    def __init__(self, reason, role="retained-review", *, supported_historical=False):
+        self.exit_code, self.code, message, self.next_action = self.REASONS[reason]
+        if reason == "missing_source_provenance" and supported_historical:
+            self.next_action = "Retry owned-run-finish with --historical-review-digests locating the original saved inventory."
+        self.reason, self.role = reason, role if role in self.ROLES else "retained-review"
+        super().__init__(message)
+
+    def to_dict(self):
+        return {"error": {"code": self.code, "message": str(self), "details": {
+            "reason": self.reason, "artifact_role": self.role, "next_action": self.next_action}}}
+
+
+def _terminal_read(path, root, role, *, document=False):
     try:
-        request = _load_json(scope / "review/request.json")
-        receipts = _load_json(scope / "review/authoritative-receipts.json")
-        lane_receipts = _load_json(scope / "review/review-lane-receipts.json")
-        raw_outputs = _load_json(scope / "review/raw-lane-outputs.json")
-        raw_findings = _load_json(scope / "review/raw-finding-inventory.json")
-        decisions = _load_json(scope / "review/synthesis-decisions.json")
-        parsed_request = ReviewRequest.from_mapping(request)  # type: ignore[arg-type]
-        if parsed_request.source_repository is None or parsed_request.source_head is None:
-            return False
-        expected_scope = (
-            "repo-" + hashlib.sha256(parsed_request.source_repository.encode("utf-8")).hexdigest()[:12]
-            + "-head-" + parsed_request.source_head
-        )
-        if scope.name != expected_scope:
-            return False
-        validate_review_source_coverage(
-            request, receipts, lane_receipts, raw_outputs, raw_findings, decisions,
-            repository=parsed_request.source_repository,
-            head=parsed_request.source_head,
-            evidence_root=scope,
-        )
-        for reference in required_review_evidence_references(
-            parsed_request, receipts, lane_receipts, raw_outputs,
-        ):
+        source = _source_path(path, root)
+        data = _regular_file(source)
+    except FileNotFoundError:
+        raise RetainedReviewValidationError("missing_evidence", role) from None
+    except BoundedDiagnosticLimitError:
+        raise RetainedReviewValidationError("retention_limit", role) from None
+    except (OSError, TypeError, ValueError):
+        raise RetainedReviewValidationError("unsafe_path", role) from None
+    if not document:
+        return data
+    try:
+        return json.loads(data.decode("utf-8"), object_pairs_hook=_unique_members, parse_constant=_invalid_constant)
+    except (UnicodeError, ValueError, RecursionError):
+        raise RetainedReviewValidationError("corrupt_evidence", role) from None
+
+
+def _historical_inventory(run, inventory_path):
+    """Input locates pinned bytes; fresh matching hashes confer no authority."""
+    if run.workflow not in _REVIEW_WORKFLOWS or not os.path.lexists(run.root / "CLEANUP.txt"):
+        raise RetainedReviewValidationError("historical_retention_required", "cleanup-receipt")
+    _terminal_read(run.root / "CLEANUP.txt", run.root, "cleanup-receipt")
+    try:
+        run._existing_retention()
+    except (OSError, TypeError, ValueError):
+        raise RetainedReviewValidationError("corrupt_evidence", "cleanup-receipt") from None
+    path = Path(os.path.abspath(inventory_path))
+    data = _terminal_read(path, Path(path.anchor), "retention-inventory")
+    fingerprint, workflow, run_id, repository, head = _HISTORICAL_REVIEW
+    if hashlib.sha256(data).hexdigest() != fingerprint:
+        raise RetainedReviewValidationError("historical_baseline_missing", "retention-inventory")
+    if (run.workflow, run.run_id) != (workflow, run_id):
+        raise RetainedReviewValidationError("source_scope_mismatch", "owner-metadata")
+    try:
+        inventory = json.loads(data.decode("utf-8"), object_pairs_hook=_unique_members, parse_constant=_invalid_constant)
+        if type(inventory) is not dict or not inventory or len(inventory) > _MAX_DIAGNOSTIC_FILES:
+            raise ValueError()
+        if not {".depot-owned-run.json", ".depot-owned-run.lock", "CLEANUP.txt"} <= inventory.keys():
+            raise ValueError()
+        for reference, digest in inventory.items():
+            if type(reference) is not str or type(digest) is not str or re.fullmatch(r"[0-9a-f]{64}", digest) is None:
+                raise ValueError()
+            if Path(reference).is_absolute() or ".." in Path(reference).parts or Path(reference).as_posix() != reference:
+                raise RetainedReviewValidationError("unsafe_path", "retention-inventory")
+            role = {".depot-owned-run.json": "owner-metadata", ".depot-owned-run.lock": "owner-metadata",
+                    "CLEANUP.txt": "cleanup-receipt", "request.json": "review-request",
+                    "authoritative-receipts.json": "review-receipts", "review-lane-receipts.json": "lane-receipts",
+                    "raw-lane-outputs.json": "lane-outputs", "raw-finding-inventory.json": "finding-inventory",
+                    "synthesis-decisions.json": "synthesis-decisions", "report.md": "review-report"}.get(
+                        Path(reference).name, "review-reference")
+            original = _terminal_read(run.root / reference, run.root, role)
+            if hashlib.sha256(original).hexdigest() != digest:
+                raise RetainedReviewValidationError("digest_mismatch", role)
+    except RetainedReviewValidationError:
+        raise
+    except (UnicodeError, TypeError, ValueError, RecursionError):
+        raise RetainedReviewValidationError("corrupt_evidence", "retention-inventory") from None
+    return inventory, repository, head
+
+
+def validate_preserved_review_evidence(diagnostic: Path, *, run=None, historical_review_digests=None):
+    """Throw closed terminal reasons; historical authority is explicit and pinned."""
+    inventory = None
+    if historical_review_digests is not None:
+        if run is None:
+            raise RetainedReviewValidationError("historical_retention_required", "owner-metadata")
+        inventory, repository, head = _historical_inventory(run, historical_review_digests)
+    role = "retained-review"
+    try:
+        if diagnostic.is_symlink():
+            raise RetainedReviewValidationError("unsafe_path", role)
+        if not diagnostic.is_dir():
+            raise RetainedReviewValidationError("missing_evidence", role)
+        if run is not None:
+            resource = next((item for item in run._metadata["resources"] if item["kind"] == "diagnostic"), None)
+            info = diagnostic.stat()
+            if resource is None or diagnostic != run.root / resource["relative_path"] or (info.st_dev, info.st_ino) != (resource["device"], resource["inode"]):
+                raise RetainedReviewValidationError("source_scope_mismatch", "owner-metadata")
+        try:
+            _bounded_diagnostic(diagnostic)
+        except BoundedDiagnosticLimitError:
+            raise
+        except ValueError:
+            raise RetainedReviewValidationError("unsafe_path", role) from None
+        for path in diagnostic.rglob("*"):
+            if path.is_file() and path.stat().st_nlink != 1:
+                raise RetainedReviewValidationError("unsafe_path", role)
+        review_root = diagnostic / "review"
+        if review_root.is_symlink():
+            raise RetainedReviewValidationError("unsafe_path", role)
+        scopes = [path for path in review_root.iterdir() if path.is_dir()]
+        if len(scopes) != 1 or not scopes[0].is_dir() or scopes[0].is_symlink():
+            raise RetainedReviewValidationError("source_scope_mismatch", role)
+        scope = scopes[0]
+        names = ("request", "authoritative-receipts", "review-lane-receipts", "raw-lane-outputs", "raw-finding-inventory", "synthesis-decisions")
+        roles = ("review-request", "review-receipts", "lane-receipts", "lane-outputs", "finding-inventory", "synthesis-decisions")
+        documents = [_terminal_read(scope / "review" / (name + ".json"), diagnostic, artifact, document=True)
+                     for name, artifact in zip(names, roles)]
+        role = "review-request"
+        request = ReviewRequest.from_mapping(documents[0])
+        if request.source_repository is None or request.source_head is None or run is not None and request.run_id != run.run_id:
+            raise RetainedReviewValidationError("source_scope_mismatch", role)
+        expected_scope = "repo-" + hashlib.sha256(request.source_repository.encode()).hexdigest()[:12] + "-head-" + request.source_head
+        if scope.name != expected_scope or inventory is not None and (request.source_repository, request.source_head) != (repository, head):
+            raise RetainedReviewValidationError("source_scope_mismatch", role)
+        role = "review-coverage"
+        if inventory is not None:
+            _validate_review_common_contract(*documents, repository=request.source_repository, head=request.source_head)
+        else:
+            validate_review_source_coverage(*documents, repository=request.source_repository, head=request.source_head, evidence_root=scope)
+        role = "review-reference"
+        for reference in required_review_evidence_references(request, documents[1], documents[2], documents[3]):
             if reference.startswith(("url-sha256:", "sha256:")):
                 continue
-            _regular_file(scope / reference)
-        private_router = scope / "receipts/private/router"
-        if not private_router.is_dir() or private_router.is_symlink():
-            return False
-        _validate_router_receipts(private_router)
-        report = scope / "report.md"
-        if not _regular_file(report).strip():
-            return False
+            _terminal_read(scope / reference, diagnostic, role)
+        if inventory is not None:
+            # Freeze the entire established scope, including report links and
+            # router index targets. Additions are allowed only outside this scope.
+            saved_directories = {parent for reference in inventory for parent in Path(reference).parents}
+            for path in scope.rglob("*"):
+                relative = path.relative_to(run.root)
+                if relative.as_posix() not in inventory and relative not in saved_directories:
+                    raise RetainedReviewValidationError("historical_baseline_missing", role)
+        role = "router-receipts"
+        _validate_router_receipts(scope / "receipts/private/router")
+        role = "review-report"
+        if not _terminal_read(scope / "report.md", diagnostic, role).strip():
+            raise RetainedReviewValidationError("corrupt_evidence", role)
         _validate_retained_report(scope)
+        return {"validation": "historical_compatibility" if inventory is not None else "source_bound",
+                "run_id": request.run_id, "source_repository": request.source_repository, "source_head": request.source_head}
+    except RetainedReviewValidationError:
+        raise
+    except EvidenceAssemblyError as exc:
+        reason = exc.reason if exc.reason in RetainedReviewValidationError.REASONS else "corrupt_evidence"
+        supported_historical = run is not None and (
+            run.workflow, request.run_id, request.source_repository, request.source_head
+        ) == _HISTORICAL_REVIEW[1:]
+        if reason == "missing_source_provenance" and documents[2]["schema_version"] == 1 and not supported_historical:
+            reason = "historical_baseline_missing"
+        if exc.reason == "missing_source_provenance":
+            role = "lane-receipts"
+        raise RetainedReviewValidationError(reason, role, supported_historical=supported_historical) from None
+    except ReviewCloseoutValidationError as exc:
+        reason = "missing_evidence" if exc.reason_code == "review_report_link_missing" else "unsafe_path"
+        raise RetainedReviewValidationError(reason, role) from None
+    except FileNotFoundError:
+        raise RetainedReviewValidationError("missing_evidence", role) from None
+    except BoundedDiagnosticLimitError:
+        raise RetainedReviewValidationError("retention_limit", role) from None
+    except OSError:
+        raise RetainedReviewValidationError("unsafe_path", role) from None
+    except (TypeError, ValueError):
+        raise RetainedReviewValidationError("corrupt_evidence", role) from None
+
+
+def has_preserved_review_evidence(diagnostic: Path) -> bool:
+    """Strict boolean wrapper for existing callers."""
+    try:
+        validate_preserved_review_evidence(diagnostic)
         return True
-    except (OSError, TypeError, ValueError):
+    except RetainedReviewValidationError:
         return False
 
 

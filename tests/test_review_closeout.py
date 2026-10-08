@@ -18,7 +18,7 @@ from workflow_kernel.dm_review_adapter import (
 from workflow_kernel.cli import _validated_existing_review_contributions
 from workflow_kernel.owned_run import ExactOwnedRun
 from workflow_kernel.review_closeout import (
-    ReviewCloseoutValidationError,
+    ReviewCloseoutValidationError, RetainedReviewValidationError,
     bind_review_source,
     preserve_review_evidence,
     source_identity, assemble_review_evidence, EvidenceAssemblyError,
@@ -44,7 +44,8 @@ class ReviewCloseoutTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def make_run(self, workflow="dm-review", run_id="closeout", *, legacy=False, synthetic=False):
+    def make_run(self, workflow="dm-review", run_id="closeout", *, legacy=False, synthetic=False,
+                 required_source_path=None, literal_output=None):
         run = ExactOwnedRun.start(workflow, run_id, base=self.state)
         source = run.create_path("raw-output", "review")
         run.create_path("raw-output", "receipts")
@@ -114,7 +115,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         (source / "coverage.json").write_text("{}\n", encoding="utf-8")
         referenced = run.root / "raw" / "security.md"
         referenced.parent.mkdir(parents=True, exist_ok=True)
-        referenced.write_text("Security lane evidence.\n", encoding="utf-8")
+        referenced.write_bytes(literal_output if literal_output is not None else b"Security lane evidence.\n")
         receipts[0]["source_repository"] = repository
         receipts[0]["source_head"] = head
         receipts[1]["source_repository"] = repository
@@ -175,6 +176,26 @@ class ReviewCloseoutTests(unittest.TestCase):
                 "provenance": {"kind": "synthetic_test" if synthetic else "live", "executed_at": None if synthetic else "2026-09-01T00:01:00Z", "source_refs": ["review/prompt.md"]},
                 "recheck": {"prior_record_ref": None, "selection_ref": None, "repair_refs": []},
             }
+            if required_source_path is not None:
+                # The caller actually inspects this committed fixture input;
+                # keep its bytes required, rather than padding diagnostic files.
+                required_ref = "review/required-input.jsonl"
+                (run.root / required_ref).write_bytes((self.repo / required_source_path).read_bytes())
+                for group in ("requested", "inspected"):
+                    lane_input[group]["paths"].append(required_source_path)
+                for key in ("evidence_refs", "required_evidence_refs"):
+                    lane_input["requested"][key].append(required_ref)
+                lane_input["provenance"] = {
+                    "kind": "synthetic_test" if synthetic else "recovery", "executed_at": None,
+                    "source_refs": ["review/prompt.md", required_ref],
+                }
+                lane_input["inspected"]["limitations"] = [
+                    "Deterministic fixture inspection of case declarations only; no external participant execution.",
+                ]
+                (source / "prompt.md").write_text(
+                    f"Inspect source.txt and every case declaration in {required_source_path}. "
+                    "Record path safety, owner-only mode and single-link expectations for each fixture row.\n"
+                )
             paths["input"] = source / "lane-input.json"
             paths["input"].write_text(json.dumps(lane_input) + "\n")
             lane_result = assemble_review_evidence(run_root=run.root, repository_root=self.repo, request_path=paths["request"], receipts_path=paths["receipts"], input_path=paths["input"], test_harness=synthetic)
@@ -380,7 +401,7 @@ class ReviewCloseoutTests(unittest.TestCase):
     def test_premature_success_cleanup_cannot_delete_review_evidence(self):
         run, paths = self.make_run()
         original = paths["raw_lane_outputs"].read_bytes()
-        with self.assertRaisesRegex(ValueError, "review evidence must be retained"):
+        with self.assertRaises(RetainedReviewValidationError):
             run.finish("succeeded")
         self.assertTrue(run.root.is_dir())
         self.assertEqual(original, paths["raw_lane_outputs"].read_bytes())
@@ -776,7 +797,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         self.assertEqual("review/missing.md", error["details"]["path"])
         self.assertEqual(ErrorMessage.REVIEW_REPORT_LINK_MISSING.value, error["message"])
         self.assertTrue(paths["report"].is_file())
-        with self.assertRaisesRegex(ValueError, "durably validated"):
+        with self.assertRaises(RetainedReviewValidationError):
             run.finish("succeeded", retain_diagnostics=True)
 
     def test_report_links_resolve_from_retained_scope_root_and_retry_idempotently(self):
@@ -856,7 +877,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         }) + "\n", encoding="utf-8")
         result = self.preserve(run, paths)
         Path(result["evidence_path"], "receipts/private/router/security.json").unlink()
-        with self.assertRaisesRegex(ValueError, "not durably validated"):
+        with self.assertRaises(RetainedReviewValidationError):
             run.finish("succeeded", retain_diagnostics=True)
 
     def test_reference_style_report_link_must_resolve(self):
@@ -925,7 +946,7 @@ class ReviewCloseoutTests(unittest.TestCase):
         paths["receipts"].write_text(json.dumps(receipts) + "\n", encoding="utf-8")
         result = self.preserve(run, paths)
         self.assertEqual("incomplete", result["status"])
-        with self.assertRaisesRegex(ValueError, "durably validated"):
+        with self.assertRaises(RetainedReviewValidationError):
             run.finish("succeeded", retain_diagnostics=True)
 
     def test_supported_cli_seals_and_reports_the_durable_evidence_path(self):

@@ -161,7 +161,7 @@ Append is the commit point. Retry reconstructs missing derived companions
 without dispatch. Conflicting fixed files cannot be replaced: use a new
 exact-owned replay with the original committed stream/history. Preservation
 reads the same locked snapshot and retains referenced history within existing
-128-file/2 MiB limits. Optional contribution writers use that lock too;
+128-file/4 MiB limits. Optional contribution writers use that lock too;
 economics and observations never settle or revoke required coverage.
 
 Closed failure stages are `lane_input`, `lane_validation`,
@@ -171,3 +171,67 @@ mismatch, unsafe paths, conflicts and retention limits, using safe artifact-role
 filenames. Schema exits 2, incomplete/unsafe evidence 3, conflicts 6. Preserve
 safe available inputs and originals on failure. #165 report-link behavior stays
 unchanged.
+
+## Bounded retention (>=0.26.2)
+
+The 4 MiB (4,194,304-byte) allowance bounds the sum of regular-file bytes
+across the whole diagnostic directory. It is not merely a per-file cap;
+assembly, preservation staging and terminal revalidation retain their existing
+bound checks. The 128-file limit and every digest, source, scope, provenance,
+path safety and completeness validator remain unchanged.
+
+The measured PR173 complete required package projection is 112 files and
+2,856,643 bytes. It includes the final coverage record, request, four companions,
+authoritative receipt stream, every committed source/history/transition binding,
+private router receipts/index and report. The `review/evidence` subtree alone
+is 96 files and 2,721,881 bytes. Removing its 592,768 duplicate snapshot/literal
+bytes alone would still leave the complete package above the former 2 MiB
+allowance. The complete package fits both 4 MiB and 128 files. This bounded
+allowance change preserves original bytes without deduplication, compression
+or a new storage mechanism. These figures describe the supplied read-only
+projection, not a successful consumer preservation run.
+
+## Retained historical terminal validation (>=0.26.1)
+
+New assembly/preservation stay strict. Only `owned-run-finish --outcome succeeded`
+accepts `--historical-review-digests <existing-saved-inventory>` for an already
+retained exact-owned run. The option locates independently established bytes;
+fresh hashes, failed retention or schema changes grant no authority.
+
+The sole supported literal inventory SHA256 is
+`b33733a078242d51f12968fe57214d313b5f09e85c963268cc3f41db33328981`,
+for workflow `pipeline`, run `parity-1118-20261007-a`, repository
+`github.com/Design-Machines-Studio/assembly-baseplate`, original head
+`768532b154251d86ea585b730184629594e1ac5d`. This is a bounded recovery.
+
+Kernel verifies original owner metadata/CLEANUP, every saved digest, contained
+regular files without symlinks/hardlinks, complete reference closure, indexed
+receipts/report links and the shared original contract: lanes, output digests,
+finding/synthesis accounting and browser cases. Saved files cannot change or
+vanish. Diagnostic additions outside the frozen review scope remain allowed
+within existing retention limits; they grant no eligibility or coverage.
+
+The result adds `review_validation.validation: historical_compatibility` with
+original run/repository/head. It never approves current PR head
+`5c11779293aff6d08a9eea185331dbc1ff9dc844` or claims current source-bound
+coverage. Repeated validation returns unchanged evidence and the same result.
+After release/synchronization, the owner reruns only terminal validation:
+
+```sh
+"$WORKFLOW_KERNEL" owned-run-finish --run-root "$RETAINED_RUN_ROOT" \
+  --outcome succeeded --retain-diagnostics \
+  --historical-review-digests "$ORIGINAL_SAVED_INVENTORY"
+```
+
+Unknown fingerprints report the missing independent retention baseline. Keep
+retained evidence; use `assemble-review-evidence` recovery from existing outputs
+and actual source/inspection evidence, then strict preservation in a new
+exact-owned replay. Never fabricate versions, timestamps, inventories or
+inspection. Unknown execution times stay unknown; missing inspection stays
+incomplete. Do not preserve the historical original again.
+
+Terminal errors carry closed reasons, safe `artifact_role`, plain messages and
+one `next_action`; compatibility/missing/unsafe evidence exits 3, corruption or
+incomplete coverage exits 2. No arbitrary supplied paths/raw exceptions appear.
+Terminal cleanup uses the throwing validator; existing boolean callers stay
+strict.

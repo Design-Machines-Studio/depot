@@ -165,7 +165,7 @@
   "pluginDependencies": {
     "dm-review": ">=1.87.0",
     "model-router": ">=0.12.0",
-    "workflow-kernel": ">=0.26.0"
+    "workflow-kernel": ">=0.26.2"
   },
   "optionalPluginDependencies": {
     "ned": ">=1.4.0",
