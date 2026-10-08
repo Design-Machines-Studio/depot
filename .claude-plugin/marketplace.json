@@ -141,7 +141,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "3.17.1",
+      "version": "3.17.2",
       "author": {
         "name": "Design Machines"
       },
