@@ -161,7 +161,7 @@ Append is the commit point. Retry reconstructs missing derived companions
 without dispatch. Conflicting fixed files cannot be replaced: use a new
 exact-owned replay with the original committed stream/history. Preservation
 reads the same locked snapshot and retains referenced history within existing
-128-file/2 MiB limits. Optional contribution writers use that lock too;
+128-file/4 MiB limits. Optional contribution writers use that lock too;
 economics and observations never settle or revoke required coverage.
 
 Closed failure stages are `lane_input`, `lane_validation`,
@@ -171,6 +171,25 @@ mismatch, unsafe paths, conflicts and retention limits, using safe artifact-role
 filenames. Schema exits 2, incomplete/unsafe evidence 3, conflicts 6. Preserve
 safe available inputs and originals on failure. #165 report-link behavior stays
 unchanged.
+
+## Bounded retention (>=0.26.2)
+
+The 4 MiB (4,194,304-byte) allowance bounds the sum of regular-file bytes
+across the whole diagnostic directory. It is not merely a per-file cap;
+assembly, preservation staging and terminal revalidation retain their existing
+bound checks. The 128-file limit and every digest, source, scope, provenance,
+path safety and completeness validator remain unchanged.
+
+The measured PR173 complete required package projection is 112 files and
+2,856,643 bytes. It includes the final coverage record, request, four companions,
+authoritative receipt stream, every committed source/history/transition binding,
+private router receipts/index and report. The `review/evidence` subtree alone
+is 96 files and 2,721,881 bytes. Removing its 592,768 duplicate snapshot/literal
+bytes alone would still leave the complete package above the former 2 MiB
+allowance. The complete package fits both 4 MiB and 128 files. This bounded
+allowance change preserves original bytes without deduplication, compression
+or a new storage mechanism. These figures describe the supplied read-only
+projection, not a successful consumer preservation run.
 
 ## Retained historical terminal validation (>=0.26.1)
 

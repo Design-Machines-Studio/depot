@@ -137,7 +137,8 @@ not a new user-facing keep/debug option:
 ```
 
 Retention deletes every other child of the exact-owned root, permits at most
-128 regular files and 2 MiB, refuses links or special files, and emits all four
+128 regular files and 4 MiB across the whole diagnostic directory, refuses
+links or special files, and emits all four
 terminal fields:
 
 ```text
@@ -146,6 +147,12 @@ reason
 contains
 cleanup_command
 ```
+
+The byte allowance covers the complete required package, not just each file.
+Kernel 0.26.2 raises only this allowance: the PR173 package projection totals
+112 files and 2,856,643 bytes, including coverage, request, companions, receipt
+stream, committed source/history/transition bindings, private receipts and report.
+See [the review retention rationale](review-evidence-contract.md#bounded-retention-0262).
 
 It also writes those fields to `CLEANUP.txt` inside the retained root. The
 cleanup command is one exact shell-quoted `rm -rf -- <path>` for that verified
