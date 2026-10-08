@@ -575,4 +575,18 @@ fixture ui-changed
 change_readiness ".readiness.ui={changed:true,preview:\"https://preview.test\",tasks:[\"Check proposal confirmation.\"],acceptance:{head:\"$INITIAL_HEAD\",unchangedSince:true}} | .uiNonImpact={fromHead:\"$INITIAL_HEAD\",toHead:.readiness.finalHead,paths:[\"ui.html\"],evidence:\"$RUN_ROOT/review/ui-non-impact.json\"}"
 jq '.uiNonImpact | del(.evidence) | .reason="Owner non-impact claim (contradicted by source)."' "$READINESS" > "$RUN_ROOT/review/ui-non-impact.json"
 reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_gh
+# Exercise the actual host-discovery preamble with gh outside the fixed PATH.
+# The remaining tests exercise the complete producer/publication flow. This
+# isolated preamble avoids replacing canonical Git identity with a local URL.
+sed '/^HERE=/,$d' "$PUBLISH" > "$TMP/host-discovery.sh"
+printf '\ngh pr create\n' >> "$TMP/host-discovery.sh"
+: > "$GH_LOG"
+assert env PATH="$TMP/bin:$PATH" "$HELPER_BASH" "$TMP/host-discovery.sh"
+assert grep -Fxq 'pr create' "$GH_LOG"
+# Without a discovered host CLI the same call fails, rather than selecting an
+# executable from the reviewed repository or retained evidence.
+if env PATH=/nonexistent "$HELPER_BASH" "$TMP/host-discovery.sh" > "$TMP/missing-host-gh.out" 2>&1; then
+  printf 'FAIL: missing host gh accepted\n' >&2; exit 1
+fi
+pass=$((pass+1))
 printf 'publish-reviewed-pr: %d assertions passed (real Kernel producer, disposable production-shaped fixtures, mocked gh; no live/installed proof)\n' "$pass"

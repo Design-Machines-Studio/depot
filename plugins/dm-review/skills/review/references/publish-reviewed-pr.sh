@@ -3,8 +3,12 @@
 # producer-input is a closed map of preserve-review-evidence file arguments.
 # readiness-input contains the explicit current owner and handoff facts.
 set -euo pipefail
+GH_HOST_BIN="$(command -v gh || true)"
 PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export PATH
+# The host CLI may live outside the fixed child PATH (for example ~/.local/bin).
+# Capture it before reset, as the existing external-finding collector does.
+gh() { "$GH_HOST_BIN" "$@"; }
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HERE/review-owner-context.sh"
 OPERATION= REPO= RUN_ROOT= PRODUCER= READINESS= PR= FEATURE_BRANCH=
@@ -43,6 +47,10 @@ if [ -n "${DM_REVIEW_DEVELOPMENT_TEST_ROOT:-}" ]; then
   done
   git() { "$TEST_ROOT/bin/git" "$@"; }
   gh() { "$TEST_ROOT/bin/gh" "$@"; }
+fi
+if [ -z "${DM_REVIEW_DEVELOPMENT_TEST_ROOT:-}" ]; then
+  case "$GH_HOST_BIN" in /*) [ -x "$GH_HOST_BIN" ] || review_refuse 'host GitHub CLI unavailable' ;; *) review_refuse 'host GitHub CLI unavailable' ;; esac
+  case "$GH_HOST_BIN" in "$REPO"/*|"$RUN_ROOT"/*) review_refuse 'GitHub CLI must come from the host, outside reviewed source and run evidence' ;; esac
 fi
 for file in "$PRODUCER" "$READINESS"; do
   review_safe_path "$file"
@@ -258,7 +266,7 @@ if [ "$OPERATION" = ready ]; then
     if [ -n "${DM_REVIEW_DEVELOPMENT_TEST_ROOT:-}" ]; then
       export DM_REVIEW_TEST_MODE=1 DM_REVIEW_TEST_GH_BIN="$TEST_ROOT/bin/gh"
     fi
-    "$HERE/external-finding-intake.sh" --repo "$REPOSITORY" --pr "$NUMBER" --output "$FRESH/intake.json" \
+    PATH="${GH_HOST_BIN%/*}:$PATH" /bin/bash "$HERE/external-finding-intake.sh" --repo "$REPOSITORY" --pr "$NUMBER" --output "$FRESH/intake.json" \
       --max-pr-body-source-bytes "$(jq -r .pull_request.body.source.max_bytes "$INTAKE")"
   ) > "$TEMP/intake-result.json" || review_refuse "fresh external feedback intake incomplete: $FRESH_REL/intake.json"
   jq -cS 'del(.collected_at,.collection_cutoff,.pull_request.body.source.path)' "$INTAKE" > "$TEMP/prior-feedback.json"
