@@ -256,7 +256,26 @@ assert jq -e '.resourceOwnership == "pre-existing" and
 assert grep -Fq '2. the established project domain and canonical checkout' "$CONTRACT"
 assert grep -Fq '5. an attached automation-capable T3 preview' "$CONTRACT"
 assert grep -Fq 'Commit/push and verify the exact head before normally detaching an owned' "$CONTRACT"
-assert grep -Fq 'unfinished evidence; select the branch in the canonical folder before' "$CONTRACT"
+# Inspect the actual ordered host procedure, rather than one wrapped sentence.
+assert python3 - "$CONTRACT" <<'PY'
+import pathlib
+import sys
+
+source = pathlib.Path(sys.argv[1]).read_text()
+procedure = source.split('2. Capture entry status and source fingerprint.', 1)[1].split(
+    '3. Use the project', 1)[0]
+ordered = (
+    'canonical-checkout.sh inspect` then `prepare',
+    'Commit/push and verify the exact head before normally detaching',
+    'Retain its producer checkout, owner state and',
+    'unfinished evidence; select the branch in the canonical folder before',
+    'browser capture, then preserve completed evidence',
+    'Publish from the retained producer with approved `--feature-branch`',
+    'evidence remains mandatory for publication and review-resource destruction',
+)
+positions = [procedure.index(text) for text in ordered]
+assert positions == sorted(positions), positions
+PY
 assert grep -Fq "Foreign occupancy requires that owner's exact release handoff." "$CONTRACT"
 assert grep -Fq 'name collisions and coordinate without force, stash, reset or clean.' "$CONTRACT"
 assert grep -Fq 'changing Git HEAD alone does not refresh' "$CONTRACT"

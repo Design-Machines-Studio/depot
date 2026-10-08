@@ -1024,9 +1024,10 @@ producer/readiness and preserved source/browser references. The parent runs
 mandatory caller verification before publication and refreshes invalidated
 evidence after repairs under this same owner. Pending PR-only CI blocks ready,
 not draft creation. Inputs follow `automatic-implementation-closeout.md`;
-copy approved manifest `baseBranch` to `approvedBase` in `REVIEW_READINESS_INPUT`.
-The helper resolves local/origin names without changing review source base/head;
-never infer approval from GitHub's default.
+Retain `FEATURE_BRANCH`, bound earlier to approved manifest `featureBranch`,
+and `$REVIEW_ROOT` after transfer; never rediscover from detached HEAD. Copy
+manifest `baseBranch` to readiness `approvedBase`; local/origin resolution
+preserves review source base/head, never infers GitHub-default approval.
 
 <!-- reviewed-pr-full:start -->
 ```bash
@@ -1035,6 +1036,7 @@ pipeline) printf '%s\n' 'Publication deferred to parent caller verification.' ;;
 pipeline-run)
 "$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
   --operation create --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --feature-branch "${FEATURE_BRANCH:?approved featureBranch required}" \
   --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT"
 ;;
 *) exit 2 ;;
@@ -1052,6 +1054,7 @@ pipeline) printf '%s\n' 'Publication deferred to parent caller verification.' ;;
 pipeline-run)
 "$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
   --operation ready --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --feature-branch "${FEATURE_BRANCH:?approved featureBranch required}" \
   --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT" \
   --pr "$REVIEW_PR_URL"
 ;;

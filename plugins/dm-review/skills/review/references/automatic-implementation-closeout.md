@@ -154,14 +154,16 @@ ignores intake test overrides; only the validated disposable source fixture
 uses the existing collector seam. Thread and aggregate decision checks remain.
 
 Publish after independent review, repair, recheck and preservation; Full requires
-parent verification. After transfer, both calls use the retained `$REVIEW_ROOT`
-and `--feature-branch` from approved task/manifest `featureBranch`. Never bypass
-with bare `gh`:
+parent verification. Bind `FEATURE_BRANCH` from the approved direct task's
+`featureBranch` (Full: manifest; Lean: approved plan). Retain that authoritative
+binding and `$REVIEW_ROOT` after transfer; never rediscover from detached HEAD.
+Never bypass with bare `gh`:
 
 <!-- reviewed-pr-direct:start -->
 ```bash
 "$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
   --operation create --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --feature-branch "${FEATURE_BRANCH:?approved featureBranch required}" \
   --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT"
 ```
 <!-- reviewed-pr-direct:end -->
@@ -173,6 +175,7 @@ pass at the final head, use the same producer gate for draft-to-ready:
 ```bash
 "$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
   --operation ready --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --feature-branch "${FEATURE_BRANCH:?approved featureBranch required}" \
   --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT" \
   --pr "$REVIEW_PR_URL"
 ```

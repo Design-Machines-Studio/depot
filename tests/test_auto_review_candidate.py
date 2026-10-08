@@ -197,6 +197,7 @@ esac
                         WORKFLOW_KERNEL=str(self.source / "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"),
                         REVIEW_ROOT=str(self.repo), REVIEW_PR_URL="https://github.com/Fixture/consumer/pull/42",
                         PR_BUCKET="pass", UNRESOLVED="false", REVIEW_DECISION="APPROVED",
+                        FEATURE_BRANCH="candidate",
                         TERMINAL_MODEL_REPORT_OWNER="pipeline-run", CALLER_VERIFICATION_PASSED="true")
 
     def tearDown(self):
@@ -292,6 +293,91 @@ esac
         if no_gh:
             self.assertEqual("", self.log.read_text())
         return result
+
+    def test_actual_callers_publish_after_same_owner_detached_transfer(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                # Bind the approved task (direct), manifest (Full), or plan
+                # (Lean) context before transfer; never derive it from HEAD.
+                self.env["FEATURE_BRANCH"] = "candidate"
+                self.git_run("switch", "candidate")
+                run, paths = self.prepare(caller, "detached-transfer")
+                owner = dict(self.facts["owner"])
+                state = Path(owner["state_dir"])
+                original = {path: path.read_bytes() for path in paths.values()
+                            if isinstance(path, Path) and path.is_file()}
+                canonical = self.root / f"canonical-{caller}"
+                head = self.git_run("rev-parse", "HEAD")
+                self.git_run("worktree", "add", "--quiet", "--detach", str(canonical), head)
+                self.git_run("switch", "--detach", head)
+                subprocess.run([self.git, "-C", str(canonical), "switch", "--quiet", "candidate"], check=True)
+                self.assertEqual("", self.git_run("branch", "--show-current"))
+                self.assertEqual("candidate", subprocess.check_output(
+                    [self.git, "-C", str(canonical), "branch", "--show-current"], text=True).strip())
+                self.assertEqual(head, self.git_run("rev-parse", "HEAD"))
+                self.assertEqual(str(self.repo), self.env["REVIEW_ROOT"])
+                self.assertEqual(str(run.root), self.env["REVIEW_RUN_ROOT"])
+                self.assertEqual(self.repo / ".workflow-kernel/runs" / run.run_id, state)
+                for operation in ("create", "ready"):
+                    if operation == "ready":
+                        self.facts["readiness"]["feedbackSettled"] = True
+                        self.save_facts()
+                    marker = f"reviewed-pr-{caller}" + ("-ready" if operation == "ready" else "")
+                    self.assertIn('--feature-branch "${FEATURE_BRANCH:?approved featureBranch required}"',
+                                  self.snippet(caller, marker))
+                    result = self.publish(caller, operation)
+                    self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+                    self.assertRegex(self.log.read_text(), rf"(?m)^pr {operation}(?: |$)")
+                    self.assertEqual(owner, self.facts["owner"])
+                    self.assertTrue(state.is_dir())
+                    self.assertEqual(original, {path: path.read_bytes() for path in original})
+                    self.assertEqual("", self.git_run("branch", "--show-current"))
+                # Leave the branch free for the next caller's independent run.
+                subprocess.run([self.git, "-C", str(canonical), "switch", "--quiet", "--detach", head], check=True)
+
+    def test_detached_actual_callers_reject_wrong_or_missing_branch_without_mutation(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.env["FEATURE_BRANCH"] = "candidate"
+                self.git_run("switch", "candidate")
+                run, _ = self.prepare(caller, "detached-rejections")
+                canonical = self.root / f"canonical-rejections-{caller}"
+                head = self.git_run("rev-parse", "HEAD")
+                self.git_run("worktree", "add", "--quiet", "--detach", str(canonical), head)
+                self.git_run("switch", "--detach", head)
+                subprocess.run([self.git, "-C", str(canonical), "switch", "--quiet", "candidate"], check=True)
+                # Seal via the actual caller first. Retries must preserve the
+                # same real Kernel/source inputs, owner state and Git refs.
+                created = self.publish(caller)
+                self.assertEqual(0, created.returncode, created.stdout + created.stderr)
+                self.facts["readiness"]["feedbackSettled"] = True
+                self.save_facts()
+                state = Path(self.facts["owner"]["state_dir"])
+                def snapshot():
+                    files = {path: path.read_bytes() for root in (run.root, state, self.repo / ".claude")
+                             for path in root.rglob("*") if path.is_file()}
+                    files.update({Path(self.env[key]): Path(self.env[key]).read_bytes()
+                                  for key in ("REVIEW_PRODUCER_INPUT", "REVIEW_READINESS_INPUT")})
+                    return (files, self.git_run("show-ref"), self.git_run("rev-parse", "HEAD"),
+                            self.git_run("status", "--porcelain"), subprocess.check_output(
+                                [self.git, "-C", str(canonical), "symbolic-ref", "HEAD"], text=True))
+                before = snapshot()
+                for operation in ("create", "ready"):
+                    for branch in (None, "", "release/reviewed", "absent-feature"):
+                        with self.subTest(operation=operation, branch=branch):
+                            if branch is None:
+                                self.env.pop("FEATURE_BRANCH", None)
+                            else:
+                                self.env["FEATURE_BRANCH"] = branch
+                            rejected = self.reject(caller, operation)
+                            if branch in (None, ""):
+                                self.assertIn("approved featureBranch required", rejected.stderr)
+                            else:
+                                self.assertRegex(rejected.stderr, "feature branch missing|remote candidate heads differ")
+                            self.assertEqual(before, snapshot())
+                            self.assertTrue(state.is_dir())
+                self.env["FEATURE_BRANCH"] = "candidate"
+                subprocess.run([self.git, "-C", str(canonical), "switch", "--quiet", "--detach", head], check=True)
 
     def test_callers_block_pre_review_creation_and_missing_source(self):
         for caller in self.CALLERS:

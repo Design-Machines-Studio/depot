@@ -507,16 +507,19 @@ checks and the requirements cross-check pass. Only then set
 source changes, failed or missing checks and refresh affected producer evidence.
 Full mode reuses its deferred candidate under the same owner, never a new loop.
 Never use bare `gh` to create or ready a PR.
-Use the exact input variables and closed producer/readiness shapes from
-`automatic-implementation-closeout.md`. Copy approved plan/manifest `baseBranch`
-to `approvedBase` in `REVIEW_READINESS_INPUT`; the helper resolves local/origin
-names, never GitHub's default, and preserves original review source base/head:
+Use `automatic-implementation-closeout.md`'s closed inputs. Bind `FEATURE_BRANCH`
+from approved plan `featureBranch` for Lean (no manifest), or retain Full's
+approved manifest binding. Keep it and `$REVIEW_ROOT` after transfer; never
+rediscover from detached HEAD. Copy approved `baseBranch` to readiness
+`approvedBase`; local/origin resolution preserves source base/head, never
+infers GitHub-default approval:
 
 <!-- reviewed-pr-lean:start -->
 ```bash
 [ "${CALLER_VERIFICATION_PASSED:-false}" = true ] || exit 3
 "$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
   --operation create --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --feature-branch "${FEATURE_BRANCH:?approved featureBranch required}" \
   --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT"
 ```
 <!-- reviewed-pr-lean:end -->
@@ -529,6 +532,7 @@ pass at the final head, use the same producer gate for draft-to-ready:
 [ "${CALLER_VERIFICATION_PASSED:-false}" = true ] || exit 3
 "$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
   --operation ready --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --feature-branch "${FEATURE_BRANCH:?approved featureBranch required}" \
   --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT" \
   --pr "$REVIEW_PR_URL"
 ```
