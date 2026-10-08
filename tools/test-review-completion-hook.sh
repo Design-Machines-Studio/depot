@@ -17,9 +17,9 @@ REASON='Resume this exact owner, validate current producer coverage and perform 
 
 # Run the hook; stdout goes to $TMP/out. Every case must exit zero.
 hook() { "$HOOK" "$1" < "$2" > "$TMP/out"; }
-silent() { hook "$1" "$2"; test ! -s "$TMP/out"; }
-blocks() { hook stop "$1"; jq -e --arg reason "$REASON" '. == {decision:"block",reason:$reason}' "$TMP/out"; }
-diagnoses() { hook "$1" "$2"; jq -e --arg text "$3" '(keys == ["systemMessage"]) and (.systemMessage | contains($text))' "$TMP/out"; }
+silent() { hook "$1" "$2" || return; test ! -s "$TMP/out"; }
+blocks() { hook stop "$1" || return; jq -e --arg reason "$REASON" '. == {decision:"block",reason:$reason}' "$TMP/out"; }
+diagnoses() { hook "$1" "$2" || return; jq -e --arg text "$3" '(keys == ["systemMessage"]) and (.systemMessage | contains($text))' "$TMP/out"; }
 boundary() { bash -c 'source "$1"; review_change_boundary "$2"' bash "$CONTEXT" "$REPO"; }
 phase() { "$CONTEXT" phase --repository-root "$REPO" --context "$POINTER" --phase "$1" --change-boundary "$(boundary)" < "$TMP/start.json" >/dev/null; }
 recorded_phase() { jq -r .phase "$POINTER"; }
@@ -58,6 +58,18 @@ make_repo "$REPO" https://github.com/Fixture/consumer.git
 native SessionStart native-session "$REPO" > "$TMP/start.json"
 native Stop native-session "$REPO" false > "$TMP/stop.json"
 native Stop native-session "$REPO" true > "$TMP/stop-active.json"
+
+# A hook that exits nonzero fails every wrapper, even with matching output.
+fails() { ! "$@"; }
+REAL_HOOK="$HOOK"; HOOK="$TMP/crashing-hook"
+printf '#!/usr/bin/env bash\ncat %q\nexit 7\n' "$TMP/crash.out" > "$HOOK"; chmod +x "$HOOK"
+: > "$TMP/crash.out"
+assert fails silent stop "$TMP/stop.json"
+jq -cn --arg reason "$REASON" '{decision:"block",reason:$reason}' > "$TMP/crash.out"
+assert fails blocks "$TMP/stop.json"
+jq -cn '{systemMessage:"Not ready: crashed"}' > "$TMP/crash.out"
+assert fails diagnoses stop "$TMP/stop.json" 'Not ready'
+HOOK="$REAL_HOOK"
 
 # Malformed input, wrong events, bad modes and missing assets are precise diagnostics.
 printf 'not json' > "$TMP/malformed.json"
