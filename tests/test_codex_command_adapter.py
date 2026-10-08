@@ -86,6 +86,39 @@ class CodexCommandAdapterContractTests(unittest.TestCase):
         self.assertIn("init .workflow-kernel/runs/<run-id>", review)
         self.assertIn("Produce nonempty independent `review_request` prediction receipts", review)
 
+    def test_review_before_publication_and_owner_only_merge_contract(self) -> None:
+        direct = (REPO / "plugins/dm-review/skills/review/references/automatic-implementation-closeout.md").read_text()
+        pipeline = (REPO / "plugins/pipeline/commands/pipeline.md").read_text()
+        full = (REPO / "plugins/pipeline/agents/workflow/execution-orchestrator.md").read_text()
+        adapter = (REPO / "plugins/pipeline/references/codex-native-execution-adapter.md").read_text()
+        schema = (REPO / "plugins/pipeline/skills/promptcraft/references/manifest-schema.md").read_text()
+        prompt = (REPO / "plugins/pipeline/skills/promptcraft/references/prompt-template.md").read_text()
+        self.assertIn('"noMergeOnCompletion": true', schema)
+        for text in (pipeline, full, adapter, prompt):
+            with self.subTest(surface=text.splitlines()[0]):
+                self.assertIn("noMergeOnCompletion=true", text)
+                self.assertIn("publish-reviewed-pr.sh", text)
+                self.assertIn("read-only", text)
+        self.assertNotIn('default `false`', full)
+        self.assertNotIn('**If `false`:** proceed', full)
+        self.assertNotIn('Recommended next action: create the PR', pipeline)
+        self.assertNotIn('**If the user chooses PR:**', pipeline)
+        self.assertLess(full.index('## Step 4: Approved Final Review'), full.index('<!-- reviewed-pr-full:start -->'))
+        self.assertLess(pipeline.index('### Caller Verification Checklist'), pipeline.index('<!-- reviewed-pr-lean:start -->'))
+        self.assertLess(direct.index('Independently review,'), direct.index('<!-- reviewed-pr-direct:start -->'))
+        for caller, text in (("direct", direct), ("full", full), ("lean", pipeline)):
+            with self.subTest(caller=caller):
+                for operation in ("create", "ready"):
+                    self.assertIn(f'--operation {operation} --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT"', text)
+                self.assertIn('not_applicable', text)
+                self.assertIn(f'<!-- review-gap-{caller}:start -->', text)
+                self.assertIn('hook activation unavailable', text)
+                self.assertNotRegex(text, r"(?m)^\s*gh pr (create|ready|merge)(?: |$)")
+        self.assertIn('rebind', direct.lower())
+        self.assertIn('SessionStart/Stop', direct)
+        self.assertIn('private ownership, single-link containment', direct)
+        self.assertIn('never bind/update/clear', direct)
+
     def test_aliases_retain_canonical_command_bodies(self) -> None:
         expected = GENERATOR.expected_files()
         self.assertEqual(36, len(expected))

@@ -42,10 +42,28 @@ This project uses the [Live Wires CSS framework](https://github.com/Design-Machi
 
 ### Proportional review
 
-When a code review produces findings, fix P1 and P2 before merge. Preserve P3
-with its evidence and provenance as advisory guidance; it does not enter the
-fix queue or require a deferral mechanism. Use the smallest applicable review
-roster during development and one full review at the final integration boundary.
+After plan/prompt approval, implement and commit/push the candidate branch.
+Use dm-review's `automatic-implementation-closeout.md`: independently review,
+fix every retained P1/P2/P3 defect, reject unsupported preferences with reasons,
+recheck affected evidence and preserve source/browser proof before opening a PR.
+Direct tasks use one supported loop; Pipeline uses its single integrated owner
+and final review. A repair push never starts a duplicate broad review.
+
+Use `publish-reviewed-pr.sh` for both PR creation and draft-to-ready transitions
+with the exact automatic-closeout arguments; never bypass it with bare `gh`.
+PR-only CI remains pending until the PR exists. Keep the draft until actual
+final-head automation, independently settled feedback and required designer UI
+acceptance pass. At an unchanged covered head with zero findings, wait for CI/
+feedback without reviewer dispatch. Use chunk01's `operator-handoff.sh` human
+handoff for browser tasks and owner merge; never ask for routine backend-code
+review or PR creation. Preserve planning and material-scope approval.
+
+Generate `noMergeOnCompletion=true`; missing or false legacy controls never
+authorize agent merge. Only the root owner binds the exact native SessionStart
+context after approval and updates actual phases with `review-owner-context.sh`;
+workers receive the ref read-only. When hooks are unavailable, report
+`hook activation unavailable` and still run the mandatory pre-PR producer gate.
+No agent merges, tags or releases by implication.
 
 ### Brainstorm trigger
 

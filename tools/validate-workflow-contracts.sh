@@ -357,7 +357,7 @@ else
 fi
 
 require_text "$pipeline_cmd" "repo-cleanup-contract.md" "pipeline command references the cleanup contract"
-require_text "$pipeline_cmd" "exact-owned cleanup phase runs on all three answers" "pipeline gate runs cleanup on every answer"
+require_text "$pipeline_cmd" "Exact-owned cleanup runs on every terminal path" "pipeline delivery runs cleanup on every terminal path"
 codex_native_adapter="$REPO_ROOT/plugins/pipeline/references/codex-native-execution-adapter.md"
 rail_exhaustion_gate="$REPO_ROOT/plugins/pipeline/references/rail-exhaustion-ask-gate.md"
 role_dispatch="$REPO_ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh"
@@ -799,8 +799,8 @@ require_text "$review_skill" "references/selective-lane-allowlist.md" "review re
 require_text "$selective_allowlist" "never relax this equality check to a subset check" "allowlist contract requires exact selected_full_set equality"
 require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.26.0"' "dm-review requires source-bound review evidence producer"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.24.0"' "pipeline requires review evidence closeout"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.85.0"' "pipeline requires the current completion and host-adapter contract"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.26.0"' "pipeline requires review evidence closeout"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.87.0"' "pipeline requires the current reviewed-publication contract"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"model-router": ">=0.11.0"' "dm-review requires review recommendation routing"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"model-router": ">=0.12.0"' "pipeline requires the current routing runtime"
 require_text "$review_skill" 'Implementation origin is not a coverage field or eligibility condition.' "dm-review makes implementation origin ineligible as a review filter"
@@ -1228,10 +1228,10 @@ for f in "$prompt_template" "$orchestrator"; do
     "$rel permits targeted repair calls"
   require_text "$f" "commit coherent work" \
     "$rel permits commit calls"
-  require_text "$f" "push the branch" \
+  require_text "$f" "candidate branch" \
     "$rel permits push calls"
-  require_text "$f" "create or update the PR" \
-    "$rel permits PR calls"
+  require_text "$f" "publication seam" \
+    "$rel reserves PR calls for the root publication seam"
   require_text "$f" "final report" \
     "$rel permits final reporting calls"
   require_text "$f" "After at most two targeted repair-and-recheck cycles" \
@@ -1724,8 +1724,8 @@ require_text "$orchestrator" 'Detailed review: `.claude/ux-review/report.md`' \
   "Pipeline links the mandatory detailed review artifact"
 require_before "$orchestrator" '## Step 4c: Merge Policy Check' '## Step 6: Summary Report' \
   "Pipeline records merge policy before final human delivery"
-require_text "$orchestrator" 'state `noMergeOnCompletion=true` in **Branch or PR** and make manual branch review the single **Recommended next action**' \
-  "Pipeline routes no-merge disposition into live compact-summary fields"
+require_text "$orchestrator" 'state `noMergeOnCompletion=true` in **Branch or PR**' \
+  "Pipeline routes owner-only merge into live compact-summary fields"
 require_absent "$orchestrator" 'Summary Report'"'"'s "Next Steps" section' \
   "Pipeline no longer points no-merge runs at the deleted Next Steps section"
 require_text "$orchestrator" 'roleSplit: {<role>: N}' \
@@ -1757,7 +1757,7 @@ reviewer_prompt_template="$REPO_ROOT/plugins/dm-review/skills/review/references/
 full_lane_dispatch="$REPO_ROOT/plugins/dm-review/skills/review/references/full-lane-dispatch.md"
 
 # One canonical owner, reached on every hot path and inlined into external prompts.
-require_text "$deployment_context" "two-person development team" "deployment context names the team scale"
+require_text "$deployment_context" "small designer-led team" "deployment context names the current designer/agent team"
 require_text "$deployment_context" "4--50 users" "deployment context names the install scale"
 require_text "$deployment_context" "not search-indexed" "deployment context names the non-indexed threat model"
 require_text "$deployment_context" "single owner" "deployment context declares itself the single owner"
@@ -2070,6 +2070,33 @@ require_text "$review_loop" 'max_iterations += 1' "default checkpoint continues 
 require_absent "$review_loop" 'Manual decision required.' "first recheck does not defer fixable findings"
 require_text "$review_skill" 'without recursion' "nested review preserves enclosing repair ownership"
 require_text "$review_skill" 'Explicit read-only requests remain read-only' "read-only review override remains effective"
+
+# Review-before-publication callers and designer/owner boundaries.
+auto_closeout="$REPO_ROOT/plugins/dm-review/skills/review/references/automatic-implementation-closeout.md"
+manifest_schema="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/manifest-schema.md"
+require_text "$manifest_schema" '"noMergeOnCompletion": true' "new manifests reserve merge for the owner"
+require_absent "$orchestrator" 'default `false`' "missing merge controls default safely"
+require_absent "$orchestrator" '**If `false`:** proceed' "legacy false grants no agent merge authority"
+require_absent "$pipeline_cmd" 'Recommended next action: create the PR' "designer is not asked to create the PR"
+require_absent "$pipeline_cmd" '**If the user chooses PR:**' "PR publication is agent-owned after candidate vetting"
+require_before "$orchestrator" '## Step 4: Approved Final Review' '<!-- reviewed-pr-full:start -->' "full review precedes PR publication"
+require_before "$pipeline_cmd" '### Caller Verification Checklist' '<!-- reviewed-pr-lean:start -->' "Lean caller verification precedes PR publication"
+for caller in direct full lean; do
+  case "$caller" in direct) surface="$auto_closeout" ;; full) surface="$orchestrator" ;; lean) surface="$pipeline_cmd" ;; esac
+  require_text "$surface" "<!-- reviewed-pr-$caller:start -->" "$caller invokes the creation seam"
+  require_text "$surface" "<!-- reviewed-pr-$caller-ready:start -->" "$caller invokes the ready seam"
+  require_text "$surface" '--operation create --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT"' "$caller uses exact create arguments"
+  require_text "$surface" '--operation ready --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT"' "$caller uses exact ready arguments"
+  require_text "$surface" '--producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT"' "$caller supplies producer/readiness inputs"
+  require_text "$surface" 'not_applicable' "$caller separates pre-PR feedback from review"
+  require_text "$surface" "<!-- review-gap-$caller:start -->" "$caller guards the review selector on actual gaps"
+  require_text "$surface" 'hook activation unavailable' "$caller reports unavailable native hook binding honestly"
+done
+require_text "$auto_closeout" 'private ownership, single-link containment' "session binding validates the private native pointer"
+require_text "$auto_closeout" 'never bind/update/clear' "workers cannot bind the parent session"
+require_text "$auto_closeout" 'existing producer is the only coverage authority' "native context never supplies review coverage"
+require_text "$REPO_ROOT/plugins/project-scaffolder/skills/scaffolding/references/claude-md-templates/dm-standard.md" 'fix every retained P1/P2/P3 defect' "scaffold preserves zero-deferral repair"
+require_text "$REPO_ROOT/tests/test_auto_review_candidate.py" 'Fixture-owner orchestration proof; no installed workflow or live canary.' "caller fixtures distinguish source proof from installed enforcement"
 
 # Browser artifacts must not dirty the next chunk's source checkout.
 artifact_cleanup="$REPO_ROOT/plugins/dm-review/skills/review/references/browser-artifact-cleanup.md"

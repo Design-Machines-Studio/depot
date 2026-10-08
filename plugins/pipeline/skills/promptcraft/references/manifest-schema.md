@@ -16,6 +16,7 @@ transport, family, subscription, or billing source.
   "featureBranch": "feat/member-export",
   "branchMode": "create",
   "expectedFeatureHead": null,
+  "noMergeOnCompletion": true,
   "finalReviewMode": "full",
   "finalReviewRationale": "The export changes data handling.",
   "chunks": [
@@ -59,6 +60,7 @@ requirement.
 |---|---|---|
 | `branchMode` | enum | Required `create` or `reuse`; legacy absence defaults to `create` with a receipt. |
 | `expectedFeatureHead` | string or null | Required exact remote head for `reuse`; null for `create`. |
+| `noMergeOnCompletion` | boolean | Required `true` in every generated manifest. Missing legacy controls default safely to owner-only merge; an old explicit `false` cannot override this owner instruction. |
 | `finalReviewMode` | enum | Required `full` or explicitly approved eligible `quick`. |
 | `finalReviewRationale` | string | Required non-empty rationale copied from the approved plan. |
 

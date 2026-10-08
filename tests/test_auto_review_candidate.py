@@ -2,6 +2,10 @@
 import json
 import hashlib
 import subprocess
+import os
+import re
+import shutil
+import tempfile
 from pathlib import Path
 
 import unittest
@@ -58,6 +62,223 @@ class AutoReviewCandidateTests(unittest.TestCase):
 
     def test_pipeline_owner_repair_push_and_final_head_closeout(self):
         self.exercise_path("pipeline")
+
+
+class ReviewedPRCallerFixtures(unittest.TestCase):
+    """Fixture-owner orchestration proof; no installed workflow or live canary.
+
+    Execute the direct/full/Lean source caller seams, using the real production
+    producer and disposable production-shaped data. Only git remote projection
+    and gh are mocked; no participant or actual PR is claimed.
+    """
+    make_run = fixture.ReviewCloseoutTests.make_run
+
+    CALLERS = {
+        "direct": "plugins/dm-review/skills/review/references/automatic-implementation-closeout.md",
+        "full": "plugins/pipeline/agents/workflow/execution-orchestrator.md",
+        "lean": "plugins/pipeline/commands/pipeline.md",
+    }
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="publish-reviewed-pr-test.")
+        self.root = Path(self.temp.name).resolve()
+        self.repo = self.root / "repository"
+        self.repo.mkdir()
+        self.state = self.root / "runs"
+        self.state.mkdir()
+        self.source = Path(__file__).resolve().parents[1]
+        self.git = shutil.which("git")
+        for argv in (
+            ["init", "--quiet", "-b", "candidate"],
+            ["config", "user.name", "Fixture"],
+            ["config", "user.email", "fixture@example.test"],
+            ["remote", "add", "origin", "https://github.com/Fixture/consumer.git"],
+        ):
+            self.git_run(*argv)
+        (self.repo / "source.txt").write_text("reviewed source\n")
+        (self.repo / ".gitignore").write_text(".workflow-kernel/\n.claude/\n")
+        self.git_run("add", ".")
+        self.git_run("commit", "--quiet", "-m", "fixture")
+        self.log = self.root / "gh.log"
+        self.git_log = self.root / "git.log"
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.write_tool("git", r'''#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$GIT_LOG"
+if [ "${3:-}" = ls-remote ]; then
+  printf '%s\trefs/heads/candidate\n' "$REMOTE_HEAD"
+else exec "$REAL_GIT" "$@"; fi
+''')
+        self.write_tool("gh", r'''#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$GH_LOG"
+case "$1 ${2:-}" in
+  'pr create') printf 'https://github.com/Fixture/consumer/pull/42\n' ;;
+  'pr ready') ;;
+  'pr view') jq -cn --arg head "$PR_HEAD" '{headRefOid:$head,headRefName:"candidate",state:"OPEN",isDraft:true,reviewDecision:"APPROVED"}' ;;
+  'pr checks') jq -cn --arg bucket "$PR_BUCKET" '[{name:"actual CI",bucket:$bucket,link:"https://example.test/ci"}]' ;;
+  'api graphql') jq -cn --arg head "$PR_HEAD" '{data:{repository:{pullRequest:{headRefOid:$head,reviewThreads:{nodes:[{isResolved:(env.UNRESOLVED!="true")}],pageInfo:{hasNextPage:false}}}}}}' ;;
+  *) exit 2 ;;
+esac
+''')
+        self.env = dict(os.environ, DM_REVIEW_DEVELOPMENT_TEST_ROOT=str(self.root),
+                        REAL_GIT=self.git, GH_LOG=str(self.log), GIT_LOG=str(self.git_log),
+                        DM_REVIEW_BUNDLE_ROOT=str(self.source / "plugins/dm-review"),
+                        WORKFLOW_KERNEL=str(self.source / "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"),
+                        REVIEW_ROOT=str(self.repo), REVIEW_PR_URL="https://github.com/Fixture/consumer/pull/42",
+                        PR_BUCKET="pass", UNRESOLVED="false")
+
+    def tearDown(self):
+        # No agent merge may occur on success, rejection or recovery paths.
+        if self.log.exists():
+            self.assertNotRegex(self.log.read_text(), r"(?m)^pr merge(?: |$)")
+        if self.git_log.exists():
+            self.assertNotRegex(self.git_log.read_text(), r" -?merge(?: |$)")
+        self.temp.cleanup()
+
+    def git_run(self, *args):
+        return subprocess.check_output([self.git, "-C", str(self.repo), *args], text=True).strip()
+
+    def write_tool(self, name, body):
+        path = self.bin / name
+        path.write_text(body)
+        path.chmod(0o700)
+
+    def prepare(self, caller, suffix="initial"):
+        workflow = "dm-review-loop" if caller == "direct" else "pipeline"
+        run_id = f"{caller}-initial" if suffix == "exact-replay" else f"{caller}-{suffix}"
+        run, paths = self.make_run(workflow, run_id)
+        state = self.repo / ".workflow-kernel/runs" / run_id
+        state.mkdir(parents=True, exist_ok=True)
+        producer = self.root / f"{run_id}-producer.json"
+        keys = {"request": "request", "receipts": "receipts", "lane-receipts": "lane_receipts",
+                "raw-lane-outputs": "raw_lane_outputs", "raw-findings": "raw_findings",
+                "decisions": "decisions", "private-router-directory": "router", "report": "report"}
+        producer.write_text(json.dumps({key: str(paths[value]) for key, value in keys.items()}))
+        head = self.git_run("rev-parse", "HEAD")
+        self.readiness = self.root / f"{run_id}-readiness.json"
+        self.facts = {
+            "owner": {"repository": "Fixture/consumer", "workflow": workflow, "run_id": run_id,
+                      "run_root": str(run.root), "state_dir": str(state)}, "uiNonImpact": None,
+            "readiness": {
+                "target": "Vetted candidate", "detail": "https://example.test/report", "finalHead": head,
+                "dirty": False, "feedbackSettled": False,
+                "coverage": {"status": "missing", "head": None, "gaps": [], "requiredBrowserCases": [], "evidence": None},
+                "lanes": [{"area": area, "status": "covered" if area == "Security" else "exempt",
+                           "note": None if area == "Security" else "Not selected by this bounded fixture.",
+                           "evidence": "https://example.test/security" if area == "Security" else None}
+                          for area in ("Architecture", "Simplicity", "Security", "Testing", "Fixture/distribution")],
+                "findings": [], "checks": [{"name": "candidate tests", "stage": "candidate", "status": "pass", "link": None},
+                                           {"name": "actual CI", "stage": "pr", "status": "pending", "link": None}],
+                "ui": {"changed": False, "preview": None, "tasks": [], "acceptance": None},
+            },
+        }
+        self.save_facts()
+        self.env.update(REVIEW_RUN_ROOT=str(run.root), REVIEW_PRODUCER_INPUT=str(producer),
+                        REVIEW_READINESS_INPUT=str(self.readiness), REMOTE_HEAD=head, PR_HEAD=head)
+        self.log.write_text("")
+        self.git_log.write_text("")
+        return run, paths
+
+    def save_facts(self):
+        self.readiness.write_text(json.dumps(self.facts))
+
+    def snippet(self, caller, marker):
+        text = (self.source / self.CALLERS[caller]).read_text()
+        match = re.search(rf"<!-- {marker}:start -->\n```bash\n(.*?)\n```\n<!-- {marker}:end -->", text, re.S)
+        self.assertIsNotNone(match, marker)
+        return match.group(1)
+
+    def publish(self, caller, operation="create"):
+        marker = f"reviewed-pr-{caller}" + ("-ready" if operation == "ready" else "")
+        return subprocess.run(["bash", "-euc", self.snippet(caller, marker)],
+                              env=self.env, capture_output=True, text=True, timeout=30)
+
+    def reject(self, caller, operation="create", *, no_gh=True):
+        self.log.write_text("")
+        result = self.publish(caller, operation)
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertNotRegex(self.log.read_text(), r"(?m)^pr (create|ready)(?: |$)")
+        if no_gh:
+            self.assertEqual("", self.log.read_text())
+        return result
+
+    def test_callers_block_pre_review_creation_and_missing_source(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                run, paths = self.prepare(caller)
+                paths["lane_receipts"].unlink()
+                rejected = self.reject(caller)
+                self.assertIn("required producer validation failed", rejected.stderr)
+                self.prepare(caller, "missing-source")
+                (self.repo / "source.txt").unlink()
+                self.reject(caller)
+                self.git_run("restore", "source.txt")
+
+    def test_candidate_repairs_and_fresh_replay_precede_publication(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                run, paths = self.prepare(caller)
+                preserved = fixture.ReviewCloseoutTests.preserve(self, run, paths)
+                self.assertEqual("complete", preserved["status"])
+                retained = Path(preserved["evidence_path"])
+                original = {p.relative_to(retained): p.read_bytes() for p in retained.rglob("*") if p.is_file()}
+                self.facts["readiness"]["findings"] = [{"severity": "P3", "location": "source.txt:1", "problem": "Concrete fixture defect"}]
+                self.save_facts()
+                self.reject(caller)
+                (self.repo / "source.txt").write_text(f"{caller} repaired source\n")
+                self.git_run("add", "source.txt")
+                self.git_run("commit", "--quiet", "-m", "repair fixture defect")
+                self.reject(caller, "ready")  # old review cannot ready the repaired head
+                self.prepare(caller, "exact-replay")
+                created = self.publish(caller)
+                self.assertEqual(0, created.returncode, created.stdout + created.stderr)
+                self.assertIn("--draft", self.log.read_text())
+                self.assertIn("pr create", self.log.read_text())
+                self.assertEqual(original, {p.relative_to(retained): p.read_bytes() for p in retained.rglob("*") if p.is_file()})
+                self.env["PR_BUCKET"] = "pending"
+                self.reject(caller, "ready", no_gh=False)
+                self.env["PR_BUCKET"] = "pass"
+                self.env["UNRESOLVED"] = "true"
+                self.reject(caller, "ready", no_gh=False)
+                self.env["UNRESOLVED"] = "false"
+                self.facts["readiness"]["feedbackSettled"] = True
+                self.save_facts()
+                ready = self.publish(caller, "ready")
+                self.assertEqual(0, ready.returncode, ready.stdout + ready.stderr)
+                self.assertIn("pr ready", self.log.read_text())
+
+    def test_unchanged_covered_head_unsettled_feedback_does_not_select_reviewers(self):
+        # The selector alone would currently ask for broad review on false
+        # prFeedbackSettled. Callers must separate that wait before invoking it.
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.prepare(caller)
+                self.env.update(SOURCE_COVERAGE_GAP="false", SUPPORTED_RETAINED_FINDING="false",
+                                RENDERED_AUTOMATION_GAP="false", REVIEW_ACTION_INPUT=str(self.root / "not-applicable-feedback.json"))
+                result = subprocess.run(["bash", "-euc", self.snippet(caller, f"review-gap-{caller}")],
+                                        env=self.env, capture_output=True, text=True, timeout=10)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertIn("without reviewer dispatch", result.stdout)
+                self.assertNotIn("modelWork: true", result.stdout)
+                self.assertEqual("", self.log.read_text())
+
+    def test_changed_ui_keeps_draft_until_designer_acceptance(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.prepare(caller)
+                self.facts["readiness"].update(feedbackSettled=True)
+                self.facts["readiness"]["ui"].update(changed=True, preview="https://preview.test", tasks=["Check confirmation."])
+                self.save_facts()
+                created = self.publish(caller)
+                self.assertEqual(0, created.returncode, created.stderr)
+                self.reject(caller, "ready", no_gh=False)
+                self.facts["readiness"]["ui"]["acceptance"] = {"head": self.env["PR_HEAD"], "unchangedSince": False}
+                self.save_facts()
+                ready = self.publish(caller, "ready")
+                self.assertEqual(0, ready.returncode, ready.stderr)
+                self.assertIn("pr ready", self.log.read_text())
 
 
 class ReviewEvidenceProducerTests(unittest.TestCase):

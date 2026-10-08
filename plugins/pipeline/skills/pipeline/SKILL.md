@@ -93,10 +93,10 @@ Create this ledger with TodoWrite at the start and update it as each phase compl
 9. FINAL PLANNING GATE: Approve the reviewed planning package for execution
 10. Phase 6: Execute (full: orchestrator chunks; lean: one approved implementation pass)
 11. Phase 7: Deliver -- evidence-backed cross-check against approved requirements and outcomes
-12. Phase 7 GATE: Present results and ask user for next step
+12. Phase 7: Publish vetted PR, settle automation/feedback, present UI acceptance or owner merge handoff
 ```
 
-Mark each item as completed; do not mark a GATE complete until AskUserQuestion has returned. Before execution there are exactly two routine human gates: combined discovery and final planning. Creative brainstorming, capacity, and post-execution delivery decisions remain conditional boundaries and do not recreate assessment, research, or plan gates.
+Mark each item as completed; do not mark a planning GATE complete until AskUserQuestion has returned. Delivery does not add a routine code-review or create-PR approval gate. Before execution there are exactly two routine human gates: combined discovery and final planning. Creative brainstorming, capacity, and post-execution delivery decisions remain conditional boundaries and do not recreate assessment, research, or plan gates.
 
 ### Wait Measurement
 
@@ -318,6 +318,8 @@ Load the promptcraft skill from `plugins/pipeline/skills/promptcraft/SKILL.md`.
 6. Generate the manifest
 7. Save to `plans/<feature-slug>/manifest.json` and `plans/<feature-slug>/prompts/`
 
+Every generated manifest MUST set `noMergeOnCompletion=true`. Missing legacy controls default safely; an old explicit `false` never overrides owner-only merge.
+
 The manifest MUST copy the approved plan island's explicit `workflowClass: chore|bug|feature|hotfix|security|investigation|migration`, exact closed `decisionProfile`, `baseBranch`, `featureBranch`, `branchMode`, `expectedFeatureHead`, `finalReviewMode`, and `finalReviewRationale` unchanged; never infer or reselect them from chunk kind, file paths, prompt prose, risk, or one another. Missing required fields, malformed/multiple candidates, or upstream conflict return to the combined discovery gate. A legacy missing workflow class defaults only at consumption to `feature` with `workflow_class_defaulted=true`; legacy missing decision/branch/review controls follow documented safe defaults with explicit default receipts. Pass validated values and provenance unchanged through execution receipts and metrics; security keeps all existing provider and approval overrides.
 
 Every new chunk also carries `renderedSurface: required|not_applicable` and non-empty `renderedSurfaceRationale`, derived independently from `kind`: `required` covers served routes, rendered output, browser interaction, and visual/browser criteria; `not_applicable` must name and account for every syntactic UI/integration trigger. Mixed or uncertain scope is `required`.
@@ -369,6 +371,18 @@ Execution MUST NOT begin without explicit approval of this final package. Correc
 
 Enter only after the final planning gate returned explicit execution approval; approval of assessment, research, or a draft plan is insufficient.
 
+Load dm-review's `automatic-implementation-closeout.md` and the coherent bundle's
+`review-owner-context.sh`, `publish-reviewed-pr.sh` and `operator-handoff.sh`.
+The root owner invokes `bind` only now, after plan/prompt approval, using the
+exact SessionStart context ref, native input and actual workflow/run/root/state/
+repository. Invoke `phase` at actual executing, checking, UI/merge wait, blocked
+and terminal boundaries under that contract. Pass the exact context ref to
+workers only as read-only context; a delegated orchestrator reports boundaries
+to this root and never binds the parent session. Clear this root's own completed
+binding before exact-owned cleanup. When hooks are disabled/unavailable, report
+`hook activation unavailable`, omit binding and still run the pre-PR producer
+gate. Planning and material-scope approval requirements remain explicit.
+
 Before the first implementation dispatch, create one mode-`0700`
 invocation-private router directory and ordered `terminal-receipt-index.json`
 owned by this Pipeline caller. Reuse and extend that same index across every
@@ -403,7 +417,7 @@ directory and index. The orchestrator and every nested dm-review suppress
 terminal identity reporting and return only the exact identity-free receipt-
 index handoff for this caller.
 
-**Lean mode:** execute the final-gate-approved plan as one bounded implementation pass: inline the approved Key Requirements, compact project goal, relevant non-goals, and ownership boundary into the worker context; run the plan's focused verification and exactly one final dm-review; do not invent a manifest, prompt directory, chunk receipts, or per-chunk ceremony.
+**Lean mode:** execute the final-gate-approved plan as one bounded implementation pass: inline the approved Key Requirements, compact project goal, relevant non-goals, and ownership boundary into the worker context; run the plan's focused verification and one final dm-review with its repair/affected-recheck sequence; do not invent a manifest, prompt directory, chunk receipts, or per-chunk ceremony. Commit/push and verify the candidate branch before that review; create no PR until independent selected lanes and required browser evidence pass and are preserved.
 Use the same caller-owned directory and index for the implementation and final-
 review receipts; pass them to the nested review with terminal reporting
 suppressed. The lean implementation still dispatches `builder-fast` or
@@ -446,29 +460,77 @@ Requirements Cross-Check:
 
 "Addressed" entries without an evidence type are NOT ADDRESSED. Report misses explicitly: "The following requirements from your original prompt were not addressed: [list]." Mark item 11 complete.
 
-**GATE (ledger item 12):** AskUserQuestion with the compact terminal summary contract: lead with the outcome and one recommendation, e.g. "Done. Feature branch `<branch>` passed verification. Recommended next action: create the PR. Reply with feedback instead if another iteration is needed." Include evidence paths; no standing multiple-choice menu.
+**Publication and designer handoff (ledger item 12):** Complete candidate
+verification, independent selected review, repair, affected recheck and producer
+source/browser preservation before PR creation. Full mode executes the
+orchestrator's Step 4c publication seam exactly once under this same owner;
+Lean mode invokes the seam here. Never use bare `gh` to create or ready a PR.
+Use the exact input variables and closed producer/readiness shapes from
+`automatic-implementation-closeout.md`:
 
-Before presenting it, run dm-review's `review-next-action.sh` from final-head
-policy, coverage, findings, and settled feedback. Preserve its four public
-lines. Pass the actual base, final head, and dirty state. For `modelWork: true`,
-run the emitted request through model-router's
-recommendation renderer; otherwise omit the model block. Existing gates remain.
+<!-- reviewed-pr-lean:start -->
+```bash
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
+  --operation create --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT"
+```
+<!-- reviewed-pr-lean:end -->
 
-**The exact-owned cleanup phase runs on all three answers.** Only requested
-deliverable disposition varies. Exact registered worktrees, temp chunk branches,
-run roots, temporary repositories/caches, and labelled Docker resources must
-not be left behind because the caller chose "Create PR" or "Give feedback".
-See `plugins/dm-review/skills/review/references/repo-cleanup-contract.md` and
-Workflow Kernel's `exact-owned-cleanup.md`.
+After actual PR checks, feedback settlement and required designer UI acceptance
+pass at the final head, use the same producer gate for draft-to-ready:
 
-Before this gate, confirm the orchestrator's Step 5b ran repository cleanup (full mode) or run the same contract directly (lean mode; no chunk worktrees or receipts fabricated). Either way `plans/<feature-slug>/receipt.md` must carry a `## Branch & Worktree Inventory` block before proceeding.
+<!-- reviewed-pr-lean-ready:start -->
+```bash
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
+  --operation ready --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT" \
+  --pr "$REVIEW_PR_URL"
+```
+<!-- reviewed-pr-lean-ready:end -->
 
-**If the user chooses PR:** create the PR. The feature branch is kept (no merge proof yet -- expected; the inventory says so). Tier 3 cleanup waits for the user's return.
+PR-only CI is pending until creation. Then collect actual final-head checks
+and external feedback independently; automatically fix supported defects,
+push, recheck affected source/browser evidence and refresh readiness under the
+same owner. Keep the draft while checks, feedback or required designer UI
+acceptance remain. `noMergeOnCompletion=true` applies in both modes; missing
+or false legacy controls never authorize an agent merge.
+
+Separate feedback from review: pre-PR is `not_applicable`, never claimed
+settled. At an unchanged covered head with zero retained findings, CI/feedback
+waits do not invoke the selector or dispatch reviewers. Invoke it only for
+actual source, new supported finding or rendered automation gaps:
+
+<!-- review-gap-lean:start -->
+```bash
+if [ "$SOURCE_COVERAGE_GAP" = true ] || [ "$SUPPORTED_RETAINED_FINDING" = true ] || [ "$RENDERED_AUTOMATION_GAP" = true ]; then
+  "$DM_REVIEW_BUNDLE_ROOT/skills/review/references/review-next-action.sh" "$REVIEW_ACTION_INPUT"
+else
+  printf '%s\n' 'Review coverage unchanged; settle CI and feedback without reviewer dispatch.'
+fi
+```
+<!-- review-gap-lean:end -->
+
+When invoked, preserve its four public lines and actual base/head/dirty state.
+For `modelWork: true`, use the existing model-router recommendation renderer
+inside this owner, never start a duplicate loop. Present the chunk01
+`operator-handoff.sh` result with preview tasks for required designer UI
+acceptance or owner merge as the next action. Do not ask the designer to review
+backend code or create a PR. Retain planning/material-scope decisions.
+
+Exact-owned cleanup runs on every terminal path under
+`repo-cleanup-contract.md` and Workflow Kernel's `exact-owned-cleanup.md`.
+Before delivery, confirm
+Step 5b ran in full mode or run the same contract directly in Lean mode (no
+invented chunk worktrees/receipts). The receipt must carry its Branch & Worktree
+Inventory. Preserve candidate evidence and the maintained preview before
+removing exact-owned disposable paths; retain the feature branch without merge
+proof. The root owner updates terminal phase and clears only its own completed
+hook binding. A worker never finishes the shared owner.
 
 **If the user gives feedback:** append it to `original-prompt.md` (`## Iteration N Feedback`), extract new requirements, re-enter the earliest affected planning phase, and return to the same final planning gate before any new execution -- feedback accumulates rather than replacing context. Keep the caller-owned private directory and index bounded and unexpanded, extend it with later dispatch receipts, and do not render or clean it while another iteration can still run.
 
 **Terminal model report:** A feedback answer is non-terminal and emits no
-report. For `Create PR`, `done`, or a closed failed/blocked/stopped invocation,
+report. For a completed publication/UI-or-merge handoff or a closed failed/blocked/stopped invocation,
 first settle the requested PR/disposition and every model-dependent decision.
 Then load model-router's `terminal-report-contract.md`, consume the full-mode
 orchestrator's exact private index handoff or the lean caller's exact index, and render once to

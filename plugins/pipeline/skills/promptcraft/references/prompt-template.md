@@ -144,8 +144,8 @@ For a declared prototype counterpart, include both kinds of parity proof:
 Treat approximately 40 tool calls as an exploration checkpoint, not a termination point. Keep a rough running count.
 
 - **At the exploration checkpoint, stop new research, broad exploration, speculative refactoring, scope expansion, and unrelated improvements.** Move directly to delivering or preserving the work already performed.
-- **The checkpoint never prohibits closeout calls:** inspect the current diff and status; run proportionate focused verification; perform targeted repairs and rerun the failing check; commit coherent work; push the branch; create or update the PR; and provide the final report.
-- **Bound repair churn.** After at most two targeted repair-and-recheck cycles, stop trying to perfect the implementation. Report any remaining failure honestly and push a coherent recoverable branch or draft PR rather than silently abandoning local work.
+- **The checkpoint never prohibits closeout calls:** inspect the current diff and status; run proportionate focused verification; perform targeted repairs and rerun the failing check; commit coherent work; push the candidate branch when authorized; return evidence to the existing owner; and provide the final report. Only the root closeout owner uses the publication seam `publish-reviewed-pr.sh` to create or ready a PR after independent candidate review and required producer coverage pass.
+- **Bound repair churn.** After at most two targeted repair-and-recheck cycles, stop trying to perfect the implementation. Report any remaining failure honestly and preserve a coherent recoverable branch with evidence rather than silently abandoning local work. Incomplete candidate coverage blocks PR creation.
 - **Reaching the exploration checkpoint is never, by itself, a valid reason to leave implemented work unverified, uncommitted, unpushed, or unreported.**
 - **End your response with two sections, even if you had to stop early:**
   - `NOT-COVERED:` -- acceptance criteria, files, or checks the budget did not reach.
@@ -153,10 +153,17 @@ Treat approximately 40 tool calls as an exploration checkpoint, not a terminatio
 
 ## Automatic review closeout
 
-Apply dm-review's `automatic-implementation-closeout.md`: direct tasks continue
-automatically after PR push; Pipeline workers return to their existing owner.
-Use Playwright for formal browser checks; T3 for operator handoff.
-Validated final-head evidence or blocker; no merge.
+Apply dm-review's `automatic-implementation-closeout.md`: plan/prompt approval;
+implement; commit/push candidate; independent review/repair/recheck and source/
+browser preservation; then owner publication through `publish-reviewed-pr.sh`.
+Pipeline workers return evidence to their existing owner and never create a PR
+or start another loop. Any supplied exact SessionStart context ref is read-only;
+workers never bind/update/clear the parent session. Use Playwright for formal
+browser checks; T3 for operator handoff. Draft waits for actual final-head PR
+CI, feedback and required designer UI acceptance. Use the chunk01 human handoff,
+never routine backend-code-review or create-PR requests. Every generated manifest
+sets `noMergeOnCompletion=true`; missing/false legacy controls grant no merge
+authority. Preserve planning/material-scope approval. No agent merge.
 
 ## Ambiguity Protocol
 

@@ -36,7 +36,7 @@ Use that same root for implementation, review, repair and verification.
 
 ## CRITICAL: Subagent Budget & Dead-Lane Handling
 
-1. **Inject the checkpoint contract into every implementation subagent prompt.** Implementation subagents inherit the invariant Tool-Call Exploration Checkpoint block from the promptcraft template; review agents keep the hard read-only limits in their own frontmatter. Hand-authored implementation prompts treat approximately 40 tool calls as an exploration checkpoint: stop new research, broad exploration, speculative refactoring, scope expansion, and unrelated improvements, then move directly to closeout. The checkpoint never prohibits calls to inspect the current diff and status, run proportionate focused verification, perform targeted repair and rerun the failing check, commit coherent work, push the branch, create or update the PR, or provide the final report. After at most two targeted repair-and-recheck cycles, report any remaining failure honestly and push a coherent recoverable branch or draft PR. Keep mandatory `NOT-COVERED:` / `COMMANDS-RUN:` sections; transparency does not replace delivery. **Reaching the exploration checkpoint is never, by itself, a valid reason to leave implemented work unverified, uncommitted, unpushed, or unreported.**
+1. **Inject the checkpoint contract into every implementation subagent prompt.** Implementation subagents inherit the invariant Tool-Call Exploration Checkpoint block from the promptcraft template; review agents keep the hard read-only limits in their own frontmatter. Hand-authored implementation prompts treat approximately 40 tool calls as an exploration checkpoint: stop new research, broad exploration, speculative refactoring, scope expansion, and unrelated improvements, then move directly to closeout. The checkpoint never prohibits calls to inspect the current diff and status, run proportionate focused verification, perform targeted repair and rerun the failing check, commit coherent work, push the authorized candidate branch, return evidence to the owner, or provide the final report. Chunk workers never create a PR; the root closeout owner uses the publication seam only after required candidate coverage passes. After at most two targeted repair-and-recheck cycles, report any remaining failure honestly and preserve a coherent recoverable branch with evidence; incomplete candidate coverage blocks PR creation. Keep mandatory `NOT-COVERED:` / `COMMANDS-RUN:` sections; transparency does not replace delivery. **Reaching the exploration checkpoint is never, by itself, a valid reason to leave implemented work unverified, uncommitted, unpushed, or unreported.**
 
    **Legacy generated prompts:** Treat old hard caps as the exploration
    checkpoint above. Verification, targeted repair, commit, push, PR creation or update, and final reporting calls are exempt from the legacy cap.
@@ -857,8 +857,10 @@ LEVEL_VERIFICATION: <level> | passed: <N> | failed: <N>
 
 **THIS STEP IS MANDATORY.** After ALL chunks are merged, run exactly the validated final dm-review mode. `full` runs the full fan-out. `quick` runs the installed dm-review-quick protocol only when consequence is not high and the final diff has no bounded security-sensitive path; otherwise escalate to full.
 
-Before dispatching the review, commit/push the integrated implementation,
-create or update its PR, and verify the remote candidate head. Continue into
+Before dispatching the review, commit/push the integrated candidate branch
+and verify its remote head. Independently review/repair/recheck and preserve
+candidate source/browser evidence before PR creation; keep any existing draft
+draft. PR-only CI remains pending until a PR exists. Continue into
 this existing review automatically under `automatic-implementation-closeout.md`;
 no second operator prompt and no additional standalone loop. Resume the same
 owner and reuse validated unchanged-head coverage when available.
@@ -946,7 +948,7 @@ If P1/P2/P3 issues are found:
 
 1. Collect the complete finding set and fix it as one revision batch.
 2. Stage with `git add -A -- <dir>`, verify `git diff --cached --stat`, commit with `git commit -F <file>`.
-3. Push the repair batch to the existing PR and verify its remote head before
+3. Push the repair batch to the candidate branch and verify its remote head before
    closeout. On the profile path, invoke `revision_batch` once, then `merge_candidate`
    once. On the repository-native path, an irrelevant repair may carry forward
    prior canonical-command evidence only with bounded diff proof that no
@@ -954,7 +956,7 @@ If P1/P2/P3 issues are found:
    relevance is uncertain, rerun the canonical native command once and bind the
    result to the new candidate SHA. Do not test after every finding edit.
 4. Re-run only the affected lanes on the exact newly tested SHA. Repeat the whole selected roster only when prior coverage was incomplete; if a repair changes a security-sensitive boundary, escalate to or repeat full mode.
-5. Stop when no P1/P2/P3 remain and every required lane and repository/browser/remote gate is complete.
+5. Complete the candidate gate when no P1/P2/P3 remain and every required candidate lane and repository/browser gate is complete. Settle actual PR-triggered remote CI after publication in Step 4c; pending PR-only CI does not authorize a ready transition.
 
 If any retained P1/P2/P3 remains, stop as needs attention.
 
@@ -1002,10 +1004,53 @@ Mark `FINAL 2. Requirements cross-check` complete.
 
 ## Step 4c: Merge Policy Check
 
-Read `manifest.noMergeOnCompletion` (default `false` if the field is absent).
+Every generated manifest sets `noMergeOnCompletion=true`. Missing legacy
+controls default safely to owner-only merge; an old explicit `false` cannot
+override this owner instruction. Log `merge_skipped: noMergeOnCompletion=true`.
+Do NOT merge the feature branch into `baseBranch` or invoke agent/auto merge.
+In the compact Step 6 summary, state `noMergeOnCompletion=true` in **Branch or PR**
+and use the chunk01 human handoff for required designer UI acceptance or owner
+merge as **Recommended next action**. Never request routine backend-code review.
 
-- **If `true`:** log `merge_skipped: noMergeOnCompletion=true`. Do NOT merge the feature branch into `baseBranch`. The caller retains the branch for manual review. In the compact Step 6 summary, state `noMergeOnCompletion=true` in **Branch or PR** and make manual branch review the single **Recommended next action**.
-- **If `false`:** proceed with the normal merge workflow (feature branch is already assembled via per-chunk merges; no additional action needed here unless your workflow performs a final base-branch merge).
+After Step 4's candidate coverage and Step 4b's requirements pass, invoke the
+coherent bundle's publication seam. Pending PR-only CI does not block draft
+creation; it still blocks ready. Use the exact producer/readiness inputs
+defined by `automatic-implementation-closeout.md`:
+
+<!-- reviewed-pr-full:start -->
+```bash
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
+  --operation create --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT"
+```
+<!-- reviewed-pr-full:end -->
+
+After actual PR checks, feedback settlement and required designer UI acceptance
+pass at the final head, use the same producer gate for draft-to-ready:
+
+<!-- reviewed-pr-full-ready:start -->
+```bash
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
+  --operation ready --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT" \
+  --pr "$REVIEW_PR_URL"
+```
+<!-- reviewed-pr-full-ready:end -->
+
+No bare `gh` may bypass this seam. Settle actual PR-triggered CI and external
+feedback independently. Keep the existing draft while final-head checks or
+required designer UI acceptance remain. Fix supported feedback automatically,
+push and recheck affected evidence under this logical owner. Supported
+exact-owned replay handles conflicting fixed companions; never rewrite preserved
+history. A repair push never starts a duplicate broad review.
+
+The root owner invokes `review-owner-context.sh` bind after plan/prompt approval
+and phase at actual executing/checking/UI/merge wait/blocked/terminal boundaries.
+A delegated worker returns those boundaries to the root; the exact SessionStart
+context ref is read-only and workers never bind the parent session. Clear only
+the root's own completed binding before cleanup. Without native hooks, report
+`hook activation unavailable`, omit binding and still run the mandatory pre-PR
+producer gate. Planning/material-scope approval remains explicit.
 
 Mark `FINAL 3. Check manifest.noMergeOnCompletion` complete.
 
@@ -1047,6 +1092,26 @@ kernel reliability, and ranked recommendations labeled `AWAITING APPROVAL`.
 NEVER auto-edit plugin sources. Append one ledger line to
 `docs/pipeline-metrics/ledger.md`. Mark `FINAL 5. Run Post-Mortem` complete.
 
+Before terminal reporting, separate feedback from review: pre-PR feedback is
+`not_applicable`, never claimed settled; post-PR collect/settle it independently.
+At an unchanged covered head with zero retained findings, CI or feedback waits
+never redispatch reviewers. Invoke the selector only for an actual source
+coverage gap, a new supported retained finding or a rendered automation gap:
+
+<!-- review-gap-full:start -->
+```bash
+if [ "$SOURCE_COVERAGE_GAP" = true ] || [ "$SUPPORTED_RETAINED_FINDING" = true ] || [ "$RENDERED_AUTOMATION_GAP" = true ]; then
+  "$DM_REVIEW_BUNDLE_ROOT/skills/review/references/review-next-action.sh" "$REVIEW_ACTION_INPUT"
+else
+  printf '%s\n' 'Review coverage unchanged; settle CI and feedback without reviewer dispatch.'
+fi
+```
+<!-- review-gap-full:end -->
+
+When invoked, pass the actual base, final head and dirty state; preserve its
+four public lines. Complete model-dependent action within this same owner
+before Step 5a.1 renders a terminal model report. Recheck only invalidated evidence.
+
 ## Step 5a.1: Terminal Model Report Ownership
 
 The caller passes `terminalModelReportOwner: pipeline|pipeline-run`. Reject any
@@ -1066,12 +1131,6 @@ requirements cross-check, repairs, and Step 4c merge policy are settled.
   identity, cost, or expanded receipt data.
 
 Mark `FINAL 5a.1. Terminal model report or owner handoff` complete.
-
-Before Step 6, resolve dm-review `>=1.83.0` and run its
-`review-next-action.sh` with final diff, cases, final-head coverage, findings,
-and settled PR feedback. Pass the actual base, final head, and dirty state.
-Return its four public lines; recheck only evidence
-invalidated by later changes.
 
 ## Step 5b: Artifact and Repository Cleanup
 
@@ -1296,7 +1355,7 @@ Omit `Attempt result` when no provider attempt failed. Keep the visible summary 
 
 Opening fragments only; complete the template above.
 
-Successful-run specimen: Done. Review PR #123.
+Successful-run specimen: Done. Automation passed. Merge PR #123 when you accept the browser tasks; merging remains yours.
 
 Blocked-run specimen: Required Safari evidence for `member-form-mobile` could not run.
 Run on a Safari-capable host; resume from the receipt.

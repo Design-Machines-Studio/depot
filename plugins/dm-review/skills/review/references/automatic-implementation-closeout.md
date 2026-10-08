@@ -3,17 +3,20 @@
 Supported direct implementation tasks and Pipeline continue through review and
 repair before their implementation session finishes. Implementation authorization
 includes this closeout; no second operator prompt or human-started thread is
-required. This contract authorizes no merge, tag, publication, cache update, or
-global hook. Arbitrary GitHub PR creation outside an active supported task has
-no event trigger and remains uncovered.
+required. This contract authorizes reviewed PR creation, but no merge, tag, release
+publication, cache update, or global hook. Arbitrary GitHub PR creation outside
+an active supported task has no event trigger and remains uncovered.
 
 ## Enter once, preserve the owner
 
-After the authorized implementation is committed and pushed, create or update
-its PR and verify the remote head against the local candidate. Register it with
-the host when supported. Record the repository/PR, base/head, entry dirty-state
-boundary, approved requirements, verification evidence, and current review owner
-in the existing workflow receipts. Preserve foreign files, ignored evidence,
+After plan/prompt approval, implement, commit and push the candidate branch,
+and verify its remote head against the local candidate. Independently review,
+repair, recheck and preserve candidate source/browser evidence before opening
+a PR. An existing draft stays draft. PR-only CI is pending until a PR exists;
+it cannot be claimed passed from candidate checks. Record the repository/branch
+and PR when present, base/head, entry dirty-state boundary, approved requirements,
+verification evidence, and current review owner in the existing workflow
+receipts. Preserve foreign files, ignored evidence,
 worktrees, branches and maintained previews.
 
 Use the existing workflow state, run lease, exact-owned root and review-source
@@ -26,14 +29,142 @@ is a transition inside this owner, never a new implementation trigger.
 Pipeline supplies the root and terminal report owner: its existing final
 review, repair batch and affected-lane recheck implement this contract. Do not
 append a standalone loop after that sequence. Chunk workers return evidence
-to Pipeline and never start a second PR closeout. For a direct task, evaluate
-`review-next-action.sh` against authenticated current PR feedback, the actual
-base/head and validated coverage. Execute its needed action in the current
-session. A new review uses one `dm-review-loop`; quick/full commands already
+to Pipeline and never start a second PR closeout. Separate feedback from
+review: pre-PR feedback is `not_applicable`, never claimed settled; post-PR
+collect and settle authenticated feedback independently. At an unchanged covered
+head with zero retained findings, CI or feedback waits never redispatch reviewers.
+Invoke `review-next-action.sh` only for an actual source coverage gap, a new
+supported retained finding or a rendered automation gap. Bind the gap flags
+to inspected source, validated producer coverage and supported findings, then
+use the actual base/head and dirty boundary in its input:
+
+<!-- review-gap-direct:start -->
+```bash
+if [ "$SOURCE_COVERAGE_GAP" = true ] || [ "$SUPPORTED_RETAINED_FINDING" = true ] || [ "$RENDERED_AUTOMATION_GAP" = true ]; then
+  "$DM_REVIEW_BUNDLE_ROOT/skills/review/references/review-next-action.sh" "$REVIEW_ACTION_INPUT"
+else
+  printf '%s\n' 'Review coverage unchanged; settle CI and feedback without reviewer dispatch.'
+fi
+```
+<!-- review-gap-direct:end -->
+
+Execute a needed action within the current logical owner. A new review uses
+one `dm-review-loop`; quick/full commands already
 delegate to that loop before lane dispatch. Existing passing coverage at an
 unchanged head means no duplicate model work. A rendered-only gap uses the
 existing visual path; a policy-permitted mechanical/docs exemption still runs
 mandatory repository checks and reports the exemption accurately.
+
+## Native session pointer (root owner only)
+
+Load `review-owner-context.sh` from the same coherent dm-review bundle as the
+publication helper. The thin SessionStart handler initializes an unbound
+planning marker and supplies its exact path as `additionalContext`; a matching
+resume preserves it. The existing private per-session hook-state convention
+stores one `review-owner.json`, keyed by SHA256 of the canonical repository,
+physical worktree identity and native `session_id`. Store exactly `session_id`,
+`repository`, `workflow`, `run_id`, `run_root`, `state_dir`, `phase`, and
+`change_boundary`. This is a session pointer, not a discovery registry or
+review receipt. Native SessionStart/Stop inputs are the only hook authority.
+
+The root owner retains the host-supplied native input and exact SessionStart
+context ref, and binds only after plan/prompt approval with the actual logical
+owner's workflow, run ID, exact-owned run root, state directory and canonical
+repository. `REVIEW_CHANGE_BOUNDARY` is the helper's `review_change_boundary`
+for the actual checkout, never a caller guess. With that native input on stdin:
+
+```bash
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/review-owner-context.sh" bind \
+  --repository-root "$REVIEW_ROOT" --context "$REVIEW_OWNER_CONTEXT" \
+  --workflow "$REVIEW_WORKFLOW" --run-id "$REVIEW_RUN_ID" \
+  --run-root "$REVIEW_RUN_ROOT" --state-dir "$REVIEW_STATE_DIR" \
+  --change-boundary "$REVIEW_CHANGE_BOUNDARY" < "$REVIEW_NATIVE_HOOK_INPUT"
+```
+
+Use `phase` at actual boundaries: `awaiting_plan_approval` before the plan gate,
+`executing` after binding or resuming repairs, `checking` for verification,
+`awaiting_ui` for required designer browser acceptance, `awaiting_merge` for
+owner merge, `blocked` for an actual blocker, and `complete` at terminal
+closeout. Pass the exact ref and fresh change boundary on each bound update:
+
+```bash
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/review-owner-context.sh" phase \
+  --repository-root "$REVIEW_ROOT" --context "$REVIEW_OWNER_CONTEXT" \
+  --phase "$REVIEW_PHASE" --change-boundary "$REVIEW_CHANGE_BOUNDARY" \
+  < "$REVIEW_NATIVE_HOOK_INPUT"
+```
+
+Only the root owner clears its own completed binding before exact-owned cleanup:
+
+```bash
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/review-owner-context.sh" clear \
+  --repository-root "$REVIEW_ROOT" --context "$REVIEW_OWNER_CONTEXT" \
+  --run-id "$REVIEW_RUN_ID" --run-root "$REVIEW_RUN_ROOT" \
+  < "$REVIEW_NATIVE_HOOK_INPUT"
+```
+
+Rebind only a completed prior owner. Workers receive the exact SessionStart
+context ref solely as read-only context and never bind/update/clear the parent
+session. The helper validates private ownership, single-link containment,
+matching native session/repository and actual exact-owned metadata. Missing,
+foreign or conflicting context cannot be adopted. Never parse transcripts,
+search newest runs, invent a session ID, rewrite evidence or add a Kernel API.
+When native hooks are disabled/unavailable or no exact SessionStart context
+exists, report `hook activation unavailable`, omit binding honestly and still
+run the mandatory pre-PR producer gate below.
+
+## Publish only the reviewed candidate
+
+Resolve a coherent dm-review bundle containing `publish-reviewed-pr.sh`,
+`review-owner-context.sh` and `operator-handoff.sh`. Retain the trusted
+`WORKFLOW_KERNEL` launcher. `REVIEW_ROOT` is the physical reviewed checkout;
+`REVIEW_RUN_ROOT` is the current owner's exact-owned root.
+`REVIEW_PRODUCER_INPUT` is the closed map of absolute existing producer file
+arguments: `request`, `receipts`, `lane-receipts`, `raw-lane-outputs`,
+`raw-findings`, `decisions`, `private-router-directory`, `report`.
+`REVIEW_READINESS_INPUT` contains exactly `owner`, `readiness`, `uiNonImpact`;
+owner contains canonical `repository`, `workflow`, `run_id`, `run_root`,
+`state_dir`. Read `operator-handoff.sh` for its closed readiness shape; use
+actual candidate checks and leave PR checks pending and `feedbackSettled=false`
+until the PR exists. UI acceptance is an explicit owner fact, bound to the
+final head or supported bounded UI non-impact proof. No missing source packet
+can be called inspected; the existing producer is the only coverage authority.
+
+Direct closeout invokes this seam after independent review/repair/recheck and
+candidate evidence preservation. Full and Lean Pipeline invoke their matching
+caller seam below the same gate. No supported caller uses bare `gh` to bypass
+PR creation or draft-to-ready validation:
+
+<!-- reviewed-pr-direct:start -->
+```bash
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
+  --operation create --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT"
+```
+<!-- reviewed-pr-direct:end -->
+
+After actual PR checks, feedback settlement and required designer UI acceptance
+pass at the final head, use the same producer gate for draft-to-ready:
+
+<!-- reviewed-pr-direct-ready:start -->
+```bash
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
+  --operation ready --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT" \
+  --pr "$REVIEW_PR_URL"
+```
+<!-- reviewed-pr-direct-ready:end -->
+
+Register the returned PR with the host when supported. Collect actual PR CI
+and external feedback, fix every new supported defect automatically, push and
+recheck affected source/browser evidence under this same owner. Keep the PR
+draft while CI, feedback or designer acceptance remains. Reuse unchanged UI
+acceptance only with explicit bounded non-impact proof. Use the chunk01
+`operator-handoff.sh` output for the designer: tested behavior, actual checks,
+preview tasks/acceptance when applicable and owner merge. Never ask the designer
+to inspect backend code or create a PR. Planning and material-scope approvals
+remain explicit. Never merge, including when legacy controls are absent or
+explicitly false.
 
 ## Invoke the supported protocol
 
@@ -85,4 +216,6 @@ evidence before cleanup, finalize once, and report `CLEAN` only when every
 required gate passes. Otherwise retain recoverable work and report the exact
 head, unresolved condition, Issue when applicable, evidence/recovery path and
 owned resources with purpose and removal condition. Interruption uses the same
-preservation and resume path; it never rewrites sealed evidence.
+preservation and resume path; it never rewrites sealed evidence. Fixed companion
+conflicts use a supported exact-owned replay under the same logical owner;
+never overwrite preserved history or finish an enclosing owner from a worker.

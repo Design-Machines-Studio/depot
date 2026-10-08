@@ -75,10 +75,26 @@ explicitly receipted replacement. Project rich feedback into kernel
 references.
 
 **Automatic closeout:** Load dm-review's `automatic-implementation-closeout.md`.
-Push and verify the integrated PR head, then continue through the existing final
-gate without another prompt or standalone loop. Repair pushes advance this owner
-and cause affected rechecks, never recursive review. Preserve final-head evidence
-before cleanup or report the exact blocker.
+After plan/prompt approval, commit/push and verify the candidate branch, then
+run the existing independent final review, repair and affected recheck before
+PR creation. Execute Step 4c's `publish-reviewed-pr.sh` create and ready seams
+with its exact arguments; never bypass them with bare `gh`. Keep PR-only CI
+pending until creation and keep the draft until actual final-head checks,
+feedback and required designer UI acceptance pass. Repair pushes advance this
+same owner, never a duplicate broad review. Pre-PR feedback is `not_applicable`;
+an unchanged covered head with zero findings waits for CI/feedback without
+invoking `review-next-action.sh`. Only actual source, supported finding or
+rendered automation gaps invoke the selector. Preserve final-head producer
+source/browser evidence before cleanup or report the exact blocker.
+
+The Codex root owner alone uses `review-owner-context.sh` bind after approval
+and phase at actual execution/check/UI/merge-wait/terminal boundaries. Pass the
+exact SessionStart context ref to worker packets as read-only context; workers
+never bind the parent session. Use native SessionStart/Stop input only. With
+hooks disabled/unavailable, report `hook activation unavailable`, omit binding
+and still execute the mandatory publication producer gate. Clear only the
+root's own completed binding before cleanup. `noMergeOnCompletion=true` is
+mandatory; missing or false legacy controls never authorize agent merge.
 
 **Review adapter:** Codex sessions do not expose a generic nested `Skill(skill="dm-review:review", ...)` callable. Use this risk-tiered contract in the current orchestrator context:
 
