@@ -54,6 +54,12 @@ unchanged head means no duplicate model work. A rendered-only gap uses the
 existing visual path; a policy-permitted mechanical/docs exemption still runs
 mandatory repository checks and reports the exemption accurately.
 
+`awaiting_ui` is nonterminal: provisional handoff retains the same owner,
+checkout, root/state and unfinished evidence/private index. Requested repairs
+resume executing/checking; acceptance and actual ready precede terminal
+model/cost generation and destructive cleanup. Complete preservation still
+gates publication and destroying review resources; owner alone merges.
+
 ## Native session pointer (root owner only)
 
 When checking native hook activation, load `review-hook-activation.md`.
@@ -124,7 +130,7 @@ Resolve a coherent dm-review bundle containing `publish-reviewed-pr.sh`,
 `REVIEW_PRODUCER_INPUT` is the closed map of absolute existing producer file
 arguments: `request`, `receipts`, `lane-receipts`, `raw-lane-outputs`,
 `raw-findings`, `decisions`, `private-router-directory`, `report`.
-`REVIEW_READINESS_INPUT` contains exactly `approvedBase`, `owner`, `readiness`, `uiNonImpact`;
+`REVIEW_READINESS_INPUT` contains `approvedBase`, `owner`, `readiness`, `uiNonImpact`, plus `feedback` for ready;
 copy `approvedBase` from the approved task/plan (`baseBranch` for Full/Lean),
 never GitHub's default. The publication helper resolves local/origin branch
 names, passes explicit `--base` and rejects a different actual PR base.
@@ -136,6 +142,16 @@ prove candidate verification. Leave PR checks pending and `feedbackSettled=false
 until the PR exists. UI acceptance is an explicit owner fact, bound to the
 final head or supported bounded UI non-impact proof. No missing source packet
 can be called inspected; the existing producer is the only coverage authority.
+
+`feedback` is the closed `{intake, decisions}` map of absolute current-run
+files from `external-finding-intake.sh` and `external-finding-settlement.sh`.
+Ready requires matching repository/PR/head, complete source artifacts and all
+source judgments. The helper recollects once and compares all source content,
+identity and metadata, excluding collection timestamps and the body filename.
+Only identical sources permit cutoff-only decision revalidation; changed/new
+sources remain blocked for host evaluation under the same owner. Production
+ignores intake test overrides; only the validated disposable source fixture
+uses the existing collector seam. Thread and aggregate decision checks remain.
 
 Direct/Full/Lean publication follows independent candidate review, repair,
 recheck and preserved evidence; Full also requires parent caller verification.

@@ -165,7 +165,7 @@ The real trusted Kernel producer still validates all coverage and rejects
 synthetic/incomplete evidence. Mocked publication is development fixture
 proof only; it establishes neither live review nor installed enforcement.
 
-The readiness file has exactly `approvedBase`, `owner`, `readiness`, `uiNonImpact`.
+The readiness file contains `approvedBase`, `owner`, `readiness`, `uiNonImpact`, plus `feedback` for ready.
 Copy `approvedBase` from the approved task/plan branch, including manifest
 `baseBranch` for Full/Lean. The wrapper resolves existing local or origin branch
 names to the GitHub base; missing, ambiguous, tag/SHA or foreign-remote input
@@ -193,6 +193,16 @@ before retrying. Both operations recheck clean local/remote candidate HEAD
 immediately before mutation. Neither merges or approves planning/UI for the
 owner. Opening a draft does not finish the current review root.
 
+`feedback` is the closed `{intake, decisions}` map of absolute current-run
+files from `external-finding-intake.sh` and `external-finding-settlement.sh`.
+Ready requires matching repository/PR/head, complete source artifacts and all
+source judgments. The helper recollects once and compares all source content,
+identity and metadata, excluding collection timestamps and the body filename.
+Only identical sources permit cutoff-only decision revalidation; changed/new
+sources remain blocked for host evaluation under the same owner. Production
+ignores intake test overrides; only the validated disposable source fixture
+uses the existing collector seam. Thread and aggregate decision checks remain.
+
 `uiNonImpact` is normally null. To carry actual designer acceptance across an
 unaffected source change, supply `fromHead`, `toHead`, the complete UI/dependency
 `paths` selected by the owner, and a contained `evidence` file with the owner's
@@ -201,6 +211,12 @@ nonempty `reason`). The wrapper verifies matching proof fields, ancestry and act
 unchanged bytes/modes for those paths. A Boolean claim alone is rejected.
 The owner must include every relevant UI dependency; the helper does not infer
 UI semantics from extensions. Any changed behavior requires fresh acceptance.
+
+`awaiting_ui` is nonterminal: provisional handoff retains the same owner,
+checkout, root/state and unfinished evidence/private index. Requested repairs
+resume executing/checking; acceptance and actual ready precede terminal
+model/cost generation and destructive cleanup. Complete preservation still
+gates publication and destroying review resources; owner alone merges.
 
 ## Session owner pointer
 

@@ -2,6 +2,8 @@
 # Production-shaped disposable fixtures exercise the real supported producer.
 # No participant ran; this is source development proof, not live review proof.
 set -euo pipefail
+# Fixture feedback decisions must satisfy the production private-file contract.
+umask 077
 PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export PATH
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -12,7 +14,7 @@ TMP="$(mktemp -d "${TMPDIR:-/tmp}/publish-reviewed-pr-test.XXXXXX")"
 TMP="$(cd "$TMP" && pwd -P)"
 trap 'rm -rf -- "$TMP"' EXIT
 pass=0
-assert() { "$@" >/dev/null || { printf 'FAIL: %s\n' "$*" >&2; exit 1; }; pass=$((pass+1)); }
+assert() { "$@" >/dev/null || { printf 'FAIL: %s\n' "$*" >&2; [ ! -f "$TMP/rejected.out" ] || tail -n 20 "$TMP/rejected.out" >&2; exit 1; }; pass=$((pass+1)); }
 REPO="$TMP/repository"; mkdir "$REPO" "$TMP/bin"
 git -C "$REPO" init -q -b candidate
 git -C "$REPO" config user.name Fixture
@@ -40,6 +42,22 @@ cat > "$TMP/bin/gh" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$GH_LOG"
+if [ "$1" = api ] && [[ "$*" != *graphql* ]]; then
+  endpoint="${@: -1}"
+  case "$endpoint" in
+    repos/Fixture/consumer/pulls/42)
+      [ "${INTAKE_MODE:-complete}" != unavailable ] || exit 1
+      jq -cn --arg head "$PR_HEAD" --arg body "${FEEDBACK_PR_BODY:-Fixture PR body}" '{head:{sha:$head},body:$body,html_url:"https://github.com/Fixture/consumer/pull/42",updated_at:"2026-10-08T00:00:00Z"}'; exit 0 ;;
+    *pulls/42/comments\?*) printf '[[]]\n'; exit 0 ;;
+    *pulls/42/reviews\?*)
+      jq -cn --arg head "$PR_HEAD" --arg body "${FEEDBACK_REVIEW_BODY:-}" '[[{id:81,html_url:"https://github.com/Fixture/consumer/pull/42#pullrequestreview-81",commit_id:$head,state:"COMMENTED",user:{login:"fixture"},submitted_at:"2026-10-08T00:00:00Z",body:$body}]]'; exit 0 ;;
+    *issues/42/comments\?*)
+      [ "${INTAKE_MODE:-complete}" != partial ] || exit 1
+      jq -cn --arg body "${FEEDBACK_COMMENT:-}" '[[{id:82,html_url:"https://github.com/Fixture/consumer/pull/42#issuecomment-82",user:{login:"fixture"},created_at:"2026-10-08T00:00:00Z",updated_at:"2026-10-08T00:00:00Z",body:$body}]]'; exit 0 ;;
+    *check-suites\?*) printf '{"total_count":0}\n'; exit 0 ;;
+    *check-runs\?*) printf '[{"check_runs":[]}]\n'; exit 0 ;;
+  esac
+fi
 case "$1 ${2:-}" in
   'pr create') printf 'https://github.com/Fixture/consumer/pull/42\n' ;;
   'pr ready') ;;
@@ -153,7 +171,15 @@ fixture() {
       coverage:{status:"missing",head:null,gaps:[],requiredBrowserCases:[],evidence:null},
       lanes:(["Architecture","Simplicity","Security","Testing","Fixture/distribution"]|map({area:.,status:(if .=="Security" then "covered" else "exempt" end),note:(if .=="Security" then null else "Not selected in this bounded fixture." end),evidence:(if .=="Security" then "https://example.test/security" else null end)})),
       findings:[],checks:[{name:"candidate tests",stage:"candidate",status:"pass",link:null}],ui:{changed:false,preview:null,tasks:[],acceptance:null}}}' > "$READINESS"
+  settle_feedback
   : > "$GH_LOG"
+}
+settle_feedback() {
+  local intake="$RUN_ROOT/review/external-finding-intake.json" decisions="$RUN_ROOT/review/external-finding-decisions.json"
+  env DM_REVIEW_TEST_MODE=1 DM_REVIEW_TEST_GH_BIN="$TMP/bin/gh" "$ROOT/plugins/dm-review/skills/review/references/external-finding-intake.sh" --repo Fixture/consumer --pr 42 --output "$intake" >/dev/null
+  jq '{schema_version:1,artifact_role:"external_finding_decisions",repository,pr_number,inspected_head,collection_cutoff,decisions:[],
+    source_evidence_index:([.pull_request.source_id,.surfaces[].items[].source_id]|map({source_id:.,candidate_source_finding_ids:[],rationale:"Empty fixture feedback or PR summary contains no finding."}))}' "$intake" > "$decisions"
+  change_readiness ".feedback={intake:\"$intake\",decisions:\"$decisions\"}"
 }
 publish() { "$HELPER_BASH" "$PUBLISH" --operation "$1" --repository-root "$REPO" --run-root "$RUN_ROOT" --producer-input "$PRODUCER" --readiness-input "$READINESS" "${@:2}"; }
 reject_publish() {
@@ -284,8 +310,16 @@ reject_publish create; no_gh
 assert grep -Fxq '## Not ready' "$TMP/rejected.out"
 assert grep -Fq 'Candidate verification results are missing.' "$TMP/rejected.out"
 assert grep -Fq '**Agent next action:** Run the required source/build/verification checks' "$TMP/rejected.out"
-reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_gh
 assert grep -Fxq '## Not ready' "$TMP/rejected.out"
+assert grep -Fq 'Candidate verification results are missing.' "$TMP/rejected.out"
+assert grep -Fq '**Agent next action:** Run the required source/build/verification checks' "$TMP/rejected.out"
+for candidate_status in fail pending; do
+  fixture "candidate-blocked-$candidate_status"
+  change_readiness ".readiness.checks[0].status=\"$candidate_status\""
+  reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_gh
+  assert grep -Fxq '## Not ready' "$TMP/rejected.out"
+done
 fixture wrong-approved-base
 change_readiness '.approvedBase="release/reviewed"'
 reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
@@ -412,6 +446,49 @@ unset REVIEW_DECISION
 fixture absent-ci
 change_readiness '.readiness.checks += [{name:"missing required CI",stage:"pr",status:"pass",link:null}]'
 reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+# Complete full-surface judgments, source identity and one fresh intake are
+# mandatory; empty threads and a caller true flag cannot replace them.
+fixture feedback-missing-intake
+change_readiness 'del(.feedback)'
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+for field in FEEDBACK_COMMENT FEEDBACK_REVIEW_BODY FEEDBACK_PR_BODY; do
+  fixture "feedback-new-$pass"
+  export "$field=Actionable new defect needs current-code evaluation."
+  reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+  assert grep -Fq 'external feedback changed' "$TMP/rejected.out"
+  unset "$field"
+done
+fixture feedback-unprocessed
+jq '.source_evidence_index |= map(select(.source_id!="github:conversation-comment:82"))' "$RUN_ROOT/review/external-finding-decisions.json" > "$TMP/update.json"
+mv "$TMP/update.json" "$RUN_ROOT/review/external-finding-decisions.json"
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+fixture feedback-stale
+jq '.inspected_head="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"' "$RUN_ROOT/review/external-finding-intake.json" > "$TMP/update.json"
+mv "$TMP/update.json" "$RUN_ROOT/review/external-finding-intake.json"
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+fixture feedback-stale-cutoff
+jq '.collection_cutoff="2026-01-01T00:00:00Z"' "$RUN_ROOT/review/external-finding-decisions.json" > "$TMP/update.json"
+mv "$TMP/update.json" "$RUN_ROOT/review/external-finding-decisions.json"
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+for mode in partial unavailable; do
+  fixture "feedback-intake-$mode"
+  export INTAKE_MODE="$mode"
+  reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+  unset INTAKE_MODE
+done
+fixture feedback-settled
+export FEEDBACK_COMMENT='Prior claim is contradicted by current source.' FEEDBACK_REVIEW_BODY='Review claim already repaired at this head.'
+settle_feedback
+jq '.source_evidence_index |= map(if (.source_id|IN("github:conversation-comment:82","github:submitted-review:81")) then .candidate_source_finding_ids=[.source_id+":claim"] else . end) |
+  .decisions=[.source_evidence_index[]|select(.candidate_source_finding_ids|length>0)|{
+    source_finding_id:.candidate_source_finding_ids[0],source_ids:[.source_id],finding_id:("finding-v1:sha256("+("a"*64)+")"),
+    finding_disposition:"discarded",decision_reason_code:"superseded-by-stronger-evidence",evidence_ref:"source.txt:1",current_head_evidence_ref:"source.txt:1",rationale:"Disposable fixture current source establishes repair."}]' "$RUN_ROOT/review/external-finding-decisions.json" > "$TMP/update.json"
+mv "$TMP/update.json" "$RUN_ROOT/review/external-finding-decisions.json"
+change_readiness '.readiness.feedbackSettled=false'
+assert publish ready --pr https://github.com/Fixture/consumer/pull/42
+assert test -f "$RUN_ROOT/review/external-finding-intake.json.pull-request-body.md"
+assert sh -c 'find "$1/review" -path "*/publication-feedback-*/decisions.json" | read -r file' sh "$RUN_ROOT"
+unset FEEDBACK_COMMENT FEEDBACK_REVIEW_BODY
 fixture ui
 change_readiness '.readiness.ui={changed:true,preview:"https://preview.test",tasks:["Check proposal confirmation."],acceptance:null}'
 reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation

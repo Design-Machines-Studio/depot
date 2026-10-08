@@ -184,7 +184,12 @@ survived.
 For selected Assembly development checkouts, use the same
 `canonical-checkout.sh inspect/prepare/finish` policy as direct review, through
 `repo-cleanup-contract.md`. Preserve producer roots and receipts through their
-last calls; finish checks follow final writes. Report pending cleanup as Not
-ready, never switch to an alternate preview to evade source dirt.
+last calls; normal owned detach precedes required browser capture and complete
+preservation. `awaiting_ui` is nonterminal: retain the same owner, checkout,
+root/state, evidence and private index for acceptance and requested UI repairs.
+Resume executing/checking, refresh affected evidence and feedback, and complete
+actual ready before terminal model/cost generation or destructive cleanup.
+No new review loop or consumer restart; source-only work finishes normally
+after ready and owner alone merges. Finish checks follow final writes.
 
 The Codex adapter does not get a weaker gate than the Claude path. If `codex_native` cannot execute the cleanup phase, that is a pipeline-blocking failure, not a degradation.

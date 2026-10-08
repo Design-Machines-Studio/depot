@@ -47,7 +47,7 @@ for file in "$PRODUCER" "$READINESS"; do
   review_safe_path "$file"
   [ -f "$file" ] && [ -r "$file" ] && [ "$(review_stat links "$file")" = 1 ] || review_refuse 'missing or unsafe publication input'
 done
-jq -e 'type=="object" and (keys|sort)==(["approvedBase","owner","readiness","uiNonImpact"]|sort) and
+jq -e 'type=="object" and ((keys-["feedback"])|sort)==(["approvedBase","owner","readiness","uiNonImpact"]|sort) and
   (.approvedBase|type=="string" and length>0 and length<=1024 and (test("[\u0000-\u001f\u007f]")|not))' "$READINESS" >/dev/null || exit 2
 OWNER="$(jq -c .owner "$READINESS")"
 review_owner_validate "$OWNER" "$REPO"
@@ -148,9 +148,10 @@ fi
 if [ "$OPERATION" = create ]; then
   "$HERE/operator-handoff.sh" --gate candidate "$TEMP/handoff.json" > "$TEMP/handoff.md" || { cat "$TEMP/handoff.md"; exit 3; }
 else
-  # Validate caller shape without gating on cached PR outcomes. Fresh GitHub
-  # facts below replace those projections before the final merge gate.
-  "$HERE/operator-handoff.sh" "$TEMP/handoff.json" > "$TEMP/handoff.md"
+  # Gate source verification before GitHub access. Cached PR outcomes must
+  # remain refreshable; fresh facts replace them before the final merge gate.
+  jq '.checks |= map(select(.stage=="candidate"))' "$TEMP/handoff.json" > "$TEMP/candidate-handoff.json"
+  "$HERE/operator-handoff.sh" --gate candidate "$TEMP/candidate-handoff.json" > "$TEMP/handoff.md" || { cat "$TEMP/handoff.md"; exit 3; }
 fi
 BRANCH="$(git -C "$REPO" symbolic-ref --quiet --short HEAD)" || review_refuse 'detached candidate head'
 git -C "$REPO" check-ref-format "refs/heads/$BRANCH" || exit 2
@@ -215,6 +216,37 @@ if [ "$OPERATION" = ready ]; then
     -f owner="$OWNER_NAME" -f name="$REPO_NAME" -F number="$NUMBER" > "$TEMP/feedback.json"
   jq -e --arg head "$HEAD" '.data.repository.pullRequest | .headRefOid==$head and .reviewThreads.pageInfo.hasNextPage==false and all(.reviewThreads.nodes[];.isResolved==true)' "$TEMP/feedback.json" >/dev/null || review_refuse 'actual PR feedback unsettled or incomplete'
   jq -e '.reviewDecision!="CHANGES_REQUESTED"' "$TEMP/pr.json" >/dev/null || review_refuse 'changes requested on PR'
+  # Settlement covers bodies/conversation/check evidence as well as threads.
+  # Recollect once, then carry judgments only across byte-identical sources;
+  # changed/new sources require host evaluation in this same owner, not a flag.
+  jq -e '.feedback | type=="object" and (keys|sort)==(["intake","decisions"]|sort) and
+    all(.[]; type=="string" and startswith("/"))' "$READINESS" >/dev/null || review_refuse 'current-head feedback intake/decisions required'
+  INTAKE="$(jq -r .feedback.intake "$READINESS")"
+  FEEDBACK_DECISIONS="$(jq -r .feedback.decisions "$READINESS")"
+  for file in "$INTAKE" "$FEEDBACK_DECISIONS"; do
+    review_private "$file"
+    [[ "$file" = "$RUN_ROOT/"* ]] && [ -f "$file" ] && [ "$(review_stat links "$file")" = 1 ] || review_refuse 'foreign feedback evidence'
+  done
+  jq -e --arg repo "$REPOSITORY" --argjson pr "$NUMBER" --arg head "$HEAD" '
+    .repository==$repo and .pr_number==$pr and .inspected_head==$head' "$INTAKE" >/dev/null || review_refuse 'feedback repository/PR/head mismatch'
+  "$HERE/external-finding-settlement.sh" --intake "$INTAKE" --decisions "$FEEDBACK_DECISIONS" --current-head "$HEAD" > "$TEMP/settlement.json" || review_refuse 'external feedback unsettled'
+  FRESH_REL="review/publication-feedback-${TEMP##*.}"
+  "$WORKFLOW_KERNEL" owned-run-create --run-root "$RUN_ROOT" --kind raw-output --relative-path "$FRESH_REL" >/dev/null
+  FRESH="$RUN_ROOT/$FRESH_REL"
+  # Production never inherits the collector's source-test tool overrides.
+  (
+    unset DM_REVIEW_TEST_MODE DM_REVIEW_TEST_GH_BIN DM_REVIEW_TEST_MAX_ITEMS DM_REVIEW_TEST_MAX_CHECK_SUITES
+    if [ -n "${DM_REVIEW_DEVELOPMENT_TEST_ROOT:-}" ]; then
+      export DM_REVIEW_TEST_MODE=1 DM_REVIEW_TEST_GH_BIN="$TEST_ROOT/bin/gh"
+    fi
+    "$HERE/external-finding-intake.sh" --repo "$REPOSITORY" --pr "$NUMBER" --output "$FRESH/intake.json" \
+      --max-pr-body-source-bytes "$(jq -r .pull_request.body.source.max_bytes "$INTAKE")"
+  ) > "$TEMP/intake-result.json" || review_refuse "fresh external feedback intake incomplete: $FRESH_REL/intake.json"
+  jq -cS 'del(.collected_at,.collection_cutoff,.pull_request.body.source.path)' "$INTAKE" > "$TEMP/prior-feedback.json"
+  jq -cS 'del(.collected_at,.collection_cutoff,.pull_request.body.source.path)' "$FRESH/intake.json" > "$TEMP/fresh-feedback.json"
+  cmp -s "$TEMP/prior-feedback.json" "$TEMP/fresh-feedback.json" || review_refuse "external feedback changed; evaluate $FRESH_REL/intake.json and settle before ready"
+  jq --slurpfile fresh "$FRESH/intake.json" '.collection_cutoff=$fresh[0].collection_cutoff' "$FEEDBACK_DECISIONS" > "$FRESH/decisions.json"
+  "$HERE/external-finding-settlement.sh" --intake "$FRESH/intake.json" --decisions "$FRESH/decisions.json" --current-head "$HEAD" > "$TEMP/fresh-settlement.json" || review_refuse 'fresh external feedback unsettled'
   jq --arg pr "$PR" --slurpfile checks "$TEMP/checks.json" --slurpfile required "$TEMP/required.json" '
     (.checks | map(select(.stage=="pr" and .required!=false))) as $declared |
     .feedbackSettled=true |

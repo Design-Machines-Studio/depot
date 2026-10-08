@@ -5,6 +5,8 @@
 #   --delivered-head REVIEWED_SHA --current-context POINTER [--owner-context POINTER ...] [--keep-path REL ...]
 #   [--inspection INSPECT.json] [--implementation-root ROOT]
 #   [--preservation PRODUCER.json] [--residue-path ABS ...]
+# preservation is accepted for existing callers; nondestructive transfer does
+# not consume it. Complete review remains required for publication/destruction.
 # Dependencies: Git, jq; Bash 3.2+. inspect emits JSON-quoted paths (including
 # newlines); prepare requires that exact unchanged inspection before mutation.
 set -euo pipefail
@@ -126,6 +128,9 @@ context() {
   if [ "$current" = true ]; then
     [ "$(jq -r .phase <<< "$value")" != complete ] || refuse 'current owner is complete'
     OWNER_REPO="$owner_repo"
+    # Current evidence never inherits inactive-source disposal authority.
+    root="$(jq -r .run_root <<< "$value")"
+    case "$root" in "$REPO"/*) PROTECTED+=("${root#"$REPO/"}") ;; esac
   elif [ "$file" != "$CURRENT" ]; then
     [ "$(jq -r .phase <<< "$value")" = complete ] || refuse "active owner at $owner_repo: $file; coordinate its release"
     [ "$owner_repo" = "$REPO" ] || refuse "inactive handoff is for another checkout: $owner_repo"
@@ -173,11 +178,9 @@ if [ -n "$OCCUPANT" ] && [ "$OCCUPANT" != "$REPO" ]; then
   pushurl="$(git -C "$IMPLEMENTATION" remote get-url --push origin)"
   git -C "$IMPLEMENTATION" ls-remote --exit-code "$pushurl" "refs/heads/$BRANCH" > "$TMP/remote"
   [ "$(cut -f1 < "$TMP/remote")" = "$TARGET" ] || refuse 'push not verified'
-  review_private "$PRESERVATION"
-  jq -e '.status=="complete" and (.evidence_path|type=="string")' "$PRESERVATION" >/dev/null || refuse 'preservation incomplete'
-  retained="$(jq -r .evidence_path "$PRESERVATION")"; review_private "$retained"
-  case "$retained/" in "$REPO/"*|"$IMPLEMENTATION/"*) refuse 'evidence must survive checkout cleanup' ;; esac
-  [ -f "$retained/report.md" ] || refuse 'retained report unavailable'
+  # Detach changes only this owner's branch selection. Keep the physical
+  # producer checkout, owner state and all unfinished review/browser evidence.
+  # Required browser coverage can now be captured from the canonical branch.
   RELEASE=true
 fi
 # Git -z and literal pathspecs prevent pathname parsing or wildcard expansion.

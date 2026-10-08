@@ -210,6 +210,10 @@ require_text "$orchestrator" 'Only under `per-chunk-worktree`, load' "cleanup sc
 require_absent "$orchestrator" '<worktree-path>' "review and repair use the selected chunk root"
 printf 'OK    sequential commit gate accepts direct commits and rejects invalid boundaries\n'
 
+require_text "$pipeline_command" '`awaiting_ui` is nonterminal' "parent keeps designer handoff nonterminal"
+require_text "$orchestrator" '`awaiting_ui` is nonterminal' "standalone keeps designer handoff nonterminal"
+require_text "$REPO_ROOT/plugins/pipeline/references/codex-native-execution-adapter.md" '`awaiting_ui` is nonterminal' "Codex retains owner through acceptance and ready"
+
 if [ "$failures" -ne 0 ]; then
   printf "FIX  add the Codex-native pipeline execution adapter and regenerate command skill aliases\n"
   exit 1

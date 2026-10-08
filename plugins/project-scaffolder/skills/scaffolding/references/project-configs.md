@@ -199,8 +199,9 @@ definitive HTML/Live Wires/component and Datastar interaction baseline, with
 source comparison and matched browser save/reload proof. Link existing
 prototype UX task/persona selection through dm-review’s `ui-case-selection.md`.
 Include status commands. For selected Assembly development checkouts, commit/push
-and preserve evidence, normally release only the owned producer worktree, then
-select the actual reviewed branch in the canonical folder. Foreign occupancy
+and verify the head, normally detach only the owned producer worktree, then
+select the branch before browser capture and complete preservation. Retain
+producer checkout/state and unfinished evidence until publication and cleanup. Foreign occupancy
 blocks until that owner's exact handoff; never detach/remove a foreign owner.
 Retain the maintained instance. Carry this into generated AGENTS.md; no second registry.
 
@@ -227,9 +228,10 @@ This file is the routing document for Claude Code. Critical rules live here; det
 - Status command: [existing exact command]
 - Rebuild/restart: [existing exact command or directly linked runbook]
 
-For selected Assembly development checkouts, commit/push and preserve evidence
-before normally releasing only the owned producer worktree. Use ordinary Git to
-select the actual reviewed branch in the canonical folder. Foreign occupancy
+For selected Assembly development checkouts, commit/push and verify the head
+before normally detaching only the owned producer worktree. Select the branch
+before browser capture and complete preservation; retain producer checkout,
+state and unfinished evidence until publication and destructive cleanup. Foreign occupancy
 blocks until that owner's exact handoff; never detach/remove a foreign owner.
 For other Go projects, select the feature branch with ordinary Git.
 Preserve owned edits and fingerprint them for in-place review; name

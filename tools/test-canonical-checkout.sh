@@ -47,12 +47,12 @@ jq -cn --arg repo "$REPO" '{kind:"assembly-development",repository:"Design-Machi
 boundary() { bash -c 'source "$1"; review_change_boundary "$2"' bash "$CONTEXT" "$1"; }
 # Use the actual pointer API and supported owned-run producer, no invented lease store.
 make_context() {
-  local repo="$1" run="$2" terminal="$3" native root state pointer changed
+  local repo="$1" run="$2" terminal="$3" base="${4:-$TMP/runs}" native root state pointer changed
   native="$TMP/native-$run.json"
   jq -cn --arg cwd "$repo" --arg session "$run" '{hook_event_name:"SessionStart",session_id:$session,cwd:$cwd}' > "$native"
   "$CONTEXT" init --repository-root "$repo" < "$native" > "$TMP/init-$run.json"
   pointer="$(jq -r '.hookSpecificOutput.additionalContext | split(" ")[3] | rtrimstr(".")' "$TMP/init-$run.json")"
-  root="$("$KERNEL" owned-run-start --workflow pipeline --run-id "$run" --base "$TMP/runs" | jq -r .path)"
+  root="$("$KERNEL" owned-run-start --workflow pipeline --run-id "$run" --base "$base" | jq -r .path)"
   state="$repo/.workflow-kernel/runs/$run"; mkdir -p "$state"
   changed="$(boundary "$repo")"
   "$CONTEXT" bind --repository-root "$repo" --context "$pointer" --workflow pipeline --run-id "$run" --run-root "$root" --state-dir "$state" --change-boundary "$changed" < "$native" >/dev/null
@@ -157,6 +157,23 @@ fi
 assert jq -e 'any(.paths[]; .path=="unknown" and .classification=="retained")' "$TMP/no-prior.json"
 reject "$HELPER_BASH" "$HELPER" prepare "${no_prior[@]}" --inspection "$TMP/no-prior.json"
 rm -- "$REPO/unknown"
+# A live producer under the canonical checkout never becomes inactive
+# disposable source, even after the owner refreshes its clean boundary.
+IN_CHECKOUT="$(make_context "$REPO" in-checkout checking "$REPO/local-evidence")"
+LIVE_ROOT="$(jq -r .run_root "$IN_CHECKOUT")"
+"$KERNEL" owned-run-create --run-root "$LIVE_ROOT" --kind raw-output --relative-path raw >/dev/null
+printf 'unfinished browser evidence\n' > "$LIVE_ROOT/raw/browser.txt"
+for phase in executing checking; do
+  "$CONTEXT" phase --repository-root "$REPO" --context "$IN_CHECKOUT" --phase "$phase" --change-boundary "$(boundary "$REPO")" < "$TMP/native-in-checkout.json" >/dev/null
+done
+inspect --current-context "$IN_CHECKOUT"
+assert jq -e --arg p "${LIVE_ROOT#"$REPO/"}/raw/browser.txt" 'any(.paths[]; .path==$p and .classification=="retained" and .reason=="protected-or-current")' "$TMP/inspect.json"
+reject prepare --current-context "$IN_CHECKOUT"
+assert test "$(cat "$LIVE_ROOT/raw/browser.txt")" = 'unfinished browser evidence'
+# Fixture teardown is explicitly aborted, never successful review disposal.
+assert "$KERNEL" owned-run-finish --run-root "$LIVE_ROOT" --outcome review-aborted
+rm -r -- "$(jq -r .state_dir "$IN_CHECKOUT")"
+
 # New current-run changes do not become disposable without delivery.
 printf 'current repair\n' > "$REPO/source with spaces"
 inspect
@@ -218,15 +235,15 @@ IMPL_OWNER="$(make_context "$FOREIGN" implementation checking)"
 git init -q --bare "$TMP/remote.git"
 git -C "$FOREIGN" remote set-url --push origin "$TMP/remote.git"
 git -C "$FOREIGN" push -q origin reviewed
-# A bounded preservation-result fixture exercises transfer preconditions only;
-# actual coverage/retention authority remains the existing Kernel producer.
-mkdir "$TMP/retained"; printf 'retained report\n' > "$TMP/retained/report.md"
-jq -cn --arg p "$TMP/retained" '{status:"complete",evidence_path:$p}' > "$TMP/preserved.json"
-release=(--current-context "$IMPL_OWNER" --implementation-root "$FOREIGN" --delivered-head "$TARGET" --preservation "$TMP/preserved.json")
-reject inspect --current-context "$IMPL_OWNER" --implementation-root "$FOREIGN" --delivered-head "$BASE" --preservation "$TMP/preserved.json"
+# Transfer must work before required browser evidence is complete. The real
+# source-bound incomplete-to-browser lifecycle is covered in
+# test_owned_transfer_precedes_required_browser_completion; no preservation
+# result is fabricated here.
+mkdir "$TMP/retained"
+release=(--current-context "$IMPL_OWNER" --implementation-root "$FOREIGN" --delivered-head "$TARGET")
+reject inspect --current-context "$IMPL_OWNER" --implementation-root "$FOREIGN" --delivered-head "$BASE"
 assert test "$(git -C "$FOREIGN" symbolic-ref --short HEAD)" = reviewed
-jq '.status="incomplete"' "$TMP/preserved.json" > "$TMP/preservation-failed.json"
-reject inspect "${release[@]}" --preservation "$TMP/preservation-failed.json"
+inspect "${release[@]}" --preservation "$TMP/preservation-failed.json"
 assert test "$(git -C "$FOREIGN" symbolic-ref --short HEAD)" = reviewed
 inspect "${release[@]}"
 assert prepare "${release[@]}"

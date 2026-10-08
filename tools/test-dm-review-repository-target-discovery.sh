@@ -255,8 +255,8 @@ assert jq -e '.resourceOwnership == "pre-existing" and
 # Declared project beats an unrelated attached tab; maintenance retains ownership.
 assert grep -Fq '2. the established project domain and canonical checkout' "$CONTRACT"
 assert grep -Fq '5. an attached automation-capable T3 preview' "$CONTRACT"
-assert grep -Fq 'Commit/push and preserve coverage before normally detaching an owned' "$CONTRACT"
-assert grep -Fq 'branch in the canonical folder; retain the detached producer checkout.' "$CONTRACT"
+assert grep -Fq 'Commit/push and verify the exact head before normally detaching an owned' "$CONTRACT"
+assert grep -Fq 'unfinished evidence; select the branch in the canonical folder before' "$CONTRACT"
 assert grep -Fq "Foreign occupancy requires that owner's exact release handoff." "$CONTRACT"
 assert grep -Fq 'name collisions and coordinate without force, stash, reset or clean.' "$CONTRACT"
 assert grep -Fq 'changing Git HEAD alone does not refresh' "$CONTRACT"
@@ -272,9 +272,9 @@ awk '/^## CLAUDE.md Templates/{templates=1} templates && /^### go-templ-datastar
 for surface in "$PROMPT" "$COORDINATOR" "$TMP/assembly-template.md"; do
   awk '{$1=$1; printf "%s ", $0}' "$surface" > "$TMP/normalized-instructions.md"
   assert grep -Fq 'Foreign occupancy blocks' "$TMP/normalized-instructions.md"
-  assert grep -Fq 'actual reviewed branch in the canonical' "$TMP/normalized-instructions.md"
+  assert grep -Fiq 'branch before' "$TMP/normalized-instructions.md"
   assert grep -Fq 'owned producer' "$TMP/normalized-instructions.md"
-  assert grep -Fq 'preserve evidence' "$TMP/normalized-instructions.md"
+  assert grep -Fq 'unfinished evidence' "$TMP/normalized-instructions.md"
   assert grep -Fq 'detach/remove a foreign owner' "$TMP/normalized-instructions.md"
   assert bash -c '! grep -Fq "exact detached commit" "$1"' bash "$TMP/normalized-instructions.md"
   assert bash -c '! grep -Fiq "chunk01" "$1"' bash "$TMP/normalized-instructions.md"

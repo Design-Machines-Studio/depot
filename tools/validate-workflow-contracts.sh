@@ -2109,7 +2109,8 @@ handoff="$REPO_ROOT/plugins/dm-review/skills/review/references/operator-handoff.
 require_text "$publication" '--base "$BASE" --draft' "create explicitly uses the approved base"
 require_text "$publication" 'actual PR base differs from approved base' "ready rejects the wrong target base"
 require_text "$publication" 'refs/remotes/origin/*)' "publication resolves approved origin branch naming"
-require_text "$publication" 'Fresh GitHub' "ready refreshes cached PR facts before gating"
+require_text "$publication" '--gate candidate "$TEMP/candidate-handoff.json"' "ready gates candidate verification before refreshing PR facts"
+require_text "$publication" '.checks |= map(select(.stage=="candidate"))' "cached PR checks cannot block ready refresh"
 require_text "$handoff" 'Candidate verification results are missing.' "PR checks alone cannot settle candidate verification"
 require_text "$handoff" '**Agent next action:** ' "Not ready names one agent action"
 require_absent "$handoff" 'exact-owned' "designer output uses ordinary cleanup wording"
@@ -2156,6 +2157,21 @@ require_text "$output_format" 'post-report source/residue checks' "handoff clean
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/operator-handoff.sh" 'Workspace: ' "designer handoff states workspace readiness"
 require_text "$REPO_ROOT/tools/validate-composition.sh" 'test-canonical-checkout.sh' "runner includes canonical fixtures"
 require_text "$REPO_ROOT/tools/validate-composition.sh" 'test-review-completion-hook.sh' "runner includes completed hook fixtures"
+
+# Browser preparation and designer acceptance are nonterminal dependencies.
+require_absent "$canonical" 'preservation incomplete' "nondestructive transfer does not require complete browser coverage"
+require_text "$canonical" 'Current evidence never inherits inactive-source disposal authority.' "current producer root is protected"
+require_text "$publication" 'external-finding-intake.sh' "ready refreshes full feedback surfaces"
+require_text "$publication" 'external-finding-settlement.sh' "ready validates source judgments"
+require_before "$publication" 'fresh external feedback unsettled' '.feedbackSettled=true' "full current-head settlement precedes feedback flag"
+require_text "$publication" 'unset DM_REVIEW_TEST_MODE DM_REVIEW_TEST_GH_BIN' "production ignores intake tool overrides"
+for surface in "$pipeline_cmd" "$orchestrator" "$codex_native_adapter"; do
+  require_text "$surface" '`awaiting_ui` is nonterminal' "designer handoff retains the active owner"
+  require_text "$surface" 'actual ready' "terminal boundary follows actual draft readiness"
+done
+require_text "$REPO_ROOT/tests/test_auto_review_candidate.py" 'test_owned_transfer_precedes_required_browser_completion' "fixture covers incomplete browser branch transfer"
+require_text "$REPO_ROOT/tests/test_auto_review_candidate.py" 'test_designer_handoff_retains_same_owner_through_acceptance_and_ui_repair' "fixture covers acceptance and UI repair lifecycle"
+require_text "$REPO_ROOT/tests/test_codex_command_adapter.py" 'test_handoff_check_schema_matches_documented_runtime_statuses' "check schema documentation matches runtime"
 
 # Browser artifacts must not dirty the next chunk's source checkout.
 artifact_cleanup="$REPO_ROOT/plugins/dm-review/skills/review/references/browser-artifact-cleanup.md"

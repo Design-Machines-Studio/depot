@@ -94,6 +94,17 @@ for status in skipped not_applicable; do
   jq 'del(.checks[1].required)' "$TMP/optional.json" > "$TMP/unknown-required.json"
   reject handoff --gate merge "$TMP/unknown-required.json"
 done
+# Skipped/not-applicable have closed PR-stage/link requirements; required
+# defaults apply to both omitted and null values.
+for status in skipped not_applicable; do
+  for expression in '.checks[1].stage="candidate"' '.checks[1].link=null'; do
+    jq --arg status "$status" '.checks[1]+={status:$status,required:false}' "$TMP/base.json" | jq "$expression" > "$TMP/invalid-check.json"
+    reject handoff "$TMP/invalid-check.json"
+  done
+  jq --arg status "$status" '.checks[1]+={status:$status,required:null}' "$TMP/base.json" > "$TMP/default-required.json"
+  reject handoff --gate merge "$TMP/default-required.json"
+  assert grep -Fq 'it has not passed' "$TMP/rejected.out"
+done
 # Final artifact writes can leave cleanup pending while code coverage is clean.
 assert grep -Fxq 'Workspace: clean' "$TMP/base.out"
 jq '.workspace={clean:false,paths:["/safe/checkout/final report.md"],nextAction:"Preserve report bytes in the retained root, remove the exact owned copy, and recheck both checkouts."}' "$TMP/base.json" > "$TMP/workspace.json"

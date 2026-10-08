@@ -191,8 +191,9 @@ Every prompt must state:
 - worktree and branch expectations;
 - for rendered work, the established project domain and canonical serving repo
   folder, feature branch/head and existing build/restart command. Commit/push
-  and preserve evidence before normally releasing only the owned producer
-  worktree; select the actual reviewed branch in the canonical folder.
+  and verify the head before normally detaching only the owned producer
+  worktree; select the branch before browser capture and complete preservation.
+  Retain producer checkout/state and unfinished evidence through publication.
   Foreign occupancy blocks until that owner's exact handoff; never detach/remove
   a foreign owner. No new harness or environment reconfiguration by implication.
   For multiple maintained instances, carry the exact originating folder/domain

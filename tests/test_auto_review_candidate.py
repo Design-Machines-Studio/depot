@@ -115,6 +115,22 @@ else exec "$REAL_GIT" "$@"; fi
         self.write_tool("gh", r'''#!/usr/bin/env bash
 set -euo pipefail
 printf '%s\n' "$*" >> "$GH_LOG"
+if [ "$1" = api ] && [[ "$*" != *graphql* ]]; then
+  endpoint="${@: -1}"
+  case "$endpoint" in
+    repos/Fixture/consumer/pulls/42)
+      [ "${INTAKE_MODE:-complete}" != unavailable ] || exit 1
+      jq -cn --arg head "$PR_HEAD" --arg body "${FEEDBACK_PR_BODY:-Fixture PR body}" '{head:{sha:$head},body:$body,html_url:"https://github.com/Fixture/consumer/pull/42",updated_at:"2026-10-08T00:00:00Z"}'; exit 0 ;;
+    *pulls/42/comments\?*) printf '[[]]\n'; exit 0 ;;
+    *pulls/42/reviews\?*)
+      jq -cn --arg head "$PR_HEAD" --arg body "${FEEDBACK_REVIEW_BODY:-}" '[[{id:81,html_url:"https://github.com/Fixture/consumer/pull/42#pullrequestreview-81",commit_id:$head,state:"COMMENTED",user:{login:"fixture"},submitted_at:"2026-10-08T00:00:00Z",body:$body}]]'; exit 0 ;;
+    *issues/42/comments\?*)
+      [ "${INTAKE_MODE:-complete}" != partial ] || exit 1
+      jq -cn --arg body "${FEEDBACK_COMMENT:-}" '[[{id:82,html_url:"https://github.com/Fixture/consumer/pull/42#issuecomment-82",user:{login:"fixture"},created_at:"2026-10-08T00:00:00Z",updated_at:"2026-10-08T00:00:00Z",body:$body}]]'; exit 0 ;;
+    *check-suites\?*) printf '{"total_count":0}\n'; exit 0 ;;
+    *check-runs\?*) printf '[{"check_runs":[]}]\n'; exit 0 ;;
+  esac
+fi
 case "$1 ${2:-}" in
   'pr create') printf 'https://github.com/Fixture/consumer/pull/42\n' ;;
   'pr ready') ;;
@@ -201,7 +217,7 @@ esac
 
     def prepare(self, caller, suffix="initial"):
         workflow = "dm-review-loop" if caller == "direct" else "pipeline"
-        run_id = f"{caller}-initial" if suffix == "exact-replay" else f"{caller}-{suffix}"
+        run_id = self.facts["owner"]["run_id"] if suffix == "exact-replay" else f"{caller}-{suffix}"
         run, paths = self.make_run(workflow, run_id)
         state = self.repo / ".workflow-kernel/runs" / run_id
         state.mkdir(parents=True, exist_ok=True)
@@ -232,6 +248,24 @@ esac
         self.save_facts()
         self.env.update(REVIEW_RUN_ROOT=str(run.root), REVIEW_PRODUCER_INPUT=str(producer),
                         REVIEW_READINESS_INPUT=str(self.readiness), REMOTE_HEAD=head, PR_HEAD=head)
+        intake = run.root / "review/external-finding-intake.json"
+        decisions = run.root / "review/external-finding-decisions.json"
+        collected = subprocess.run([str(self.source / "plugins/dm-review/skills/review/references/external-finding-intake.sh"),
+                                    "--repo", "Fixture/consumer", "--pr", "42", "--output", str(intake)],
+                                   env=dict(self.env, DM_REVIEW_TEST_MODE="1", DM_REVIEW_TEST_GH_BIN=str(self.bin / "gh")),
+                                   capture_output=True, text=True, timeout=15)
+        self.assertEqual(0, collected.returncode, collected.stderr)
+        evidence = json.loads(intake.read_text())
+        ledger = {key: evidence[key] for key in ("repository", "pr_number", "inspected_head", "collection_cutoff")}
+        ledger.update(schema_version=1, artifact_role="external_finding_decisions", decisions=[],
+                      source_evidence_index=[{"source_id": source_id, "candidate_source_finding_ids": [],
+                                              "rationale": "Fixture summary/empty feedback has no claim."}
+                                             for source_id in [evidence["pull_request"]["source_id"],
+                                                               *[item["source_id"] for surface in evidence["surfaces"].values() for item in surface["items"]]]])
+        decisions.write_text(json.dumps(ledger))
+        decisions.chmod(0o600)
+        self.facts["feedback"] = {"intake": str(intake), "decisions": str(decisions)}
+        self.save_facts()
         self.log.write_text("")
         self.git_log.write_text("")
         return run, paths
@@ -394,6 +428,150 @@ esac
                 self.assertEqual(0, ready.returncode, ready.stderr)
                 self.assertIn("pr ready", self.log.read_text())
 
+    def recheck_designer_repair_in_owned_retained_scope(self, run, paths):
+        """Use the existing registered retained-scope replay, keeping the owner root."""
+        from workflow_kernel.review_closeout import assemble_review_evidence, _source_snapshot, _resolve_snapshot, _changed_paths, _git_patch
+        record_ref = paths["record_ref"]
+        record = json.loads((run.root / record_ref).read_text())
+        before = _resolve_snapshot(run.root, record["source_snapshot"], shared=record["schema_version"] == 2)
+        head = self.git_run("rev-parse", "HEAD")
+        after = _source_snapshot(self.repo, head)
+        request = json.loads(paths["request"].read_text())
+        scope = run.root / "diagnostic/review" / ("repo-" + hashlib.sha256(request["source_repository"].encode()).hexdigest()[:12] + "-head-" + head)
+        scope.mkdir(mode=0o700)
+        # The old stream and immutable history remain in the original root and
+        # previous retained scope. Only a new scope gets new fixed companions.
+        for folder in ("review", "receipts", "raw"):
+            shutil.copytree(run.root / folder, scope / folder)
+        current = {key: scope / path.relative_to(run.root) if isinstance(path, Path) and path.is_relative_to(run.root) else path for key, path in paths.items()}
+        for key in ("lane_receipts", "raw_lane_outputs", "raw_findings", "decisions"):
+            current[key].unlink()  # exact derived copies; originals stay untouched
+        request["source_head"] = head
+        current["request"] = scope / "review/request.json"
+        current["request"].write_text(json.dumps(request))
+        patch_ref = "review/designer-repair.patch"
+        (scope / patch_ref).write_bytes(_git_patch(self.repo, before["head"], head))
+        selection = {"schema_version": 1, "selected_full_set": ["security"], "applied": True,
+                     "iteration": {"run_id": run.run_id, "sequence": 0, "stage": "review_iteration", "status": "complete", "occurred_at": "2026-09-01T00:03:00Z",
+                                   "authoritative_receipt": "review/designer-selection.json", "selective_rerun": False, "promoted_to_full": False, "full_fanout_override": False,
+                                   "lanes_rerun": ["security"], "lanes_skipped": [], "rerun_reasons": {"security": ["b_fix_file_trigger"]}, "selection_fallback_reason": None},
+                     "finding_owner_lanes": [], "file_trigger_lanes": ["security"], "from_source": before, "to_source": after,
+                     "changed_paths": _changed_paths(before, after), "patch_ref": patch_ref, "worktree_ref": None}
+        (scope / "review/designer-selection.json").write_text(json.dumps(selection))
+        value = json.loads(paths["input"].read_text())
+        value.update(pass_id="designer-recheck", attempt=2)
+        value["source"].update(head=head, base=before["head"], request_ref="review/request.json")
+        value["literal"]["output_ref"] = "raw/designer-recheck.md"
+        # A distinct disposable fixture dispatch is mandatory for changed
+        # source. Reusing the old fixture receipt must not pass production gates.
+        dispatch = json.loads((scope / value["literal"]["dispatch_receipt_ref"]).read_text())
+        dispatch["receiptId"] = "dispatch-" + "b" * 24
+        value["literal"]["dispatch_receipt_ref"] = "receipts/private/router/security-designer.json"
+        (scope / value["literal"]["dispatch_receipt_ref"]).write_text(json.dumps(dispatch))
+        (scope / "receipts/private/router/terminal-receipt-index.json").write_text(json.dumps({"schemaVersion": 1, "receiptFiles": ["security.json", "security-designer.json"]}))
+        (scope / "raw/designer-recheck.md").write_text("Disposable current-source recheck: confirmation label repair passes.\n")
+        value["requested"]["evidence_refs"].append(patch_ref)
+        value["requested"]["required_evidence_refs"].append(patch_ref)
+        value["recheck"] = {"prior_record_ref": record_ref, "selection_ref": "review/designer-selection.json", "repair_refs": [patch_ref]}
+        input_path = scope / "review/designer-recheck-input.json"
+        input_path.write_text(json.dumps(value))
+        arguments = dict(run_root=run.root, repository_root=self.repo, request_path=current["request"], receipts_path=current["receipts"])
+        result = assemble_review_evidence(**arguments, input_path=input_path)
+        aggregate = {"schema_version": 1, "operation": "coverage", "run_id": run.run_id, "pass_id": "designer-final",
+                     "selection": [{"lane": "security", "record_ref": result["record_ref"], "history_refs": [record_ref], "transition_refs": []}],
+                     "decisions": [], "occurred_at": "2026-09-01T00:04:00Z", "required_case_refs": [], "resolutions": []}
+        input_path = scope / "review/designer-final-input.json"
+        input_path.write_text(json.dumps(aggregate))
+        assemble_review_evidence(**arguments, input_path=input_path)
+        producer = Path(self.env["REVIEW_PRODUCER_INPUT"])
+        fields = json.loads(producer.read_text())
+        for key, path in list(fields.items()):
+            if Path(path).is_relative_to(run.root):
+                fields[key] = str(scope / Path(path).relative_to(run.root))
+        fields["request"] = str(current["request"])
+        # Report remains in the reviewed checkout, where make_run put it.
+        producer.write_text(json.dumps(fields))
+        self.env.update(PR_HEAD=head, REMOTE_HEAD=head)
+        self.facts["readiness"]["finalHead"] = head
+        self.save_facts()
+        # Collect fresh current-head feedback through the existing seam.
+        intake = Path(self.facts["feedback"]["intake"])
+        result = subprocess.run([str(self.source / "plugins/dm-review/skills/review/references/external-finding-intake.sh"),
+                                 "--repo", "Fixture/consumer", "--pr", "42", "--output", str(intake)],
+                                env=dict(self.env, DM_REVIEW_TEST_MODE="1", DM_REVIEW_TEST_GH_BIN=str(self.bin / "gh")), capture_output=True, text=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        evidence = json.loads(intake.read_text())
+        ledger = json.loads(Path(self.facts["feedback"]["decisions"]).read_text())
+        ledger.update(inspected_head=head, collection_cutoff=evidence["collection_cutoff"])
+        Path(self.facts["feedback"]["decisions"]).write_text(json.dumps(ledger))
+        return current
+
+    def test_designer_handoff_retains_same_owner_through_acceptance_and_ui_repair(self):
+        for repair in (False, True):
+            with self.subTest(repair=repair):
+                # Each case owns a separate native session. UI repair replays
+                # evidence in that exact logical run; no new owner or review loop.
+                run, paths = self.prepare("lean", "ui-repair" if repair else "acceptance")
+                context = self.source / "plugins/dm-review/skills/review/references/review-owner-context.sh"
+                self.env["TMPDIR"] = str(self.root)
+                native = json.dumps({"hook_event_name": "SessionStart", "session_id": f"designer-{repair}", "cwd": str(self.repo)})
+                def ctx(*args, success=True):
+                    result = subprocess.run([str(context), *args], input=native, env=self.env, capture_output=True, text=True)
+                    self.assertEqual(0 if success else 3, result.returncode, result.stderr)
+                    return result.stdout
+                initialized = json.loads(ctx("init", "--repository-root", str(self.repo)))
+                pointer = Path(initialized["hookSpecificOutput"]["additionalContext"].split()[3].rstrip("."))
+                def phase(name):
+                    boundary = subprocess.check_output(["bash", "-c", 'source "$1"; review_change_boundary "$2"', "bash", str(context), str(self.repo)], text=True).strip()
+                    ctx("phase", "--repository-root", str(self.repo), "--context", str(pointer), "--phase", name, "--change-boundary", boundary)
+                boundary = subprocess.check_output(["bash", "-c", 'source "$1"; review_change_boundary "$2"', "bash", str(context), str(self.repo)], text=True).strip()
+                ctx("bind", "--repository-root", str(self.repo), "--context", str(pointer), "--workflow", "pipeline", "--run-id", run.run_id,
+                    "--run-root", str(run.root), "--state-dir", self.facts["owner"]["state_dir"], "--change-boundary", boundary)
+                self.facts["readiness"]["ui"].update(changed=True, preview="https://preview.test", tasks=["Check confirmation label."])
+                self.save_facts()
+                self.assertEqual(0, self.publish("lean").returncode)
+                phase("checking")
+                phase("awaiting_ui")
+                saved_owner = dict(self.facts["owner"])
+                self.reject("lean", "ready", no_gh=False)
+                self.assertTrue(run.root.is_dir())
+                self.assertTrue(Path(saved_owner["state_dir"]).is_dir())
+                self.assertEqual("awaiting_ui", json.loads(pointer.read_text())["phase"])
+                ctx("clear", "--repository-root", str(self.repo), "--context", str(pointer), "--run-id", run.run_id, "--run-root", str(run.root), success=False)
+                if repair:
+                    preserved = fixture.ReviewCloseoutTests.preserve(self, run, paths)
+                    retained = Path(preserved["evidence_path"])
+                    literal_ref = json.loads((run.root / paths["record_ref"]).read_text())["bindings"]["raw/security.md"]["retained_ref"]
+                    literal_path = retained / literal_ref
+                    literal = literal_path.read_bytes()
+                    phase("executing")
+                    (self.repo / "source.txt").write_text("Repaired confirmation label requested by designer.\n")
+                    self.git_run("add", "source.txt")
+                    self.git_run("commit", "-qm", "repair designer label")
+                    self.reject("lean", "ready")  # old-head source proof cannot publish
+                    phase("checking")
+                    paths = self.recheck_designer_repair_in_owned_retained_scope(run, paths)
+                    self.assertEqual(str(run.root), self.facts["owner"]["run_root"])
+                    self.assertEqual(saved_owner, self.facts["owner"])
+                    self.assertEqual(literal, literal_path.read_bytes())
+                    self.facts["readiness"]["ui"].update(changed=True, preview="https://preview.test", tasks=["Check repaired confirmation label."])
+                    self.save_facts()
+                    phase("awaiting_ui")
+                    self.reject("lean", "ready", no_gh=False)
+                self.facts["readiness"]["ui"]["acceptance"] = {"head": self.env["PR_HEAD"], "unchangedSince": False}
+                self.save_facts()
+                phase("checking")
+                ready = self.publish("lean", "ready")
+                self.assertEqual(0, ready.returncode, ready.stderr)
+                self.assertIn("pr ready", self.log.read_text())
+                phase("awaiting_merge")
+                self.assertEqual(saved_owner, self.facts["owner"])
+                phase("complete")
+                ctx("clear", "--repository-root", str(self.repo), "--context", str(pointer), "--run-id", run.run_id, "--run-root", str(run.root))
+                self.assertFalse(pointer.exists())
+                # Source test cleanup only after complete; next case gets fresh
+                # fixture evidence, never an automatic workflow restart.
+
     def test_callers_create_against_approved_nondefault_base(self):
         for caller in self.CALLERS:
             with self.subTest(caller=caller):
@@ -425,16 +603,17 @@ esac
                 self.assertIn("pr ready", self.log.read_text())
                 self.assertIn("- actual CI passed.", ready.stdout)
 
-    def test_callers_require_candidate_verification_before_creation(self):
+    def test_callers_require_candidate_verification_before_publication(self):
         for caller in self.CALLERS:
             with self.subTest(caller=caller):
                 self.prepare(caller)
                 self.facts["readiness"]["checks"] = [self.facts["readiness"]["checks"][1]]
                 self.save_facts()
-                rejected = self.reject(caller)
-                self.assertIn("## Not ready", rejected.stdout)
-                self.assertIn("Candidate verification results are missing.", rejected.stdout)
-                self.assertIn("**Agent next action:** Run the required source/build/verification checks", rejected.stdout)
+                for operation in ("create", "ready"):
+                    rejected = self.reject(caller, operation)
+                    self.assertIn("## Not ready", rejected.stdout)
+                    self.assertIn("Candidate verification results are missing.", rejected.stdout)
+                    self.assertIn("**Agent next action:** Run the required source/build/verification checks", rejected.stdout)
 
 
 class ReviewEvidenceProducerTests(unittest.TestCase):
@@ -556,6 +735,84 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         value.update(overrides)
         path = self.write(run.root / "review/aggregate-input.json", value)
         return self.cli(run, paths, path, test_harness=test_harness)
+
+    def test_owned_transfer_precedes_required_browser_completion(self):
+        """Actual incomplete source producer then transfer; synthetic browser fixture only."""
+        from workflow_kernel.review_closeout import bind_review_source
+        source = Path(__file__).resolve().parents[1]
+        helper = source / "plugins/dm-review/skills/review/references/canonical-checkout.sh"
+        context = helper.with_name("review-owner-context.sh")
+        def git(*args):
+            return subprocess.check_output(["git", "-C", str(self.repo), *args], text=True).strip()
+        git("remote", "add", "origin", "https://github.com/Design-Machines-Studio/assembly-fixture.git")
+        (self.repo / ".gitignore").write_text(".workflow-kernel/\n.claude/\n")
+        (self.repo / "AGENTS.md").write_text("Assembly development fixture; protect install state.\n")
+        git("add", ".")
+        git("commit", "-qm", "fixture binding")
+        git("branch", "-m", "reviewed")
+        canonical = self.root / "canonical"
+        git("worktree", "add", "-qb", "serving", str(canonical), "HEAD")
+        remote = self.root / "remote.git"
+        subprocess.run(["git", "init", "--quiet", "--bare", str(remote)], check=True)
+        git("remote", "set-url", "--push", "origin", str(remote))
+        git("push", "--quiet", "origin", "reviewed")
+        run, paths = self.prepare()
+        request = json.loads(paths["request"].read_text())
+        request["required_browser_cases"] = ["settings"]
+        self.write(paths["request"], request)
+        bind_review_source(run_root=run.root, repository_root=self.repo, request_path=paths["request"])
+        record = self.lane(run, paths)
+        self.assertNotEqual(0, self.coverage(run, paths, {"security": record}).returncode)
+        self.assertEqual("incomplete", self.preserve(run, paths)["status"])
+        original = {p.relative_to(run.root): p.read_bytes() for p in run.root.rglob("*") if p.is_file()}
+        state = self.repo / ".workflow-kernel/runs" / run.run_id
+        state.mkdir(parents=True)
+        env = dict(os.environ, TMPDIR=str(self.root))
+        native = json.dumps({"hook_event_name": "SessionStart", "session_id": "browser-owner", "cwd": str(self.repo)})
+        def ctx(*args):
+            result = subprocess.run([str(context), *args], input=native, env=env, capture_output=True, text=True)
+            self.assertEqual(0, result.returncode, result.stderr)
+            return result.stdout
+        initialized = json.loads(ctx("init", "--repository-root", str(self.repo)))
+        pointer = initialized["hookSpecificOutput"]["additionalContext"].split()[3].rstrip(".")
+        boundary = subprocess.check_output(["bash", "-c", 'source "$1"; review_change_boundary "$2"', "bash", str(context), str(self.repo)], text=True).strip()
+        ctx("bind", "--repository-root", str(self.repo), "--context", pointer, "--workflow", "dm-review-loop",
+            "--run-id", run.run_id, "--run-root", str(run.root), "--state-dir", str(state), "--change-boundary", boundary)
+        binding = self.write(self.root / "binding.json", {"kind": "assembly-development", "repository": "Design-Machines-Studio/assembly-fixture",
+            "checkout": str(canonical), "domain": "https://dm006.asmbly.app", "sourceRanges": [{"path": "AGENTS.md", "startLine": 1, "endLine": 1}],
+            "protectedPaths": [str(canonical / ".env")]})
+        binding.chmod(0o600)
+        args = ["--repository-root", str(canonical), "--repository", "Design-Machines-Studio/assembly-fixture", "--target-branch", "reviewed",
+                "--delivered-head", git("rev-parse", "HEAD"), "--binding-file", str(binding), "--current-context", pointer, "--implementation-root", str(self.repo)]
+        bash = os.environ.get("BASH32", "/bin/bash")
+        inspected = subprocess.run([bash, str(helper), "inspect", *args], capture_output=True, text=True, env=env)
+        self.assertEqual(0, inspected.returncode, inspected.stderr)
+        inspection = self.root / "inspection.json"
+        inspection.write_text(inspected.stdout)
+        inspection.chmod(0o600)
+        transferred = subprocess.run([bash, str(helper), "prepare", *args, "--inspection", str(inspection)], capture_output=True, text=True, env=env)
+        self.assertEqual(0, transferred.returncode, transferred.stderr)
+        self.assertNotEqual(0, subprocess.run(["git", "-C", str(self.repo), "symbolic-ref", "-q", "HEAD"], capture_output=True).returncode)
+        self.assertEqual("reviewed", subprocess.check_output(["git", "-C", str(canonical), "symbolic-ref", "--short", "HEAD"], text=True).strip())
+        self.assertTrue(state.is_dir())
+        self.assertEqual(original, {p.relative_to(run.root): p.read_bytes() for p in run.root.rglob("*") if p.is_file()})
+        # Only after selecting the canonical branch can the required fixture
+        # capture be attached. It is explicitly synthetic, never live proof.
+        browser = self.write(run.root / "review/browser.json", {"fixture": True, "case_id": "settings", "source_head": git("rev-parse", "HEAD")})
+        receipts = json.loads(paths["receipts"].read_text())
+        receipts.append({"run_id": run.run_id, "sequence": len(receipts), "stage": "browser_verification", "status": "completed",
+                         "node_id": "visual", "occurred_at": "2026-09-01T00:02:00Z", "authoritative_receipt": "review/browser.json", "host": "codex",
+                         "source_repository": request["source_repository"], "source_head": request["source_head"], "case_ids": ["settings"], "evidence_refs": ["review/browser.json"]})
+        self.write(paths["receipts"], receipts)
+        completed_input = json.loads((run.root / "review/aggregate-input.json").read_text())
+        completed_input["required_case_refs"] = ["review/browser.json"]
+        completed = self.cli(run, paths, self.write(run.root / "review/completed-browser-input.json", completed_input))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        # Synthetic participants cannot authorize production publication/destruction.
+        self.assertEqual("incomplete", self.preserve(run, paths)["status"])
+        for ref, data in original.items():
+            if ref.name != "authoritative-receipts.json":
+                self.assertEqual(data, (run.root / ref).read_bytes())
 
     def test_zero_findings_cli_completion_retry_and_missing_companion_reconstruction(self):
         run, paths = self.prepare()

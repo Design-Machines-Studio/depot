@@ -37,10 +37,12 @@ The owner supplies the formatter's closed JSON object:
 - `findings`: retained `severity`, `location` and concrete `problem` rows.
   Every retained P1/P2/P3 prevents readiness until repaired and rechecked.
 - Nonempty `checks`: `name`, `stage` (`candidate|pr`), `status`
-  (`pass|pending|fail`) and nullable `link`. Candidate tests must pass before
-  opening a draft. PR-only pending CI may wait until the PR exists; it still
-  produces Not ready for merge. State an applicable check exemption explicitly
-  in the linked report rather than inventing passing CI.
+  (`pass|pending|fail|skipped|not_applicable`) and nullable `link`; optional
+  `required` is Boolean or null. Omitted/null defaults to required. `skipped`
+  and `not_applicable` require `stage: pr` and a non-null evidence link, and
+  block readiness unless `required: false`. Candidate-stage checks must pass
+  before opening a draft; PR-only pending CI may wait until creation but blocks
+  merge. Optional skipped checks remain visible without being called passed.
 - `ui`: `changed`, nullable `preview`, concrete `tasks` and nullable
   `acceptance` (`head`, `unchangedSince`). Acceptance records the designer's
   actual decision, separate from automated browser cases. `unchangedSince` is

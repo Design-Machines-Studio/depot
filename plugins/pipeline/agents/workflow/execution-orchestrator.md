@@ -1067,13 +1067,12 @@ push and recheck affected evidence under this logical owner. Supported
 exact-owned replay handles conflicting fixed companions; never rewrite preserved
 history. A repair push never starts a duplicate broad review.
 
-The root owner invokes `review-owner-context.sh` bind after plan/prompt approval
-and phase at actual executing/checking/UI/merge wait/blocked/terminal boundaries.
-A delegated worker returns those boundaries to the root; the exact SessionStart
-context ref is read-only and workers never bind the parent session. Clear only
-the root's own completed binding before cleanup. Without native hooks, report
-`hook activation unavailable`, omit binding and still run the mandatory pre-PR
-producer gate. Planning/material-scope approval remains explicit.
+The root binds `review-owner-context.sh` after approval and updates actual
+execution/check/UI/merge-wait/blocked/terminal phases. Workers return boundaries;
+the SessionStart ref is read-only and workers never bind the parent. Clear only
+the root's completed binding before cleanup. Without native hooks, report
+`hook activation unavailable`, omit binding and run the mandatory producer gate.
+Planning/material-scope approval remains explicit.
 
 Mark `FINAL 3. Check manifest.noMergeOnCompletion` complete.
 
@@ -1137,6 +1136,12 @@ before Step 5a.1 renders a terminal model report. Recheck only invalidated evide
 
 ## Step 5a.1: Terminal Model Report Ownership
 
+`awaiting_ui` is nonterminal: retain owner, checkout, root/state, evidence and
+private index at provisional handoff. Resume executing/checking for UI repairs,
+refresh affected evidence/feedback, and complete acceptance and actual ready
+before terminal model/cost generation or destructive Step 5b. No new review
+loop/consumer restart; source-only work finishes after ready; owner alone merges.
+
 The caller passes `terminalModelReportOwner: pipeline|pipeline-run`. Reject any
 other value before execution. Load model-router's
 `terminal-report-contract.md` only now, after the approved final review,
@@ -1165,7 +1170,7 @@ Reconcile authoritative Docker ownership first, then clean artifacts and Git ref
 review/chunk/pipeline failure and caller Phase 7 outcomes. Parent-owned
 `pipeline` returns active candidate evidence before terminal cleanup: defer
 this owner's finalization/removal to the parent after caller verification,
-publication and reporting. Chunk cleanup already completed; never finish the
+acceptance, actual ready and reporting. Chunk cleanup already completed; never finish the
 shared owner while its parent still needs producer evidence.
 
 ### 1. Docker terminal reconciliation
@@ -1244,7 +1249,7 @@ Parent-owned `pipeline` also defers cleanup of exact producer/source/browser,
 verification, readiness and private index references until parent verification,
 publication/reporting and observation binding settle; this is an active owner
 handoff, never terminal success or an abandoned diagnostic. Standalone reporting
-settles in 5a.1. Remove deferred paths only under the same exact-owned authority.
+settles in 5a.1 only after acceptance and actual ready. Remove deferred paths only under the same exact-owned authority.
 
 ### 3. Repository cleanup
 

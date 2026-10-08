@@ -7,6 +7,7 @@ behavioral substitute for the isolated fresh-session canary.
 from __future__ import annotations
 
 import importlib.util
+import re
 import unittest
 from pathlib import Path
 
@@ -133,6 +134,19 @@ class CodexCommandAdapterContractTests(unittest.TestCase):
         self.assertIn('SessionStart/Stop', direct)
         self.assertIn('private ownership, single-link containment', direct)
         self.assertIn('never bind/update/clear', direct)
+
+    def test_handoff_check_schema_matches_documented_runtime_statuses(self) -> None:
+        refs = REPO / "plugins/dm-review/skills/review/references"
+        doc = (refs / "output-format.md").read_text()
+        runtime = (refs / "operator-handoff.sh").read_text()
+        documented = re.search(r"Nonempty `checks`:.*?`status`\s*\(`([^`]+)`\)", doc, re.S)
+        supported = re.search(r'\(\.name \| str\) and \(\.status \| IN\(([^)]+)\)\)', runtime)
+        self.assertIsNotNone(documented)
+        self.assertIsNotNone(supported)
+        self.assertEqual(set(documented.group(1).split("|")), set(re.findall(r'"([^"\n]+)"', supported.group(1))))
+        checks_doc = doc.split("- Nonempty `checks`:", 1)[1].split("- `ui`:", 1)[0]
+        for rule in ("optional", "`required`", "Omitted/null defaults to required", "`stage: pr`", "non-null evidence link", "block readiness unless `required: false`"):
+            self.assertIn(rule, checks_doc)
 
     def test_aliases_retain_canonical_command_bodies(self) -> None:
         expected = GENERATOR.expected_files()

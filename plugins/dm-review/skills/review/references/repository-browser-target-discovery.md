@@ -66,9 +66,11 @@ infer that a production/customer deployment is a branch-switchable review app.
    source policy through `canonical-checkout.sh inspect` then `prepare`.
    Preserve current repairs and protected install state; unreadable/active
    ownership blocks this folder, never justifies an alternate preview.
-   Commit/push and preserve coverage before normally detaching an owned
-   implementation worktree to free the branch. Check out the actual feature
-   branch in the canonical folder; retain the detached producer checkout.
+   Commit/push and verify the exact head before normally detaching an owned
+   implementation worktree. Retain its producer checkout, owner state and
+   unfinished evidence; select the branch in the canonical folder before
+   capturing required browser cases and complete preservation. Complete evidence
+   remains mandatory for publication and destroying current review resources.
    Foreign occupancy requires that owner's exact release handoff. For other
    repositories, ordinary checkout must preserve every pre-existing change;
    name collisions and coordinate without force, stash, reset or clean.

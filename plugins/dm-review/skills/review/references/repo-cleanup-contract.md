@@ -8,7 +8,10 @@ Workflow Kernel.
 
 ## 1. Ref registry
 
-Every worktree and branch the automation creates is appended to the run's durable exact-resource registry **in the same creation action**, never reconstructed afterward from a glob. `kind` is one of `worktree`, `chunk-branch`, `review-branch`, `feature-branch`. Capture the entry status, registered-worktree set, and before state inside the exact-owned run root so completion compares against the baseline rather than demanding that pre-existing changes disappear.
+Register every created worktree/branch **in the same creation action**, never
+from globs. `kind`: `worktree|chunk-branch|review-branch|feature-branch`. Capture
+entry status, registered worktrees and before state in the exact-owned root;
+completion compares the baseline and preserves pre-existing changes.
 
 - **Nothing is deleted outside exact creation records.** Unregistered refs are foreign.
 - **Nothing registered is silently dropped.** Every registered ref appears in the final inventory with a disposition, even if that disposition is "kept".
@@ -22,8 +25,9 @@ it is foreign.
 
 ## 2. The cleanup phase is mandatory
 
-It runs on success, every failure/abort, and every user-gate answer before
-reporting. Exiting without it is a contract violation.
+Terminal cleanup runs before reporting on success/failure/abort. Provisional
+`awaiting_ui` retains owner resources for acceptance, repairs and actual ready;
+per-chunk eligible cleanup still runs. Skipping terminal cleanup violates this contract.
 
 Cleanup is plain in-process Git, never model-delegated. The host uses the same
 sequence for `EXIT`, `SIGINT`, and `SIGTERM`; a pre-execution abort records an
@@ -46,12 +50,11 @@ implementation worktree, restore main by default or remove the serving folder.
 
 ## Selected Assembly development source
 
-Only an explicitly selected canonical Assembly development checkout and its
-established dmXXX domain have standing source-disposal authority. Before
-mutation, the host checks the complete current owner/lease/handoff set for that
-folder. Use exact existing records; age, filenames, narrative completion and
-latest-run guessing prove nothing. Unreadable or conflicting ownership blocks
-that checkout with the exact missing release/record; do not move the preview.
+Standing disposal applies only to the selected canonical Assembly development
+checkout/dmXXX domain. Before mutation inspect its complete current
+owner/lease/handoff set; age, filenames, narrative completion and latest-run
+searches prove nothing. Unreadable or conflicting ownership blocks
+that checkout: name the missing release/record; never move the preview.
 
 Completed/inactive source leftovers are disposable even without per-file
 creation records. Preserve active owners, current unfinished repairs, required
@@ -73,21 +76,20 @@ metadata provide inactive handoff proof; active, malformed or missing records
 block. Other host leases use their existing release mechanism, never invented
 pointers. No pointer search or second registry.
 
-`inspect` builds a file-backed, deduplicated inventory from NUL-safe Git names.
-Pass its private JSON output as `--inspection` to `prepare`;
-changed source/index/owner/binding facts require reinspection. Supply `--keep-path`
-for current-run changes from entry/current ownership evidence; a changed current
-boundary is retained automatically. Only disposable source is restored by
-literal path or removed as individual files. Symlinks, directory/file conflicts
-and protected descendants fail closed. No broad reset, clean, prune or force
-checkout. Ignored install/evidence files remain protected.
+`inspect` inventories NUL-safe Git names in deduplicated files; `prepare`
+requires that private `--inspection` unchanged across source/index/owner/binding
+facts. `--keep-path` protects current-run changes; changed current boundaries
+are retained automatically. Restore/remove only individual literal disposable
+paths. Symlinks, directory/file conflicts and protected descendants block;
+no broad reset/clean/prune/force checkout. Ignored install/evidence stays protected.
 
-Commit, push, verify delivery and cover current repairs before branch transfer.
-For this owner's occupied implementation worktree, pass exact
-`--implementation-root` and complete producer `--preservation` result after
-preserving evidence in the supported retained root.
-Normally detach that owned worktree at the delivered head, then check out the
-actual branch in the same canonical folder. Foreign occupancy names that
+Commit, push and verify the exact delivered head before branch transfer.
+Pass this owner's exact `--implementation-root`; normal detach frees its branch
+without deleting the producer checkout, state or unfinished evidence. Browser
+preparation precedes complete preservation: select the branch in the canonical
+folder, capture required cases, then seal complete coverage before publication
+or destroying current review resources. Existing `--preservation` is optional
+and grants no disposal authority. Foreign occupancy names that
 owner's exact release action; never detach/remove a foreign owner. Keep unique
 history and literal receipts. Retain the detached checkout or use the verified
 canonical root for later producer calls; remove owned worktrees only afterward.

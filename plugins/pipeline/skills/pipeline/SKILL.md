@@ -555,10 +555,15 @@ fi
 <!-- review-gap-lean:end -->
 
 Preserve the selector's four public lines and actual base/head/dirty boundary.
-For `modelWork: true`, use model-router's recommendation renderer within this
-owner. Deliver dm-review's `operator-handoff.sh` preview tasks for designer UI
-acceptance or owner merge. Never request backend-code review or create-PR
-approval; retain planning/material-scope decisions.
+For `modelWork: true`, render model-router's recommendation within this owner.
+Deliver `operator-handoff.sh` preview tasks/acceptance or owner merge; retain
+planning/material-scope decisions without backend-code review/create-PR approval.
+
+`awaiting_ui` is nonterminal: retain owner, checkout, root/state, evidence and
+private index during provisional handoff. Resume executing/checking for requested
+UI repairs, refresh affected evidence/feedback, and complete acceptance and actual
+ready before terminal model/cost generation or destructive cleanup. No new
+review loop/consumer restart; source-only work finishes after ready; owner alone merges.
 
 Exact-owned cleanup runs on every terminal path under `repo-cleanup-contract.md`
 and Kernel's `exact-owned-cleanup.md`: finish the deferred Full Step 5b here
@@ -569,17 +574,15 @@ branch without merge proof. Root updates terminal phase and clears only its
 completed binding; workers never finish the shared owner.
 
 **If the user gives feedback:** append `## Iteration N Feedback` to
-`original-prompt.md`, extract new requirements, re-enter the earliest affected
-planning phase and return to final planning approval before new execution.
-Preserve the bounded private directory/index and extend later receipts; no
-rendering/cleanup while another iteration can run.
+`original-prompt.md`. New requirements re-enter the earliest affected planning
+phase and final approval; repairs within approved scope continue under the owner.
+Extend private receipts/index without rendering/cleanup while iterations remain.
 
-**Terminal model report:** Feedback iterations remain non-terminal; extend the
-same bounded index without rendering or cleanup. Once publication/UI-or-merge
-handoff or failed/blocked/stopped disposition and all model decisions settle,
-load `terminal-report-contract.md`. Render the full/lean exact index once to
-`plans/<feature-slug>/model-cost-report.json` and `.md` before private cleanup.
-Complete cleanup/receipts and append the Markdown or closed unavailable line.
+**Terminal model report:** After actual ready/owner merge handoff or terminal
+failed/blocked/stopped disposition settles all model decisions, load
+`terminal-report-contract.md`. Render the exact full/lean index once to
+`plans/<feature-slug>/model-cost-report.json` and `.md` before private cleanup;
+complete cleanup/receipts and append Markdown or the closed unavailable line.
 No model dispatch, repair, synthesis or merge decision follows rendering.
 
 **If the user says done:** run full cleanup per the artifact lifecycle policy:

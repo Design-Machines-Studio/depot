@@ -56,9 +56,10 @@ workstation path.]
 `repository-browser-target-discovery.md`: established project code/domain,
 canonical serving repo folder, feature branch and source head, existing
 build/restart command, and checkout ownership. For selected Assembly development
-checkouts, commit/push and preserve evidence, normally release only the owned
-producer worktree, then select the actual reviewed branch in the canonical
-folder. Foreign occupancy blocks until that owner's exact handoff; never
+checkouts, commit/push and verify the head, normally detach only the owned
+producer worktree, then select the branch before required browser capture.
+Retain producer checkout/state and unfinished evidence until complete
+preservation permits publication and destructive cleanup. Foreign occupancy blocks until that owner's exact handoff; never
 detach/remove a foreign owner. Other repositories select the feature branch normally.
 Review through the existing domain; do not create
 a harness or reconfigure the environment. Name concrete exceptions such as
