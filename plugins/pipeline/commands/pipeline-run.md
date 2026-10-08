@@ -125,23 +125,41 @@ The canonical shadow inputs are `plans/<feature>/manifest.json` plus the cumulat
 "$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest plans/<feature>/manifest.json --prediction-receipts plans/<feature>/independent-prediction-receipts.json --state-dir plans/<feature>
 ```
 
-After the canonical `run.started` transition and before the first builder
-dispatch, generate `plans/<feature>/verification-contract.json` only from the
-approved requirements and final acceptance criteria. Resolve persona/browser
-case IDs against authoritative project declarations for chunks whose
-`renderedSurface` is `required` and block unresolved IDs. When at least one
-chunk is required, materialize and bind the authoritative verification profile
-for that union. When every chunk is `not_applicable`, use null profile
-ID/digest, empty arrays, no profile artifact/flag, and preserve the validated
-rationales in manifest and receipts. Never fabricate cases. Validate and bind
-the initial contract exactly once, adding `--verification-profile
-plans/<feature>/verification-profile.json` only for the required-surface form:
+Load `plugins/pipeline/references/execution-verification-profile.md` after
+`run.started` for generation, candidate/final selection and reload/binding checks.
+Resolve/read Kernel >=0.27.0:
+
+```sh
+"$WORKFLOW_KERNEL" kernel-info --minimum-version 0.27.0
+VERIFICATION_CONTRACT=$("$WORKFLOW_KERNEL" resolve-plugin-asset \
+  --plugin workflow-kernel \
+  --asset skills/workflow-kernel/references/verification-contract.md \
+  --minimum-version 0.27.0) || exit "$?"
+```
+
+Generate all combinations of the approved task union:
+
+```sh
+"$WORKFLOW_KERNEL" generate-verification-profile \
+  --project-root . --output plans/<feature>/verification-profile.json \
+  --target-origin '<verified-target-origin>' \
+  --task-id <approved-task-id-1> --task-id <approved-task-id-2> \
+  > plans/<feature>/verification-profile-generation.json
+```
+
+Repeat tasks; focused subsets require candidate/reload then exact approved case
+IDs, retaining required primitives. No whole-app sweep. Check receipt ID/full
+digest, states/required IDs and reload proof; no browser proof.
+Non-rendered skips profiles: nulls, empty arrays, retained N/A rationales.
+Bind approved requirements/criteria:
+`--verification-profile plans/<feature>/verification-profile.json` only for required work:
 
 ```text
 "$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature>/verification-contract.json > plans/<feature>/verification-contract-binding.json
 ```
 
-The binding receipt's `contract_digest` and `revision` identify the contract for dispatch.
+Retry only exact immutable bindings; changed digest/cases requires a newly planned
+run, never rewriting or retroactive validation. Dispatch names exact `contract_digest`/`revision`.
 Every builder dispatch and completion must name those exact current values; a
 missing or mismatched claim is deterministic validation failure, never success.
 The kernel seals/validates this artifact but never schedules a builder or gate.

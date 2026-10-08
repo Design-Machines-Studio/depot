@@ -48,6 +48,41 @@ curl-verified, or an inferred persona/browser sample.
 
 ## Declared coverage
 
+Kernel >=0.27.0 exposes profile materialization through its trusted launcher:
+
+```sh
+"$WORKFLOW_KERNEL" generate-verification-profile \
+  --project-root <project-directory> --output <fresh-profile.json> \
+  [--target-origin <verified-origin>] [--declaration-root .] \
+  [--task-id <exact-lowercase-task-id> ...] [--case-id <exact-case-id> ...]
+```
+
+The command reuses `ProjectPersonaAdapter`, built-in `load_policy()` from the
+executing bundle, the existing profile serializer and bounded behavioral-contract
+loader. It validates serialization before writing, publishes through the durable
+immutable writer, then reloads and compares the complete canonical document.
+Existing output is a structured conflict (exit 6); failed discovery writes
+nothing, and publication/reload failure removes only new task-owned output.
+Absent declarations succeed with `not_declared`, including with task selectors.
+Unresolved selected route bindings exit 3 with safe exact task/placeholder gaps
+and no profile. The success receipt contains the exact profile ID, full-document
+digest, discovery/selection states, selected task/case IDs and required case IDs.
+Its `proof_kind=plan_generation_and_reload` and `reload_verified=true` prove only
+materialization/reload, never browser execution or passing application tests.
+
+Adapter `discover(..., task_ids=None, case_ids=None)` preserves existing behavior
+when selectors are absent. An explicit task list is nonempty, unique, exact,
+lowercase, and bounded to 128 characters per ID; unknown tasks are invalid on a
+declared tree. It replaces configured suite/status selection only after existing
+configuration validation. An explicit case list is a nonempty unique exact subset
+of discovered `case-sha256` IDs. Filtering preserves each selected case's required
+flag and every other primitive, and every explicit task must retain at least one
+case. Selected unresolved routes remain blocked before filtering. Without case
+selectors, all authoritative combinations for the task union remain selected.
+For a focused approved subset, generate/reload a full candidate first, use the
+exact approved case IDs, then generate a fresh final profile; never invent combinations
+or silently omit required selected cases.
+
 The kernel implicitly discovers only `tests/ux/personas/_index.md`, persona
 frontmatter, actual frontmatter declarations in `tests/ux/tasks/**/*.md`,
 optional `suites/*.md`, and optional `tests/ux/verification.json`. A sanitized

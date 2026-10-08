@@ -118,6 +118,7 @@ class ReleaseValidatorTests(unittest.TestCase):
             "live-observation-validate", "live-observation-publish", "agent-board", "codex-observation-hook",
             "decide-validation-retry", "bind-prediction",
             "bind-verification-contract",
+            "generate-verification-profile",
             "observe-pipeline", "reconcile-legacy-browser", "observe-review",
             "export-review-contributions", "bind-review-source",
             "preserve-review-evidence", "assemble-review-evidence",

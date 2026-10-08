@@ -86,6 +86,7 @@ BEHAVIORAL_CLI_CASES = {
     "decide-validation-retry": ("--state-dir", "<state>", "--reason", "deterministic_validation_failure"),
     "bind-prediction": ("--type", "pipeline", "--manifest", "<missing>", "--prediction-receipts", "<missing>", "--state-dir", "<state>"),
     "bind-verification-contract": ("--state-dir", "<state>", "--contract", "<missing>"),
+    "generate-verification-profile": ("--project-root", "<missing>", "--output", "<output>"),
     "observe-pipeline": ("--manifest", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
     "reconcile-legacy-browser": (
         "--events", "<missing>", "--target-sequence", "1",
@@ -543,6 +544,7 @@ def check_cli(context):
         "agent-board",
         "decide-validation-retry", "bind-prediction",
         "bind-verification-contract",
+        "generate-verification-profile",
         "observe-pipeline", "reconcile-legacy-browser", "observe-review",
         "export-review-contributions", "bind-review-source",
         "preserve-review-evidence", "assemble-review-evidence",
@@ -915,6 +917,10 @@ def check_cli(context):
         )
 
         from tests.test_runtime_cli import verification_contract
+        successful(
+            "generate-verification-profile", "--project-root", PERSONAS,
+            "--declaration-root", ".", "--output", root / "generated-profile.json",
+        )
         contract_run = initialize("contract-1")
         contract_value = verification_contract()
         contract_path = root / "verification-contract-1.json"

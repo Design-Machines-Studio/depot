@@ -85,6 +85,17 @@ def _fail():
     raise invalid_policy("invalid_verification_declaration")
 
 
+def _selectors(values, pattern):
+    if values is None:
+        return None
+    if (type(values) not in {list, tuple} or not values
+            or any(type(item) is not str or pattern.fullmatch(item) is None
+                   for item in values)
+            or len(values) != len(set(values))):
+        _fail()
+    return frozenset(values)
+
+
 def _owned_path(path, root, *, directory=False):
     try:
         lexical_root = root.absolute()
@@ -789,11 +800,15 @@ class ProjectPersonaAdapter:
         self._executor = executor
         self._profile = None
 
-    def discover(self, project_root, *, target_origin=None, declaration_root=None):
+    def discover(self, project_root, *, target_origin=None, declaration_root=None,
+                 task_ids=None, case_ids=None):
         try:
+            task_ids = _selectors(task_ids, re.compile(r"[a-z0-9][a-z0-9._-]{0,127}\Z"))
+            case_ids = _selectors(case_ids, re.compile(r"case-sha256:[0-9a-f]{64}\Z"))
             profile = self._discover(
                 project_root, target_origin=target_origin,
-                declaration_root=declaration_root,
+                declaration_root=declaration_root, task_ids=task_ids,
+                case_ids=case_ids,
             )
             self._profile = _snapshot_verification_profile(profile)
             return _snapshot_verification_profile(profile)
@@ -839,7 +854,8 @@ class ProjectPersonaAdapter:
             failure = invalid_policy("invalid_verification_evidence")
         raise failure from None
 
-    def _discover(self, project_root, *, target_origin=None, declaration_root=None):
+    def _discover(self, project_root, *, target_origin=None, declaration_root=None,
+                  task_ids=None, case_ids=None):
         project = Path(project_root)
         if declaration_root is None:
             declared_root = project / "tests" / "ux"
@@ -861,6 +877,8 @@ class ProjectPersonaAdapter:
         elif explicit_root:
             _fail()
         else:
+            if case_ids is not None:
+                _fail()
             profile = VerificationProfile(
                 1, "not_declared", (), (), "not_declared", "not_declared", (),
             )
@@ -875,9 +893,11 @@ class ProjectPersonaAdapter:
             declarations.bind_directory(ux / "suites", optional=True)
             return self._discover_declarations(
                 ux, declarations, target_origin=target_origin,
+                task_ids=task_ids, case_ids=case_ids,
             )
 
-    def _discover_declarations(self, ux, declarations, *, target_origin=None):
+    def _discover_declarations(self, ux, declarations, *, target_origin=None,
+                               task_ids=None, case_ids=None):
         try:
             document = self._policy_document or load_policy(self._policy_path)
             defaults_map = document.verification_defaults
@@ -989,6 +1009,12 @@ class ProjectPersonaAdapter:
             }
             if not runnable_present <= statuses:
                 _fail()
+        if selected is not None and not selected <= set(ids):
+            _fail()
+        if task_ids is not None:
+            if not task_ids <= set(ids):
+                _fail()
+            selected = task_ids
         cases, auth_names = [], set()
         route_binding_gaps = []
         for task in tasks:
@@ -1030,14 +1056,21 @@ class ProjectPersonaAdapter:
                         cases.append(PersonaCase(persona_id, task["id"], task["role"], route, engine,
                                                  viewport, required, expected, task["requires_auth"], browser_source,
                                                  source, task["legacy"], declared_route_digest))
-        if selected is not None and not selected <= set(ids): _fail()
         cases.sort(key=lambda item: item.case_id)
         if route_binding_gaps:
             cases = []
-            selection_status = "blocked_route_bindings"
             coverage_diagnostics = tuple(sorted(set(coverage_diagnostics) | {
                 "unresolved_route_parameters",
             }))
+        else:
+            if case_ids is not None:
+                if not case_ids <= {case.case_id for case in cases}:
+                    _fail()
+                cases = [case for case in cases if case.case_id in case_ids]
+                if task_ids is not None and task_ids != {case.scenario_id for case in cases}:
+                    _fail()
+        if route_binding_gaps:
+            selection_status = "blocked_route_bindings"
         elif not cases:
             selection_status = "no_runnable_tasks"
         elif any(case.required for case in cases):

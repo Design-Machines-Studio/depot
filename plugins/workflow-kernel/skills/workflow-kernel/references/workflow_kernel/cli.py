@@ -381,7 +381,7 @@ def _write_text(path, value):
         directory.fsync()
 
 
-def _write_json_once(path, value):
+def _write_json_once(path, value, *, verify=None):
     """Atomically claim an immutable artifact pathname without replacement."""
     destination = Path(path)
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -405,13 +405,91 @@ def _write_json_once(path, value):
             os.fsync(descriptor)
             directory.require_identity(descriptor, binding.path.name)
             directory.fsync()
+            if verify is not None:
+                verify(binding.path)
+                directory.revalidate()
+                directory.require_identity(descriptor, binding.path.name)
         except BaseException:
             try:
+                directory.require_identity(descriptor, binding.path.name)
                 directory.unlink(binding.path.name)
                 directory.fsync()
             except OSError:
                 pass
             raise
+
+
+def command_generate_verification_profile(args):
+    from .adapters.personas import ProjectPersonaAdapter, _owned_path
+    from .behavioral_contract import (
+        load_profile, parse_profile_bytes, verification_profile_digest,
+    )
+    from .policies import load_policy
+    from .redaction import contains_secret_shape
+
+    project = Path(os.path.abspath(args.project_root))
+    output = Path(os.path.abspath(args.output))
+    # Check lexical ancestors before canonical durable binding erases symlinks.
+    _owned_path(project, Path(project.anchor), directory=True)
+    _reject_symlinked_components(output)
+    ancestor = output.parent
+    while not ancestor.exists() and not ancestor.is_symlink():
+        ancestor = ancestor.parent
+    _owned_path(ancestor, Path(ancestor.anchor), directory=True)
+    binding = bind_durable_path(output)
+    if binding.parent_identity is not None:
+        with binding.pin_parent() as directory:
+            try:
+                directory.require_absent(binding.path.name)
+            except FileExistsError:
+                _emit({"error": {"code": "verification_profile_output_conflict",
+                                 "message": "verification profile output already exists"}}, sys.stderr)
+                return EXIT_CONFLICT
+    profile = ProjectPersonaAdapter(policy_document=load_policy()).discover(
+        project, target_origin=args.target_origin,
+        declaration_root=args.declaration_root,
+        task_ids=args.task_id, case_ids=args.case_id,
+    )
+    if profile.selection_status == "blocked_route_bindings":
+        if any(contains_secret_shape(gap) for gap in profile.route_binding_gaps):
+            raise ValueError("unsafe verification route diagnostic")
+        _emit({"error": {
+            "code": "blocked_route_bindings",
+            "message": "selected tasks require route bindings",
+            "route_binding_gaps": list(profile.route_binding_gaps),
+        }}, sys.stderr)
+        return EXIT_UNSAFE_PLAN
+    document = profile.to_dict()
+    encoded = (json.dumps(document, ensure_ascii=False, sort_keys=True,
+                          separators=(",", ":")) + "\n").encode("utf-8")
+    if contains_secret_shape(encoded.decode("utf-8")):
+        raise ValueError("unsafe verification profile document")
+    if parse_profile_bytes(encoded) != document:
+        raise ValueError("verification profile serialization mismatch")
+
+    def verify(path):
+        if load_profile(path) != document:
+            raise ValueError("verification profile reload mismatch")
+
+    try:
+        _write_json_once(output, document, verify=verify)
+    except FileExistsError:
+        _emit({"error": {"code": "verification_profile_output_conflict",
+                         "message": "verification profile output already exists"}}, sys.stderr)
+        return EXIT_CONFLICT
+    _emit({
+        "stage": "verification_profile_generated",
+        "profile_id": profile.profile_id,
+        "profile_digest": verification_profile_digest(document),
+        "discovery_status": profile.discovery_status,
+        "selection_status": profile.selection_status,
+        "selected_task_ids": sorted({case.scenario_id for case in profile.cases}),
+        "selected_case_ids": [case.case_id for case in profile.cases],
+        "required_case_ids": [case.case_id for case in profile.cases if case.required],
+        "proof_kind": "plan_generation_and_reload",
+        "reload_verified": True,
+    })
+    return 0
 
 
 @contextmanager
@@ -4074,6 +4152,18 @@ def parser():
     bind_contract.add_argument("--contract", required=True)
     bind_contract.add_argument("--verification-profile")
     bind_contract.set_defaults(handler=command_bind_verification_contract)
+
+    generate_profile = commands.add_parser(
+        "generate-verification-profile",
+        help="discover, select, publish and reload an authoritative verification plan",
+    )
+    generate_profile.add_argument("--project-root", required=True)
+    generate_profile.add_argument("--output", required=True)
+    generate_profile.add_argument("--target-origin")
+    generate_profile.add_argument("--declaration-root", choices=(".",))
+    generate_profile.add_argument("--task-id", action="append")
+    generate_profile.add_argument("--case-id", action="append")
+    generate_profile.set_defaults(handler=command_generate_verification_profile)
 
     observe_pipeline = commands.add_parser("observe-pipeline", help="observe authoritative pipeline receipts")
     observe_pipeline.add_argument("--manifest", required=True)
