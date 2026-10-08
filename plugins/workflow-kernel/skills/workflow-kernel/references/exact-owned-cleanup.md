@@ -137,7 +137,7 @@ not a new user-facing keep/debug option:
 ```
 
 Retention deletes every other child of the exact-owned root, permits at most
-128 regular files and 4 MiB across the whole diagnostic directory, refuses
+160 regular files and 4 MiB across the whole diagnostic directory, refuses
 links or special files, and emits all four
 terminal fields:
 
@@ -149,7 +149,8 @@ cleanup_command
 ```
 
 The byte allowance covers the complete required package, not just each file.
-Kernel 0.26.2 raises only this allowance: the PR173 package projection totals
+Kernel0.26.2 raises bytes to4MiB and files to160 after a separate measured
+144file/3,941,061byte final-head package exceeded128files. The original PR173 package projection totals
 112 files and 2,856,643 bytes, including coverage, request, companions, receipt
 stream, committed source/history/transition bindings, private receipts and report.
 See [the review retention rationale](review-evidence-contract.md#bounded-retention-0262).
