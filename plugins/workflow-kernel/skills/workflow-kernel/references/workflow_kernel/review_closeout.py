@@ -2280,7 +2280,18 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
         aggregate_bindings = {}
         for ref in sorted(aggregate_refs):
             data = _evidence_bytes(root, ref, "aggregate_validation")
-            aggregate_bindings[ref] = {"retained_ref": _seal_evidence(root, "literal", data, literal=True), "digest": _byte_digest(data)}
+            if previous is not None and ref in previous[1]["bindings"]:
+                # Preserve the first committed binding across runtime upgrades.
+                if _bound_bytes(root, previous[1], ref) != data:
+                    raise EvidenceAssemblyError("aggregate_validation", "digest_mismatch")
+                aggregate_bindings[ref] = previous[1]["bindings"][ref]
+            elif ref.startswith("review/evidence/source-sha256-"):
+                # A validated source seal is already an exact retained reference.
+                # Bind its original bytes instead of creating a second literal.
+                _read_seal(root, ref, "source", "aggregate_validation")
+                aggregate_bindings[ref] = {"retained_ref": ref, "digest": _byte_digest(data)}
+            else:
+                aggregate_bindings[ref] = {"retained_ref": _seal_evidence(root, "literal", data, literal=True), "digest": _byte_digest(data)}
         for name, document in documents.items():
             target_file = root / name
             try:

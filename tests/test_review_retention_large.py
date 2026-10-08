@@ -80,6 +80,42 @@ class LargeReviewRetentionTests(unittest.TestCase):
         return {path.relative_to(root): path.read_bytes()
                 for path in root.rglob("*") if path.is_file()}
 
+    def test_coverage_reuses_source_seal_and_retries_without_rewriting(self):
+        run, paths = self.make_run(run_id="source-reference-reuse")
+        record = json.loads((run.root / paths["record_ref"]).read_text())
+        reference = record["source_snapshot"]["snapshot_ref"]
+        before = (run.root / reference).read_bytes()
+        value = json.loads(paths["coverage_input"].read_text())
+        value["pass_id"] = "source-reference-reuse"
+        value["required_case_refs"] = [reference]
+        input_path = run.root / "review/reuse-input.json"
+        input_path.write_text(json.dumps(value) + "\n")
+        kwargs = dict(run_root=run.root, repository_root=self.repo,
+                      request_path=paths["request"], receipts_path=paths["receipts"],
+                      input_path=input_path)
+        first = review_closeout.assemble_review_evidence(**kwargs)
+        snapshot = json.loads((run.root / first["snapshot_ref"]).read_text())
+        self.assertEqual(reference, snapshot["bindings"][reference]["retained_ref"])
+        self.assertEqual(before, (run.root / reference).read_bytes())
+        committed = (run.root / first["snapshot_ref"]).read_bytes()
+        again = review_closeout.assemble_review_evidence(**kwargs)
+        self.assertTrue(again["reused"])
+        self.assertEqual(committed, (run.root / first["snapshot_ref"]).read_bytes())
+        self.assertEqual("complete", self.preserve(run, paths)["status"])
+
+    def test_new_file_count_boundary_remains_bounded(self):
+        directory = self.root / "count-boundary"
+        directory.mkdir()
+        for index in range(160):
+            (directory / f"evidence-{index}.json").write_bytes(b"{}\n")
+        self.assertEqual((160, 480), _bounded_diagnostic(directory))
+        original = self.snapshot(directory)
+        (directory / "overflow.json").write_bytes(b"{}\n")
+        with self.assertRaises(owned_run.BoundedDiagnosticLimitError):
+            _bounded_diagnostic(directory)
+        for path, data in original.items():
+            self.assertEqual(data, (directory / path).read_bytes())
+
     def test_former_two_mib_bound_rejects_the_required_large_fixture(self):
         # Prove this fixture exercises the repaired aggregate limit: both
         # required files fit 2 MiB, but assembly could not commit their lane.
@@ -126,7 +162,7 @@ class LargeReviewRetentionTests(unittest.TestCase):
         retained_run = self.snapshot(run.root)
         self.assertEqual(finished.to_dict(), ExactOwnedRun.open(run.root).finish("succeeded").to_dict())
         self.assertEqual(retained_run, self.snapshot(run.root))
-        print(f"FIXTURE required large package: {files}/128 files, {size}/4194304 bytes; all case declarations inspected; no live review claim.")
+        print(f"FIXTURE required large package: {files}/160 files, {size}/4194304 bytes; all case declarations inspected; no live review claim.")
 
     def test_complete_package_over_four_mib_fails_with_structured_reason(self):
         run, paths = self.large_run("required-too-large")
