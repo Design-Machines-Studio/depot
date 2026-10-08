@@ -2081,6 +2081,16 @@ require_absent "$pipeline_cmd" 'Recommended next action: create the PR' "designe
 require_absent "$pipeline_cmd" '**If the user chooses PR:**' "PR publication is agent-owned after candidate vetting"
 require_before "$orchestrator" '## Step 4: Approved Final Review' '<!-- reviewed-pr-full:start -->' "full review precedes PR publication"
 require_before "$pipeline_cmd" '### Caller Verification Checklist' '<!-- reviewed-pr-lean:start -->' "Lean caller verification precedes PR publication"
+require_before "$pipeline_cmd" '**Requirements cross-check (ledger item 11):**' '<!-- reviewed-pr-lean:start -->' "Full and Lean parent checks precede publication"
+require_text "$pipeline_cmd" 'Both Full and Lean modes invoke' "Full publication belongs to the checked parent"
+require_text "$pipeline_cmd" 'The orchestrator defers create and ready' "Full request defers both publication operations"
+require_text "$pipeline_cmd" 'CALLER_VERIFICATION_PASSED:-false' "parent publication blocks missing caller checks"
+require_text "$orchestrator" 'case "${TERMINAL_MODEL_REPORT_OWNER:?validated caller owner required}" in' "orchestrator guards publication by existing caller owner"
+require_text "$orchestrator" 'pipeline) printf' "parent-owned execution defers publication"
+require_text "$orchestrator" 'pipeline-run)' "standalone execution retains checked publication"
+require_text "$codex_native_adapter" '`pipeline` defers both create and ready' "native adapter preserves parent publication deferral"
+require_text "$REPO_ROOT/tests/test_auto_review_candidate.py" 'test_full_parent_defers_both_operations_until_actual_caller_checks' "fixtures execute parent verification ordering"
+require_text "$REPO_ROOT/tests/test_auto_review_candidate.py" 'test_standalone_publishes_after_own_checks_and_rejects_unknown_owner' "fixtures execute standalone verification ordering"
 for caller in direct full lean; do
   case "$caller" in direct) surface="$auto_closeout" ;; full) surface="$orchestrator" ;; lean) surface="$pipeline_cmd" ;; esac
   require_text "$surface" "<!-- reviewed-pr-$caller:start -->" "$caller invokes the creation seam"

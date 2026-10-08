@@ -26,17 +26,16 @@ the conflicting dispatch; continue independent authorized work. Never adopt an
 unattributed run or infer ownership from a latest-file search. The repair push
 is a transition inside this owner, never a new implementation trigger.
 
-Pipeline supplies the root and terminal report owner: its existing final
-review, repair batch and affected-lane recheck implement this contract. Do not
-append a standalone loop after that sequence. Chunk workers return evidence
-to Pipeline and never start a second PR closeout. Separate feedback from
-review: pre-PR feedback is `not_applicable`, never claimed settled; post-PR
-collect and settle authenticated feedback independently. At an unchanged covered
-head with zero retained findings, CI or feedback waits never redispatch reviewers.
-Invoke `review-next-action.sh` only for an actual source coverage gap, a new
-supported retained finding or a rendered automation gap. Bind the gap flags
-to inspected source, validated producer coverage and supported findings, then
-use the actual base/head and dirty boundary in its input:
+Pipeline's existing final review/repair/affected-recheck sequence owns closeout;
+workers return evidence, never start another loop or publish. Full `/pipeline`
+defers create/ready to its parent after mandatory caller verification;
+standalone `/pipeline-run` publishes after corresponding checks.
+Pre-PR feedback is `not_applicable`, never settled. Collect/settle post-PR
+authenticated feedback independently. Unchanged covered HEAD plus zero findings
+waits for CI/feedback without review dispatch. Only actual source coverage,
+new supported finding or rendered automation gaps invoke `review-next-action.sh`.
+Bind flags to inspected source, validated producer coverage and supported findings;
+use actual base/head/dirty boundary:
 
 <!-- review-gap-direct:start -->
 ```bash
@@ -130,10 +129,9 @@ until the PR exists. UI acceptance is an explicit owner fact, bound to the
 final head or supported bounded UI non-impact proof. No missing source packet
 can be called inspected; the existing producer is the only coverage authority.
 
-Direct closeout invokes this seam after independent review/repair/recheck and
-candidate evidence preservation. Full and Lean Pipeline invoke their matching
-caller seam below the same gate. No supported caller uses bare `gh` to bypass
-PR creation or draft-to-ready validation:
+Direct/Full/Lean publication follows independent candidate review, repair,
+recheck and preserved evidence; Full also requires parent caller verification.
+Never bypass create/ready with bare `gh`:
 
 <!-- reviewed-pr-direct:start -->
 ```bash
@@ -155,16 +153,13 @@ pass at the final head, use the same producer gate for draft-to-ready:
 ```
 <!-- reviewed-pr-direct-ready:end -->
 
-Register the returned PR with the host when supported. Collect actual PR CI
-and external feedback, fix every new supported defect automatically, push and
-recheck affected source/browser evidence under this same owner. Keep the PR
-draft while CI, feedback or designer acceptance remains. Reuse unchanged UI
-acceptance only with explicit bounded non-impact proof. Use the chunk01
-`operator-handoff.sh` output for the designer: tested behavior, actual checks,
-preview tasks/acceptance when applicable and owner merge. Never ask the designer
-to inspect backend code or create a PR. Planning and material-scope approvals
-remain explicit. Never merge, including when legacy controls are absent or
-explicitly false.
+Register the returned PR with the host when supported. Collect actual PR CI/
+feedback; fix supported defects, push and recheck affected source/browser under
+this owner. Keep draft while CI, feedback or designer acceptance remains;
+unchanged UI acceptance needs bounded non-impact proof. Deliver chunk01
+`operator-handoff.sh`: tested behavior, checks, preview tasks/acceptance and owner
+merge. Never ask for backend-code review or create-PR approval. Preserve
+planning/material-scope approvals. Missing/false legacy controls grant no merge.
 
 ## Invoke the supported protocol
 

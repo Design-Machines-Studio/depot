@@ -99,12 +99,10 @@ Key visual decisions:
 
 The rendered result must match these visual treatments. If you cannot determine the visual intent from these descriptions, read the mockup file at the path above.
 
-When the prototype covers this surface, it is primary. Inspect its exact source
-before editing, then search existing target and Live Wires components before
-creating anything. Copy its affected HTML hierarchy, exact Live Wires classes,
-and shared livewires-templ components. Preserve its copy, save behavior,
-action order, and control placement unless an approved requirement names a
-divergence. Generic SaaS heuristics cannot redesign a settled prototype choice.
+Prototype-covered choices are primary: inspect exact source, search existing
+target/Live Wires components, then preserve hierarchy/classes/shared components,
+copy/save behavior/action order/control placement unless approval names divergence.
+Generic SaaS heuristics cannot redesign a settled prototype choice.
 
 ## Acceptance Criteria
 
@@ -121,7 +119,8 @@ divergence. Generic SaaS heuristics cannot redesign a settled prototype choice.
 - [ ] [E.g., "Block and Abstain buttons are visually lighter and smaller than position buttons"]
 - [ ] [E.g., "Sidebar headings create a clear hierarchy -- h4 muted style, not competing with page heading"]
 
-Visual criteria describe the IMPRESSION, not the implementation. "Uses button--outline-danger" is structural. "Block button is visually subordinate to the Accept button" is visual. Include both types.
+Pair structural criteria (classes/components) with rendered impressions
+(hierarchy/prominence); neither proves the other.
 
 For a declared prototype counterpart, include both kinds of parity proof:
 
@@ -141,47 +140,43 @@ For a declared prototype counterpart, include both kinds of parity proof:
 
 ## Tool-Call Exploration Checkpoint & Delivery Contract
 
-Treat approximately 40 tool calls as an exploration checkpoint, not a termination point. Keep a rough running count.
-
-- **At the exploration checkpoint, stop new research, broad exploration, speculative refactoring, scope expansion, and unrelated improvements.** Move directly to delivering or preserving the work already performed.
-- **The checkpoint never prohibits closeout calls:** inspect the current diff and status; run proportionate focused verification; perform targeted repairs and rerun the failing check; commit coherent work; push the candidate branch when authorized; return evidence to the existing owner; and provide the final report. Only the root closeout owner uses the publication seam `publish-reviewed-pr.sh` to create or ready a PR after independent candidate review and required producer coverage pass.
-- **Bound repair churn.** After at most two targeted repair-and-recheck cycles, stop trying to perfect the implementation. Report any remaining failure honestly and preserve a coherent recoverable branch with evidence rather than silently abandoning local work. Incomplete candidate coverage blocks PR creation.
-- **Reaching the exploration checkpoint is never, by itself, a valid reason to leave implemented work unverified, uncommitted, unpushed, or unreported.**
-- **End your response with two sections, even if you had to stop early:**
-  - `NOT-COVERED:` -- acceptance criteria, files, or checks the budget did not reach.
-  - `COMMANDS-RUN:` -- the build/test/search commands you actually ran.
+Treat approximately 40 tool calls as an exploration checkpoint.
+- At that point, stop new research, broad exploration, speculative refactoring, scope expansion, and unrelated improvements.
+- Closeout remains allowed: inspect the current diff and status; run proportionate focused verification; perform targeted repairs; commit coherent work; push the candidate branch when authorized; return evidence and final report.
+- Only the root publication seam creates/readies PRs after independent candidate review and producer coverage; workers never publish.
+- After at most two targeted repair-and-recheck cycles, report remaining failures and preserve recoverable work. Incomplete coverage blocks publication.
+- Reaching the exploration checkpoint is never, by itself, a valid reason to leave implemented work unverified, uncommitted, unpushed, or unreported.
+- End with `NOT-COVERED:` and `COMMANDS-RUN:` listing unreached work and actual commands.
 
 ## Automatic review closeout
 
-Apply dm-review's `automatic-implementation-closeout.md`: plan/prompt approval;
-implement; commit/push candidate; independent review/repair/recheck and source/
-browser preservation; then owner publication through `publish-reviewed-pr.sh`.
-Pipeline workers return evidence to their existing owner and never create a PR
-or start another loop. Any supplied exact SessionStart context ref is read-only;
-workers never bind/update/clear the parent session. Use Playwright for formal
-browser checks; T3 for operator handoff. Draft waits for actual final-head PR
-CI, feedback and required designer UI acceptance. Use the chunk01 human handoff,
-never routine backend-code-review or create-PR requests. Every generated manifest
-sets `noMergeOnCompletion=true`; missing/false legacy controls grant no merge
-authority. Preserve planning/material-scope approval. No agent merge.
+Apply `automatic-implementation-closeout.md`: approve plan/prompts; implement;
+commit/push; independently review/repair/recheck and preserve source/browser;
+owner publishes via `publish-reviewed-pr.sh` after mandatory caller checks.
+Workers return evidence, never publish or start another loop. Exact SessionStart
+ref is read-only; never bind/update/clear parent context. Playwright checks,
+T3 handoff. Draft waits for final-head CI/feedback/designer UI acceptance.
+Chunk01 handoff never requests backend review/create-PR approval.
+`noMergeOnCompletion=true`; absent/false legacy values grant no merge.
+Preserve planning/material-scope approval.
 
 ## Ambiguity Protocol
 
-This block is one of three layers in the pipeline's ambiguity defence. Sibling layers: `plan-adversary.md` adversarial scope review (catches structural ambiguity at prompt-review time, cheapest) and `execution-orchestrator.md` Ambiguity Handling (autonomous-mode commit-trailer fallback). Keep the wording here in sync with those two.
+Keep this invariant aligned with `plan-adversary.md` scope review and the
+orchestrator's autonomous fallback. Never choose silently between reasonable
+Task/AC interpretations:
 
-If the Task or Acceptance Criteria allow more than one reasonable interpretation, do not pick silently.
-
-- Name the interpretations in a single short list before you touch code. Example: "Task says 'make the members page faster' -- this could mean (a) reduce server render time, (b) reduce perceived load time via progressive rendering, (c) reduce bundle size. Proceeding with (a) because the assessment flagged a slow query; alternatives rejected for lack of evidence."
-- When running under the execution-orchestrator's autonomous mode, record the chosen interpretation and rejected alternatives as two separate git-style trailer lines in the chunk's commit message: one `Chose: <interpretation>` line and one `Rejected: <alt-1>; <alt-2>` line. Multiple rejected alternatives are `; `-separated on the single `Rejected:` line. Follow the canonical `git interpret-trailers` shape so downstream tools can parse them.
-- Flag the decision in the chunk receipt (`ambiguity_resolved: true` with a one-line summary) so the adversarial reviewer on the next round can evaluate whether the right path was taken.
-- Fabricating certainty is a P1 failure. Surfacing ambiguity is never penalized.
+- Before edits, list interpretations, choose the smallest adequate one and why.
+- In autonomous mode, commit separate `Chose: <interpretation>` and
+  `Rejected: <alt-1>; <alt-2>` trailers using `git interpret-trailers` syntax.
+- Receipt `ambiguity_resolved: true` with a short summary for later review.
+- Fabricating certainty is P1; surfacing ambiguity is never penalized.
 
 ## Constraints
 
-- Only modify the files listed above
-- Follow existing patterns -- do not introduce new abstractions
-- Do not refactor surrounding code unless required for the task
-- Only lines that directly serve the Acceptance Criteria should change. If you notice unrelated issues in files you are editing, list them at the end of your response as "Noted, not fixed" -- do not include them in the diff.
+- Modify only listed files and AC-serving lines, following existing patterns.
+  No new abstractions or unrelated refactoring. Report other issues as
+  "Noted, not fixed" outside the diff.
 - Every changed line must serve an approved requirement or project outcome from
   Context. Keep adjacent improvements and work owned by another repository out
   of the diff; report them as "Noted, not fixed."
@@ -203,20 +198,15 @@ If the Task or Acceptance Criteria allow more than one reasonable interpretation
 
 ## Guidelines for Writing Prompts
 
-1. **Inline everything.** The subagent should never need to read another file to understand its task. If a pattern is important, show it in the prompt.
+Inline task-relevant context and actual pattern snippets; use exact files and
+verifiable acceptance criteria. Explain why, scope ownership tightly and cite
+approved mockup paths/key decisions. Pair structural criteria (class/component)
+with visual impressions (hierarchy/prominence); one never proves the other.
+Source inspection remains useful when images cannot be viewed.
 
-2. **Be specific about files.** Use exact paths, not descriptions. "Modify `internal/handler/proposal.go`" not "update the proposal handler."
 
-3. **Show, don't tell.** If there's a pattern to follow, include a code snippet from an existing file rather than describing it abstractly.
-
-4. **Acceptance criteria must be verifiable.** "Build passes" is verifiable. "Code is clean" is not. "All new functions have error handling" is verifiable.
-
-5. **Scope tightly.** If a subagent touches files outside its scope, it risks conflicting with parallel chunks. Be explicit about boundaries.
-
-6. **Include the "why."** Context helps the subagent make good judgment calls when the prompt doesn't cover every edge case.
-
-7. **Visual criteria are separate from structural criteria.** Structural: "button uses `.button--outline-danger` class." Visual: "button appears lighter and smaller than the primary action buttons." Both are needed for UI work. A subagent can satisfy the structural criterion (correct class) while failing the visual criterion (the class renders differently than expected in context).
-
-8. **Reference the approved design.** When a brainstorm produced mockups, the prompt must reference them. The subagent can read HTML source even if it can't view rendered images. Include the path and the key visual decisions extracted from it.
-
-9. **The Tool-Call Exploration Checkpoint block, the Ambiguity Protocol, and the last two Constraints bullets are invariant.** Copy them verbatim into every prompt. The checkpoint block stops exploration before it runs away while preserving the calls needed to verify and deliver coherent work with transparent `NOT-COVERED:` and `COMMANDS-RUN:` sections; the Ambiguity Protocol closes the seam between plan-adversary (structural ambiguity) and brainstorming (pre-plan ambiguity) by addressing implementation-time micro-decisions and drive-by refactors. Do not rewrite or shorten them per chunk.
+9. **The Tool-Call Exploration Checkpoint, Ambiguity Protocol and last two
+Constraints bullets are invariant:** copy verbatim into every prompt. They
+bound exploration without blocking verification/delivery, require honest
+`NOT-COVERED:` / `COMMANDS-RUN:` and expose implementation ambiguity between
+adversarial planning and brainstorming. Never shorten them per chunk.

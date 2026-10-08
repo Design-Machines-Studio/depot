@@ -105,6 +105,21 @@ class CodexCommandAdapterContractTests(unittest.TestCase):
         self.assertNotIn('**If the user chooses PR:**', pipeline)
         self.assertLess(full.index('## Step 4: Approved Final Review'), full.index('<!-- reviewed-pr-full:start -->'))
         self.assertLess(pipeline.index('### Caller Verification Checklist'), pipeline.index('<!-- reviewed-pr-lean:start -->'))
+        self.assertLess(pipeline.index('**Requirements cross-check (ledger item 11):**'), pipeline.index('<!-- reviewed-pr-lean:start -->'))
+        self.assertIn('The orchestrator defers create and ready', pipeline)
+        self.assertIn('Both Full and Lean modes invoke', pipeline)
+        for operation in ('full', 'full-ready'):
+            snippet = full.split(f'<!-- reviewed-pr-{operation}:start -->')[1].split(f'<!-- reviewed-pr-{operation}:end -->')[0]
+            self.assertLess(snippet.index('pipeline) printf'), snippet.index('pipeline-run)'))
+            self.assertLess(snippet.index('pipeline-run)'), snippet.index('publish-reviewed-pr.sh'))
+            self.assertIn('*) exit 2', snippet)
+        for operation in ('lean', 'lean-ready'):
+            snippet = pipeline.split(f'<!-- reviewed-pr-{operation}:start -->')[1].split(f'<!-- reviewed-pr-{operation}:end -->')[0]
+            self.assertLess(snippet.index('CALLER_VERIFICATION_PASSED:-false'), snippet.index('publish-reviewed-pr.sh'))
+        for text in (pipeline, full, adapter):
+            self.assertIn('TERMINAL_MODEL_REPORT_OWNER', text)
+        self.assertIn('`pipeline` defers both create and ready', adapter)
+        self.assertIn('`pipeline-run` executes Step 4c', adapter)
         self.assertLess(direct.index('Independently review,'), direct.index('<!-- reviewed-pr-direct:start -->'))
         for caller, text in (("direct", direct), ("full", full), ("lean", pipeline)):
             with self.subTest(caller=caller):

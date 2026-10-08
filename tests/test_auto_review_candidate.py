@@ -127,7 +127,8 @@ esac
                         DM_REVIEW_BUNDLE_ROOT=str(self.source / "plugins/dm-review"),
                         WORKFLOW_KERNEL=str(self.source / "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"),
                         REVIEW_ROOT=str(self.repo), REVIEW_PR_URL="https://github.com/Fixture/consumer/pull/42",
-                        PR_BUCKET="pass", UNRESOLVED="false")
+                        PR_BUCKET="pass", UNRESOLVED="false",
+                        TERMINAL_MODEL_REPORT_OWNER="pipeline-run", CALLER_VERIFICATION_PASSED="true")
 
     def tearDown(self):
         # No agent merge may occur on success, rejection or recovery paths.
@@ -215,6 +216,65 @@ esac
                 (self.repo / "source.txt").unlink()
                 self.reject(caller)
                 self.git_run("restore", "source.txt")
+
+    def test_full_parent_defers_both_operations_until_actual_caller_checks(self):
+        # Execute the child guards and the shared Full/Lean parent seams.
+        # Producer-valid evidence cannot bypass missing caller verification.
+        self.prepare("full")
+        self.env["TERMINAL_MODEL_REPORT_OWNER"] = "pipeline"
+        for operation in ("create", "ready"):
+            child = self.publish("full", operation)
+            self.assertEqual(0, child.returncode, child.stderr)
+            self.assertIn("Publication deferred", child.stdout)
+            self.assertEqual("", self.log.read_text())
+            self.env["CALLER_VERIFICATION_PASSED"] = "false"
+            self.reject("lean", operation)
+
+        # A caller-discovered defect is committed before publication; covered
+        # old HEAD still fails even after the caller passes its new checks.
+        (self.repo / "source.txt").write_text("caller-discovered repair\n")
+        self.git_run("add", "source.txt")
+        self.git_run("commit", "--quiet", "-m", "repair caller verification defect")
+        self.env["CALLER_VERIFICATION_PASSED"] = "true"
+        self.reject("lean")
+        self.prepare("full", "exact-replay")
+        # No broad redispatch: fresh producer evidence is an exact-owned replay.
+        created = self.publish("lean")
+        self.assertEqual(0, created.returncode, created.stderr)
+        self.assertIn("pr create", self.log.read_text())
+        self.env["CALLER_VERIFICATION_PASSED"] = "false"
+        self.reject("lean", "ready")
+        self.env["CALLER_VERIFICATION_PASSED"] = "true"
+        self.facts["readiness"]["feedbackSettled"] = True
+        self.save_facts()
+        ready = self.publish("lean", "ready")
+        self.assertEqual(0, ready.returncode, ready.stderr)
+        self.assertIn("pr ready", self.log.read_text())
+
+    def test_standalone_publishes_after_own_checks_and_rejects_unknown_owner(self):
+        _, paths = self.prepare("full")
+        # Standalone corresponding candidate checks still gate publication.
+        self.facts["readiness"]["checks"][0]["status"] = "fail"
+        self.save_facts()
+        self.reject("full")
+        self.facts["readiness"]["checks"][0]["status"] = "pass"
+        self.save_facts()
+        self.env["TERMINAL_MODEL_REPORT_OWNER"] = "unknown"
+        self.reject("full")
+        self.env.pop("TERMINAL_MODEL_REPORT_OWNER")
+        self.reject("full")
+        self.env["TERMINAL_MODEL_REPORT_OWNER"] = "pipeline-run"
+        paths["lane_receipts"].unlink()
+        self.reject("full")
+        self.prepare("full", "standalone-checked")
+        created = self.publish("full")
+        self.assertEqual(0, created.returncode, created.stderr)
+        self.assertIn("pr create", self.log.read_text())
+        self.facts["readiness"]["feedbackSettled"] = True
+        self.save_facts()
+        ready = self.publish("full", "ready")
+        self.assertEqual(0, ready.returncode, ready.stderr)
+        self.assertIn("pr ready", self.log.read_text())
 
     def test_candidate_repairs_and_fresh_replay_precede_publication(self):
         for caller in self.CALLERS:

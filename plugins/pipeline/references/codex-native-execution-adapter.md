@@ -77,8 +77,14 @@ references.
 **Automatic closeout:** Load dm-review's `automatic-implementation-closeout.md`.
 After plan/prompt approval, commit/push and verify the candidate branch, then
 run the existing independent final review, repair and affected recheck before
-PR creation. Execute Step 4c's `publish-reviewed-pr.sh` create and ready seams
-with its exact arguments; never bypass them with bare `gh`. Keep PR-only CI
+PR creation. Preserve the request's `terminalModelReportOwner` unchanged as
+`TERMINAL_MODEL_REPORT_OWNER`: `pipeline` defers both create and ready to the
+parent after mandatory caller verification; `pipeline-run` executes Step 4c's
+seams after its own corresponding checks. Return exact committed/pushed
+candidate, producer/readiness and preserved source/browser references without
+finishing the parent owner or starting another loop. Missing/invalid owner
+blocks publication. Use `publish-reviewed-pr.sh` with the exact caller arguments;
+never bypass it with bare `gh`. Keep PR-only CI
 pending until creation and keep the draft until actual final-head checks,
 feedback and required designer UI acceptance pass. Repair pushes advance this
 same owner, never a duplicate broad review. Pre-PR feedback is `not_applicable`;
