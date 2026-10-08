@@ -54,8 +54,9 @@ Pipeline retains one final review/repair owner and root.
 ### Focused role review (ordinary chunks)
 
 One read-only `review-fast` participant, or `review-deep` for logic and
-integration. Read `todos/*-pending-*.md`. Zero findings: Clean. Else apply
-targeted fixes and perform one affected-lane recheck. Stop after two passes.
+integration. Bind `<review-root>` to CHUNK_ROOT for chunks and the integrated
+feature checkout for final review. Read `todos/*-pending-*.md` and repair from `<review-root>`;
+use Step 4's repair/recheck sequence. Zero findings: Clean. Stop after two passes.
 
 ### Full review (replaces `/dm-review` full mode)
 
@@ -76,8 +77,7 @@ coverage in receipts. Never replace the quick protocol with a generic reviewer.
 
 ### Full review-fix loop (sensitive chunks and full final review)
 
-Bind sensitive review to CHUNK_ROOT and final review to the feature checkout.
-Apply Step 4 repairs, `selective-lane-allowlist.md` and `dm-review-loop` limits.
+Apply `selective-lane-allowlist.md` and `dm-review-loop` limits in `<review-root>`.
 Retain chunk base, refresh repaired end, commit/push, verify remote head and
 recheck affected checks/lanes. Caps, stalled evidence and blockers preserve
 recoverable incomplete coverage.
@@ -679,7 +679,7 @@ chunk's non-empty `prototypeParity` packet: exact source inspection, target/Live
 Wires component search, post-edit source comparison, matched browser comparison
 and intentional differences. Generic heuristics stay secondary. `no_counterpart`
 carries no packet. Follow `ui-case-selection.md` for exact task source/commit,
-IDs, personas/roles/states/devices, preconditions, steps, success and screenshots.
+IDs, personas/roles/states/devices, preconditions, steps, success criteria and screenshot points.
 Record paired prototype/application results and differences; expected denial
 is a verified boundary, expected FRICTION a hypothesis.
 
@@ -739,7 +739,8 @@ Use `CHUNK_START_HEAD..CHUNK_END_HEAD` as the sequential chunk's verification
 and review boundary; each later chunk captures its own start.
 
 Materialize `git -C "$CHUNK_ROOT" diff "$CHUNK_START_HEAD..$CHUNK_END_HEAD"`
-and `--name-only` for the common focused reviewer prompt. Nested dm-review gets
+and `--name-only`. Supply both commit heads, changed-file inventory and diff
+to focused reviewers. Nested dm-review gets
 `--base-commit <CHUNK_START_HEAD> --head-commit <CHUNK_END_HEAD>`; Phase 1 validates
 the range. Repairs retain base and refresh end. Final review uses full PR scope.
 

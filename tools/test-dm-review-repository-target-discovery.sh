@@ -255,15 +255,16 @@ assert jq -e '.resourceOwnership == "pre-existing" and
 # Declared project beats an unrelated attached tab; maintenance retains ownership.
 assert grep -Fq '2. the established project domain and canonical checkout' "$CONTRACT"
 assert grep -Fq '5. an attached automation-capable T3 preview' "$CONTRACT"
-assert grep -Fq 'git checkout --detach' "$CONTRACT"
-assert grep -Fq '<exact-committed-head>' "$CONTRACT"
-assert grep -Fq 'collision and coordinate a safe handoff' "$CONTRACT"
+assert grep -Fq 'Commit/push and preserve coverage before normally detaching an owned' "$CONTRACT"
+assert grep -Fq 'branch in the canonical folder; retain the detached producer checkout.' "$CONTRACT"
+assert grep -Fq "Foreign occupancy requires that owner's exact release handoff." "$CONTRACT"
+assert grep -Fq 'name collisions and coordinate without force, stash, reset or clean.' "$CONTRACT"
 assert grep -Fq 'changing Git HEAD alone does not refresh' "$CONTRACT"
 assert grep -Fq 'cleanup argv or ownership adoption' "$CONTRACT"
 assert grep -Fq 'simultaneous Federation peers' "$CONTRACT"
 
-# Exercise ordinary Git in disposable fixture repos. The implementation branch
-# stays owned by its worktree. This simulated binary requires a separate rebuild.
+# Exercise ordinary Git in disposable fixture repos. Release the owned producer
+# and select the actual feature branch for serving; rebuild remains separate.
 SERVING="$TMP/serving"
 BUILDER="$TMP/builder"
 git init -q "$SERVING"
@@ -281,10 +282,20 @@ if git -C "$SERVING" checkout fixture-feature 2> "$TMP/branch-owned-error"; then
   exit 1
 fi
 assert grep -Eq 'already (checked out|used)' "$TMP/branch-owned-error"
-git -C "$SERVING" checkout -q --detach "$feature_head"
-assert test "$(git -C "$SERVING" rev-parse HEAD)" = "$feature_head"
 assert test "$(git -C "$BUILDER" branch --show-current)" = fixture-feature
-assert test -z "$(git -C "$SERVING" branch --show-current)"
+assert test "$(git -C "$BUILDER" rev-parse HEAD)" = "$feature_head"
+assert test -z "$(git -C "$BUILDER" status --porcelain)"
+# Preserve this fixture's exact owned producer evidence before branch transfer.
+printf '%s\n' "$feature_head" > "$TMP/owned-producer-evidence"
+producer_evidence_digest="$(git hash-object "$TMP/owned-producer-evidence")"
+git -C "$BUILDER" checkout -q --detach "$feature_head"
+git -C "$SERVING" checkout -q fixture-feature
+assert test "$(git -C "$SERVING" rev-parse HEAD)" = "$feature_head"
+assert test "$(git -C "$SERVING" branch --show-current)" = fixture-feature
+assert test -z "$(git -C "$BUILDER" branch --show-current)"
+assert test "$(git -C "$BUILDER" rev-parse HEAD)" = "$feature_head"
+assert test "$(git hash-object "$TMP/owned-producer-evidence")" = "$producer_evidence_digest"
+assert test -d "$BUILDER"
 assert test "$(cat "$TMP/served-build-head")" != "$feature_head"
 # Simulated rebuild receipt, not application/browser evidence.
 git -C "$SERVING" rev-parse HEAD > "$TMP/served-build-head"
@@ -296,7 +307,7 @@ assert test -n "$(git -C "$SERVING" status --porcelain)"
 assert test "$(git -C "$SERVING" diff | git hash-object --stdin)" = "$before_dirty"
 assert test -d "$SERVING"
 
-# Unrelated tracked plan dirtiness survives an ordinary detached checkout.
+# Foreign tracked plan dirtiness survives an ordinary actual-branch checkout.
 DIRTY_SERVING="$TMP/dirty-serving"
 DIRTY_BUILDER="$TMP/dirty-builder"
 git init -q "$DIRTY_SERVING"
@@ -312,7 +323,10 @@ git -C "$DIRTY_BUILDER" -c user.name=test -c user.email=test@example.invalid com
 dirty_feature_head="$(git -C "$DIRTY_BUILDER" rev-parse HEAD)"
 printf 'pre-existing notes\n' >> "$DIRTY_SERVING/plans/notes.md"
 notes_digest="$(git -C "$DIRTY_SERVING" diff -- plans/notes.md | git hash-object --stdin)"
-git -C "$DIRTY_SERVING" checkout -q --detach "$dirty_feature_head"
+git -C "$DIRTY_BUILDER" checkout -q --detach "$dirty_feature_head"
+git -C "$DIRTY_SERVING" checkout -q dirty-feature
+assert test "$(git -C "$DIRTY_SERVING" branch --show-current)" = dirty-feature
+assert test -z "$(git -C "$DIRTY_BUILDER" branch --show-current)"
 assert test "$(git -C "$DIRTY_SERVING" rev-parse HEAD)" = "$dirty_feature_head"
 assert test "$(git -C "$DIRTY_SERVING" diff -- plans/notes.md | git hash-object --stdin)" = "$notes_digest"
 assert grep -Fq 'plans/notes.md' <(git -C "$DIRTY_SERVING" status --porcelain)
@@ -322,10 +336,13 @@ git -C "$DIRTY_SERVING" checkout -q --detach HEAD~1
 source_base_head="$(git -C "$DIRTY_SERVING" rev-parse HEAD)"
 printf 'local source edit\n' >> "$DIRTY_SERVING/app.txt"
 set +e
-git -C "$DIRTY_SERVING" checkout --detach "$dirty_feature_head" > "$TMP/overlap.out" 2>&1
+source_dirty_digest="$(git -C "$DIRTY_SERVING" diff -- app.txt | git hash-object --stdin)"
+git -C "$DIRTY_SERVING" checkout dirty-feature > "$TMP/overlap.out" 2>&1
 overlap_rc=$?
 set -e
 assert test "$overlap_rc" -ne 0
+assert test "$(git -C "$DIRTY_SERVING" diff -- app.txt | git hash-object --stdin)" = "$source_dirty_digest"
+assert test "$(git -C "$DIRTY_SERVING" diff -- plans/notes.md | git hash-object --stdin)" = "$notes_digest"
 assert test "$(git -C "$DIRTY_SERVING" rev-parse HEAD)" = "$source_base_head"
 assert grep -Fq 'app.txt' <(git -C "$DIRTY_SERVING" status --porcelain)
 

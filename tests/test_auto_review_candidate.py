@@ -116,9 +116,60 @@ printf '%s\n' "$*" >> "$GH_LOG"
 case "$1 ${2:-}" in
   'pr create') printf 'https://github.com/Fixture/consumer/pull/42\n' ;;
   'pr ready') ;;
-  'pr view') jq -cn --arg head "$PR_HEAD" '{headRefOid:$head,headRefName:"candidate",state:"OPEN",isDraft:true,reviewDecision:"APPROVED"}' ;;
-  'pr checks') jq -cn --arg bucket "$PR_BUCKET" '[{name:"actual CI",bucket:$bucket,link:"https://example.test/ci"}]' ;;
-  'api graphql') jq -cn --arg head "$PR_HEAD" '{data:{repository:{pullRequest:{headRefOid:$head,reviewThreads:{nodes:[{isResolved:(env.UNRESOLVED!="true")}],pageInfo:{hasNextPage:false}}}}}}' ;;
+  'pr view') jq -cn --arg head "$PR_HEAD" --arg base "${PR_BASE:-main}" '{headRefOid:$head,headRefName:"candidate",baseRefName:$base,state:"OPEN",isDraft:true,reviewDecision:env.REVIEW_DECISION}' ;;
+  'pr checks')
+    required=false
+    for arg in "$@"; do [ "$arg" != --required ] || required=true; done
+    if [ "$required" = true ]; then
+      case "${REQUIRED_MODE:-checks}" in
+        none) printf "no required checks reported on the 'candidate' branch\n" >&2; exit 1 ;;
+        lookup-failure) printf 'error connecting to api.github.com\n' >&2; exit 1 ;;
+        empty-error) exit 1 ;; empty-success) printf '[]\n'; exit 0 ;;
+        diagnostic-extra) printf "no required checks reported on the 'candidate' branch\nlookup failed\n" >&2; exit 1 ;;
+        wrong-branch) printf "no required checks reported on the 'foreign' branch\n" >&2; exit 1 ;;
+        missing) printf '[{"name":"missing CI","bucket":"pass","link":"https://example.test/missing"}]\n'; exit 0 ;;
+      esac
+    fi
+    case "${ALL_CHECKS_MODE:-checks}" in
+      missing) printf '[]\n'; exit 0 ;;
+      lookup-failure) printf 'API unavailable\n' >&2; exit 1 ;;
+    esac
+    jq -cn --arg bucket "${PR_BUCKET:-pass}" '[{name:"actual CI",bucket:$bucket,link:"https://example.test/ci"}]' ;;
+
+  'api graphql')
+    if [[ "$*" = *branchProtectionRule* ]]; then
+      [[ "$*" = *"ref=refs/heads/${PR_BASE:-main}"* ]] || exit 2
+      case "${CLASSIC_MODE:-checks}" in
+        lookup-failure) printf 'API unavailable\n' >&2; exit 1 ;;
+        malformed) printf '{\n'; exit 0 ;;
+        incomplete) printf '{"data":{"repository":{"ref":{"name":"main"}}}}\n'; exit 0 ;;
+      esac
+      jq -cn --arg base "${PR_BASE:-main}" --arg mode "${CLASSIC_MODE:-checks}" '
+        {data:{repository:{ref:{name:(if $mode=="wrong-base" then "foreign" else $base end),
+          branchProtectionRule:(if $mode=="none" then null else
+            {requiresStatusChecks:($mode!="empty"),requiredStatusChecks:(if $mode=="empty" then [] else
+              [{context:(if $mode=="absent" then "missing CI" else "actual CI" end),app:(if $mode=="app-bound" then {id:"App1"} else null end)}] end)} end)}}}} |
+        if $mode=="partial-error" then .errors=[{message:"not accessible"}] else . end'
+    else
+      jq -cn --arg head "$PR_HEAD" '{data:{repository:{pullRequest:{headRefOid:$head,reviewThreads:{nodes:[{isResolved:(env.UNRESOLVED!="true")}],pageInfo:{hasNextPage:(env.MORE_THREADS=="true")}}}}}}'
+    fi ;;
+  'api --paginate')
+    BASE_ENCODED="$(jq -rn --arg base "${PR_BASE:-main}" '$base|@uri')"
+    [ "$*" = "api --paginate --slurp repos/Fixture/consumer/rules/branches/$BASE_ENCODED?per_page=100" ] || exit 2
+    case "${RULES_MODE:-none}" in
+      lookup-failure) printf 'API unavailable\n' >&2; exit 1 ;;
+      malformed) printf '{\n'; exit 0 ;;
+      incomplete) printf '[[],null]\n'; exit 0 ;;
+      none) printf '[[]]\n'; exit 0 ;;
+    esac
+    jq -cn --arg mode "$RULES_MODE" '
+      {type:(if $mode=="workflow" then "workflows" elif $mode=="unknown" then "future_required_rule" else "required_status_checks" end),
+        ruleset_id:73,ruleset_source_type:"Organization",ruleset_source:"Fixture",
+        parameters:(if $mode=="workflow" then {workflows:[{path:".github/workflows/required.yml",repository_id:42,ref:"refs/heads/main"}]}
+          elif $mode=="missing-parameters" then {} else
+            {required_status_checks:[{context:(if $mode=="absent" or $mode=="second-page" then "missing CI" else "actual CI" end)}]} |
+              if $mode=="app-bound" then .required_status_checks[0].integration_id=123 else . end end)} |
+      if $mode=="second-page" then [[],[.]] else [[.]] end' ;;
   *) exit 2 ;;
 esac
 ''')
@@ -127,7 +178,7 @@ esac
                         DM_REVIEW_BUNDLE_ROOT=str(self.source / "plugins/dm-review"),
                         WORKFLOW_KERNEL=str(self.source / "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"),
                         REVIEW_ROOT=str(self.repo), REVIEW_PR_URL="https://github.com/Fixture/consumer/pull/42",
-                        PR_BUCKET="pass", UNRESOLVED="false",
+                        PR_BUCKET="pass", UNRESOLVED="false", REVIEW_DECISION="APPROVED",
                         TERMINAL_MODEL_REPORT_OWNER="pipeline-run", CALLER_VERIFICATION_PASSED="true")
 
     def tearDown(self):

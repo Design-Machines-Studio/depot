@@ -120,11 +120,14 @@ git -C "$CHUNK_ROOT" commit -qm repair-two
 bash "$TMP/check.sh"
 test "$(git -C "$CHUNK_ROOT" rev-list --count "$CHUNK_START_HEAD..HEAD")" -eq 2
 test "$(git -C "$CHUNK_ROOT" diff --name-only "$CHUNK_START_HEAD..HEAD")" = repair.txt
-require_text "$orchestrator" 'Commit/push repairs,' "review repairs commit before the sequential gate"
+require_text "$orchestrator" '2. Stage with `git add -A -- <dir>`, verify `git diff --cached --stat`, commit with `git commit -F <file>`.' "final review repairs stage and commit before push/recheck"
+require_text "$orchestrator" 'Push the repair batch to the candidate branch and verify its remote head before' "review repairs push and verify the remote candidate head"
 require_text "$orchestrator" 'feature checkout for final review.' "final repair binds the integrated feature checkout"
-require_text "$orchestrator" 'Bind `<review-root>` to CHUNK_ROOT' "finding lookup uses the bound review root"
-require_text "$orchestrator" "Use Step 4's repair/recheck sequence" "repairs use the bound review root"
-require_text "$orchestrator" 'Supply both heads, that inventory and that diff as' "per-chunk review receives the explicit commit boundary"
+require_text "$orchestrator" 'Bind `<review-root>` to CHUNK_ROOT for chunks and the integrated' "finding lookup uses the bound review root"
+require_text "$orchestrator" 'Read `todos/*-pending-*.md` and repair from `<review-root>`;' "finding lookup and repair cwd use the selected review root"
+require_text "$orchestrator" "use Step 4's repair/recheck sequence" "repairs use the bound review root"
+require_text "$orchestrator" 'and `--name-only`. Supply both commit heads, changed-file inventory and diff' "per-chunk review receives the explicit commit boundary"
+require_text "$orchestrator" 'to focused reviewers. Nested dm-review gets' "explicit commit evidence reaches focused reviewers"
 require_text "$orchestrator" 'Every Step 3g repair batch, including focused UI/Logic, Integration and Trivial' "ordinary review repairs use the commit protocol"
 require_text "$orchestrator" 'full  -> Skill(skill="dm-review:review", args="full <feature-branch>")' "nested review consumes its selected arguments"
 require_text "$orchestrator" '--base-commit <CHUNK_START_HEAD> --head-commit <CHUNK_END_HEAD>' "nested chunk review passes the supported commit range"
