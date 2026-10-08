@@ -2,12 +2,36 @@
 # Session pointer only. Native SessionStart/Stop JSON is read from stdin.
 # Sourceable identity helpers are also used by the publication gate.
 set -euo pipefail
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+export PATH
 
 review_refuse() { printf 'Not ready: %s\n' "$*" >&2; exit 3; }
+review_stat() {
+  # GNU and BSD stat use different format flags. All callers pass absolute paths.
+  local gnu bsd value
+  case "$1" in
+    uid) gnu=%u; bsd=%u ;; mode) gnu=%a; bsd=%Lp ;;
+    links) gnu=%h; bsd=%l ;; identity) gnu='[%d,%i]'; bsd='[%d,%i]' ;;
+    *) return 2 ;;
+  esac
+  if value="$(stat -c "$gnu" -- "$2" 2>/dev/null)"; then
+    printf '%s\n' "$value"
+  else
+    stat -f "$bsd" "$2"
+  fi
+}
+review_sha256() {
+  if command -v sha256sum >/dev/null 2>&1; then sha256sum
+  else shasum -a 256
+  fi | awk '{print $1}'
+}
 review_safe_path() {
   local path="$1" part cursor=/
+  local -a parts
   [[ "$path" = /* && "$path" != *$'\n'* && "$path" != *$'\t'* ]] || review_refuse 'unsafe path'
-  [ "$(realpath -m -- "$path")" = "$path" ] || review_refuse 'noncanonical path'
+  # Lexical canonicality also works for not-yet-created marker paths.
+  case "$path" in *//*|*/./*|*/../*|*/.|*/..) review_refuse 'noncanonical path' ;; esac
+  [ "$path" = / ] || [ "${path%/}" = "$path" ] || review_refuse 'noncanonical path'
   IFS=/ read -r -a parts <<< "$path"
   for part in "${parts[@]}"; do
     [ -n "$part" ] || continue
@@ -17,12 +41,12 @@ review_safe_path() {
 }
 review_private() {
   review_safe_path "$1"
-  [ -e "$1" ] && [ "$(stat -c %u -- "$1")" = "$(id -u)" ] || review_refuse 'foreign or missing private context'
+  [ -e "$1" ] && [ "$(review_stat uid "$1")" = "$(id -u)" ] || review_refuse 'foreign or missing private context'
   local mode
-  mode="$(stat -c %a -- "$1")"
+  mode="$(review_stat mode "$1")"
   (( (8#$mode & 077) == 0 )) || review_refuse 'context is not private'
   if [ -f "$1" ]; then
-    [ "$(stat -c %h -- "$1")" = 1 ] || review_refuse 'linked private context'
+    [ "$(review_stat links "$1")" = 1 ] || review_refuse 'linked private context'
   else
     [ -d "$1" ] || review_refuse 'invalid private context'
   fi
@@ -58,8 +82,8 @@ review_owner_validate() {
   review_safe_path "$state"
   [ -d "$state" ] || review_refuse 'missing owner state directory'
   jq -e --arg root "$root" --arg run "$run" --arg workflow "$workflow" \
-    --argjson rootid "$(stat -c '[%d,%i]' -- "$root")" \
-    --argjson baseid "$(stat -c '[%d,%i]' -- "$(dirname "$root")")" '
+    --argjson rootid "$(review_stat identity "$root")" \
+    --argjson baseid "$(review_stat identity "$(dirname "$root")")" '
     (keys|sort)==(["version","workflow","run_id","root","root_identity","base_identity","resources"]|sort) and
     .version==1 and .root==$root and .run_id==$run and .workflow==$workflow and
     .root_identity==$rootid and .base_identity==$baseid and
@@ -78,10 +102,10 @@ review_change_boundary() {
     git -C "$repo" diff --binary HEAD
     while IFS= read -r -d '' file; do
       printf '%s\0' "$file"
-      stat -c %a -- "$repo/$file"
-      if [ -L "$repo/$file" ]; then readlink -- "$repo/$file"; else sha256sum -- "$repo/$file"; fi
+      review_stat mode "$repo/$file"
+      if [ -L "$repo/$file" ]; then readlink "$repo/$file"; else review_sha256 < "$repo/$file"; fi
     done < <(git -C "$repo" ls-files --others --exclude-standard -z)
-  } | sha256sum | awk '{print "sha256:" $1}'
+  } | review_sha256 | awk '{print "sha256:" $1}'
 }
 
 if [ "${BASH_SOURCE[0]}" != "$0" ]; then return 0; fi
@@ -104,10 +128,12 @@ jq -e '(.hook_event_name|IN("SessionStart","Stop")) and
   (.session_id|type=="string" and length>0 and length<=256 and (test("[\u0000-\u001f\u007f]")|not)) and
   (.cwd|type=="string") and (.agent_id==null) and (.agent_type==null)' <<< "$NATIVE" >/dev/null || review_refuse 'native root session context unavailable'
 SESSION="$(jq -r .session_id <<< "$NATIVE")"
-[ "$(realpath -e -- "$(jq -r .cwd <<< "$NATIVE")")" = "$REPO" ] || review_refuse 'native repository mismatch'
+[ "$(cd "$(jq -r .cwd <<< "$NATIVE")" && pwd -P)" = "$REPO" ] || review_refuse 'native repository mismatch'
 REPOSITORY="$(review_repository "$REPO")"
-KEY="$(printf '%s\0%s\0%s' "$REPOSITORY" "$REPO" "$SESSION" | sha256sum | cut -d ' ' -f1)"
-BASE="${TMPDIR:-/tmp}/claude-hook-state"
+KEY="$(printf '%s\0%s\0%s' "$REPOSITORY" "$REPO" "$SESSION" | review_sha256)"
+# macOS native TMPDIR (and /tmp) can have a system symlink above it. Resolve
+# that existing directory first; marker/run paths still reject symlink components.
+BASE="$(cd "${TMPDIR:-/tmp}" && pwd -P)/claude-hook-state"
 DIRECTORY="$BASE/review-$KEY"
 EXPECTED="$DIRECTORY/review-owner.json"
 umask 077
@@ -116,7 +142,7 @@ if [ "$MODE" = init ]; then
   review_safe_path "$BASE"
   [ -d "$BASE" ] || mkdir -- "$BASE"
   # Existing reminder markers may share this account-owned directory.
-  [ "$(stat -c %u -- "$BASE")" = "$(id -u)" ] || review_refuse 'foreign hook-state directory'
+  [ "$(review_stat uid "$BASE")" = "$(id -u)" ] || review_refuse 'foreign hook-state directory'
   [ -d "$DIRECTORY" ] || mkdir -- "$DIRECTORY"
 else
   [ "$CONTEXT" = "$EXPECTED" ] || review_refuse 'hook activation unavailable: exact SessionStart context required'

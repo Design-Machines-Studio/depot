@@ -3,25 +3,49 @@
 # producer-input is a closed map of preserve-review-evidence file arguments.
 # readiness-input contains the explicit current owner and handoff facts.
 set -euo pipefail
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+export PATH
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HERE/review-owner-context.sh"
 OPERATION= REPO= RUN_ROOT= PRODUCER= READINESS= PR=
-declare -A SEEN=()
+SEEN=' '
 while [ "$#" -gt 0 ]; do
-  [ "$#" -ge 2 ] && [ -z "${SEEN[$1]:-}" ] || exit 2
-  SEEN[$1]=1
+  [ "$#" -ge 2 ] || exit 2
   case "$1" in
     --operation) OPERATION="$2" ;; --repository-root) REPO="$2" ;;
     --run-root) RUN_ROOT="$2" ;; --producer-input) PRODUCER="$2" ;;
     --readiness-input) READINESS="$2" ;; --pr) PR="$2" ;;
     *) exit 2 ;;
   esac
+  case "$SEEN" in *" $1 "*) exit 2 ;; esac
+  SEEN="$SEEN$1 "
   shift 2
 done
 case "$OPERATION:$PR" in create:) ;; ready:https://github.com/*/pull/*) ;; *) exit 2 ;; esac
+# Source-development fixtures alone may supply two mocked tools. Fixed PATH
+# still governs every other dependency and the real Kernel producer. This is
+# deliberately restricted to a private disposable Fixture/consumer checkout;
+# installed consumers and current production repositories cannot opt in.
+if [ -n "${DM_REVIEW_DEVELOPMENT_TEST_ROOT:-}" ]; then
+  TEST_ROOT="$DM_REVIEW_DEVELOPMENT_TEST_ROOT"
+  review_private "$TEST_ROOT"
+  case "${TEST_ROOT##*/}" in publish-reviewed-pr-test.*) ;; *) review_refuse 'invalid development fixture root' ;; esac
+  DEPOT_ROOT="${HERE%/plugins/dm-review/skills/review/references}"
+  [ "$DEPOT_ROOT" != "$HERE" ] && [ -e "$DEPOT_ROOT/.git" ] &&
+    [ -f "$DEPOT_ROOT/tools/test-publish-reviewed-pr.sh" ] || review_refuse 'development tools require source checkout'
+  [ "$REPO" = "$TEST_ROOT/repository" ] && [[ "$RUN_ROOT" = "$TEST_ROOT/runs/"* ]] || review_refuse 'development tools require disposable candidate'
+  [ "$(review_repository "$REPO")" = Fixture/consumer ] || review_refuse 'development tools require fixture identity'
+  for tool in git gh; do
+    review_safe_path "$TEST_ROOT/bin/$tool"
+    [ -f "$TEST_ROOT/bin/$tool" ] && [ -x "$TEST_ROOT/bin/$tool" ] &&
+      [ "$(review_stat links "$TEST_ROOT/bin/$tool")" = 1 ] || review_refuse 'unsafe development tool'
+  done
+  git() { "$TEST_ROOT/bin/git" "$@"; }
+  gh() { "$TEST_ROOT/bin/gh" "$@"; }
+fi
 for file in "$PRODUCER" "$READINESS"; do
   review_safe_path "$file"
-  [ -f "$file" ] && [ -r "$file" ] && [ "$(stat -c %h -- "$file")" = 1 ] || review_refuse 'missing or unsafe publication input'
+  [ -f "$file" ] && [ -r "$file" ] && [ "$(review_stat links "$file")" = 1 ] || review_refuse 'missing or unsafe publication input'
 done
 jq -e 'type=="object" and (keys|sort)==(["owner","readiness","uiNonImpact"]|sort)' "$READINESS" >/dev/null || exit 2
 OWNER="$(jq -c .owner "$READINESS")"
@@ -96,7 +120,8 @@ if jq -e '.ui.acceptance!=null and .ui.acceptance.head!=.finalHead' "$TEMP/hando
   jq -e --slurpfile input "$READINESS" '(keys|sort)==(["fromHead","toHead","paths","reason"]|sort) and
     .fromHead==$input[0].uiNonImpact.fromHead and .toHead==$input[0].uiNonImpact.toHead and
     .paths==$input[0].uiNonImpact.paths and (.reason|type=="string" and length>0)' "$PROOF" >/dev/null || review_refuse 'invalid source-bound UI non-impact judgment'
-  mapfile -t UI_PATHS < <(jq -r '.uiNonImpact.paths[]' "$READINESS")
+  UI_PATHS=()
+  while IFS= read -r path; do UI_PATHS+=("$path"); done < <(jq -r '.uiNonImpact.paths[]' "$READINESS")
   git -C "$REPO" merge-base --is-ancestor "$ACCEPTED" "$HEAD" || review_refuse 'designer acceptance ancestry mismatch'
   git -C "$REPO" diff --quiet "$ACCEPTED" "$HEAD" -- "${UI_PATHS[@]}" || review_refuse 'UI changed since designer acceptance'
   jq '.ui.acceptance.unchangedSince=true' "$TEMP/handoff.json" > "$TEMP/update.json"

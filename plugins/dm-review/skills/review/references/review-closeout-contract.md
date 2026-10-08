@@ -141,6 +141,19 @@ local HEAD and the matching remote branch. No gh call occurs on rejected
 coverage. Source, lane and browser authority stays with the producer; no
 caller true flag, latest-run search or new Kernel API exists.
 
+The publication and context helpers reset PATH to the established trusted
+directories and use Bash 3.2-compatible arrays, GNU/BSD stat formats and the
+existing SHA256/shasum fallback pattern. Source tests alone may set
+`DM_REVIEW_DEVELOPMENT_TEST_ROOT` to a private, canonical disposable
+`publish-reviewed-pr-test.*` directory. It must contain the exact
+`repository` checkout with real `Fixture/consumer` identity and the run under
+`runs/`; only its explicit `bin/git` and `bin/gh` mocks are used. The helper
+must be in a Depot source checkout with the repository fixture runner.
+Installed consumers and production candidates cannot activate these mocks.
+The real trusted Kernel producer still validates all coverage and rejects
+synthetic/incomplete evidence. Mocked publication is development fixture
+proof only; it establishes neither live review nor installed enforcement.
+
 The readiness file has exactly `owner`, `readiness` and `uiNonImpact`.
 `owner` has exactly canonical `repository` (`owner/repository`), `workflow`
 (`pipeline|dm-review|dm-review-loop`), `run_id`, `run_root`, `state_dir` (the

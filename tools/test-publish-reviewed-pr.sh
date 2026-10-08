@@ -2,10 +2,13 @@
 # Production-shaped disposable fixtures exercise the real supported producer.
 # No participant ran; this is source development proof, not live review proof.
 set -euo pipefail
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+export PATH
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PUBLISH="$ROOT/plugins/dm-review/skills/review/references/publish-reviewed-pr.sh"
 export WORKFLOW_KERNEL="$ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/publish-reviewed-pr-test.XXXXXX")"
+TMP="$(cd "$TMP" && pwd -P)"
 trap 'rm -rf -- "$TMP"' EXIT
 pass=0
 assert() { "$@" >/dev/null || { printf 'FAIL: %s\n' "$*" >&2; exit 1; }; pass=$((pass+1)); }
@@ -42,7 +45,7 @@ case "$1 ${2:-}" in
 esac
 SH
 chmod +x "$TMP/bin/git" "$TMP/bin/gh"
-export PATH="$TMP/bin:$PATH"
+export DM_REVIEW_DEVELOPMENT_TEST_ROOT="$TMP"
 
 fixture() {
   local id="$1" kind="${2:-live}" browser="${3:-false}" assembly
@@ -111,7 +114,24 @@ fixture candidate
 change_readiness '.readiness.checks += [{name:"PR-only CI",stage:"pr",status:"pending",link:null}] | .readiness.feedbackSettled=false'
 assert publish create
 assert grep -Fq 'pr create --repo Fixture/consumer --head candidate --draft' "$GH_LOG"
-assert test -f "$RUN_ROOT/diagnostic/review/$(find "$RUN_ROOT/diagnostic/review" -mindepth 1 -maxdepth 1 -type d -printf '%f')/report.md"
+assert test "$(find "$RUN_ROOT/diagnostic/review" -name report.md | wc -l | tr -d ' ')" = 1
+# PATH cannot select executable dependencies. Only the bounded source fixture
+# mechanism above activates mocks, and never replaces the real producer.
+: > "$GH_LOG"
+assert env PATH="$TMP/bin" /bin/bash "$PUBLISH" --operation create --repository-root "$REPO" --run-root "$RUN_ROOT" --producer-input "$PRODUCER" --readiness-input "$READINESS"
+: > "$GH_LOG"
+reject_publish create --operation create; no_gh
+reject_publish create --pr https://github.com/Fixture/consumer/pull/42; no_gh
+SAVED_TEST_ROOT="$DM_REVIEW_DEVELOPMENT_TEST_ROOT"
+export DM_REVIEW_DEVELOPMENT_TEST_ROOT="$TMP/bin"
+reject_publish create; no_gh
+export DM_REVIEW_DEVELOPMENT_TEST_ROOT="$SAVED_TEST_ROOT"
+SAVED_REPO="$REPO"; REPO="$ROOT"
+reject_publish create; no_gh
+REPO="$SAVED_REPO"
+git -C "$REPO" remote set-url origin https://github.com/Actual/production.git
+reject_publish create; no_gh
+git -C "$REPO" remote set-url origin https://github.com/Fixture/consumer.git
 
 fixture missing
 rm "$RUN_ROOT/$(jq -r .source_snapshot.snapshot_ref "$RUN_ROOT/$RECORD_REF")"
@@ -142,6 +162,23 @@ reject_publish create; no_gh
 fixture foreign
 change_readiness '.owner.run_id="someone-else"'
 reject_publish create; no_gh
+fixture foreign-root
+change_readiness '.owner.run_root += "/wrong"'
+reject_publish create; no_gh
+fixture foreign-state
+change_readiness '.owner.state_dir += "/wrong"'
+reject_publish create; no_gh
+fixture noncanonical
+jq '.request |= sub("/review/";"/review/../review/")' "$PRODUCER" > "$TMP/update.json"; mv "$TMP/update.json" "$PRODUCER"
+reject_publish create; no_gh
+fixture linked-input
+ln "$PRODUCER" "$TMP/linked-producer.json"
+reject_publish create; no_gh
+rm "$TMP/linked-producer.json"
+fixture quoted
+mv "$RUN_ROOT/report.md" "$RUN_ROOT/report with spaces.md"
+jq --arg report "$RUN_ROOT/report with spaces.md" '.report=$report' "$PRODUCER" > "$TMP/update.json"; mv "$TMP/update.json" "$PRODUCER"
+assert publish create
 fixture stale-facts
 change_readiness '.readiness.finalHead="aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"'
 reject_publish create; no_gh

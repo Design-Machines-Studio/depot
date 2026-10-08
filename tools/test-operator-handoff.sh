@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
+PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
+export PATH
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HANDOFF="$ROOT/plugins/dm-review/skills/review/references/operator-handoff.sh"
 CONTEXT="$ROOT/plugins/dm-review/skills/review/references/review-owner-context.sh"
 KERNEL="$ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/operator-handoff.XXXXXX")"
+TMP="$(cd "$TMP" && pwd -P)"
 trap 'rm -rf -- "$TMP"' EXIT
 pass=0
 assert() { "$@" >/dev/null || { printf 'FAIL: %s\n' "$*" >&2; exit 1; }; pass=$((pass+1)); }
@@ -84,13 +87,51 @@ init_context
 POINTER="$(jq -r '.hookSpecificOutput.additionalContext | split(" ")[3] | rtrimstr(".")' "$TMP/init.json")"
 assert test -f "$POINTER"
 assert jq -e '.phase=="planning" and .run_id==null and (keys|length)==8' "$POINTER"
-assert test "$(stat -c %a "$POINTER")" = 600
+assert test "$(bash -c 'source "$1"; review_stat mode "$2"' bash "$CONTEXT" "$POINTER")" = 600
 cp "$POINTER" "$TMP/original.json"
 init_context
 assert cmp "$POINTER" "$TMP/original.json"
+ln -s "$TMP" "$TMP/temporary-alias"
+assert env TMPDIR="$TMP/temporary-alias" bash -c '"$1" init --repository-root "$2" < "$3" > "$4"' bash "$CONTEXT" "$REPO" "$TMP/native.json" "$TMP/alias-init.json"
+assert cmp "$TMP/init.json" "$TMP/alias-init.json"
+rm "$TMP/temporary-alias"
 RUN_ROOT="$("$KERNEL" owned-run-start --workflow pipeline --run-id parent --base "$TMP/runs" | jq -r .path)"
 STATE="$REPO/.workflow-kernel/runs/parent"; mkdir -p "$STATE"
 BOUNDARY="$(bash -c 'source "$1"; review_change_boundary "$2"' bash "$CONTEXT" "$REPO")"
+printf 'untracked content\n' > "$REPO/untracked file.txt"
+UNTRACKED_BOUNDARY="$(bash -c 'source "$1"; review_change_boundary "$2"' bash "$CONTEXT" "$REPO")"
+assert test "$BOUNDARY" != "$UNTRACKED_BOUNDARY"
+printf 'changed content\n' >> "$REPO/untracked file.txt"
+assert test "$UNTRACKED_BOUNDARY" != "$(bash -c 'source "$1"; review_change_boundary "$2"' bash "$CONTEXT" "$REPO")"
+rm "$REPO/untracked file.txt"
+assert test "$BOUNDARY" = "$(bash -c 'source "$1"; review_change_boundary "$2"' bash "$CONTEXT" "$REPO")"
+# A hostile inherited PATH is discarded even when the library is sourced.
+assert env PATH=/unavailable /bin/bash -c 'source "$1"; test "$PATH" = /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; review_private "$2"' bash "$CONTEXT" "$POINTER"
+# Exercise BSD stat and shasum fallbacks on Linux with function-local mocks.
+# This proves branch behavior, not actual macOS execution.
+if stat -c %u -- "$TMP" >/dev/null 2>&1; then
+assert bash -c '
+  source "$1"
+  stat() {
+    [ "$1" = -f ] || return 1
+    local format="$2"
+    case "$format" in %Lp) format=%a ;; %l) format=%h ;; esac
+    command stat -c "$format" -- "$3"
+  }
+  command() {
+    if [ "${1:-}" = -v ] && [ "${2:-}" = sha256sum ]; then return 1; fi
+    builtin command "$@"
+  }
+  review_private "$2"
+  test "$(review_stat identity "$3")" = "$(builtin command stat -c "[%d,%i]" -- "$3")"
+  test "$(printf fixture | review_sha256)" = "$(printf fixture | shasum -a 256 | awk "{print \$1}")"
+' bash "$CONTEXT" "$POINTER" "$RUN_ROOT"
+fi
+reject bash -c 'source "$1"; id() { printf "0\n"; }; review_private "$2"' bash "$CONTEXT" "$POINTER"
+for path in "$REPO/./source.txt" "$REPO/../repository/source.txt" "$REPO//source.txt" "$REPO/source.txt/"; do
+  reject bash -c 'source "$1"; review_safe_path "$2"' bash "$CONTEXT" "$path"
+done
+assert bash -c 'source "$1"; review_safe_path "$2"' bash "$CONTEXT" "$REPO/not-created/file with spaces"
 owner_bind() { "$CONTEXT" bind --repository-root "$REPO" --context "$POINTER" --workflow pipeline --run-id parent --run-root "$RUN_ROOT" --state-dir "$STATE" --change-boundary "$BOUNDARY" < "$TMP/native.json"; }
 phase() { "$CONTEXT" phase --repository-root "$REPO" --context "$POINTER" --phase "$1" --change-boundary "$BOUNDARY" < "$TMP/native.json"; }
 assert phase awaiting_plan_approval
@@ -115,6 +156,8 @@ jq '.agent_id="worker"' "$TMP/native.json" > "$TMP/worker.json"
 reject bash -c '"$1" bind --repository-root "$2" --context "$3" < "$4"' bash "$CONTEXT" "$REPO" "$POINTER" "$TMP/worker.json"
 jq '.session_id="foreign-session"' "$TMP/native.json" > "$TMP/foreign.json"
 reject bash -c '"$1" phase --repository-root "$2" --context "$3" --phase checking < "$4"' bash "$CONTEXT" "$REPO" "$POINTER" "$TMP/foreign.json"
+jq --arg cwd "$TMP" '.cwd=$cwd' "$TMP/native.json" > "$TMP/foreign-cwd.json"
+reject bash -c '"$1" phase --repository-root "$2" --context "$3" --phase checking < "$4"' bash "$CONTEXT" "$REPO" "$POINTER" "$TMP/foreign-cwd.json"
 reject bash -c '"$1" clear --repository-root "$2" --context "$3" --run-id parent --run-root "$4" < "$5"' bash "$CONTEXT" "$REPO" "$POINTER" "$RUN_ROOT" "$TMP/native.json"
 printf 'changed\n' >> "$REPO/source.txt"
 reject phase checking
@@ -132,6 +175,8 @@ reject phase awaiting_merge
 rm "$POINTER"; cp "$TMP/safe.json" "$POINTER"; chmod 600 "$POINTER"
 # Exact run metadata cannot be adopted from a different root.
 cp "$RUN_ROOT/.depot-owned-run.json" "$TMP/meta.json"
+jq '.root_identity=[0,0]' "$TMP/meta.json" > "$RUN_ROOT/.depot-owned-run.json"
+reject phase awaiting_merge
 jq '.run_id="foreign"' "$TMP/meta.json" > "$RUN_ROOT/.depot-owned-run.json"
 reject phase awaiting_merge
 cp "$TMP/meta.json" "$RUN_ROOT/.depot-owned-run.json"
