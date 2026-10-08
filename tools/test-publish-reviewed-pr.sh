@@ -196,6 +196,21 @@ unset REMOTE_HEAD
 fixture ready
 assert publish ready --pr https://github.com/Fixture/consumer/pull/42
 assert grep -Fxq 'pr ready https://github.com/Fixture/consumer/pull/42 --repo Fixture/consumer' "$GH_LOG"
+# Actual GitHub results replace caller PR projections while candidate rows stay.
+for caller_status in pending pass; do
+  fixture "pr-refresh-$caller_status"
+  change_readiness ".readiness.checks += [{name:\"actual CI\",stage:\"pr\",status:\"$caller_status\",link:null}]"
+  publish ready --pr https://github.com/Fixture/consumer/pull/42 > "$TMP/ready.out" || {
+    cat "$TMP/ready.out"
+    echo "FAIL: $caller_status PR projection was not replaced by actual passing CI" >&2
+    exit 1
+  }
+  assert grep -Fxq '## Ready to merge' "$TMP/ready.out"
+  assert test "$(grep -Fxc -- '- actual CI passed.' "$TMP/ready.out")" = 1
+  assert test "$(grep -Fxc -- '- candidate tests passed.' "$TMP/ready.out")" = 1
+  assert sh -c '! grep -Fq "is still running" "$1"' sh "$TMP/ready.out"
+  assert grep -Fxq 'pr ready https://github.com/Fixture/consumer/pull/42 --repo Fixture/consumer' "$GH_LOG"
+done
 fixture pr-stale
 export PR_HEAD="$(printf 'c%.0s' {1..40})"
 reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation

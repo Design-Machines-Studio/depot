@@ -143,7 +143,7 @@ if [ "$OPERATION" = ready ]; then
     -f owner="$OWNER_NAME" -f name="$REPO_NAME" -F number="$NUMBER" > "$TEMP/feedback.json"
   jq -e --arg head "$HEAD" '.data.repository.pullRequest | .headRefOid==$head and .reviewThreads.pageInfo.hasNextPage==false and all(.reviewThreads.nodes[];.isResolved==true)' "$TEMP/feedback.json" >/dev/null || review_refuse 'actual PR feedback unsettled or incomplete'
   jq -e '.reviewDecision!="CHANGES_REQUESTED"' "$TEMP/pr.json" >/dev/null || review_refuse 'changes requested on PR'
-  jq --slurpfile checks "$TEMP/checks.json" '.checks += ($checks[0] | map({name:.name,link:.link,stage:"pr",status:(if .bucket=="pass" then "pass" elif .bucket=="pending" then "pending" else "fail" end)}))' "$TEMP/handoff.json" > "$TEMP/update.json"
+  jq --slurpfile checks "$TEMP/checks.json" '.checks = ((.checks | map(select(.stage=="candidate"))) + ($checks[0] | map({name:.name,link:.link,stage:"pr",status:(if .bucket=="pass" then "pass" elif .bucket=="pending" then "pending" else "fail" end)})))' "$TEMP/handoff.json" > "$TEMP/update.json"
   mv -- "$TEMP/update.json" "$TEMP/handoff.json"
   "$HERE/operator-handoff.sh" --gate merge "$TEMP/handoff.json" > "$TEMP/handoff.md" || { cat "$TEMP/handoff.md"; exit 3; }
 fi
