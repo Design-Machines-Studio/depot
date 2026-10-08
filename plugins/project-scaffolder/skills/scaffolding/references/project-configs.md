@@ -179,6 +179,8 @@ settings.json, CLAUDE.md, and starter files for each project type. Replace all `
 
 **Note:** `block-bare-craft.sh` is the hook template in `references/hooks.md`. It blocks bare `php craft` and `composer` commands, requiring `ddev craft` and `ddev composer` instead.
 
+**Plugin hooks:** dm-review registers its review completion hook for SessionStart and Stop from its own plugin bundle. Keep each template's `pre-stop-check.sh` Stop entry and existing settings unchanged. Do not add the review hook to project `settings.json`.
+
 ---
 
 ## CLAUDE.md Templates

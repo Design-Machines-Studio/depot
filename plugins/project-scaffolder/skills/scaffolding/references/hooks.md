@@ -18,7 +18,7 @@ All hook scripts for Claude Code project scaffolding. Each template uses `{{PROJ
 - **Exit codes**: `0` = allow the tool call, `2` = block it
 - **PreToolUse hooks** receive tool input as JSON on stdin
 - **PostToolUse hooks** receive tool input as JSON on stdin; return JSON with `systemMessage` to inject context
-- **Stop hooks** receive conversation context on stdin
+- **Stop hooks** receive native JSON on stdin, including `session_id`, `cwd`, and `stop_hook_active`
 - All hooks must be executable: `chmod +x .claude/hooks/*.sh`
 - All paths use `$CLAUDE_PROJECT_DIR` (set automatically by Claude Code)
 
@@ -282,6 +282,8 @@ exit 0
 ### Customization
 
 Replace `{{PROJECT_PREFIX}}` with the project's lowercase directory name. No per-project agent-compliance list is needed. Keep this hook focused on the real uncommitted-work boundary; choose implementation, documentation, security, and accessibility agents from the task and risk.
+
+The dm-review plugin ships its own bounded review completion hook for SessionStart and Stop. Do not copy it into project settings or turn this reminder into a review loop. Activation and proof levels live in dm-review's `skills/review/references/review-hook-activation.md`.
 
 ---
 
