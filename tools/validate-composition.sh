@@ -661,6 +661,15 @@ run_composition_checks() {
     any_failed=1
   fi
 
+  if ! "$SCRIPT_DIR/test-operator-handoff.sh"; then
+    echo "FAIL: designer handoff/context behavioral tests failed"
+    any_failed=1
+  fi
+  if ! "$SCRIPT_DIR/test-publish-reviewed-pr.sh"; then
+    echo "FAIL: reviewed PR publication behavioral tests failed"
+    any_failed=1
+  fi
+
   printf "\n${BOLD}dm-review source/rendered UI contract:${RESET}\n"
   if ! "$SCRIPT_DIR/test-dm-review-ui-contract.sh"; then
     any_failed=1

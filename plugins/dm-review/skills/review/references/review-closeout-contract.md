@@ -93,11 +93,13 @@ companions before terminal delivery. The compact handoff links the established
 `.claude/ux-review/report.md` and retained `report.md`, names blocked cleanup,
 and contains no expanded report or private provider data.
 
-Use `review-next-action.sh` against the base/final-head diff, policy, required
+Keep `review-next-action.sh` internal. Use it against the base/final-head diff, policy, required
 cases, coverage, retained findings, and settled PR feedback. Follow its exact
 Review, Action, Why, and Reuse lines; invoke `operator-recommendation.sh` only
 when it reports `modelWork: true`. Append the existing terminal model report
-only for its declared owner. A standalone owner preserves the already-rendered
+only for its declared owner. Deliver `operator-handoff.sh` readiness to the
+designer after validating final-head facts; never ask for backend inspection
+or another dm-review command. A standalone owner preserves the already-rendered
 model report and accepted observation index; a nested owner returns its private
 index without rendering. Preserve bounded PR intake and decision artifacts.
 
@@ -111,8 +113,106 @@ indexes are optional observations. Their absence or export failure produces a
 concise unavailable diagnostic only; it cannot downgrade otherwise supported
 required coverage. Missing lane output, literal lane receipt, required browser
 evidence, or invalid source binding remains `REVIEW INCOMPLETE`. Report one
-terminal verdict only; do not pair a formal status with an informal clean
-approval.
+mechanical verdict in the complete report. The designer's readiness status
+also accounts for current PR CI/feedback and UI acceptance; CLEAN alone does
+not authorize publication, readiness or merge.
+
+## Candidate publication gate
+
+Supported owners use `publish-reviewed-pr.sh` before creating a PR or marking
+a draft ready. The host resolves and exports its exact trusted
+`WORKFLOW_KERNEL` launcher once using `runtime-resolution.md`. Invoke:
+
+```text
+publish-reviewed-pr.sh --operation create|ready \
+  --repository-root <canonical-checkout> --run-root <exact-current-owned-root> \
+  --producer-input <absolute-producer-arguments.json> \
+  --readiness-input <absolute-owner-readiness.json> [--pr <URL-for-ready-only>]
+```
+
+The producer file is a closed JSON map with exactly `request`, `receipts`,
+`lane-receipts`, `raw-lane-outputs`, `raw-findings`, `decisions`,
+`private-router-directory` and `report`. Values are absolute paths for the
+existing preserve command above, not command text. All except `report` are
+contained in the explicit current owned root; the report may also be in the
+reviewed checkout. The wrapper builds quoted argv, invokes the actual producer,
+requires `status: complete`, and checks unresolved producer decisions, clean
+local HEAD and the matching remote branch. No gh call occurs on rejected
+coverage. Source, lane and browser authority stays with the producer; no
+caller true flag, latest-run search or new Kernel API exists.
+
+The readiness file has exactly `owner`, `readiness` and `uiNonImpact`.
+`owner` has exactly canonical `repository` (`owner/repository`), `workflow`
+(`pipeline|dm-review|dm-review-loop`), `run_id`, `run_root`, `state_dir` (the
+checkout's `.workflow-kernel/runs/<run_id>`). Exact-owned metadata must match.
+`readiness` is the formatter object described in `output-format.md`. Producer
+coverage, HEAD and dirty state replace caller projections. The owner supplies
+current candidate checks, retained findings, PR feedback settlement and actual
+designer acceptance. These judgments do not substitute for required code cases.
+
+`create` requires complete candidate source/browser/test coverage and always
+opens a draft. Pending PR-only CI and PR feedback settle afterward. `ready`
+also requires designer acceptance for changed UI, queries actual PR head,
+checks, review decision and unresolved review threads, and rejects mismatched,
+pending, failed or unsettled facts. More than 100 review threads is an explicit
+feedback coverage gap; settle through the owner's supported feedback intake
+before retrying. Both operations recheck clean local/remote candidate HEAD
+immediately before mutation. Neither merges or approves planning/UI for the
+owner. Opening a draft does not finish the current review root.
+
+`uiNonImpact` is normally null. To carry actual designer acceptance across an
+unaffected source change, supply `fromHead`, `toHead`, the complete UI/dependency
+`paths` selected by the owner, and a contained `evidence` file with the owner's
+source-bound non-impact judgment (exact `fromHead`, `toHead`, `paths`, and
+nonempty `reason`). The wrapper verifies matching proof fields, ancestry and actual
+unchanged bytes/modes for those paths. A Boolean claim alone is rejected.
+The owner must include every relevant UI dependency; the helper does not infer
+UI semantics from extensions. Any changed behavior requires fresh acceptance.
+
+## Session owner pointer
+
+`review-owner-context.sh` extends the existing
+`$TMPDIR/claude-hook-state` convention with one private
+`review-<sha256>/review-owner.json`. The key hashes canonical repository,
+canonical checkout/worktree and native `session_id`. This pointer is not a
+registry, review receipt or coverage marker. It stores exactly `session_id`,
+`repository`, `workflow`, `run_id`, `run_root`, `state_dir`, `phase` and
+`change_boundary`.
+
+Every mode reads native SessionStart/Stop JSON on stdin. Pass the canonical
+`--repository-root`; never parse transcripts, invent a session ID or select a
+newest run. `init` requires SessionStart, creates an unbound planning marker
+and returns the exact context reference as SessionStart `additionalContext`.
+Matching resume preserves it. Private account ownership, single-link regular
+files, contained non-symlink paths, native session/repository and actual
+exact-owned metadata are checked before using a bound marker.
+
+Only the root owner binds after plan/prompt approval, using `bind --context
+<exact-reference> --workflow <workflow> --run-id <id> --run-root <root>
+--state-dir <state> --change-boundary <digest>`. A worker's native agent fields
+are rejected; workers never bind the parent session. The host must deliver the
+root's native input to root operations, not let workers impersonate it. There
+is no independent authentication rail in this same-account pointer helper.
+
+The sourceable `review_change_boundary <checkout>` function returns SHA256 of
+HEAD, actual binary working diff and untracked paths/content/modes. Pass that
+digest at each actual boundary with `phase --context <reference> --phase
+<phase> --change-boundary <digest>`. Phases are `planning`,
+`awaiting_plan_approval`, `executing`, `checking`, `awaiting_ui`,
+`awaiting_merge`, `blocked`, `complete`. Approval advances via bind to
+executing; checking may return to executing, wait on UI/merge, block or finish.
+UI waits may return to checking/executing or advance to merge; merge waits may
+return to checking or complete; blocked may resume executing/checking. Phase
+is lifecycle context only and never settles checks or designer acceptance.
+
+Only a completed prior owner can be rebound. At closeout the root calls
+`clear --context <reference> --run-id <id> --run-root <root>` with its native
+input, after marking complete. A completed marker can be cleared after exact
+cleanup removes its disposable root. Active, missing, foreign or conflicting
+markers cannot be adopted. When no SessionStart reference exists, report
+`hook activation unavailable`; continue the mandatory workflow code gate.
+This chunk supplies the helper and source fixtures. Hook installation, native
+host activation and Stop continuation are separate integration work.
 
 
 ## Source-bound repair and retry

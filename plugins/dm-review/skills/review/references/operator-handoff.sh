@@ -57,7 +57,8 @@ jq -e --arg sha "$SHA" '
       (.status != "exempt" or .note != null) and (.status != "covered" or .evidence != null))) and
   (.findings | type == "array" and all(.[]; type == "object" and (keys | sort) == (["location","problem","severity"] | sort) and
     (.severity | IN("P1","P2","P3")) and (.location | str) and (.problem | str))) and
-  (.checks | type == "array" and all(.[]; type == "object" and (keys | sort) == (["link","name","status"] | sort) and
+  (.checks | type == "array" and length > 0 and all(.[]; type == "object" and (keys | sort) == (["link","name","stage","status"] | sort) and
+    (.stage | IN("candidate","pr")) and
     (.name | str) and (.status | IN("pass","pending","fail")) and (.link == null or (.link | str)))) and
   (.ui | type == "object" and (keys | sort) == (["acceptance","changed","preview","tasks"] | sort) and
     (.changed | type == "boolean") and (.preview == null or (.preview | str)) and
@@ -75,11 +76,12 @@ RESULT="$(jq -r '
     (if .coverage.status == "missing" or .coverage.head == null then {kind:"source", text:"No review evidence exists for head \(.finalHead | short)."}
      elif .coverage.head != .finalHead then {kind:"source", text:"Review evidence is for \(.coverage.head | short), not the current head \(.finalHead | short)."}
      else empty end),
-    (if .coverage.status == "incomplete" then {kind:"coverage", text:"Review coverage is incomplete: \(if (.coverage.gaps | length) > 0 then (.coverage.gaps | join(", ")) else "the producer reported no complete coverage" end)."} else empty end),
+    (if .coverage.status == "incomplete" or (.coverage.gaps | length) > 0 then {kind:"coverage", text:"Review coverage is incomplete: \(if (.coverage.gaps | length) > 0 then (.coverage.gaps | join(", ")) else "the producer reported no complete coverage" end)."} else empty end),
+    (if .coverage.status == "complete" and .coverage.evidence == null then {kind:"coverage", text:"The retained review evidence link is missing."} else empty end),
     (.lanes[] | select(.status == "omitted") | {kind:"coverage", text:"\(.area) review did not run."}),
     (.findings[] | {kind:"finding", text:"\(.severity) \(.location): \(.problem)"}),
     (.checks[] | select(.status == "fail") | {kind:"check", text:"\(.name) failed."}),
-    (.checks[] | select(.status == "pending") | {kind:"pending", text:"\(.name) is still running."}),
+    (.checks[] | select(.status == "pending") | {kind:(if .stage == "pr" then "pending" else "check" end), text:"\(.name) is still running."}),
     (if .feedbackSettled | not then {kind:"feedback", text:"PR feedback is not settled yet."} else empty end),
     (if .ui.changed and .ui.preview == null then {kind:"ui", text:"The UI changed but no preview link is available."} else empty end),
     (if .ui.changed and (.ui.tasks | length) == 0 then {kind:"ui", text:"The UI changed but no UI check tasks are listed."} else empty end)
@@ -91,9 +93,9 @@ RESULT="$(jq -r '
     candidate_blocked: ([$gaps[] | select(.kind != "pending" and .kind != "feedback")] | length > 0),
     text: ([
       "## \($status)", "",
-      (if $status == "Ready to merge" then "Automated review, browser checks and CI passed at \(.finalHead | short)."
+      (if $status == "Ready to merge" then "Required automated review and checks passed at \(.finalHead | short)."
        elif $status == "UI check needed" then "Automated checks passed at \(.finalHead | short). The UI change needs your eyes in the browser."
-       else "Work remains before this can merge. The agent handles every item below." end), "",
+       else "Work remains before this can merge. The agent handles the gaps below." end), "",
       "**Your action:** " + (if $status == "Ready to merge" then "Merge \(.target)."
         elif $status == "UI check needed" then "Open the preview at \(.ui.preview) and check the tasks below. Tell the agent what you accept or what to change."
         else "None yet. You will get a new handoff when it is ready." end),
@@ -108,7 +110,7 @@ RESULT="$(jq -r '
       ] | if length == 0 then ["- None yet."] else . end | .[]),
       "", "### Remaining",
       (if ($gaps | length) == 0 and ($needs_ui | not) then "- None."
-       else ($gaps[] | "- \(.text)"), (if $needs_ui and ($gaps | length) == 0 then "- Designer UI acceptance at \(.finalHead | short)." else empty end) end),
+       else ($gaps[] | "- \(.text)"), (if $needs_ui then "- Designer UI acceptance at \(.finalHead | short)." else empty end) end),
       "", "### Review coverage", "",
       "| Area | Status | Evidence |", "|------|--------|----------|",
       (.lanes | sort_by(.area)[] | "| \(.area) | \(if .status == "covered" then "Covered" elif .status == "exempt" then "Exempt: \(.note)" else "Not run\(if .note then ": \(.note)" else "" end)" end) | \(.evidence // "--") |"),
