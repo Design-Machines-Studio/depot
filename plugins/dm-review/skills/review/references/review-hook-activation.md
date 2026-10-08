@@ -34,7 +34,7 @@ Keep each level separate. A lower level never implies a higher one.
 | Level | Evidence | Status for this candidate |
 |-------|----------|---------------------------|
 | Source fixtures | `tools/test-review-completion-hook.sh` | Run against candidate source |
-| Bundle shape | `tools/validate-dual-compat.sh` plugin hook check, `claude plugin validate plugins/dm-review` | Run. The generated Codex manifest needs `"hooks": "./hooks/hooks.json"` from the integration owner. |
+| Bundle shape | `tools/validate-dual-compat.sh` plugin hook check, `claude plugin validate plugins/dm-review` | Run. The generated Codex manifest includes the hook entry. |
 | Claude native canary | Installed released plugin in a disposable repository | Not exercised |
 | Codex native canary | Installed released plugin with Codex hooks enabled and trusted | Not exercised |
 | T3 delivery | T3 Codex thread shows the Stop continuation | Not exercised. Report T3 hook enforcement as unavailable. |
