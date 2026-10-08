@@ -40,8 +40,8 @@ _OUTCOMES = frozenset({
     "review-aborted",
 })
 _MAX_METADATA_BYTES = 256 * 1024
-_MAX_DIAGNOSTIC_FILES = 160
-_MAX_DIAGNOSTIC_BYTES = 4 * 1024 * 1024
+_MAX_DIAGNOSTIC_FILES = 200
+_MAX_DIAGNOSTIC_BYTES = 5 * 1024 * 1024
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
