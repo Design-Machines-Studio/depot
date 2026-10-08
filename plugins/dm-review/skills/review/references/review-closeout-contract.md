@@ -61,9 +61,9 @@ retry may append a valid closeout receipt, but changing an existing review or
 coverage receipt is rejected and reported as an incomplete recovery; correct
 the caller input in a new owned replay rather than rewriting the first copy.
 
-Keep every producer's repository root available until its last call; use the
-retained detached implementation checkout or verified canonical branch folder.
-Never rewrite original receipt bytes after transfer.
+Keep the original producer checkout, owner/state and receipts through publication.
+After transfer, publish there with `--feature-branch` from the approved task or
+manifest `featureBranch`; the canonical serving folder cannot adopt its state.
 After owned-resource cleanup settles, update `<evidence_path>/report.md` with
 the actual cleanup inventory and revalidate all local links. Write the final report to `.claude/ux-review/report.md` while its checkout remains available.
 Check every used checkout after its last producer/write and before removal.
@@ -136,34 +136,32 @@ a draft ready. The host resolves and exports its exact trusted
 
 ```text
 publish-reviewed-pr.sh --operation create|ready \
-  --repository-root <canonical-checkout> --run-root <exact-current-owned-root> \
+  --repository-root <original-producer-checkout> --run-root <exact-current-owned-root> \
   --producer-input <absolute-producer-arguments.json> \
-  --readiness-input <absolute-owner-readiness.json> [--pr <URL-for-ready-only>]
+  --readiness-input <absolute-owner-readiness.json> \
+  [--feature-branch <approved-short-branch>] [--pr <URL-for-ready-only>]
 ```
 
-The producer file is a closed JSON map with exactly `request`, `receipts`,
+The producer JSON map contains exactly `request`, `receipts`,
 `lane-receipts`, `raw-lane-outputs`, `raw-findings`, `decisions`,
 `private-router-directory` and `report`. Values are absolute paths for the
-existing preserve command above, not command text. All except `report` are
-contained in the explicit current owned root; the report may also be in the
-reviewed checkout. The wrapper builds quoted argv, invokes the actual producer,
-requires `status: complete`, and checks unresolved producer decisions, clean
-local HEAD and the matching remote branch. No gh call occurs on rejected
-coverage. Source, lane and browser authority stays with the producer; no
-caller true flag, latest-run search or new Kernel API exists.
+preserve command. Except `report`, inputs stay in the current owned root;
+`report` may use the reviewed checkout. Quoted argv invokes the real producer;
+complete coverage, settled decisions and clean HEAD remain mandatory before gh.
+Detached HEAD requires explicit `--feature-branch`. Its exact local branch ref
+and remote SHA must match reviewed HEAD; an attached branch must match too.
+Recheck before mutation. Missing, unsafe or moved branches block. No state or
+source-proof relocation, caller coverage flags or new Kernel API is accepted.
 
-The publication and context helpers reset PATH to the established trusted
-directories and use Bash 3.2-compatible arrays, GNU/BSD stat formats and the
-existing SHA256/shasum fallback pattern. Source tests alone may set
+Helpers use fixed PATH, Bash 3.2 arrays, GNU/BSD stat and SHA256/shasum.
+Source tests alone may set
 `DM_REVIEW_DEVELOPMENT_TEST_ROOT` to a private, canonical disposable
 `publish-reviewed-pr-test.*` directory. It must contain the exact
 `repository` checkout with real `Fixture/consumer` identity and the run under
-`runs/`; only its explicit `bin/git` and `bin/gh` mocks are used. The helper
-must be in a Depot source checkout with the repository fixture runner.
-Installed consumers and production candidates cannot activate these mocks.
-The real trusted Kernel producer still validates all coverage and rejects
-synthetic/incomplete evidence. Mocked publication is development fixture
-proof only; it establishes neither live review nor installed enforcement.
+`runs/`; only explicit `bin/git` and `bin/gh` mocks are used. Only Depot source
+with its fixture runner accepts mocks; installed/live consumers cannot. The real Kernel rejects synthetic/incomplete coverage. Assembly transfer
+and detached Fixture publication are separate composed fixtures, with unchanged
+identities; neither proves live review or installed enforcement.
 
 The readiness file contains `approvedBase`, `owner`, `readiness`, `uiNonImpact`, plus `feedback` for ready.
 Copy `approvedBase` from the approved task/plan branch, including manifest

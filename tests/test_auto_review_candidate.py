@@ -796,6 +796,35 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         self.assertEqual("reviewed", subprocess.check_output(["git", "-C", str(canonical), "symbolic-ref", "--short", "HEAD"], text=True).strip())
         self.assertTrue(state.is_dir())
         self.assertEqual(original, {p.relative_to(run.root): p.read_bytes() for p in run.root.rglob("*") if p.is_file()})
+        # Stage one ends at real transfer with unfinished/synthetic coverage.
+        # Publication cannot bypass that producer from the detached owner.
+        self.assertEqual(git("rev-parse", "HEAD"), git("show-ref", "--verify", "--hash", "refs/heads/reviewed"))
+        owner = {key: json.loads(Path(pointer).read_text())[key]
+                 for key in ("repository", "workflow", "run_id", "run_root", "state_dir")}
+        keys = {"request": "request", "receipts": "receipts", "lane-receipts": "lane_receipts",
+                "raw-lane-outputs": "raw_lane_outputs", "raw-findings": "raw_findings",
+                "decisions": "decisions", "private-router-directory": "router", "report": "report"}
+        producer = self.write(self.root / "publication-producer.json", {key: str(paths[value]) for key, value in keys.items()})
+        readiness = self.write(self.root / "publication-readiness.json", {
+            "approvedBase": "serving", "owner": owner, "readiness": {}, "uiNonImpact": None})
+        publication_env = dict(env, WORKFLOW_KERNEL=str(source / "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"))
+        publication_env.pop("DM_REVIEW_DEVELOPMENT_TEST_ROOT", None)
+        for operation in ("create", "ready"):
+            result = subprocess.run([bash, str(helper.with_name("publish-reviewed-pr.sh")),
+                "--operation", operation, "--repository-root", str(self.repo), "--run-root", str(run.root),
+                "--producer-input", str(producer), "--readiness-input", str(readiness), "--feature-branch", "reviewed",
+                *(["--pr", "https://github.com/Design-Machines-Studio/assembly-fixture/pull/42"] if operation == "ready" else [])],
+                capture_output=True, text=True, env=publication_env, timeout=15)
+            self.assertEqual(3, result.returncode, result.stdout + result.stderr)
+            self.assertIn("required producer validation failed", result.stderr)
+        wrong_checkout = subprocess.run([bash, str(helper.with_name("publish-reviewed-pr.sh")),
+            "--operation", "create", "--repository-root", str(canonical), "--run-root", str(run.root),
+            "--producer-input", str(producer), "--readiness-input", str(readiness), "--feature-branch", "reviewed"],
+            capture_output=True, text=True, env=publication_env, timeout=15)
+        self.assertEqual(3, wrong_checkout.returncode, wrong_checkout.stdout + wrong_checkout.stderr)
+        self.assertIn("foreign owner state directory", wrong_checkout.stderr)
+        # Stage two in test-publish-reviewed-pr.sh uses its fixed Fixture/consumer
+        # identity and real detached Git refs, never rewrites this source proof.
         # Only after selecting the canonical branch can the required fixture
         # capture be attached. It is explicitly synthetic, never live proof.
         browser = self.write(run.root / "review/browser.json", {"fixture": True, "case_id": "settings", "source_head": git("rev-parse", "HEAD")})

@@ -68,9 +68,9 @@ infer that a production/customer deployment is a branch-switchable review app.
    ownership blocks this folder, never justifies an alternate preview.
    Commit/push and verify the exact head before normally detaching an owned
    implementation worktree. Retain its producer checkout, owner state and
-   unfinished evidence; select the branch in the canonical folder before
-   capturing required browser cases and complete preservation. Complete evidence
-   remains mandatory for publication and destroying current review resources.
+   evidence; capture required cases from the canonical branch, then preserve.
+   Publish from the retained producer with approved `--feature-branch`; complete
+   evidence remains mandatory for publication and review-resource destruction.
    Foreign occupancy requires that owner's exact release handoff. For other
    repositories, ordinary checkout must preserve every pre-existing change;
    name collisions and coordinate without force, stash, reset or clean.

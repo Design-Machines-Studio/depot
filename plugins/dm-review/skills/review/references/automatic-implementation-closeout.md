@@ -153,9 +153,10 @@ sources remain blocked for host evaluation under the same owner. Production
 ignores intake test overrides; only the validated disposable source fixture
 uses the existing collector seam. Thread and aggregate decision checks remain.
 
-Direct/Full/Lean publication follows independent candidate review, repair,
-recheck and preserved evidence; Full also requires parent caller verification.
-Never bypass create/ready with bare `gh`:
+Publish after independent review, repair, recheck and preservation; Full requires
+parent verification. After transfer, both calls use the retained `$REVIEW_ROOT`
+and `--feature-branch` from approved task/manifest `featureBranch`. Never bypass
+with bare `gh`:
 
 <!-- reviewed-pr-direct:start -->
 ```bash

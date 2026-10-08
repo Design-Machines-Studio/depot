@@ -91,8 +91,8 @@ folder, capture required cases, then seal complete coverage before publication
 or destroying current review resources. Existing `--preservation` is optional
 and grants no disposal authority. Foreign occupancy names that
 owner's exact release action; never detach/remove a foreign owner. Keep unique
-history and literal receipts. Retain the detached checkout or use the verified
-canonical root for later producer calls; remove owned worktrees only afterward.
+history and receipts. Publish from the retained producer with its original state
+and approved `--feature-branch`; remove owned worktrees only after its last call.
 
 `finish` runs after final report/evidence writes on success, failure, abort and
 interruption. It checks clean source in both supplied checkouts, the reviewed

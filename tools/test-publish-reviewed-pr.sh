@@ -35,7 +35,7 @@ cat > "$TMP/bin/git" <<'SH'
 #!/usr/bin/env bash
 set -euo pipefail
 if [ "${3:-}" = ls-remote ]; then
-  printf '%s\trefs/heads/candidate\n' "${REMOTE_HEAD:-$("$REAL_GIT" -C "$2" rev-parse HEAD)}"
+  printf '%s\t%s\n' "${REMOTE_HEAD:-$("$REAL_GIT" -C "$2" rev-parse HEAD)}" "${REMOTE_REF:-$6}"
 else exec "$REAL_GIT" "$@"; fi
 SH
 cat > "$TMP/bin/gh" <<'SH'
@@ -61,7 +61,9 @@ fi
 case "$1 ${2:-}" in
   'pr create') printf 'https://github.com/Fixture/consumer/pull/42\n' ;;
   'pr ready') ;;
-  'pr view') jq -cn --arg head "$PR_HEAD" --arg base "${PR_BASE:-main}" '{headRefOid:$head,headRefName:"candidate",baseRefName:$base,state:"OPEN",isDraft:true,reviewDecision:env.REVIEW_DECISION}' ;;
+  'pr view')
+    if [ -n "${MOVE_BRANCH_TO:-}" ]; then "$REAL_GIT" -C "$DM_REVIEW_DEVELOPMENT_TEST_ROOT/repository" update-ref refs/heads/candidate "$MOVE_BRANCH_TO"; fi
+    jq -cn --arg head "$PR_HEAD" --arg branch "${PR_BRANCH:-candidate}" --arg base "${PR_BASE:-main}" '{headRefOid:$head,headRefName:$branch,baseRefName:$base,state:"OPEN",isDraft:true,reviewDecision:env.REVIEW_DECISION}' ;;
   'pr checks')
     required=false
     for arg in "$@"; do [ "$arg" != --required ] || required=true; done
@@ -274,6 +276,70 @@ fixture remote
 export REMOTE_HEAD="$(printf 'b%.0s' {1..40})"
 reject_publish create; no_gh
 unset REMOTE_HEAD
+
+# Stage two: the Assembly-only transfer fixture covers the helper and unfinished
+# browser proof. Here the unchanged Fixture/consumer identity permits bounded gh
+# mocks: real Git detaches the same producer and selects its branch elsewhere.
+fixture detached-producer
+cp "$READINESS" "$TMP/retained-readiness.json"
+cp "$RUN_ROOT/review/request.json" "$TMP/retained-request.json"
+cp "$RUN_ROOT/review/authoritative-receipts.json" "$TMP/retained-receipts.json"
+printf 'retained owner state\n' > "$STATE/retained"
+CANONICAL="$TMP/canonical"
+git -C "$REPO" worktree add -q --detach "$CANONICAL" HEAD
+# Explicit attached mismatch must fail even when both branches name this SHA.
+git -C "$REPO" branch same-head HEAD
+reject_publish create --feature-branch same-head; no_gh
+assert publish create --feature-branch candidate
+: > "$GH_LOG"
+git -C "$REPO" checkout -q --detach HEAD
+git -C "$CANONICAL" checkout -q candidate
+for operation in create ready; do
+  extra=(); [ "$operation" != ready ] || extra=(--pr https://github.com/Fixture/consumer/pull/42)
+  reject_publish "$operation" ${extra[@]+"${extra[@]}"}; no_gh
+  for branch in '' missing main '-candidate' 'candidate~1' 'refs/heads/candidate' 'HEAD' 'candidate..bad'; do
+    reject_publish "$operation" ${extra[@]+"${extra[@]}"} --feature-branch "$branch"; no_gh
+  done
+  reject_publish "$operation" ${extra[@]+"${extra[@]}"} --feature-branch candidate --feature-branch candidate; no_gh
+  # A tag of the same name must not make exact local branch selection ambiguous.
+  git -C "$REPO" tag candidate "$INITIAL_HEAD"
+  assert publish "$operation" ${extra[@]+"${extra[@]}"} --feature-branch candidate
+  git -C "$REPO" tag -d candidate >/dev/null
+  assert grep -Eq "^pr $operation " "$GH_LOG"
+  : > "$GH_LOG"
+  git -C "$REPO" update-ref refs/heads/candidate "$INITIAL_HEAD"
+  reject_publish "$operation" ${extra[@]+"${extra[@]}"} --feature-branch candidate; no_gh
+  git -C "$REPO" update-ref refs/heads/candidate "$PR_HEAD"
+  export REMOTE_HEAD="$INITIAL_HEAD"
+  reject_publish "$operation" ${extra[@]+"${extra[@]}"} --feature-branch candidate; no_gh
+  unset REMOTE_HEAD
+  export REMOTE_REF=refs/heads/foreign
+  reject_publish "$operation" ${extra[@]+"${extra[@]}"} --feature-branch candidate; no_gh
+  unset REMOTE_REF
+done
+export PR_BRANCH=foreign
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42 --feature-branch candidate; no_mutation
+unset PR_BRANCH
+: > "$GH_LOG"
+export MOVE_BRANCH_TO="$INITIAL_HEAD"
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42 --feature-branch candidate; no_mutation
+assert grep -Fq 'local feature branch missing or differs' "$TMP/rejected.out"
+unset MOVE_BRANCH_TO
+git -C "$REPO" update-ref refs/heads/candidate "$PR_HEAD"
+assert cmp "$READINESS" "$TMP/retained-readiness.json"
+assert cmp "$RUN_ROOT/review/request.json" "$TMP/retained-request.json"
+assert cmp "$RUN_ROOT/review/authoritative-receipts.json" "$TMP/retained-receipts.json"
+assert test "$(cat "$STATE/retained")" = 'retained owner state'
+assert test "$(git -C "$REPO" rev-parse HEAD)" = "$PR_HEAD"
+assert test "$(git -C "$CANONICAL" symbolic-ref --short HEAD)" = candidate
+# The serving checkout cannot adopt the original owner's state.
+SAVED_REPO="$REPO"; REPO="$CANONICAL"
+: > "$GH_LOG"
+reject_publish create --feature-branch candidate; no_gh
+REPO="$SAVED_REPO"
+git -C "$CANONICAL" checkout -q --detach HEAD
+git -C "$REPO" checkout -q candidate
+git -C "$REPO" worktree remove "$CANONICAL"
 
 # Preserve original source-bound base/head while publishing to the approved
 # branch. Resolve local and origin naming without guessing GitHub's default.

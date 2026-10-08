@@ -7,7 +7,7 @@ PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export PATH
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$HERE/review-owner-context.sh"
-OPERATION= REPO= RUN_ROOT= PRODUCER= READINESS= PR=
+OPERATION= REPO= RUN_ROOT= PRODUCER= READINESS= PR= FEATURE_BRANCH=
 SEEN=' '
 while [ "$#" -gt 0 ]; do
   [ "$#" -ge 2 ] || exit 2
@@ -15,6 +15,7 @@ while [ "$#" -gt 0 ]; do
     --operation) OPERATION="$2" ;; --repository-root) REPO="$2" ;;
     --run-root) RUN_ROOT="$2" ;; --producer-input) PRODUCER="$2" ;;
     --readiness-input) READINESS="$2" ;; --pr) PR="$2" ;;
+    --feature-branch) FEATURE_BRANCH="$2" ;;
     *) exit 2 ;;
   esac
   case "$SEEN" in *" $1 "*) exit 2 ;; esac
@@ -153,9 +154,27 @@ else
   jq '.checks |= map(select(.stage=="candidate"))' "$TEMP/handoff.json" > "$TEMP/candidate-handoff.json"
   "$HERE/operator-handoff.sh" --gate candidate "$TEMP/candidate-handoff.json" > "$TEMP/handoff.md" || { cat "$TEMP/handoff.md"; exit 3; }
 fi
-BRANCH="$(git -C "$REPO" symbolic-ref --quiet --short HEAD)" || review_refuse 'detached candidate head'
-git -C "$REPO" check-ref-format "refs/heads/$BRANCH" || exit 2
-REMOTE_HEAD="$(git -C "$REPO" ls-remote --exit-code origin "refs/heads/$BRANCH" | awk '{print $1}')" || review_refuse 'remote candidate unavailable'
+# The approved manifest/task supplies the branch after canonical transfer;
+# the original detached producer still owns the state and source evidence.
+ATTACHED="$(git -C "$REPO" symbolic-ref --quiet HEAD)" || ATTACHED=
+case "$SEEN" in
+  *" --feature-branch "*) BRANCH="$FEATURE_BRANCH" ;;
+  *) [ -n "$ATTACHED" ] || review_refuse 'detached candidate requires --feature-branch from approved task/manifest'
+     BRANCH="${ATTACHED#refs/heads/}" ;;
+esac
+case "$BRANCH" in ''|-*|refs/*|HEAD) review_refuse 'unsafe feature branch' ;; esac
+git -C "$REPO" check-ref-format "refs/heads/$BRANCH" || review_refuse 'unsafe feature branch'
+check_local_branch() {
+  local attached
+  attached="$(git -C "$REPO" symbolic-ref --quiet HEAD)" || attached=
+  [ -z "$attached" ] || [ "$attached" = "refs/heads/$BRANCH" ] || review_refuse 'attached candidate branch differs'
+  [ "$(git -C "$REPO" show-ref --verify --hash "refs/heads/$BRANCH")" = "$HEAD" ] || review_refuse 'local feature branch missing or differs from reviewed head'
+}
+remote_branch_head() {
+  git -C "$REPO" ls-remote --exit-code origin "refs/heads/$BRANCH" | awk -v ref="refs/heads/$BRANCH" '$2==ref {print $1}'
+}
+check_local_branch
+REMOTE_HEAD="$(remote_branch_head)" || review_refuse 'remote candidate unavailable'
 [ "$REMOTE_HEAD" = "$HEAD" ] || review_refuse 'local and remote candidate heads differ'
 if [ "$OPERATION" = ready ]; then
   gh pr view "$PR" --repo "$REPOSITORY" --json headRefOid,headRefName,baseRefName,state,isDraft,reviewDecision > "$TEMP/pr.json"
@@ -259,14 +278,17 @@ if [ "$OPERATION" = ready ]; then
   mv -- "$TEMP/update.json" "$TEMP/handoff.json"
   "$HERE/operator-handoff.sh" --gate merge "$TEMP/handoff.json" > "$TEMP/handoff.md" || { cat "$TEMP/handoff.md"; exit 3; }
 fi
+if [ "$OPERATION" = ready ]; then
+  gh pr view "$PR" --repo "$REPOSITORY" --json headRefOid,headRefName,baseRefName > "$TEMP/final-pr.json"
+  jq -e --arg head "$HEAD" --arg branch "$BRANCH" --arg base "$BASE" '.headRefOid==$head and .headRefName==$branch and .baseRefName==$base' "$TEMP/final-pr.json" >/dev/null || review_refuse 'actual PR head/base changed during publication'
+fi
 # Recheck source/remote immediately before the only mutation.
 [ "$(git -C "$REPO" rev-parse HEAD)" = "$HEAD" ] && [ -z "$(git -C "$REPO" status --porcelain)" ] || review_refuse 'candidate changed during publication'
-[ "$(git -C "$REPO" ls-remote --exit-code origin "refs/heads/$BRANCH" | awk '{print $1}')" = "$HEAD" ] || review_refuse 'remote candidate changed during publication'
+check_local_branch
+[ "$(remote_branch_head)" = "$HEAD" ] || review_refuse 'remote candidate changed during publication'
 if [ "$OPERATION" = create ]; then
   gh pr create --repo "$REPOSITORY" --head "$BRANCH" --base "$BASE" --draft --title "$(jq -r .target "$TEMP/handoff.json")" --body-file "$TEMP/handoff.md"
 else
-  gh pr view "$PR" --repo "$REPOSITORY" --json headRefOid,baseRefName > "$TEMP/final-pr.json"
-  jq -e --arg head "$HEAD" --arg base "$BASE" '.headRefOid==$head and .baseRefName==$base' "$TEMP/final-pr.json" >/dev/null || review_refuse 'actual PR head/base changed during publication'
   gh pr ready "$PR" --repo "$REPOSITORY"
 fi
 cat "$TEMP/handoff.md"
