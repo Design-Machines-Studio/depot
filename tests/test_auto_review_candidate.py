@@ -99,6 +99,8 @@ class ReviewedPRCallerFixtures(unittest.TestCase):
         (self.repo / ".gitignore").write_text(".workflow-kernel/\n.claude/\n")
         self.git_run("add", ".")
         self.git_run("commit", "--quiet", "-m", "fixture")
+        self.git_run("branch", "main")
+        self.git_run("branch", "release/reviewed")
         self.log = self.root / "gh.log"
         self.git_log = self.root / "git.log"
         self.bin = self.root / "bin"
@@ -211,6 +213,7 @@ esac
         head = self.git_run("rev-parse", "HEAD")
         self.readiness = self.root / f"{run_id}-readiness.json"
         self.facts = {
+            "approvedBase": "main",
             "owner": {"repository": "Fixture/consumer", "workflow": workflow, "run_id": run_id,
                       "run_root": str(run.root), "state_dir": str(state)}, "uiNonImpact": None,
             "readiness": {
@@ -390,6 +393,48 @@ esac
                 ready = self.publish(caller, "ready")
                 self.assertEqual(0, ready.returncode, ready.stderr)
                 self.assertIn("pr ready", self.log.read_text())
+
+    def test_callers_create_against_approved_nondefault_base(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.prepare(caller)
+                self.facts["approvedBase"] = "release/reviewed"
+                self.save_facts()
+                created = self.publish(caller)
+                self.assertEqual(0, created.returncode, created.stdout + created.stderr)
+                self.assertIn("--base release/reviewed", self.log.read_text())
+
+    def test_callers_reject_wrong_actual_pr_base(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.prepare(caller)
+                self.env["PR_BASE"] = "unapproved"
+                self.facts["readiness"]["feedbackSettled"] = True
+                self.save_facts()
+                rejected = self.reject(caller, "ready", no_gh=False)
+                self.assertIn("actual PR base differs from approved base", rejected.stderr)
+
+    def test_callers_refresh_cached_failed_checks_before_ready(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.prepare(caller)
+                self.facts["readiness"]["checks"][1]["status"] = "fail"
+                self.save_facts()
+                ready = self.publish(caller, "ready")
+                self.assertEqual(0, ready.returncode, ready.stdout + ready.stderr)
+                self.assertIn("pr ready", self.log.read_text())
+                self.assertIn("- actual CI passed.", ready.stdout)
+
+    def test_callers_require_candidate_verification_before_creation(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.prepare(caller)
+                self.facts["readiness"]["checks"] = [self.facts["readiness"]["checks"][1]]
+                self.save_facts()
+                rejected = self.reject(caller)
+                self.assertIn("## Not ready", rejected.stdout)
+                self.assertIn("Candidate verification results are missing.", rejected.stdout)
+                self.assertIn("**Agent next action:** Run the required source/build/verification checks", rejected.stdout)
 
 
 class ReviewEvidenceProducerTests(unittest.TestCase):

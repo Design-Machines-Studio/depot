@@ -242,7 +242,7 @@ Use applicable sources and declared GitHub/Project authority only, never an
 organization survey. Test alignment, ownership, currency, mechanism necessity,
 scale and API/pattern existence under that skill.
 
-Load and apply the canonical Design Machines deployment context from `plugins/dm-review/skills/review/references/deployment-context.md` (two-person team and sole Baseplate/Fixture developers, roughly 4--50 users per install, non-indexed small-group threat model, proportional security with hard boundaries at credentials/authorization/data-loss/release-integrity, YAGNI and token economy). No enterprise architecture without a demonstrated current consumer.
+Apply `plugins/dm-review/skills/review/references/deployment-context.md`: a small designer-led team with agents implementing and vetting code. The owner approves plans/prompts, accepts browser UI and decides merge; agents own backend and applicable reviews. Retain roughly 4--50 users per install, non-indexed small-group threats, proportional security with hard boundaries at credentials/authorization/data-loss/release-integrity, YAGNI and token economy. No enterprise architecture without a current consumer.
 
 Save `plans/<feature-slug>/research.html` with material confirmations, corrections, ownership conflicts, and the smallest supported approach. **Verification:** `ls plans/<feature-slug>/research.html` MUST exist before proceeding. Mark ledger item 3 complete.
 
@@ -508,7 +508,9 @@ source changes, failed or missing checks and refresh affected producer evidence.
 Full mode reuses its deferred candidate under the same owner, never a new loop.
 Never use bare `gh` to create or ready a PR.
 Use the exact input variables and closed producer/readiness shapes from
-`automatic-implementation-closeout.md`:
+`automatic-implementation-closeout.md`. Copy approved plan/manifest `baseBranch`
+to `approvedBase` in `REVIEW_READINESS_INPUT`; the helper resolves local/origin
+names, never GitHub's default, and preserves original review source base/head:
 
 <!-- reviewed-pr-lean:start -->
 ```bash
@@ -554,7 +556,7 @@ fi
 
 Preserve the selector's four public lines and actual base/head/dirty boundary.
 For `modelWork: true`, use model-router's recommendation renderer within this
-owner. Deliver chunk01 `operator-handoff.sh` preview tasks for designer UI
+owner. Deliver dm-review's `operator-handoff.sh` preview tasks for designer UI
 acceptance or owner merge. Never request backend-code review or create-PR
 approval; retain planning/material-scope decisions.
 

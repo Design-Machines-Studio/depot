@@ -2101,6 +2101,22 @@ for caller in direct full lean; do
   require_text "$surface" 'not_applicable' "$caller separates pre-PR feedback from review"
   require_text "$surface" "<!-- review-gap-$caller:start -->" "$caller guards the review selector on actual gaps"
   require_text "$surface" 'hook activation unavailable' "$caller reports unavailable native hook binding honestly"
+  require_text "$surface" 'approvedBase' "$caller carries the approved publication base"
+  require_absent "$surface" 'chunk01' "$caller names the reusable dm-review handoff"
+done
+publication="$REPO_ROOT/plugins/dm-review/skills/review/references/publish-reviewed-pr.sh"
+handoff="$REPO_ROOT/plugins/dm-review/skills/review/references/operator-handoff.sh"
+require_text "$publication" '--base "$BASE" --draft' "create explicitly uses the approved base"
+require_text "$publication" 'actual PR base differs from approved base' "ready rejects the wrong target base"
+require_text "$publication" 'refs/remotes/origin/*)' "publication resolves approved origin branch naming"
+require_text "$publication" 'Fresh GitHub' "ready refreshes cached PR facts before gating"
+require_text "$handoff" 'Candidate verification results are missing.' "PR checks alone cannot settle candidate verification"
+require_text "$handoff" '**Agent next action:** ' "Not ready names one agent action"
+require_absent "$handoff" 'exact-owned' "designer output uses ordinary cleanup wording"
+require_absent "$handoff" 'the producer reported' "designer output explains incomplete review plainly"
+for surface in "$pipeline_cmd" "$orchestrator"; do
+  require_text "$surface" 'small designer-led team' "Pipeline uses canonical designer/agent team facts"
+  require_absent "$surface" 'two-person team and sole Baseplate/Fixture developers' "Pipeline drops retired staffing assumptions"
 done
 require_text "$auto_closeout" 'private ownership, single-link containment' "session binding validates the private native pointer"
 require_text "$auto_closeout" 'never bind/update/clear' "workers cannot bind the parent session"
@@ -2116,6 +2132,9 @@ require_text "$contract" 'never authorizes disposal in another repository' "stan
 require_text "$canonical" 'git -C "$REPO" --literal-pathspecs restore' "source restore uses exact literal Git paths"
 require_text "$canonical" 'worktree list --porcelain -z' "branch occupancy uses NUL-safe worktree facts"
 require_text "$canonical" 'inspection changed; inspect again before mutation' "prepare rejects stale classification"
+require_text "$canonical" 'jq -s '\''unique_by(.path)'\''' "inventory deduplicates file-backed rows once"
+require_text "$canonical" '--slurpfile paths "$TMP/paths.json"' "final plan loads large inventories from a file"
+require_absent "$canonical" '--argjson paths "$PATHS"' "inventory never returns to one large argv argument"
 require_text "$canonical" 'checkout --detach "$TARGET"' "owned implementation releases branch normally"
 require_text "$canonical" 'git -C "$REPO" diff --cached --binary HEAD' "cleanup snapshot binds staged content"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/review-owner-context.sh" 'git -C "$repo" diff --cached --binary HEAD' "current boundary binds staged content"
@@ -2128,6 +2147,10 @@ require_absent "$canonical" 'git clean' "helper never uses broad Git clean"
 require_absent "$canonical" 'git reset' "helper never uses broad Git reset"
 for surface in "$auto_closeout" "$orchestrator" "$codex_native_adapter" "$REPO_ROOT/plugins/dm-review/skills/review/references/review-closeout-contract.md"; do
   require_text "$surface" 'canonical-checkout.sh' "${surface#$REPO_ROOT/} shares canonical cleanup helper"
+done
+for surface in "$orchestrator" "$REPO_ROOT/plugins/dm-review/skills/review/references/review-closeout-contract.md"; do
+  require_text "$surface" 'explicitly selected Assembly development' "canonical finish is scoped to selected Assembly development"
+  require_text "$surface" 'Other repositories' "other repositories retain baseline source/residue checks"
 done
 require_text "$output_format" 'post-report source/residue checks' "handoff cleanliness includes final writes"
 require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/operator-handoff.sh" 'Workspace: ' "designer handoff states workspace readiness"

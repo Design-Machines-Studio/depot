@@ -113,6 +113,23 @@ assert cmp "$REPO/evidence/receipt" "$TMP/receipt-before"
 # Clean retry is safe and makes no alternate checkout.
 inspect; assert prepare
 assert "$HELPER_BASH" "$HELPER" finish "${args[@]}"
+# Real inventory exceeds Linux's single-argument limit. Every inspection and
+# prepare, including final plan construction, must read the inventory as files.
+for ((i=0; i<1100; i++)); do
+  printf 'protected local bytes %s\n' "$i" > "$REPO/install/large-inventory-$i-extensionless"
+done
+LARGE_NEWLINE=$'install/large\nignored path'
+printf 'protected newline bytes\n' > "$REPO/$LARGE_NEWLINE"
+inspect
+assert jq -e '[.paths[] | select(.path|startswith("install/large"))] | length==1101 and all(.[]; .classification=="retained" and .reason=="ignored-install-or-evidence")' "$TMP/inspect.json"
+assert jq -e '(.paths|length)==([.paths[].path]|unique|length)' "$TMP/inspect.json"
+assert test "$(wc -c < "$TMP/inspect.json")" -gt 131072
+assert prepare
+assert test "$(cat "$REPO/install/large-inventory-1099-extensionless")" = 'protected local bytes 1099'
+assert test "$(cat "$REPO/$LARGE_NEWLINE")" = 'protected newline bytes'
+# Keep subsequent fixtures small; remove only the exact files just created.
+for ((i=0; i<1100; i++)); do rm -- "$REPO/install/large-inventory-$i-extensionless"; done
+rm -- "$REPO/$LARGE_NEWLINE"
 git -C "$REPO" worktree list --porcelain -z > "$TMP/trees"
 assert test "$(git -C "$REPO" worktree list --porcelain | grep -c '^worktree ')" = 1
 # Post-report ignored residue is checked separately from Git's clean status.

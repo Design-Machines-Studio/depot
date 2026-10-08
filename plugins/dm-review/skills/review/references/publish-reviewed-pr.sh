@@ -47,12 +47,30 @@ for file in "$PRODUCER" "$READINESS"; do
   review_safe_path "$file"
   [ -f "$file" ] && [ -r "$file" ] && [ "$(review_stat links "$file")" = 1 ] || review_refuse 'missing or unsafe publication input'
 done
-jq -e 'type=="object" and (keys|sort)==(["owner","readiness","uiNonImpact"]|sort)' "$READINESS" >/dev/null || exit 2
+jq -e 'type=="object" and (keys|sort)==(["approvedBase","owner","readiness","uiNonImpact"]|sort) and
+  (.approvedBase|type=="string" and length>0 and length<=1024 and (test("[\u0000-\u001f\u007f]")|not))' "$READINESS" >/dev/null || exit 2
 OWNER="$(jq -c .owner "$READINESS")"
 review_owner_validate "$OWNER" "$REPO"
 [ "$RUN_ROOT" = "$(jq -r .run_root <<< "$OWNER")" ] || review_refuse 'current run root mismatch'
 RUN="$(jq -r .run_id <<< "$OWNER")"
 REPOSITORY="$(jq -r .repository <<< "$OWNER")"
+# Copy approvedBase from the approved task/plan, never GitHub's default. Git
+# resolves the exact local/origin branch name; no SHA, tag or foreign remote.
+# This publication branch does not change original review source base/head.
+APPROVED_BASE="$(jq -r .approvedBase "$READINESS")"
+[[ "$APPROVED_BASE" != -* ]] || review_refuse 'invalid approved base branch'
+BASE_REF="$(git -C "$REPO" rev-parse --symbolic-full-name --verify --end-of-options "$APPROVED_BASE")" || review_refuse 'approved base branch unavailable or ambiguous'
+case "$BASE_REF" in
+  refs/heads/*)
+    BASE="${BASE_REF#refs/heads/}"
+    [ "$APPROVED_BASE" = "$BASE" ] || [ "$APPROVED_BASE" = "$BASE_REF" ] || review_refuse 'approved base must name a branch explicitly' ;;
+  refs/remotes/origin/*)
+    BASE="${BASE_REF#refs/remotes/origin/}"
+    [ "$APPROVED_BASE" = "origin/$BASE" ] || [ "$APPROVED_BASE" = "$BASE_REF" ] || review_refuse 'approved base must name a branch explicitly' ;;
+  *) review_refuse 'approved base must name a local or origin branch' ;;
+esac
+git -C "$REPO" check-ref-format "refs/heads/$BASE" || review_refuse 'invalid approved base branch'
+git -C "$REPO" rev-parse --verify "$BASE_REF^{commit}" >/dev/null || review_refuse 'approved base is not a commit branch'
 if [ "$OPERATION" = ready ]; then
   [[ "$PR" =~ ^https://github.com/$REPOSITORY/pull/[0-9]+$ ]] || review_refuse 'foreign PR'
 fi
@@ -127,7 +145,13 @@ if jq -e '.ui.acceptance!=null and .ui.acceptance.head!=.finalHead' "$TEMP/hando
   jq '.ui.acceptance.unchangedSince=true' "$TEMP/handoff.json" > "$TEMP/update.json"
   mv -- "$TEMP/update.json" "$TEMP/handoff.json"
 fi
-"$HERE/operator-handoff.sh" --gate candidate "$TEMP/handoff.json" > "$TEMP/handoff.md" || { cat "$TEMP/handoff.md"; exit 3; }
+if [ "$OPERATION" = create ]; then
+  "$HERE/operator-handoff.sh" --gate candidate "$TEMP/handoff.json" > "$TEMP/handoff.md" || { cat "$TEMP/handoff.md"; exit 3; }
+else
+  # Validate caller shape without gating on cached PR outcomes. Fresh GitHub
+  # facts below replace those projections before the final merge gate.
+  "$HERE/operator-handoff.sh" "$TEMP/handoff.json" > "$TEMP/handoff.md"
+fi
 BRANCH="$(git -C "$REPO" symbolic-ref --quiet --short HEAD)" || review_refuse 'detached candidate head'
 git -C "$REPO" check-ref-format "refs/heads/$BRANCH" || exit 2
 REMOTE_HEAD="$(git -C "$REPO" ls-remote --exit-code origin "refs/heads/$BRANCH" | awk '{print $1}')" || review_refuse 'remote candidate unavailable'
@@ -135,8 +159,7 @@ REMOTE_HEAD="$(git -C "$REPO" ls-remote --exit-code origin "refs/heads/$BRANCH" 
 if [ "$OPERATION" = ready ]; then
   gh pr view "$PR" --repo "$REPOSITORY" --json headRefOid,headRefName,baseRefName,state,isDraft,reviewDecision > "$TEMP/pr.json"
   jq -e --arg head "$HEAD" --arg branch "$BRANCH" '.headRefOid==$head and .headRefName==$branch and .state=="OPEN" and .isDraft==true' "$TEMP/pr.json" >/dev/null || review_refuse 'actual PR head/state differs'
-  BASE="$(jq -er '.baseRefName | select(type=="string" and length>0)' "$TEMP/pr.json")" || review_refuse 'actual PR base unavailable; Next action: resolve the PR base and retry publication.'
-  git -C "$REPO" check-ref-format "refs/heads/$BASE" || review_refuse 'actual PR base invalid; Next action: resolve the PR base and retry publication.'
+  jq -e --arg base "$BASE" '.baseRefName==$base' "$TEMP/pr.json" >/dev/null || review_refuse 'actual PR base differs from approved base; restore the approved PR target and retry publication'
   OWNER_NAME="${REPOSITORY%/*}"; REPO_NAME="${REPOSITORY#*/}"; NUMBER="${PR##*/}"
   requirements_block() { review_refuse "$REPOSITORY base $BASE: $1; Next action: $2"; }
   # Reported contexts cannot prove an absent workflow is optional. Resolve the
@@ -194,6 +217,7 @@ if [ "$OPERATION" = ready ]; then
   jq -e '.reviewDecision!="CHANGES_REQUESTED"' "$TEMP/pr.json" >/dev/null || review_refuse 'changes requested on PR'
   jq --arg pr "$PR" --slurpfile checks "$TEMP/checks.json" --slurpfile required "$TEMP/required.json" '
     (.checks | map(select(.stage=="pr" and .required!=false))) as $declared |
+    .feedbackSettled=true |
     .checks = ((.checks | map(select(.stage=="candidate"))) +
       ($checks[0] | map(. as $check | {name:.name,link:.link,stage:"pr",
         required:(any($required[0][]; .name==$check.name) or any($declared[]; .name==$check.name)),
@@ -207,7 +231,7 @@ fi
 [ "$(git -C "$REPO" rev-parse HEAD)" = "$HEAD" ] && [ -z "$(git -C "$REPO" status --porcelain)" ] || review_refuse 'candidate changed during publication'
 [ "$(git -C "$REPO" ls-remote --exit-code origin "refs/heads/$BRANCH" | awk '{print $1}')" = "$HEAD" ] || review_refuse 'remote candidate changed during publication'
 if [ "$OPERATION" = create ]; then
-  gh pr create --repo "$REPOSITORY" --head "$BRANCH" --draft --title "$(jq -r .target "$TEMP/handoff.json")" --body-file "$TEMP/handoff.md"
+  gh pr create --repo "$REPOSITORY" --head "$BRANCH" --base "$BASE" --draft --title "$(jq -r .target "$TEMP/handoff.json")" --body-file "$TEMP/handoff.md"
 else
   gh pr view "$PR" --repo "$REPOSITORY" --json headRefOid,baseRefName > "$TEMP/final-pr.json"
   jq -e --arg head "$HEAD" --arg base "$BASE" '.headRefOid==$head and .baseRefName==$base' "$TEMP/final-pr.json" >/dev/null || review_refuse 'actual PR head/base changed during publication'

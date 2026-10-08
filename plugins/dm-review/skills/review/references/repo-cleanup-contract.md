@@ -73,8 +73,8 @@ metadata provide inactive handoff proof; active, malformed or missing records
 block. Other host leases use their existing release mechanism, never invented
 pointers. No pointer search or second registry.
 
-`inspect` emits JSON-quoted path classifications from NUL-safe Git names before
-mutation. Keep that private output and pass it as `--inspection` to `prepare`;
+`inspect` builds a file-backed, deduplicated inventory from NUL-safe Git names.
+Pass its private JSON output as `--inspection` to `prepare`;
 changed source/index/owner/binding facts require reinspection. Supply `--keep-path`
 for current-run changes from entry/current ownership evidence; a changed current
 boundary is retained automatically. Only disposable source is restored by
@@ -83,23 +83,22 @@ and protected descendants fail closed. No broad reset, clean, prune or force
 checkout. Ignored install/evidence files remain protected.
 
 Commit, push, verify delivery and cover current repairs before branch transfer.
-If this owner's implementation worktree occupies the branch, pass its exact
-`--implementation-root` and existing complete producer
-`--preservation` result. Preserve evidence in the supported retained root first.
+For this owner's occupied implementation worktree, pass exact
+`--implementation-root` and complete producer `--preservation` result after
+preserving evidence in the supported retained root.
 Normally detach that owned worktree at the delivered head, then check out the
 actual branch in the same canonical folder. Foreign occupancy names that
-owner's exact release action. Unique branches/history remain. Retain the
-detached checkout for later producer calls, or pass the verified canonical
-root. Preserve literal receipt bytes; remove an owned disposable worktree only
-after its last required producer call.
+owner's exact release action; never detach/remove a foreign owner. Keep unique
+history and literal receipts. Retain the detached checkout or use the verified
+canonical root for later producer calls; remove owned worktrees only afterward.
 
 `finish` runs after final report/evidence writes on success, failure, abort and
 interruption. It checks clean source in both supplied checkouts, the reviewed
 branch/head and absence of each exact-owned `--residue-path` supplied from the
 existing cleanup inventory (including ignored artifacts and empty directories).
-Preserve evidence before cleanup. Read-only `finish` needs no disposable
-owner/binding state; mutation still requires it. Check used roots after their
-last writes, before removal; then verify removed exact paths are absent.
+Preserve evidence first. Read-only `finish` needs no disposable owner/binding
+state; mutation still requires it. Check used roots after last writes and before
+removal, then verify removed paths are absent.
 Pending cleanup means Not ready with paths and agent action. Keep the preview
 and source/assets/build/Fixture proof; Git/status/HTTP200 and fixtures cannot
 supply it. Live-domain proof follows publication/synchronization on the next
@@ -108,12 +107,12 @@ approved Assembly run; source fixtures authorize no live cleanup.
 ## Final readiness
 
 When a run captures browser artifacts, load `browser-artifact-cleanup.md` before
-capture and apply it at closeout, including standalone visual review. Use exact
-owned paths and preserve linked evidence before removing disposable copies.
+capture and apply it at closeout, including standalone visual review. Preserve
+linked evidence before removing exact owned disposable copies.
 After all report/receipt writes, check every used checkout against its baseline.
 Deliver intentional changes and remove run-owned residue before reporting
 `Next chunk: ready`; otherwise name exact paths and blockers. Preserve foreign
-work and the running feature preview. A clean code verdict does not prove cleanup.
+work and the running feature preview. Code verdicts never prove cleanup.
 
 ## 3. Safe-to-delete decision table
 

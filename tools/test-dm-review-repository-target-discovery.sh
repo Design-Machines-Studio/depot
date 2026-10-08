@@ -262,6 +262,24 @@ assert grep -Fq 'name collisions and coordinate without force, stash, reset or c
 assert grep -Fq 'changing Git HEAD alone does not refresh' "$CONTRACT"
 assert grep -Fq 'cleanup argv or ownership adoption' "$CONTRACT"
 assert grep -Fq 'simultaneous Federation peers' "$CONTRACT"
+# Reusable Assembly instructions must release only the owned producer and
+# select the actual reviewed branch in the canonical folder. Craft's separate
+# detached-serving allowance does not apply to the Assembly template.
+PROMPT="$ROOT/plugins/pipeline/skills/promptcraft/references/prompt-template.md"
+COORDINATOR="$ROOT/plugins/project-manager/skills/assembly-coordinator/SKILL.md"
+CONFIGS="$ROOT/plugins/project-scaffolder/skills/scaffolding/references/project-configs.md"
+awk '/^## CLAUDE.md Templates/{templates=1} templates && /^### go-templ-datastar/{assembly=1} assembly && /^### go-library/{exit} assembly {print}' "$CONFIGS" > "$TMP/assembly-template.md"
+for surface in "$PROMPT" "$COORDINATOR" "$TMP/assembly-template.md"; do
+  awk '{$1=$1; printf "%s ", $0}' "$surface" > "$TMP/normalized-instructions.md"
+  assert grep -Fq 'Foreign occupancy blocks' "$TMP/normalized-instructions.md"
+  assert grep -Fq 'actual reviewed branch in the canonical' "$TMP/normalized-instructions.md"
+  assert grep -Fq 'owned producer' "$TMP/normalized-instructions.md"
+  assert grep -Fq 'preserve evidence' "$TMP/normalized-instructions.md"
+  assert grep -Fq 'detach/remove a foreign owner' "$TMP/normalized-instructions.md"
+  assert bash -c '! grep -Fq "exact detached commit" "$1"' bash "$TMP/normalized-instructions.md"
+  assert bash -c '! grep -Fiq "chunk01" "$1"' bash "$TMP/normalized-instructions.md"
+done
+assert grep -Fq 'For Craft repositories only' "$CONFIGS"
 
 # Exercise ordinary Git in disposable fixture repos. Release the owned producer
 # and select the actual feature branch for serving; rebuild remains separate.

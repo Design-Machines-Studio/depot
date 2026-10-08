@@ -6,6 +6,7 @@ PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin"
 export PATH
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PUBLISH="$ROOT/plugins/dm-review/skills/review/references/publish-reviewed-pr.sh"
+HELPER_BASH="${BASH32:-/bin/bash}"
 export WORKFLOW_KERNEL="$ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/publish-reviewed-pr-test.XXXXXX")"
 TMP="$(cd "$TMP" && pwd -P)"
@@ -23,6 +24,10 @@ printf '<p>unchanged UI</p>\n' > "$REPO/ui.html"
 git -C "$REPO" add .
 git -C "$REPO" commit -qm fixture
 INITIAL_HEAD="$(git -C "$REPO" rev-parse HEAD)"
+git -C "$REPO" branch main
+git -C "$REPO" branch release/reviewed
+git -C "$REPO" branch release/topic
+git -C "$REPO" update-ref refs/remotes/origin/release/reviewed "$INITIAL_HEAD"
 export REAL_GIT="$(command -v git)" GH_LOG="$TMP/gh.log"
 cat > "$TMP/bin/git" <<'SH'
 #!/usr/bin/env bash
@@ -143,14 +148,14 @@ fixture() {
   jq -cn --arg root "$RUN_ROOT" '{request:($root+"/review/request.json"),receipts:($root+"/review/authoritative-receipts.json"),"lane-receipts":($root+"/review/review-lane-receipts.json"),
     "raw-lane-outputs":($root+"/review/raw-lane-outputs.json"),"raw-findings":($root+"/review/raw-finding-inventory.json"),decisions:($root+"/review/synthesis-decisions.json"),
     "private-router-directory":($root+"/receipts/private/router"),report:($root+"/report.md")}' > "$PRODUCER"
-  jq -cn --arg id "$id" --arg root "$RUN_ROOT" --arg state "$STATE" --arg head "$PR_HEAD" '{owner:{repository:"Fixture/consumer",workflow:"pipeline",run_id:$id,run_root:$root,state_dir:$state},uiNonImpact:null,
+  jq -cn --arg id "$id" --arg root "$RUN_ROOT" --arg state "$STATE" --arg head "$PR_HEAD" '{approvedBase:"main",owner:{repository:"Fixture/consumer",workflow:"pipeline",run_id:$id,run_root:$root,state_dir:$state},uiNonImpact:null,
     readiness:{target:"Vetted candidate",detail:"https://example.test/report",finalHead:$head,dirty:false,feedbackSettled:true,
       coverage:{status:"missing",head:null,gaps:[],requiredBrowserCases:[],evidence:null},
       lanes:(["Architecture","Simplicity","Security","Testing","Fixture/distribution"]|map({area:.,status:(if .=="Security" then "covered" else "exempt" end),note:(if .=="Security" then null else "Not selected in this bounded fixture." end),evidence:(if .=="Security" then "https://example.test/security" else null end)})),
       findings:[],checks:[{name:"candidate tests",stage:"candidate",status:"pass",link:null}],ui:{changed:false,preview:null,tasks:[],acceptance:null}}}' > "$READINESS"
   : > "$GH_LOG"
 }
-publish() { "$PUBLISH" --operation "$1" --repository-root "$REPO" --run-root "$RUN_ROOT" --producer-input "$PRODUCER" --readiness-input "$READINESS" "${@:2}"; }
+publish() { "$HELPER_BASH" "$PUBLISH" --operation "$1" --repository-root "$REPO" --run-root "$RUN_ROOT" --producer-input "$PRODUCER" --readiness-input "$READINESS" "${@:2}"; }
 reject_publish() {
   local code=0
   publish "$@" > "$TMP/rejected.out" 2>&1 || code=$?
@@ -164,12 +169,12 @@ change_readiness() { jq "$1" "$READINESS" > "$TMP/update.json"; mv "$TMP/update.
 fixture candidate
 change_readiness '.readiness.checks += [{name:"PR-only CI",stage:"pr",status:"pending",link:null}] | .readiness.feedbackSettled=false'
 assert publish create
-assert grep -Fq 'pr create --repo Fixture/consumer --head candidate --draft' "$GH_LOG"
+assert grep -Fq 'pr create --repo Fixture/consumer --head candidate --base main --draft' "$GH_LOG"
 assert test "$(find "$RUN_ROOT/diagnostic/review" -name report.md | wc -l | tr -d ' ')" = 1
 # PATH cannot select executable dependencies. Only the bounded source fixture
 # mechanism above activates mocks, and never replaces the real producer.
 : > "$GH_LOG"
-assert env PATH="$TMP/bin" /bin/bash "$PUBLISH" --operation create --repository-root "$REPO" --run-root "$RUN_ROOT" --producer-input "$PRODUCER" --readiness-input "$READINESS"
+assert env PATH="$TMP/bin" "$HELPER_BASH" "$PUBLISH" --operation create --repository-root "$REPO" --run-root "$RUN_ROOT" --producer-input "$PRODUCER" --readiness-input "$READINESS"
 : > "$GH_LOG"
 reject_publish create --operation create; no_gh
 reject_publish create --pr https://github.com/Fixture/consumer/pull/42; no_gh
@@ -244,13 +249,60 @@ export REMOTE_HEAD="$(printf 'b%.0s' {1..40})"
 reject_publish create; no_gh
 unset REMOTE_HEAD
 
+# Preserve original source-bound base/head while publishing to the approved
+# branch. Resolve local and origin naming without guessing GitHub's default.
+for base in release/reviewed refs/heads/release/reviewed origin/release/reviewed refs/remotes/origin/release/reviewed; do
+  fixture "base-${pass}"
+  cp "$RUN_ROOT/review/request.json" "$TMP/request-before.json"
+  change_readiness ".approvedBase=\"$base\""
+  assert publish create
+  assert grep -Fq -- '--base release/reviewed --draft' "$GH_LOG"
+  assert cmp "$RUN_ROOT/review/request.json" "$TMP/request-before.json"
+done
+git -C "$REPO" tag release/reviewed
+fixture ambiguous-approved-base
+change_readiness '.approvedBase="release/reviewed"'
+reject_publish create; no_gh
+fixture explicit-approved-base
+change_readiness '.approvedBase="refs/heads/release/reviewed"'
+assert publish create
+assert grep -Fq -- '--base release/reviewed --draft' "$GH_LOG"
+git -C "$REPO" tag -d release/reviewed >/dev/null
+git -C "$REPO" tag not-a-branch
+git -C "$REPO" update-ref refs/remotes/foreign/main "$INITIAL_HEAD"
+for base in '' '-main' missing HEAD "$INITIAL_HEAD" refs/tags/not-a-branch refs/remotes/foreign/main; do
+  fixture "invalid-base-${pass}"
+  change_readiness ".approvedBase=\"$base\""
+  reject_publish create; no_gh
+done
+fixture missing-approved-base
+change_readiness 'del(.approvedBase)'
+reject_publish create; no_gh
+fixture pr-only-candidate
+change_readiness '.readiness.checks=[{name:"actual CI",stage:"pr",status:"pass",link:null}]'
+reject_publish create; no_gh
+assert grep -Fxq '## Not ready' "$TMP/rejected.out"
+assert grep -Fq 'Candidate verification results are missing.' "$TMP/rejected.out"
+assert grep -Fq '**Agent next action:** Run the required source/build/verification checks' "$TMP/rejected.out"
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+assert grep -Fxq '## Not ready' "$TMP/rejected.out"
+fixture wrong-approved-base
+change_readiness '.approvedBase="release/reviewed"'
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+assert grep -Fq 'actual PR base differs from approved base' "$TMP/rejected.out"
+fixture approved-ready-base
+change_readiness '.approvedBase="origin/release/reviewed"'
+export PR_BASE=release/reviewed
+assert publish ready --pr https://github.com/Fixture/consumer/pull/42
+unset PR_BASE
+
 fixture ready
 assert publish ready --pr https://github.com/Fixture/consumer/pull/42
 assert grep -Fxq 'pr ready https://github.com/Fixture/consumer/pull/42 --repo Fixture/consumer' "$GH_LOG"
 # Actual GitHub results replace caller PR projections while candidate rows stay.
-for caller_status in pending pass; do
+for caller_status in fail pending pass; do
   fixture "pr-refresh-$caller_status"
-  change_readiness ".readiness.checks += [{name:\"actual CI\",stage:\"pr\",status:\"$caller_status\",link:null}]"
+  change_readiness ".readiness.checks += [{name:\"actual CI\",stage:\"pr\",status:\"$caller_status\",link:null}] | .readiness.feedbackSettled=false"
   publish ready --pr https://github.com/Fixture/consumer/pull/42 > "$TMP/ready.out" || {
     cat "$TMP/ready.out"
     echo "FAIL: $caller_status PR projection was not replaced by actual passing CI" >&2
@@ -328,6 +380,7 @@ export RULES_MODE=second-page
 reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
 unset RULES_MODE
 fixture rules-reported-required
+change_readiness '.approvedBase="release/topic"'
 export CLASSIC_MODE=none RULES_MODE=checks PR_BASE=release/topic
 assert publish ready --pr https://github.com/Fixture/consumer/pull/42
 assert grep -Fq 'rules/branches/release%2Ftopic?per_page=100' "$GH_LOG"

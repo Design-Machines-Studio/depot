@@ -185,7 +185,7 @@ git -C "$REPO" diff --name-only --no-renames -z HEAD > "$TMP/changed"
 git -C "$REPO" diff --cached --name-only --no-renames -z HEAD >> "$TMP/changed"
 git -C "$REPO" ls-files --others --exclude-standard -z >> "$TMP/changed"
 git -C "$REPO" ls-files --others --ignored --exclude-standard -z > "$TMP/ignored"
-PATHS='[]'
+: > "$TMP/paths.jsonl"
 while IFS= read -r -d '' path; do
   relative "$path"
   classification=disposable; reason=inactive-source; tracked=false; hash=missing
@@ -201,26 +201,29 @@ while IFS= read -r -d '' path; do
   elif [ -d "$REPO/$path" ]; then classification=blocked; reason=directory-file-conflict
   elif [ -e "$REPO/$path" ] && [ ! -f "$REPO/$path" ]; then classification=blocked; reason=special-file
   elif [ -f "$REPO/$path" ]; then hash="$(review_sha256 < "$REPO/$path")"; fi
-  PATHS="$(jq -cn --argjson rows "$PATHS" --arg p "$path" --arg c "$classification" --arg r "$reason" --arg h "$hash" --argjson t "$tracked" '$rows+[{path:$p,classification:$c,reason:$r,hash:$h,tracked:$t}] | unique_by(.path)')"
+  jq -cn --arg p "$path" --arg c "$classification" --arg r "$reason" --arg h "$hash" --argjson t "$tracked" '{path:$p,classification:$c,reason:$r,hash:$h,tracked:$t}' >> "$TMP/paths.jsonl"
 done < "$TMP/changed"
 while IFS= read -r -d '' path; do
   relative "$path"
   classification=retained; reason=ignored-install-or-evidence
   path_safe "$path" || { classification=blocked; reason=symlink-path; }
-  PATHS="$(jq -cn --argjson rows "$PATHS" --arg p "$path" --arg c "$classification" --arg r "$reason" '$rows+[{path:$p,classification:$c,reason:$r,hash:null,tracked:false}] | unique_by(.path)')"
+  jq -cn --arg p "$path" --arg c "$classification" --arg r "$reason" '{path:$p,classification:$c,reason:$r,hash:null,tracked:false}' >> "$TMP/paths.jsonl"
 done < "$TMP/ignored"
+jq -s 'unique_by(.path)' "$TMP/paths.jsonl" > "$TMP/paths.json"
 # All ignored paths stay protected, including extensionless local state.
 # Their bytes are never restored, removed or used as source-clean proof.
 DIFF_HASH="$( { git -C "$REPO" diff --binary HEAD; git -C "$REPO" diff --cached --binary HEAD; } | review_sha256)"
-PLAN="$(jq -cn --arg repo "$REPO" --arg id "$ID" --arg branch "$BRANCH" --arg target "$TARGET" --arg head "$HEAD" --arg selected "$SELECTED" --arg domain "$(jq -r .domain "$BINDING")" --arg binding "$(review_sha256 < "$BINDING")" --arg diff "$DIFF_HASH" --arg occupant "$OCCUPANT" --argjson release "$RELEASE" --argjson owners "$OWNER_FACTS" --argjson ranges "$RANGE_FACTS" --argjson paths "$PATHS" '{repository:$id,checkout:$repo,domain:$domain,branch:$branch,target:$target,head:$head,selected:$selected,bindingHash:$binding,diffHash:$diff,owners:$owners,sourceRanges:$ranges,occupant:$occupant,release:$release,paths:$paths}')"
-if [ "$MODE" = inspect ]; then printf '%s\n' "$PLAN"; exit 0; fi
+jq -cn --arg repo "$REPO" --arg id "$ID" --arg branch "$BRANCH" --arg target "$TARGET" --arg head "$HEAD" --arg selected "$SELECTED" --arg domain "$(jq -r .domain "$BINDING")" --arg binding "$(review_sha256 < "$BINDING")" --arg diff "$DIFF_HASH" --arg occupant "$OCCUPANT" --argjson release "$RELEASE" --argjson owners "$OWNER_FACTS" --argjson ranges "$RANGE_FACTS" --slurpfile paths "$TMP/paths.json" '{repository:$id,checkout:$repo,domain:$domain,branch:$branch,target:$target,head:$head,selected:$selected,bindingHash:$binding,diffHash:$diff,owners:$owners,sourceRanges:$ranges,occupant:$occupant,release:$release,paths:$paths[0]}' > "$TMP/plan.json"
+if [ "$MODE" = inspect ]; then cat "$TMP/plan.json"; exit 0; fi
 if [ "$MODE" = prepare ]; then
   review_private "$INSPECTION"
-  [ "$(jq -cS . "$INSPECTION")" = "$(jq -cS . <<< "$PLAN")" ] || refuse 'inspection changed; inspect again before mutation'
-  jq -e 'all(.paths[]; .classification!="blocked")' <<< "$PLAN" >/dev/null || refuse 'blocked path classification; inspect exact paths'
+  jq -cS . "$INSPECTION" > "$TMP/expected.json"
+  jq -cS . "$TMP/plan.json" > "$TMP/current.json"
+  cmp -s "$TMP/expected.json" "$TMP/current.json" || refuse 'inspection changed; inspect again before mutation'
+  jq -e 'all(.paths[]; .classification!="blocked")' "$TMP/plan.json" >/dev/null || refuse 'blocked path classification; inspect exact paths'
   # Retained dirty source must be delivered, never discarded to look clean.
-  jq -e 'all(.paths[]; .classification=="disposable" or (.tracked==false and (.reason|IN("secret-config","ignored-install-or-evidence"))))' <<< "$PLAN" >/dev/null || refuse 'protected/current source remains; commit/push required repairs or coordinate owner'
-  jq -j '.paths[] | select(.classification=="disposable") | .path,"\u0000"' <<< "$PLAN" > "$TMP/dispose"
+  jq -e 'all(.paths[]; .classification=="disposable" or (.tracked==false and (.reason|IN("secret-config","ignored-install-or-evidence"))))' "$TMP/plan.json" >/dev/null || refuse 'protected/current source remains; commit/push required repairs or coordinate owner'
+  jq -j '.paths[] | select(.classification=="disposable") | .path,"\u0000"' "$TMP/plan.json" > "$TMP/dispose"
   while IFS= read -r -d '' path; do
     if git -C "$REPO" cat-file -e "HEAD:$path" 2>/dev/null || git -C "$REPO" --literal-pathspecs ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
       git -C "$REPO" --literal-pathspecs restore --source=HEAD --staged --worktree -- "$path"

@@ -124,10 +124,15 @@ Resolve a coherent dm-review bundle containing `publish-reviewed-pr.sh`,
 `REVIEW_PRODUCER_INPUT` is the closed map of absolute existing producer file
 arguments: `request`, `receipts`, `lane-receipts`, `raw-lane-outputs`,
 `raw-findings`, `decisions`, `private-router-directory`, `report`.
-`REVIEW_READINESS_INPUT` contains exactly `owner`, `readiness`, `uiNonImpact`;
-owner contains canonical `repository`, `workflow`, `run_id`, `run_root`,
+`REVIEW_READINESS_INPUT` contains exactly `approvedBase`, `owner`, `readiness`, `uiNonImpact`;
+copy `approvedBase` from the approved task/plan (`baseBranch` for Full/Lean),
+never GitHub's default. The publication helper resolves local/origin branch
+names, passes explicit `--base` and rejects a different actual PR base.
+Keep original source-bound review base/head unchanged.
+`owner` contains canonical `repository`, `workflow`, `run_id`, `run_root`,
 `state_dir`. Read `operator-handoff.sh` for its closed readiness shape; use
-actual candidate checks and leave PR checks pending and `feedbackSettled=false`
+actual candidate-stage source/build/verification checks; PR-only rows do not
+prove candidate verification. Leave PR checks pending and `feedbackSettled=false`
 until the PR exists. UI acceptance is an explicit owner fact, bound to the
 final head or supported bounded UI non-impact proof. No missing source packet
 can be called inspected; the existing producer is the only coverage authority.
@@ -159,7 +164,7 @@ pass at the final head, use the same producer gate for draft-to-ready:
 Register the returned PR with the host when supported. Collect actual PR CI/
 feedback; fix supported defects, push and recheck affected source/browser under
 this owner. Keep draft while CI, feedback or designer acceptance remains;
-unchanged UI acceptance needs bounded non-impact proof. Deliver chunk01
+unchanged UI acceptance needs bounded non-impact proof. Deliver dm-review's
 `operator-handoff.sh`: tested behavior, checks, preview tasks/acceptance and owner
 merge. Never ask for backend-code review or create-PR approval. Preserve
 planning/material-scope approvals. Missing/false legacy controls grant no merge.

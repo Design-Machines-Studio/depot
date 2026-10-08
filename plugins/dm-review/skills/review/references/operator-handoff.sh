@@ -61,7 +61,7 @@ jq -e --arg sha "$SHA" '
       (.status != "exempt" or .note != null) and (.status != "covered" or .evidence != null))) and
   (.findings | type == "array" and all(.[]; type == "object" and (keys | sort) == (["location","problem","severity"] | sort) and
     (.severity | IN("P1","P2","P3")) and (.location | str) and (.problem | str))) and
-  (.checks | type == "array" and length > 0 and all(.[]; type == "object" and ((keys - ["required"]) | sort) == (["link","name","stage","status"] | sort) and
+  (.checks | type == "array" and all(.[]; type == "object" and ((keys - ["required"]) | sort) == (["link","name","stage","status"] | sort) and
     (.required==null or (.required|type=="boolean")) and
     (.stage | IN("candidate","pr")) and
     (.name | str) and (.status | IN("pass","pending","fail","skipped","not_applicable")) and (.link == null or (.link | str)) and
@@ -78,15 +78,16 @@ RESULT="$(jq -r '
   def short: .[0:12];
   . as $in |
   [
-    (if .workspace != null and (.workspace.clean | not) then {kind:"workspace",text:("Workspace cleanup pending at " + (.workspace.paths|join(", ")) + ". Agent next action: " + .workspace.nextAction)} else empty end),
-    (if .dirty then {kind:"source", text:"The checkout has uncommitted changes at \(.finalHead | short). The agent must deliver required repairs and complete exact-owned cleanup."} else empty end),
+    (if .workspace != null and (.workspace.clean | not) then {kind:"workspace",text:("Temporary files remain at " + (.workspace.paths|join(", ")) + ".")} else empty end),
+    (if .dirty then {kind:"source", text:"The checkout has uncommitted changes at \(.finalHead | short). The agent must commit the repairs and remove its temporary files."} else empty end),
     (if .coverage.status == "missing" or .coverage.head == null then {kind:"source", text:"No review evidence exists for head \(.finalHead | short)."}
      elif .coverage.head != .finalHead then {kind:"source", text:"Review evidence is for \(.coverage.head | short), not the current head \(.finalHead | short)."}
      else empty end),
-    (if .coverage.status == "incomplete" or (.coverage.gaps | length) > 0 then {kind:"coverage", text:"Review coverage is incomplete: \(if (.coverage.gaps | length) > 0 then (.coverage.gaps | join(", ")) else "the producer reported no complete coverage" end)."} else empty end),
+    (if .coverage.status == "incomplete" or (.coverage.gaps | length) > 0 then {kind:"coverage", text:"Review coverage is incomplete: \(if (.coverage.gaps | length) > 0 then (.coverage.gaps | join(", ")) else "the required review did not finish" end)."} else empty end),
     (if .coverage.status == "complete" and .coverage.evidence == null then {kind:"coverage", text:"The retained review evidence link is missing."} else empty end),
     (.lanes[] | select(.status == "omitted") | {kind:"coverage", text:"\(.area) review did not run."}),
     (.findings[] | {kind:"finding", text:"\(.severity) \(.location): \(.problem)"}),
+    (if any(.checks[]; .stage=="candidate") | not then {kind:"candidate",text:"Candidate verification results are missing."} else empty end),
     (.checks[] | select((.status|IN("skipped","not_applicable")) and .required!=false) | {kind:"check", text:"Required check \(.name) is \(.status); it has not passed."}),
     (.checks[] | select(.status == "fail") | {kind:"check", text:"\(.name) failed."}),
     (.checks[] | select(.status == "pending") | {kind:(if .stage == "pr" then "pending" else "check" end), text:"\(.name) is still running."}),
@@ -108,6 +109,10 @@ RESULT="$(jq -r '
       "**Your action:** " + (if $status == "Ready to merge" then "Merge \(.target)."
         elif $status == "UI check needed" then "Open the preview at \(.ui.preview) and check the tasks below. Tell the agent what you accept or what to change."
         else "None yet. You will get a new handoff when it is ready." end),
+      (if $status=="Not ready" then "", "**Agent next action:** " +
+        (if any($gaps[]; .kind=="candidate") then "Run the required source/build/verification checks for this head and record their results."
+         elif .workspace!=null and (.workspace.clean|not) then .workspace.nextAction
+         else "Resolve the remaining gaps below and check readiness again at this head." end) else empty end),
       (if $status == "UI check needed" then ("", "### UI check", (.ui.tasks | to_entries[] | "\(.key + 1). \(.value)")) else empty end),
       "", "### Completed",
       ([

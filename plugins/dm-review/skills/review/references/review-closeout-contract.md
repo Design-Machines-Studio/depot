@@ -67,10 +67,13 @@ Never rewrite original receipt bytes after transfer.
 After owned-resource cleanup settles, update `<evidence_path>/report.md` with
 the actual cleanup inventory and revalidate all local links. Write the final report to `.claude/ux-review/report.md` while its checkout remains available.
 Check every used checkout after its last producer/write and before removal.
-After final writes and exact-owned cleanup, run read-only `canonical-checkout.sh finish`
-with exact `--delivered-head`, surviving checkouts and removed owned residue paths.
-It requires no disposable owner state. Pending cleanup means Not ready with
-exact safe paths and agent action; `Workspace: clean` requires the final check.
+After final writes and cleanup, only explicitly selected Assembly development
+checkouts run read-only `canonical-checkout.sh finish` with exact
+`--delivered-head`, surviving checkouts and removed owned residue paths; no
+disposable owner state is required. Other repositories compare every used
+checkout against its entry baseline and verify absence of run-owned residue.
+Pending cleanup means Not ready with safe paths and one agent action;
+`Workspace: clean` requires the applicable final source/residue checks.
 Finish once, after fresh exact-scope Docker inventory proves zero run-owned
 objects:
 
@@ -162,7 +165,13 @@ The real trusted Kernel producer still validates all coverage and rejects
 synthetic/incomplete evidence. Mocked publication is development fixture
 proof only; it establishes neither live review nor installed enforcement.
 
-The readiness file has exactly `owner`, `readiness` and `uiNonImpact`.
+The readiness file has exactly `approvedBase`, `owner`, `readiness`, `uiNonImpact`.
+Copy `approvedBase` from the approved task/plan branch, including manifest
+`baseBranch` for Full/Lean. The wrapper resolves existing local or origin branch
+names to the GitHub base; missing, ambiguous, tag/SHA or foreign-remote input
+blocks. Never infer approval from GitHub's default or rewrite original
+source-bound base/head. Create passes explicit `--base`; ready rejects a
+different actual PR base before mutation.
 `owner` has exactly canonical `repository` (`owner/repository`), `workflow`
 (`pipeline|dm-review|dm-review-loop`), `run_id`, `run_root`, `state_dir` (the
 checkout's `.workflow-kernel/runs/<run_id>`). Exact-owned metadata must match.
@@ -171,11 +180,14 @@ coverage, HEAD and dirty state replace caller projections. The owner supplies
 current candidate checks, retained findings, PR feedback settlement and actual
 designer acceptance. These judgments do not substitute for required code cases.
 
-`create` requires complete candidate source/browser/test coverage and always
-opens a draft. Pending PR-only CI and PR feedback settle afterward. `ready`
-also requires designer acceptance for changed UI, queries actual PR head,
-checks, review decision and unresolved review threads, and rejects mismatched,
-pending, failed or unsettled facts. More than 100 review threads is an explicit
+`create` requires complete candidate source/browser/test coverage and actual
+candidate-stage source/build/verification results; PR-only rows cannot replace
+them. Missing results give Not ready and one agent action, never a PR.
+Pending PR-only CI and PR feedback settle after draft creation. `ready` validates
+caller shape, refreshes actual PR metadata/checks/feedback before the final merge
+gate, and retains strict candidate/source/owner checks and designer acceptance.
+Cached failed/pending PR projections cannot block that refresh; actual missing,
+failed, pending or unsettled facts block mutation. More than 100 threads is an explicit
 feedback coverage gap; settle through the owner's supported feedback intake
 before retrying. Both operations recheck clean local/remote candidate HEAD
 immediately before mutation. Neither merges or approves planning/UI for the

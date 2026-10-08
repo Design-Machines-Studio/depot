@@ -55,12 +55,15 @@ workstation path.]
 [Resolve from current project context and root instructions using dm-review's
 `repository-browser-target-discovery.md`: established project code/domain,
 canonical serving repo folder, feature branch and source head, existing
-build/restart command, and checkout ownership. Default to checking out this
-feature branch there (or its exact detached commit when already checked out
-elsewhere) and reviewing through the existing domain. Do not create
-a new harness or reconfigure the environment. Name any concrete exception,
-such as simultaneous Federation peers. Record the prototype's established
-target too when comparison is required. Omit for non-rendered work.]
+build/restart command, and checkout ownership. For selected Assembly development
+checkouts, commit/push and preserve evidence, normally release only the owned
+producer worktree, then select the actual reviewed branch in the canonical
+folder. Foreign occupancy blocks until that owner's exact handoff; never
+detach/remove a foreign owner. Other repositories select the feature branch normally.
+Review through the existing domain; do not create
+a harness or reconfigure the environment. Name concrete exceptions such as
+simultaneous Federation peers. Record the prototype target for comparison.
+Omit for non-rendered work.]
 
 Host owns browser evidence; `renderedSurface: required` does not add `browser`.
 
@@ -156,7 +159,7 @@ owner publishes via `publish-reviewed-pr.sh` after mandatory caller checks.
 Workers return evidence, never publish or start another loop. Exact SessionStart
 ref is read-only; never bind/update/clear parent context. Playwright checks,
 T3 handoff. Draft waits for final-head CI/feedback/designer UI acceptance.
-Chunk01 handoff never requests backend review/create-PR approval.
+dm-review's designer handoff never requests backend review/create-PR approval.
 `noMergeOnCompletion=true`; absent/false legacy values grant no merge.
 Preserve planning/material-scope approval.
 

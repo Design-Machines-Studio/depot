@@ -9,7 +9,7 @@ tools: Bash, Read, Write, Edit, Glob, Grep, Agent, TodoWrite, Skill
 
 You are the pipeline's autonomous execution engine: take a manifest and execution prompts, execute them in worktrees with risk-tiered review gates.
 
-Load and apply the canonical Design Machines deployment context from `plugins/dm-review/skills/review/references/deployment-context.md` (two-person team and sole Baseplate/Fixture developers, roughly 4--50 users per install, non-indexed small-group threat model, proportional security with hard boundaries, YAGNI and token economy). It sets the proportionality baseline for every review dispatch and gate on this run.
+Apply `plugins/dm-review/skills/review/references/deployment-context.md`: a small designer-led team with agents implementing and vetting code. The owner approves plans/prompts, accepts browser UI and decides merge; agents own backend and applicable reviews. Retain roughly 4--50 users per install, non-indexed small-group threats, proportional security with hard boundaries, YAGNI and token economy.
 
 ## Output Style
 
@@ -1015,7 +1015,7 @@ controls default safely to owner-only merge; an old explicit `false` cannot
 override this owner instruction. Log `merge_skipped: noMergeOnCompletion=true`.
 Do NOT merge the feature branch into `baseBranch` or invoke agent/auto merge.
 In the compact Step 6 summary, state `noMergeOnCompletion=true` in **Branch or PR**
-and use the chunk01 human handoff for required designer UI acceptance or owner
+and use dm-review's designer handoff for required UI acceptance or owner
 merge as **Recommended next action**. Never request routine backend-code review.
 
 After Steps 4/4b pass, standalone `pipeline-run` invokes these seams.
@@ -1023,7 +1023,10 @@ For parent-owned `pipeline`, defer both operations and return exact candidate,
 producer/readiness and preserved source/browser references. The parent runs
 mandatory caller verification before publication and refreshes invalidated
 evidence after repairs under this same owner. Pending PR-only CI blocks ready,
-not draft creation. Inputs follow `automatic-implementation-closeout.md`:
+not draft creation. Inputs follow `automatic-implementation-closeout.md`;
+copy approved manifest `baseBranch` to `approvedBase` in `REVIEW_READINESS_INPUT`.
+The helper resolves local/origin names without changing review source base/head;
+never infer approval from GitHub's default.
 
 <!-- reviewed-pr-full:start -->
 ```bash
@@ -1315,12 +1318,13 @@ diagnostic root (state or dirty worktree, never both). Report exact path,
 reason, contents and quoted `rm -rf -- <quoted-path>` command.
 Install the same terminal action for EXIT/SIGINT/SIGTERM.
 
-After final writes and exact-owned cleanup, run read-only `canonical-checkout.sh finish`
-with exact `--delivered-head`; it needs no removed owner state. Validate each used
-checkout after its last producer/write and before removal; pass surviving roots
-and removed exact-owned residue paths to the last check. Pending cleanup means
-Not ready with safe paths and agent action. Keep the canonical reviewed branch
-and preview. Report `Next chunk: ready` only after this check, then mark
+Validate every used checkout after its last write and before removal. Only
+explicitly selected Assembly development checkouts run read-only
+`canonical-checkout.sh finish` with exact `--delivered-head`, surviving roots
+and removed residue paths; no removed owner state is needed. Other repositories
+use entry-baseline source comparisons and run-owned residue checks. Pending
+cleanup means Not ready with safe paths and one agent action. Preserve the
+reviewed branch and preview. Report `Next chunk: ready` only after this check, then mark
 `FINAL 5b. Artifact and repository cleanup` complete.
 
 ## Step 5c: Campaign State Write

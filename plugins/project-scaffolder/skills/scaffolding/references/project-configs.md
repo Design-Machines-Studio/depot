@@ -198,9 +198,11 @@ For Assembly Baseplate/Fixtures, also declare the Assembly prototype as the
 definitive HTML/Live Wires/component and Datastar interaction baseline, with
 source comparison and matched browser save/reload proof. Link existing
 prototype UX task/persona selection through dm-review’s `ui-case-selection.md`.
-Include status commands and the safe detached exact-head alternative when the
-feature branch is already checked out elsewhere; retain the maintained
-instance. Carry these same instructions into the generated AGENTS.md; do not create a second registry.
+Include status commands. For selected Assembly development checkouts, commit/push
+and preserve evidence, normally release only the owned producer worktree, then
+select the actual reviewed branch in the canonical folder. Foreign occupancy
+blocks until that owner's exact handoff; never detach/remove a foreign owner.
+Retain the maintained instance. Carry this into generated AGENTS.md; no second registry.
 
 ### go-templ-datastar
 
@@ -225,9 +227,12 @@ This file is the routing document for Claude Code. Critical rules live here; det
 - Status command: [existing exact command]
 - Rebuild/restart: [existing exact command or directly linked runbook]
 
-Use ordinary Git in the clean, available serving checkout to select the feature
-branch, or its exact detached commit when that branch is already checked out
-elsewhere. Preserve owned edits and fingerprint them for in-place review; name
+For selected Assembly development checkouts, commit/push and preserve evidence
+before normally releasing only the owned producer worktree. Use ordinary Git to
+select the actual reviewed branch in the canonical folder. Foreign occupancy
+blocks until that owner's exact handoff; never detach/remove a foreign owner.
+For other Go projects, select the feature branch with ordinary Git.
+Preserve owned edits and fingerprint them for in-place review; name
 unrelated dirty or concurrent ownership collisions. Rebuild before claiming the
 new source is served. Keep the same domain, service, data and configuration.
 Check incompatible migrations before maintenance; never reset shared data.
@@ -598,9 +603,10 @@ This file is the routing document for Claude Code.
 - Status command: [existing exact command]
 - Rebuild/restart: [existing exact command or directly linked runbook]
 
-Use ordinary Git in the clean, available serving checkout to select the feature
-branch, or its exact detached commit when that branch is already checked out
-elsewhere. Preserve owned edits and fingerprint them for in-place review; name
+For Craft repositories only, use ordinary Git in the clean, available serving checkout
+to select the feature branch, or use the detached exact-head alternative when
+that branch is occupied elsewhere.
+Preserve owned edits and fingerprint them for in-place review; name
 unrelated dirty or concurrent ownership collisions. Rebuild before claiming the
 new source is served. Keep the same domain, service, data and configuration.
 Check incompatible migrations before maintenance; never reset shared data.

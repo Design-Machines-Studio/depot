@@ -54,7 +54,7 @@ with the exact automatic-closeout arguments; never bypass it with bare `gh`.
 PR-only CI remains pending until the PR exists. Keep the draft until actual
 final-head automation, independently settled feedback and required designer UI
 acceptance pass. At an unchanged covered head with zero findings, wait for CI/
-feedback without reviewer dispatch. Use chunk01's `operator-handoff.sh` human
+feedback without reviewer dispatch. Use dm-review's `operator-handoff.sh` designer
 handoff for browser tasks and owner merge; never ask for routine backend-code
 review or PR creation. Preserve planning and material-scope approval.
 

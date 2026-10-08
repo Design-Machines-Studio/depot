@@ -176,8 +176,8 @@ integrated owner and final gate; no duplicate standalone loop. Keep the draft
 until actual final-head PR CI, independently settled feedback and applicable
 designer UI acceptance pass; use the same seam for ready. CI/feedback waits
 at an unchanged covered head with zero retained findings never redispatch
-reviewers. Require Playwright for formal browser checks, T3 and the chunk01
-human handoff for designer UI tasks and owner merge. Never request routine
+reviewers. Require Playwright for formal browser checks, T3 and dm-review's
+designer handoff for UI tasks and owner merge. Never request routine
 backend-code review or PR creation from the designer. Generate
 `noMergeOnCompletion=true`; missing/false legacy controls grant no merge
 authority. The root owner alone binds the exact SessionStart context after
@@ -190,9 +190,11 @@ Every prompt must state:
 - repository and exact base;
 - worktree and branch expectations;
 - for rendered work, the established project domain and canonical serving repo
-  folder, feature branch/head and existing build/restart command. Default to
-  checking out the feature branch or its exact detached commit there for browser review; an implementation
-  worktree does not authorize a new harness or environment reconfiguration.
+  folder, feature branch/head and existing build/restart command. Commit/push
+  and preserve evidence before normally releasing only the owned producer
+  worktree; select the actual reviewed branch in the canonical folder.
+  Foreign occupancy blocks until that owner's exact handoff; never detach/remove
+  a foreign owner. No new harness or environment reconfiguration by implication.
   For multiple maintained instances, carry the exact originating folder/domain
   pair through review and leave the reviewed feature head serving for the operator.
   Require final task-owned commit/push and remote PR-head verification; cleanup
