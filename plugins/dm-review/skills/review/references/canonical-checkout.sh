@@ -2,9 +2,9 @@
 # Selected Assembly development source cleanup, never ref/Docker disposal.
 # Usage: canonical-checkout.sh inspect|prepare|finish --repository-root ROOT
 #   --repository OWNER/REPO --target-branch BRANCH --binding-file INSTALL.json
-#   --current-context POINTER [--owner-context POINTER ...] [--keep-path REL ...]
+#   --delivered-head REVIEWED_SHA --current-context POINTER [--owner-context POINTER ...] [--keep-path REL ...]
 #   [--inspection INSPECT.json] [--implementation-root ROOT]
-#   [--delivered-head SHA --preservation PRODUCER.json] [--residue-path ABS ...]
+#   [--preservation PRODUCER.json] [--residue-path ABS ...]
 # Dependencies: Git, jq; Bash 3.2+. inspect emits JSON-quoted paths (including
 # newlines); prepare requires that exact unchanged inspection before mutation.
 set -euo pipefail
@@ -30,6 +30,28 @@ refuse() { review_refuse "$REPO: $*"; }
 case "$ID" in Design-Machines-Studio/assembly|Design-Machines-Studio/assembly-*) ;; *) refuse 'Assembly development scope required' ;; esac
 [[ "$BRANCH" != -* ]] && git check-ref-format "refs/heads/$BRANCH" || refuse 'unsafe target branch'
 TARGET="$(git -C "$REPO" rev-parse --verify "refs/heads/$BRANCH^{commit}")" || refuse 'target branch missing'
+SHA_PATTERN='^[0-9a-f]{40}([0-9a-f]{24})?$'
+[[ "$DELIVERED" =~ $SHA_PATTERN ]] && [ "$DELIVERED" = "$TARGET" ] || refuse 'reviewed delivered head required; target branch differs'
+workspace_check() {
+  # Read-only: disposable owner state may already be removed. This grants no
+  # disposal authority; inspect/prepare still validate every original owner.
+  local path status
+  status="$(git -C "$REPO" status --porcelain=v1 -z | review_sha256)"
+  [ "$status" = "$(printf '' | review_sha256)" ] || refuse 'source residue remains; inspect paths and complete exact-owned cleanup'
+  for path in ${RESIDUE[@]+"${RESIDUE[@]}"}; do
+    review_safe_path "$path"
+    [ ! -e "$path" ] && [ ! -L "$path" ] || refuse "owned residue at $path; preserve required evidence then run exact-owned cleanup"
+  done
+  if [ -n "$IMPLEMENTATION" ]; then
+    [ "$(review_repository "$IMPLEMENTATION")" = "$ID" ] || refuse 'implementation repository mismatch'
+    [ "$(git -C "$IMPLEMENTATION" rev-parse --path-format=absolute --git-common-dir)" = "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)" ] || refuse 'foreign implementation checkout'
+    [ -z "$(git -C "$IMPLEMENTATION" status --porcelain)" ] || refuse "source residue at $IMPLEMENTATION; deliver repairs before cleanup"
+    [ "$(git -C "$IMPLEMENTATION" rev-parse HEAD)" = "$DELIVERED" ] || refuse 'implementation reviewed head differs'
+  fi
+  [ "$(git -C "$REPO" symbolic-ref -q --short HEAD)" = "$BRANCH" ] && [ "$(git -C "$REPO" rev-parse HEAD)" = "$DELIVERED" ] || refuse 'reviewed branch/head not selected'
+  printf '%s\n' 'Workspace: clean'
+}
+if [ "$MODE" = finish ]; then workspace_check; exit 0; fi
 review_private "$BINDING"
 jq -e --arg repo "$REPO" --arg id "$ID" '
   type=="object" and (keys|sort)==(["kind","repository","checkout","domain","sourceRanges","protectedPaths"]|sort) and
@@ -84,8 +106,8 @@ while IFS= read -r -d '' path; do
   # Outside bindings are protected by containment; no command targets them.
   case "$path" in "$REPO") refuse 'whole checkout is protected' ;; "$REPO"/*) PROTECTED+=("${path#"$REPO/"}") ;; esac
 done < "$TMP/protected"
-for path in "${KEEP[@]}"; do relative "$path"; done
-for path in "${RESIDUE[@]}"; do review_safe_path "$path"; done
+for path in ${KEEP[@]+"${KEEP[@]}"}; do relative "$path"; done
+for path in ${RESIDUE[@]+"${RESIDUE[@]}"}; do review_safe_path "$path"; done
 OWNER_FACTS='[]'; INACTIVE=false; OWNER_REPO=
 context() {
   local file="$1" current="$2" value root run owner_repo
@@ -112,7 +134,7 @@ context() {
   OWNER_FACTS="$(jq -cn --argjson rows "$OWNER_FACTS" --arg p "$file" --arg h "$(review_sha256 < "$file")" '$rows+[{path:$p,hash:$h}]')"
 }
 context "$CURRENT" true
-for file in "${OWNERS[@]}"; do context "$file" false; done
+for file in ${OWNERS[@]+"${OWNERS[@]}"}; do context "$file" false; done
 # The caller supplies the complete exact owner/lease/handoff set for this
 # selected checkout. Missing host ownership inspection is not inactivity.
 # Native complete pointers are the supported handoff proof in this adapter;
@@ -148,7 +170,6 @@ if [ -n "$OCCUPANT" ] && [ "$OCCUPANT" != "$REPO" ]; then
   [ "$(git -C "$IMPLEMENTATION" rev-parse HEAD)" = "$TARGET" ] || refuse 'implementation head mismatch'
   git -C "$IMPLEMENTATION" status --porcelain=v1 -z > "$TMP/implementation-status"
   [ ! -s "$TMP/implementation-status" ] || refuse "unfinished repairs at $IMPLEMENTATION; commit/push and cover them"
-  [[ "$DELIVERED" =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ ]] && [ "$DELIVERED" = "$TARGET" ] || refuse 'delivered head required'
   pushurl="$(git -C "$IMPLEMENTATION" remote get-url --push origin)"
   git -C "$IMPLEMENTATION" ls-remote --exit-code "$pushurl" "refs/heads/$BRANCH" > "$TMP/remote"
   [ "$(cut -f1 < "$TMP/remote")" = "$TARGET" ] || refuse 'push not verified'
@@ -161,16 +182,17 @@ if [ -n "$OCCUPANT" ] && [ "$OCCUPANT" != "$REPO" ]; then
 fi
 # Git -z and literal pathspecs prevent pathname parsing or wildcard expansion.
 git -C "$REPO" diff --name-only --no-renames -z HEAD > "$TMP/changed"
+git -C "$REPO" diff --cached --name-only --no-renames -z HEAD >> "$TMP/changed"
 git -C "$REPO" ls-files --others --exclude-standard -z >> "$TMP/changed"
 git -C "$REPO" ls-files --others --ignored --exclude-standard -z > "$TMP/ignored"
 PATHS='[]'
 while IFS= read -r -d '' path; do
   relative "$path"
   classification=disposable; reason=inactive-source; tracked=false; hash=missing
-  if git -C "$REPO" --literal-pathspecs ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then tracked=true; fi
+  if git -C "$REPO" cat-file -e "HEAD:$path" 2>/dev/null || git -C "$REPO" --literal-pathspecs ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then tracked=true; fi
   [ "$INACTIVE" = true ] || { classification=retained; reason=no-inactive-owner-proof; }
   [ "$CURRENT_UNFINISHED" = false ] || { classification=retained; reason=current-boundary-changed; }
-  for protected in "${PROTECTED[@]}" "${KEEP[@]}"; do
+  for protected in "${PROTECTED[@]}" ${KEEP[@]+"${KEEP[@]}"}; do
     case "$path" in "$protected"|"$protected"/*) classification=retained; reason=protected-or-current ;; esac
     case "$protected" in "$path"/*) classification=blocked; reason=protected-descendant ;; esac
   done
@@ -189,7 +211,7 @@ while IFS= read -r -d '' path; do
 done < "$TMP/ignored"
 # All ignored paths stay protected, including extensionless local state.
 # Their bytes are never restored, removed or used as source-clean proof.
-DIFF_HASH="$(git -C "$REPO" diff --binary HEAD | review_sha256)"
+DIFF_HASH="$( { git -C "$REPO" diff --binary HEAD; git -C "$REPO" diff --cached --binary HEAD; } | review_sha256)"
 PLAN="$(jq -cn --arg repo "$REPO" --arg id "$ID" --arg branch "$BRANCH" --arg target "$TARGET" --arg head "$HEAD" --arg selected "$SELECTED" --arg domain "$(jq -r .domain "$BINDING")" --arg binding "$(review_sha256 < "$BINDING")" --arg diff "$DIFF_HASH" --arg occupant "$OCCUPANT" --argjson release "$RELEASE" --argjson owners "$OWNER_FACTS" --argjson ranges "$RANGE_FACTS" --argjson paths "$PATHS" '{repository:$id,checkout:$repo,domain:$domain,branch:$branch,target:$target,head:$head,selected:$selected,bindingHash:$binding,diffHash:$diff,owners:$owners,sourceRanges:$ranges,occupant:$occupant,release:$release,paths:$paths}')"
 if [ "$MODE" = inspect ]; then printf '%s\n' "$PLAN"; exit 0; fi
 if [ "$MODE" = prepare ]; then
@@ -200,7 +222,7 @@ if [ "$MODE" = prepare ]; then
   jq -e 'all(.paths[]; .classification=="disposable" or (.tracked==false and (.reason|IN("secret-config","ignored-install-or-evidence"))))' <<< "$PLAN" >/dev/null || refuse 'protected/current source remains; commit/push required repairs or coordinate owner'
   jq -j '.paths[] | select(.classification=="disposable") | .path,"\u0000"' <<< "$PLAN" > "$TMP/dispose"
   while IFS= read -r -d '' path; do
-    if git -C "$REPO" --literal-pathspecs ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
+    if git -C "$REPO" cat-file -e "HEAD:$path" 2>/dev/null || git -C "$REPO" --literal-pathspecs ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
       git -C "$REPO" --literal-pathspecs restore --source=HEAD --staged --worktree -- "$path"
     else
       # No recursive deletion; even empty directory residue is retained until
@@ -212,16 +234,5 @@ if [ "$MODE" = prepare ]; then
   if [ "$RELEASE" = true ]; then git -C "$IMPLEMENTATION" checkout --detach "$TARGET"; fi
   git -C "$REPO" checkout --no-overwrite-ignore "$BRANCH"
 fi
-# finish is read-only and runs AFTER the owner's final artifact/report writes.
-git -C "$REPO" status --porcelain=v1 -z > "$TMP/final-status"
-for path in "${RESIDUE[@]}"; do
-  [ ! -e "$path" ] && [ ! -L "$path" ] || refuse "owned residue at $path; preserve required evidence then run exact-owned cleanup"
-done
-if [ -n "$IMPLEMENTATION" ]; then
-  review_repository "$IMPLEMENTATION" >/dev/null
-  git -C "$IMPLEMENTATION" status --porcelain=v1 -z > "$TMP/implementation-final"
-  [ ! -s "$TMP/implementation-final" ] || refuse "source residue at $IMPLEMENTATION; deliver repairs before cleanup"
-fi
-[ ! -s "$TMP/final-status" ] || refuse 'source residue remains; inspect paths and complete exact-owned cleanup'
-[ "$(git -C "$REPO" symbolic-ref -q --short HEAD)" = "$BRANCH" ] && [ "$(git -C "$REPO" rev-parse HEAD)" = "$TARGET" ] || refuse 'reviewed branch/head not selected'
-printf '%s\n' 'Workspace: clean'
+# After prepare, verify the same reviewed head and source state.
+workspace_check

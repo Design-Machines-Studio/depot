@@ -6,6 +6,7 @@ export PATH
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 HELPER="$ROOT/plugins/dm-review/skills/review/references/canonical-checkout.sh"
 CONTEXT="$ROOT/plugins/dm-review/skills/review/references/review-owner-context.sh"
+HELPER_BASH="${BASH32:-/bin/bash}"
 KERNEL="$ROOT/plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/canonical-checkout-test.XXXXXX")"
 TMP="$(cd "$TMP" && pwd -P)"; export TMPDIR="$TMP"
@@ -25,6 +26,8 @@ printf 'original\n' > "$REPO/source with spaces"
 printf 'original\n' > "$REPO/-leading"
 NEWLINE=$'source\nwith newline'; printf 'original\n' > "$REPO/$NEWLINE"
 printf 'original\n' > "$REPO/conflict"
+printf 'deleted original\n' > "$REPO/deleted source"
+printf 'renamed original\n' > "$REPO/renamed source"
 mkdir -p "$REPO/nested"; printf 'tracked secret\n' > "$REPO/nested/secret"
 git -C "$REPO" add .; git -C "$REPO" commit -qm baseline
 BASE="$(git -C "$REPO" rev-parse HEAD)"
@@ -65,16 +68,35 @@ printf 'stale\n' > "$REPO/source with spaces"; printf 'stale\n' > "$REPO/-leadin
 printf 'discard\n' > "$REPO/untracked with spaces"; printf 'discard\n' > "$REPO/-untracked"; printf 'discard\n' > "$REPO/"$'untracked\nnewline'
 printf 'staged abandonment\n' > "$REPO/staged new"
 git -C "$REPO" add 'staged new'
+git -C "$REPO" rm -q -- "deleted source"
+git -C "$REPO" mv -- "renamed source" "renamed destination"
 CURRENT="$(make_context "$REPO" current checking)"
-args=(--repository-root "$REPO" --repository Design-Machines-Studio/assembly-fixture --target-branch reviewed --binding-file "$BINDING" --current-context "$CURRENT" --owner-context "$OLD")
-inspect() { "$HELPER" inspect "${args[@]}" "$@" > "$TMP/inspect.json"; }
-prepare() { "$HELPER" prepare "${args[@]}" --inspection "$TMP/inspect.json" "$@"; }
+args=(--repository-root "$REPO" --repository Design-Machines-Studio/assembly-fixture --target-branch reviewed --delivered-head "$TARGET" --binding-file "$BINDING" --current-context "$CURRENT" --owner-context "$OLD")
+inspect() { "$HELPER_BASH" "$HELPER" inspect "${args[@]}" "$@" > "$TMP/inspect.json"; }
+prepare() { "$HELPER_BASH" "$HELPER" prepare "${args[@]}" --inspection "$TMP/inspect.json" "$@"; }
 inspect
 assert jq -e --arg p "$NEWLINE" 'any(.paths[]; .path==$p and .classification=="disposable")' "$TMP/inspect.json"
 assert jq -e 'any(.paths[]; .path=="install/nested/extensionless" and .classification=="retained")' "$TMP/inspect.json"
 assert test "$(git -C "$REPO" rev-parse HEAD)" = "$BASE"
 assert test -f "$REPO/untracked with spaces"
+# Index-only change: working bytes return to the inspected stale version.
+cp "$REPO/source with spaces" "$TMP/working-before"
+INDEX_BOUNDARY="$(boundary "$REPO")"
+printf 'new staged repair\n' > "$REPO/source with spaces"
+git -C "$REPO" add -- 'source with spaces'
+cp "$TMP/working-before" "$REPO/source with spaces"
+reject prepare
+assert grep -Fq 'inspection changed' "$TMP/rejected.out"
+assert test "$(git -C "$REPO" show ':source with spaces')" = 'new staged repair'
+assert test "$INDEX_BOUNDARY" != "$(boundary "$REPO")"
+inspect
+assert jq -e 'any(.paths[]; .reason=="current-boundary-changed" and .classification=="retained")' "$TMP/inspect.json"
+git -C "$REPO" restore --source=HEAD --staged -- 'source with spaces'
+inspect
 assert prepare
+assert test "$(cat "$REPO/deleted source")" = 'deleted original'
+assert test "$(cat "$REPO/renamed source")" = 'renamed original'
+assert test ! -e "$REPO/renamed destination"
 assert test "$(git -C "$REPO" symbolic-ref --short HEAD)" = reviewed
 assert test "$(git -C "$REPO" rev-parse HEAD)" = "$TARGET"
 assert test "$(cat "$REPO/source with spaces")" = original
@@ -90,15 +112,15 @@ assert cmp "$REPO/install/nested/extensionless" "$TMP/data-before"
 assert cmp "$REPO/evidence/receipt" "$TMP/receipt-before"
 # Clean retry is safe and makes no alternate checkout.
 inspect; assert prepare
-assert "$HELPER" finish "${args[@]}"
+assert "$HELPER_BASH" "$HELPER" finish "${args[@]}"
 git -C "$REPO" worktree list --porcelain -z > "$TMP/trees"
 assert test "$(git -C "$REPO" worktree list --porcelain | grep -c '^worktree ')" = 1
 # Post-report ignored residue is checked separately from Git's clean status.
 printf 'final report\n' > "$REPO/evidence/final report"
-reject "$HELPER" finish "${args[@]}" --residue-path "$REPO/evidence/final report"
+reject "$HELPER_BASH" "$HELPER" finish "${args[@]}" --residue-path "$REPO/evidence/final report"
 assert grep -Fq 'preserve required evidence' "$TMP/rejected.out"
 rm -- "$REPO/evidence/final report"
-assert "$HELPER" finish "${args[@]}" --residue-path "$REPO/evidence/final report"
+assert "$HELPER_BASH" "$HELPER" finish "${args[@]}" --residue-path "$REPO/evidence/final report"
 # Active ownership is an exact coordination blocker; no bytes change.
 ACTIVE="$(make_context "$REPO" other checking)"
 reject inspect --owner-context "$ACTIVE"
@@ -107,11 +129,16 @@ cp "$OLD" "$TMP/malformed.json"; printf '{invalid' > "$TMP/malformed.json"
 reject inspect --owner-context "$TMP/malformed.json"
 reject inspect --owner-context "$TMP/unavailable.json"
 # No inactive proof cannot authorize source disposal.
-no_prior=(--repository-root "$REPO" --repository Design-Machines-Studio/assembly-fixture --target-branch reviewed --binding-file "$BINDING" --current-context "$CURRENT")
+no_prior=(--repository-root "$REPO" --repository Design-Machines-Studio/assembly-fixture --target-branch reviewed --delivered-head "$TARGET" --binding-file "$BINDING" --current-context "$CURRENT")
 printf 'unknown dirt\n' > "$REPO/unknown"
-"$HELPER" inspect "${no_prior[@]}" > "$TMP/no-prior.json"
+"$HELPER_BASH" "$HELPER" inspect "${no_prior[@]}" > "$TMP/no-prior.json"
+if [ -n "${BASH32:-}" ]; then
+  [[ "$("$BASH32" -c 'printf "%s" "$BASH_VERSION"')" = 3.2.* ]] || exit 1
+  assert "$BASH32" "$HELPER" inspect "${no_prior[@]}"
+  reject "$BASH32" "$HELPER" prepare "${no_prior[@]}" --inspection "$TMP/no-prior.json"
+fi
 assert jq -e 'any(.paths[]; .path=="unknown" and .classification=="retained")' "$TMP/no-prior.json"
-reject "$HELPER" prepare "${no_prior[@]}" --inspection "$TMP/no-prior.json"
+reject "$HELPER_BASH" "$HELPER" prepare "${no_prior[@]}" --inspection "$TMP/no-prior.json"
 rm -- "$REPO/unknown"
 # New current-run changes do not become disposable without delivery.
 printf 'current repair\n' > "$REPO/source with spaces"
@@ -153,7 +180,7 @@ assert grep -Fq 'inspection changed' "$TMP/rejected.out"
 git -C "$REPO" restore -- 'source with spaces'
 # Symlinked binding or owner files are refused.
 ln -s "$BINDING" "$TMP/binding-link"
-reject "$HELPER" inspect "${args[@]}" --binding-file "$TMP/binding-link"
+reject "$HELPER_BASH" "$HELPER" inspect "${args[@]}" --binding-file "$TMP/binding-link"
 # Foreign occupancy cannot be evaded with a fresh preview target.
 git -C "$REPO" checkout -q main
 FOREIGN="$TMP/foreign worktree"; git -C "$REPO" worktree add -q "$FOREIGN" reviewed
@@ -165,7 +192,7 @@ git -C "$REPO" checkout -qb changes-install
 printf 'wrong install state\n' > "$REPO/nested/secret"
 git -C "$REPO" add nested/secret; git -C "$REPO" commit -qm protected-change
 git -C "$REPO" checkout -q main
-reject inspect --target-branch changes-install
+reject inspect --target-branch changes-install --delivered-head "$(git -C "$REPO" rev-parse changes-install)"
 assert grep -Fq 'target branch changes protected binding' "$TMP/rejected.out"
 assert test "$(cat "$REPO/nested/secret")" = 'tracked secret'
 # The existing current owner can bind its implementation worktree; normal
@@ -191,19 +218,19 @@ assert test "$(git -C "$FOREIGN" rev-parse HEAD)" = "$TARGET"
 assert bash -c '! git -C "$1" symbolic-ref -q HEAD' bash "$FOREIGN"
 assert test -d "$FOREIGN"
 assert cmp "$REPO/evidence/receipt" "$TMP/receipt-before"
-assert "$HELPER" finish "${args[@]}" "${release[@]}"
+assert "$HELPER_BASH" "$HELPER" finish "${args[@]}" "${release[@]}"
 # A failing/interrupting caller uses the same read-only terminal checks.
 printf 'abort residue\n' > "$FOREIGN/unfinished"
-reject "$HELPER" finish "${args[@]}" "${release[@]}"
+reject "$HELPER_BASH" "$HELPER" finish "${args[@]}" "${release[@]}"
 assert test "$(cat "$FOREIGN/unfinished")" = 'abort residue'
 rm -- "$FOREIGN/unfinished"
-assert "$HELPER" finish "${args[@]}" "${release[@]}"
+assert "$HELPER_BASH" "$HELPER" finish "${args[@]}" "${release[@]}"
 # An actual SIGTERM during inspect leaves source/protected bytes untouched;
 # retry uses the same exact contexts rather than guessing a latest owner.
 (
   trap - EXIT
   printf 'started\n' > "$TMP/interruption-started"
-  exec "$HELPER" inspect "${args[@]}" "${release[@]}"
+  exec "$HELPER_BASH" "$HELPER" inspect "${args[@]}" "${release[@]}"
 ) > "$TMP/interrupted.json" 2> "$TMP/interrupted.err" &
 inspection_pid=$!
 while [ ! -f "$TMP/interruption-started" ]; do sleep 0.01; done
@@ -214,5 +241,49 @@ assert test "$interrupt_rc" = 143
 assert cmp "$REPO/.env" "$TMP/env-before"
 assert cmp "$REPO/install/nested/extensionless" "$TMP/data-before"
 assert cmp "$REPO/evidence/receipt" "$TMP/receipt-before"
-assert "$HELPER" finish "${args[@]}" "${release[@]}"
+assert "$HELPER_BASH" "$HELPER" finish "${args[@]}" "${release[@]}"
+# All operations bind the exact reviewed SHA even without foreign occupancy.
+for mode in inspect prepare finish; do
+  reject "$HELPER_BASH" "$HELPER" "$mode" "${args[@]}" --delivered-head ''
+  reject "$HELPER_BASH" "$HELPER" "$mode" "${args[@]}" --delivered-head "$BASE"
+done
+# Select an explicit Bash 3.2 runtime when provided by the host. Otherwise
+# report the runtime gap; Bash-5 fixtures cannot establish macOS compatibility.
+if [ -n "${BASH32:-}" ]; then
+  [[ "$("$BASH32" -c 'printf "%s" "$BASH_VERSION"')" = 3.2.* ]] || exit 1
+  assert "$BASH32" "$HELPER" finish --repository-root "$REPO" --repository Design-Machines-Studio/assembly-fixture --target-branch reviewed --delivered-head "$TARGET"
+else printf 'NOT-COVERED: Bash 3.2 runtime unavailable\n'; fi
+printf 'clean unreviewed commit\n' > "$REPO/new-commit"
+git -C "$REPO" add -- new-commit; git -C "$REPO" commit -qm unreviewed
+for mode in inspect prepare finish; do
+  reject "$HELPER_BASH" "$HELPER" "$mode" "${args[@]}"
+  assert grep -Fq 'reviewed delivered head required' "$TMP/rejected.out"
+done
+assert test "$(git -C "$REPO" rev-parse unique)" = "$TARGET"
+assert cmp "$REPO/.env" "$TMP/env-before"
+# Preserve the unreviewed commit on a unique branch; normal checkout returns
+# the canonical fixture to the delivered branch without reset or lost history.
+UNREVIEWED="$(git -C "$REPO" rev-parse HEAD)"
+git -C "$REPO" branch -m unreviewed-history
+git -C "$REPO" branch reviewed "$TARGET"
+git -C "$REPO" checkout -q reviewed
+assert test "$(git -C "$REPO" rev-parse unreviewed-history)" = "$UNREVIEWED"
+# Complete terminal order: final writes, verified preservation, exact-owned
+# temporary cleanup, state/root removal, then read-only workspace validation.
+printf 'final report after producers\n' > "$FOREIGN/evidence-final"
+cp "$FOREIGN/evidence-final" "$TMP/retained/final-report.md"
+assert cmp "$FOREIGN/evidence-final" "$TMP/retained/final-report.md"
+rm -- "$FOREIGN/evidence-final"
+for pointer in "$CURRENT" "$OLD" "$IMPL_OWNER"; do
+  state="$(jq -r .state_dir "$pointer")"; root="$(jq -r .run_root "$pointer")"
+  rm -r -- "$state"
+  # No review ran in this source fixture, so successful review retention must
+  # still refuse. Abort removes the exact root without inventing coverage.
+  assert bash -c '! "$1" owned-run-finish --run-root "$2" --outcome succeeded > "$3" 2>&1' bash "$KERNEL" "$root" "$TMP/premature-success.out"
+  assert "$KERNEL" owned-run-finish --run-root "$root" --outcome review-aborted
+done
+assert "$HELPER_BASH" "$HELPER" finish "${args[@]}" "${release[@]}" --residue-path "$FOREIGN/evidence-final"
+assert "$HELPER_BASH" "$HELPER" finish "${args[@]}" "${release[@]}" --residue-path "$root" --residue-path "$state"
+reject inspect "${release[@]}"
+reject prepare "${release[@]}"
 printf 'PASS: %s canonical checkout assertions (source/Git fixtures only; no live-domain proof)\n' "$pass"

@@ -2117,6 +2117,13 @@ require_text "$canonical" 'git -C "$REPO" --literal-pathspecs restore' "source r
 require_text "$canonical" 'worktree list --porcelain -z' "branch occupancy uses NUL-safe worktree facts"
 require_text "$canonical" 'inspection changed; inspect again before mutation' "prepare rejects stale classification"
 require_text "$canonical" 'checkout --detach "$TARGET"' "owned implementation releases branch normally"
+require_text "$canonical" 'git -C "$REPO" diff --cached --binary HEAD' "cleanup snapshot binds staged content"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/review-owner-context.sh" 'git -C "$repo" diff --cached --binary HEAD' "current boundary binds staged content"
+require_text "$canonical" 'cat-file -e "HEAD:$path"' "staged deletions restore from HEAD membership"
+require_text "$canonical" 'reviewed delivered head required' "every operation binds reviewed SHA"
+require_text "$canonical" 'if [ "$MODE" = finish ]; then workspace_check; exit 0; fi' "read-only finish precedes disposal prerequisites"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/publish-reviewed-pr.sh" 'no required checks reported on the' "no-required proof uses exact gh diagnostic"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/operator-handoff.sh" 'optional check skipped' "optional skip is never passed"
 require_absent "$canonical" 'git clean' "helper never uses broad Git clean"
 require_absent "$canonical" 'git reset' "helper never uses broad Git reset"
 for surface in "$auto_closeout" "$orchestrator" "$codex_native_adapter" "$REPO_ROOT/plugins/dm-review/skills/review/references/review-closeout-contract.md"; do

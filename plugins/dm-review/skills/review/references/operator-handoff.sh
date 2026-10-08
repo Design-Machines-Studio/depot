@@ -61,9 +61,11 @@ jq -e --arg sha "$SHA" '
       (.status != "exempt" or .note != null) and (.status != "covered" or .evidence != null))) and
   (.findings | type == "array" and all(.[]; type == "object" and (keys | sort) == (["location","problem","severity"] | sort) and
     (.severity | IN("P1","P2","P3")) and (.location | str) and (.problem | str))) and
-  (.checks | type == "array" and length > 0 and all(.[]; type == "object" and (keys | sort) == (["link","name","stage","status"] | sort) and
+  (.checks | type == "array" and length > 0 and all(.[]; type == "object" and ((keys - ["required"]) | sort) == (["link","name","stage","status"] | sort) and
+    (.required==null or (.required|type=="boolean")) and
     (.stage | IN("candidate","pr")) and
-    (.name | str) and (.status | IN("pass","pending","fail")) and (.link == null or (.link | str)))) and
+    (.name | str) and (.status | IN("pass","pending","fail","skipped","not_applicable")) and (.link == null or (.link | str)) and
+    (if (.status|IN("skipped","not_applicable")) then .stage=="pr" and .link!=null else true end))) and
   (.ui | type == "object" and (keys | sort) == (["acceptance","changed","preview","tasks"] | sort) and
     (.changed | type == "boolean") and (.preview == null or (.preview | str)) and
     (.tasks | type == "array" and all(.[]; str)) and
@@ -85,6 +87,7 @@ RESULT="$(jq -r '
     (if .coverage.status == "complete" and .coverage.evidence == null then {kind:"coverage", text:"The retained review evidence link is missing."} else empty end),
     (.lanes[] | select(.status == "omitted") | {kind:"coverage", text:"\(.area) review did not run."}),
     (.findings[] | {kind:"finding", text:"\(.severity) \(.location): \(.problem)"}),
+    (.checks[] | select((.status|IN("skipped","not_applicable")) and .required!=false) | {kind:"check", text:"Required check \(.name) is \(.status); it has not passed."}),
     (.checks[] | select(.status == "fail") | {kind:"check", text:"\(.name) failed."}),
     (.checks[] | select(.status == "pending") | {kind:(if .stage == "pr" then "pending" else "check" end), text:"\(.name) is still running."}),
     (if .feedbackSettled | not then {kind:"feedback", text:"PR feedback is not settled yet."} else empty end),
@@ -111,6 +114,7 @@ RESULT="$(jq -r '
         (if .coverage.status == "complete" and .coverage.head == .finalHead and (.dirty | not) then "- Review coverage complete at \(.finalHead | short)." else empty end),
         (if .coverage.status == "complete" and .coverage.head == .finalHead and (.coverage.requiredBrowserCases | length) > 0 then "- Browser checks passed: \(.coverage.requiredBrowserCases | join(", "))." else empty end),
         (.checks[] | select(.status == "pass") | "- \(.name) passed."),
+        (.checks[] | select(.required==false and (.status|IN("skipped","not_applicable"))) | "- \(.name): \(if .status=="skipped" then "optional check skipped" else "not applicable (no required PR checks)" end)."),
         (if .feedbackSettled then "- PR feedback settled." else empty end),
         (if .ui.changed and ($needs_ui | not) then "- Designer UI acceptance recorded." else empty end)
       ] | if length == 0 then ["- None yet."] else . end | .[]),

@@ -39,7 +39,25 @@ case "$1 ${2:-}" in
   'pr create') printf 'https://github.com/Fixture/consumer/pull/42\n' ;;
   'pr ready') ;;
   'pr view') jq -cn --arg head "$PR_HEAD" '{headRefOid:$head,headRefName:"candidate",state:"OPEN",isDraft:true,reviewDecision:env.REVIEW_DECISION}' ;;
-  'pr checks') jq -cn --arg bucket "${PR_BUCKET:-pass}" '[{name:"actual CI",bucket:$bucket,link:"https://example.test/ci"}]' ;;
+  'pr checks')
+    required=false
+    for arg in "$@"; do [ "$arg" != --required ] || required=true; done
+    if [ "$required" = true ]; then
+      case "${REQUIRED_MODE:-checks}" in
+        none) printf "no required checks reported on the 'candidate' branch\n" >&2; exit 1 ;;
+        lookup-failure) printf 'error connecting to api.github.com\n' >&2; exit 1 ;;
+        empty-error) exit 1 ;; empty-success) printf '[]\n'; exit 0 ;;
+        diagnostic-extra) printf "no required checks reported on the 'candidate' branch\nlookup failed\n" >&2; exit 1 ;;
+        wrong-branch) printf "no required checks reported on the 'foreign' branch\n" >&2; exit 1 ;;
+        missing) printf '[{"name":"missing CI","bucket":"pass","link":"https://example.test/missing"}]\n'; exit 0 ;;
+      esac
+    fi
+    case "${ALL_CHECKS_MODE:-checks}" in
+      missing) printf '[]\n'; exit 0 ;;
+      lookup-failure) printf 'API unavailable\n' >&2; exit 1 ;;
+    esac
+    jq -cn --arg bucket "${PR_BUCKET:-pass}" '[{name:"actual CI",bucket:$bucket,link:"https://example.test/ci"}]' ;;
+
   'api graphql') jq -cn --arg head "$PR_HEAD" '{data:{repository:{pullRequest:{headRefOid:$head,reviewThreads:{nodes:[{isResolved:(env.UNRESOLVED!="true")}],pageInfo:{hasNextPage:(env.MORE_THREADS=="true")}}}}}}' ;;
   *) exit 2 ;;
 esac
@@ -222,6 +240,40 @@ fixture pr-failed
 export PR_BUCKET=fail
 reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
 unset PR_BUCKET
+# Optional skipped checks remain visible without being called passed. The
+# no-required diagnostic is accepted only with its exact successful lookup shape.
+fixture optional-skipped
+export PR_BUCKET=skipping REQUIRED_MODE=none
+publish ready --pr https://github.com/Fixture/consumer/pull/42 > "$TMP/optional.out"
+assert grep -Fxq '## Ready to merge' "$TMP/optional.out"
+assert grep -Fxq -- '- actual CI: optional check skipped.' "$TMP/optional.out"
+assert grep -Fxq -- '- Required PR checks: not applicable (no required PR checks).' "$TMP/optional.out"
+assert sh -c '! grep -Fq "actual CI passed" "$1"' sh "$TMP/optional.out"
+assert grep -Fxq 'pr ready https://github.com/Fixture/consumer/pull/42 --repo Fixture/consumer' "$GH_LOG"
+# Caller-declared required checks stay strict even if GitHub marks them optional.
+fixture declared-required-skip
+change_readiness '.readiness.checks += [{name:"actual CI",stage:"pr",status:"pending",link:null}]'
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+unset REQUIRED_MODE
+fixture required-skipped
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+unset PR_BUCKET
+fixture no-required
+export REQUIRED_MODE=none
+assert publish ready --pr https://github.com/Fixture/consumer/pull/42
+unset REQUIRED_MODE
+for lookup in missing lookup-failure empty-error empty-success diagnostic-extra wrong-branch; do
+  fixture "required-$lookup"
+  export REQUIRED_MODE="$lookup"
+  reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+  unset REQUIRED_MODE
+done
+for lookup in missing lookup-failure; do
+  fixture "all-$lookup"
+  export ALL_CHECKS_MODE="$lookup"
+  reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+  unset ALL_CHECKS_MODE
+done
 fixture feedback
 export UNRESOLVED=true
 reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation

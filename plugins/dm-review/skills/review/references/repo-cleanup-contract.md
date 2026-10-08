@@ -62,7 +62,7 @@ never authorizes disposal in another repository or weakens resource ownership.
 
 Use `canonical-checkout.sh inspect|prepare|finish` from the coherent dm-review
 bundle with exact `--repository-root`, canonical `--repository`, and
-`--target-branch`. `--binding-file` is private host-interpreted existing install
+`--target-branch` and exact reviewed `--delivered-head` in every operation. `--binding-file` is private host-interpreted existing install
 evidence: `kind: assembly-development`, `repository`, physical `checkout`,
 existing `domain`, bounded tracked `sourceRanges` (`path,startLine,endLine`) and
 absolute `protectedPaths`. Include every relevant source/config/data binding;
@@ -75,7 +75,7 @@ pointers. No pointer search or second registry.
 
 `inspect` emits JSON-quoted path classifications from NUL-safe Git names before
 mutation. Keep that private output and pass it as `--inspection` to `prepare`;
-changed source/owner/binding facts require reinspection. Supply `--keep-path`
+changed source/index/owner/binding facts require reinspection. Supply `--keep-path`
 for current-run changes from entry/current ownership evidence; a changed current
 boundary is retained automatically. Only disposable source is restored by
 literal path or removed as individual files. Symlinks, directory/file conflicts
@@ -84,7 +84,7 @@ checkout. Ignored install/evidence files remain protected.
 
 Commit, push, verify delivery and cover current repairs before branch transfer.
 If this owner's implementation worktree occupies the branch, pass its exact
-`--implementation-root`, `--delivered-head` and existing complete producer
+`--implementation-root` and existing complete producer
 `--preservation` result. Preserve evidence in the supported retained root first.
 Normally detach that owned worktree at the delivered head, then check out the
 actual branch in the same canonical folder. Foreign occupancy names that
@@ -97,10 +97,13 @@ after its last required producer call.
 interruption. It checks clean source in both supplied checkouts, the reviewed
 branch/head and absence of each exact-owned `--residue-path` supplied from the
 existing cleanup inventory (including ignored artifacts and empty directories).
-Preserve evidence before exact-owned artifact cleanup. Pending cleanup means Not ready with safe paths and agent action. Retain the preview. Git/status/HTTP200 and fixture tests do not prove the installed
-source/assets/build/Fixture identity: retain the existing rebuild/browser proof.
-No live cleanup is authorized by source implementation fixtures. Verify the
-real domain on the next approved Assembly run after publication/synchronization.
+Preserve evidence before cleanup. Read-only `finish` needs no disposable
+owner/binding state; mutation still requires it. Check used roots after their
+last writes, before removal; then verify removed exact paths are absent.
+Pending cleanup means Not ready with paths and agent action. Keep the preview
+and source/assets/build/Fixture proof; Git/status/HTTP200 and fixtures cannot
+supply it. Live-domain proof follows publication/synchronization on the next
+approved Assembly run; source fixtures authorize no live cleanup.
 
 ## Final readiness
 

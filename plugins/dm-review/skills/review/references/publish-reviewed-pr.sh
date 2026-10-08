@@ -135,15 +135,36 @@ REMOTE_HEAD="$(git -C "$REPO" ls-remote --exit-code origin "refs/heads/$BRANCH" 
 if [ "$OPERATION" = ready ]; then
   gh pr view "$PR" --repo "$REPOSITORY" --json headRefOid,headRefName,state,isDraft,reviewDecision > "$TEMP/pr.json"
   jq -e --arg head "$HEAD" --arg branch "$BRANCH" '.headRefOid==$head and .headRefName==$branch and .state=="OPEN" and .isDraft==true' "$TEMP/pr.json" >/dev/null || review_refuse 'actual PR head/state differs'
-  # gh returns nonzero for pending/failed checks; keep that a visible blocker.
-  gh pr checks "$PR" --repo "$REPOSITORY" --json name,bucket,link > "$TEMP/checks.json" || review_refuse 'actual PR checks failed or pending'
+  gh pr checks "$PR" --repo "$REPOSITORY" --json name,bucket,link > "$TEMP/checks.json" || review_refuse 'actual PR checks lookup failed'
+  jq -e 'type=="array" and length>0 and all(.[];
+    (.name|type=="string" and length>0) and (.bucket|IN("pass","fail","pending","skipping","cancel")) and
+    (.link|type=="string" and length>0))' "$TEMP/checks.json" >/dev/null || review_refuse 'actual PR checks missing or invalid'
+  required_rc=0
+  gh pr checks "$PR" --repo "$REPOSITORY" --required --json name,bucket,link > "$TEMP/required.json" 2> "$TEMP/required.err" || required_rc=$?
+  if [ "$required_rc" -ne 0 ]; then
+    # gh reports this exact diagnostic only after a successful required-filter
+    # lookup. Empty output or an arbitrary API error is never no-required proof.
+    printf "no required checks reported on the '%s' branch\n" "$BRANCH" > "$TEMP/no-required.err"
+    [ "$required_rc" -eq 1 ] && [ ! -s "$TEMP/required.json" ] && cmp -s "$TEMP/required.err" "$TEMP/no-required.err" || review_refuse 'required PR checks lookup failed'
+    printf '[]\n' > "$TEMP/required.json"
+  else
+    jq -e 'type=="array" and length>0 and all(.[]; .bucket=="pass")' "$TEMP/required.json" >/dev/null || review_refuse 'required PR checks failed, pending, skipped or missing'
+  fi
+  jq -e --slurpfile actual "$TEMP/checks.json" 'all(.[]; . as $required | any($actual[0][]; .name==$required.name and .bucket==$required.bucket and .link==$required.link))' "$TEMP/required.json" >/dev/null || review_refuse 'required PR check absent from actual PR'
   jq -e --slurpfile actual "$TEMP/checks.json" 'all(.checks[]|select(.stage=="pr"); .name as $name | any($actual[0][]; .name==$name))' "$TEMP/handoff.json" >/dev/null || review_refuse 'required PR check absent from actual PR'
   OWNER_NAME="${REPOSITORY%/*}"; REPO_NAME="${REPOSITORY#*/}"; NUMBER="${PR##*/}"
   gh api graphql -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){headRefOid reviewThreads(first:100){nodes{isResolved} pageInfo{hasNextPage}}}}}' \
     -f owner="$OWNER_NAME" -f name="$REPO_NAME" -F number="$NUMBER" > "$TEMP/feedback.json"
   jq -e --arg head "$HEAD" '.data.repository.pullRequest | .headRefOid==$head and .reviewThreads.pageInfo.hasNextPage==false and all(.reviewThreads.nodes[];.isResolved==true)' "$TEMP/feedback.json" >/dev/null || review_refuse 'actual PR feedback unsettled or incomplete'
   jq -e '.reviewDecision!="CHANGES_REQUESTED"' "$TEMP/pr.json" >/dev/null || review_refuse 'changes requested on PR'
-  jq --slurpfile checks "$TEMP/checks.json" '.checks = ((.checks | map(select(.stage=="candidate"))) + ($checks[0] | map({name:.name,link:.link,stage:"pr",status:(if .bucket=="pass" then "pass" elif .bucket=="pending" then "pending" else "fail" end)})))' "$TEMP/handoff.json" > "$TEMP/update.json"
+  jq --arg pr "$PR" --slurpfile checks "$TEMP/checks.json" --slurpfile required "$TEMP/required.json" '
+    (.checks | map(select(.stage=="pr" and .required!=false))) as $declared |
+    .checks = ((.checks | map(select(.stage=="candidate"))) +
+      ($checks[0] | map(. as $check | {name:.name,link:.link,stage:"pr",
+        required:(any($required[0][]; .name==$check.name) or any($declared[]; .name==$check.name)),
+        status:(if .bucket=="pass" then "pass" elif .bucket=="pending" then "pending" elif .bucket=="skipping" then "skipped" else "fail" end)})) +
+      (if ($required[0]|length)==0 then [{name:"Required PR checks",link:$pr,stage:"pr",required:false,status:"not_applicable"}] else [] end))
+  ' "$TEMP/handoff.json" > "$TEMP/update.json"
   mv -- "$TEMP/update.json" "$TEMP/handoff.json"
   "$HERE/operator-handoff.sh" --gate merge "$TEMP/handoff.json" > "$TEMP/handoff.md" || { cat "$TEMP/handoff.md"; exit 3; }
 fi

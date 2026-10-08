@@ -390,3 +390,7 @@ an incomplete committed attempt clean or duplicate an effective lane. Recheck
 findings describe that inspection; prior findings/decisions remain in sealed
 history with repair/verification resolutions. Required union validation runs
 independently of optional economics.
+
+Optional GitHub checks verified as skipped or not applicable stay labelled that
+way; never call them passed. Required, missing, failed or pending checks and
+lookup failures still block readiness.

@@ -66,10 +66,11 @@ retained detached implementation checkout or verified canonical branch folder.
 Never rewrite original receipt bytes after transfer.
 After owned-resource cleanup settles, update `<evidence_path>/report.md` with
 the actual cleanup inventory and revalidate all local links. Write the final report to `.claude/ux-review/report.md` while its checkout remains available.
-After these final writes, run `canonical-checkout.sh finish` when the selected
-checkout is an Assembly development install, with every used checkout and exact
-owned residue path. `Workspace: clean` requires source cleanliness and no owned
-residue; otherwise hand off Not ready with exact safe paths and agent action.
+Check every used checkout after its last producer/write and before removal.
+After final writes and exact-owned cleanup, run read-only `canonical-checkout.sh finish`
+with exact `--delivered-head`, surviving checkouts and removed owned residue paths.
+It requires no disposable owner state. Pending cleanup means Not ready with
+exact safe paths and agent action; `Workspace: clean` requires the final check.
 Finish once, after fresh exact-scope Docker inventory proves zero run-owned
 objects:
 

@@ -70,6 +70,18 @@ reject "$HANDOFF" "$TMP/shortcut.json"
 jq '.coverage.status="incomplete" | .coverage.gaps=["required automated UI case missing"]' "$TMP/accepted.json" > "$TMP/approval-gap.json"
 reject "$HANDOFF" --gate merge "$TMP/approval-gap.json"
 
+# Optional GitHub outcomes are separate from passed required checks.
+for status in skipped not_applicable; do
+  jq --arg status "$status" '.checks[1] += {status:$status,required:false}' "$TMP/base.json" > "$TMP/optional.json"
+  "$HANDOFF" --gate merge "$TMP/optional.json" > "$TMP/optional.out"
+  assert grep -Fxq '## Ready to merge' "$TMP/optional.out"
+  assert sh -c '! grep -Fq "CI passed" "$1"' sh "$TMP/optional.out"
+  jq '.checks[1].required=true' "$TMP/optional.json" > "$TMP/required-skipped.json"
+  reject "$HANDOFF" --gate merge "$TMP/required-skipped.json"
+  assert grep -Fq 'it has not passed' "$TMP/rejected.out"
+  jq 'del(.checks[1].required)' "$TMP/optional.json" > "$TMP/unknown-required.json"
+  reject "$HANDOFF" --gate merge "$TMP/unknown-required.json"
+done
 # Final artifact writes can leave cleanup pending while code coverage is clean.
 assert grep -Fxq 'Workspace: clean' "$TMP/base.out"
 jq '.workspace={clean:false,paths:["/safe/checkout/final report.md"],nextAction:"Preserve report bytes in the retained root, remove the exact owned copy, and recheck both checkouts."}' "$TMP/base.json" > "$TMP/workspace.json"
@@ -119,6 +131,13 @@ assert test "$BOUNDARY" != "$UNTRACKED_BOUNDARY"
 printf 'changed content\n' >> "$REPO/untracked file.txt"
 assert test "$UNTRACKED_BOUNDARY" != "$(bash -c 'source "$1"; review_change_boundary "$2"' bash "$CONTEXT" "$REPO")"
 rm "$REPO/untracked file.txt"
+assert test "$BOUNDARY" = "$(bash -c 'source "$1"; review_change_boundary "$2"' bash "$CONTEXT" "$REPO")"
+# Staging different bytes while retaining HEAD working bytes changes ownership.
+printf 'index-only repair\n' > "$REPO/source.txt"
+git -C "$REPO" add -- source.txt
+git -C "$REPO" show HEAD:source.txt > "$REPO/source.txt"
+assert test "$BOUNDARY" != "$(bash -c 'source "$1"; review_change_boundary "$2"' bash "$CONTEXT" "$REPO")"
+git -C "$REPO" restore --source=HEAD --staged -- source.txt
 assert test "$BOUNDARY" = "$(bash -c 'source "$1"; review_change_boundary "$2"' bash "$CONTEXT" "$REPO")"
 # A hostile inherited PATH is discarded even when the library is sourced.
 assert env PATH=/unavailable /bin/bash -c 'source "$1"; test "$PATH" = /opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin; review_private "$2"' bash "$CONTEXT" "$POINTER"

@@ -1313,14 +1313,13 @@ diagnostic root (state or dirty worktree, never both). Report exact path,
 reason, contents and quoted `rm -rf -- <quoted-path>` command.
 Install the same terminal action for EXIT/SIGINT/SIGTERM.
 
-After final report/receipt writes, run `canonical-checkout.sh finish` when using
-an Assembly development checkout; include all used roots and exact-owned residue.
-Pending cleanup yields Not ready with safe paths and agent action. Keep the
-canonical folder on the reviewed branch and its established preview available.
-Repeat `repo-cleanup-contract.md` readiness
-checks in every used checkout. Report `Next chunk: ready` only with no run-owned
-dirty residue; otherwise name the paths and blocker. Preserve the live preview.
-Mark `FINAL 5b. Artifact and repository cleanup` complete only after this check.
+After final writes and exact-owned cleanup, run read-only `canonical-checkout.sh finish`
+with exact `--delivered-head`; it needs no removed owner state. Validate each used
+checkout after its last producer/write and before removal; pass surviving roots
+and removed exact-owned residue paths to the last check. Pending cleanup means
+Not ready with safe paths and agent action. Keep the canonical reviewed branch
+and preview. Report `Next chunk: ready` only after this check, then mark
+`FINAL 5b. Artifact and repository cleanup` complete.
 
 ## Step 5c: Campaign State Write
 

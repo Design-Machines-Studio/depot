@@ -100,6 +100,7 @@ review_change_boundary() {
   {
     git -C "$repo" rev-parse HEAD
     git -C "$repo" diff --binary HEAD
+    git -C "$repo" diff --cached --binary HEAD
     while IFS= read -r -d '' file; do
       printf '%s\0' "$file"
       review_stat mode "$repo/$file"
