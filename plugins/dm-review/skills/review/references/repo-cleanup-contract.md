@@ -39,10 +39,68 @@ means incomplete delivery. Read-only review grants no repair authority. Keep
 runtime evidence in its existing artifact location; avoid unsolicited lessons.
 
 After the last UI repair, rebuild/recheck the maintained site and leave the
-reviewed feature branch or exact detached head available for the operator.
+reviewed feature branch available for the operator.
 Report `Preview: <domain> — <serving checkout> — <branch/head>` with existing
 browser/build proof or the concrete blocker. Never repoint the server to an
 implementation worktree, restore main by default or remove the serving folder.
+
+## Selected Assembly development source
+
+Only an explicitly selected canonical Assembly development checkout and its
+established dmXXX domain have standing source-disposal authority. Before
+mutation, the host checks the complete current owner/lease/handoff set for that
+folder. Use exact existing records; age, filenames, narrative completion and
+latest-run guessing prove nothing. Unreadable or conflicting ownership blocks
+that checkout with the exact missing release/record; do not move the preview.
+
+Completed/inactive source leftovers are disposable even without per-file
+creation records. Preserve active owners, current unfinished repairs, required
+review evidence, .env/secrets, databases, uploads, persistent volumes and
+install-local configuration. Resolve protected paths from actual runbook/service
+bindings and containment, including extensionless and nested state. This exception
+never authorizes disposal in another repository or weakens resource ownership.
+
+Use `canonical-checkout.sh inspect|prepare|finish` from the coherent dm-review
+bundle with exact `--repository-root`, canonical `--repository`, and
+`--target-branch`. `--binding-file` is private host-interpreted existing install
+evidence: `kind: assembly-development`, `repository`, physical `checkout`,
+existing `domain`, bounded tracked `sourceRanges` (`path,startLine,endLine`) and
+absolute `protectedPaths`. Include every relevant source/config/data binding;
+the helper checks containment/ranges, not prose semantics. Supply the current
+native `--current-context` and all exact `--owner-context` references from host
+ownership inspection. Complete native pointers with matching exact-owned
+metadata provide inactive handoff proof; active, malformed or missing records
+block. Other host leases use their existing release mechanism, never invented
+pointers. No pointer search or second registry.
+
+`inspect` emits JSON-quoted path classifications from NUL-safe Git names before
+mutation. Keep that private output and pass it as `--inspection` to `prepare`;
+changed source/owner/binding facts require reinspection. Supply `--keep-path`
+for current-run changes from entry/current ownership evidence; a changed current
+boundary is retained automatically. Only disposable source is restored by
+literal path or removed as individual files. Symlinks, directory/file conflicts
+and protected descendants fail closed. No broad reset, clean, prune or force
+checkout. Ignored install/evidence files remain protected.
+
+Commit, push, verify delivery and cover current repairs before branch transfer.
+If this owner's implementation worktree occupies the branch, pass its exact
+`--implementation-root`, `--delivered-head` and existing complete producer
+`--preservation` result. Preserve evidence in the supported retained root first.
+Normally detach that owned worktree at the delivered head, then check out the
+actual branch in the same canonical folder. Foreign occupancy names that
+owner's exact release action. Unique branches/history remain. Retain the
+detached checkout for later producer calls, or pass the verified canonical
+root. Preserve literal receipt bytes; remove an owned disposable worktree only
+after its last required producer call.
+
+`finish` runs after final report/evidence writes on success, failure, abort and
+interruption. It checks clean source in both supplied checkouts, the reviewed
+branch/head and absence of each exact-owned `--residue-path` supplied from the
+existing cleanup inventory (including ignored artifacts and empty directories).
+Preserve evidence before exact-owned artifact cleanup. Pending cleanup means Not ready with safe paths and agent action. Retain the preview. Git/status/HTTP200 and fixture tests do not prove the installed
+source/assets/build/Fixture identity: retain the existing rebuild/browser proof.
+No live cleanup is authorized by source implementation fixtures. Verify the
+real domain on the next approved Assembly run after publication/synchronization.
 
 ## Final readiness
 

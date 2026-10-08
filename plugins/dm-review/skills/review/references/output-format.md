@@ -21,7 +21,12 @@ current PR checks/feedback and applicable designer UI acceptance.
 
 The owner supplies the formatter's closed JSON object:
 
-- `target`, `detail`, `finalHead`, `dirty`, `feedbackSettled`.
+- `target`, `detail`, `finalHead`, `dirty`, `feedbackSettled`. `dirty` reflects
+  post-report source/residue checks in every used checkout, not a pre-report
+  status. Optional `workspace` gives `clean`, JSON-quoted safe `paths`, and
+  nullable `nextAction`; pending cleanup requires exact paths and agent action.
+  Print `Workspace: clean` only after cleanup; pending cleanup is Not ready even
+  with complete code coverage.
 - `coverage`: `status` (`complete|incomplete|missing`), `head`, `gaps`, explicit
   `requiredBrowserCases` and `evidence` link. These are validated producer facts,
   never inferred from narrative CLEAN, passing CI or a session phase.

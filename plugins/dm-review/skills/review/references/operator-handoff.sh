@@ -40,8 +40,12 @@ jq -e --arg sha "$SHA" '
   def str: type == "string" and length > 0 and length <= 2048 and (test("[\u0000-\u001f\u007f]") | not);
   def sha: type == "string" and test($sha);
   type == "object" and
-  (keys | sort) == (["checks","coverage","detail","dirty","feedbackSettled","finalHead","findings","lanes","target","ui"] | sort) and
+  ((keys - ["workspace"]) | sort) == (["checks","coverage","detail","dirty","feedbackSettled","finalHead","findings","lanes","target","ui"] | sort) and
   (.target | str) and (.detail | str) and (.finalHead | sha) and
+  (.workspace == null or (.workspace | type=="object" and (keys|sort)==(["clean","paths","nextAction"]|sort) and
+    (.clean|type=="boolean") and (.paths|type=="array" and all(.[]; str)) and
+    (.nextAction==null or (.nextAction|str)) and
+    (if .clean then (.paths|length)==0 and .nextAction==null else (.paths|length)>0 and .nextAction!=null end))) and
   (.dirty | type == "boolean") and (.feedbackSettled | type == "boolean") and
   (.coverage | type == "object" and (keys | sort) == (["evidence","gaps","head","requiredBrowserCases","status"] | sort)) and
   (.coverage.status | IN("complete","incomplete","missing")) and
@@ -72,7 +76,8 @@ RESULT="$(jq -r '
   def short: .[0:12];
   . as $in |
   [
-    (if .dirty then {kind:"source", text:"The checkout has uncommitted changes at \(.finalHead | short). The agent must commit or discard them."} else empty end),
+    (if .workspace != null and (.workspace.clean | not) then {kind:"workspace",text:("Workspace cleanup pending at " + (.workspace.paths|join(", ")) + ". Agent next action: " + .workspace.nextAction)} else empty end),
+    (if .dirty then {kind:"source", text:"The checkout has uncommitted changes at \(.finalHead | short). The agent must deliver required repairs and complete exact-owned cleanup."} else empty end),
     (if .coverage.status == "missing" or .coverage.head == null then {kind:"source", text:"No review evidence exists for head \(.finalHead | short)."}
      elif .coverage.head != .finalHead then {kind:"source", text:"Review evidence is for \(.coverage.head | short), not the current head \(.finalHead | short)."}
      else empty end),
@@ -96,6 +101,7 @@ RESULT="$(jq -r '
       (if $status == "Ready to merge" then "Required automated review and checks passed at \(.finalHead | short)."
        elif $status == "UI check needed" then "Automated checks passed at \(.finalHead | short). The UI change needs your eyes in the browser."
        else "Work remains before this can merge. The agent handles the gaps below." end), "",
+      "Workspace: " + (if (.dirty|not) and (.workspace==null or .workspace.clean) then "clean" else "Not ready" end), "",
       "**Your action:** " + (if $status == "Ready to merge" then "Merge \(.target)."
         elif $status == "UI check needed" then "Open the preview at \(.ui.preview) and check the tasks below. Tell the agent what you accept or what to change."
         else "None yet. You will get a new handoff when it is ready." end),

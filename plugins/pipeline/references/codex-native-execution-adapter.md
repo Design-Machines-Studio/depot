@@ -181,4 +181,10 @@ delegated to model-router or any participant. Deleting refs is not a judgment
 task, and a worker sandbox cannot be trusted to report honestly which refs
 survived.
 
+For selected Assembly development checkouts, use the same
+`canonical-checkout.sh inspect/prepare/finish` policy as direct review, through
+`repo-cleanup-contract.md`. Preserve producer roots and receipts through their
+last calls; finish checks follow final writes. Report pending cleanup as Not
+ready, never switch to an alternate preview to evade source dirt.
+
 The Codex adapter does not get a weaker gate than the Claude path. If `codex_native` cannot execute the cleanup phase, that is a pipeline-blocking failure, not a degradation.

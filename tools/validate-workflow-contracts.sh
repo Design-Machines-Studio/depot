@@ -2108,6 +2108,25 @@ require_text "$auto_closeout" 'existing producer is the only coverage authority'
 require_text "$REPO_ROOT/plugins/project-scaffolder/skills/scaffolding/references/claude-md-templates/dm-standard.md" 'fix every retained P1/P2/P3 defect' "scaffold preserves zero-deferral repair"
 require_text "$REPO_ROOT/tests/test_auto_review_candidate.py" 'Fixture-owner orchestration proof; no installed workflow or live canary.' "caller fixtures distinguish source proof from installed enforcement"
 
+# Narrow Assembly source policy and shared post-write workspace closeout.
+canonical="$REPO_ROOT/plugins/dm-review/skills/review/references/canonical-checkout.sh"
+require_text "$contract" 'per-file' "inactive Assembly source does not require per-file provenance"
+require_text "$contract" 'Unreadable or conflicting ownership blocks' "unknown ownership fails closed for selected checkout"
+require_text "$contract" 'never authorizes disposal in another repository' "standing disposal is Assembly-only"
+require_text "$canonical" 'git -C "$REPO" --literal-pathspecs restore' "source restore uses exact literal Git paths"
+require_text "$canonical" 'worktree list --porcelain -z' "branch occupancy uses NUL-safe worktree facts"
+require_text "$canonical" 'inspection changed; inspect again before mutation' "prepare rejects stale classification"
+require_text "$canonical" 'checkout --detach "$TARGET"' "owned implementation releases branch normally"
+require_absent "$canonical" 'git clean' "helper never uses broad Git clean"
+require_absent "$canonical" 'git reset' "helper never uses broad Git reset"
+for surface in "$auto_closeout" "$orchestrator" "$codex_native_adapter" "$REPO_ROOT/plugins/dm-review/skills/review/references/review-closeout-contract.md"; do
+  require_text "$surface" 'canonical-checkout.sh' "${surface#$REPO_ROOT/} shares canonical cleanup helper"
+done
+require_text "$output_format" 'post-report source/residue checks' "handoff cleanliness includes final writes"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/operator-handoff.sh" 'Workspace: ' "designer handoff states workspace readiness"
+require_text "$REPO_ROOT/tools/validate-composition.sh" 'test-canonical-checkout.sh' "runner includes canonical fixtures"
+require_text "$REPO_ROOT/tools/validate-composition.sh" 'test-review-completion-hook.sh' "runner includes completed hook fixtures"
+
 # Browser artifacts must not dirty the next chunk's source checkout.
 artifact_cleanup="$REPO_ROOT/plugins/dm-review/skills/review/references/browser-artifact-cleanup.md"
 require_text "$artifact_cleanup" 'Never use the repository root' "screenshots use an explicit owned destination"

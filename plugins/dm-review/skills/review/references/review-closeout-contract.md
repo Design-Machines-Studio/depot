@@ -61,8 +61,15 @@ retry may append a valid closeout receipt, but changing an existing review or
 coverage receipt is rejected and reported as an incomplete recovery; correct
 the caller input in a new owned replay rather than rewriting the first copy.
 
+Keep every producer's repository root available until its last call; use the
+retained detached implementation checkout or verified canonical branch folder.
+Never rewrite original receipt bytes after transfer.
 After owned-resource cleanup settles, update `<evidence_path>/report.md` with
 the actual cleanup inventory and revalidate all local links. Write the final report to `.claude/ux-review/report.md` while its checkout remains available.
+After these final writes, run `canonical-checkout.sh finish` when the selected
+checkout is an Assembly development install, with every used checkout and exact
+owned residue path. `Workspace: clean` requires source cleanliness and no owned
+residue; otherwise hand off Not ready with exact safe paths and agent action.
 Finish once, after fresh exact-scope Docker inventory proves zero run-owned
 objects:
 

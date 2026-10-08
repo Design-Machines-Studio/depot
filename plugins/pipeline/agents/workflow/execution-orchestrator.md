@@ -366,7 +366,10 @@ Git safety:
 - user files: <list> -> BLOCKED until caller commits/stashes
 ```
 
-Do NOT stash automatically. Do NOT checkout another branch while user files are dirty. The user's unrelated work takes priority.
+For an explicitly selected Assembly development checkout, first apply
+`repo-cleanup-contract.md`'s `canonical-checkout.sh inspect/prepare` inactive
+source policy. Preserve active/unfinished work and install state. For all other
+source dirt, do NOT stash or switch while user files are dirty.
 
 ### 1b: Branch Setup
 
@@ -1310,7 +1313,11 @@ diagnostic root (state or dirty worktree, never both). Report exact path,
 reason, contents and quoted `rm -rf -- <quoted-path>` command.
 Install the same terminal action for EXIT/SIGINT/SIGTERM.
 
-After final report/receipt writes, repeat `repo-cleanup-contract.md` readiness
+After final report/receipt writes, run `canonical-checkout.sh finish` when using
+an Assembly development checkout; include all used roots and exact-owned residue.
+Pending cleanup yields Not ready with safe paths and agent action. Keep the
+canonical folder on the reviewed branch and its established preview available.
+Repeat `repo-cleanup-contract.md` readiness
 checks in every used checkout. Report `Next chunk: ready` only with no run-owned
 dirty residue; otherwise name the paths and blocker. Preserve the live preview.
 Mark `FINAL 5b. Artifact and repository cleanup` complete only after this check.

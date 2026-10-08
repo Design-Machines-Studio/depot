@@ -665,6 +665,14 @@ run_composition_checks() {
     echo "FAIL: designer handoff/context behavioral tests failed"
     any_failed=1
   fi
+  if ! "$SCRIPT_DIR/test-review-completion-hook.sh"; then
+    echo "FAIL: review completion hook behavioral tests failed"
+    any_failed=1
+  fi
+  if ! "$SCRIPT_DIR/test-canonical-checkout.sh"; then
+    echo "FAIL: canonical Assembly checkout behavioral tests failed"
+    any_failed=1
+  fi
   if ! "$SCRIPT_DIR/test-publish-reviewed-pr.sh"; then
     echo "FAIL: reviewed PR publication behavioral tests failed"
     any_failed=1

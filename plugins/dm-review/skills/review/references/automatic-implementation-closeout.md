@@ -16,8 +16,8 @@ a PR. An existing draft stays draft. PR-only CI is pending until a PR exists;
 it cannot be claimed passed from candidate checks. Record the repository/branch
 and PR when present, base/head, entry dirty-state boundary, approved requirements,
 verification evidence, and current review owner in the existing workflow
-receipts. Preserve foreign files, ignored evidence,
-worktrees, branches and maintained previews.
+receipts. Apply `repo-cleanup-contract.md` for selected Assembly inactive source; preserve
+active work, ignored evidence, refs and maintained previews.
 
 Use the existing workflow state, run lease, exact-owned root and review-source
 binding. Resume an attributable existing owner instead of creating another
@@ -55,6 +55,9 @@ existing visual path; a policy-permitted mechanical/docs exemption still runs
 mandatory repository checks and reports the exemption accurately.
 
 ## Native session pointer (root owner only)
+
+When checking native hook activation, load `review-hook-activation.md`.
+Run final workspace checks before marking the owner complete/clearing its pointer.
 
 Load `review-owner-context.sh` from the same coherent dm-review bundle as the
 publication helper. The thin SessionStart handler initializes an unbound
@@ -203,6 +206,8 @@ PR, retain the incomplete coverage, and name the exact unblock condition. Do
 not create Issues for repairable findings, speculative enhancements or routine
 transient limits. Never implement in another repository without authority.
 
+After final report writes, apply `canonical-checkout.sh finish` when using a
+selected Assembly development checkout; pending cleanup yields Not ready.
 Before terminal delivery, validate final-head selected lane outputs, literal
 receipts, required cases and authoritative coverage through
 `review-closeout-contract.md`. Contribution exports retain their existing

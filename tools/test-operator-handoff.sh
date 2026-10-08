@@ -70,6 +70,21 @@ reject "$HANDOFF" "$TMP/shortcut.json"
 jq '.coverage.status="incomplete" | .coverage.gaps=["required automated UI case missing"]' "$TMP/accepted.json" > "$TMP/approval-gap.json"
 reject "$HANDOFF" --gate merge "$TMP/approval-gap.json"
 
+# Final artifact writes can leave cleanup pending while code coverage is clean.
+assert grep -Fxq 'Workspace: clean' "$TMP/base.out"
+jq '.workspace={clean:false,paths:["/safe/checkout/final report.md"],nextAction:"Preserve report bytes in the retained root, remove the exact owned copy, and recheck both checkouts."}' "$TMP/base.json" > "$TMP/workspace.json"
+reject "$HANDOFF" --gate candidate "$TMP/workspace.json"
+assert grep -Fxq '## Not ready' "$TMP/rejected.out"
+assert grep -Fxq 'Workspace: Not ready' "$TMP/rejected.out"
+assert grep -Fq '/safe/checkout/final report.md' "$TMP/rejected.out"
+assert grep -Fq 'Agent next action: Preserve report bytes' "$TMP/rejected.out"
+jq '.workspace={clean:true,paths:[],nextAction:null}' "$TMP/base.json" > "$TMP/workspace-clean.json"
+assert "$HANDOFF" --gate merge "$TMP/workspace-clean.json"
+jq '.workspace.paths=["unremoved"]' "$TMP/workspace-clean.json" > "$TMP/false-clean.json"
+reject "$HANDOFF" "$TMP/false-clean.json"
+jq '.workspace.clean="true"' "$TMP/workspace-clean.json" > "$TMP/malformed-workspace.json"
+reject "$HANDOFF" "$TMP/malformed-workspace.json"
+
 # Native session/owner lifecycle. Disposable supported Kernel root only.
 REPO="$TMP/repository"; mkdir "$REPO"
 git -C "$REPO" init -q

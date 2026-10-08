@@ -4,6 +4,12 @@ Loaded by `/pipeline` Phase 7 only when a `renderedSurface: required` chunk ran.
 
 ## Caller Verification Checklist
 
+For selected Assembly development checkouts, apply the shared
+`repo-cleanup-contract.md` before browser work and after final artifact writes.
+Keep the canonical folder on the actual reviewed branch and established domain;
+source/build/assets/Fixture identity proof remains mandatory. Fixture cleanup
+proof is not installed-domain proof. Pending cleanup is Not ready.
+
 Complete ALL THREE checks; record evidence in the delivery report.
 
 - [ ] **(1) Screenshot the selected viewports.** Cover each selected affected
