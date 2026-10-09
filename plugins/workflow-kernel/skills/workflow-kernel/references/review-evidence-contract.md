@@ -161,7 +161,7 @@ Append is the commit point. Retry reconstructs missing derived companions
 without dispatch. Conflicting fixed files cannot be replaced: use a new
 exact-owned replay with the original committed stream/history. Preservation
 reads the same locked snapshot and retains referenced history within existing
-128-file/2 MiB limits. Optional contribution writers use that lock too;
+416-file/9 MiB limits. Optional contribution writers use that lock too;
 economics and observations never settle or revoke required coverage.
 
 Closed failure stages are `lane_input`, `lane_validation`,
@@ -171,6 +171,24 @@ mismatch, unsafe paths, conflicts and retention limits, using safe artifact-role
 filenames. Schema exits 2, incomplete/unsafe evidence 3, conflicts 6. Preserve
 safe available inputs and originals on failure. #165 report-link behavior stays
 unchanged.
+
+## Bounded retention (>=0.26.2)
+
+The 9 MiB (9,437,184-byte) allowance bounds the sum of regular-file bytes
+across the whole diagnostic directory. It is not merely a per-file cap;
+assembly, preservation staging and terminal revalidation retain their existing
+bound checks. Every digest, source, scope, provenance,
+path safety and completeness validator remain unchanged.
+
+The measured PR173 complete required package projection is 112 files and
+2,856,643 bytes. It includes the final coverage record, request, four companions,
+authoritative receipt stream, every committed source/history/transition binding,
+private router receipts/index and report. The `review/evidence` subtree alone
+is 96 files and 2,721,881 bytes. Removing its 592,768 duplicate snapshot/literal
+bytes alone would still leave the complete package above the former 2 MiB
+allowance. That original package fits4MiB and128files. The final-head integration with its required affected documentation/test rechecks measures144files and3,941,061bytes. Actual preservation still failed the128file bound, so the first separately measured count limit rose to160. The completed affected CLI security/test rechecks then produced an eligible current-head package of185files and4,685,139bytes, including its final coverage record and all companions. Actual preservation rejected both4MiB and160files. The first final source transition preserved196files/4,935,164bytes under5MiB/200files. Normal GitHub review then reported three valid defects. Their required affected/core Codex rechecks produced a complete eligible246-file/5,877,650-byte package; actual preservation rejected both5MiB and200files. The preceding bounded allowance was6MiB/288files, leaving bounded room for the required finishing source transition without changing evidence or validation. The earlier measured transition added11files, so256files would leave inadequate room for that step. These bounded
+allowance changes preserve original bytes without compression or a new storage mechanism. New coverage bindings may reuse validated source-seal references directly. Existing committed bindings are reused byte-for-byte on assembly retries; original seals and lane records are never rewritten. These figures describe the supplied read-only
+projection, not a successful consumer preservation run.
 
 ## Retained historical terminal validation (>=0.26.1)
 
@@ -216,3 +234,18 @@ one `next_action`; compatibility/missing/unsafe evidence exits 3, corruption or
 incomplete coverage exits 2. No arbitrary supplied paths/raw exceptions appear.
 Terminal cleanup uses the throwing validator; existing boolean callers stay
 strict.
+
+The final required GitHub/caller rechecks produced an eligible complete package
+of 362 files and 8,080,697 bytes, including final coverage and every companion,
+source/history/transition binding, private receipt and report. Actual production
+preservation rejected both 6 MiB and 288 files. The bounded final allowance is
+8 MiB/384 files; 8 MiB is evaluated against this complete package, and 384 leaves
+room for the required final source transition (the previous measured transition
+added 11 files). Required evidence and original sealed bytes are unchanged.
+No digest, source, scope, provenance, path-safety or completeness check changes.
+
+Release verification found PR172's digest race and repaired it in the existing
+Kernel dependency. Required repair/source-continuity evidence then measured
+386 files and 8,579,686 bytes; normal preservation rejected both 384 files and
+8 MiB. The final bounded allowance is 9 MiB/416 files, including room for the
+required finishing transition. Original bytes and validation remain strict.
