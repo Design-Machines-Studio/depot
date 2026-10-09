@@ -1407,6 +1407,10 @@ def validate_preserved_review_evidence(diagnostic: Path, *, run=None, historical
         if not _terminal_read(scope / "report.md", diagnostic, role).strip():
             raise RetainedReviewValidationError("corrupt_evidence", role)
         _validate_retained_report(scope)
+        if inventory is not None:
+            # Semantic readers run after the first inventory pass. Reject any
+            # replacement before returning historical compatibility success.
+            _historical_inventory(run, historical_review_digests)
         return {"validation": "historical_compatibility" if inventory is not None else "source_bound",
                 "run_id": request.run_id, "source_repository": request.source_repository, "source_head": request.source_head}
     except RetainedReviewValidationError:

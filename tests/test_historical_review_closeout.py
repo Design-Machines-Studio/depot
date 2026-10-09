@@ -88,6 +88,44 @@ class HistoricalReviewCloseoutTests(unittest.TestCase):
         self.assertEqual(original, self.bytes_of(run.root))
         self.assertFalse(closeout.has_preserved_review_evidence(scope.parent.parent))
 
+    def test_late_inventory_replacement_cannot_pass_historical_closeout(self):
+        for phase in ("initial-read", "after-semantics", "late-link"):
+            with self.subTest(phase=phase):
+                run, scope, inventory = self.historical()
+                target = scope / "review/raw-lane-outputs.json"
+                original = target.read_bytes()
+                changed = False
+                terminal_read = closeout._terminal_read
+                report_check = closeout._validate_retained_report
+
+                def read(*args, **kwargs):
+                    nonlocal changed
+                    value = terminal_read(*args, **kwargs)
+                    if phase == "initial-read" and Path(args[0]) == target and not changed:
+                        target.write_bytes(original + b" ")
+                        changed = True
+                    return value
+
+                def report(*args, **kwargs):
+                    nonlocal changed
+                    value = report_check(*args, **kwargs)
+                    if phase == "after-semantics":
+                        target.write_bytes(original + b" ")
+                    elif phase == "late-link":
+                        external = self.root / "late-output.json"
+                        external.write_bytes(original)
+                        target.unlink()
+                        target.symlink_to(external)
+                    changed = True
+                    return value
+
+                with self.pinned_fixture(run, inventory), \
+                        mock.patch.object(closeout, "_terminal_read", side_effect=read), \
+                        mock.patch.object(closeout, "_validate_retained_report", side_effect=report):
+                    self.assert_reason("unsafe_path" if phase == "late-link" else "digest_mismatch",
+                        lambda: run.finish("succeeded", historical_review_digests=inventory))
+                self.assertTrue(changed)
+
     def test_prior_retention_and_terminal_success_are_mandatory(self):
         run, scope, inventory = self.historical(retained=False)
         with self.pinned_fixture(run, inventory):
