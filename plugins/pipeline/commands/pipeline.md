@@ -510,7 +510,7 @@ approved plan `featureBranch` (Lean) or manifest (Full). Retain it and
 ```
 <!-- reviewed-pr-lean:end -->
 
-Start PR checks after source validation:
+Start PR checks:
 
 <!-- reviewed-pr-lean-request:start -->
 ```bash
@@ -523,7 +523,7 @@ Start PR checks after source validation:
 ```
 <!-- reviewed-pr-lean-request:end -->
 
-Wait for actual CI, approvals, feedback and UI acceptance before readiness:
+CI, approvals, feedback and UI acceptance gate readiness:
 
 <!-- reviewed-pr-lean-ready:start -->
 ```bash
