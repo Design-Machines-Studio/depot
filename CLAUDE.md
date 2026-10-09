@@ -240,11 +240,12 @@ per-operator subscription and billing eligibility, availability, fallback,
 family independence, and exact private receipts. Operational agent cards use
 `model: inherit`; their frontmatter never selects a routed participant.
 
-Eligible native Claude and Codex subscriptions share implementation and review.
-Opus leads substantive implementation and required design judgment; Fable leads
-architecture and deep review with Astra as its immediate fallback. Opus 5.5
-uses Sol 6.1 as its immediate fallback, including design review. Luna
-handles mechanical work and bounded evidence gathering. No
+Eligible native subscriptions follow model-router’s economical role policy.
+Settled bounded application code and tests can use fast roles; coordination,
+harder implementation and consequential judgment use stronger ordinary roles.
+Applicable UI/UX design retains the design specialist subordinate to prototype
+and explicit user decisions. Native fast service mode is separate from effort.
+No
 tracked policy contains a developer identity, allocation, plan, quota, or paid
 credit preference. OpenRouter remains the authority for its credential loading,
 provider catalog, wrapper, response provenance, provider receipt, and direct
@@ -264,7 +265,10 @@ does not select roles or concrete participants.
 
 ## Pipeline Enforcement
 
-When the user says `/pipeline` or asks to "run the pipeline" or "use the full pipeline process," you MUST invoke the pipeline skill from `plugins/pipeline/`. Do not manually execute pipeline steps. Do not replicate the pipeline's assess-research-plan-prompt-review-execute phases by hand. The pipeline enforces gates, review loops, visual verification, and memory capture that manual execution skips.
+When the user says `/pipeline` or asks to "run the pipeline" or "use the full pipeline process," you MUST invoke the pipeline skill from `plugins/pipeline/`. Do not manually execute pipeline steps. Do not replicate the pipeline's assess-research-plan-prompt-review-execute phases by hand. Pipeline selects the smallest sufficient direct/lean/full path and retains
+applicable reviews and mandatory verification. Generic invocation does not
+require full phases, routine reconfirmation or lesson chores; explicit full
+requests and actual repository requirements remain binding.
 
 If the pipeline skill is unavailable (not installed), tell the user and stop. Do not improvise a substitute.
 

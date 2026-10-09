@@ -43,31 +43,31 @@ check 'builder-fast starts with the bounded fast candidate' jq -e '
   .roles["builder-fast"][0].model == "gpt-6-luna" and
   .roles["builder-fast"][0].transport == "codex-cli"' "$POLICY"
 
-check 'builder-deep starts on native subscription capacity' jq -e '
-  .roles["builder-deep"][0].model == "claude-opus-5-5" and
-  .roles["builder-deep"][0].billing == "subscription-or-local-paid-credits"' "$POLICY"
+check 'builder-deep starts on ordinary native judgment capacity' jq -e '
+  .roles["builder-deep"][0].model == "gpt-6.1-sol" and
+  .roles["builder-deep"][0].billing == "included-subscription"' "$POLICY"
 
-check 'architect begins with Fable; native fallbacks remain available' jq -e '
-  .roles.architect[0].model == "fable" and
-  .roles.architect[0].transport == "claude-cli"' "$POLICY"
+check 'architect starts Sol and escalates explicitly' jq -e '
+  .roles.architect[0].model == "gpt-6.1-sol" and
+  .roles.architect[0].transport == "codex-cli"' "$POLICY"
 
 check 'driver policy retains the baseline and distinct specialist workers' jq -e '
   .roles.architect[1].model == "gpt-6-astra" and
-  .roles["builder-deep"][1].model == "gpt-6.1-sol" and
-  .roles["builder-deep"][2].model == "gpt-6-astra" and
+  .roles["builder-deep"][0].model == "gpt-6.1-sol" and
+  .roles["builder-deep"][1].model == "gpt-6-astra" and
   .roles["review-fast"][0].model == "gpt-6-luna" and
   .roles["review-fast"][1].model == "gpt-6.1-sol" and
   .roles["review-fast"][2].transport == "openrouter" and
-  .roles["review-deep"][3].model == "gpt-6.1-sol" and
-  .roles["review-deep"][4].transport == "openrouter" and
-  .roles["review-deep"][0].model == "fable"' "$POLICY"
+  .roles["review-deep"][0].model == "gpt-6.1-sol" and
+  .roles["review-deep"][2].transport == "openrouter"' "$POLICY"
 
-check 'substantive UI, logic and integration use deep roles; mechanical work stays fast' jq -e '
+check 'unknown application kinds retain deep defaults; settled-work override exists' jq -e '
   all(.chunkKinds | to_entries[] | select(.key | IN("logic","integration")); .value.executorRole == "builder-deep" and .value.executorEffort == "high") and
   .chunkKinds.ui.executorRole == "builder-deep" and .chunkKinds.ui.executorEffort == "high" and
   .chunkKinds.docs.executorEffort == "low" and
   .chunkKinds["mechanical-logic"].executorEffort == "medium" and
-  .reviewRoles.security.effort == "high"' "$ROOT/plugins/pipeline/references/routing-policy.json"
+  .reviewRoles.security.effort == "high" and
+  (.routingOverride.reasonCodes | index("bounded-settled-work") != null)' "$ROOT/plugins/pipeline/references/routing-policy.json"
 
 check 'declared native aliases bind to exact approved served identities' jq -e '
   (.roles["design-consultant"] | length == 2 and .[1].model == "gpt-6.1-sol" and .[0].model == "claude-opus-5-5" and .[0].servedIdentities == ["claude-opus-5-5"]) and
@@ -155,6 +155,8 @@ check 'resolver economics fixtures pass' "$ROOT/tools/test-model-router.sh"
 check 'benchmark evidence contract fixtures pass' "$ROOT/tools/test-benchmark-evidence-contract.sh"
 check 'Depot role benchmark fixtures pass' "$ROOT/tools/test-openrouter-role-benchmark.sh"
 check 'model intelligence and native benchmark tests pass' python3 "$ROOT/tests/test_model_intelligence.py" -v
+
+check 'economical workflow/dispatch cases pass' python3 -m unittest discover -s "$ROOT/tests" -p test_economical_execution.py -q
 
 if [ "$failures" -ne 0 ]; then
   printf 'routing economics validation failed\n' >&2

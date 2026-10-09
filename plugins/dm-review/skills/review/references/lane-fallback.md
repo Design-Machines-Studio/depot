@@ -19,3 +19,11 @@ silently waived. Pipeline's final review cannot use gap-and-continue.
 
 Every retained P1/P2/P3 still requires repair and affected-lane recheck. Routing
 failure never authorizes deferral.
+
+Pass the enclosing owner's exact `--run-receipt-index` to each model-router
+dispatch and recommendation; extend it with every settled receipt, including
+failures. Reuse confirmed run-scoped unavailable rails and model/configuration
+faults through the router, never through provider-specific worker instructions.
+A transient limit or infrastructure failure requires diagnosis, not run-wide
+exclusion. Preserve partial output and valid exact-source evidence. Repeat only
+changed/missing/affected coverage or a concrete new question.

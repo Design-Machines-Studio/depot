@@ -5,7 +5,8 @@ description: Gathers repository context and enriches it from any available relev
 
 # DM Research Orchestrator
 
-Gather context from all available DM knowledge sources before planning a feature. Produces a Research Brief that informs plan creation and prompt generation.
+Resolve named unanswered questions using the smallest relevant source set.
+Settled work needs no research stage.
 
 ## Input
 
@@ -14,8 +15,8 @@ Requires:
 2. **Provisional Assessment Brief** -- Including its compact Project Alignment record
 3. **Current repository evidence** -- Identity, source state, and relevant instructions/plans
 
-The assessment's `keyRequirements` remain provisional during research. Do not
-describe them as approved or use them to override a current authority.
+Preserve recorded scope authority. Unresolved `keyRequirements` remain
+provisional; research cannot override approved decisions.
 
 ## Process
 
@@ -38,12 +39,9 @@ environment variables, repository ownership, or other identity heuristics.
 | Context7 | `mcp__plugin_context7_context7__resolve-library-id` available | No -- graceful skip |
 | compound-engineering | Check if repo-research-analyst agent is available | No -- graceful skip |
 
-When an optional personal source is callable, continue using it for relevant
-enrichment. When it is absent during incidental Pipeline research, omit that
-lookup silently: do not mention the source in the brief, receipts, coverage,
-completion status, or user guidance. Never ask the user to install or configure
-it. Only an explicit user request for an ai-memory or RAG operation makes an
-unavailable personal source reportable.
+Use callable personal sources only for relevant enrichment. Incidental absence
+is silent, never an installation request or coverage gap. Report unavailability
+only for an explicitly requested personal-source operation.
 
 Inspect the supplied or safely discoverable native Issue/PR when it is relevant.
 Consult a coordination Project only when the repository or user declares one.
@@ -68,16 +66,17 @@ pragmatic DRY. Keep strong security at real credential, authorization,
 release-integrity, and data-loss boundaries, but do not add enterprise
 architecture without a demonstrated current consumer.
 
-### Phase 3: Parallel Research Dispatch
+### Phase 3: Focused Research
 
-Launch the selected applicable research agents simultaneously. Each gets the
-original request, provisional assessment, compact Project Alignment record, and
-current repository evidence. Do not query unrelated company/domain sources.
+Research only named unanswered questions. The current agent can resolve a
+bounded question directly. Add a specialist only for affected concerns and
+parallelize only independent work with a concrete advantage. Workers receive
+relevant request/assessment/source excerpts, owned scope and an answerable
+question, not a full conversation. Do not query unrelated sources.
 
-**Executor routing:** Default read-heavy research fan-out to Codex, with Claude
-as the local fallback when Codex is unavailable. This phase remains native by
-workload policy; configured-key availability does not broaden the bounded
-OpenRouter execution workload.
+**Executor routing:** Request `research-fast` for bounded evidence gathering;
+use a stronger judgment role for conflicting or consequential evidence. Concrete
+selection, native service mode and fallback remain model-router-owned.
 
 Resolve the coherent installed Pipeline bundle with `--plugin pipeline
 --minimum-version 1.36.1 --required-asset
@@ -91,75 +90,25 @@ and relevant, load `plugins/pipeline/references/research-optional-sources.md`
 for Agents 1 and 2. When neither is callable, skip them silently and do not load
 that file.
 
-**Agent 3: Domain Plugin Researcher**
+These are source options, not a participant roster:
 
-Load companion skills based on project type and extract relevant patterns:
-
-1. If Go project: What assembly patterns apply? Handler conventions? DTO patterns?
-2. If Craft project: What content modeling patterns? Query patterns? Template conventions?
-3. If CSS work: What Live Wires primitives exist? Token conventions? Component patterns?
-4. If governance: What BC Co-op Act requirements apply? Voting thresholds? Member lifecycle?
-
-This agent reads the companion skill content and extracts the sections most relevant to the feature.
-
-**Agent 4: Web + Context7 Researcher** (if available)
-
-Search for current best practices:
-
-1. If a framework/library is involved, use Context7 to get current docs
-2. WebSearch for recent best practices articles
-3. Search for common pitfalls or known issues
-4. Extract: current documentation, community patterns, version-specific guidance
-
-**Agent 5: Codebase Researcher** (if compound-engineering available)
-
-Delegate to compound-engineering's research agents:
-
-1. `repo-research-analyst` -- Repository structure and conventions
-2. `best-practices-researcher` -- Industry best practices for the feature type
-3. `framework-docs-researcher` -- Framework-specific documentation
-
-If compound-engineering is not installed, perform basic codebase research directly:
-- Grep for similar patterns in the codebase
-- Read CLAUDE.md files for conventions
-- Check git log for related recent changes
-
-When a native Issue/PR or declared coordination Project is in scope, verify only
-the named repository/ownership/dependency state needed for this request. Record
-conflicts between live GitHub state and stale tracked prose without treating the
-coordination projection as architectural authority.
-
-**Agent 6: Web Search Researcher** (Claude-native grounding, if WebSearch available)
-
-Use native web tools for current, cited results:
-
-1. Formulate at most 2-3 focused queries only when current external technical
-   evidence is needed, targeting the specific framework/API claim
-2. Run `WebSearch` for each query. From the results, select the most authoritative sources (official docs, maintainer posts, recognized practitioners)
-3. `WebFetch` the top sources to extract specifics and capture exact URLs for citation
-4. Extract: authoritative sources with URLs, recent changes or deprecations, community consensus, version-specific guidance
-
-**Relationship to Agent 4 (Web + Context7):** Agent 4 leans on Context7 for framework API docs; this agent leans on WebSearch + WebFetch for current best practices, recent changes, and community patterns with cited URLs. They complement each other. If WebSearch is unavailable, skip gracefully.
+- Domain skills: extract only the applicable framework/governance patterns.
+- Repository: inspect similar implementations, instructions and related history;
+  verify named Issue/PR ownership or declared Project dependencies.
+- Current external technical claims: use available Context7 or native web tools,
+  at most 2–3 focused queries, and cite exact authoritative documentation URLs.
+  Do not duplicate the same research through several agents or transports.
+- Compound-engineering research is optional when it resolves the named question.
 
 ### Phase 3b: Verify-Don't-Trust Checks
 
-After parallel research completes, run these mandatory verification steps. These prevent the most common pipeline failures:
+Verify claims the research actually relies on; do not add unrelated checks.
 
 **1. API Existence Verification**
 
-If the research suggests using specific framework functions, APIs, or library features, verify they exist in the actual installed version:
-
-```bash
-# Go: check if a function exists in the module
-docker compose exec app grep -r "func.*WithID" /go/pkg/mod/github.com/a-h/templ* 2>/dev/null
-
-# Node: check exports
-node -e "console.log(Object.keys(require('package-name')))"
-
-# General: check go.mod/package.json for actual version installed
-```
-
-Do NOT propose using an API that hasn't been verified to exist in the installed version. Hallucinated APIs are the #1 cause of pipeline failures.
+Verify proposed APIs in the actual installed dependency/version before planning
+implementation. Search dependency source or package exports; never rely on an
+unverified model claim.
 
 **0. Project Alignment Verification**
 
@@ -180,52 +129,32 @@ project goal.
 
 **2. Codebase Pattern Verification**
 
-When research finds framework patterns (e.g., Datastar attribute syntax), verify the EXACT syntax used in the CURRENT codebase, not documentation:
-
-```bash
-# Find actual Datastar modifier syntax in use
-grep -r "data-on:" backend/internal/ --include="*.templ" | head -5
-```
-
-If the codebase uses `data-on:keydown__window` but docs say `data-on:keydown.window`, the CODEBASE wins. Document the actual patterns found.
+Verify the exact currently used framework syntax and version, including routes
+with duplicate templates. Resolve any difference from documentation explicitly.
 
 **3. Build Tool Detection**
 
-Read the actual build configuration -- don't assume:
-
-```bash
-cat package.json | python3 -c "import json,sys; d=json.load(sys.stdin); print('scripts:', json.dumps(d.get('scripts',{}), indent=2))"
-```
+Read actual package.json/Makefile/go.mod commands and versions before recommending
+build or verification commands.
 
 **4. Exhaustive File Search**
 
-When research finds a file matching a pattern, search for ALL matches -- don't stop at the first one:
-
-```bash
-# Find ALL template files for a given feature
-find . -name "*.templ" -path "*/members/*" 2>/dev/null
-```
-
-Document every match. Duplicate files serving different routes is a common source of bugs.
+Search all relevant matches with `rg --files`; account for duplicate files serving
+different routes rather than assuming the first match is the only consumer.
 
 ### Phase 3b: Stable Anchor Recommendations
 
-When research uncovers code-to-doc cross-references (e.g. a spec cites a specific handler, or code references a design doc), prefer stable anchors over line numbers in the Research Brief output.
-
-Rules the Research Brief should follow:
-
-- **Go / Python / TS functions:** reference by function name, not line number. `func SetPosition in internal/handler/position.go` beats `position.go:42`.
-- **Templ components:** `templ PositionChangeDialog` beats `dialogs.templ:235`.
-- **Markdown documents:** use heading slugs (`#voting-thresholds`) rather than `docs/governance.md:120`.
-- **Migrations:** cite filename plus table/column (`003_add_votes.sql -> proposals.vote_count`) rather than SQL line numbers.
-
-When the research agent generates citations, it should apply these rules to its own outputs. The prompt-writer (Phase 4) inherits these anchors and does not have to clean up brittle line-number references the research phase introduced.
-
-Also loads (see Phase 4 handoff): the promptcraft skill's Phase 3e Stable Anchors Audit enforces the same rule downstream.
+Use function/component names, Markdown heading slugs and migration filenames
+plus table/column when citing source. Avoid brittle line references. Promptcraft's
+Phase 3e Stable Anchors Audit enforces the same rule downstream.
 
 ### Phase 4: Consolidation
 
-Collect results from all agents and produce a **Research Brief**. Write it as **HTML with a JSON data island**, not markdown -- assemble `templates/base.html` + `templates/sections/research.html` per `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/README.md`. This is the synthesized brief; if research also produced facet notes (`research-codebase.md`, `research-context.md`, `research-design.md`), leave those as markdown supporting detail. The `findings` and `references` arrays populate the `#pipeline-data` island. The content outline below maps to the section's slots:
+Save material findings as **HTML with a JSON data island** using `templates/base.html`
++ `templates/sections/research.html` per
+`${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/README.md`.
+Populate `findings` and `references`; supporting facet notes may stay Markdown.
+Include only applicable sections from this outline:
 
 ```markdown
 # Research Brief: [Feature Name]
@@ -280,10 +209,5 @@ outcome.
 
 ## Reference Loading Discipline
 
-Reference files under `plugins/*/references/` (domain plugins, companion skills) are loaded ON DEMAND by research agents, not eagerly up front. The Research Brief is synthesized from targeted loads -- an agent reads a specific reference only when its research thread needs it.
-
-- DO: load `live-wires:livewires/references/spacing.md` when the feature touches CSS spacing.
-- DO: load `council:governance/references/bc-cooperative-act.md` when the feature involves voting thresholds.
-- DON'T: bulk-load every reference from every companion plugin at the start of the research phase -- that burns tokens without adding focus.
-
-When in doubt, load narrowly. Re-load only if the first pass missed necessary detail.
+Load references on demand for the named question; never bulk-load companion
+plugins. Re-read only when changed facts or missing evidence require it.

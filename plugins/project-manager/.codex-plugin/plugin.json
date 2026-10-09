@@ -1,6 +1,6 @@
 {
   "name": "project-manager",
-  "version": "1.20.2",
+  "version": "1.21.0",
   "description": "Project management: LT10 methodology, Notion-integrated sprint planning, and GitHub-native cross-repository Assembly coordination",
   "author": {
     "name": "Design Machines"
@@ -129,8 +129,8 @@
     "council": ">=1.5.0"
   },
   "optionalPluginDependencies": {
-    "model-router": ">=0.12.0",
-    "dm-review": ">=1.87.0",
+    "model-router": ">=0.13.0",
+    "dm-review": ">=1.88.0",
     "workflow-kernel": ">=0.25.0"
   },
   "interface": {

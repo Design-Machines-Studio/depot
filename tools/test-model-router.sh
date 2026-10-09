@@ -165,6 +165,8 @@ case "${1:-}:${2:-}" in
       esac
     done
     ;;
+  features:list) printf "fast_mode stable true\n" ;;
+  exec:--help) printf -- "--strict-config\n" ;;
   exec:*)
     output=""
     while [ "$#" -gt 0 ]; do
@@ -689,7 +691,7 @@ assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .rea
 assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "rate_limited")' "$TMP/failure-rate.receipt"
 assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "provider_transport_failed")' "$TMP/failure-transport.receipt"
 assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "provider_model_unavailable")' "$TMP/failure-model.receipt"
-assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "unknown_provider_failure")' "$TMP/failure-unknown.receipt"
+assert jq -e '[.attempts[] | select(.transport == "openrouter")] | all(.[]; .reason == "provider_transport_failed")' "$TMP/failure-unknown.receipt"
 assert sh -c "! grep -Eq 'fake-home|OPENROUTER_API_KEY|transport_error|model_not_found' '$TMP/failure-transport.receipt' '$TMP/failure-model.receipt'"
 
 # A provider completion without request-envelope effort evidence cannot become

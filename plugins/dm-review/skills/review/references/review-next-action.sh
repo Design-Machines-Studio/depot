@@ -82,7 +82,7 @@ elif [ "$POLICY_NO_REVIEW" = true ] && [ "$FEEDBACK" = true ] && [ "$SENSITIVE" 
   review='not warranted'
   model_work=false
   action="Run the repository's mandatory checks for $TARGET at final head $FINAL_HEAD."
-  why="Repository policy permits this narrow mechanical or documentation change without another model review."
+  why="Repository policy permits this settled low-impact change without another model review."
 else
   if [ "$SENSITIVE" = true ] || [ "$CONSEQUENCE" = true ]; then
     action="Run \`/dm-review $review_range $TARGET\`."

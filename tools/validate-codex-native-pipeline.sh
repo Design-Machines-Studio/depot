@@ -51,7 +51,7 @@ require_text "$codex_adapter" "dm-review inline protocol" "Codex adapter replace
 require_text "$pipeline_run" "executionMode: codex_native" "pipeline-run records codex_native receipts"
 
 require_text "$pipeline_command" "Codex Native Execution Adapter" "full pipeline Phase 6 links to Codex-native adapter"
-require_text "$pipeline_command" "Mandatory regardless of resolved participant" "full pipeline keeps the required adversarial lens participant-neutral"
+require_text "$pipeline_command" "applicable independent/adversarial review" "Pipeline selects applicable independent adversarial scrutiny"
 require_text "$pipeline_command" "role-level planning coverage receipt" "full pipeline records role-level planning coverage"
 
 require_text "$orchestrator" "codex_native" "orchestrator accepts codex_native execution mode"

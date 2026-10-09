@@ -25,6 +25,7 @@ MATRIX=""
 AVAILABILITY_FILE=""
 WORKFLOW_KERNEL_LAUNCHER=""
 ROLE=""
+RUN_RECEIPT_INDEX=""
 EFFORT=""
 FORMAT=markdown
 CAPABILITIES=()
@@ -36,6 +37,7 @@ usage() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --run-receipt-index) [ "$#" -ge 2 ] || usage; RUN_RECEIPT_INDEX="$2"; shift 2 ;;
     --role) [ "$#" -ge 2 ] || usage; ROLE="$2"; shift 2 ;;
     --capability) [ "$#" -ge 2 ] || usage; CAPABILITIES+=("$2"); shift 2 ;;
     --effort) [ "$#" -ge 2 ] || usage; EFFORT="$2"; shift 2 ;;
@@ -149,10 +151,18 @@ candidate_status() {
   esac
 }
 
+source "$DIR/native-fast-mode.sh"
+source "$DIR/run-availability.sh"
+load_run_failures || usage
 CANDIDATES='[]'
 while IFS= read -r candidate; do
   [ -n "$candidate" ] || continue
   candidate_model="$(printf '%s' "$candidate" | jq -r '.model')"
+  candidate_transport="$(printf '%s' "$candidate" | jq -r '.transport')"
+  [ -z "$(run_failure_reason "$candidate_transport" "$candidate_model")" ] || continue
+  if [ "$candidate_model" = gpt-6-luna ]; then
+    codex_fast_supported "$ROUTER_CODEX_CLI" || continue
+  fi
   if printf '%s' "$DISABLED_CANDIDATES" | jq -e --arg value "$candidate_model" 'index($value) != null' >/dev/null; then
     continue
   fi
@@ -173,8 +183,9 @@ PRIMARY="$(printf '%s' "$CANDIDATES" | jq -c '([.[] | select(.availability == "a
 PRIMARY_MODEL="$(printf '%s' "$PRIMARY" | jq -r '.model')"
 FALLBACK="$(printf '%s' "$CANDIDATES" | jq -c --arg model "$PRIMARY_MODEL" '([.[] | select(.model != $model and (.availability == "available" or .availability == "attemptable"))][0] // [.[] | select(.model != $model and .availability == "unknown")][0] // [.[] | select(.model != $model and .availability == "unavailable")][0]) // empty')"
 [ -n "$FALLBACK" ] && [ "$FALLBACK" != null ] || {
-  jq -cn --arg role "$ROLE" '{recommendedStart:null,reason:"no_concrete_fallback",role:$role}'
-  exit 76
+  # One eligible candidate is still dispatchable. Missing fallback is a visible
+  # limitation, not a reason to misreport the healthy primary as unavailable.
+  FALLBACK='{"model":"unavailable","transport":"unavailable","availability":"unavailable"}'
 }
 
 harness_for() {
@@ -251,9 +262,9 @@ RESULT="$(jq -cn --arg model "$PRIMARY_MODEL" --arg harness "$PRIMARY_HARNESS" \
   --arg availability_reason "$PRIMARY_DIAGNOSTIC" \
   --arg fallback_model "$(printf '%s' "$FALLBACK" | jq -r '.model')" \
   --arg fallback_harness "$FALLBACK_HARNESS" --arg fallback_availability "$FALLBACK_AVAILABILITY" \
-  --arg snapshot "$SNAPSHOT" --argjson cost "$PRIMARY_COST" \
-  '{recommendedStart:{model:$model,harness:$harness,effort:$effort,availability:$availability,availabilityReason:(if $availability_reason == "" then null else $availability_reason end),why:$why,cost:$cost,
-    fallback:{model:$fallback_model,harness:$fallback_harness,availability:$fallback_availability},matrixEvidence:$snapshot}}')"
+  --arg service_mode "$(printf '%s' "$PRIMARY" | jq -r '.serviceMode // "unspecified"')" --arg fallback_service_mode "$(printf '%s' "$FALLBACK" | jq -r '.serviceMode // "unspecified"')" --arg snapshot "$SNAPSHOT" --argjson cost "$PRIMARY_COST" \
+  '{recommendedStart:{model:$model,harness:$harness,effort:$effort,serviceMode:$service_mode,availability:$availability,availabilityReason:(if $availability_reason == "" then null else $availability_reason end),why:$why,cost:$cost,
+    fallback:{model:$fallback_model,harness:$fallback_harness,availability:$fallback_availability,serviceMode:$fallback_service_mode},matrixEvidence:$snapshot}}')"
 
 if [ "$FORMAT" = json ]; then
   printf '%s\n' "$RESULT"
@@ -274,6 +285,7 @@ fi
 printf 'Recommended start\n\n'
 printf -- '- Model: %s\n' "$PRIMARY_MODEL"
 printf -- '- Harness/rail: %s\n' "$PRIMARY_HARNESS"
+printf -- '- Mode: %s (requested; dispatch records confirmation separately)\n' "$(printf '%s' "$RESULT" | jq -r '.recommendedStart.serviceMode')"
 printf -- '- Effort: %s\n' "$EFFECTIVE_EFFORT"
 printf -- '- Why: %s\n' "$WHY"
 printf -- '- Cost: %s\n' "$COST_TEXT"

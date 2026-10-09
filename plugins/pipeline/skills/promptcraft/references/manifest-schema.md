@@ -168,12 +168,12 @@ templates or create a durable registry.
 Derive defaults from `references/routing-policy.json`:
 
 - `docs`, `config`, and bounded `mechanical-logic` use `builder-fast`;
-- substantive `logic`, `ui`, and `integration` use `builder-deep` at `high`;
-- a genuinely mechanical edit in those kinds may use a `builder-fast` override
-  with `bounded-mechanical-work` and a concrete reason; small file count or a
-  settled prototype alone does not remove implementation judgment;
-- add `browser`, `tool-use`, `long-context`, or `structured-output` only when
-  the chunk actually requires it.
+- unknown/consequential `logic`, `ui` and `integration` retain deep defaults;
+- settled bounded application code and tests may use a `builder-fast` override
+  with `bounded-settled-work`, documenting clear design/ownership/patterns,
+  reversible low consequence and verifiable acceptance; file type or count
+  alone is insufficient;
+- add worker capabilities only when required; host browser checks are separate.
 
 Risk, consequence, uncertainty, workflow class, sensitive paths, and rendered
 surface remain separate workflow inputs. They may strengthen scope,

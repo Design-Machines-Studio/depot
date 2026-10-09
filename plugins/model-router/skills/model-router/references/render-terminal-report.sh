@@ -298,6 +298,11 @@ if ! jq -S -s \
                 $entry.value.effortStatus;
                 $entry.value.effortEvidence
               ),
+              serviceMode:(if ($entry.value.serviceMode | type) == "object" then {
+                requested:(if $entry.value.serviceMode.requested == "fast" then "fast" else "unavailable" end),
+                transmitted:(if $entry.value.serviceMode.transmitted == "fast" and ($entry.value.serviceMode.evidence == "native-cli-config" or $entry.value.serviceMode.evidence == "native-event") then "fast" else "unavailable" end),
+                confirmed:(if ($entry.value.serviceMode.confirmed | IN("fast","standard")) and $entry.value.serviceMode.evidence == "native-event" then $entry.value.serviceMode.confirmed else "unavailable" end)
+              } else {requested:"unavailable",transmitted:"unavailable",confirmed:"unavailable"} end),
               billingMode:((if $was_served then $served.billingMode else $entry.value.billingMode end) | safe_billing),
               duration:(if $was_served then duration($served.durationSeconds) else duration($entry.value.durationSeconds) end),
               tokens:(if $was_served then tokens($served) else failure_tokens($entry.value) end),
@@ -368,15 +373,15 @@ if ! jq -r '
     .calls[] as $call
     | $call.attempts[]
     | . as $attempt
-    | "| \($call.role) | \($attempt.model) \(if $attempt.served then "(served)" else "(attempted)" end) | \($attempt.provider) / \($attempt.transport) | \($attempt.requestedEffort) / \($attempt.transmittedEffort) | \($attempt.duration | display_duration) | \($attempt.tokens | display_tokens) | \($attempt.billedCost | display_cost($attempt.billingMode)) | \($attempt.providerFailure | display_failure) | \($attempt.result)\(if $attempt.served and $call.fallback then " (fallback)" else "" end) |";
+    | "| \($call.role) | \($attempt.model) \(if $attempt.served then "(served)" else "(attempted)" end) | \($attempt.provider) / \($attempt.transport) | \($attempt.requestedEffort) / \($attempt.transmittedEffort) | \($attempt.serviceMode.requested) / \($attempt.serviceMode.confirmed) | \($attempt.duration | display_duration) | \($attempt.tokens | display_tokens) | \($attempt.billedCost | display_cost($attempt.billingMode)) | \($attempt.providerFailure | display_failure) | \($attempt.result)\(if $attempt.served and $call.fallback then " (fallback)" else "" end) |";
   [
     "### Model & Cost Report",
     "",
     "Run: " + (.runStatus | ascii_upcase),
     "Matrix: " + (.matrixSnapshots | matrix_line),
     "",
-    "| Role | Attempted / served model | Rail | Effort requested / transmitted | Duration | Tokens | Billed cost | Failure evidence | Result |",
-    "|---|---|---|---|---:|---:|---:|---|---|",
+    "| Role | Attempted / served model | Rail | Effort requested / transmitted | Mode requested / confirmed | Duration | Tokens | Billed cost | Failure evidence | Result |",
+    "|---|---|---|---|---|---:|---:|---:|---|---|",
     (attempt_rows),
     "",
     "Paid total: `" + (.summary.measuredPaidCostUsd | display_money) + "`",

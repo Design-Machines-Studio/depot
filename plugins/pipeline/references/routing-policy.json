@@ -16,7 +16,7 @@
   },
   "routingOverride": {
     "allowedKeys": ["executorRole", "executorCapabilities", "executorEffort", "reasonCode", "reason"],
-    "reasonCodes": ["sensitive-path", "required-live-tool", "complexity-escalation", "bounded-mechanical-work"],
+    "reasonCodes": ["sensitive-path", "required-live-tool", "complexity-escalation", "bounded-mechanical-work", "bounded-settled-work"],
     "forbiddenKeys": ["executor", "model", "provider", "transport", "billingMode", "family"]
   },
   "reviewRoles": {
@@ -33,10 +33,54 @@
     "allowedLevels": ["low", "medium", "high"],
     "legacyDefault": {"planningDepth": "current-standard-path", "verificationDepth": "current-standard-path", "receiptFlag": "decision_profile_defaulted=true", "semanticClaim": "unknown-not-low-low"},
     "rules": {
-      "lowLow": {"when": {"uncertainty": "low", "consequence": "low"}, "planningDepth": "standard", "verificationDepth": "standard"},
+      "lowLow": {"when": {"uncertainty": "low", "consequence": "low"}, "planningDepth": "acceptance-or-short-plan", "verificationDepth": "focused-required"},
       "highUncertainty": {"when": {"uncertainty": "high"}, "planningDepth": "one-independent-opinion-plus-bounded-synthesis", "verificationDepth": "standard-unless-high-consequence"},
       "highConsequence": {"when": {"consequence": "high"}, "planningDepth": "standard-unless-high-uncertainty", "verificationDepth": "stronger-existing-independent-seam"}
     },
     "neverControls": ["role", "capabilities", "effort", "model", "provider", "transport", "billing", "security-policy", "authorization", "rendered-surface", "review-roster", "finding-severity"]
+  },
+  "workflowSelection": {
+    "assessmentInputs": [
+      "acceptanceClear",
+      "designSettled",
+      "consequence",
+      "reversibility",
+      "coordination",
+      "existingPattern",
+      "verificationDefined",
+      "unansweredQuestions"
+    ],
+    "paths": {
+      "direct": {
+        "stages": [
+          "implement",
+          "verify",
+          "deliver"
+        ]
+      },
+      "lean": {
+        "stages": [
+          "targeted-research",
+          "short-plan",
+          "implement",
+          "verify",
+          "independent-review",
+          "deliver"
+        ]
+      },
+      "full": {
+        "stages": [
+          "assess",
+          "targeted-research",
+          "plan",
+          "applicable-adversary",
+          "execute",
+          "verify",
+          "independent-review",
+          "deliver"
+        ]
+      }
+    },
+    "selection": "Use select-workflow.sh with source-backed facts; file count, language, UI and integration labels never determine depth. Explicit full and repository requirements win; escalate incrementally without discarding valid work."
   }
 }

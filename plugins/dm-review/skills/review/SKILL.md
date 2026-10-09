@@ -57,7 +57,7 @@ Default to the cheapest tier that fits.
 | When | Tier | What runs |
 |------|------|-----------|
 | Ordinary chunk during Pipeline execution | focused role | One independent role; sensitive chunks retain full review |
-| Pre-merge, once per PR | full `dm-review` | All applicable agents + consolidation + optional memory enrichment when callable |
+| PR closeout | proportional review | Direct low-impact work follows actual repository policy; ordinary bounded work uses quick, consequential/security boundaries or an explicit full request use full. |
 | Bulk second opinions / large-diff first pass | fixed lane-to-role mapping | Security analysis plus style, duplication, pattern, and doc lanes; eligible diff sections only; mandatory full-diff security sign-off |
 | Bounded repair review | full + one repair | One repair batch and one affected-lane recheck; repeat broad review only when the original was incomplete or the repair changed a real sensitive boundary |
 

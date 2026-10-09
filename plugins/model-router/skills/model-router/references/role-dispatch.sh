@@ -22,6 +22,7 @@ CONTRACT_DIGEST=""
 CONTRACT_REVISION=""
 CONTRACT_REVISION_JSON=null
 WORKFLOW_KERNEL_LAUNCHER=""
+RUN_RECEIPT_INDEX=""
 CAPABILITIES=()
 INDEPENDENCE_RECEIPT_IDS=()
 CAPABILITY_COUNT=0
@@ -34,6 +35,7 @@ usage() {
 
 while [ "$#" -gt 0 ]; do
   case "$1" in
+    --run-receipt-index) [ "$#" -ge 2 ] || usage; RUN_RECEIPT_INDEX="$2"; shift 2 ;;
     --role) [ "$#" -ge 2 ] || usage; ROLE="$2"; shift 2 ;;
     --capability) [ "$#" -ge 2 ] || usage; CAPABILITIES+=("$2"); CAPABILITY_COUNT=$((CAPABILITY_COUNT + 1)); shift 2 ;;
     --effort) [ "$#" -ge 2 ] || usage; EFFORT="$2"; shift 2 ;;
@@ -240,6 +242,13 @@ PROBE_SOURCE="$(printf '%s' "$AVAILABILITY" | jq -r '.probeSource')"
 TRANSPORT_STUB=false
 [ -z "${MODEL_ROUTER_TRANSPORT_STUB:-}" ] || TRANSPORT_STUB=true
 
+source "$DIR/native-fast-mode.sh"
+source "$DIR/run-availability.sh"
+load_run_failures || usage
+if [ -n "$RUN_RECEIPT_INDEX" ]; then
+  [ "$(cd "$(dirname "$RECEIPT_FILE")" && pwd -P)" = "$(cd "$(dirname "$RUN_RECEIPT_INDEX")" && pwd -P)" ] || usage
+fi
+
 ATTEMPTS='[]'
 LAST_REASON="none"
 if printf '%s' "$CAPABILITIES_JSON" | jq -e 'index("browser") != null' >/dev/null; then
@@ -250,21 +259,23 @@ fi
 ATTEMPT_INDEX=0
 EXHAUSTED_TRANSPORTS='[]'
 EXHAUSTED_MODELS='[]'
+NATIVE_STDERR=""
 PRIVATE_LOG="$(mktemp "${TMPDIR:-/tmp}/model-router.log.XXXXXX")" || exit 76
-TRANSPORT_OUTPUT="$(mktemp "${TMPDIR:-/tmp}/model-router.output.XXXXXX")" || { rm -f "$PRIVATE_LOG"; exit 76; }
-PROVIDER_RECEIPT="$(mktemp "${TMPDIR:-/tmp}/model-router.provider.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT"; exit 76; }
-EMERGENCY_RECEIPT="$(mktemp "${TMPDIR:-/tmp}/model-router.mutation-receipt.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT"; exit 76; }
-PUBLIC_OUTPUT_TMP="$(mktemp "$(dirname "$OUTPUT_FILE")/.model-router-output.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT"; exit 76; }
-PUBLIC_RECEIPT_TMP="$(mktemp "$(dirname "$RECEIPT_FILE")/.model-router-receipt.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT" "$PUBLIC_OUTPUT_TMP"; exit 76; }
+NATIVE_STDERR="$(mktemp "${TMPDIR:-/tmp}/model-router.native-stderr.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$NATIVE_STDERR"; exit 76; }
+TRANSPORT_OUTPUT="$(mktemp "${TMPDIR:-/tmp}/model-router.output.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$NATIVE_STDERR"; exit 76; }
+PROVIDER_RECEIPT="$(mktemp "${TMPDIR:-/tmp}/model-router.provider.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$NATIVE_STDERR" "$TRANSPORT_OUTPUT"; exit 76; }
+EMERGENCY_RECEIPT="$(mktemp "${TMPDIR:-/tmp}/model-router.mutation-receipt.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$NATIVE_STDERR" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT"; exit 76; }
+PUBLIC_OUTPUT_TMP="$(mktemp "$(dirname "$OUTPUT_FILE")/.model-router-output.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$NATIVE_STDERR" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT"; exit 76; }
+PUBLIC_RECEIPT_TMP="$(mktemp "$(dirname "$RECEIPT_FILE")/.model-router-receipt.XXXXXX")" || { rm -f "$PRIVATE_LOG" "$NATIVE_STDERR" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT" "$PUBLIC_OUTPUT_TMP"; exit 76; }
 ATTEMPT_RECEIPT_DIR=""
 ATTEMPT_RECEIPT_DIR_NAME=""
 if [ "$WRITE_REQUEST" -eq 1 ]; then
   REPOSITORY_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)" || {
-    rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT" "$PUBLIC_OUTPUT_TMP" "$PUBLIC_RECEIPT_TMP"
+    rm -f "$PRIVATE_LOG" "$NATIVE_STDERR" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT" "$PUBLIC_OUTPUT_TMP" "$PUBLIC_RECEIPT_TMP"
     exit 76
   }
   ATTEMPT_RECEIPT_DIR="$(mktemp -d "$REPOSITORY_ROOT/.model-router-attempts.XXXXXX")" || {
-    rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT" "$PUBLIC_OUTPUT_TMP" "$PUBLIC_RECEIPT_TMP"
+    rm -f "$PRIVATE_LOG" "$NATIVE_STDERR" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$EMERGENCY_RECEIPT" "$PUBLIC_OUTPUT_TMP" "$PUBLIC_RECEIPT_TMP"
     exit 76
   }
   ATTEMPT_RECEIPT_DIR_NAME="$(basename "$ATTEMPT_RECEIPT_DIR")"
@@ -273,7 +284,7 @@ if [ "$WRITE_REQUEST" -eq 1 ]; then
 fi
 PRESERVE_EMERGENCY_RECEIPT=0
 cleanup() {
-  rm -f "$PRIVATE_LOG" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$PUBLIC_OUTPUT_TMP" "$PUBLIC_RECEIPT_TMP"
+  rm -f "$PRIVATE_LOG" "$NATIVE_STDERR" "$TRANSPORT_OUTPUT" "$PROVIDER_RECEIPT" "$PUBLIC_OUTPUT_TMP" "$PUBLIC_RECEIPT_TMP"
   [ -z "$ATTEMPT_RECEIPT_DIR" ] || rm -rf "$ATTEMPT_RECEIPT_DIR"
   [ "$PRESERVE_EMERGENCY_RECEIPT" -eq 1 ] || rm -f "$EMERGENCY_RECEIPT"
 }
@@ -607,13 +618,44 @@ invoke_candidate() {
         printf '\n\n--- bound behavioral contract ---\ncontract_digest: %s\ncontract_revision: %s\n' \
           "$CONTRACT_DIGEST" "$CONTRACT_REVISION" >> "$prompt_copy"
       fi
-      argv=("$ROUTER_CODEX_CLI" exec --model "$model" --config "model_reasoning_effort=\"$effective\"" --sandbox "$sandbox" --ephemeral --output-last-message "$TRANSPORT_OUTPUT")
+      if [ "$model" = gpt-6-luna ]; then
+        ATTEMPT_SERVICE_MODE='{"requested":"fast","transmitted":null,"confirmed":null,"evidence":"unavailable"}'
+        # Feature discovery is native, read-only and makes no model request.
+        if codex_fast_supported "$ROUTER_CODEX_CLI"; then :; else
+          fast_probe_status=$?
+          INVOKE_REASON=fast_mode_probe_unavailable
+          [ "$fast_probe_status" -ne 1 ] || INVOKE_REASON=fast_mode_unsupported
+          rm -f "$prompt_copy"
+          return 77
+        fi
+      fi
+      argv=("$ROUTER_CODEX_CLI" exec --model "$model" --config "model_reasoning_effort=\"$effective\"" --sandbox "$sandbox" --ephemeral --json --output-last-message "$TRANSPORT_OUTPUT")
+      if [ "$model" = gpt-6-luna ]; then
+        argv+=(--config 'service_tier="fast"' --enable fast_mode --strict-config)
+        ATTEMPT_SERVICE_MODE='{"requested":"fast","transmitted":"fast","confirmed":null,"evidence":"native-cli-config"}'
+      fi
       git_root="$(git rev-parse --show-toplevel 2>/dev/null)" && argv+=(--cd "$git_root")
       ATTEMPT_TRANSMITTED_EFFORT="$effective"
       ATTEMPT_EFFORT_STATUS="transmitted"
       ATTEMPT_EFFORT_EVIDENCE="native-cli-config"
-      invoke_native_sanitized "${argv[@]}" < "$prompt_copy" >>"$PRIVATE_LOG" 2>&1
+      invoke_native_sanitized "${argv[@]}" < "$prompt_copy" >>"$PRIVATE_LOG" 2>"$NATIVE_STDERR"
       rc=$?
+      cat "$NATIVE_STDERR" >> "$PRIVATE_LOG"
+      if [ "$model" = gpt-6-luna ]; then
+        # Successful argv transmission is not served-tier confirmation. Retain
+        # confirmation only if a native event explicitly reports a service tier.
+        confirmed="$(jq -Rr 'fromjson? | select(.type == "thread.started" or .type == "turn.completed") | .service_tier // .serviceTier // empty' "$PRIVATE_LOG" | tail -1)"
+        case "$confirmed" in
+          priority|fast) ATTEMPT_SERVICE_MODE='{"requested":"fast","transmitted":"fast","confirmed":"fast","evidence":"native-event"}' ;;
+          default|standard) ATTEMPT_SERVICE_MODE='{"requested":"fast","transmitted":"fast","confirmed":"standard","evidence":"native-event"}'; INVOKE_REASON=fast_mode_unavailable; rc=77 ;;
+        esac
+        native_errors="$(jq -Rr 'fromjson? | select(.type == "error" or .type == "turn.failed") | (.error // .) | .message // empty' "$PRIVATE_LOG")"
+        fast_error_pattern='fast (mode|service tier).*(unavailable|not supported)|unsupported service tier|unknown.*service_tier|unknown.*fast_mode|unexpected argument.*strict-config'
+        if grep -qiE "$fast_error_pattern" <<< "$native_errors" ||
+           { [ "$rc" -ne 0 ] && grep -qiE "$fast_error_pattern" "$NATIVE_STDERR"; }; then
+          INVOKE_REASON=fast_mode_unavailable; rc=77
+        fi
+      fi
       rm -f "$prompt_copy"
       return "$rc"
       ;;
@@ -697,12 +739,31 @@ invoke_candidate() {
         argv=(bash "$root/skills/openrouter-delegate/references/openrouter-wrapper.sh" "$model" - 3600)
         env -u OPENROUTER_SYSTEM OPENROUTER_SYSTEM_FILE="$system_file" \
           OPENROUTER_WORKLOAD=mechanical OPENROUTER_WEB_SEARCH=0 \
+          OPENROUTER_RUN_ID="$RECEIPT_ID" OPENROUTER_LANE_ID="attempt-$ATTEMPT_INDEX" \
           OPENROUTER_REASONING_EFFORT="$effective" \
           OPENROUTER_RECEIPT_FILE="$PROVIDER_RECEIPT" "${argv[@]}" \
           < "$prompt_copy" > "$TRANSPORT_OUTPUT" 2>>"$PRIVATE_LOG"
         rc=$?
         if [ "$rc" -ne 0 ]; then
-          INVOKE_REASON="$(closed_openrouter_failure_reason "$PROVIDER_RECEIPT")"
+          INVOKE_REASON=provider_transport_failed
+          # Read-only wrapper receipts have the wrapper's larger v2 shape.
+          # Validate the actual invocation's model, effort, run/lane and HTTP
+          # diagnosis before treating it as a confirmed reusable failure.
+          if jq -e --arg model "$model" --arg effort "$effective" --arg run "$RECEIPT_ID" --arg lane "attempt-$ATTEMPT_INDEX" '
+            .schemaVersion == 2 and .outcome == "error" and .failureKind == "http_error" and
+            (.invocationId | type == "string" and test("^[0-9a-f]{64}$")) and
+            .requestedModel == $model and .authorization.runId == $run and .authorization.laneId == $lane and
+            .reasoningEffort.requested == $effort and .reasoningEffort.transmitted == $effort and
+            .reasoningEffort.status == "transmitted" and .reasoningEffort.evidence == "request-envelope" and
+            ((.httpStatus == 402 and .failureReason == "insufficient_credits") or
+             ((.httpStatus == 401 or .httpStatus == 403) and .failureReason == "key_permission_denied") or
+             (.httpStatus == 403 and .failureReason == "organization_monthly_budget_exceeded") or
+             (.httpStatus == 429 and .failureReason == "rate_limited") or .httpStatus == 404)
+          ' "$PROVIDER_RECEIPT" >/dev/null 2>&1; then
+            INVOKE_REASON="$(closed_openrouter_failure_reason "$PROVIDER_RECEIPT")"
+            PROVIDER_RECEIPT_STATUS=valid-provider-failure
+            PROVIDER_FAILURE_EVIDENCE_JSON="$(jq -c --argjson rc "$rc" '{status:"valid-provider-failure",failureKind,failureReason,httpStatus,timeoutKind:null,usage:null,billedCostUsd:null,reasoningEffort,processExitStatus:$rc}' "$PROVIDER_RECEIPT")"
+          fi
         fi
         if jq -e --arg effort "$effective" '
           .reasoningEffort.requested == $effort and
@@ -753,16 +814,37 @@ while IFS= read -r candidate; do
      printf '%s' "$EXHAUSTED_MODELS" | jq -e --arg value "$model" 'index($value) != null' >/dev/null; then
     continue
   fi
+  cached_reason="$(run_failure_reason "$transport" "$model")"
+  if [ -n "$cached_reason" ]; then
+    ATTEMPTS="$(jq -c --arg model "$model" --arg transport "$transport" --arg reason "$cached_reason" '. + [{model:$model,transport:$transport,outcome:"skipped",reason:$reason,reusedFailure:true}]' <<< "$ATTEMPTS")"
+    LAST_REASON="$cached_reason"
+    continue
+  fi
   ATTEMPT_INDEX=$((ATTEMPT_INDEX + 1))
   if ! transport_eligibility "$transport" "$model" "$rate_limit_id"; then
     reason="$ELIGIBILITY_REASON"
     ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg provider "$provider" --arg transport "$transport" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg reason "$reason" '. + [{model:$model,provider:$provider,transport:$transport,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,transmittedEffort:null,effortStatus:"not-transmitted",effortEvidence:"unavailable",outcome:"skipped",reason:$reason}]')"
+    if [ "$PROBE_SOURCE" = live ]; then
+      probe_confirmed=false
+      case "$reason" in
+        provider_credential_unavailable) probe_confirmed=true ;;
+        rate_limit_exhausted)
+          # Only the common applicable snapshot or all exhausted buckets can
+          # close a rail. Never turn an explicitly model-mapped bucket into a
+          # provider-wide exclusion.
+          [ -n "$(jq -r '.rateLimitId // empty' <<< "$candidate")" ] || probe_confirmed=true ;;
+      esac
+      if [ "$probe_confirmed" = true ]; then
+        ATTEMPTS="$(jq -c '.[-1] += {failureScope:"rail",failureConfirmed:true}' <<< "$ATTEMPTS")"
+      fi
+    fi
     LAST_REASON="$reason"
     continue
   fi
   ATTEMPT_AVAILABILITY="available"
   [ "$BILLING_MODE" != subscription-headroom-unknown ] || ATTEMPT_AVAILABILITY="attemptable"
   ATTEMPT_AVAILABILITY_REASON="$ELIGIBILITY_REASON"
+  ATTEMPT_SERVICE_MODE=null
   ATTEMPT_TRANSMITTED_EFFORT=""
   ATTEMPT_EFFORT_STATUS="unavailable"
   ATTEMPT_EFFORT_EVIDENCE="unavailable"
@@ -901,10 +983,10 @@ while IFS= read -r candidate; do
     CURRENT_HEAD="$(git rev-parse --verify HEAD 2>/dev/null)" || exit 76
     CURRENT_STATUS="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" || exit 76
     if [ "$CURRENT_HEAD" = "$ATTEMPT_HEAD" ]; then
-      printf '%s\n' 'write-completion-without-commit' > "$PRIVATE_LOG"
+      printf '%s\n' 'write-completion-without-commit' >> "$PRIVATE_LOG"
       rc=79
     elif [ "$CURRENT_STATUS" != "$ATTEMPT_STATUS" ]; then
-      printf '%s\n' 'write-completion-dirty' > "$PRIVATE_LOG"
+      printf '%s\n' 'write-completion-dirty' >> "$PRIVATE_LOG"
       rc=79
     fi
   fi
@@ -929,14 +1011,27 @@ while IFS= read -r candidate; do
     fi
     transmitted_effort_json=null
     [ -z "$ATTEMPT_TRANSMITTED_EFFORT" ] || transmitted_effort_json="$(jq -Rn --arg effort "$ATTEMPT_TRANSMITTED_EFFORT" '$effort')"
+    if [ "$transport" = codex-cli ] && [ "$TRANSPORT_STUB" = false ]; then
+      native_usage="$(jq -Rc 'fromjson? | select(.type == "turn.completed") | .usage // empty' "$PRIVATE_LOG" | tail -1)"
+      if [ -n "$native_usage" ] && jq -e 'type == "object" and
+        all([.input_tokens,.output_tokens][]; type == "number" and . >= 0 and floor == .)' <<< "$native_usage" >/dev/null; then
+        usage_json="$(jq -c '. + {total_tokens:(.input_tokens + .output_tokens)}' <<< "$native_usage")"
+        token_provenance=provider-receipt
+      fi
+    fi
     ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg served_identity "$OBSERVED_SERVED_IDENTITY" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --arg receipt_status "$PROVIDER_RECEIPT_STATUS" --argjson transmitted_effort "$transmitted_effort_json" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,servedIdentity:$served_identity,provider:$provider,transport:$transport,billingMode:$billing,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,effortEvidence:$effort_evidence,providerReceiptStatus:$receipt_status,outcome:"served",durationSeconds:$duration}]')"
+    ATTEMPTS="$(jq -c --argjson mode "$ATTEMPT_SERVICE_MODE" '.[-1].serviceMode=$mode' <<< "$ATTEMPTS")"
     fallback=false
     fallback_reason=none
-    [ "$ATTEMPT_INDEX" -gt 1 ] && { fallback=true; fallback_reason="$LAST_REASON"; }
+    if [ "$ATTEMPT_INDEX" -gt 1 ] || [ "$model" != "$(jq -r '.model' <<< "$REQUESTED_CANDIDATE")" ]; then
+      fallback=true
+      fallback_reason="$LAST_REASON"
+      [ "$fallback_reason" != none ] || fallback_reason=candidate-ineligible
+    fi
     jq -n --arg receipt_id "$RECEIPT_ID" --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --arg model "$model" --arg served_identity "$OBSERVED_SERVED_IDENTITY" --arg provider "$provider" --arg transport "$transport" --arg family "$family" --arg billing "$BILLING_MODE" --arg allowance_window "$ALLOWANCE_WINDOW" --arg matrix "$MATRIX_SNAPSHOT" --arg fallback_reason "$fallback_reason" --arg token_provenance "$token_provenance" --arg cost_provenance "$cost_provenance" --arg contract_digest "$CONTRACT_DIGEST" --arg probe_source "$PROBE_SOURCE" --argjson transmitted_effort "$transmitted_effort_json" --argjson transport_stub "$TRANSPORT_STUB" --argjson contract_revision "$CONTRACT_REVISION_JSON" --argjson requested_candidate "$REQUESTED_CANDIDATE" --argjson capabilities "$CAPABILITIES_JSON" --argjson attempts "$ATTEMPTS" --argjson independence_ids "$INDEPENDENCE_IDS_JSON" --argjson excluded_families "$EXCLUDED_FAMILIES" --argjson fallback "$fallback" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" --argjson duration "$DURATION_SECONDS" --argjson usage "$usage_json" --argjson cost "$cost_json" --argjson commit "$commit_json" --argjson files_changed "$files_changed_json" '{schemaVersion:1,receiptId:$receipt_id,probeSource:$probe_source,transportStub:$transport_stub,requested:{role:$role,capabilities:$capabilities,effort:$requested_effort,independenceReceiptIds:$independence_ids,humanAuthored:$human_authored,candidate:{model:$requested_candidate.model,provider:$requested_candidate.provider,transport:$requested_candidate.transport}},contract_digest:(if $contract_digest == "" then null else $contract_digest end),revision:$contract_revision,participantId:$participant,attempts:$attempts,served:{model:$model,servedIdentity:$served_identity,provider:$provider,transport:$transport,family:$family,billingMode:$billing,allowanceWindow:$allowance_window,durationSeconds:$duration,tokens:$usage,tokenProvenance:$token_provenance,billedCostUsd:$cost,costProvenance:$cost_provenance,commit:$commit,filesChanged:$files_changed},normalizedEffort:$normalized_effort,effectiveEffort:$transmitted_effort,transmittedEffort:$transmitted_effort,effortTransmission:{status:$effort_status,evidence:$effort_evidence,modelReasoningMeasurement:null},effortNormalized:($requested_effort != $normalized_effort),fallback:$fallback,fallbackReason:$fallback_reason,matrixSnapshot:$matrix,publication:{output:"pending"},familyIndependence:{required:(($independence_ids|length>0) or $human_authored),humanAuthored:$human_authored,excludedFamilies:$excluded_families,passed:true}}' > "$EMERGENCY_RECEIPT" || exit 76
     [ -s "$EMERGENCY_RECEIPT" ] || publication_failed receipt-preparation-failed
     jq --arg availability "$ATTEMPT_AVAILABILITY" --arg availability_reason "$ATTEMPT_AVAILABILITY_REASON" \
-      '.served.availability=$availability | .served.availabilityReason=$availability_reason | .attempts[-1].availability=$availability | .attempts[-1].availabilityReason=$availability_reason' \
+      --argjson mode "$ATTEMPT_SERVICE_MODE" '.served.serviceMode=$mode | .served.availability=$availability | .served.availabilityReason=$availability_reason | .attempts[-1].availability=$availability | .attempts[-1].availabilityReason=$availability_reason' \
       "$EMERGENCY_RECEIPT" > "$EMERGENCY_RECEIPT.next" || exit 76
     mv "$EMERGENCY_RECEIPT.next" "$EMERGENCY_RECEIPT" || exit 76
     cp "$TRANSPORT_OUTPUT" "$PUBLIC_OUTPUT_TMP" 2>/dev/null || publication_failed output-preparation-failed
@@ -947,13 +1042,20 @@ while IFS= read -r candidate; do
     jq -n --arg role "$ROLE" --arg participant "$PARTICIPANT_ID" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg output "$OUTPUT_FILE" --arg probe_source "$PROBE_SOURCE" --argjson transmitted_effort "$transmitted_effort_json" --argjson transport_stub "$TRANSPORT_STUB" --argjson capabilities "$CAPABILITIES_JSON" --argjson fallback "$fallback" --argjson human_authored "$([ "$HUMAN_AUTHORED" -eq 1 ] && printf true || printf false)" --argjson excluded_family_count "$(printf '%s' "$EXCLUDED_FAMILIES" | jq 'length')" '{role:$role,capabilities:$capabilities,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,effectiveEffort:$transmitted_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,participantId:$participant,disposition:"completed",fallback:$fallback,evidenceSource:$probe_source,transportStub:$transport_stub,familyIndependence:{humanAuthored:$human_authored,excludedFamilyCount:$excluded_family_count},output:$output}'
     exit 0
   fi
+  diagnostic_text="$(cat "$PRIVATE_LOG")"
+  if [ "$transport" = codex-cli ] && [ "$PROBE_SOURCE" = live ]; then
+    diagnostic_text="$(jq -Rr 'fromjson? | select(.type == "error" or .type == "turn.failed") | (.error // .) | .message // empty' "$PRIVATE_LOG")"
+    diagnostic_text="$diagnostic_text
+$(cat "$NATIVE_STDERR")"
+  fi
   if [ -n "${INVOKE_REASON:-}" ]; then reason="$INVOKE_REASON"
   elif grep -Fqi 'repository-not-clean' "$PRIVATE_LOG"; then reason=repository-not-clean
   elif grep -Fqi 'write-completion-without-commit' "$PRIVATE_LOG"; then reason=write-completion-without-commit
   elif grep -Fqi 'write-completion-dirty' "$PRIVATE_LOG"; then reason=write-completion-dirty
   elif [ "$WRITE_REQUEST" -eq 1 ] && [ "$transport" = openrouter ]; then reason="$(openrouter_write_failure_reason)"
-  elif grep -qiE 'usage.?limit|rate.?limit|quota|exhausted' "$PRIVATE_LOG"; then
+  elif grep -qiE 'usage.?limit|quota exhausted|quota-exhausted' <<< "$diagnostic_text"; then
     if [ "$transport" = codex-cli ]; then reason=rate_limit_exhausted; else reason=quota-exhausted; fi
+  elif grep -qiE 'rate.?limit|too many requests|429' <<< "$diagnostic_text"; then reason=rate_limited
   elif grep -qiE 'declin|refus' "$PRIVATE_LOG"; then reason=content-refusal
   else reason=transport-unavailable
   fi
@@ -967,6 +1069,41 @@ while IFS= read -r candidate; do
   fi
   ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg model "$model" --arg served_identity "$OBSERVED_SERVED_IDENTITY" --arg provider "$provider" --arg transport "$transport" --arg billing "$BILLING_MODE" --arg requested_effort "$EFFORT" --arg normalized_effort "$EFFECTIVE_EFFORT" --arg effort_status "$ATTEMPT_EFFORT_STATUS" --arg effort_evidence "$ATTEMPT_EFFORT_EVIDENCE" --arg receipt_status "$PROVIDER_RECEIPT_STATUS" --arg reason "$reason" --argjson provider_failure "$PROVIDER_FAILURE_EVIDENCE_JSON" --argjson process_exit_status "$process_exit_status" --argjson transmitted_effort "$transmitted_effort_json" --argjson duration "$DURATION_SECONDS" '. + [{model:$model,servedIdentity:$served_identity,provider:$provider,transport:$transport,billingMode:$billing,requestedEffort:$requested_effort,normalizedEffort:$normalized_effort,transmittedEffort:$transmitted_effort,effortStatus:$effort_status,effortEvidence:$effort_evidence,providerReceiptStatus:$receipt_status,providerFailureEvidence:$provider_failure,processExitStatus:$process_exit_status,outcome:"failed",reason:$reason,durationSeconds:$duration}]')"
   ATTEMPTS="$(printf '%s' "$ATTEMPTS" | jq -c --arg availability "$ATTEMPT_AVAILABILITY" --arg availability_reason "$ATTEMPT_AVAILABILITY_REASON" '.[-1].availability=$availability | .[-1].availabilityReason=$availability_reason')"
+  failure_scope=none
+  failure_confirmed=false
+  case "$reason" in
+    fast_mode_unsupported|fast_mode_unavailable) failure_scope=model; failure_confirmed=true ;;
+    insufficient_credits|organization_monthly_budget_exceeded|provider_credential_unavailable)
+      if [ "$PROVIDER_RECEIPT_STATUS" = valid-provider-failure ]; then failure_scope=rail; failure_confirmed=true; fi ;;
+    provider_model_unavailable)
+      if [ "$PROVIDER_RECEIPT_STATUS" = valid-provider-failure ]; then failure_scope=model; failure_confirmed=true; fi ;;
+    rate_limited) failure_scope=transient ;;
+    fast_mode_probe_unavailable|transport-unavailable|provider_transport_failed) failure_scope=infrastructure ;;
+  esac
+  # Native JSON error envelopes are stronger than arbitrary transcript text.
+  if [ "$transport" = codex-cli ] && jq -Rse '
+    [split("\n")[] | fromjson? | select(.type == "error" or .type == "turn.failed") |
+      (.error // .) | select(.code == "usage_limit_reached" or .code == "quota_exceeded" or
+        ((.message // "") | startswith("You\u0027ve hit your usage limit.")))] | length > 0
+  ' "$PRIVATE_LOG" >/dev/null 2>&1; then
+    reason=rate_limit_exhausted; failure_scope=rail; failure_confirmed=true
+  fi
+  native_code="$(jq -Rr 'fromjson? | select(.type == "error" or .type == "turn.failed") | (.error // .) | .code // empty' "$PRIVATE_LOG" | tail -1)"
+  if [ "$transport" = codex-cli ]; then
+    case "$native_code" in
+      model_not_found|model_not_available) reason=provider_model_unavailable; failure_scope=model; failure_confirmed=true ;;
+      not_authenticated|authentication_failed) reason=authentication-unavailable; failure_scope=rail; failure_confirmed=true ;;
+    esac
+  fi
+  ATTEMPTS="$(jq -c --arg reason "$reason" --arg scope "$failure_scope" --argjson confirmed "$failure_confirmed" --argjson mode "$ATTEMPT_SERVICE_MODE" \
+    '.[-1] += {reason:$reason,failureScope:$scope,failureConfirmed:$confirmed,serviceMode:$mode}' <<< "$ATTEMPTS")"
+  # Keep useful partial output beside its actual failed receipt; never treat it as success.
+  if [ -s "$TRANSPORT_OUTPUT" ]; then
+    partial_path="$RECEIPT_FILE.partial-$ATTEMPT_INDEX.txt"
+    if [ -e "$partial_path" ] || [ -L "$partial_path" ]; then exit 76; fi
+    cp "$TRANSPORT_OUTPUT" "$partial_path" || exit 76
+    ATTEMPTS="$(jq -c --arg path "$(basename "$partial_path")" '.[-1].partialOutput=$path' <<< "$ATTEMPTS")"
+  fi
   if [ "$WRITE_REQUEST" -eq 1 ]; then
     CURRENT_HEAD="$(git rev-parse --verify HEAD 2>/dev/null)" || exit 76
     CURRENT_STATUS="$(git status --porcelain=v1 --untracked-files=all 2>/dev/null)" || exit 76
@@ -977,8 +1114,16 @@ while IFS= read -r candidate; do
       break
     fi
   fi
-  if [ "$reason" = quota-exhausted ] || [ "$reason" = rate_limit_exhausted ] ||
-     { [ "$transport" = openrouter ] && [ "$reason" = insufficient_credits ]; }; then
+  if [ "$failure_confirmed" = true ]; then
+    if [ "$failure_scope" = rail ]; then
+      EXHAUSTED_TRANSPORTS="$(jq -c --arg value "$transport" '. + [$value] | unique' <<< "$EXHAUSTED_TRANSPORTS")"
+    elif [ "$failure_scope" = model ]; then
+      EXHAUSTED_MODELS="$(jq -c --arg value "$model" '. + [$value] | unique' <<< "$EXHAUSTED_MODELS")"
+    fi
+  fi
+  if [ "$PROBE_SOURCE" = fixture ] &&
+     { [ "$reason" = quota-exhausted ] || [ "$reason" = rate_limit_exhausted ] ||
+       { [ "$transport" = openrouter ] && [ "$reason" = insufficient_credits ]; }; }; then
     if [ "$transport" = codex-cli ] || [ "$transport" = claude-cli ] ||
        { [ "$transport" = openrouter ] && [ "$reason" = insufficient_credits ]; }; then
       EXHAUSTED_TRANSPORTS="$(printf '%s' "$EXHAUSTED_TRANSPORTS" | jq -c --arg value "$transport" '. + [$value] | unique')"
