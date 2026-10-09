@@ -169,19 +169,33 @@ If the selected plugin is unavailable at execution time, report the missing
 workflow instead of silently substituting an unstructured implementation.
 
 Direct prompts require dm-review's `automatic-implementation-closeout.md`:
-automatic proportional review/repair after verified PR push, ending in validated
-final-head evidence or a precise blocker. Pipeline retains its existing final
-gate. Require Playwright for formal browser checks, T3 for operator handoff.
-Preparation stays planning-only.
+plan/prompt approval, implementation, verified candidate commit/push, independent
+proportional review/repair/recheck and source/browser evidence preservation,
+then PR creation through `publish-reviewed-pr.sh`. Pipeline retains its single
+integrated owner and final gate; no duplicate standalone loop. Keep the draft
+until actual final-head PR CI, independently settled feedback and applicable
+designer UI acceptance pass; use the same seam for ready. CI/feedback waits
+at an unchanged covered head with zero retained findings never redispatch
+reviewers. Require Playwright for formal browser checks, T3 and dm-review's
+designer handoff for UI tasks and owner merge. Never request routine
+backend-code review or PR creation from the designer. Generate
+`noMergeOnCompletion=true`; missing/false legacy controls grant no merge
+authority. The root owner alone binds the exact SessionStart context after
+approval and updates actual phases; workers receive it read-only. If unavailable,
+report `hook activation unavailable` while the pre-PR producer gate still runs.
+Planning/material-scope approval stays explicit; preparation stays planning-only.
 
 Every prompt must state:
 
 - repository and exact base;
 - worktree and branch expectations;
 - for rendered work, the established project domain and canonical serving repo
-  folder, feature branch/head and existing build/restart command. Default to
-  checking out the feature branch or its exact detached commit there for browser review; an implementation
-  worktree does not authorize a new harness or environment reconfiguration.
+  folder, feature branch/head and existing build/restart command. Commit/push
+  and verify the head before normally detaching only the owned producer
+  worktree; select the branch before browser capture and complete preservation.
+  Retain producer checkout/state and unfinished evidence through publication.
+  Foreign occupancy blocks until that owner's exact handoff; never detach/remove
+  a foreign owner. No new harness or environment reconfiguration by implication.
   For multiple maintained instances, carry the exact originating folder/domain
   pair through review and leave the reviewed feature head serving for the operator.
   Require final task-owned commit/push and remote PR-head verification; cleanup
@@ -335,9 +349,13 @@ Return a compact, outcome-first report containing:
 Do not bury the recommendation beneath process narration.
 
 For completed implementation or PR follow-up, use dm-review's
-`review-next-action.sh` with authenticated current head/feedback and the
-repository's retained coverage and recording the actual dirty-state boundary.
-Report its exact `Review`, `Action`, `Why`, and
+`operator-handoff.sh` for the designer-facing result. Separate feedback from
+review: pre-PR feedback is `not_applicable`; post-PR collect and settle it
+independently. Invoke `review-next-action.sh` only for actual source coverage,
+new supported retained finding or rendered automation gaps, with authenticated
+current head and retained coverage plus the actual dirty-state boundary. An
+unchanged covered head with zero findings waits for CI/feedback without broad
+dispatch. When invoked, report its exact `Review`, `Action`, `Why`, and
 `Reuse` lines. Only when it emits `modelWork: true`, render the requested
 `review-coordinator` recommendation through the actual model-router renderer.
 This follow-up does not dispatch a review or turn green checks into settlement

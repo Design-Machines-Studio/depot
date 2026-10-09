@@ -1,14 +1,14 @@
 {
   "name": "project-scaffolder",
   "description": "Claude Code project infrastructure scaffolding with hooks, agents, settings, and CLAUDE.md templates (project-type-specific plus generic/DM-standard starters)",
-  "version": "1.10.2",
+  "version": "1.11.0",
   "author": {
     "name": "Design Machines"
   },
   "optionalPluginDependencies": {
     "live-wires": ">=1.0.0",
-    "dm-review": ">=1.83.6",
-    "pipeline": ">=1.68.0",
+    "dm-review": ">=1.87.0",
+    "pipeline": ">=1.73.0",
     "accessibility-compliance": ">=1.0.0"
   },
   "capabilities": {
@@ -30,7 +30,14 @@
           "Docker safety gate",
           "session-start workflow"
         ],
-        "tags": ["scaffolding", "claude-code", "hooks", "settings", "project-setup", "claude-md-starter"]
+        "tags": [
+          "scaffolding",
+          "claude-code",
+          "hooks",
+          "settings",
+          "project-setup",
+          "claude-md-starter"
+        ]
       }
     ],
     "agents": [],

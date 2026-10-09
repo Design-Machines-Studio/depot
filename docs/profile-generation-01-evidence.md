@@ -1,68 +1,106 @@
 # PROFILE-GENERATION-01 evidence
 
-Pipeline Step 0f now has a supported launcher path for authoritative browser-plan discovery, focused selection, materialization and reload. Kernel 0.27.0 supplies `generate-verification-profile`; Pipeline 1.73.1 requires Kernel >=0.27.0 and resolves the Kernel contract from its coherent bundle. Generation and binding prepare a test plan. They do not prove browser execution.
+Draft PR #175 provides `generate-verification-profile` in Kernel 0.27.0 and Pipeline 1.73.1 integration with Kernel >=0.27.0. Generation prepares and reloads an authoritative plan; it proves no browser execution. Baseplate remains paused. Source validation and settled review outputs do not supply the missing final native-review provenance intake.
 
 ## SIMPLICITY-CHECK
 
-One CLI handler delegates discovery to `ProjectPersonaAdapter`; task selection runs before expansion and an optional exact case-ID filter retains declared primitives and required flags. It reuses the existing profile parser, identity, origin digest, durable writer, loader and behavioral binding. No alternate discovery implementation, profile schema, browser service, sweep framework or private-module workaround was added. No changes to application UI or Baseplate repairs were made. Generated aliases/manifests come from canonical sources.
+One CLI handler delegates discovery to ProjectPersonaAdapter. Explicit task selection runs before expansion; exact case selection retains declared primitives and required flags. Existing parsers, identities, origin digests, serialization, safe publication, reload and immutable binding are reused. There is no second discovery implementation, new profile schema, browser service, runbook parser or application sweep. Pipeline now compares all required acceptance dimensions, including mobile, before dispatch.
 
-## Candidate canary
+## Integration and versions
 
-Baseplate source: `f508cd6c890473246c43c3d9b6d7f59c1c62903b`, branch `fix/owner-ui-feedback-20261008`, PR [#1152](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/1152). Every copied declaration retained exact source bytes. The bounded declaration copy contains the seven affected task files, four additional task declarations named by the unchanged route-binding configuration, the complete persona index/files, configuration and generated coverage matrix. Full original checkout, serving state, shared data, original run evidence and native PR/Issues were untouched.
+Recorded order remains **#172 → #174 → #173 → #175**. Refreshed reviewed heads:
 
-The launcher generated/reloaded 30 candidate cases for the seven-task union. Exact candidate case IDs selected the eight Firefox task/persona pairs named by the source planning artifact. This preserves declared viewports and provenance; it does not reproduce the diagnostic profile's invented desktop/mobile matrix.
+| PR | Exact source | Preserved behavior |
+| --- | --- | --- |
+| [172](https://github.com/Design-Machines-Studio/depot/pull/172) | ff171bae66a51ad20acbaa40d89d0183cf4d05fb | Pinned historical retained-review compatibility; new reviews remain strict |
+| [174](https://github.com/Design-Machines-Studio/depot/pull/174) | f1c1a3a9fc58618642987604101078ecdb88a222 | Whole-package 5 MiB / 200-file bounds; existing source references reused without seal rewriting |
+| [173](https://github.com/Design-Machines-Studio/depot/pull/173) | d1aca4ef2320569d9840b42191e3550b97a822f9 | Readiness/publication and maintained-checkout behavior; exact 172/174 ancestors |
 
-| Task | Persona | Route | Browser | Declared viewport |
-| --- | --- | --- | --- | --- |
-| bp-acct-002 | casual-member | /account/edit | firefox | 1280x800 |
-| bp-dev-001 | casual-member | /dev/markdown-editor | firefox | 1280x800 |
-| bp-adm-001 | engaged-chair | /admin/settings | firefox | 1440x900 |
-| bp-adm-018 | super-admin | /super/design | firefox | 1440x900 |
-| bp-adm-004 | engaged-chair | /admin/members | firefox | 1440x900 |
-| bp-dev-001 | power-secretary | /dev/markdown-editor | firefox | 1680x1050 |
-| bp-adm-007 | super-admin | /super/fixtures | firefox | 1440x900 |
-| bp-memb-004 | engaged-chair | /admin/members/new | firefox | 1440x900 |
+Normal Git merge preserves those commits and source changes. #175 retains later Kernel 0.27.0/Pipeline 1.73.1; Pipeline also preserves dm-review>=1.87.0. dm-review's Kernel>=0.26.2 floor and all other owner versions remain intact. Generated manifests/aliases and dependency graph are regenerated from canonical sources. No owner branch, primary checkout or consumer work was rewritten.
 
-Both generated-profile binding and its exact idempotent retry succeeded in a fresh disposable Git scope. The original diagnostic profile/contract also bound and retried in a separate disposable run. Attempting to bind the changed generated profile/contract to that run was rejected. No immutable binding was rewritten and no earlier dispatch was retroactively validated.
+## Exact preservation diagnosis
 
-Supported bounded-copy invocation (substitute the exact source copy and verified origin):
+The failed attempt supplied the entire working `router/` directory. All 18 actual indexed receipt JSON files are valid, but `_copy_router_tree` accepts only JSON files. Actual traversal first rejects **router/plan-prompt.md** with `private router receipt directory has an unexpected file`; the wrapper reports `preservation_input/invalid_evidence`. The other rejected files are plan-evidence.txt, plan-output.md, builder-prompt.md, builder-completion-prompt.md, builder-completion-evidence.txt and builder-final-prompt.md. Originals are preserved. An exact receipt-only copy containing 18 receipts and the original index passes the directory requirement.
+
+The supported helper now preserves the complete initial review at its actual source, 676b40b5: 83 files and 1,764,469 bytes. An identical retry leaves every retained hash unchanged. Literal native outputs and actual host traces are byte-verified as separate supplemental diagnostics. This successful interim retention does not approve the newer source.
+
+That correction alone cannot establish final coverage. The last committed request and aggregate bind **676b40b5**, while the accepted documentation recheck and six settled native collaboration outputs inspected **53298592**. The final integrated commit needs a new source-bound aggregate and validated transitions. An edited request or old seal cannot approve it.
+
+All six native literal outputs and their hashes remain unchanged. Actual private Codex host JSONL traces were recovered for the three agents, recording parent/agent thread identities, actual model/effort, timestamps, task assignments, tool executions and returned results. Their derived index is explicitly host-trace evidence; it is not a router receipt. Each agent covered two affected lanes with shared context. Native usage/cost is not inferred from routing metadata.
+
+**Specific Kernel gap:** existing lane input requires `dispatch_receipt_ref` and `companion_ref`; production validation requires an actual served router dispatch, attempts, published output and non-stub transport. It has no accepted alternative for T3 `collaboration.spawn_agent/followup_task` completion events. Six separate failed routed attempts have served: null and cannot represent native success. PR #172's sole historical pin is a different Baseplate run; PR #174's larger bounds do not add provenance support. PR #173 used real role-dispatch codex-cli receipts, not collaboration-native outputs.
+
+The smallest repair is a closed actual host-event provenance variant in the existing lane producer, binding agent, source/inspection scope, output bytes and actual completion while preserving unknown fields and all existing router checks. It was handed to Kernel ownership through the board. No router receipts, source seals, successful final coverage or terminal completion were manufactured. Settled lanes were not restarted. Supported final coverage/preservation remains blocked until that intake accepts the preserved evidence.
+
+## Complete Baseplate declaration-tree diagnosis
+
+Consumer exact source: [f508cd6c890473246c43c3d9b6d7f59c1c62903b](https://github.com/Design-Machines-Studio/assembly-baseplate/pull/1152). Full-tree supported generation exits 2 and writes no profile. The exact blocker is [tests/ux/tasks/baseplate/fixtures/bp-fix-002-autosave.md:26](https://github.com/Design-Machines-Studio/assembly-baseplate/blob/f508cd6c890473246c43c3d9b6d7f59c1c62903b/tests/ux/tasks/baseplate/fixtures/bp-fix-002-autosave.md#L26):
+
+```yaml
+tags: [fixtures, autosave, keyboard, accessibility, csrf, no-js, responsive]
+heuristics: [N1, N4, N5, G1]
+```
+
+Lines 26–27 use inline arrays for ordinary task list fields. The existing limited declaration contract requires indented lists; `_validate_frontmatter_lines` rejects nonempty inline values for these keys. Tags is the first rejection; changing only one field in a disposable copy exposes the other. Discovery validates all authoritative tasks before focused selection, so this unrelated task blocks the seven-task union. This declaration syntax defect belongs to Baseplate; Depot must not weaken parsing to accept it. File SHA256: 9297154e2a92682a6fcaaea494a86e9cd55abf7054c1b76a96277add29bc405a.
+
+Supported CLI isolation found this one failure among 149 additional frontmatter tasks. A disposable complete-tree counterfactual that changes both fields to the supported list form yields 30 candidate cases. It is diagnostic evidence, not a consumer implementation or normal exact-source passing canary.
+
+## Acceptance coverage and corrected canary claim
+
+The earlier reduced-copy canary generated 30 candidates and selected eight Firefox desktop cases. It proved supported generation/reload/binding mechanics on a bounded fixture only. Its driver ignored the source planning artifact's **1440x900 and 375x812** selection. It omitted all eight approved mobile cases and three approved desktop cases, while adding three persona-default desktop cases. The prior description of that matrix as invented was incorrect: the artifact and retained contract specify wide/narrow obligations. That eight-case output is **not normal consumer proof and does not satisfy approved acceptance**.
+
+Required focused coverage remains:
+
+| Task | Persona | Route | Required Firefox viewports |
+| --- | --- | --- | --- |
+| bp-dev-001 | power-secretary | /dev/markdown-editor | 1440x900; 375x812 |
+| bp-dev-001 | casual-member | /dev/markdown-editor | 1440x900; 375x812 |
+| bp-memb-004 | engaged-chair | /admin/members/new | 1440x900; 375x812 |
+| bp-adm-004 | engaged-chair | /admin/members | 1440x900; 375x812 |
+| bp-adm-007 | super-admin | /super/fixtures | 1440x900; 375x812 |
+| bp-acct-002 | casual-member | /account/edit | 1440x900; 375x812 |
+| bp-adm-001 | engaged-chair | /admin/settings | 1440x900; 375x812 |
+| bp-adm-018 | super-admin | /super/design | 1440x900; 375x812 |
+
+Firefox is the approved primary engine; Chromium remains alternate recovery. Editor 200% zoom, narrow keyboard interaction and design-token 375px assertions remain behavioral obligations. Viewport generation proves none of these passed.
+
+Current `tests/ux/verification.json` declares route bindings but no viewport override. Persona desktop defaults win under existing precedence; screenshot instructions and Markdown browser matrices are not parsed as declarations. Baseplate's owner must reconcile the approved viewport set through the existing configuration mechanism. It was handed off through exchange b29cc4ad4dbb4fa39921c883b9a9242d; no consumer file was changed.
+
+A second disposable counterfactual applies only the two list fixes and explicit existing `verification.json.viewports=[1440x900,375x812]`. Full discovery yields 60 candidates; the approved eight pairs × Firefox × two viewports yields 16 cases with the **same sixteen case IDs** as the diagnostic plan. The generated profile nevertheless differs in viewport provenance and coverage-matrix diagnostics, so profile ID and full-document digest differ. Counterfactual profile ID: profile-sha256:bea7f595e1689a1450504ff4623c1deaf998a2c7a39bdebae1136240ced96454; full digest: sha256:7d35b9de9454a2aaed299b285a5e0a2031b41fdbe654af308f363ef1f3a72289. This is hypothetical fixture proof, never normal consumer proof. No binding or browser tests were attempted for it.
+
+## Supported invocation and binding recovery
+
+After publication/install and valid consumer declarations, generate the complete task union through the supported launcher:
 
 ```sh
 "$WORKFLOW_KERNEL" generate-verification-profile \
-  --project-root "$AFFECTED_DECLARATION_COPY" --declaration-root . \
-  --output plans/profile-generation-candidate.json \
+  --project-root . --output plans/<new-plan>/verification-profile-candidate.json \
   --target-origin "$VERIFIED_TARGET_ORIGIN" \
   --task-id bp-dev-001 --task-id bp-memb-004 \
   --task-id bp-adm-004 --task-id bp-adm-007 \
   --task-id bp-acct-002 --task-id bp-adm-001 --task-id bp-adm-018
 ```
 
-Ordinary repository discovery uses `--project-root .` and omits `--declaration-root`. For an explicitly approved narrower combination set, reload the candidate JSON and pass its exact approved `--case-id` values in a second invocation with a fresh output path. Every task in the explicit union must retain at least one case. Generation receipts expose profile ID, full digest, exact selected/required IDs, discovery/selection status and `reload_verified=true`.
+Reload the output and compare declared task/persona/engine/viewport cases with every approved acceptance obligation. Missing mobile/browser coverage blocks dispatch. For the approved focused set, pass all sixteen exact candidate IDs through repeated `--case-id` in a second invocation with a fresh output path. Never select eight desktop cases as a substitute.
 
-## Binding recovery
-
-The diagnostic profile has 16 Firefox cases at `1440x900` and `375x812`. Authoritative focused discovery has eight cases at the declarations' applicable viewports. Both profile ID and full-document digest differ. Preserve the original run/profile/binding. Prepare and review a new consumer plan, initialize its fresh run, generate/reload the approved profile, create the contract with the exact profile ID/full digest and required case arrays, then call `bind-verification-contract` with `--verification-profile`. Only an identical existing binding permits idempotent reuse.
+Preserve the diagnostic run/profile/immutable binding. Only an identical complete binding permits supported idempotent retry. Changed profile provenance or full digest requires a newly planned run, even when all sixteen case IDs match. Initialize that run, generate/reload its approved profile, build the contract with exact profile identity/digest and required case arrays, then bind with `--verification-profile`. Never rewrite an old binding or retroactively validate earlier dispatch.
 
 ## NOT-COVERED
 
-- No browser tests, application repairs, review restarts, serving-checkout changes, shared data changes, release publication, tags or harness synchronization occurred.
-- The complete exact-source declaration-tree copy was rejected by existing declaration validation and wrote no profile. The bounded affected-source canary passed; it does not claim production whole-tree discovery passed. Unrelated declaration repair remains outside this Depot scope.
-- Candidate source proof is separate from installed-consumer proof. Baseplate remains blocked until compatible releases are published/installed, declaration authority is valid, and its changed profile is bound in a newly planned run.
-- Existing sandbox socket failures and `/tmp/.git` interference are retained in failed attempts. Host verification uses one task-owned temporary directory outside Git checkouts; the foreign `/tmp/.git` is preserved.
-- Project 1 update: None. No native consumer Issue/PR state was changed.
+- Supported final native-review intake/aggregate/preservation remains blocked by the specific Kernel gap above. An archive is not a successful final producer seal.
+- No normal exact-source full-tree passing consumer canary, consumer declaration repair, new consumer binding, browser execution, application repair, review restart, serving-checkout change or shared-data change occurred.
+- Native macOS, publication/tags, Claude/Codex synchronization and installed-consumer proof remain separate. Original evidence and consumer Issue/PR state are unchanged. Project 1 update: None.
 
 ## COMMANDS-RUN
 
-- Focused CLI/discovery/release-validator tests; runtime CLI and behavioral binding checks.
-- `tools/validate-workflow-kernel.py` and `tools/validate-composition.sh --all`, using a registered non-Git temporary directory for host fixture sockets/bindings.
-- Canonical manifest/alias generation, generated index/dependency graph refresh and corresponding current-surface checks.
-- Candidate launcher generation/reload, disposable `init`/`append`, `bind-verification-contract`, exact binding retries and changed-binding rejection.
-- `git diff --check`; source ownership, remote main and PR #172/#173 inspection. Exact results and private routed receipts remain in the retained task evidence.
+- Refreshed origin/main and exact 172/174/173 PR files/heads; verified ancestor order; normal Git integration and canonical/generated version/dependency reconciliation.
+- Focused CLI/discovery/binding and retention/historical tests; `tools/validate-workflow-kernel.py`; full `tools/validate-composition.sh --all`; generated manifest/alias/index/dependency and `git diff --check` validation.
+- Read-only exact 532 validator reproduction; all 18 actual receipt validation, seven rejected extra files, byte-identical 19-file receipt-only copy; initial/final request-scope failures; six unchanged literal-output hashes; actual native host-trace preservation.
+- Supported generation on disposable exact-source declarations; isolated inline-list failures; explicitly patched hypothetical full-tree probes; complete approved 16-case/identity/provenance comparison. Every diagnostic scratch scope was removed after preserving results. No private installed-module workaround.
 
-## Required delivery after this unmerged source PR
+## Remaining delivery and consumer steps
 
-1. Review and merge the authorized source changes. Coordinate/reconcile #172's retained-review Kernel changes and #173's readiness/cleanup changes before release, preserving their versions/dependency updates. This PR reserves Kernel 0.27.0 and Pipeline 1.73.1; it does not absorb those repairs.
-2. Run the repository release preflight against the final combined main. Publish `workflow-kernel-v0.27.0` and `pipeline-v1.73.1` under the repository release procedure; confirm canonical/generated manifests and dependency floors on that exact release. No tag is created here.
-3. Refresh the Claude marketplace clone and run `claude plugin update workflow-kernel@depot` and `claude plugin update pipeline@depot`. Desktop Cowork has an independent cache and must be refreshed/restarted separately where used.
-4. Use `codex plugin marketplace list` to identify the managed snapshot; refresh it with the supported marketplace upgrade path, then run `codex plugin add workflow-kernel@depot` and `codex plugin add pipeline@depot`. Do not edit cache files manually. Confirm each host resolves coherent assets at the required versions, without an older cross-host fallback.
-5. After publication/install, run the installed launcher generation/reload/binding canary on the approved consumer declarations. Resolve the full-tree declaration failure or explicitly approve a valid bounded fixture authority. Create a newly planned consumer run for changed profile coverage; preserve the diagnostic run. Only then may the consumer resume its own authorized work.
+1. Kernel ownership supplies the supported actual host-native evidence intake. Recover settled outputs, assemble final source-bound transitions/coverage and preserve/repeat the complete package. Recheck only newly affected source. Keep this PR draft until its readiness evidence is complete.
+2. Owner merges in 172 → 174 → 173 → 175 order. Run release preflight on combined main; publish required workflow-kernel-v0.27.0 and pipeline-v1.73.1 tags under the repository release procedure. These versions are reserved source, not published releases.
+3. Refresh Claude marketplace and update workflow-kernel@depot/pipeline@depot. Refresh/restart independent Desktop Cowork caches where used. Use supported Codex marketplace upgrade and plugin-add paths; confirm coherent required versions in each harness. Never edit installed caches.
+4. Baseplate owner fixes the two declared list fields and reconciles viewport authority with approved 16-case acceptance. After required plugins are published and installed, run the normal installed full-tree generation/reload path, prepare a new plan/run, and bind its complete approved contract. Only then may its owner resume authorized consumer work. Baseplate remains paused until all these conditions hold.

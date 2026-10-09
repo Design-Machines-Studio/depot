@@ -357,7 +357,7 @@ else
 fi
 
 require_text "$pipeline_cmd" "repo-cleanup-contract.md" "pipeline command references the cleanup contract"
-require_text "$pipeline_cmd" "exact-owned cleanup phase runs on all three answers" "pipeline gate runs cleanup on every answer"
+require_text "$pipeline_cmd" "Exact-owned cleanup runs on every terminal path" "pipeline delivery runs cleanup on every terminal path"
 codex_native_adapter="$REPO_ROOT/plugins/pipeline/references/codex-native-execution-adapter.md"
 rail_exhaustion_gate="$REPO_ROOT/plugins/pipeline/references/rail-exhaustion-ask-gate.md"
 role_dispatch="$REPO_ROOT/plugins/model-router/skills/model-router/references/role-dispatch.sh"
@@ -798,9 +798,9 @@ selective_allowlist="$REPO_ROOT/plugins/dm-review/skills/review/references/selec
 require_text "$review_skill" "references/selective-lane-allowlist.md" "review receiver loads the allowlist contract only when the input is present"
 require_text "$selective_allowlist" "never relax this equality check to a subset check" "allowlist contract requires exact selected_full_set equality"
 require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.26.0"' "dm-review requires source-bound review evidence producer"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.26.2"' "dm-review requires source-bound review evidence producer"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.27.0"' "pipeline requires supported verification profile generation"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.85.0"' "pipeline requires the current completion and host-adapter contract"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.87.0"' "pipeline requires the current reviewed-publication contract"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"model-router": ">=0.11.0"' "dm-review requires review recommendation routing"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"model-router": ">=0.12.0"' "pipeline requires the current routing runtime"
 require_text "$review_skill" 'Implementation origin is not a coverage field or eligibility condition.' "dm-review makes implementation origin ineligible as a review filter"
@@ -1228,10 +1228,10 @@ for f in "$prompt_template" "$orchestrator"; do
     "$rel permits targeted repair calls"
   require_text "$f" "commit coherent work" \
     "$rel permits commit calls"
-  require_text "$f" "push the branch" \
+  require_text "$f" "candidate branch" \
     "$rel permits push calls"
-  require_text "$f" "create or update the PR" \
-    "$rel permits PR calls"
+  require_text "$f" "publication seam" \
+    "$rel reserves PR calls for the root publication seam"
   require_text "$f" "final report" \
     "$rel permits final reporting calls"
   require_text "$f" "After at most two targeted repair-and-recheck cycles" \
@@ -1724,8 +1724,8 @@ require_text "$orchestrator" 'Detailed review: `.claude/ux-review/report.md`' \
   "Pipeline links the mandatory detailed review artifact"
 require_before "$orchestrator" '## Step 4c: Merge Policy Check' '## Step 6: Summary Report' \
   "Pipeline records merge policy before final human delivery"
-require_text "$orchestrator" 'state `noMergeOnCompletion=true` in **Branch or PR** and make manual branch review the single **Recommended next action**' \
-  "Pipeline routes no-merge disposition into live compact-summary fields"
+require_text "$orchestrator" 'state `noMergeOnCompletion=true` in **Branch or PR**' \
+  "Pipeline routes owner-only merge into live compact-summary fields"
 require_absent "$orchestrator" 'Summary Report'"'"'s "Next Steps" section' \
   "Pipeline no longer points no-merge runs at the deleted Next Steps section"
 require_text "$orchestrator" 'roleSplit: {<role>: N}' \
@@ -1757,7 +1757,7 @@ reviewer_prompt_template="$REPO_ROOT/plugins/dm-review/skills/review/references/
 full_lane_dispatch="$REPO_ROOT/plugins/dm-review/skills/review/references/full-lane-dispatch.md"
 
 # One canonical owner, reached on every hot path and inlined into external prompts.
-require_text "$deployment_context" "two-person development team" "deployment context names the team scale"
+require_text "$deployment_context" "small designer-led team" "deployment context names the current designer/agent team"
 require_text "$deployment_context" "4--50 users" "deployment context names the install scale"
 require_text "$deployment_context" "not search-indexed" "deployment context names the non-indexed threat model"
 require_text "$deployment_context" "single owner" "deployment context declares itself the single owner"
@@ -2070,6 +2070,108 @@ require_text "$review_loop" 'max_iterations += 1' "default checkpoint continues 
 require_absent "$review_loop" 'Manual decision required.' "first recheck does not defer fixable findings"
 require_text "$review_skill" 'without recursion' "nested review preserves enclosing repair ownership"
 require_text "$review_skill" 'Explicit read-only requests remain read-only' "read-only review override remains effective"
+
+# Review-before-publication callers and designer/owner boundaries.
+auto_closeout="$REPO_ROOT/plugins/dm-review/skills/review/references/automatic-implementation-closeout.md"
+manifest_schema="$REPO_ROOT/plugins/pipeline/skills/promptcraft/references/manifest-schema.md"
+require_text "$manifest_schema" '"noMergeOnCompletion": true' "new manifests reserve merge for the owner"
+require_absent "$orchestrator" 'default `false`' "missing merge controls default safely"
+require_absent "$orchestrator" '**If `false`:** proceed' "legacy false grants no agent merge authority"
+require_absent "$pipeline_cmd" 'Recommended next action: create the PR' "designer is not asked to create the PR"
+require_absent "$pipeline_cmd" '**If the user chooses PR:**' "PR publication is agent-owned after candidate vetting"
+require_before "$orchestrator" '## Step 4: Approved Final Review' '<!-- reviewed-pr-full:start -->' "full review precedes PR publication"
+require_before "$pipeline_cmd" '### Caller Verification Checklist' '<!-- reviewed-pr-lean:start -->' "Lean caller verification precedes PR publication"
+require_before "$pipeline_cmd" '**Requirements cross-check (ledger item 11):**' '<!-- reviewed-pr-lean:start -->' "Full and Lean parent checks precede publication"
+require_text "$pipeline_cmd" 'Both Full and Lean modes invoke' "Full publication belongs to the checked parent"
+require_text "$pipeline_cmd" 'The orchestrator defers create and ready' "Full request defers both publication operations"
+require_text "$pipeline_cmd" 'CALLER_VERIFICATION_PASSED:-false' "parent publication blocks missing caller checks"
+require_text "$orchestrator" 'case "${TERMINAL_MODEL_REPORT_OWNER:?validated caller owner required}" in' "orchestrator guards publication by existing caller owner"
+require_text "$orchestrator" 'pipeline) printf' "parent-owned execution defers publication"
+require_text "$orchestrator" 'pipeline-run)' "standalone execution retains checked publication"
+require_text "$codex_native_adapter" '`pipeline` defers both create and ready' "native adapter preserves parent publication deferral"
+require_text "$REPO_ROOT/tests/test_auto_review_candidate.py" 'test_full_parent_defers_both_operations_until_actual_caller_checks' "fixtures execute parent verification ordering"
+require_text "$REPO_ROOT/tests/test_auto_review_candidate.py" 'test_standalone_publishes_after_own_checks_and_rejects_unknown_owner' "fixtures execute standalone verification ordering"
+for caller in direct full lean; do
+  case "$caller" in direct) surface="$auto_closeout" ;; full) surface="$orchestrator" ;; lean) surface="$pipeline_cmd" ;; esac
+  require_text "$surface" "<!-- reviewed-pr-$caller:start -->" "$caller invokes the creation seam"
+  require_text "$surface" "<!-- reviewed-pr-$caller-ready:start -->" "$caller invokes the ready seam"
+  require_text "$surface" '--operation create --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT"' "$caller uses exact create arguments"
+  require_text "$surface" '--operation ready --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT"' "$caller uses exact ready arguments"
+  require_text "$surface" '--producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT"' "$caller supplies producer/readiness inputs"
+  require_text "$surface" 'not_applicable' "$caller separates pre-PR feedback from review"
+  require_text "$surface" "<!-- review-gap-$caller:start -->" "$caller guards the review selector on actual gaps"
+  require_text "$surface" 'hook activation unavailable' "$caller reports unavailable native hook binding honestly"
+  require_text "$surface" 'approvedBase' "$caller carries the approved publication base"
+  require_absent "$surface" 'chunk01' "$caller names the reusable dm-review handoff"
+done
+publication="$REPO_ROOT/plugins/dm-review/skills/review/references/publish-reviewed-pr.sh"
+handoff="$REPO_ROOT/plugins/dm-review/skills/review/references/operator-handoff.sh"
+require_text "$publication" '--base "$BASE" --draft' "create explicitly uses the approved base"
+require_text "$publication" 'actual PR base differs from approved base' "ready rejects the wrong target base"
+require_text "$publication" 'refs/remotes/origin/*)' "publication resolves approved origin branch naming"
+require_text "$publication" '--gate candidate "$TEMP/candidate-handoff.json"' "ready gates candidate verification before refreshing PR facts"
+require_text "$publication" '.checks |= map(select(.stage=="candidate"))' "cached PR checks cannot block ready refresh"
+require_text "$handoff" 'Candidate verification results are missing.' "PR checks alone cannot settle candidate verification"
+require_text "$handoff" '**Agent next action:** ' "Not ready names one agent action"
+require_absent "$handoff" 'exact-owned' "designer output uses ordinary cleanup wording"
+require_absent "$handoff" 'the producer reported' "designer output explains incomplete review plainly"
+for surface in "$pipeline_cmd" "$orchestrator"; do
+  require_text "$surface" 'small designer-led team' "Pipeline uses canonical designer/agent team facts"
+  require_absent "$surface" 'two-person team and sole Baseplate/Fixture developers' "Pipeline drops retired staffing assumptions"
+done
+require_text "$auto_closeout" 'private ownership, single-link containment' "session binding validates the private native pointer"
+require_text "$auto_closeout" 'never bind/update/clear' "workers cannot bind the parent session"
+require_text "$auto_closeout" 'existing producer is the only coverage authority' "native context never supplies review coverage"
+require_text "$REPO_ROOT/plugins/project-scaffolder/skills/scaffolding/references/claude-md-templates/dm-standard.md" 'fix every retained P1/P2/P3 defect' "scaffold preserves zero-deferral repair"
+require_text "$REPO_ROOT/tests/test_auto_review_candidate.py" 'Fixture-owner orchestration proof; no installed workflow or live canary.' "caller fixtures distinguish source proof from installed enforcement"
+
+# Narrow Assembly source policy and shared post-write workspace closeout.
+canonical="$REPO_ROOT/plugins/dm-review/skills/review/references/canonical-checkout.sh"
+require_text "$contract" 'per-file' "inactive Assembly source does not require per-file provenance"
+require_text "$contract" 'Unreadable or conflicting ownership blocks' "unknown ownership fails closed for selected checkout"
+require_text "$contract" 'never authorizes disposal in another repository' "standing disposal is Assembly-only"
+require_text "$canonical" 'git -C "$REPO" --literal-pathspecs restore' "source restore uses exact literal Git paths"
+require_text "$canonical" 'worktree list --porcelain -z' "branch occupancy uses NUL-safe worktree facts"
+require_text "$canonical" 'inspection changed; inspect again before mutation' "prepare rejects stale classification"
+require_text "$canonical" 'jq -s '\''unique_by(.path)'\''' "inventory deduplicates file-backed rows once"
+require_text "$canonical" '--slurpfile paths "$TMP/paths.json"' "final plan loads large inventories from a file"
+require_absent "$canonical" '--argjson paths "$PATHS"' "inventory never returns to one large argv argument"
+require_text "$canonical" 'checkout --detach "$TARGET"' "owned implementation releases branch normally"
+require_text "$canonical" 'git -C "$REPO" diff --cached --binary HEAD' "cleanup snapshot binds staged content"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/review-owner-context.sh" 'git -C "$repo" diff --cached --binary HEAD' "current boundary binds staged content"
+require_text "$canonical" 'cat-file -e "HEAD:$path"' "staged deletions restore from HEAD membership"
+require_text "$canonical" 'reviewed delivered head required' "every operation binds reviewed SHA"
+require_text "$canonical" 'if [ "$MODE" = finish ]; then workspace_check; exit 0; fi' "read-only finish precedes disposal prerequisites"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/publish-reviewed-pr.sh" 'no required checks reported on the' "no-required proof uses exact gh diagnostic"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/operator-handoff.sh" 'optional check skipped' "optional skip is never passed"
+require_absent "$canonical" 'git clean' "helper never uses broad Git clean"
+require_absent "$canonical" 'git reset' "helper never uses broad Git reset"
+for surface in "$auto_closeout" "$orchestrator" "$codex_native_adapter" "$REPO_ROOT/plugins/dm-review/skills/review/references/review-closeout-contract.md"; do
+  require_text "$surface" 'canonical-checkout.sh' "${surface#$REPO_ROOT/} shares canonical cleanup helper"
+done
+for surface in "$orchestrator" "$REPO_ROOT/plugins/dm-review/skills/review/references/review-closeout-contract.md"; do
+  require_text "$surface" 'explicitly selected Assembly development' "canonical finish is scoped to selected Assembly development"
+  require_text "$surface" 'Other repositories' "other repositories retain baseline source/residue checks"
+done
+require_text "$output_format" 'post-report source/residue checks' "handoff cleanliness includes final writes"
+require_text "$REPO_ROOT/plugins/dm-review/skills/review/references/operator-handoff.sh" 'Workspace: ' "designer handoff states workspace readiness"
+require_text "$REPO_ROOT/tools/validate-composition.sh" 'test-canonical-checkout.sh' "runner includes canonical fixtures"
+require_text "$REPO_ROOT/tools/validate-composition.sh" 'test-review-completion-hook.sh' "runner includes completed hook fixtures"
+
+# Browser preparation and designer acceptance are nonterminal dependencies.
+require_absent "$canonical" 'preservation incomplete' "nondestructive transfer does not require complete browser coverage"
+require_text "$canonical" 'Current evidence never inherits inactive-source disposal authority.' "current producer root is protected"
+require_text "$publication" 'external-finding-intake.sh' "ready refreshes full feedback surfaces"
+require_text "$publication" 'external-finding-settlement.sh' "ready validates source judgments"
+require_before "$publication" 'fresh external feedback unsettled' '.feedbackSettled=true' "full current-head settlement precedes feedback flag"
+require_text "$publication" 'unset DM_REVIEW_TEST_MODE DM_REVIEW_TEST_GH_BIN' "production ignores intake tool overrides"
+for surface in "$pipeline_cmd" "$orchestrator" "$codex_native_adapter"; do
+  require_text "$surface" '`awaiting_ui` is nonterminal' "designer handoff retains the active owner"
+  require_text "$surface" 'actual ready' "terminal boundary follows actual draft readiness"
+done
+require_text "$REPO_ROOT/tests/test_auto_review_candidate.py" 'test_owned_transfer_precedes_required_browser_completion' "fixture covers incomplete browser branch transfer"
+require_text "$REPO_ROOT/tests/test_auto_review_candidate.py" 'test_designer_handoff_retains_same_owner_through_acceptance_and_ui_repair' "fixture covers acceptance and UI repair lifecycle"
+require_text "$REPO_ROOT/tests/test_codex_command_adapter.py" 'test_handoff_check_schema_matches_documented_runtime_statuses' "check schema documentation matches runtime"
 
 # Browser artifacts must not dirty the next chunk's source checkout.
 artifact_cleanup="$REPO_ROOT/plugins/dm-review/skills/review/references/browser-artifact-cleanup.md"

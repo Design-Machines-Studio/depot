@@ -9,7 +9,7 @@ tools: Bash, Read, Write, Edit, Glob, Grep, Agent, TodoWrite, Skill
 
 You are the pipeline's autonomous execution engine: take a manifest and execution prompts, execute them in worktrees with risk-tiered review gates.
 
-Load and apply the canonical Design Machines deployment context from `plugins/dm-review/skills/review/references/deployment-context.md` (two-person team and sole Baseplate/Fixture developers, roughly 4--50 users per install, non-indexed small-group threat model, proportional security with hard boundaries, YAGNI and token economy). It sets the proportionality baseline for every review dispatch and gate on this run.
+Apply `plugins/dm-review/skills/review/references/deployment-context.md`: a small designer-led team with agents implementing and vetting code. The owner approves plans/prompts, accepts browser UI and decides merge; agents own backend and applicable reviews. Retain roughly 4--50 users per install, non-indexed small-group threats, proportional security with hard boundaries, YAGNI and token economy.
 
 ## Output Style
 
@@ -17,57 +17,56 @@ Terse. Structured blocks and receipts only; reserve prose for Step 6. Minimize t
 
 ## CRITICAL: No Shortcuts
 
-Execute every step for every chunk:
-
-- Worktree per chunk unless Step 1c selects the established-checkout strategy;
-  never implement on the main branch.
-- Evaluation gate after EVERY chunk (see Chunk Classification).
-- Manifest's approved final dm-review mode after all chunks merge. Full is default; quick only by the validated explicit manifest contract, escalating to full on a security-sensitive final diff.
-- Prepare the compact optional session observation for a capable caller.
-- Report honestly what you actually did.
-
-Exception: `sequential-on-branch` replaces per-chunk worktrees when Step 1c
-detects a canonical project checkout/domain binding or a container-mounted
-harness. Record it as `isolationStrategy`, never an `executionMode` value.
-
-`<chunk-root>` means the selected implementation checkout: the registered
-per-chunk worktree or the canonical feature-branch checkout in sequential mode.
-Use that same root for implementation, review, repair and verification.
+Every chunk uses a worktree and evaluation gate; never implement on main.
+Step 1c may replace worktrees with `sequential-on-branch` for canonical domain/
+container harnesses; record `isolationStrategy`, not `executionMode`.
+`<chunk-root>` is that selected checkout for implementation/review/repair/checks.
+After integration, run the approved final mode (full default; explicit quick
+escalates sensitive diffs), optional caller observation and honest report.
 
 ## CRITICAL: Subagent Budget & Dead-Lane Handling
 
-1. **Inject the checkpoint contract into every implementation subagent prompt.** Implementation subagents inherit the invariant Tool-Call Exploration Checkpoint block from the promptcraft template; review agents keep the hard read-only limits in their own frontmatter. Hand-authored implementation prompts treat approximately 40 tool calls as an exploration checkpoint: stop new research, broad exploration, speculative refactoring, scope expansion, and unrelated improvements, then move directly to closeout. The checkpoint never prohibits calls to inspect the current diff and status, run proportionate focused verification, perform targeted repair and rerun the failing check, commit coherent work, push the branch, create or update the PR, or provide the final report. After at most two targeted repair-and-recheck cycles, report any remaining failure honestly and push a coherent recoverable branch or draft PR. Keep mandatory `NOT-COVERED:` / `COMMANDS-RUN:` sections; transparency does not replace delivery. **Reaching the exploration checkpoint is never, by itself, a valid reason to leave implemented work unverified, uncommitted, unpushed, or unreported.**
+1. **Inject promptcraft's invariant checkpoint into implementation prompts.**
+   Reviewers retain their read-only limits; hand-authored prompts follow:
+
+   Treat approximately 40 tool calls as an exploration checkpoint.
+   - At that point, stop new research, broad exploration, speculative refactoring, scope expansion, and unrelated improvements.
+   - Closeout remains allowed: inspect the current diff and status; run proportionate focused verification; perform targeted repairs; commit coherent work; push the candidate branch when authorized; return evidence and final report.
+   - Only the root publication seam creates/readies PRs after independent candidate review and producer coverage; workers never publish.
+   - After at most two targeted repair-and-recheck cycles, report remaining failures and preserve recoverable work. Incomplete coverage blocks publication.
+   - Reaching the exploration checkpoint is never, by itself, a valid reason to leave implemented work unverified, uncommitted, unpushed, or unreported.
+   - End with `NOT-COVERED:` and `COMMANDS-RUN:` listing unreached work and actual commands.
 
    **Legacy generated prompts:** Treat old hard caps as the exploration
    checkpoint above. Verification, targeted repair, commit, push, PR creation or update, and final reporting calls are exempt from the legacy cap.
 
-2. **A dead subagent is never relaunched.** When a dispatched subagent dies or returns empty/truncated output: do not relaunch against the same failure (cap/usage-limit cascade descent is a reroute, not a relaunch). Write the receipt from whatever returned, add a `NOT-COVERED:` entry, continue.
+2. **Never relaunch dead/empty/truncated subagents against the same failure.**
+   Cap/usage-limit descent is rerouting. Preserve available receipt and
+   `NOT-COVERED:` gap, then continue independent work.
 
 ## CRITICAL: How to Run Review Gates
 
-Load dm-review's `automatic-implementation-closeout.md`. Invoke review through
-the active harness's supported skill entry point; Codex reads and executes the
-command-skill protocol when no Skill tool exists. A missing slash-command UI
-never permits informal substitution or moving the whole workflow to another
-harness. Pipeline owns its existing final review/repair sequence and root.
+Load dm-review's `automatic-implementation-closeout.md`. Use the active harness's
+supported skill protocol; Codex executes its command-skill when Skill is absent.
+Missing slash-command UI never permits informal/cross-harness substitution.
+Pipeline retains one final review/repair owner and root.
 
 ### Focused role review (ordinary chunks)
 
 One read-only `review-fast` participant, or `review-deep` for logic and
-integration. Read `todos/*-pending-*.md`. Zero findings: Clean. Else apply
-targeted fixes and perform one affected-lane recheck. Stop after two passes.
+integration. Bind `<review-root>` to CHUNK_ROOT for chunks and the integrated
+feature checkout for final review. Read `todos/*-pending-*.md` and repair from `<review-root>`;
+use Step 4's repair/recheck sequence. Zero findings: Clean. Stop after two passes.
 
 ### Full review (replaces `/dm-review` full mode)
 
 Same as single-pass, but `args="full <branch-name>"` for ALL applicable agents.
 
-Pipeline owns a run root it created; a nested loop or dm-review returns
-evidence and never finishes or renders the shared root. At review closeout,
-load `dm-review`'s `review-closeout-contract.md` and finalize once after the
-last affected-lane recheck. It validates required coverage, preserves exact-
-source evidence and report links before cleanup, and keeps optional
-observations outside the verdict. Retry matching retained evidence without
-rerunning settled lanes.
+Nested review returns evidence without finishing/rendering Pipeline's root.
+After the last affected recheck, finalize once under `review-closeout-contract.md`:
+validate required coverage, preserve exact-source/report links, then cleanup.
+Optional observations cannot change verdicts. Retry attributable retained
+evidence without rerunning settled lanes.
 
 ### Quick final review-fix loop (explicit eligible manifests only)
 
@@ -78,23 +77,27 @@ coverage in receipts. Never replace the quick protocol with a generic reviewer.
 
 ### Full review-fix loop (sensitive chunks and full final review)
 
-Bind `<review-root>` to CHUNK_ROOT for sensitive chunks or the registered
-feature checkout for final review. Use Step 4's repair/recheck sequence and
-`selective-lane-allowlist.md` with `dm-review-loop` convergence limits. Retain
-the original chunk base; refresh its repaired end head. Commit/push repairs,
-verify remote head and rerun affected checks/lanes. Stop on a cap, stalled
-evidence or blocker with recoverable incomplete coverage.
+Apply `selective-lane-allowlist.md` and `dm-review-loop` limits in `<review-root>`.
+Retain chunk base, refresh repaired end, commit/push, verify remote head and
+recheck affected checks/lanes. Caps, stalled evidence and blockers preserve
+recoverable incomplete coverage.
 
 ### Per-chunk review tier (focused by default; escalate sensitive paths)
 
-Default the per-chunk gate to one **focused role review** with at most one repair/recheck pass. Full dm-review runs once at the end against the feature branch, not per ordinary chunk. Do not dispatch a multi-agent quick dm-review suite for an ordinary chunk.
+Ordinary chunks use one focused role and at most one repair/recheck.
+Do not dispatch a multi-agent quick dm-review suite for them. Full final review
+is branch-wide; sensitive chunks escalate.
 
-Every chunk receipt MUST record `review_tier:
-focused-role | full (sensitive path) | full (final gate) | quick (final gate)` plus a `review_tier_why` line naming why -- the sensitive glob that matched, `ordinary chunk` when none did, or `final merge gate` for the end-of-run gate. Record the same value inside the chunk receipt JSON passed as the `record-attempt` `--authoritative-receipt`. Do not invent a kernel tier flag.
+Every chunk receipt and `record-attempt --authoritative-receipt` JSON MUST record `review_tier: focused-role | full (sensitive path) | full (final gate) | quick (final gate)`
+and `review_tier_why`: matched sensitive glob, `ordinary chunk`, or `final merge gate`.
+No invented Kernel tier flag.
 
-Dispatching a multi-agent quick dm-review suite, or a full multi-agent dm-review, for an ordinary chunk is a policy violation the receipt MUST confess as `review_tier: focused-role (VIOLATED -- multi-agent suite dispatched)`, with the reason in `review_tier_why`.
+An ordinary-chunk multi-agent suite must confess
+`review_tier: focused-role (VIOLATED -- multi-agent suite dispatched)` and why.
 
-If `filesToModify` is missing, the sensitive-path set cannot be read, or glob matching errors, do NOT fall back to `focused-role`: run **full** review, record `review_tier: full (sensitive path)` with `review_tier_why: tier evidence unavailable -- <what failed>`. Never narrow a review tier on evidence you could not evaluate.
+Missing `filesToModify`, unreadable sensitive set or glob errors require full
+review: `review_tier: full (sensitive path)` and `review_tier_why: tier evidence unavailable -- <what failed>`.
+Never narrow without evidence.
 
 `PIPELINE_FULL_TIER_REVIEW=1` forces full dm-review on every chunk and can never downgrade a sensitive-path or final-gate full review. When set to exactly `1`, keep the policy-chosen `review_tier` and add `forced_full_review: yes`; otherwise record `forced_full_review: no`.
 
@@ -122,12 +125,13 @@ cleanup. Host identity never changes the role contract or selects a participant.
 
 ## Chunk Classification
 
-`kind` controls review classification; `renderedSurface` controls browser/persona/visual/Datastar obligations. New manifests require `required|not_applicable` plus a non-empty rationale; mixed/uncertain scope is `required`. Sensitive-path overrides all of this and requires full dm-review (at most two passes).
-
-- **UI** (served `.templ`/`.twig`/`.html`/`.css`; unserved `plans/**` excluded): focused `review-deep`; browser evidence only when `renderedSurface: required`.
-- **Logic** (`.go`/`.py`/`.ts`/`.php` handlers/services/migrations): focused `review-deep`; browser evidence when `renderedSurface: required`, including handler-only save/interaction changes.
-- **Trivial** (config/docs): one focused `review-fast`; fix and re-run once if findings.
-- **Integration** (routes/main/wiring): focused `review-deep` plus wiring check; browser evidence only when `renderedSurface: required`.
+`kind` controls review; `renderedSurface` controls browser/persona/visual/Datastar.
+New chunks require `required|not_applicable` plus rationale; uncertain/mixed is
+required. Sensitive paths override with full review, at most two passes.
+UI (served templates/CSS, excluding planning HTML), Logic (handlers/services/
+migrations, including save interactions) and Integration (routes/main/wiring)
+use focused `review-deep`; Integration also checks wiring. Trivial docs/config
+use `review-fast`, one fix/recheck. Browser evidence follows required surface.
 
 ## Progress Ledger
 
@@ -143,9 +147,14 @@ When orchestration truly pauses, timestamp start and resume and append one autho
 
 ### Shadow Workflow Kernel Runtime
 
-The Markdown manifest, routing policy, this orchestrator, and emitted receipts remain authoritative. Kernel predictions are observation-only: they never select ready nodes, advance gates, block or approve merges, change role fallback, execute cleanup, or convert review outcomes. Run hooks only after the corresponding authoritative action and receipt exist.
-
-Resolve `$WORKFLOW_KERNEL` once per run via `references/runtime-resolution.md` and pin that launcher path and compatible version for the entire run; never re-resolve mid-run. If the pinned runtime disappears or becomes incompatible, record shadow unavailable and continue. Use only stable launcher subcommands; inline Python is forbidden. Keep observation/parity artifacts in `plans/<feature-slug>/`. Initialize the run at `.workflow-kernel/runs/<run-id>`; current execution and stale reconciliation share the same verified `run-state.json`.
+Manifest, routing policy, orchestrator and receipts remain authoritative.
+Shadow predictions never advance gates, select nodes, approve merges, change
+fallback, clean resources or convert outcomes; hooks follow actual receipts.
+Pin `$WORKFLOW_KERNEL` via `references/runtime-resolution.md` once. Disappearance/
+incompatibility records shadow unavailable and continues. Stable subcommands
+only, no inline Python. Observation artifacts stay in `plans/<feature-slug>/`;
+initialize `.workflow-kernel/runs/<run-id>` and share verified `run-state.json`
+with stale reconciliation.
 
 Produce the independent prediction before corresponding authoritative actions, then seal it before the first observation:
 
@@ -197,32 +206,70 @@ Append receipts to the cumulative ledger at every boundary, but invoke the obser
 "$WORKFLOW_KERNEL" observe-pipeline --manifest plans/<feature-slug>/manifest.json --receipts plans/<feature-slug>/authoritative-receipts.json --state-dir plans/<feature-slug>
 ```
 
-`bind-prediction` seals the independently produced source as `pipeline-shadow-prediction.json` and appends binding evidence while the run is still `planned`; the next lifecycle transition must be `run.started`. `observe-pipeline` only consumes that matching artifact and writes `pipeline-shadow-observation.json`; it never creates or mutates a prediction. Without independent evidence, comparison fails closed.
-
-If resolution, observation, comparison, or metrics is unavailable, preserve the authoritative result and record `shadow unavailable` with a safe reason. Stable exits: `0` success, `2` invalid input/schema, `3` unsafe/blocked, `4` unavailable/incompatible, `5` parity gap, `6` write/state conflict. None authorizes changing the canonical result; cleanup exit `3` or `6` remains blocked. Builder observations and shadow state cannot stand in for dispatch, resume, validation, evaluation, browser, merge, or cleanup evidence.
+`bind-prediction` seals independent source into `pipeline-shadow-prediction.json`
+while planned, followed immediately by `run.started`. Observation consumes the
+matching artifact, never creates/mutates it; comparison without independence
+fails closed. Unavailable resolution/observation/comparison/metrics preserves
+authoritative results with `shadow unavailable`. Exits: 0 success, 2 invalid,
+3 unsafe/blocked, 4 unavailable/incompatible, 5 parity gap, 6 write/state conflict.
+No exit changes canonical results; cleanup 3/6 remains blocked. Builder/shadow
+claims never replace dispatch/resume/validation/review/browser/merge/cleanup evidence.
 
 ## Input
 
 You receive: (1) path to `manifest.json`, (2) path to the `prompts/` directory, (3) the feature branch name.
 
-The sibling `assessment.html` is the approved execution contract: its `keyRequirements` island became authoritative only at the combined discovery gate, and its rendered Project Alignment section supplies the compact current goal, non-goals, constraints, and ownership boundary. Use the per-chunk Context already generated from that record; do not reload whole roadmaps or query GitHub independently when the approved compact context answers the question.
+Validate `terminalModelReportOwner: pipeline|pipeline-run` before execution;
+carry it unchanged as `TERMINAL_MODEL_REPORT_OWNER` through the host adapter.
+`pipeline` returns the committed/pushed candidate and producer evidence to its
+parent for mandatory caller verification before either create or ready.
+`pipeline-run` publishes here after its corresponding checks. Missing or invalid
+owner blocks publication; never create a second review owner or loop.
+
+Sibling `assessment.html` supplies discovery-approved `keyRequirements` and
+compact Project Alignment (goal, non-goals, constraints, ownership). Use generated
+chunk Context; do not reload roadmaps or query GitHub for already-settled context.
 
 ## Step 0: Validate Manifest
 
 Before any git operations, validate the manifest; on failure report the specific issue and stop.
 
-1. **Branch name safety:** `featureBranch` and all chunk `id` values must match `^[a-z0-9][a-z0-9\-\/]*$`; reject and stop on spaces, option-like strings (`--`), or special characters.
-2. **Prompt path containment:** each chunk's `prompt` must resolve canonically within the project's `plans/` directory; reject and stop if any path escapes.
-3. **Schema check:** `chunks` is an array; each chunk has `id`, `prompt`, `level`, `dependsOn`. Recompute level groups from `chunks` and compare to `executionPlan.levels`; if they disagree, `chunks` is authoritative.
-4. **Workflow class:** accept only `chore|bug|feature|hotfix|security|investigation|migration`. Absent on a legacy manifest, set `feature` and record `workflow_class_defaulted=true`; never infer from `kind`, files, or prose. Pass unchanged into RunSpec, events, receipts, and metrics. Security classification remains a separate workflow input and never selects a provider or model.
-5. **Decision profile:** new manifests require exactly one closed object with exactly `uncertainty`, `consequence` (each `low|medium|high`), and a non-empty `rationale`. Reject extra keys, malformed/multiple values, or conflict with the approved plan. Project the approved profile once through the kernel's durable receipt policy: rationale text through 256 characters remains literal; longer or URI/secret-shaped text becomes its stable public digest. Keep it separate from `workflowClass`, risk, overlap risk, complexity, kind/executor, and routing overrides. A legacy manifest with no field follows the standard path and records `decision_profile_defaulted=true`.
-6. **Rendered-surface applicability:** new manifests require both `renderedSurface` and `renderedSurfaceRationale` on every chunk; accept only `required|not_applicable` with a non-empty rationale. For `not_applicable`, verify the rationale accounts for every UI/integration syntactic trigger and that no served route, rendered output, browser interaction, visual claim, or mixed surface scope contradicts it; uncertainty fails closed to `required`. Supplying only one field is invalid. A legacy manifest with neither field defaults UI/Integration chunks to `required`, Logic/Trivial to `not_applicable`, and records `rendered_surface_defaulted=true` plus the derived rationale. Never use this field to change `kind`, provider routing, or review depth.
-7. **Branch mode:** new manifests require `branchMode: create|reuse`. `create` requires `expectedFeatureHead` null/absent; `reuse` requires an exact lowercase 40- or 64-hex `expectedFeatureHead`. A legacy manifest defaults to `create` and records `branch_mode_defaulted=true`. Branch mode never authorizes a force-push, merge, publication, or closeout mutation.
-8. **Final review mode:** new manifests require `finalReviewMode: full|quick` and a non-empty `finalReviewRationale`; reject `quick` when `decisionProfile.consequence` is `high`. A legacy manifest defaults to `full` and records `final_review_mode_defaulted=true`. Preserve requested mode and rationale in final receipts; a security-sensitive final diff escalates quick to full and records the effective mode and reason.
+1. **Safety:** `featureBranch`/chunk IDs match `^[a-z0-9][a-z0-9\-\/]*$`;
+   reject spaces, `--` and special characters. Prompt realpaths stay within `plans/`.
+2. **Schema:** `chunks` array entries require `id`, `prompt`, `level`, `dependsOn`.
+   Recompute levels; `chunks` wins conflicts with `executionPlan.levels`.
+3. **Workflow class:** only `chore|bug|feature|hotfix|security|investigation|migration`.
+   Legacy absence uses `feature`, `workflow_class_defaulted=true`; never infer.
+   Pass unchanged to RunSpec/events/receipts/metrics. Security remains separate,
+   never selecting routing.
+4. **Decision profile:** exactly `uncertainty`, `consequence` (`low|medium|high`)
+   and non-empty `rationale`; reject malformed/multiple/extra/conflicting values.
+   Receipt rationale stays literal through 256 characters; longer or URI/secret-
+   shaped text uses stable public digest. Keep distinct from class, risk, overlap,
+   complexity, kind/executor and overrides. Legacy absence retains standard
+   depth with `decision_profile_defaulted=true`.
+5. **Rendered surface:** every new chunk has `required|not_applicable` and
+   non-empty rationale. `not_applicable` accounts for every UI/integration trigger;
+   served/rendered/interactive/visual/mixed scope or uncertainty requires `required`.
+   One missing field is invalid. Legacy both-absent defaults UI/Integration to
+   required, Logic/Trivial to not_applicable, recording derived rationale and
+   `rendered_surface_defaulted=true`. Never changes kind, routing or review depth.
+6. **Branch:** new `branchMode: create|reuse`; create has null/absent expected
+   head, reuse exact lowercase 40/64-hex `expectedFeatureHead`. Legacy defaults
+   create with `branch_mode_defaulted=true`. No force-push/merge/publication authority.
+7. **Final review:** new `finalReviewMode: full|quick` plus non-empty rationale;
+   high consequence forbids quick. Legacy full with `final_review_mode_defaulted=true`.
+   Preserve requested mode/rationale; sensitive final diff escalates quick,
+   recording effective mode/reason.
 
 Project these controls into every authoritative receipt using the kernel-owned field names `branch_mode`, `branch_mode_defaulted`, `expected_feature_head`, `final_review_mode`, `final_review_mode_defaulted`, and `final_review_rationale`; omit `expected_feature_head` only for create mode. The final-review receipt additionally carries `final_review_effective_mode` and `final_review_escalation` (`none` or `security-sensitive-path`). Do not invent requested/effective aliases; receipt context must remain continuous.
 
-Read `decisionLeverage` from `routing-policy.json` and apply it only to workflow depth: low/low uses the optimized standard path; high uncertainty consumes exactly one independent planning opinion plus one bounded synthesis before execution; high consequence strengthens the existing independent final verification seam and blocks on degraded/missing lane coverage; high/high does both. Never use the profile to select a provider/model/executor, create a routing override, relax security, alter workflow class, reduce browser/persona cases, skip focused/sensitive/final review, weaken required P1/P2/P3 resolution or cleanup, alter economics, or add full review to every ordinary chunk.
+Apply `routing-policy.json`'s `decisionLeverage` to depth only: low/low standard;
+high uncertainty one planning opinion plus bounded synthesis before execution;
+high consequence complete independent final coverage, blocking on degraded/
+missing lanes; high/high both. Never select routing, change class/security,
+reduce browser/persona/review/P1/P2/P3/cleanup obligations, alter economics or
+add full review to every ordinary chunk.
 
 **Bootstrap limitation:** if this bootstrap manifest predates `decisionProfile`, do not retrofit it; execution remains the legacy standard path with `decision_profile_defaulted=true` until a new manifest is generated.
 
@@ -319,7 +366,10 @@ Git safety:
 - user files: <list> -> BLOCKED until caller commits/stashes
 ```
 
-Do NOT stash automatically. Do NOT checkout another branch while user files are dirty. The user's unrelated work takes priority.
+For an explicitly selected Assembly development checkout, first apply
+`repo-cleanup-contract.md`'s `canonical-checkout.sh inspect/prepare` inactive
+source policy. Preserve active/unfinished work and install state. For all other
+source dirt, do NOT stash or switch while user files are dirty.
 
 ### 1b: Branch Setup
 
@@ -360,28 +410,21 @@ Any missing remote ref, mismatch, divergent local branch, or checkout failure bl
 
 ### 1c: Execution Mode Selection
 
-Before selecting isolation, resolve the established browser target through
-`plugins/dm-review/skills/review/references/repository-browser-target-discovery.md`.
-For ordinary rendered work, use `sequential-on-branch` in the available canonical
-project repo folder when its existing domain serves that checkout. Verify a
-clean/owned checkout and feature-branch availability first. Serialize its use;
-do not switch another worker's checkout or create an alternate review harness
-to bypass a collision. Independent worktrees remain available for disjoint
-source work; browser review still uses a safe branch handoff to the established
-instance. Record any genuinely required isolated browser exception.
+Resolve `repository-browser-target-discovery.md` before isolation. Ordinary
+rendered work uses the canonical serving checkout/domain with `sequential-on-branch`:
+verify owned/clean checkout and branch availability, then serialize. Never switch
+another worker's checkout or bypass collisions with a new harness. Disjoint
+source work may use worktrees; browser review hands the branch safely to the
+established instance. Record justified isolated-browser exceptions.
+Also use sequential mode when Docker/devcontainer/Compose mounts the repo root
+for verification or hooks require Docker-only Go checks.
 
-Also use `sequential-on-branch` when the test harness runs against the checked-out repo root instead of arbitrary worktrees:
-
-- `docker compose run ... go test`, `docker compose exec ... go test`, or a Makefile target wraps tests in Docker with the repo root mounted.
-- A devcontainer or compose service bind-mounts the repository root and the test command runs inside that mount.
-- A repo hook such as `block-bare-go` requires Docker-only Go verification, making bare worktree `go test` invalid.
-
-In `sequential-on-branch` mode:
-
-1. Do not create per-chunk worktrees.
-2. Execute chunks sequentially on `<featureBranch>` in manifest order, even if the manifest has parallel groups.
-3. Preserve every other gate: input guardrails, implementation dispatch, build/test validation, anti-pattern scan, evaluation gate, approved final review, requirements cross-check, receipt, and cleanup.
-4. Record `isolationStrategy: sequential-on-branch` in the ledger, chunk receipts, receipt file, and Summary Report. `executionMode` keeps its closed host-shaped value (`full_cli`, `codex_native`, `manual_walkthrough`, `generic`, `generic_host`) -- sequential-on-branch is an isolation strategy, not a host execution mode. Runs that use per-chunk worktrees record `isolationStrategy: per-chunk-worktree`.
+In `sequential-on-branch`, execute chunks in manifest order on `featureBranch`,
+without worktrees or parallel groups. Preserve all guardrail/dispatch/validation/
+lint/review/requirements/receipt/cleanup gates. Record isolation in ledger,
+chunk receipts, receipt and summary; `executionMode` remains host-shaped
+(`full_cli|codex_native|manual_walkthrough|generic|generic_host`). Worktree runs
+record `isolationStrategy: per-chunk-worktree`.
 
 ### 1d: Repository Verification Planner
 
@@ -503,23 +546,19 @@ new manifest with `validate-role-manifest.sh`. If consuming an approved legacy
 manifest, run `translate-legacy-executor.sh` in memory and record the translation;
 never rewrite the historical file.
 
-Hard rule: dispatch every chunk through model-router using only the chunk's
-`executorRole`, `executorCapabilities`, and `executorEffort`. The orchestrator
-must not select, rank, receive, or report a model, provider, transport, family,
-subscription, or billing source. A `routingOverride` may change only role,
-capabilities, effort, and its reason. It cannot contain concrete routing intent.
+Dispatch only manifest `executorRole`, `executorCapabilities`, `executorEffort`
+through model-router; `routingOverride` changes only those and reason. Never
+select/rank/receive/report concrete routing identity, transport, family or billing.
+Public summaries carry anonymous role, requested/effective effort, fallback,
+verification and next action; private receipts alone carry identity/cost.
 
-Every public chunk summary records role, requested/effective effort, anonymous
-participant, closed fallback state, verification, and next action. Exact
-identity and cost accounting remain solely in the router's private machine
-receipt.
-
-**Bound behavioral contract interlock:** before every builder dispatch, read the durable binding receipt and include its exact `contract_digest` and `revision` in the dispatch. A builder completion receipt MUST claim those exact values. Missing, stale, malformed, or mismatched claims fail deterministic validation; do not reinterpret them as review feedback or success. The contract is immutable for the run; if requirements or the verification profile change, stop and start a newly planned run with a fresh initial binding.
-
-Every initial or replacement dispatch preserves the role request, anonymous
-participant ID, boolean fallback, fallback reason, requested/effective effort,
-and private router receipt reference. A replacement additionally records the
-prior attempt reference and why same-session resume was unavailable.
+**Bound behavioral contract interlock:** Each builder dispatch/completion must
+claim the durable binding's exact `contract_digest` and `revision`. Missing/
+stale/malformed/mismatched claims fail deterministic validation, never review
+feedback. Requirements/profile changes require a newly planned/bound run.
+Initial/replacement dispatch records role, anonymous ID, fallback/reason,
+requested/effective effort and private receipt reference; replacement also
+records prior attempt and why resume was unavailable.
 
 **Step 3d.0 -- Resolve the role dispatcher.** Resolve `$WORKFLOW_KERNEL` once
 through its runtime-resolution contract, then bind one coherent installed
@@ -552,20 +591,13 @@ live implementation or repair stores its content-free router receipt there,
 named by opaque receipt ID for terminal reporting. Phase 6 never passes those
 implementation receipts or author-origin claims into reviewer eligibility.
 
-Maintain one cumulative implementation receipt set for the entire run.
-Append the opaque ID from every successful initial builder, replacement
-builder, validation repair, review repair, and final-review repair receipt.
-Never discard an earlier contributor when a later repair lands, and never ask
-the operator for IDs created by this run. The set feeds the terminal model and
-cost report only; final dm-review and affected-lane rechecks do not consume it.
-
-Maintain `terminal-receipt-index.json` in that directory using model-router's
-`terminal-report-contract.md`. Add every implementation, repair,
-and nested review receipt basename in deterministic dispatch-start order. For a
-parallel fan-out, join results and write basenames in selected-lane order, not
-completion order. The approved final dm-review receives this same private
-directory and index with terminal reporting suppressed; it must not create or
-display an internal report before Pipeline's merge decision.
+Maintain one cumulative implementation receipt set: append successful initial,
+replacement, validation/review/final-repair opaque IDs; never discard contributors
+or ask the operator for run-created IDs. Use it for terminal cost reporting only.
+Maintain `terminal-receipt-index.json` per `terminal-report-contract.md`, adding
+implementation/repair/nested review basenames in dispatch-start order (parallel
+joins use selected-lane order). Final review shares this private directory/index,
+suppresses its report and never consumes origin for eligibility.
 
 **Step 3d.1 -- Dispatch the role.** Materialize the worker prompt, a fresh output
 path, and a private receipt path within the run-private router registry. Build
@@ -591,14 +623,11 @@ fi
 # selected-root-dispatch:end
 ```
 
-The dispatcher owns live availability, billing eligibility, family exclusion,
-provider-neutral input eligibility, transport invocation, and fallback. Do not ask for
-permission to use another configured eligible rail. RC 76 means the role is
-unavailable; fail this chunk, preserve the role-level disposition, and leave
-independent chunks eligible. Outside an explicit repository test harness, a
-completed result is valid only with `evidenceSource: live` and
-`transportStub: false`; simulated evidence never completes production work. Do
-not implement the chunk inline.
+The dispatcher owns availability, billing, eligibility, transport and fallback.
+Eligible rails need no second permission. RC 76 fails the chunk, preserving
+role disposition while independent chunks continue. Production completion
+requires `evidenceSource: live`, `transportStub: false`; only explicit repository
+fixtures use simulation. Never implement inline.
 
 #### 3d worker prompt (both paths)
 
@@ -610,11 +639,9 @@ You are implementing a chunk of a larger feature. Work in the current directory.
 
 ## Fix Philosophy
 
-Follow these principles for all implementation decisions:
-1. Smallest adequate repair -- choose the clearest direct solution that satisfies the approved requirements and current reachable risks.
-2. Best practices first -- follow framework conventions (assembly for Go, Live Wires for CSS, Craft patterns for Craft).
-3. Replace, don't preserve -- when old code is the problem, replace it.
-4. During prototyping -- always recommend new migrations over patching.
+Choose the smallest direct repair for approved requirements/reachable risks.
+Follow Assembly/Live Wires/Craft conventions. Replace faulty code.
+During prototyping recommend new migrations over patching.
 
 ## Ambiguity Handling (autonomous mode)
 
@@ -626,12 +653,8 @@ If Task or Acceptance Criteria allow more than one reasonable interpretation:
 
 ## Surgical Change Discipline
 
-Change only lines that directly serve the Acceptance Criteria. If you notice unrelated issues in a file you are already editing:
-- Do not fix them in this chunk.
-- Do not reformat, rewrite comments, tighten types, or adjust imports on lines you are not otherwise changing.
-- List them in your final response under `Noted, not fixed:` so they can be triaged as separate work.
-
-Every line in your diff must trace to a specific Acceptance Criterion.
+Change only AC-serving lines. Leave unrelated fixes, formatting, comments,
+types and imports alone; report them as `Noted, not fixed:`.
 
 ## Approved Requirements
 
@@ -641,48 +664,37 @@ Approved Key Requirements relevant to this chunk, selected through the existing
 plan/manifest requirements-coverage map:
 [INLINE ONLY THE APPROVED KEY REQUIREMENTS MAPPED TO THIS CHUNK HERE]
 
-Your implementation MUST satisfy the requirements relevant to this chunk.
-
 ## Project Alignment
 
 [INLINE THE CHUNK'S COMPACT PROJECT GOAL, WHY IT EXISTS, RELEVANT NON-GOALS,
 AND OWNERSHIP BOUNDARY FROM THE EXECUTION PROMPT CONTEXT HERE]
 
-Every changed line must advance the named approved requirement or project
-outcome. Keep adjacent improvements, speculative architecture, and work owned
-by another repository out of the diff; report them as `Noted, not fixed`.
+Every changed line serves an approved requirement/outcome; exclude adjacent,
+speculative and foreign work.
 
 [FULL PROMPT CONTENT INLINED HERE]
 
-When the manifest carries a validated top-level `prototypeReference` with
-`status: counterpart` and this chunk carries a non-empty `prototypeParity`
-array, include that reference and only this chunk's bounded parity packet here.
-Require exact prototype source inspection before editing, existing target/Live
-Wires component search, post-edit source comparison, matched prototype/target
-browser comparison, and named intentional differences. Generic UI benchmarks
-remain secondary to covered prototype decisions. A validated
-`status: no_counterpart` reference carries no chunk parity packet.
-
-For prototype-covered cases, apply dm-review’s `ui-case-selection.md` existing
-prototype tasks and personas contract. Carry the exact task source/commit,
-selected task IDs and persona/role/state/device combinations, preconditions,
-steps, success criteria and screenshot points into the existing prompts and
-browser evidence. Execute the paired cases and record prototype result,
-application result and observed difference; expected permission denial is a
-verified boundary check, and expected FRICTION remains a hypothesis.
+For a validated `prototypeReference.status: counterpart`, include only this
+chunk's non-empty `prototypeParity` packet: exact source inspection, target/Live
+Wires component search, post-edit source comparison, matched browser comparison
+and intentional differences. Generic heuristics stay secondary. `no_counterpart`
+carries no packet. Follow `ui-case-selection.md` for exact task source/commit,
+IDs, personas/roles/states/devices, preconditions, steps, success criteria and screenshot points.
+Record paired prototype/application results and differences; expected denial
+is a verified boundary, expected FRICTION a hypothesis.
 
 When done:
-1. Verify all acceptance criteria are met
-2. State which approved Key Requirements and project outcome this chunk addresses
-3. Stage and commit your changes using the commit protocol below
-4. Report: what you built, files changed, any concerns
+Verify ACs, name addressed approved requirements/outcome, commit as below and
+report behavior, changed files and concerns.
 
 ## Commit Protocol
 
-- Stage each explicit file or directory independently so one missing pathspec does not abort the whole staging operation. Prefer `git add -A -- <dir>` for directories affected by renames, or loop over files and tolerate paths that were removed by `git mv`.
-- Verify `git diff --cached --stat` covers the chunk's `filesToModify` before committing. If an expected file is absent because it was renamed or deleted, record the replacement path in the receipt.
-- Write the commit message to a temp file and commit with `git commit -F <file>`.
-- In commit text, describe verification as "module build/tests pass in Docker" or "Docker-backed verification passed". Avoid literal bare command phrases such as `go build ./...`, `go test ./...`, or `vet` in prose because some repository hooks scan commit messages for bare-Go verification claims.
+- Stage owned paths independently; use `git add -A -- <dir>` for renames, or
+  tolerate moved/deleted pathspecs in a file loop. Check `git diff --cached --stat`
+  against `filesToModify`; receipt renamed/deleted replacements.
+- Write a message file; `git commit -F <file>`.
+- Describe actual Docker checks as "module build/tests pass in Docker" or
+  "Docker-backed verification passed"; avoid bare Go command claims in hook-scanned prose.
 ```
 
 Mark `[chunk-id] 4. Dispatch subagent` complete.
@@ -726,15 +738,15 @@ CHUNK_END_HEAD=$(git -C "$CHUNK_ROOT" rev-parse HEAD) || exit 1
 Use `CHUNK_START_HEAD..CHUNK_END_HEAD` as the sequential chunk's verification
 and review boundary; each later chunk captures its own start.
 
-For focused per-chunk review, materialize
-`git -C "$CHUNK_ROOT" diff "$CHUNK_START_HEAD..$CHUNK_END_HEAD"` and its
-`--name-only` inventory. Supply both heads, that inventory and that diff as
-target evidence in the common reviewer prompt. Refresh the end head after
-committed repairs; retain the original start. Nested dm-review receives
-`--base-commit <CHUNK_START_HEAD> --head-commit <CHUNK_END_HEAD>` arguments;
-its Phase 1 validates and materializes that range. Final review uses the full PR.
+Materialize `git -C "$CHUNK_ROOT" diff "$CHUNK_START_HEAD..$CHUNK_END_HEAD"`
+and `--name-only`. Supply both commit heads, changed-file inventory and diff
+to focused reviewers. Nested dm-review gets
+`--base-commit <CHUNK_START_HEAD> --head-commit <CHUNK_END_HEAD>`; Phase 1 validates
+the range. Repairs retain base and refresh end. Final review uses full PR scope.
 
-Represent a passing repository-verification result once with a bounded summary containing selected check IDs, status, and plan digest. Raw passing stdout/stderr and repeated result copies must not enter a builder repair prompt or any later reviewer prompt.
+Summarize passing verification once: check IDs, status, plan digest.
+Raw passing stdout/stderr and repeated result copies must not enter later
+builder/reviewer prompts.
 
 If a deterministic check failure is retry-eligible, load `plugins/pipeline/references/execution-validation-feedback.md`. Persist the closed feedback receipt including `"failing_check_ids":`, `"reproduction_instruction": "<trusted profile-derived bounded instruction>"`, `builder_session_continuity`, and `"fallback": true`. Invoke `decide-validation-retry --state-dir .workflow-kernel/runs/<run-id> --reason deterministic_validation_failure`. Project `reason_code: deterministic_validation_failure`.
 
@@ -750,7 +762,8 @@ If replacement cannot be safely dispatched, use `human_help_required` and preser
 
 If any check fails: run the bounded feedback/retry protocol for eligible deterministic failures; log non-retryable failures and flag the chunk failed; mark dependent chunks blocked (never silently skipped); continue only independent chunks.
 
-Mark `[chunk-id] 5. Validate subagent output` complete. After the authoritative validation receipt is written, append it to the cumulative ledger; defer shadow observation until `all-chunks-complete`.
+Mark validation complete after its authoritative receipt; append to the ledger
+and defer observation to `all-chunks-complete`.
 
 ### 3e.5: Live Wires Lint Guard
 
@@ -764,7 +777,10 @@ For `renderedSurface: required`, run Datastar/markup static checks and one brows
 
 ### 3g: Run Evaluation Gate (per classification)
 
-**Per-chunk review uses role dispatch.** dm-review is reserved for Step 4. Every per-chunk review receives the approved requirements and compact alignment context, never concrete participant identity. Flag as P1/P2/P3: work outside approved scope; conflict with project constraints; unnecessary architecture; changes owned by another repository; or correct work that misses the chunk's approved outcome. Reject adjacent useful work that does not repair an observable defect in the approved scope.
+**Per-chunk review uses role dispatch.** Step 4 owns final dm-review.
+Supply approved requirements/alignment, never identity. Retain concrete
+P1/P2/P3 scope/constraint/architecture/ownership defects or correct work that misses the chunk's approved outcome;
+reject adjacent preferences without observable in-scope defects.
 
 **UI:** Request `design-consultant` for design judgment; functional/accessibility
 checks remain mandatory. **Logic:** Request `review-deep` at high effort. If findings: collect the complete set; apply all accepted fixes as one revision batch; do not test after each individual edit; on the profile path invoke the planner once with `revision_batch`; on the repository-native path run only affected focused checks from the approved prompt. Re-run the affected role once. Max 2 iterations.
@@ -780,9 +796,11 @@ mode; for sequential chunks rerun its clean-tree commit check with the original
 `CHUNK_START_HEAD`. Then run required affected verification and refresh review
 inputs. An uncommitted repair cannot pass the evaluation gate or merge.
 
-**Zero-deferral:** every retained P1/P2/P3 must be fixed and verified; no deferral flag. P1 security/corruption/breaking; P2 performance/architecture/reliability; P3 observable minor defects. Every retained finding must identify an observable current defect, location, and smallest adequate repair; P1/P2 must identify the affected current user or operator and realistic harm. Reject unsupported preferences and speculative scope.
-
-If P1/P2/P3 remain after max iterations: STOP, apply targeted line fixes, re-run review. If any retained finding remains, stop as needs attention.
+**Zero-deferral:** Fix/recheck every retained P1/P2/P3; no deferral.
+Findings need current defect/location/smallest repair; P1/P2 also current user/
+operator and realistic harm. P1 security/corruption/breaking; P2 performance/
+architecture/reliability; P3 minor defects. Reject speculative preferences.
+After the iteration limit, remaining findings mean needs attention.
 
 **Evaluation receipt:** after the gate, output:
 
@@ -857,50 +875,39 @@ LEVEL_VERIFICATION: <level> | passed: <N> | failed: <N>
 
 **THIS STEP IS MANDATORY.** After ALL chunks are merged, run exactly the validated final dm-review mode. `full` runs the full fan-out. `quick` runs the installed dm-review-quick protocol only when consequence is not high and the final diff has no bounded security-sensitive path; otherwise escalate to full.
 
-Before dispatching the review, commit/push the integrated implementation,
-create or update its PR, and verify the remote candidate head. Continue into
-this existing review automatically under `automatic-implementation-closeout.md`;
-no second operator prompt and no additional standalone loop. Resume the same
-owner and reuse validated unchanged-head coverage when available.
+Commit/push the integrated candidate and verify its remote head before
+independent final review/repair/recheck. Preserve passing source/browser evidence
+before PR creation; existing drafts stay draft, PR-only CI pending. Resume the
+same owner under `automatic-implementation-closeout.md`, without another prompt
+or standalone loop; reuse valid unchanged-head coverage.
 
-Before dispatching the review, verify the exact integrated feature-branch tree.
-On the profile path, invoke the repository planner with boundary
-`merge_candidate` and run its selected lanes. It materializes every required
-remote race/security/container/harness lane as `remote_pending`, `blocked`, or
-`unavailable`; the kernel does not import remote results. On the
-repository-native path, run the one canonical native command exactly once here
-and bind its result, exact command, policy source, and candidate SHA into the
-existing verification evidence. The caller separately collects required native
-CI or independent review evidence bound to the exact candidate head.
+Verify this exact tree: profile `merge_candidate` runs selected lanes and retains
+required remote race/security/container/harness as `remote_pending|blocked|unavailable`;
+Kernel does not import remote results. Native verification runs its canonical
+command once here, binding command, policy source, result and SHA. The caller
+collects required native CI/independent review evidence at that head.
 
-When any executed chunk has `renderedSurface: required`, load
-`plugins/pipeline/references/final-review-browser-evidence.md`. On the exact
-integrated candidate head, run one host-owned capture for the selected affected
-browser cases, create the explicit bounded packet in the current ignored
-Pipeline evidence directory, and pass its exact packet and selected-case paths
-to the final dm-review. Do not discover a latest packet. The nested review must
-validate exact repository/prototype commits, dirty state, case equality,
-successful completion, and every artifact hash before reuse. An accepted packet
-prevents a second capture and is shared across all applicable UI analyses; a
-rejected packet falls back to normal readiness and never grants rendered
-success. When no chunk requires a rendered surface, create and pass no packet.
+When `renderedSurface: required`, load `final-review-browser-evidence.md` and
+capture selected affected cases once at this integrated head. Pass exact packet/
+case paths from ignored evidence to final dm-review; no latest lookup.
+Reuse requires matching repository/prototype commits, dirty state, case set,
+completion and artifact hashes. Accepted packets serve all UI analyses without
+recapture; rejection uses normal readiness, never rendered success.
+Non-rendered runs create/pass no packet.
 
 First materialize the cumulative authoritative receipt array through the `all-chunks-complete` boundary and run the first `observe-pipeline` checkpoint. The observation remains shadow evidence and cannot approve the final review.
 
-Verification invariant: preserve the selected review protocol without using
-implementation origin as an eligibility filter. Quick mode
-dispatches its two method-independent core judgment lanes and applicable
-build/UI/domain lanes; it may not collapse to the implementer's self-review. If
-a required lane is unavailable, report the closed role-level gap without
-selecting a substitute.
+Preserve independent selected lanes: quick retains two core judgment lanes
+plus applicable build/UI/domain lanes. Self-review cannot substitute; missing
+required lanes report role-level gaps without selecting substitutes.
+Keep cumulative Step 3d implementation/repair receipts for terminal reporting
+only; review/repair prompts receive no origin, concrete identity, candidate
+order or cost.
 
-The implementation receipt set here is exactly the cumulative set maintained
-since Step 3d, including every implementation and repair that contributed to
-the final diff. Preserve it for terminal reporting, but do not forward it as a
-review eligibility input. Nested review and repair prompts receive no concrete
-model, provider, family, candidate order, or cost.
-
-For `decisionProfile.consequence: high`, this existing final independent seam is the stronger verification depth: require all applicable independent lanes and conditional reviewers to return valid evidence. A missing, declined, dead, or degraded required lane stops `human_help_required`; do not approve from the remaining lane. This escalation does not add a full review to each ordinary chunk and does not relax sensitive-path or browser requirements.
+High consequence requires valid evidence from every applicable independent/
+conditional lane at this final seam. Missing/declined/dead/degraded required
+coverage stops `human_help_required`; never approve from remaining lanes or
+add full review per ordinary chunk.
 
 Dispatch by the validated mode:
 
@@ -934,19 +941,17 @@ Explicit Pipeline Browser Evidence, when applicable:
 [INLINE THE EXACT uiBrowserEvidencePacket AND uiBrowserSelectedCases PATHS
 CREATED FOR THIS INTEGRATED CANDIDATE. DO NOT SEARCH FOR A LATEST PACKET.]
 
-In addition to code quality, check whether the branch advances the approved
-project goal, satisfies every requirement/outcome, and stays within the approved
-ownership and non-goals. Flag a missing, contradicted, or unnecessarily expanded
-goal/outcome as P2 even when tests pass.
+Check approved goals, requirements, ownership and non-goals. Missing,
+contradicted or expanded outcomes are P2 even with passing tests.
 ```
 
-This catches cross-chunk integration issues that focused per-chunk reviews miss. Fix every retained P1/P2/P3 finding; reject unsupported or preference-only suggestions during consolidation instead of carrying them as debt.
+Fix every retained P1/P2/P3; reject unsupported/preferences during consolidation.
 
 If P1/P2/P3 issues are found:
 
 1. Collect the complete finding set and fix it as one revision batch.
 2. Stage with `git add -A -- <dir>`, verify `git diff --cached --stat`, commit with `git commit -F <file>`.
-3. Push the repair batch to the existing PR and verify its remote head before
+3. Push the repair batch to the candidate branch and verify its remote head before
    closeout. On the profile path, invoke `revision_batch` once, then `merge_candidate`
    once. On the repository-native path, an irrelevant repair may carry forward
    prior canonical-command evidence only with bounded diff proof that no
@@ -954,15 +959,16 @@ If P1/P2/P3 issues are found:
    relevance is uncertain, rerun the canonical native command once and bind the
    result to the new candidate SHA. Do not test after every finding edit.
 4. Re-run only the affected lanes on the exact newly tested SHA. Repeat the whole selected roster only when prior coverage was incomplete; if a repair changes a security-sensitive boundary, escalate to or repeat full mode.
-5. Stop when no P1/P2/P3 remain and every required lane and repository/browser/remote gate is complete.
+5. Complete the candidate gate when no P1/P2/P3 remain and every required candidate lane and repository/browser gate is complete. Settle actual PR-triggered remote CI after publication in Step 4c; pending PR-only CI does not authorize a ready transition.
 
 If any retained P1/P2/P3 remains, stop as needs attention.
 
-**Verification:** You MUST be able to state: "Final dm-review completed. Requested mode: [full/quick]. Effective mode: [full/quick]. Result: [CLEAN/N findings]."
+**Verification:** Report completed final dm-review, requested/effective mode and
+`CLEAN|N findings` from actual evidence.
 
 After the final review, fire airlift per `plugins/pipeline/references/airlift-checkpoint.md` with `--phase "review"`.
 
-**Merge recommendation emission:** after the final review, emit ONE of:
+**Merge recommendation emission:** emit one supported verdict:
 
 - `CLEAN` -- no P1/P2/P3 remain. Required visual/verification coverage passed.
 - `APPROVE WITH FIXES` -- zero P1 and at least one P2 or P3 remains. Every retained finding must be fixed before merge.
@@ -984,7 +990,9 @@ Mark `FINAL 1. Run approved final dm-review mode` complete.
 
 ## Step 4b: Requirements Cross-Check
 
-Read approved Key Requirements from the `keyRequirements` island of `plans/<feature-slug>/assessment.html` and compact Project Alignment. Write `plans/<feature-slug>/final-requirements-crosscheck.md` with one row per requirement or project outcome. Every row MUST include `Evidence:` as one of: `screenshot:<relative-path>`, `grep:<command>`, `dom_eval:<snippet>`, `build:passed`, `test:<test-name>`.
+Write `plans/<feature-slug>/final-requirements-crosscheck.md` from approved
+assessment `keyRequirements`/Project Alignment: one row per requirement/outcome,
+with `Evidence: screenshot:<path>|grep:<command>|dom_eval:<snippet>|build:passed|test:<name>`.
 
 ```text
 # Final Requirements Cross-Check
@@ -1002,10 +1010,72 @@ Mark `FINAL 2. Requirements cross-check` complete.
 
 ## Step 4c: Merge Policy Check
 
-Read `manifest.noMergeOnCompletion` (default `false` if the field is absent).
+Every generated manifest sets `noMergeOnCompletion=true`. Missing legacy
+controls default safely to owner-only merge; an old explicit `false` cannot
+override this owner instruction. Log `merge_skipped: noMergeOnCompletion=true`.
+Do NOT merge the feature branch into `baseBranch` or invoke agent/auto merge.
+In the compact Step 6 summary, state `noMergeOnCompletion=true` in **Branch or PR**
+and use dm-review's designer handoff for required UI acceptance or owner
+merge as **Recommended next action**. Never request routine backend-code review.
 
-- **If `true`:** log `merge_skipped: noMergeOnCompletion=true`. Do NOT merge the feature branch into `baseBranch`. The caller retains the branch for manual review. In the compact Step 6 summary, state `noMergeOnCompletion=true` in **Branch or PR** and make manual branch review the single **Recommended next action**.
-- **If `false`:** proceed with the normal merge workflow (feature branch is already assembled via per-chunk merges; no additional action needed here unless your workflow performs a final base-branch merge).
+After Steps 4/4b pass, standalone `pipeline-run` invokes these seams.
+For parent-owned `pipeline`, defer both operations and return exact candidate,
+producer/readiness and preserved source/browser references. The parent runs
+mandatory caller verification before publication and refreshes invalidated
+evidence after repairs under this same owner. Pending PR-only CI blocks ready,
+not draft creation. Inputs follow `automatic-implementation-closeout.md`;
+Retain `FEATURE_BRANCH`, bound earlier to approved manifest `featureBranch`,
+and `$REVIEW_ROOT` after transfer; never rediscover from detached HEAD. Copy
+manifest `baseBranch` to readiness `approvedBase`; local/origin resolution
+preserves review source base/head, never infers GitHub-default approval.
+
+<!-- reviewed-pr-full:start -->
+```bash
+case "${TERMINAL_MODEL_REPORT_OWNER:?validated caller owner required}" in
+pipeline) printf '%s\n' 'Publication deferred to parent caller verification.' ;;
+pipeline-run)
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
+  --operation create --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --feature-branch "${FEATURE_BRANCH:?approved featureBranch required}" \
+  --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT"
+;;
+*) exit 2 ;;
+esac
+```
+<!-- reviewed-pr-full:end -->
+
+After actual PR checks, feedback settlement and required designer UI acceptance
+pass at the final head, use the same producer gate for draft-to-ready:
+
+<!-- reviewed-pr-full-ready:start -->
+```bash
+case "${TERMINAL_MODEL_REPORT_OWNER:?validated caller owner required}" in
+pipeline) printf '%s\n' 'Publication deferred to parent caller verification.' ;;
+pipeline-run)
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
+  --operation ready --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --feature-branch "${FEATURE_BRANCH:?approved featureBranch required}" \
+  --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT" \
+  --pr "$REVIEW_PR_URL"
+;;
+*) exit 2 ;;
+esac
+```
+<!-- reviewed-pr-full-ready:end -->
+
+No bare `gh` may bypass this seam. Settle actual PR-triggered CI and external
+feedback independently. Keep the existing draft while final-head checks or
+required designer UI acceptance remain. Fix supported feedback automatically,
+push and recheck affected evidence under this logical owner. Supported
+exact-owned replay handles conflicting fixed companions; never rewrite preserved
+history. A repair push never starts a duplicate broad review.
+
+The root binds `review-owner-context.sh` after approval and updates actual
+execution/check/UI/merge-wait/blocked/terminal phases. Workers return boundaries;
+the SessionStart ref is read-only and workers never bind the parent. Clear only
+the root's completed binding before cleanup. Without native hooks, report
+`hook activation unavailable`, omit binding and run the mandatory producer gate.
+Planning/material-scope approval remains explicit.
 
 Mark `FINAL 3. Check manifest.noMergeOnCompletion` complete.
 
@@ -1047,7 +1117,33 @@ kernel reliability, and ranked recommendations labeled `AWAITING APPROVAL`.
 NEVER auto-edit plugin sources. Append one ledger line to
 `docs/pipeline-metrics/ledger.md`. Mark `FINAL 5. Run Post-Mortem` complete.
 
+Before terminal reporting, separate feedback from review: pre-PR feedback is
+`not_applicable`, never claimed settled; post-PR collect/settle it independently.
+At an unchanged covered head with zero retained findings, CI or feedback waits
+never redispatch reviewers. Invoke the selector only for an actual source
+coverage gap, a new supported retained finding or a rendered automation gap:
+
+<!-- review-gap-full:start -->
+```bash
+if [ "$SOURCE_COVERAGE_GAP" = true ] || [ "$SUPPORTED_RETAINED_FINDING" = true ] || [ "$RENDERED_AUTOMATION_GAP" = true ]; then
+  "$DM_REVIEW_BUNDLE_ROOT/skills/review/references/review-next-action.sh" "$REVIEW_ACTION_INPUT"
+else
+  printf '%s\n' 'Review coverage unchanged; settle CI and feedback without reviewer dispatch.'
+fi
+```
+<!-- review-gap-full:end -->
+
+When invoked, pass the actual base, final head and dirty state; preserve its
+four public lines. Complete model-dependent action within this same owner
+before Step 5a.1 renders a terminal model report. Recheck only invalidated evidence.
+
 ## Step 5a.1: Terminal Model Report Ownership
+
+`awaiting_ui` is nonterminal: retain owner, checkout, root/state, evidence and
+private index at provisional handoff. Resume executing/checking for UI repairs,
+refresh affected evidence/feedback, and complete acceptance and actual ready
+before terminal model/cost generation or destructive Step 5b. No new review
+loop/consumer restart; source-only work finishes after ready; owner alone merges.
 
 The caller passes `terminalModelReportOwner: pipeline|pipeline-run`. Reject any
 other value before execution. Load model-router's
@@ -1067,19 +1163,18 @@ requirements cross-check, repairs, and Step 4c merge policy are settled.
 
 Mark `FINAL 5a.1. Terminal model report or owner handoff` complete.
 
-Before Step 6, resolve dm-review `>=1.83.0` and run its
-`review-next-action.sh` with final diff, cases, final-head coverage, findings,
-and settled PR feedback. Pass the actual base, final head, and dirty state.
-Return its four public lines; recheck only evidence
-invalidated by later changes.
-
 ## Step 5b: Artifact and Repository Cleanup
 
 Reconcile authoritative Docker ownership first, then clean artifacts and Git refs, then write the final authoritative cleanup/terminal receipt, and only then run shadow observation/comparison/metrics. This order is mandatory.
 
 `STEP5B_ORDER: docker_reconcile -> artifact_git_cleanup -> authoritative_terminal_receipt -> shadow_observe_compare_metrics -> shadow_tier2_delete_on_match -> manifest_input_cleanup_on_match`
 
-**This step is mandatory and runs on every exit path** -- success, review failure, chunk-blocking failure, pipeline-blocking failure, and every answer to the caller's Phase 7 gate. If the run is aborting because of an exception, this step still runs: it is deterministic git and cannot make the failure worse.
+**This step is mandatory and runs on every exit path**, including exceptions,
+review/chunk/pipeline failure and caller Phase 7 outcomes. Parent-owned
+`pipeline` returns active candidate evidence before terminal cleanup: defer
+this owner's finalization/removal to the parent after caller verification,
+acceptance, actual ready and reporting. Chunk cleanup already completed; never finish the
+shared owner while its parent still needs producer evidence.
 
 ### 1. Docker terminal reconciliation
 
@@ -1148,19 +1243,16 @@ Apply dm-review's `repo-cleanup-contract.md` browser-artifact lifecycle across
 implementation and serving checkouts. Preserve linked evidence before cleanup;
 remove only exact run-owned disposable captures, never arbitrary image globs.
 
-Create Tier 1 and Tier 2 execution material beneath the invocation's exact-owned
-root wherever it is not a documented standalone `/pipeline-prompts` deliverable.
-At terminal cleanup, reconcile only exact artifact records from this run. Never
-delete `plans/<feature-slug>` children by a broad path list: those paths may
-predate this invocation or belong to a concurrent run. On failure, project the
-compact reason and cleanup outcomes, then remove raw Tier 1 and Tier 2 inputs;
-retain at most one bounded diagnostic root under `exact-owned-cleanup.md`.
-When `terminalModelReportOwner` is `pipeline`, the exact private router
-directory and its index are an explicitly deferred caller-owned cleanup record,
-not an abandoned diagnostic root. Retain only that bounded directory until the
-Pipeline caller renders or closes reporting unavailable, then remove it through
-the same exact-owned cleanup authority. For `pipeline-run`, reporting already
-settled in Step 5a.1 and no such deferral exists.
+Keep Tier 1/2 material in exact-owned roots except documented standalone
+`/pipeline-prompts` deliverables. Reconcile exact current-run artifact records;
+never broad-delete plan children that may be foreign. Failure projects compact
+reason/outcomes before removing raw inputs; retain at most one bounded diagnostic
+root per `exact-owned-cleanup.md`.
+Parent-owned `pipeline` also defers cleanup of exact producer/source/browser,
+verification, readiness and private index references until parent verification,
+publication/reporting and observation binding settle; this is an active owner
+handoff, never terminal success or an abandoned diagnostic. Standalone reporting
+settles in 5a.1 only after acceptance and actual ready. Remove deferred paths only under the same exact-owned authority.
 
 ### 3. Repository cleanup
 
@@ -1181,7 +1273,8 @@ Absent that, the inventory says `kept -- no merge proof`. `git branch -D` on the
 
 ### 4. Readiness checks
 
-Verify the repo is fit for the next run and record each result honestly, pass or fail. A failing check does not invalidate the run's result -- the work is already done -- but it must appear in the receipt so the next operator knows what they are inheriting.
+Record readiness failures honestly in the receipt for the next operator;
+they do not invalidate already-completed work.
 
 ```bash
 git worktree list --porcelain   # inspect each exact registered path only
@@ -1190,7 +1283,10 @@ git status --porcelain          # expect: empty
 
 ### 5. Final authoritative cleanup/terminal receipt and report
 
-Now create `plans/<feature-slug>/receipt.md` using the schema above. Every Docker, artifact, worktree, branch, readiness, and repository-status field must come from the completed authoritative outcomes in Steps 1-4. A receipt field cannot predict, precede, or be backfilled from shadow state. This Step 5b base receipt MUST omit the caller-owned `- Memory capture:` field. After Step 6 returns the handoff, a caller with callable ai-memory tools may append exactly one terminal memory-capture field (`written`, `already-present`, or nonblocking `failed -- <safe reason>`). Without that capability, the base receipt remains unchanged and no absence is reported.
+Write `plans/<feature-slug>/receipt.md` only from actual Steps 1-4 outcomes;
+shadow state never supplies cleanup truth. This Step 5b base receipt MUST omit the caller-owned `- Memory capture:` field.
+After Step 6, callable ai-memory callers may append exactly one terminal memory-capture field
+(`written|already-present|failed -- <safe reason>`). Otherwise leave it unchanged without absence reporting.
 
 Log cleanup stats: `Artifact cleanup before shadow: removed N ephemeral + M run-scoped files, retained K feature-scoped files.` The authoritative receipt does not predict the later shadow/input disposition; Step 6 reports those post-receipt deletions separately after they occur.
 
@@ -1208,43 +1304,36 @@ Only after the complete final authoritative cleanup/terminal receipt exists, app
 "$WORKFLOW_KERNEL" metrics --events plans/<feature-slug>/authoritative-receipts.json --output plans/<feature-slug>/metrics.json
 ```
 
-Retain the manifest, terminal receipt, lifecycle artifacts, cumulative
-authoritative receipts, attempt records, metrics, verification,
-reconciliation, installed-bundle resolution, contribution references, and
-private router/provider reference receipts until the caller completes the
-terminal observation index. Return one `Observation index source handoff:`
-line naming those exact paths and whether each exists; do not copy their
-contents into the handoff. The Pipeline caller materializes
-`plans/<feature-slug>/observation-index-input.json` after its cost-summary
-attempt, binds explicit `producer.name: pipeline` and source `role: producer`,
-and invokes the same Workflow Kernel `emit-observation-index` command used by
-dm-review. Observation-index failure is recorded once as unavailable in the
-durable receipt and never changes authoritative completion, review, cleanup,
-or merge evidence. Do not repeat it per lane or phase or include it in the
-normal compact chat handoff; disclose the closed reason only for requested
-observability diagnostics or when the index is the required deliverable.
+Retain manifest, terminal/lifecycle/authoritative receipts, attempts, metrics,
+verification, reconciliation, bundle resolutions and contribution/private
+reference receipts until caller terminal observation binding. Return exact
+paths/existence in `Observation index source handoff:`, without contents.
+The caller, after its cost-summary, creates `plans/<feature-slug>/observation-index-input.json`
+with `producer.name: pipeline`, source `role: producer`, then `emit-observation-index`.
+Observation never changes authoritative completion, review, cleanup or merge
+outcomes. Failure is recorded once as unavailable in the durable receipt,
+never per lane or phase or in the normal compact chat handoff. Disclose reasons
+only for requested observability diagnostics/index deliverables.
 
-Observation-only. After compact projection and the caller's observation-index
-source handoff, delete eligible shadow Tier 2 inputs only when they are not
-still required for terminal index binding. Never auto-delete `.workflow-kernel/repository-scope.json`. Preserve the compact shadow category
-in the receipt rather than the raw terminal state tree. Record disposition in
-the final summary without rewriting the cleanup receipt.
+After caller observation binding, remove eligible shadow inputs and record
+disposition separately without rewriting cleanup receipts.
+Never auto-delete `.workflow-kernel/repository-scope.json`.
+Comparison plus fresh exact-scope Docker inventory must prove zero resources
+before `exact-owned-cleanup.md` success removes exact run state and finishes
+the disposable root via `owned-run-finish --outcome succeeded`.
+Failure/interruption removes disposable roots; retain at most one useful
+diagnostic root (state or dirty worktree, never both). Report exact path,
+reason, contents and quoted `rm -rf -- <quoted-path>` command.
+Install the same terminal action for EXIT/SIGINT/SIGTERM.
 
-After comparison and fresh exact-scope Docker inventory prove zero resources,
-apply `exact-owned-cleanup.md`: on success, remove the exact
-`.workflow-kernel/runs/<run-id>/` state directory and finish the disposable root
-with `owned-run-finish --outcome succeeded`. On failure/interruption, remove the
-disposable root. Retain `.workflow-kernel/runs/<run-id>/` only when it is the one
-genuinely useful bounded diagnostic root; then report its exact path, reason,
-contents, and exact `rm -rf -- <quoted-path>` command. If a dirty worktree is
-the retained diagnostic root, remove both kernel/disposable roots and report
-that worktree instead. Install the same terminal action for `EXIT`, `SIGINT`,
-and `SIGTERM`.
-
-After final report/receipt writes, repeat `repo-cleanup-contract.md` readiness
-checks in every used checkout. Report `Next chunk: ready` only with no run-owned
-dirty residue; otherwise name the paths and blocker. Preserve the live preview.
-Mark `FINAL 5b. Artifact and repository cleanup` complete only after this check.
+Validate every used checkout after its last write and before removal. Only
+explicitly selected Assembly development checkouts run read-only
+`canonical-checkout.sh finish` with exact `--delivered-head`, surviving roots
+and removed residue paths; no removed owner state is needed. Other repositories
+use entry-baseline source comparisons and run-owned residue checks. Pending
+cleanup means Not ready with safe paths and one agent action. Preserve the
+reviewed branch and preview. Report `Next chunk: ready` only after this check, then mark
+`FINAL 5b. Artifact and repository cleanup` complete.
 
 ## Step 5c: Campaign State Write
 
@@ -1296,7 +1385,7 @@ Omit `Attempt result` when no provider attempt failed. Keep the visible summary 
 
 Opening fragments only; complete the template above.
 
-Successful-run specimen: Done. Review PR #123.
+Successful-run specimen: Done. Automation passed. Merge PR #123 when you accept the browser tasks; merging remains yours.
 
 Blocked-run specimen: Required Safari evidence for `member-form-mobile` could not run.
 Run on a Safari-capable host; resume from the receipt.

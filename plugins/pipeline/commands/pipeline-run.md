@@ -125,9 +125,8 @@ The canonical shadow inputs are `plans/<feature>/manifest.json` plus the cumulat
 "$WORKFLOW_KERNEL" bind-prediction --type pipeline --manifest plans/<feature>/manifest.json --prediction-receipts plans/<feature>/independent-prediction-receipts.json --state-dir plans/<feature>
 ```
 
-Load `plugins/pipeline/references/execution-verification-profile.md` after
-`run.started` for generation, candidate/final selection and reload/binding checks.
-Read the reference's resolved Kernel contract (>=0.27.0).
+After `run.started`, load `plugins/pipeline/references/execution-verification-profile.md`
+for generation, selection, reload and binding. Read its resolved Kernel contract >=0.27.0.
 
 Required work:
 
@@ -139,10 +138,9 @@ Required work:
   > plans/<feature>/verification-profile-generation.json
 ```
 
-Pass `--task-id` once per task. Focused cases use exact approved candidate IDs
-after reload. Check the ID/full digest, required IDs and reload receipt; this is a plan.
-Non-rendered work skips profiles: nulls, empty arrays and N/A rationales.
-Bind the approved contract:
+Pass `--task-id` once per task. After reload, select approved candidate IDs.
+Check identity/full digest, required IDs and reload receipt; generation proves a plan.
+Non-rendered work uses nulls, empty arrays and N/A rationales. Bind the contract:
 
 ```text
 # One or more required rendered chunks:
@@ -152,10 +150,9 @@ Bind the approved contract:
 "$WORKFLOW_KERNEL" bind-verification-contract --state-dir .workflow-kernel/runs/<run-id> --contract plans/<feature>/verification-contract.json > plans/<feature>/verification-contract-binding.json
 ```
 
-Retry only exact immutable bindings; changed digest/cases requires a newly planned
-run, never rewriting or retroactive validation. Dispatch names exact `contract_digest`/`revision`.
-Every builder dispatch and completion must name those exact current values; a
-missing or mismatched claim is deterministic validation failure, never success.
+Retry identical immutable bindings only. Changed digest/cases requires a new
+plan/run; no rewriting or retroactive validation. Every builder dispatch and completion must name current
+`contract_digest`/`revision`; missing or mismatched values fail validation.
 The kernel seals/validates this artifact but never schedules a builder or gate.
 
 When an owner-approved retained ledger has the one historical noncanonical

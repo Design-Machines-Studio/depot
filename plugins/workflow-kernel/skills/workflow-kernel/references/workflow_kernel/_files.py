@@ -276,11 +276,13 @@ class LockHandle:
         self.identity = (opened.st_dev, opened.st_ino)
 
     @classmethod
-    def open_bound(cls, binding: DurablePathBinding) -> "LockHandle":
+    def open_bound(cls, binding: DurablePathBinding, *, create: bool = True) -> "LockHandle":
+        """Open the lock; ``create=False`` never recreates a missing pathname."""
         directory = binding.pin_parent()
         descriptor = None
         try:
-            descriptor = directory.open_regular(binding.path.name, os.O_CREAT | os.O_RDWR)
+            flags = os.O_RDWR | (os.O_CREAT if create else 0)
+            descriptor = directory.open_regular(binding.path.name, flags)
             return cls(binding.path, descriptor, directory)
         except Exception:
             try:
@@ -295,12 +297,12 @@ class LockHandle:
             raise
 
     @classmethod
-    def acquire_bound(cls, binding: DurablePathBinding) -> "LockHandle":
+    def acquire_bound(cls, binding: DurablePathBinding, *, create: bool = True) -> "LockHandle":
         """Acquire a lock while retaining the verified parent descriptor."""
         path = binding.path
         if fcntl is None:
             raise LockingUnsupportedError(errno.ENOSYS, "crash-safe locking is unavailable", str(path))
-        handle = cls.open_bound(binding)
+        handle = cls.open_bound(binding, create=create)
         try:
             fcntl.flock(handle.descriptor, fcntl.LOCK_EX | fcntl.LOCK_NB)
             handle._locked = True

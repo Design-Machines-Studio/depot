@@ -7,6 +7,7 @@ behavioral substitute for the isolated fresh-session canary.
 from __future__ import annotations
 
 import importlib.util
+import re
 import unittest
 from pathlib import Path
 
@@ -85,6 +86,67 @@ class CodexCommandAdapterContractTests(unittest.TestCase):
         review = (REPO / "plugins/dm-review/skills/review/SKILL.md").read_text()
         self.assertIn("init .workflow-kernel/runs/<run-id>", review)
         self.assertIn("Produce nonempty independent `review_request` prediction receipts", review)
+
+    def test_review_before_publication_and_owner_only_merge_contract(self) -> None:
+        direct = (REPO / "plugins/dm-review/skills/review/references/automatic-implementation-closeout.md").read_text()
+        pipeline = (REPO / "plugins/pipeline/commands/pipeline.md").read_text()
+        full = (REPO / "plugins/pipeline/agents/workflow/execution-orchestrator.md").read_text()
+        adapter = (REPO / "plugins/pipeline/references/codex-native-execution-adapter.md").read_text()
+        schema = (REPO / "plugins/pipeline/skills/promptcraft/references/manifest-schema.md").read_text()
+        prompt = (REPO / "plugins/pipeline/skills/promptcraft/references/prompt-template.md").read_text()
+        self.assertIn('"noMergeOnCompletion": true', schema)
+        for text in (pipeline, full, adapter, prompt):
+            with self.subTest(surface=text.splitlines()[0]):
+                self.assertIn("noMergeOnCompletion=true", text)
+                self.assertIn("publish-reviewed-pr.sh", text)
+                self.assertIn("read-only", text)
+        self.assertNotIn('default `false`', full)
+        self.assertNotIn('**If `false`:** proceed', full)
+        self.assertNotIn('Recommended next action: create the PR', pipeline)
+        self.assertNotIn('**If the user chooses PR:**', pipeline)
+        self.assertLess(full.index('## Step 4: Approved Final Review'), full.index('<!-- reviewed-pr-full:start -->'))
+        self.assertLess(pipeline.index('### Caller Verification Checklist'), pipeline.index('<!-- reviewed-pr-lean:start -->'))
+        self.assertLess(pipeline.index('**Requirements cross-check (ledger item 11):**'), pipeline.index('<!-- reviewed-pr-lean:start -->'))
+        self.assertIn('The orchestrator defers create and ready', pipeline)
+        self.assertIn('Both Full and Lean modes invoke', pipeline)
+        for operation in ('full', 'full-ready'):
+            snippet = full.split(f'<!-- reviewed-pr-{operation}:start -->')[1].split(f'<!-- reviewed-pr-{operation}:end -->')[0]
+            self.assertLess(snippet.index('pipeline) printf'), snippet.index('pipeline-run)'))
+            self.assertLess(snippet.index('pipeline-run)'), snippet.index('publish-reviewed-pr.sh'))
+            self.assertIn('*) exit 2', snippet)
+        for operation in ('lean', 'lean-ready'):
+            snippet = pipeline.split(f'<!-- reviewed-pr-{operation}:start -->')[1].split(f'<!-- reviewed-pr-{operation}:end -->')[0]
+            self.assertLess(snippet.index('CALLER_VERIFICATION_PASSED:-false'), snippet.index('publish-reviewed-pr.sh'))
+        for text in (pipeline, full, adapter):
+            self.assertIn('TERMINAL_MODEL_REPORT_OWNER', text)
+        self.assertIn('`pipeline` defers both create and ready', adapter)
+        self.assertIn('`pipeline-run` executes Step 4c', adapter)
+        self.assertLess(direct.index('Independently review,'), direct.index('<!-- reviewed-pr-direct:start -->'))
+        for caller, text in (("direct", direct), ("full", full), ("lean", pipeline)):
+            with self.subTest(caller=caller):
+                for operation in ("create", "ready"):
+                    self.assertIn(f'--operation {operation} --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT"', text)
+                self.assertIn('not_applicable', text)
+                self.assertIn(f'<!-- review-gap-{caller}:start -->', text)
+                self.assertIn('hook activation unavailable', text)
+                self.assertNotRegex(text, r"(?m)^\s*gh pr (create|ready|merge)(?: |$)")
+        self.assertIn('rebind', direct.lower())
+        self.assertIn('SessionStart/Stop', direct)
+        self.assertIn('private ownership, single-link containment', direct)
+        self.assertIn('never bind/update/clear', direct)
+
+    def test_handoff_check_schema_matches_documented_runtime_statuses(self) -> None:
+        refs = REPO / "plugins/dm-review/skills/review/references"
+        doc = (refs / "output-format.md").read_text()
+        runtime = (refs / "operator-handoff.sh").read_text()
+        documented = re.search(r"Nonempty `checks`:.*?`status`\s*\(`([^`]+)`\)", doc, re.S)
+        supported = re.search(r'\(\.name \| str\) and \(\.status \| IN\(([^)]+)\)\)', runtime)
+        self.assertIsNotNone(documented)
+        self.assertIsNotNone(supported)
+        self.assertEqual(set(documented.group(1).split("|")), set(re.findall(r'"([^"\n]+)"', supported.group(1))))
+        checks_doc = doc.split("- Nonempty `checks`:", 1)[1].split("- `ui`:", 1)[0]
+        for rule in ("optional", "`required`", "Omitted/null defaults to required", "`stage: pr`", "non-null evidence link", "block readiness unless `required: false`"):
+            self.assertIn(rule, checks_doc)
 
     def test_aliases_retain_canonical_command_bodies(self) -> None:
         expected = GENERATOR.expected_files()

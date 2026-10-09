@@ -144,7 +144,10 @@ require_absent "$orchestrator" 'caller-side ai-memory unavailable' \
 caller_memory="$REPO_ROOT/plugins/pipeline/references/caller-memory-enrichment.md"
 run_memory="$REPO_ROOT/plugins/pipeline/references/run-memory-enrichment.md"
 require_text "$pipeline_command" \
-  'never by invoking a memory tool as a probe' \
+  'Check ai-memory availability in the callable inventory/search, never by probing' \
+  "Pipeline caller checks the callable inventory or search"
+require_text "$pipeline_command" \
+  'a memory tool. If callable, load' \
   "Pipeline caller detects ai-memory without a warning-producing probe"
 require_text "$caller_memory" \
   'If the tools are absent, omit the write and every receipt or summary mention.' \

@@ -2,6 +2,10 @@
 import json
 import hashlib
 import subprocess
+import os
+import re
+import shutil
+import tempfile
 from pathlib import Path
 
 import unittest
@@ -58,6 +62,644 @@ class AutoReviewCandidateTests(unittest.TestCase):
 
     def test_pipeline_owner_repair_push_and_final_head_closeout(self):
         self.exercise_path("pipeline")
+
+
+class ReviewedPRCallerFixtures(unittest.TestCase):
+    """Fixture-owner orchestration proof; no installed workflow or live canary.
+
+    Execute the direct/full/Lean source caller seams, using the real production
+    producer and disposable production-shaped data. Only git remote projection
+    and gh are mocked; no participant or actual PR is claimed.
+    """
+    make_run = fixture.ReviewCloseoutTests.make_run
+
+    CALLERS = {
+        "direct": "plugins/dm-review/skills/review/references/automatic-implementation-closeout.md",
+        "full": "plugins/pipeline/agents/workflow/execution-orchestrator.md",
+        "lean": "plugins/pipeline/commands/pipeline.md",
+    }
+
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory(prefix="publish-reviewed-pr-test.")
+        self.root = Path(self.temp.name).resolve()
+        self.repo = self.root / "repository"
+        self.repo.mkdir()
+        self.state = self.root / "runs"
+        self.state.mkdir()
+        self.source = Path(__file__).resolve().parents[1]
+        self.git = shutil.which("git")
+        for argv in (
+            ["init", "--quiet", "-b", "candidate"],
+            ["config", "user.name", "Fixture"],
+            ["config", "user.email", "fixture@example.test"],
+            ["remote", "add", "origin", "https://github.com/Fixture/consumer.git"],
+        ):
+            self.git_run(*argv)
+        (self.repo / "source.txt").write_text("reviewed source\n")
+        (self.repo / ".gitignore").write_text(".workflow-kernel/\n.claude/\n")
+        self.git_run("add", ".")
+        self.git_run("commit", "--quiet", "-m", "fixture")
+        self.git_run("branch", "main")
+        self.git_run("branch", "release/reviewed")
+        self.log = self.root / "gh.log"
+        self.git_log = self.root / "git.log"
+        self.bin = self.root / "bin"
+        self.bin.mkdir()
+        self.write_tool("git", r'''#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$GIT_LOG"
+if [ "${3:-}" = ls-remote ]; then
+  printf '%s\trefs/heads/candidate\n' "$REMOTE_HEAD"
+else exec "$REAL_GIT" "$@"; fi
+''')
+        self.write_tool("gh", r'''#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\n' "$*" >> "$GH_LOG"
+if [ "$1" = api ] && [[ "$*" != *graphql* ]]; then
+  endpoint="${@: -1}"
+  case "$endpoint" in
+    repos/Fixture/consumer/pulls/42)
+      [ "${INTAKE_MODE:-complete}" != unavailable ] || exit 1
+      jq -cn --arg head "$PR_HEAD" --arg body "${FEEDBACK_PR_BODY:-Fixture PR body}" '{head:{sha:$head},body:$body,html_url:"https://github.com/Fixture/consumer/pull/42",updated_at:"2026-10-08T00:00:00Z"}'; exit 0 ;;
+    *pulls/42/comments\?*) printf '[[]]\n'; exit 0 ;;
+    *pulls/42/reviews\?*)
+      jq -cn --arg head "$PR_HEAD" --arg body "${FEEDBACK_REVIEW_BODY:-}" '[[{id:81,html_url:"https://github.com/Fixture/consumer/pull/42#pullrequestreview-81",commit_id:$head,state:"COMMENTED",user:{login:"fixture"},submitted_at:"2026-10-08T00:00:00Z",body:$body}]]'; exit 0 ;;
+    *issues/42/comments\?*)
+      [ "${INTAKE_MODE:-complete}" != partial ] || exit 1
+      jq -cn --arg body "${FEEDBACK_COMMENT:-}" '[[{id:82,html_url:"https://github.com/Fixture/consumer/pull/42#issuecomment-82",user:{login:"fixture"},created_at:"2026-10-08T00:00:00Z",updated_at:"2026-10-08T00:00:00Z",body:$body}]]'; exit 0 ;;
+    *check-suites\?*) printf '{"total_count":0}\n'; exit 0 ;;
+    *check-runs\?*) printf '[{"check_runs":[]}]\n'; exit 0 ;;
+  esac
+fi
+case "$1 ${2:-}" in
+  'pr create') printf 'https://github.com/Fixture/consumer/pull/42\n' ;;
+  'pr ready') ;;
+  'pr view') jq -cn --arg head "$PR_HEAD" --arg base "${PR_BASE:-main}" '{headRefOid:$head,headRefName:"candidate",baseRefName:$base,state:"OPEN",isDraft:true,reviewDecision:env.REVIEW_DECISION}' ;;
+  'pr checks')
+    required=false
+    for arg in "$@"; do [ "$arg" != --required ] || required=true; done
+    if [ "$required" = true ]; then
+      case "${REQUIRED_MODE:-checks}" in
+        none) printf "no required checks reported on the 'candidate' branch\n" >&2; exit 1 ;;
+        lookup-failure) printf 'error connecting to api.github.com\n' >&2; exit 1 ;;
+        empty-error) exit 1 ;; empty-success) printf '[]\n'; exit 0 ;;
+        diagnostic-extra) printf "no required checks reported on the 'candidate' branch\nlookup failed\n" >&2; exit 1 ;;
+        wrong-branch) printf "no required checks reported on the 'foreign' branch\n" >&2; exit 1 ;;
+        missing) printf '[{"name":"missing CI","bucket":"pass","link":"https://example.test/missing"}]\n'; exit 0 ;;
+      esac
+    fi
+    case "${ALL_CHECKS_MODE:-checks}" in
+      missing) printf '[]\n'; exit 0 ;;
+      lookup-failure) printf 'API unavailable\n' >&2; exit 1 ;;
+    esac
+    jq -cn --arg bucket "${PR_BUCKET:-pass}" '[{name:"actual CI",bucket:$bucket,link:"https://example.test/ci"}]' ;;
+
+  'api graphql')
+    if [[ "$*" = *branchProtectionRule* ]]; then
+      [[ "$*" = *"ref=refs/heads/${PR_BASE:-main}"* ]] || exit 2
+      case "${CLASSIC_MODE:-checks}" in
+        lookup-failure) printf 'API unavailable\n' >&2; exit 1 ;;
+        malformed) printf '{\n'; exit 0 ;;
+        incomplete) printf '{"data":{"repository":{"ref":{"name":"main"}}}}\n'; exit 0 ;;
+      esac
+      jq -cn --arg base "${PR_BASE:-main}" --arg mode "${CLASSIC_MODE:-checks}" '
+        {data:{repository:{ref:{name:(if $mode=="wrong-base" then "foreign" else $base end),
+          branchProtectionRule:(if $mode=="none" then null else
+            {requiresStatusChecks:($mode!="empty"),requiredStatusChecks:(if $mode=="empty" then [] else
+              [{context:(if $mode=="absent" then "missing CI" else "actual CI" end),app:(if $mode=="app-bound" then {id:"App1"} else null end)}] end)} end)}}}} |
+        if $mode=="partial-error" then .errors=[{message:"not accessible"}] else . end'
+    else
+      jq -cn --arg head "$PR_HEAD" '{data:{repository:{pullRequest:{headRefOid:$head,reviewThreads:{nodes:[{isResolved:(env.UNRESOLVED!="true")}],pageInfo:{hasNextPage:(env.MORE_THREADS=="true")}}}}}}'
+    fi ;;
+  'api --paginate')
+    BASE_ENCODED="$(jq -rn --arg base "${PR_BASE:-main}" '$base|@uri')"
+    [ "$*" = "api --paginate --slurp repos/Fixture/consumer/rules/branches/$BASE_ENCODED?per_page=100" ] || exit 2
+    case "${RULES_MODE:-none}" in
+      lookup-failure) printf 'API unavailable\n' >&2; exit 1 ;;
+      malformed) printf '{\n'; exit 0 ;;
+      incomplete) printf '[[],null]\n'; exit 0 ;;
+      none) printf '[[]]\n'; exit 0 ;;
+    esac
+    jq -cn --arg mode "$RULES_MODE" '
+      {type:(if $mode=="workflow" then "workflows" elif $mode=="unknown" then "future_required_rule" else "required_status_checks" end),
+        ruleset_id:73,ruleset_source_type:"Organization",ruleset_source:"Fixture",
+        parameters:(if $mode=="workflow" then {workflows:[{path:".github/workflows/required.yml",repository_id:42,ref:"refs/heads/main"}]}
+          elif $mode=="missing-parameters" then {} else
+            {required_status_checks:[{context:(if $mode=="absent" or $mode=="second-page" then "missing CI" else "actual CI" end)}]} |
+              if $mode=="app-bound" then .required_status_checks[0].integration_id=123 else . end end)} |
+      if $mode=="second-page" then [[],[.]] else [[.]] end' ;;
+  *) exit 2 ;;
+esac
+''')
+        self.env = dict(os.environ, DM_REVIEW_DEVELOPMENT_TEST_ROOT=str(self.root),
+                        REAL_GIT=self.git, GH_LOG=str(self.log), GIT_LOG=str(self.git_log),
+                        DM_REVIEW_BUNDLE_ROOT=str(self.source / "plugins/dm-review"),
+                        WORKFLOW_KERNEL=str(self.source / "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"),
+                        REVIEW_ROOT=str(self.repo), REVIEW_PR_URL="https://github.com/Fixture/consumer/pull/42",
+                        PR_BUCKET="pass", UNRESOLVED="false", REVIEW_DECISION="APPROVED",
+                        FEATURE_BRANCH="candidate",
+                        TERMINAL_MODEL_REPORT_OWNER="pipeline-run", CALLER_VERIFICATION_PASSED="true")
+
+    def tearDown(self):
+        # No agent merge may occur on success, rejection or recovery paths.
+        if self.log.exists():
+            self.assertNotRegex(self.log.read_text(), r"(?m)^pr merge(?: |$)")
+        if self.git_log.exists():
+            self.assertNotRegex(self.git_log.read_text(), r" -?merge(?: |$)")
+        self.temp.cleanup()
+
+    def git_run(self, *args):
+        return subprocess.check_output([self.git, "-C", str(self.repo), *args], text=True).strip()
+
+    def write_tool(self, name, body):
+        path = self.bin / name
+        path.write_text(body)
+        path.chmod(0o700)
+
+    def prepare(self, caller, suffix="initial"):
+        workflow = "dm-review-loop" if caller == "direct" else "pipeline"
+        run_id = self.facts["owner"]["run_id"] if suffix == "exact-replay" else f"{caller}-{suffix}"
+        run, paths = self.make_run(workflow, run_id)
+        state = self.repo / ".workflow-kernel/runs" / run_id
+        state.mkdir(parents=True, exist_ok=True)
+        producer = self.root / f"{run_id}-producer.json"
+        keys = {"request": "request", "receipts": "receipts", "lane-receipts": "lane_receipts",
+                "raw-lane-outputs": "raw_lane_outputs", "raw-findings": "raw_findings",
+                "decisions": "decisions", "private-router-directory": "router", "report": "report"}
+        producer.write_text(json.dumps({key: str(paths[value]) for key, value in keys.items()}))
+        head = self.git_run("rev-parse", "HEAD")
+        self.readiness = self.root / f"{run_id}-readiness.json"
+        self.facts = {
+            "approvedBase": "main",
+            "owner": {"repository": "Fixture/consumer", "workflow": workflow, "run_id": run_id,
+                      "run_root": str(run.root), "state_dir": str(state)}, "uiNonImpact": None,
+            "readiness": {
+                "target": "Vetted candidate", "detail": "https://example.test/report", "finalHead": head,
+                "dirty": False, "feedbackSettled": False,
+                "coverage": {"status": "missing", "head": None, "gaps": [], "requiredBrowserCases": [], "evidence": None},
+                "lanes": [{"area": area, "status": "covered" if area == "Security" else "exempt",
+                           "note": None if area == "Security" else "Not selected by this bounded fixture.",
+                           "evidence": "https://example.test/security" if area == "Security" else None}
+                          for area in ("Architecture", "Simplicity", "Security", "Testing", "Fixture/distribution")],
+                "findings": [], "checks": [{"name": "candidate tests", "stage": "candidate", "status": "pass", "link": None},
+                                           {"name": "actual CI", "stage": "pr", "status": "pending", "link": None}],
+                "ui": {"changed": False, "preview": None, "tasks": [], "acceptance": None},
+            },
+        }
+        self.save_facts()
+        self.env.update(REVIEW_RUN_ROOT=str(run.root), REVIEW_PRODUCER_INPUT=str(producer),
+                        REVIEW_READINESS_INPUT=str(self.readiness), REMOTE_HEAD=head, PR_HEAD=head)
+        intake = run.root / "review/external-finding-intake.json"
+        decisions = run.root / "review/external-finding-decisions.json"
+        collected = subprocess.run([str(self.source / "plugins/dm-review/skills/review/references/external-finding-intake.sh"),
+                                    "--repo", "Fixture/consumer", "--pr", "42", "--output", str(intake)],
+                                   env=dict(self.env, DM_REVIEW_TEST_MODE="1", DM_REVIEW_TEST_GH_BIN=str(self.bin / "gh")),
+                                   capture_output=True, text=True, timeout=15)
+        self.assertEqual(0, collected.returncode, collected.stderr)
+        evidence = json.loads(intake.read_text())
+        ledger = {key: evidence[key] for key in ("repository", "pr_number", "inspected_head", "collection_cutoff")}
+        ledger.update(schema_version=1, artifact_role="external_finding_decisions", decisions=[],
+                      source_evidence_index=[{"source_id": source_id, "candidate_source_finding_ids": [],
+                                              "rationale": "Fixture summary/empty feedback has no claim."}
+                                             for source_id in [evidence["pull_request"]["source_id"],
+                                                               *[item["source_id"] for surface in evidence["surfaces"].values() for item in surface["items"]]]])
+        decisions.write_text(json.dumps(ledger))
+        decisions.chmod(0o600)
+        self.facts["feedback"] = {"intake": str(intake), "decisions": str(decisions)}
+        self.save_facts()
+        self.log.write_text("")
+        self.git_log.write_text("")
+        return run, paths
+
+    def save_facts(self):
+        self.readiness.write_text(json.dumps(self.facts))
+
+    def snippet(self, caller, marker):
+        text = (self.source / self.CALLERS[caller]).read_text()
+        match = re.search(rf"<!-- {marker}:start -->\n```bash\n(.*?)\n```\n<!-- {marker}:end -->", text, re.S)
+        self.assertIsNotNone(match, marker)
+        return match.group(1)
+
+    def publish(self, caller, operation="create"):
+        marker = f"reviewed-pr-{caller}" + ("-ready" if operation == "ready" else "")
+        return subprocess.run(["bash", "-euc", self.snippet(caller, marker)],
+                              env=self.env, capture_output=True, text=True, timeout=30)
+
+    def reject(self, caller, operation="create", *, no_gh=True):
+        self.log.write_text("")
+        result = self.publish(caller, operation)
+        self.assertNotEqual(0, result.returncode, result.stdout + result.stderr)
+        self.assertNotRegex(self.log.read_text(), r"(?m)^pr (create|ready)(?: |$)")
+        if no_gh:
+            self.assertEqual("", self.log.read_text())
+        return result
+
+    def test_actual_callers_publish_after_same_owner_detached_transfer(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                # Bind the approved task (direct), manifest (Full), or plan
+                # (Lean) context before transfer; never derive it from HEAD.
+                self.env["FEATURE_BRANCH"] = "candidate"
+                self.git_run("switch", "candidate")
+                run, paths = self.prepare(caller, "detached-transfer")
+                owner = dict(self.facts["owner"])
+                state = Path(owner["state_dir"])
+                original = {path: path.read_bytes() for path in paths.values()
+                            if isinstance(path, Path) and path.is_file()}
+                canonical = self.root / f"canonical-{caller}"
+                head = self.git_run("rev-parse", "HEAD")
+                self.git_run("worktree", "add", "--quiet", "--detach", str(canonical), head)
+                self.git_run("switch", "--detach", head)
+                subprocess.run([self.git, "-C", str(canonical), "switch", "--quiet", "candidate"], check=True)
+                self.assertEqual("", self.git_run("branch", "--show-current"))
+                self.assertEqual("candidate", subprocess.check_output(
+                    [self.git, "-C", str(canonical), "branch", "--show-current"], text=True).strip())
+                self.assertEqual(head, self.git_run("rev-parse", "HEAD"))
+                self.assertEqual(str(self.repo), self.env["REVIEW_ROOT"])
+                self.assertEqual(str(run.root), self.env["REVIEW_RUN_ROOT"])
+                self.assertEqual(self.repo / ".workflow-kernel/runs" / run.run_id, state)
+                for operation in ("create", "ready"):
+                    if operation == "ready":
+                        self.facts["readiness"]["feedbackSettled"] = True
+                        self.save_facts()
+                    marker = f"reviewed-pr-{caller}" + ("-ready" if operation == "ready" else "")
+                    self.assertIn('--feature-branch "${FEATURE_BRANCH:?approved featureBranch required}"',
+                                  self.snippet(caller, marker))
+                    result = self.publish(caller, operation)
+                    self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+                    self.assertRegex(self.log.read_text(), rf"(?m)^pr {operation}(?: |$)")
+                    self.assertEqual(owner, self.facts["owner"])
+                    self.assertTrue(state.is_dir())
+                    self.assertEqual(original, {path: path.read_bytes() for path in original})
+                    self.assertEqual("", self.git_run("branch", "--show-current"))
+                # Leave the branch free for the next caller's independent run.
+                subprocess.run([self.git, "-C", str(canonical), "switch", "--quiet", "--detach", head], check=True)
+
+    def test_detached_actual_callers_reject_wrong_or_missing_branch_without_mutation(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.env["FEATURE_BRANCH"] = "candidate"
+                self.git_run("switch", "candidate")
+                run, _ = self.prepare(caller, "detached-rejections")
+                canonical = self.root / f"canonical-rejections-{caller}"
+                head = self.git_run("rev-parse", "HEAD")
+                self.git_run("worktree", "add", "--quiet", "--detach", str(canonical), head)
+                self.git_run("switch", "--detach", head)
+                subprocess.run([self.git, "-C", str(canonical), "switch", "--quiet", "candidate"], check=True)
+                # Seal via the actual caller first. Retries must preserve the
+                # same real Kernel/source inputs, owner state and Git refs.
+                created = self.publish(caller)
+                self.assertEqual(0, created.returncode, created.stdout + created.stderr)
+                self.facts["readiness"]["feedbackSettled"] = True
+                self.save_facts()
+                state = Path(self.facts["owner"]["state_dir"])
+                def snapshot():
+                    files = {path: path.read_bytes() for root in (run.root, state, self.repo / ".claude")
+                             for path in root.rglob("*") if path.is_file()}
+                    files.update({Path(self.env[key]): Path(self.env[key]).read_bytes()
+                                  for key in ("REVIEW_PRODUCER_INPUT", "REVIEW_READINESS_INPUT")})
+                    return (files, self.git_run("show-ref"), self.git_run("rev-parse", "HEAD"),
+                            self.git_run("status", "--porcelain"), subprocess.check_output(
+                                [self.git, "-C", str(canonical), "symbolic-ref", "HEAD"], text=True))
+                before = snapshot()
+                for operation in ("create", "ready"):
+                    for branch in (None, "", "release/reviewed", "absent-feature"):
+                        with self.subTest(operation=operation, branch=branch):
+                            if branch is None:
+                                self.env.pop("FEATURE_BRANCH", None)
+                            else:
+                                self.env["FEATURE_BRANCH"] = branch
+                            rejected = self.reject(caller, operation)
+                            if branch in (None, ""):
+                                self.assertIn("approved featureBranch required", rejected.stderr)
+                            else:
+                                self.assertRegex(rejected.stderr, "feature branch missing|remote candidate heads differ")
+                            self.assertEqual(before, snapshot())
+                            self.assertTrue(state.is_dir())
+                self.env["FEATURE_BRANCH"] = "candidate"
+                subprocess.run([self.git, "-C", str(canonical), "switch", "--quiet", "--detach", head], check=True)
+
+    def test_callers_block_pre_review_creation_and_missing_source(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                run, paths = self.prepare(caller)
+                paths["lane_receipts"].unlink()
+                rejected = self.reject(caller)
+                self.assertIn("required producer validation failed", rejected.stderr)
+                self.prepare(caller, "missing-source")
+                (self.repo / "source.txt").unlink()
+                self.reject(caller)
+                self.git_run("restore", "source.txt")
+
+    def test_full_parent_defers_both_operations_until_actual_caller_checks(self):
+        # Execute the child guards and the shared Full/Lean parent seams.
+        # Producer-valid evidence cannot bypass missing caller verification.
+        self.prepare("full")
+        self.env["TERMINAL_MODEL_REPORT_OWNER"] = "pipeline"
+        for operation in ("create", "ready"):
+            child = self.publish("full", operation)
+            self.assertEqual(0, child.returncode, child.stderr)
+            self.assertIn("Publication deferred", child.stdout)
+            self.assertEqual("", self.log.read_text())
+            self.env["CALLER_VERIFICATION_PASSED"] = "false"
+            self.reject("lean", operation)
+
+        # A caller-discovered defect is committed before publication; covered
+        # old HEAD still fails even after the caller passes its new checks.
+        (self.repo / "source.txt").write_text("caller-discovered repair\n")
+        self.git_run("add", "source.txt")
+        self.git_run("commit", "--quiet", "-m", "repair caller verification defect")
+        self.env["CALLER_VERIFICATION_PASSED"] = "true"
+        self.reject("lean")
+        self.prepare("full", "exact-replay")
+        # No broad redispatch: fresh producer evidence is an exact-owned replay.
+        created = self.publish("lean")
+        self.assertEqual(0, created.returncode, created.stderr)
+        self.assertIn("pr create", self.log.read_text())
+        self.env["CALLER_VERIFICATION_PASSED"] = "false"
+        self.reject("lean", "ready")
+        self.env["CALLER_VERIFICATION_PASSED"] = "true"
+        self.facts["readiness"]["feedbackSettled"] = True
+        self.save_facts()
+        ready = self.publish("lean", "ready")
+        self.assertEqual(0, ready.returncode, ready.stderr)
+        self.assertIn("pr ready", self.log.read_text())
+
+    def test_standalone_publishes_after_own_checks_and_rejects_unknown_owner(self):
+        _, paths = self.prepare("full")
+        # Standalone corresponding candidate checks still gate publication.
+        self.facts["readiness"]["checks"][0]["status"] = "fail"
+        self.save_facts()
+        self.reject("full")
+        self.facts["readiness"]["checks"][0]["status"] = "pass"
+        self.save_facts()
+        self.env["TERMINAL_MODEL_REPORT_OWNER"] = "unknown"
+        self.reject("full")
+        self.env.pop("TERMINAL_MODEL_REPORT_OWNER")
+        self.reject("full")
+        self.env["TERMINAL_MODEL_REPORT_OWNER"] = "pipeline-run"
+        paths["lane_receipts"].unlink()
+        self.reject("full")
+        self.prepare("full", "standalone-checked")
+        created = self.publish("full")
+        self.assertEqual(0, created.returncode, created.stderr)
+        self.assertIn("pr create", self.log.read_text())
+        self.facts["readiness"]["feedbackSettled"] = True
+        self.save_facts()
+        ready = self.publish("full", "ready")
+        self.assertEqual(0, ready.returncode, ready.stderr)
+        self.assertIn("pr ready", self.log.read_text())
+
+    def test_candidate_repairs_and_fresh_replay_precede_publication(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                run, paths = self.prepare(caller)
+                preserved = fixture.ReviewCloseoutTests.preserve(self, run, paths)
+                self.assertEqual("complete", preserved["status"])
+                retained = Path(preserved["evidence_path"])
+                original = {p.relative_to(retained): p.read_bytes() for p in retained.rglob("*") if p.is_file()}
+                self.facts["readiness"]["findings"] = [{"severity": "P3", "location": "source.txt:1", "problem": "Concrete fixture defect"}]
+                self.save_facts()
+                self.reject(caller)
+                (self.repo / "source.txt").write_text(f"{caller} repaired source\n")
+                self.git_run("add", "source.txt")
+                self.git_run("commit", "--quiet", "-m", "repair fixture defect")
+                self.reject(caller, "ready")  # old review cannot ready the repaired head
+                self.prepare(caller, "exact-replay")
+                created = self.publish(caller)
+                self.assertEqual(0, created.returncode, created.stdout + created.stderr)
+                self.assertIn("--draft", self.log.read_text())
+                self.assertIn("pr create", self.log.read_text())
+                self.assertEqual(original, {p.relative_to(retained): p.read_bytes() for p in retained.rglob("*") if p.is_file()})
+                self.env["PR_BUCKET"] = "pending"
+                self.reject(caller, "ready", no_gh=False)
+                self.env["PR_BUCKET"] = "pass"
+                self.env["UNRESOLVED"] = "true"
+                self.reject(caller, "ready", no_gh=False)
+                self.env["UNRESOLVED"] = "false"
+                self.facts["readiness"]["feedbackSettled"] = True
+                self.save_facts()
+                ready = self.publish(caller, "ready")
+                self.assertEqual(0, ready.returncode, ready.stdout + ready.stderr)
+                self.assertIn("pr ready", self.log.read_text())
+
+    def test_unchanged_covered_head_unsettled_feedback_does_not_select_reviewers(self):
+        # The selector alone would currently ask for broad review on false
+        # prFeedbackSettled. Callers must separate that wait before invoking it.
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.prepare(caller)
+                self.env.update(SOURCE_COVERAGE_GAP="false", SUPPORTED_RETAINED_FINDING="false",
+                                RENDERED_AUTOMATION_GAP="false", REVIEW_ACTION_INPUT=str(self.root / "not-applicable-feedback.json"))
+                result = subprocess.run(["bash", "-euc", self.snippet(caller, f"review-gap-{caller}")],
+                                        env=self.env, capture_output=True, text=True, timeout=10)
+                self.assertEqual(0, result.returncode, result.stderr)
+                self.assertIn("without reviewer dispatch", result.stdout)
+                self.assertNotIn("modelWork: true", result.stdout)
+                self.assertEqual("", self.log.read_text())
+
+    def test_changed_ui_keeps_draft_until_designer_acceptance(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.prepare(caller)
+                self.facts["readiness"].update(feedbackSettled=True)
+                self.facts["readiness"]["ui"].update(changed=True, preview="https://preview.test", tasks=["Check confirmation."])
+                self.save_facts()
+                created = self.publish(caller)
+                self.assertEqual(0, created.returncode, created.stderr)
+                self.reject(caller, "ready", no_gh=False)
+                self.facts["readiness"]["ui"]["acceptance"] = {"head": self.env["PR_HEAD"], "unchangedSince": False}
+                self.save_facts()
+                ready = self.publish(caller, "ready")
+                self.assertEqual(0, ready.returncode, ready.stderr)
+                self.assertIn("pr ready", self.log.read_text())
+
+    def recheck_designer_repair_in_owned_retained_scope(self, run, paths):
+        """Use the existing registered retained-scope replay, keeping the owner root."""
+        from workflow_kernel.review_closeout import assemble_review_evidence, _source_snapshot, _resolve_snapshot, _changed_paths, _git_patch
+        record_ref = paths["record_ref"]
+        record = json.loads((run.root / record_ref).read_text())
+        before = _resolve_snapshot(run.root, record["source_snapshot"], shared=record["schema_version"] == 2)
+        head = self.git_run("rev-parse", "HEAD")
+        after = _source_snapshot(self.repo, head)
+        request = json.loads(paths["request"].read_text())
+        scope = run.root / "diagnostic/review" / ("repo-" + hashlib.sha256(request["source_repository"].encode()).hexdigest()[:12] + "-head-" + head)
+        scope.mkdir(mode=0o700)
+        # The old stream and immutable history remain in the original root and
+        # previous retained scope. Only a new scope gets new fixed companions.
+        for folder in ("review", "receipts", "raw"):
+            shutil.copytree(run.root / folder, scope / folder)
+        current = {key: scope / path.relative_to(run.root) if isinstance(path, Path) and path.is_relative_to(run.root) else path for key, path in paths.items()}
+        for key in ("lane_receipts", "raw_lane_outputs", "raw_findings", "decisions"):
+            current[key].unlink()  # exact derived copies; originals stay untouched
+        request["source_head"] = head
+        current["request"] = scope / "review/request.json"
+        current["request"].write_text(json.dumps(request))
+        patch_ref = "review/designer-repair.patch"
+        (scope / patch_ref).write_bytes(_git_patch(self.repo, before["head"], head))
+        selection = {"schema_version": 1, "selected_full_set": ["security"], "applied": True,
+                     "iteration": {"run_id": run.run_id, "sequence": 0, "stage": "review_iteration", "status": "complete", "occurred_at": "2026-09-01T00:03:00Z",
+                                   "authoritative_receipt": "review/designer-selection.json", "selective_rerun": False, "promoted_to_full": False, "full_fanout_override": False,
+                                   "lanes_rerun": ["security"], "lanes_skipped": [], "rerun_reasons": {"security": ["b_fix_file_trigger"]}, "selection_fallback_reason": None},
+                     "finding_owner_lanes": [], "file_trigger_lanes": ["security"], "from_source": before, "to_source": after,
+                     "changed_paths": _changed_paths(before, after), "patch_ref": patch_ref, "worktree_ref": None}
+        (scope / "review/designer-selection.json").write_text(json.dumps(selection))
+        value = json.loads(paths["input"].read_text())
+        value.update(pass_id="designer-recheck", attempt=2)
+        value["source"].update(head=head, base=before["head"], request_ref="review/request.json")
+        value["literal"]["output_ref"] = "raw/designer-recheck.md"
+        # A distinct disposable fixture dispatch is mandatory for changed
+        # source. Reusing the old fixture receipt must not pass production gates.
+        dispatch = json.loads((scope / value["literal"]["dispatch_receipt_ref"]).read_text())
+        dispatch["receiptId"] = "dispatch-" + "b" * 24
+        value["literal"]["dispatch_receipt_ref"] = "receipts/private/router/security-designer.json"
+        (scope / value["literal"]["dispatch_receipt_ref"]).write_text(json.dumps(dispatch))
+        (scope / "receipts/private/router/terminal-receipt-index.json").write_text(json.dumps({"schemaVersion": 1, "receiptFiles": ["security.json", "security-designer.json"]}))
+        (scope / "raw/designer-recheck.md").write_text("Disposable current-source recheck: confirmation label repair passes.\n")
+        value["requested"]["evidence_refs"].append(patch_ref)
+        value["requested"]["required_evidence_refs"].append(patch_ref)
+        value["recheck"] = {"prior_record_ref": record_ref, "selection_ref": "review/designer-selection.json", "repair_refs": [patch_ref]}
+        input_path = scope / "review/designer-recheck-input.json"
+        input_path.write_text(json.dumps(value))
+        arguments = dict(run_root=run.root, repository_root=self.repo, request_path=current["request"], receipts_path=current["receipts"])
+        result = assemble_review_evidence(**arguments, input_path=input_path)
+        aggregate = {"schema_version": 1, "operation": "coverage", "run_id": run.run_id, "pass_id": "designer-final",
+                     "selection": [{"lane": "security", "record_ref": result["record_ref"], "history_refs": [record_ref], "transition_refs": []}],
+                     "decisions": [], "occurred_at": "2026-09-01T00:04:00Z", "required_case_refs": [], "resolutions": []}
+        input_path = scope / "review/designer-final-input.json"
+        input_path.write_text(json.dumps(aggregate))
+        assemble_review_evidence(**arguments, input_path=input_path)
+        producer = Path(self.env["REVIEW_PRODUCER_INPUT"])
+        fields = json.loads(producer.read_text())
+        for key, path in list(fields.items()):
+            if Path(path).is_relative_to(run.root):
+                fields[key] = str(scope / Path(path).relative_to(run.root))
+        fields["request"] = str(current["request"])
+        # Report remains in the reviewed checkout, where make_run put it.
+        producer.write_text(json.dumps(fields))
+        self.env.update(PR_HEAD=head, REMOTE_HEAD=head)
+        self.facts["readiness"]["finalHead"] = head
+        self.save_facts()
+        # Collect fresh current-head feedback through the existing seam.
+        intake = Path(self.facts["feedback"]["intake"])
+        result = subprocess.run([str(self.source / "plugins/dm-review/skills/review/references/external-finding-intake.sh"),
+                                 "--repo", "Fixture/consumer", "--pr", "42", "--output", str(intake)],
+                                env=dict(self.env, DM_REVIEW_TEST_MODE="1", DM_REVIEW_TEST_GH_BIN=str(self.bin / "gh")), capture_output=True, text=True)
+        self.assertEqual(0, result.returncode, result.stderr)
+        evidence = json.loads(intake.read_text())
+        ledger = json.loads(Path(self.facts["feedback"]["decisions"]).read_text())
+        ledger.update(inspected_head=head, collection_cutoff=evidence["collection_cutoff"])
+        Path(self.facts["feedback"]["decisions"]).write_text(json.dumps(ledger))
+        return current
+
+    def test_designer_handoff_retains_same_owner_through_acceptance_and_ui_repair(self):
+        for repair in (False, True):
+            with self.subTest(repair=repair):
+                # Each case owns a separate native session. UI repair replays
+                # evidence in that exact logical run; no new owner or review loop.
+                run, paths = self.prepare("lean", "ui-repair" if repair else "acceptance")
+                context = self.source / "plugins/dm-review/skills/review/references/review-owner-context.sh"
+                self.env["TMPDIR"] = str(self.root)
+                native = json.dumps({"hook_event_name": "SessionStart", "session_id": f"designer-{repair}", "cwd": str(self.repo)})
+                def ctx(*args, success=True):
+                    result = subprocess.run([str(context), *args], input=native, env=self.env, capture_output=True, text=True)
+                    self.assertEqual(0 if success else 3, result.returncode, result.stderr)
+                    return result.stdout
+                initialized = json.loads(ctx("init", "--repository-root", str(self.repo)))
+                pointer = Path(initialized["hookSpecificOutput"]["additionalContext"].split()[3].rstrip("."))
+                def phase(name):
+                    boundary = subprocess.check_output(["bash", "-c", 'source "$1"; review_change_boundary "$2"', "bash", str(context), str(self.repo)], text=True).strip()
+                    ctx("phase", "--repository-root", str(self.repo), "--context", str(pointer), "--phase", name, "--change-boundary", boundary)
+                boundary = subprocess.check_output(["bash", "-c", 'source "$1"; review_change_boundary "$2"', "bash", str(context), str(self.repo)], text=True).strip()
+                ctx("bind", "--repository-root", str(self.repo), "--context", str(pointer), "--workflow", "pipeline", "--run-id", run.run_id,
+                    "--run-root", str(run.root), "--state-dir", self.facts["owner"]["state_dir"], "--change-boundary", boundary)
+                self.facts["readiness"]["ui"].update(changed=True, preview="https://preview.test", tasks=["Check confirmation label."])
+                self.save_facts()
+                self.assertEqual(0, self.publish("lean").returncode)
+                phase("checking")
+                phase("awaiting_ui")
+                saved_owner = dict(self.facts["owner"])
+                self.reject("lean", "ready", no_gh=False)
+                self.assertTrue(run.root.is_dir())
+                self.assertTrue(Path(saved_owner["state_dir"]).is_dir())
+                self.assertEqual("awaiting_ui", json.loads(pointer.read_text())["phase"])
+                ctx("clear", "--repository-root", str(self.repo), "--context", str(pointer), "--run-id", run.run_id, "--run-root", str(run.root), success=False)
+                if repair:
+                    preserved = fixture.ReviewCloseoutTests.preserve(self, run, paths)
+                    retained = Path(preserved["evidence_path"])
+                    literal_ref = json.loads((run.root / paths["record_ref"]).read_text())["bindings"]["raw/security.md"]["retained_ref"]
+                    literal_path = retained / literal_ref
+                    literal = literal_path.read_bytes()
+                    phase("executing")
+                    (self.repo / "source.txt").write_text("Repaired confirmation label requested by designer.\n")
+                    self.git_run("add", "source.txt")
+                    self.git_run("commit", "-qm", "repair designer label")
+                    self.reject("lean", "ready")  # old-head source proof cannot publish
+                    phase("checking")
+                    paths = self.recheck_designer_repair_in_owned_retained_scope(run, paths)
+                    self.assertEqual(str(run.root), self.facts["owner"]["run_root"])
+                    self.assertEqual(saved_owner, self.facts["owner"])
+                    self.assertEqual(literal, literal_path.read_bytes())
+                    self.facts["readiness"]["ui"].update(changed=True, preview="https://preview.test", tasks=["Check repaired confirmation label."])
+                    self.save_facts()
+                    phase("awaiting_ui")
+                    self.reject("lean", "ready", no_gh=False)
+                self.facts["readiness"]["ui"]["acceptance"] = {"head": self.env["PR_HEAD"], "unchangedSince": False}
+                self.save_facts()
+                phase("checking")
+                ready = self.publish("lean", "ready")
+                self.assertEqual(0, ready.returncode, ready.stderr)
+                self.assertIn("pr ready", self.log.read_text())
+                phase("awaiting_merge")
+                self.assertEqual(saved_owner, self.facts["owner"])
+                phase("complete")
+                ctx("clear", "--repository-root", str(self.repo), "--context", str(pointer), "--run-id", run.run_id, "--run-root", str(run.root))
+                self.assertFalse(pointer.exists())
+                # Source test cleanup only after complete; next case gets fresh
+                # fixture evidence, never an automatic workflow restart.
+
+    def test_callers_create_against_approved_nondefault_base(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.prepare(caller)
+                self.facts["approvedBase"] = "release/reviewed"
+                self.save_facts()
+                created = self.publish(caller)
+                self.assertEqual(0, created.returncode, created.stdout + created.stderr)
+                self.assertIn("--base release/reviewed", self.log.read_text())
+
+    def test_callers_reject_wrong_actual_pr_base(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.prepare(caller)
+                self.env["PR_BASE"] = "unapproved"
+                self.facts["readiness"]["feedbackSettled"] = True
+                self.save_facts()
+                rejected = self.reject(caller, "ready", no_gh=False)
+                self.assertIn("actual PR base differs from approved base", rejected.stderr)
+
+    def test_callers_refresh_cached_failed_checks_before_ready(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.prepare(caller)
+                self.facts["readiness"]["checks"][1]["status"] = "fail"
+                self.save_facts()
+                ready = self.publish(caller, "ready")
+                self.assertEqual(0, ready.returncode, ready.stdout + ready.stderr)
+                self.assertIn("pr ready", self.log.read_text())
+                self.assertIn("- actual CI passed.", ready.stdout)
+
+    def test_callers_require_candidate_verification_before_publication(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.prepare(caller)
+                self.facts["readiness"]["checks"] = [self.facts["readiness"]["checks"][1]]
+                self.save_facts()
+                for operation in ("create", "ready"):
+                    rejected = self.reject(caller, operation)
+                    self.assertIn("## Not ready", rejected.stdout)
+                    self.assertIn("Candidate verification results are missing.", rejected.stdout)
+                    self.assertIn("**Agent next action:** Run the required source/build/verification checks", rejected.stdout)
 
 
 class ReviewEvidenceProducerTests(unittest.TestCase):
@@ -179,6 +821,113 @@ class ReviewEvidenceProducerTests(unittest.TestCase):
         value.update(overrides)
         path = self.write(run.root / "review/aggregate-input.json", value)
         return self.cli(run, paths, path, test_harness=test_harness)
+
+    def test_owned_transfer_precedes_required_browser_completion(self):
+        """Actual incomplete source producer then transfer; synthetic browser fixture only."""
+        from workflow_kernel.review_closeout import bind_review_source
+        source = Path(__file__).resolve().parents[1]
+        helper = source / "plugins/dm-review/skills/review/references/canonical-checkout.sh"
+        context = helper.with_name("review-owner-context.sh")
+        def git(*args):
+            return subprocess.check_output(["git", "-C", str(self.repo), *args], text=True).strip()
+        git("remote", "add", "origin", "https://github.com/Design-Machines-Studio/assembly-fixture.git")
+        (self.repo / ".gitignore").write_text(".workflow-kernel/\n.claude/\n")
+        (self.repo / "AGENTS.md").write_text("Assembly development fixture; protect install state.\n")
+        git("add", ".")
+        git("commit", "-qm", "fixture binding")
+        git("branch", "-m", "reviewed")
+        canonical = self.root / "canonical"
+        git("worktree", "add", "-qb", "serving", str(canonical), "HEAD")
+        remote = self.root / "remote.git"
+        subprocess.run(["git", "init", "--quiet", "--bare", str(remote)], check=True)
+        git("remote", "set-url", "--push", "origin", str(remote))
+        git("push", "--quiet", "origin", "reviewed")
+        run, paths = self.prepare()
+        request = json.loads(paths["request"].read_text())
+        request["required_browser_cases"] = ["settings"]
+        self.write(paths["request"], request)
+        bind_review_source(run_root=run.root, repository_root=self.repo, request_path=paths["request"])
+        record = self.lane(run, paths)
+        self.assertNotEqual(0, self.coverage(run, paths, {"security": record}).returncode)
+        self.assertEqual("incomplete", self.preserve(run, paths)["status"])
+        original = {p.relative_to(run.root): p.read_bytes() for p in run.root.rglob("*") if p.is_file()}
+        state = self.repo / ".workflow-kernel/runs" / run.run_id
+        state.mkdir(parents=True)
+        env = dict(os.environ, TMPDIR=str(self.root))
+        native = json.dumps({"hook_event_name": "SessionStart", "session_id": "browser-owner", "cwd": str(self.repo)})
+        def ctx(*args):
+            result = subprocess.run([str(context), *args], input=native, env=env, capture_output=True, text=True)
+            self.assertEqual(0, result.returncode, result.stderr)
+            return result.stdout
+        initialized = json.loads(ctx("init", "--repository-root", str(self.repo)))
+        pointer = initialized["hookSpecificOutput"]["additionalContext"].split()[3].rstrip(".")
+        boundary = subprocess.check_output(["bash", "-c", 'source "$1"; review_change_boundary "$2"', "bash", str(context), str(self.repo)], text=True).strip()
+        ctx("bind", "--repository-root", str(self.repo), "--context", pointer, "--workflow", "dm-review-loop",
+            "--run-id", run.run_id, "--run-root", str(run.root), "--state-dir", str(state), "--change-boundary", boundary)
+        binding = self.write(self.root / "binding.json", {"kind": "assembly-development", "repository": "Design-Machines-Studio/assembly-fixture",
+            "checkout": str(canonical), "domain": "https://dm006.asmbly.app", "sourceRanges": [{"path": "AGENTS.md", "startLine": 1, "endLine": 1}],
+            "protectedPaths": [str(canonical / ".env")]})
+        binding.chmod(0o600)
+        args = ["--repository-root", str(canonical), "--repository", "Design-Machines-Studio/assembly-fixture", "--target-branch", "reviewed",
+                "--delivered-head", git("rev-parse", "HEAD"), "--binding-file", str(binding), "--current-context", pointer, "--implementation-root", str(self.repo)]
+        bash = os.environ.get("BASH32", "/bin/bash")
+        inspected = subprocess.run([bash, str(helper), "inspect", *args], capture_output=True, text=True, env=env)
+        self.assertEqual(0, inspected.returncode, inspected.stderr)
+        inspection = self.root / "inspection.json"
+        inspection.write_text(inspected.stdout)
+        inspection.chmod(0o600)
+        transferred = subprocess.run([bash, str(helper), "prepare", *args, "--inspection", str(inspection)], capture_output=True, text=True, env=env)
+        self.assertEqual(0, transferred.returncode, transferred.stderr)
+        self.assertNotEqual(0, subprocess.run(["git", "-C", str(self.repo), "symbolic-ref", "-q", "HEAD"], capture_output=True).returncode)
+        self.assertEqual("reviewed", subprocess.check_output(["git", "-C", str(canonical), "symbolic-ref", "--short", "HEAD"], text=True).strip())
+        self.assertTrue(state.is_dir())
+        self.assertEqual(original, {p.relative_to(run.root): p.read_bytes() for p in run.root.rglob("*") if p.is_file()})
+        # Stage one ends at real transfer with unfinished/synthetic coverage.
+        # Publication cannot bypass that producer from the detached owner.
+        self.assertEqual(git("rev-parse", "HEAD"), git("show-ref", "--verify", "--hash", "refs/heads/reviewed"))
+        owner = {key: json.loads(Path(pointer).read_text())[key]
+                 for key in ("repository", "workflow", "run_id", "run_root", "state_dir")}
+        keys = {"request": "request", "receipts": "receipts", "lane-receipts": "lane_receipts",
+                "raw-lane-outputs": "raw_lane_outputs", "raw-findings": "raw_findings",
+                "decisions": "decisions", "private-router-directory": "router", "report": "report"}
+        producer = self.write(self.root / "publication-producer.json", {key: str(paths[value]) for key, value in keys.items()})
+        readiness = self.write(self.root / "publication-readiness.json", {
+            "approvedBase": "serving", "owner": owner, "readiness": {}, "uiNonImpact": None})
+        publication_env = dict(env, WORKFLOW_KERNEL=str(source / "plugins/workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh"))
+        publication_env.pop("DM_REVIEW_DEVELOPMENT_TEST_ROOT", None)
+        for operation in ("create", "ready"):
+            result = subprocess.run([bash, str(helper.with_name("publish-reviewed-pr.sh")),
+                "--operation", operation, "--repository-root", str(self.repo), "--run-root", str(run.root),
+                "--producer-input", str(producer), "--readiness-input", str(readiness), "--feature-branch", "reviewed",
+                *(["--pr", "https://github.com/Design-Machines-Studio/assembly-fixture/pull/42"] if operation == "ready" else [])],
+                capture_output=True, text=True, env=publication_env, timeout=15)
+            self.assertEqual(3, result.returncode, result.stdout + result.stderr)
+            self.assertIn("required producer validation failed", result.stderr)
+        wrong_checkout = subprocess.run([bash, str(helper.with_name("publish-reviewed-pr.sh")),
+            "--operation", "create", "--repository-root", str(canonical), "--run-root", str(run.root),
+            "--producer-input", str(producer), "--readiness-input", str(readiness), "--feature-branch", "reviewed"],
+            capture_output=True, text=True, env=publication_env, timeout=15)
+        self.assertEqual(3, wrong_checkout.returncode, wrong_checkout.stdout + wrong_checkout.stderr)
+        self.assertIn("foreign owner state directory", wrong_checkout.stderr)
+        # Stage two in test-publish-reviewed-pr.sh uses its fixed Fixture/consumer
+        # identity and real detached Git refs, never rewrites this source proof.
+        # Only after selecting the canonical branch can the required fixture
+        # capture be attached. It is explicitly synthetic, never live proof.
+        browser = self.write(run.root / "review/browser.json", {"fixture": True, "case_id": "settings", "source_head": git("rev-parse", "HEAD")})
+        receipts = json.loads(paths["receipts"].read_text())
+        receipts.append({"run_id": run.run_id, "sequence": len(receipts), "stage": "browser_verification", "status": "completed",
+                         "node_id": "visual", "occurred_at": "2026-09-01T00:02:00Z", "authoritative_receipt": "review/browser.json", "host": "codex",
+                         "source_repository": request["source_repository"], "source_head": request["source_head"], "case_ids": ["settings"], "evidence_refs": ["review/browser.json"]})
+        self.write(paths["receipts"], receipts)
+        completed_input = json.loads((run.root / "review/aggregate-input.json").read_text())
+        completed_input["required_case_refs"] = ["review/browser.json"]
+        completed = self.cli(run, paths, self.write(run.root / "review/completed-browser-input.json", completed_input))
+        self.assertEqual(0, completed.returncode, completed.stderr)
+        # Synthetic participants cannot authorize production publication/destruction.
+        self.assertEqual("incomplete", self.preserve(run, paths)["status"])
+        for ref, data in original.items():
+            if ref.name != "authoritative-receipts.json":
+                self.assertEqual(data, (run.root / ref).read_bytes())
 
     def test_zero_findings_cli_completion_retry_and_missing_companion_reconstruction(self):
         run, paths = self.prepare()

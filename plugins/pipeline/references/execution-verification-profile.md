@@ -6,10 +6,8 @@ records that profile materialization is not applicable and never loads this file
 
 ### Verification profile and contract (0f)
 
-Resolve the trusted Kernel launcher once using its runtime-resolution contract.
-Require the executing runtime and the coherent installed contract bundle to be
-at least 0.27.0. Resolve the contract through the supported asset command; do
-not assume Kernel is a local sibling of Pipeline:
+Resolve the trusted Kernel launcher through its runtime-resolution contract.
+Require runtime and coherent installed bundle >=0.27.0; resolve the contract asset:
 
 ```sh
 "$WORKFLOW_KERNEL" kernel-info --minimum-version 0.27.0
@@ -43,19 +41,19 @@ those tasks, including all required cases and expected FRICTION/BLOCKED outcomes
   > plans/<feature-slug>/verification-profile-generation.json
 ```
 
-Replace the placeholders and repeat selectors for the complete approved union;
-do not infer new personas, engines, viewports or route bindings. Omit
-`--target-origin` only when the authoritative project configuration supplies it.
-Use `--declaration-root .` only for an explicitly approved sanitized fixture tree;
-ordinary projects discover `tests/ux/`. With no selectors the CLI preserves the
-project's existing suite/status selection, which is not a substitute for the
-approved task union. This focused operation does not require a whole app sweep.
+Replace placeholders; select the complete approved task union. Never invent
+personas, engines, viewports or route bindings. Omit `--target-origin` only when
+project configuration supplies it. `--declaration-root .` requires explicit
+fixture approval; ordinary projects discover `tests/ux/`. Without selectors,
+existing suite/status selection applies.
 
 If a narrower combination set is explicitly approved, first run the same command
 with output `verification-profile-candidate.json` and receipt
 `verification-profile-candidate-generation.json`, keeping the complete task union
-and omitting `--case-id`. Review that candidate's reloaded exact case IDs and
-primitives against the approved scope. Then generate the final fresh output:
+and omitting `--case-id`. Compare its reloaded task, persona, engine and viewport cases with approved
+acceptance, including required mobile coverage. Missing required dimensions
+block dispatch: hand off the declaration gap. Never substitute a reduced fixture
+or persona default for approved coverage. Then generate the final fresh output:
 
 ```sh
 "$WORKFLOW_KERNEL" generate-verification-profile \

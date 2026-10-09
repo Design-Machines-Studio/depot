@@ -12,8 +12,54 @@ the complete report, never a replacement for it.
 
 ## Compact Human Handoff
 
-Every visible result begins with this compact handoff. Use the exact mechanical
-verdict from the complete report. Keep the explanation to one plain sentence.
+Designer delivery begins with `operator-handoff.sh INPUT.json`. Keep the
+mechanical review verdict in the linked complete report. The formatter projects
+validated owner facts into **Ready to merge**, **UI check needed**, or **Not
+ready**, with completed checks, exact remaining gaps, one designer action and
+links. `CLEAN` means required code coverage passed; merge readiness also needs
+current PR checks/feedback and applicable designer UI acceptance.
+
+The owner supplies the formatter's closed JSON object:
+
+- `target`, `detail`, `finalHead`, `dirty`, `feedbackSettled`. `dirty` reflects
+  post-report source/residue checks in every used checkout, not a pre-report
+  status. Optional `workspace` gives `clean`, JSON-quoted safe `paths`, and
+  nullable `nextAction`; pending cleanup requires exact paths and agent action.
+  Print `Workspace: clean` only after cleanup; pending cleanup is Not ready even
+  with complete code coverage.
+- `coverage`: `status` (`complete|incomplete|missing`), `head`, `gaps`, explicit
+  `requiredBrowserCases` and `evidence` link. These are validated producer facts,
+  never inferred from narrative CLEAN, passing CI or a session phase.
+- `lanes`: exactly Architecture, Simplicity, Security, Testing and
+  Fixture/distribution. Each has `area`, `status` (`covered|omitted|exempt`),
+  `note` and `evidence`. Covered rows link proof; exemptions state why. Omissions
+  remain visible and block readiness.
+- `findings`: retained `severity`, `location` and concrete `problem` rows.
+  Every retained P1/P2/P3 prevents readiness until repaired and rechecked.
+- Nonempty `checks`: `name`, `stage` (`candidate|pr`), `status`
+  (`pass|pending|fail|skipped|not_applicable`) and nullable `link`; optional
+  `required` is Boolean or null. Omitted/null defaults to required. `skipped`
+  and `not_applicable` require `stage: pr` and a non-null evidence link, and
+  block readiness unless `required: false`. Candidate-stage checks must pass
+  before opening a draft; PR-only pending CI may wait until creation but blocks
+  merge. Optional skipped checks remain visible without being called passed.
+- `ui`: `changed`, nullable `preview`, concrete `tasks` and nullable
+  `acceptance` (`head`, `unchangedSince`). Acceptance records the designer's
+  actual decision, separate from automated browser cases. `unchangedSince` is
+  an already validated projection of explicit non-impact evidence, not authority
+  by itself. Changed UI behavior invalidates it; unaffected UI may retain it.
+
+The designer's action is **Merge** for Ready to merge, **Open the linked preview
+and check the named tasks** for UI check needed, and **None yet** for Not ready
+while the agents repair the exact gaps. Backend-only work never requests human
+code review. The owner retains planning approval, UI acceptance and merging.
+`--gate candidate` permits only PR-only pending checks, feedback settlement and
+designer acceptance to remain. `--gate merge` requires Ready to merge. Both
+print the handoff and exit 3 on an unsatisfied gate; invalid schema exits 2.
+
+The following selector block is **internal owner work**, not a designer-facing
+command request. Use `review-next-action.sh` to choose the existing supported
+repair/recheck action, then complete authorized work before handing off.
 
 ```markdown
 ## <CLEAN | APPROVE WITH FIXES | BLOCKS MERGE | REVIEW INCOMPLETE>
@@ -67,8 +113,9 @@ outputs and receipts, and no retained finding. Missing contribution, cost,
 shadow, or observation exports are unavailable diagnostics only. Missing
 required source evidence means `REVIEW INCOMPLETE`.
 
-Emit one verdict in both reports; never pair an informal clean status with
-another verdict.
+Keep one mechanical verdict in the complete report. The handoff's readiness
+status explains any additional PR or designer gate; it does not change that
+verdict or invent code coverage.
 
 Review with actionable findings: use `APPROVE WITH FIXES` or `BLOCKS MERGE` and
 keep every retained finding in the repair queue.
@@ -311,9 +358,10 @@ The consolidator preserves the original citation format from each agent.
 10. **Synthesis decisions are complete** -- every source finding appears with
     provenance, evidence, raw ref, agreement, disposition, closed reason code,
     and rationale; the compact Raw Evidence Index preserves raw-output access
-11. **Human delivery is compact** -- the exact verdict, one-sentence explanation,
-    actionable P1/P2/P3 findings, human-action coverage gaps, one recommended next
-    action, and complete-evidence pointer appear before the report
+11. **Human delivery is compact** -- readiness, completed/remaining checks,
+    applicable review coverage and omissions, one designer action and evidence
+    links appear before the report. Backend inspection and review commands stay
+    with the workflow owner.
 
 ## Merge Recommendation Logic
 
@@ -329,7 +377,7 @@ elif any P2 or P3 findings:
   summary = "X issue(s) must be addressed before merging."
 else:
   recommendation = "CLEAN"
-  summary = "No issues found. Ready to merge."
+  summary = "No retained findings. Required code review coverage passed."
 ```
 
 
@@ -344,3 +392,7 @@ an incomplete committed attempt clean or duplicate an effective lane. Recheck
 findings describe that inspection; prior findings/decisions remain in sealed
 history with repair/verification resolutions. Required union validation runs
 independently of optional economics.
+
+Optional GitHub checks verified as skipped or not applicable stay labelled that
+way; never call them passed. Required, missing, failed or pending checks and
+lookup failures still block readiness.

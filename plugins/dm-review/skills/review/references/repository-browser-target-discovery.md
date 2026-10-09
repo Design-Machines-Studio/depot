@@ -61,21 +61,20 @@ infer that a production/customer deployment is a branch-switchable review app.
    worktree registrations, and the documented service/build commands. Capture
    the original branch/head for handoff. Source-analysis worktrees do not
    automatically become browser environments.
-2. Capture the canonical folder's entry status and source fingerprint. Check
-   out the feature branch there when ordinary Git can preserve every
-   pre-existing change. A dirty checkout is not automatically blocked:
-   unrelated plans, lessons, and non-overlapping source edits may remain. This
-   ordinary checkout and the documented local
-   rebuild are part of authorized implementation/review; do not ask again.
-   If it already holds this run's edits, preserve them and bind evidence to that
-   source snapshot. If another run owns it, or checkout/build would overwrite a
-   named path or mix dirty source into the reviewed artifact, name the concrete
-   collision and coordinate a safe handoff before switching. Never force,
-   stash, reset, or clean to make the checkout pass. If the feature branch is
-   checked out in an implementation worktree, a normal `git checkout --detach
-   <exact-committed-head>` in the available serving checkout is acceptable;
-   record detached HEAD honestly. Never force
-   duplicate branch checkout, or silently substitute a fresh harness.
+2. Capture entry status and source fingerprint. For the selected Assembly
+   development checkout, apply `repo-cleanup-contract.md`'s standing inactive
+   source policy through `canonical-checkout.sh inspect` then `prepare`.
+   Preserve current repairs and protected install state; unreadable/active
+   ownership blocks this folder, never justifies an alternate preview.
+   Commit/push and verify the exact head before normally detaching an owned
+   implementation worktree. Retain its producer checkout, owner state and
+   unfinished evidence; select the branch in the canonical folder before
+   browser capture, then preserve completed evidence.
+   Publish from the retained producer with approved `--feature-branch`; complete
+   evidence remains mandatory for publication and review-resource destruction.
+   Foreign occupancy requires that owner's exact release handoff. For other
+   repositories, ordinary checkout must preserve every pre-existing change;
+   name collisions and coordinate without force, stash, reset or clean.
 3. Use the project's existing build/restart or Fixture composition command to
    serve that source through the same domain, service and data. Rebuild compiled
    Go/Templ/CSS/JS as documented; changing Git HEAD alone does not refresh a
