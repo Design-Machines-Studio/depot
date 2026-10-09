@@ -42,6 +42,8 @@ _OUTCOMES = frozenset({
 _MAX_METADATA_BYTES = 256 * 1024
 _MAX_DIAGNOSTIC_FILES = 416
 _MAX_DIAGNOSTIC_BYTES = 9 * 1024 * 1024
+_MAX_REQUIRED_REVIEW_FILES = 1024
+_MAX_REQUIRED_REVIEW_BYTES = 32 * 1024 * 1024
 _CONTROL = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -199,27 +201,78 @@ def _remove_entry(path: Path) -> None:
 class BoundedDiagnosticLimitError(ValueError):
     """Actual diagnostic file/byte exhaustion; compatible with ValueError callers."""
 
+    def __init__(self, files, size, allowed_files, allowed_bytes, *, category="diagnostic"):
+        self.measurement = {
+            "category": category, "actual_files": files, "actual_bytes": size,
+            "allowed_files": allowed_files, "allowed_bytes": allowed_bytes,
+            "next_action": "Keep original evidence; move only unrelated diagnostics out of this package or request a bounded retention policy repair.",
+        }
+        super().__init__(
+            f"{category} retention requires {size} bytes / {files} files; "
+            f"allowed {allowed_bytes} bytes / {allowed_files} files. "
+            + self.measurement["next_action"]
+        )
 
-def _bounded_diagnostic(path: Path) -> tuple[int, int]:
-    files = 0
+
+def _diagnostic_inventory(path: Path) -> dict[str, int]:
+    """Measure regular files without reading payloads or following links."""
+    inventory = {}
     size = 0
-    for current, directories, names in os.walk(path, followlinks=False):
+    maximum_files = _MAX_REQUIRED_REVIEW_FILES + _MAX_DIAGNOSTIC_FILES
+    if path.is_symlink() or not path.is_dir():
+        raise ValueError("diagnostic root is unsafe")
+    for current, directories, names in os.walk(path, followlinks=False, onerror=_inventory_error):
         current_path = Path(current)
-        for name in tuple(directories):
-            child = current_path / name
-            value = os.lstat(child)
-            if stat.S_ISLNK(value.st_mode) or not stat.S_ISDIR(value.st_mode):
+        for name in directories:
+            value = os.lstat(current_path / name)
+            if not stat.S_ISDIR(value.st_mode) or stat.S_ISLNK(value.st_mode):
                 raise ValueError("diagnostic root contains an unsafe entry")
         for name in names:
             child = current_path / name
             value = os.lstat(child)
-            if stat.S_ISLNK(value.st_mode) or not stat.S_ISREG(value.st_mode):
+            if not stat.S_ISREG(value.st_mode) or stat.S_ISLNK(value.st_mode) or value.st_nlink != 1:
                 raise ValueError("diagnostic root contains an unsafe entry")
-            files += 1
             size += value.st_size
-            if files > _MAX_DIAGNOSTIC_FILES or size > _MAX_DIAGNOSTIC_BYTES:
-                raise BoundedDiagnosticLimitError("diagnostic root exceeds bounded retention limits")
-    return files, size
+            if len(inventory) == maximum_files:
+                # Stop before allocating beyond the largest possible valid
+                # partition. Measurements describe the observed lower bound.
+                error = BoundedDiagnosticLimitError(maximum_files + 1, size, maximum_files,
+                    _MAX_REQUIRED_REVIEW_BYTES + _MAX_DIAGNOSTIC_BYTES, category="package")
+                error.measurement["measurement_complete"] = False
+                raise error
+            inventory[child.relative_to(path).as_posix()] = value.st_size
+    return inventory
+
+
+def _inventory_error(_error):
+    raise ValueError("diagnostic inventory is unavailable") from None
+
+
+def _retention_projection(inventory, required=()):
+    """Internal partition; required membership must come from validated closure."""
+    required = frozenset(required)
+    result = {}
+    for category, names, allowed_files, allowed_bytes in (
+        ("required_review", required, _MAX_REQUIRED_REVIEW_FILES, _MAX_REQUIRED_REVIEW_BYTES),
+        ("diagnostic", inventory.keys() - required, _MAX_DIAGNOSTIC_FILES, _MAX_DIAGNOSTIC_BYTES),
+    ):
+        sizes = [inventory[name] for name in names if name in inventory]
+        result[category] = {"actual_files": len(sizes), "actual_bytes": sum(sizes),
+                            "allowed_files": allowed_files, "allowed_bytes": allowed_bytes}
+    return result
+
+
+def _require_retention_projection(projection):
+    for category, row in projection.items():
+        if row["actual_files"] > row["allowed_files"] or row["actual_bytes"] > row["allowed_bytes"]:
+            raise BoundedDiagnosticLimitError(row["actual_files"], row["actual_bytes"],
+                                              row["allowed_files"], row["allowed_bytes"], category=category)
+
+
+def _bounded_diagnostic(path: Path) -> tuple[int, int]:
+    inventory = _diagnostic_inventory(path)
+    _require_retention_projection(_retention_projection(inventory))
+    return len(inventory), sum(inventory.values())
 
 
 @dataclass(frozen=True)
@@ -432,7 +485,17 @@ class ExactOwnedRun:
         diagnostic_path = self.root / diagnostic["relative_path"]
         if _identity(diagnostic_path) != (diagnostic["device"], diagnostic["inode"]):
             raise ValueError("diagnostic path identity changed")
-        files, size = _bounded_diagnostic(diagnostic_path)
+        if self.workflow in {"dm-review", "dm-review-loop", "pipeline", "pipeline-run"}:
+            from .review_closeout import validate_preserved_review_evidence, RetainedReviewValidationError
+            try:
+                validate_preserved_review_evidence(diagnostic_path, run=self)
+            except RetainedReviewValidationError:
+                # Incomplete/invalid recovery has only the diagnostic allowance.
+                _bounded_diagnostic(diagnostic_path)
+            inventory = _diagnostic_inventory(diagnostic_path)
+            files, size = len(inventory), sum(inventory.values())
+        else:
+            files, size = _bounded_diagnostic(diagnostic_path)
         for child in tuple(self.root.iterdir()):
             if child.name in {_METADATA, _LOCK} or child == diagnostic_path:
                 continue

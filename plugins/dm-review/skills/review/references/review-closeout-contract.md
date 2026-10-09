@@ -37,8 +37,21 @@ resolve in the retained scope; use `review/<artifact>` or `browser/<artifact>`
 and returned `evidence_path`. Only `status: complete` supports `CLEAN` or source
 worktree removal. The copy contains the request, authoritative coverage,
 selected outputs and literal receipts, synthesis artifacts, report, real
-private router receipts, and required evidence references. Kernel bounds it to
-128 files and 2 MiB outside product repositories.
+private router receipts, and required evidence references. Kernel >=0.28.0 bounds validated required evidence to 1,024 files / 32 MiB,
+separately from disposable diagnostics at 416 files / 9 MiB, outside product
+repositories. Kernel derives required membership from validated coverage,
+committed history, indexed receipts and local report links. Unindexed or
+unrelated additions keep the diagnostic allowance.
+
+During evidence assembly and after final report links settle, call
+`project-review-evidence` with the same arguments shown above. Inspect its
+measured/allowed bytes and files, missing inputs and `within_limits`. It is a
+read-only size projection, not coverage proof or copy authorization. Preservation
+rechecks the actual write boundary; terminal cleanup applies the same policy.
+If required bytes exceed the finite allowance, keep original evidence and request
+a bounded Kernel policy repair. Move only unrelated diagnostics; never remove
+required evidence, rewrite sealed history or rerun settled review/browser lanes
+merely to solve storage.
 
 Missing required lanes, browser cases, source, HEAD, or report links keep the
 verdict `REVIEW INCOMPLETE`; narrative and passing CI cannot fill a gap. Search

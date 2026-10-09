@@ -1507,6 +1507,7 @@ def command_preserve_review_evidence(args):
             decisions_path=args.decisions,
             private_router_directory=args.private_router_directory,
             report_path=args.report,
+            projection_only=args.command == "project-review-evidence",
         )
     except ReviewCloseoutValidationError as exc:
         _emit(exc.to_dict(), sys.stderr)
@@ -1515,7 +1516,7 @@ def command_preserve_review_evidence(args):
         _emit(exc.to_dict(), sys.stderr)
         return exc.exit_code
     _emit(result)
-    return 0 if result["status"] == "complete" else result["failure_exit"]
+    return 0 if result["status"] in {"complete", "projected"} else result["failure_exit"]
 
 
 def command_bind_review_source(args):
@@ -4223,21 +4224,19 @@ def parser():
     assemble_review.add_argument("--test-harness", action="store_true", help="explicit disposable synthetic fixture boundary")
     assemble_review.set_defaults(handler=command_assemble_review_evidence)
 
-    preserve_review = commands.add_parser(
-        "preserve-review-evidence",
-        help="validate required dm-review coverage and preserve exact run evidence",
-    )
-    preserve_review.add_argument("--run-root", required=True)
-    preserve_review.add_argument("--repository-root", required=True)
-    preserve_review.add_argument("--request", required=True)
-    preserve_review.add_argument("--receipts", required=True)
-    preserve_review.add_argument("--lane-receipts", required=True)
-    preserve_review.add_argument("--raw-lane-outputs", required=True)
-    preserve_review.add_argument("--raw-findings", required=True)
-    preserve_review.add_argument("--decisions", required=True)
-    preserve_review.add_argument("--private-router-directory")
-    preserve_review.add_argument("--report", required=True)
-    preserve_review.set_defaults(handler=command_preserve_review_evidence)
+    for name in ("preserve-review-evidence", "project-review-evidence"):
+        preserve_review = commands.add_parser(name, help="preserve required review evidence or project its size without writes")
+        preserve_review.add_argument("--run-root", required=True)
+        preserve_review.add_argument("--repository-root", required=True)
+        preserve_review.add_argument("--request", required=True)
+        preserve_review.add_argument("--receipts", required=True)
+        preserve_review.add_argument("--lane-receipts", required=True)
+        preserve_review.add_argument("--raw-lane-outputs", required=True)
+        preserve_review.add_argument("--raw-findings", required=True)
+        preserve_review.add_argument("--decisions", required=True)
+        preserve_review.add_argument("--private-router-directory")
+        preserve_review.add_argument("--report", required=True)
+        preserve_review.set_defaults(handler=command_preserve_review_evidence)
 
     bind_review = commands.add_parser(
         "bind-review-source",

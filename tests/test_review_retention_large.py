@@ -119,8 +119,8 @@ class LargeReviewRetentionTests(unittest.TestCase):
     def test_former_two_mib_bound_rejects_the_required_large_fixture(self):
         # Prove this fixture exercises the repaired aggregate limit: both
         # required files fit 2 MiB, but assembly could not commit their lane.
-        with mock.patch.object(owned_run, "_MAX_DIAGNOSTIC_BYTES", 2 * 1024 * 1024), \
-                mock.patch.object(review_closeout, "_MAX_DIAGNOSTIC_BYTES", 2 * 1024 * 1024):
+        with mock.patch.object(owned_run, "_MAX_REQUIRED_REVIEW_BYTES", 2 * 1024 * 1024), \
+                mock.patch.object(review_closeout, "_MAX_REQUIRED_REVIEW_BYTES", 2 * 1024 * 1024):
             with self.assertRaises(review_closeout.EvidenceAssemblyError) as caught:
                 self.large_run("former-bound")
         self.assertEqual("retention_limit", caught.exception.reason)
@@ -174,8 +174,8 @@ class LargeReviewRetentionTests(unittest.TestCase):
         run, paths = self.large_run(run_id)
         # Preserve under the prior supported contract first, then record actual
         # fixture-case conclusions in the required report at the upgraded cap.
-        with mock.patch.object(owned_run, "_MAX_DIAGNOSTIC_BYTES", previous_mib * 1024 * 1024), \
-                mock.patch.object(review_closeout, "_MAX_DIAGNOSTIC_BYTES", previous_mib * 1024 * 1024):
+        with mock.patch.object(owned_run, "_MAX_REQUIRED_REVIEW_BYTES", previous_mib * 1024 * 1024), \
+                mock.patch.object(review_closeout, "_MAX_REQUIRED_REVIEW_BYTES", previous_mib * 1024 * 1024):
             self.assertEqual("complete", self.preserve(run, paths)["status"])
         with paths["report"].open("a") as report:
             for index in range(report_cases):
@@ -186,8 +186,8 @@ class LargeReviewRetentionTests(unittest.TestCase):
         self.assertLess(result["bytes"], (previous_mib + 1) * 1024 * 1024)
         evidence = Path(result["evidence_path"])
         before = self.snapshot(evidence)
-        with mock.patch.object(owned_run, "_MAX_DIAGNOSTIC_BYTES", previous_mib * 1024 * 1024), \
-                mock.patch.object(review_closeout, "_MAX_DIAGNOSTIC_BYTES", previous_mib * 1024 * 1024):
+        with mock.patch.object(owned_run, "_MAX_REQUIRED_REVIEW_BYTES", previous_mib * 1024 * 1024), \
+                mock.patch.object(review_closeout, "_MAX_REQUIRED_REVIEW_BYTES", previous_mib * 1024 * 1024):
             with self.assertRaises(review_closeout.RetainedReviewValidationError):
                 run.finish("succeeded", retain_diagnostics=True)
         self.assertEqual(before, self.snapshot(evidence))
@@ -195,19 +195,19 @@ class LargeReviewRetentionTests(unittest.TestCase):
         self.assertEqual(first.to_dict(), ExactOwnedRun.open(run.root).finish("succeeded").to_dict())
         self.assertEqual(before, self.snapshot(evidence))
 
-    def test_complete_package_over_nine_mib_fails_with_structured_reason(self):
+    def test_complete_package_over_required_allowance_fails_with_structured_reason(self):
         run, paths = self.large_run("required-too-large")
         first = self.preserve(run, paths)
         destination = Path(first["evidence_path"])
         before = self.snapshot(destination)
         # The required report contains one explanatory entry per inspected case.
-        # It pushes the complete package over 9 MiB; individual files still fit.
+        # It pushes the complete package over 32 MiB; individual files still fit.
         with paths["report"].open("a") as report:
-            for index in range(36000):
+            for index in range(155000):
                 report.write(f"Case {index:05d}: declared relative path is safe, mode is owner-only, link expectation is single; fixture declaration inspection passed. Expected case identity and cardinality match the declared fixture input.\n")
-        self.assertLess(paths["report"].stat().st_size, 9 * 1024 * 1024)
+        self.assertLess(paths["report"].stat().st_size, 32 * 1024 * 1024)
         self.assertGreater(first["bytes"] - len(before[Path("report.md")]) + paths["report"].stat().st_size,
-                           9 * 1024 * 1024)
+                           32 * 1024 * 1024)
         sources = self.snapshot(run.root)
         completed = subprocess.run(
             (sys.executable, "-m", "workflow_kernel", "preserve-review-evidence",
@@ -223,12 +223,14 @@ class LargeReviewRetentionTests(unittest.TestCase):
         )
         self.assertEqual(3, completed.returncode, completed.stderr)
         self.assertEqual("", completed.stdout)
-        self.assertEqual({"error": {
-            "code": "evidence_limit_exceeded",
-            "message": "required review evidence failed validation",
-            "details": {"stage": "preservation_input", "reason": "retention_limit",
-                        "path": "review/evidence.json"},
-        }}, json.loads(completed.stderr))
+        error = json.loads(completed.stderr)["error"]
+        self.assertEqual("evidence_limit_exceeded", error["code"])
+        detail = error["details"]
+        self.assertEqual("preservation_input", detail["stage"])
+        self.assertEqual("retention_limit", detail["reason"])
+        self.assertEqual(32 * 1024 * 1024, detail["allowed_bytes"])
+        self.assertGreater(detail["actual_bytes"], detail["allowed_bytes"])
+        self.assertTrue(detail["next_action"])
         self.assertFalse(list(destination.parent.glob("review-stage-*")))
         self.assertEqual(before, self.snapshot(destination))
         self.assertEqual(sources, self.snapshot(run.root))
