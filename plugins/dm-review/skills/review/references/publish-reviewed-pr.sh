@@ -26,7 +26,7 @@ while [ "$#" -gt 0 ]; do
   SEEN="$SEEN$1 "
   shift 2
 done
-case "$OPERATION:$PR" in create:) ;; ready:https://github.com/*/pull/*) ;; *) exit 2 ;; esac
+case "$OPERATION:$PR" in create:) ;; ready:https://github.com/*/pull/*|request-review:https://github.com/*/pull/*) ;; *) exit 2 ;; esac
 # Source-development fixtures alone may supply two mocked tools. Fixed PATH
 # still governs every other dependency and the real Kernel producer. This is
 # deliberately restricted to a private disposable Fixture/consumer checkout;
@@ -80,7 +80,7 @@ case "$BASE_REF" in
 esac
 git -C "$REPO" check-ref-format "refs/heads/$BASE" || review_refuse 'invalid approved base branch'
 git -C "$REPO" rev-parse --verify "$BASE_REF^{commit}" >/dev/null || review_refuse 'approved base is not a commit branch'
-if [ "$OPERATION" = ready ]; then
+if [ "$OPERATION" != create ]; then
   [[ "$PR" =~ ^https://github.com/$REPOSITORY/pull/[0-9]+$ ]] || review_refuse 'foreign PR'
 fi
 FIELDS=(request receipts lane-receipts raw-lane-outputs raw-findings decisions private-router-directory report)
@@ -184,10 +184,26 @@ remote_branch_head() {
 check_local_branch
 REMOTE_HEAD="$(remote_branch_head)" || review_refuse 'remote candidate unavailable'
 [ "$REMOTE_HEAD" = "$HEAD" ] || review_refuse 'local and remote candidate heads differ'
-if [ "$OPERATION" = ready ]; then
+if [ "$OPERATION" != create ]; then
   gh pr view "$PR" --repo "$REPOSITORY" --json headRefOid,headRefName,baseRefName,state,isDraft,reviewDecision > "$TEMP/pr.json"
-  jq -e --arg head "$HEAD" --arg branch "$BRANCH" '.headRefOid==$head and .headRefName==$branch and .state=="OPEN" and .isDraft==true' "$TEMP/pr.json" >/dev/null || review_refuse 'actual PR head/state differs'
+  jq -e --arg head "$HEAD" --arg branch "$BRANCH" '.headRefOid==$head and .headRefName==$branch and .state=="OPEN" and (.isDraft|type=="boolean")' "$TEMP/pr.json" >/dev/null || review_refuse 'actual PR head/state differs'
   jq -e --arg base "$BASE" '.baseRefName==$base' "$TEMP/pr.json" >/dev/null || review_refuse 'actual PR base differs from approved base; restore the approved PR target and retry publication'
+  if [ "$OPERATION" = request-review ]; then
+    # Starting GitHub review/checks is a publication checkpoint, not merge
+    # readiness. Some required workflows cannot report while a PR is draft.
+    [ "$(git -C "$REPO" rev-parse HEAD)" = "$HEAD" ] && [ -z "$(git -C "$REPO" status --porcelain)" ] || review_refuse 'candidate changed before review request'
+    check_local_branch
+    [ "$(remote_branch_head)" = "$HEAD" ] || review_refuse 'remote candidate changed before review request'
+    if jq -e '.isDraft' "$TEMP/pr.json" >/dev/null; then gh pr ready "$PR" --repo "$REPOSITORY"; fi
+    # No CI result or formal approval is invented. The same owner's ready
+    # operation must collect them and settle fresh feedback before merge.
+    jq '.feedbackSettled=false | .checks |= map(select(.stage=="candidate"))' "$TEMP/handoff.json" > "$TEMP/review-handoff.json"
+    "$HERE/operator-handoff.sh" --gate candidate "$TEMP/review-handoff.json"
+    printf '%s\n' 'Review/checks requested. Agent next action: wait for actual PR results, settle feedback, then rerun the supported ready operation. Merge readiness has not passed.'
+    exit 0
+  fi
+fi
+if [ "$OPERATION" = ready ]; then
   OWNER_NAME="${REPOSITORY%/*}"; REPO_NAME="${REPOSITORY#*/}"; NUMBER="${PR##*/}"
   requirements_block() { review_refuse "$REPOSITORY base $BASE: $1; Next action: $2"; }
   # Reported contexts cannot prove an absent workflow is optional. Resolve the
@@ -288,8 +304,8 @@ if [ "$OPERATION" = ready ]; then
   "$HERE/operator-handoff.sh" --gate merge "$TEMP/handoff.json" > "$TEMP/handoff.md" || { cat "$TEMP/handoff.md"; exit 3; }
 fi
 if [ "$OPERATION" = ready ]; then
-  gh pr view "$PR" --repo "$REPOSITORY" --json headRefOid,headRefName,baseRefName > "$TEMP/final-pr.json"
-  jq -e --arg head "$HEAD" --arg branch "$BRANCH" --arg base "$BASE" '.headRefOid==$head and .headRefName==$branch and .baseRefName==$base' "$TEMP/final-pr.json" >/dev/null || review_refuse 'actual PR head/base changed during publication'
+  gh pr view "$PR" --repo "$REPOSITORY" --json headRefOid,headRefName,baseRefName,isDraft > "$TEMP/final-pr.json"
+  jq -e --arg head "$HEAD" --arg branch "$BRANCH" --arg base "$BASE" '.headRefOid==$head and .headRefName==$branch and .baseRefName==$base and (.isDraft|type=="boolean")' "$TEMP/final-pr.json" >/dev/null || review_refuse 'actual PR head/base changed during publication'
 fi
 # Recheck source/remote immediately before the only mutation.
 [ "$(git -C "$REPO" rev-parse HEAD)" = "$HEAD" ] && [ -z "$(git -C "$REPO" status --porcelain)" ] || review_refuse 'candidate changed during publication'
@@ -298,6 +314,6 @@ check_local_branch
 if [ "$OPERATION" = create ]; then
   gh pr create --repo "$REPOSITORY" --head "$BRANCH" --base "$BASE" --draft --title "$(jq -r .target "$TEMP/handoff.json")" --body-file "$TEMP/handoff.md"
 else
-  gh pr ready "$PR" --repo "$REPOSITORY"
+  if jq -e '.isDraft' "$TEMP/final-pr.json" >/dev/null; then gh pr ready "$PR" --repo "$REPOSITORY"; fi
 fi
 cat "$TEMP/handoff.md"

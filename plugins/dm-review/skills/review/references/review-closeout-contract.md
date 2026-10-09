@@ -135,11 +135,11 @@ a draft ready. The host resolves and exports its exact trusted
 `WORKFLOW_KERNEL` launcher once using `runtime-resolution.md`. Invoke:
 
 ```text
-publish-reviewed-pr.sh --operation create|ready \
+publish-reviewed-pr.sh --operation create|request-review|ready \
   --repository-root <original-producer-checkout> --run-root <exact-current-owned-root> \
   --producer-input <absolute-producer-arguments.json> \
   --readiness-input <absolute-owner-readiness.json> \
-  [--feature-branch <approved-short-branch>] [--pr <URL-for-ready-only>]
+  [--feature-branch <approved-short-branch>] [--pr <URL-for-review-or-ready>]
 ```
 
 The producer JSON map contains exactly `request`, `receipts`,
@@ -152,6 +152,14 @@ Detached HEAD requires explicit `--feature-branch`. Its exact local branch ref
 and remote SHA must match reviewed HEAD; an attached branch must match too.
 Recheck before mutation. Missing, unsafe or moved branches block. No state or
 source-proof relocation, caller coverage flags or new Kernel API is accepted.
+
+`request-review` starts draft-triggered checks after source gates and reports
+outstanding PR work. `ready` validates actual checks, approvals, feedback and UI
+acceptance at that same head, including non-draft PRs. Repeats never retrigger
+review; non-draft state alone never authorizes merge.
+
+GitHub identity helpers accept HTTPS, SCP-style SSH and URL-form SSH at the
+default host/port. Lookalike hosts stay unavailable.
 
 Helpers use fixed PATH, Bash 3.2 arrays, GNU/BSD stat and SHA256/shasum.
 Source tests alone may set

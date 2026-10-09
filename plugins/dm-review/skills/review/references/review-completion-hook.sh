@@ -53,7 +53,7 @@ jq -e '.agent_id==null and .agent_type==null' <<< "$NATIVE" >/dev/null || quiet
 REPO="$(cd "$(jq -r .cwd <<< "$NATIVE")" 2>/dev/null && pwd -P)" || quiet
 [ "$(git -C "$REPO" rev-parse --show-toplevel 2>/dev/null)" = "$REPO" ] || quiet
 case "$(git -C "$REPO" remote get-url origin 2>/dev/null)" in
-  git@github.com:*|https://github.com/*) ;;
+  git@github.com:*|https://github.com/*|ssh://git@github.com/*|ssh://git@github.com:22/*) ;;
   *) quiet ;;
 esac
 

@@ -60,13 +60,16 @@ if [ "$1" = api ] && [[ "$*" != *graphql* ]]; then
 fi
 case "$1 ${2:-}" in
   'pr create') printf 'https://github.com/Fixture/consumer/pull/42\n' ;;
-  'pr ready') ;;
+  'pr ready') touch "$DM_REVIEW_DEVELOPMENT_TEST_ROOT/review-started" ;;
   'pr view')
     if [ -n "${MOVE_BRANCH_TO:-}" ]; then "$REAL_GIT" -C "$DM_REVIEW_DEVELOPMENT_TEST_ROOT/repository" update-ref refs/heads/candidate "$MOVE_BRANCH_TO"; fi
-    jq -cn --arg head "$PR_HEAD" --arg branch "${PR_BRANCH:-candidate}" --arg base "${PR_BASE:-main}" '{headRefOid:$head,headRefName:$branch,baseRefName:$base,state:"OPEN",isDraft:true,reviewDecision:env.REVIEW_DECISION}' ;;
+    draft=true
+    [ ! -f "$DM_REVIEW_DEVELOPMENT_TEST_ROOT/review-started" ] || draft=false
+    jq -cn --arg head "$PR_HEAD" --arg branch "${PR_BRANCH:-candidate}" --arg base "${PR_BASE:-main}" --argjson draft "$draft" '{headRefOid:$head,headRefName:$branch,baseRefName:$base,state:"OPEN",isDraft:$draft,reviewDecision:env.REVIEW_DECISION}' ;;
   'pr checks')
     required=false
     for arg in "$@"; do [ "$arg" != --required ] || required=true; done
+    if [ "${READY_ONLY_CI:-false}" = true ] && [ ! -f "$DM_REVIEW_DEVELOPMENT_TEST_ROOT/review-started" ]; then printf '[]\n'; exit 0; fi
     if [ "$required" = true ]; then
       case "${REQUIRED_MODE:-checks}" in
         none) printf "no required checks reported on the 'candidate' branch\n" >&2; exit 1 ;;
@@ -124,6 +127,7 @@ chmod +x "$TMP/bin/git" "$TMP/bin/gh"
 export DM_REVIEW_DEVELOPMENT_TEST_ROOT="$TMP"
 
 fixture() {
+  rm -f -- "$TMP/review-started"
   local id="$1" kind="${2:-live}" browser="${3:-false}" assembly
   RUN_ROOT="$("$WORKFLOW_KERNEL" owned-run-start --workflow pipeline --run-id "$id" --base "$TMP/runs" | jq -r .path)"
   STATE="$REPO/.workflow-kernel/runs/$id"; mkdir -p "$STATE"
@@ -195,10 +199,36 @@ no_mutation() { assert sh -c '! grep -E "^pr (create|ready)" "$1"' sh "$GH_LOG";
 change_readiness() { jq "$1" "$READINESS" > "$TMP/update.json"; mv "$TMP/update.json" "$READINESS"; }
 
 fixture candidate
+rm -f -- "$TMP/review-started"
 change_readiness '.readiness.checks += [{name:"PR-only CI",stage:"pr",status:"pending",link:null}] | .readiness.feedbackSettled=false'
 assert publish create
 assert grep -Fq 'pr create --repo Fixture/consumer --head candidate --base main --draft' "$GH_LOG"
 assert test "$(find "$RUN_ROOT/diagnostic/review" -name report.md | wc -l | tr -d ' ')" = 1
+# Required CI can start only at ready_for_review. Requesting review is a
+# distinct non-merge checkpoint; repeated readiness must not retrigger it.
+fixture ready-only-workflow
+export READY_ONLY_CI=true PR_BUCKET=pending
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+publish request-review --pr https://github.com/Fixture/consumer/pull/42 > "$TMP/staged.out"
+assert test -f "$TMP/review-started"
+assert grep -Fxq '## Not ready' "$TMP/staged.out"
+assert sh -c '! grep -Fxq "## Ready to merge" "$1"' sh "$TMP/staged.out"
+ready_count="$(grep -c '^pr ready ' "$GH_LOG")"
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42
+assert test "$(grep -c '^pr ready ' "$GH_LOG")" = "$ready_count"
+export PR_BUCKET=pass
+publish ready --pr https://github.com/Fixture/consumer/pull/42 > "$TMP/ready-stage.out"
+assert grep -Fxq '## Ready to merge' "$TMP/ready-stage.out"
+assert test "$(grep -c '^pr ready ' "$GH_LOG")" = "$ready_count"
+assert publish ready --pr https://github.com/Fixture/consumer/pull/42
+assert test "$(grep -c '^pr ready ' "$GH_LOG")" = "$ready_count"
+unset READY_ONLY_CI PR_BUCKET
+fixture ssh-publication
+git -C "$REPO" remote set-url origin ssh://git@github.com/Fixture/consumer.git
+assert publish request-review --pr https://github.com/Fixture/consumer/pull/42
+assert publish ready --pr https://github.com/Fixture/consumer/pull/42
+git -C "$REPO" remote set-url origin https://github.com/Fixture/consumer.git
+fixture candidate
 # PATH cannot select executable dependencies. Only the bounded source fixture
 # mechanism above activates mocks, and never replaces the real producer.
 : > "$GH_LOG"

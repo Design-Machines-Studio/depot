@@ -168,8 +168,8 @@ Never bypass with bare `gh`:
 ```
 <!-- reviewed-pr-direct:end -->
 
-After actual PR checks, feedback settlement and required designer UI acceptance
-pass at the final head, use the same producer gate for draft-to-ready:
+`request-review` uses these arguments/guard after source checks, starting draft CI once.
+`ready` requires actual CI, approvals, feedback and UI acceptance:
 
 <!-- reviewed-pr-direct-ready:start -->
 ```bash
@@ -183,7 +183,7 @@ pass at the final head, use the same producer gate for draft-to-ready:
 
 Register the returned PR with the host when supported. Collect actual PR CI/
 feedback; fix supported defects, push and recheck affected source/browser under
-this owner. Keep draft while CI, feedback or designer acceptance remains;
+this owner. Keep merge readiness blocked while CI, feedback or designer acceptance remains;
 unchanged UI acceptance needs bounded non-impact proof. Deliver dm-review's
 `operator-handoff.sh`: tested behavior, checks, preview tasks/acceptance and owner
 merge. Never ask for backend-code review or create-PR approval. Preserve

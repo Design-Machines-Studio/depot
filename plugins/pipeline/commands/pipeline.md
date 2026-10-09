@@ -512,8 +512,8 @@ infers GitHub-default approval:
 ```
 <!-- reviewed-pr-lean:end -->
 
-After actual PR checks, feedback settlement and required designer UI acceptance
-pass at the final head, use the same producer gate for draft-to-ready:
+`request-review` uses these arguments/guard after source checks, starting draft CI once.
+`ready` requires actual CI, approvals, feedback and UI acceptance:
 
 <!-- reviewed-pr-lean-ready:start -->
 ```bash
@@ -528,7 +528,7 @@ pass at the final head, use the same producer gate for draft-to-ready:
 
 PR-only CI stays pending until creation. Collect final-head CI/feedback
 independently; fix defects, push, recheck affected evidence and refresh readiness
-under this owner. Draft waits for checks/feedback/designer UI acceptance.
+under this owner. Merge readiness waits for checks/feedback/designer UI acceptance.
 `noMergeOnCompletion=true` in both modes; missing/false legacy values grant no merge.
 
 Separate feedback from review: pre-PR is `not_applicable`, never claimed

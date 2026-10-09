@@ -1044,8 +1044,8 @@ esac
 ```
 <!-- reviewed-pr-full:end -->
 
-After actual PR checks, feedback settlement and required designer UI acceptance
-pass at the final head, use the same producer gate for draft-to-ready:
+`request-review` uses these arguments/guard after source checks, starting draft CI once.
+`ready` requires actual CI, approvals, feedback and UI acceptance:
 
 <!-- reviewed-pr-full-ready:start -->
 ```bash
@@ -1064,7 +1064,7 @@ esac
 <!-- reviewed-pr-full-ready:end -->
 
 No bare `gh` may bypass this seam. Settle actual PR-triggered CI and external
-feedback independently. Keep the existing draft while final-head checks or
+feedback independently. Keep merge readiness blocked while final-head checks or
 required designer UI acceptance remain. Fix supported feedback automatically,
 push and recheck affected evidence under this logical owner. Supported
 exact-owned replay handles conflicting fixed companions; never rewrite preserved

@@ -130,6 +130,15 @@ git -C "$REPO" init -q
 git -C "$REPO" config user.name Fixture
 git -C "$REPO" config user.email fixture@example.test
 git -C "$REPO" remote add origin https://github.com/Fixture/consumer.git
+for remote in ssh://git@github.com/Fixture/consumer.git ssh://git@github.com:22/Fixture/consumer.git; do
+  git -C "$REPO" remote set-url origin "$remote"
+  assert bash -c 'source "$1"; test "$(review_repository "$2")" = Fixture/consumer' bash "$CONTEXT" "$REPO"
+done
+for remote in ssh://git@github.com.evil/Fixture/consumer.git ssh://git@github.com:2222/Fixture/consumer.git; do
+  git -C "$REPO" remote set-url origin "$remote"
+  reject bash -c 'source "$1"; review_repository "$2"' bash "$CONTEXT" "$REPO"
+done
+git -C "$REPO" remote set-url origin https://github.com/Fixture/consumer.git
 printf '.workflow-kernel/\n' > "$REPO/.gitignore"
 printf 'fixture\n' > "$REPO/source.txt"
 git -C "$REPO" add .
