@@ -1,21 +1,22 @@
 # Caller visual verification (Phase 7)
 
-Loaded at `/pipeline` Phase 7 only when a full-mode chunk or the approved lean
-plan carries `renderedSurface: required`. When every chunk is
+Loaded when a full-mode chunk, approved lean plan or Direct receipt carries
+`renderedSurface: required`. Direct reads Task controls, prototype parity and
+acceptance/profile cases from its receipt without a plan or manifest. When every selected scope is
 `not_applicable`, record the rationale and never load this file.
 
 ### Caller Visual Verification (mandatory for rendered-surface features)
 
 If any full-mode manifest chunk has `renderedSurface: required`, or the approved
-lean plan includes a rendered surface, you MUST visually verify the rendered
+lean plan or Direct receipt includes a rendered surface, you MUST visually verify the rendered
 output yourself. Do not trust an implementation worker's self-report for visual
 quality. Full mode verifies per chunk; the caller verifies the whole.
 
-If all full-mode chunks have `renderedSurface: not_applicable`, or the lean plan
-records rendered verification as not applicable, record the rationale and skip
-to the requirements cross-check.
+If the selected full chunks, lean plan or Direct receipt declares rendered
+verification `not_applicable`, record its rationale and skip to the requirements
+cross-check.
 
-1. **Discover the design authority.** If assessment/plan data carries a
+1. **Discover the design authority.** If assessment/plan data or Direct Task controls carry a
    declared prototype counterpart, load `prototype-authority.md`, read its exact
    source and bounded parity map, and use it as primary. Then check:
    - `plans/<feature-slug>/brainstorm.html` (read the `visualDecisions` island with `templates/extract-json-island.sh`)

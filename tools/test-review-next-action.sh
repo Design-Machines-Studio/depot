@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
+export MODEL_ROUTER_TEST_MODE=1
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 SELECT="$ROOT/plugins/dm-review/skills/review/references/review-next-action.sh"
@@ -110,17 +111,18 @@ jq '.codex.state="unavailable" | .codex.authMode="none" | .claude.state="ok" | .
     --capability structured-output --effort medium --matrix-file "$MATRIX" \
     --availability-file "$TMP/profile-availability.json" --format markdown
 ) > "$TMP/invalid-profile-recommendation.md"
-assert grep -Fxq -- '- Model: fable' "$TMP/invalid-profile-recommendation.md"
+assert grep -Fxq -- '- Model: qwen/qwen3.8-max' "$TMP/invalid-profile-recommendation.md"
 
 jq '.codex.state="unavailable" | .codex.authMode="none" |
   .claude={state:"ok",authMode:"subscription",plan:"credits-only"} |
   .openrouter.state="ok"' "$TMP/healthy.json" > "$TMP/credits-only-availability.json"
-printf '%s\n' '{"allowPaidClaudeCredits":false}' > "$TMP/profile-recommendation/.dm/model-router.local.json"
+jq '.roles.architect = [.roles["design-consultant"][0]] + .roles.architect' "$ROOT/plugins/model-router/skills/model-router/references/role-policy.json" > "$TMP/paid-policy.json"
+printf '%s\n' '{"allowPaidClaudeCredits":false}'  > "$TMP/profile-recommendation/.dm/model-router.local.json"
 (
   cd "$TMP/profile-recommendation"
   "$RECOMMEND" --role architect --capability read-repository --capability long-context \
     --capability structured-output --effort medium --matrix-file "$MATRIX" \
-    --availability-file "$TMP/credits-only-availability.json" --format markdown
+    --policy-file "$TMP/paid-policy.json" --availability-file "$TMP/credits-only-availability.json" --format markdown
 ) > "$TMP/credits-disabled-recommendation.md"
 assert grep -Fxq -- '- Model: qwen/qwen3.8-max' "$TMP/credits-disabled-recommendation.md"
 
@@ -129,9 +131,9 @@ printf '%s\n' '{"allowPaidClaudeCredits":true}' > "$TMP/profile-recommendation/.
   cd "$TMP/profile-recommendation"
   "$RECOMMEND" --role architect --capability read-repository --capability long-context \
     --capability structured-output --effort medium --matrix-file "$MATRIX" \
-    --availability-file "$TMP/credits-only-availability.json" --format markdown
+    --policy-file "$TMP/paid-policy.json" --availability-file "$TMP/credits-only-availability.json" --format markdown
 ) > "$TMP/credits-enabled-recommendation.md"
-assert grep -Fxq -- '- Model: fable' "$TMP/credits-enabled-recommendation.md"
+assert grep -Fxq -- '- Model: claude-opus-5-5' "$TMP/credits-enabled-recommendation.md"
 assert grep -Fq -- '- Harness/rail: Claude Code' "$TMP/credits-enabled-recommendation.md"
 assert grep -Fq -- '- Cost: paid Claude credits;' "$TMP/credits-enabled-recommendation.md"
 
@@ -140,9 +142,9 @@ jq '.claude.state="unknown"' "$TMP/credits-only-availability.json" > "$TMP/credi
   cd "$TMP/profile-recommendation"
   "$RECOMMEND" --role architect --capability read-repository --capability long-context \
     --capability structured-output --effort medium --matrix-file "$MATRIX" \
-    --availability-file "$TMP/credits-only-unknown-availability.json" --format markdown
+    --policy-file "$TMP/paid-policy.json" --availability-file "$TMP/credits-only-unknown-availability.json" --format markdown
 ) > "$TMP/credits-enabled-unknown-recommendation.md"
-assert grep -Fxq -- '- Model: fable' "$TMP/credits-enabled-unknown-recommendation.md"
+assert grep -Fxq -- '- Model: claude-opus-5-5' "$TMP/credits-enabled-unknown-recommendation.md"
 assert grep -Fq -- '- Harness/rail: Claude Code' "$TMP/credits-enabled-unknown-recommendation.md"
 assert grep -Fq -- '- Cost: paid Claude credits;' "$TMP/credits-enabled-unknown-recommendation.md"
 

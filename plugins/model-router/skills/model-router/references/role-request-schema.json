@@ -29,6 +29,7 @@
     "repositoryEvidenceFile": {"type": "string", "minLength": 1},
     "contractDigest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
     "contractRevision": {"type": "integer", "minimum": 1},
+    "runReceiptIndex": {"type": "string", "minLength": 1},
     "promptFile": {"type": "string", "minLength": 1},
     "outputFile": {"type": "string", "minLength": 1},
     "receiptFile": {"type": "string", "minLength": 1}

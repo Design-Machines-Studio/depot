@@ -734,6 +734,9 @@ require_text "$orchestrator" 'Count rendered-surface chunks' "orchestrator brows
 require_text "$orchestrator" 'Do not derive it' "orchestrator does not recompute applicability from kind"
 require_text "$orchestrator" 'Do not emit `BROWSER_VERIFIED`, fabricate empty' "orchestrator avoids fabricated browser evidence"
 require_text "$pipeline_cmd" 'ANY `renderedSurface: required` chunk' "pipeline caller verification uses applicability"
+require_text "$pipeline_cmd" 'When Direct task controls carry `renderedSurface: required`' "direct rendered work enters mandatory caller checks"
+require_text "$REPO_ROOT/plugins/pipeline/references/phase7-caller-verification.md" 'Direct uses Task controls' "direct caller checks consume receipt controls"
+require_text "$REPO_ROOT/plugins/pipeline/references/phase7-visual-verification.md" 'Direct reads Task controls' "direct visual proof consumes receipt controls"
 require_text "$pipeline_prompts" 'For `not_applicable`, keep persona/browser arrays empty' "pipeline-prompts avoids invented browser cases"
 require_text "$pipeline_run" 'Rendered-surface applicability is valid' "pipeline-run validates applicability"
 require_text "$verification_contract" '`rendered_surface=required` blocks' "kernel persona contract uses independent applicability"
@@ -800,9 +803,9 @@ require_text "$selective_allowlist" "never relax this equality check to a subset
 require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.26.2"' "dm-review requires source-bound review evidence producer"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.27.0"' "pipeline requires supported verification profile generation"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.87.0"' "pipeline requires the current reviewed-publication contract"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"model-router": ">=0.11.0"' "dm-review requires review recommendation routing"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"model-router": ">=0.12.0"' "pipeline requires the current routing runtime"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.88.0"' "pipeline requires the current reviewed-publication contract"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"model-router": ">=0.13.0"' "dm-review requires review recommendation routing"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"model-router": ">=0.13.0"' "pipeline requires the current routing runtime"
 require_text "$review_skill" 'Implementation origin is not a coverage field or eligibility condition.' "dm-review makes implementation origin ineligible as a review filter"
 require_text "$review_skill" 'never request, infer, or pass implementation-origin declarations' "dm-review never collects implementation origin for lane routing"
 require_text "$orchestrator" 'one cumulative implementation receipt set' "Pipeline keeps implementation receipts for terminal reporting"
@@ -896,14 +899,31 @@ require_absent "$pipeline_cmd" "Research complete. Ready to plan, or want to adj
 require_absent "$pipeline_cmd" 'Plan ready at `plans/<feature-slug>/plan.html`' "retired plan question cannot return"
 require_before "$pipeline_cmd" "## Phase 2: Research" "## Combined Discovery Gate" "research precedes combined discovery gate"
 require_before "$pipeline_cmd" "## Combined Discovery Gate" "## Phase 3: Plan" "combined discovery precedes planning"
-require_text "$pipeline_cmd" "Only this combined discovery response makes the Key Requirements authoritative" "only discovery approval makes requirements authoritative"
+require_text "$pipeline_cmd" "Existing explicit authority or this discovery response makes requirements" "only discovery approval makes requirements authoritative"
 require_text "$pipeline_cmd" 'recommended `workflowClass`, `decisionProfile`, `baseBranch`' "discovery resolves workflow, decision, and branch controls"
 require_text "$pipeline_cmd" '`expectedFeatureHead`, `finalReviewMode`, and `finalReviewRationale`' "discovery resolves expected head and final review controls"
 require_text "$pipeline_cmd" 'non-empty `baseBranch` and `featureBranch`' "approved plan carries branch identities"
 require_text "$pipeline_cmd" '`branchMode: create|reuse`, and `expectedFeatureHead`' "approved plan carries branch mode and expected head"
 require_before "$pipeline_cmd" "## Phase 5: Adversarial Scope Review" "## Final Planning Gate" "bounded adversarial review precedes final planning gate"
 require_before "$pipeline_cmd" "## Final Planning Gate" "## Phase 6: Execute" "final planning gate precedes execution"
-require_text "$pipeline_cmd" "Execution MUST NOT begin without explicit approval of this final package" "execution requires explicit final planning approval"
+# Restrict the assertion to the actual execution gate, and mutation-check it.
+if python3 - "$pipeline_cmd" <<'PY_AUTHORITY'
+from pathlib import Path
+import sys
+text = Path(sys.argv[1]).read_text()
+clause = "Execution requires actual scope and execution authority. Existing explicit\nauthorization satisfies this requirement; do not ask again."
+def authorized(source):
+    section = source.split("## Final Planning Gate\n", 1)[1].split("## Phase 6: Execute", 1)[0]
+    return clause in section
+assert authorized(text), "Missing execution authority in Final Planning Gate"
+assert not authorized(text.replace(clause, "", 1)), "Authority deletion must fail"
+PY_AUTHORITY
+then
+  printf '  OK    execution gate preserves authority and rejects its deletion\n'
+else
+  printf '  FAIL  execution gate authority contract missing or assertion ineffective\n'
+  failures=1
+fi
 require_text "$pipeline_cmd" 'plans/<feature-slug>/manifest.json' "full final gate presents the manifest"
 require_text "$pipeline_cmd" 'plans/<feature-slug>/prompts/' "full final gate presents the prompt directory"
 require_text "$pipeline_cmd" "no manifest or prompt directory exists by design" "lean final gate does not fabricate artifacts"
@@ -2082,7 +2102,7 @@ require_absent "$pipeline_cmd" '**If the user chooses PR:**' "PR publication is 
 require_before "$orchestrator" '## Step 4: Approved Final Review' '<!-- reviewed-pr-full:start -->' "full review precedes PR publication"
 require_before "$pipeline_cmd" '### Caller Verification Checklist' '<!-- reviewed-pr-lean:start -->' "Lean caller verification precedes PR publication"
 require_before "$pipeline_cmd" '**Requirements cross-check (ledger item 11):**' '<!-- reviewed-pr-lean:start -->' "Full and Lean parent checks precede publication"
-require_text "$pipeline_cmd" 'Both Full and Lean modes invoke' "Full publication belongs to the checked parent"
+require_text "$pipeline_cmd" 'Direct, Lean and Full modes invoke' "Full publication belongs to the checked parent"
 require_text "$pipeline_cmd" 'The orchestrator defers create and ready' "Full request defers both publication operations"
 require_text "$pipeline_cmd" 'CALLER_VERIFICATION_PASSED:-false' "parent publication blocks missing caller checks"
 require_text "$orchestrator" 'case "${TERMINAL_MODEL_REPORT_OWNER:?validated caller owner required}" in' "orchestrator guards publication by existing caller owner"

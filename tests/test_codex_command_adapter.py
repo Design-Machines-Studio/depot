@@ -108,7 +108,7 @@ class CodexCommandAdapterContractTests(unittest.TestCase):
         self.assertLess(pipeline.index('### Caller Verification Checklist'), pipeline.index('<!-- reviewed-pr-lean:start -->'))
         self.assertLess(pipeline.index('**Requirements cross-check (ledger item 11):**'), pipeline.index('<!-- reviewed-pr-lean:start -->'))
         self.assertIn('The orchestrator defers create and ready', pipeline)
-        self.assertIn('Both Full and Lean modes invoke', pipeline)
+        self.assertIn('Direct, Lean and Full modes invoke', pipeline)
         for operation in ('full', 'full-ready'):
             snippet = full.split(f'<!-- reviewed-pr-{operation}:start -->')[1].split(f'<!-- reviewed-pr-{operation}:end -->')[0]
             self.assertLess(snippet.index('pipeline) printf'), snippet.index('pipeline-run)'))
@@ -121,7 +121,7 @@ class CodexCommandAdapterContractTests(unittest.TestCase):
             self.assertIn('TERMINAL_MODEL_REPORT_OWNER', text)
         self.assertIn('`pipeline` defers both create and ready', adapter)
         self.assertIn('`pipeline-run` executes Step 4c', adapter)
-        self.assertLess(direct.index('Independently review,'), direct.index('<!-- reviewed-pr-direct:start -->'))
+        self.assertLess(direct.index('Perform applicable independent review,'), direct.index('<!-- reviewed-pr-direct:start -->'))
         for caller, text in (("direct", direct), ("full", full), ("lean", pipeline)):
             with self.subTest(caller=caller):
                 for operation in ("create", "ready"):

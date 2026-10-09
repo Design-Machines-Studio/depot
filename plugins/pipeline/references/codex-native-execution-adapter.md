@@ -52,7 +52,7 @@ Wait for the role result before validating that chunk. Do not dispatch
 overlapping chunks in parallel unless the manifest level grouping and file
 ownership are disjoint.
 
-Append every successful live implementation and repair receipt ID to the
+Append every settled implementation and repair receipt ID, including failures, to the
 run-private terminal-report set. Do not pass implementation receipts or author
 origin into final dm-review or affected-lane eligibility. These are receipts
 produced internally by this run; never ask the operator to provide them.
@@ -193,3 +193,11 @@ No new review loop or consumer restart; source-only work finishes normally
 after ready and owner alone merges. Finish checks follow final writes.
 
 The Codex adapter does not get a weaker gate than the Claude path. If `codex_native` cannot execute the cleanup phase, that is a pipeline-blocking failure, not a degradation.
+
+Pass the enclosing owner's exact `--run-receipt-index` to each model-router
+dispatch and recommendation; extend it with every settled receipt, including
+failures. Reuse confirmed run-scoped unavailable rails and model/configuration
+faults through the router, never through provider-specific worker instructions.
+A transient limit or infrastructure failure requires diagnosis, not run-wide
+exclusion. Preserve partial output and valid exact-source evidence. Repeat only
+changed/missing/affected coverage or a concrete new question.

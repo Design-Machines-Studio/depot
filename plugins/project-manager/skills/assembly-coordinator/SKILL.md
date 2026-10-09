@@ -152,24 +152,22 @@ If no lane is safe, say `None`.
 
 Prepare a complete copy-paste prompt when requested or when the recommended
 next action requires a fresh execution session. Do not ask whether to write it.
-Default nontrivial product implementation to an explicit Pipeline invocation inside the copy-paste block:
-`/pipeline` for a feature or change needing planning, `/pipeline-run` with the
-exact existing manifest for prepared execution, or `/pipeline-fix` with the
-numbered findings for a repair pass. Review-only work uses `/dm-review-loop`.
-Tell the executor to load and invoke the named plugin, not imitate its phases.
-Preparing the prompt does not authorize this coordinator to run it.
+Use generic `/pipeline` to select direct, lean or full from acceptance/design
+clarity, consequence/reversibility, coordination, patterns, verification and
+useful unresolved questions. Honor explicit full or named reviews. Existing
+prepared artifacts use `/pipeline-run`; findings use `/pipeline-fix`. Invoke
+the installed plugin, never imitate it. Preparing a prompt grants no execution
+authority to this coordinator.
 
-Direct implementation is the exception for genuinely mechanical, low-impact
-edits with settled acceptance (for example, a typo or literal config update).
-State why that exception applies. A bounded branch, small file count, known
-prototype, or cheaper executor does not make substantive behavior, UI or
-integration work mechanical. Pipeline supplies execution and review structure
-for every executor; it does not compensate for unresolved design judgment.
-If the selected plugin is unavailable at execution time, report the missing
-workflow instead of silently substituting an unstructured implementation.
+Clear low-impact application code and tests can use one capable agent with
+existing acceptance as its plan. Bounded judgment uses a short plan and
+proportional independent review. Uncertain/consequential changes receive fuller
+assessment and applicable adversarial scrutiny. File count, language, UI or
+integration alone never determines depth. Preserve explicit approvals and actual
+repository/verification requirements; do not add routine permission gates.
 
 Direct prompts require dm-review's `automatic-implementation-closeout.md`:
-plan/prompt approval, implementation, verified candidate commit/push, independent
+plan/prompt approval, implementation, verified candidate commit/push, applicable independent
 proportional review/repair/recheck and source/browser evidence preservation,
 then PR creation through `publish-reviewed-pr.sh`. Pipeline retains its single
 integrated owner and final gate; no duplicate standalone loop. Keep the draft
@@ -215,16 +213,16 @@ Every prompt must state:
 - terminal handoff, including what must remain unmerged or unchanged.
 - `executorRole`, `executorCapabilities`, and `executorEffort` for every
   implementation or review lane. Start with `research-fast` at `medium` for evidence gathering, release-readiness
-  checks and routine planning; `builder-fast` for mechanical implementation;
-  `builder-deep` for substantive logic, UI, integration and significant code
-  changes; and the matching review role. Use `architect` for unresolved
+  checks and routine planning; `builder-fast` for bounded settled application implementation and tests;
+  `builder-deep` for unresolved or consequential implementation judgment; and the matching review role. Use `architect` for unresolved
   architecture, `review-deep` for architectural/code judgment, and
   `design-consultant` for applicable design review. File count alone is not a
-  measure of difficulty. A settled prototype still requires execution judgment.
+  measure of difficulty. A settled prototype can support bounded execution; applicable design review
+  and host prototype/browser acceptance remain mandatory.
   `executorCapabilities` are worker-only; `browser` requires supported
   transport, not rendered acceptance. Host owns browser work/evidence; setup gaps
   do not imply unavailability.
-  Use `builder-fast` at `low` or `medium` for mechanical tasks, and at `high`
+  Use `builder-fast` at `low` or `medium` for routine settled tasks, and at `high`
   only for a bounded settled task needing extra care. Start `builder-deep`,
   architecture and deep review at `high`; reserve `max` for named exceptional
   difficulty. Do not require a failed cheap-model attempt before choosing the
@@ -274,9 +272,9 @@ a source PR alone does not update other planning threads.
 
 Whenever this coordinator produces an implementation or review copy-paste
 prompt, resolve one coherent model-router bundle through Workflow Kernel at
-minimum version `0.12.0`, requiring
+minimum version `0.13.0`, requiring
 `skills/model-router/references/operator-recommendation.sh`, `role-policy.json`,
-and `availability-probe.sh`. Resolve the current OpenRouter
+`availability-probe.sh`, `native-fast-mode.sh` and `run-availability.sh`. Resolve the current OpenRouter
 `model-matrix.json` through Workflow Kernel without changing it. Invoke the
 read-only recommendation renderer with the prompt's `executorRole`, each
 `executorCapabilities` value, `executorEffort`, the exact matrix asset, and the

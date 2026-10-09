@@ -31,7 +31,7 @@ or review problem. Keep the critic's separate role effort and independence check
 
 Resolve one coherent installed model-router bundle through Workflow Kernel and
 bind its `role-dispatch.sh`, request schema, policy, and terminal renderer at
-minimum model-router version `0.12.0`. Materialize Plan A and Plan B prompts
+minimum model-router version `0.13.0`. Materialize Plan A and Plan B prompts
 separately, use the same immutable evidence packet as each request's
 `--repository-evidence-file`, and allocate fresh private output and receipt
 paths in one mode-`0700` run-private directory. Create
@@ -72,3 +72,11 @@ closed unavailable line and never changes the recommendation.
 
 When no routed planning opinion was requested, do not create an index and do
 not emit a model report.
+
+Pass the enclosing owner's exact `--run-receipt-index` to each model-router
+dispatch and recommendation; extend it with every settled receipt, including
+failures. Reuse confirmed run-scoped unavailable rails and model/configuration
+faults through the router, never through provider-specific worker instructions.
+A transient limit or infrastructure failure requires diagnosis, not run-wide
+exclusion. Preserve partial output and valid exact-source evidence. Repeat only
+changed/missing/affected coverage or a concrete new question.

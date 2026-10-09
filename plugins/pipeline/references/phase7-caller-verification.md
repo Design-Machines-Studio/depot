@@ -1,6 +1,8 @@
 # Phase 7 caller verification (rendered surfaces)
 
-Loaded by `/pipeline` Phase 7 only when a `renderedSurface: required` chunk ran.
+Loaded when a chunk, lean plan or Direct receipt carries `renderedSurface: required`.
+Direct uses Task controls and acceptance/profile cases from its receipt; no
+chunk, plan or manifest is required. All checks and recovery below still apply.
 
 ## Caller Verification Checklist
 

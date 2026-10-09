@@ -72,7 +72,7 @@ unattributed buckets are limited, Codex is skipped. Report
 
 An OpenRouter `insufficient_credits` failure is actionable only from its
 validated provider receipt with its HTTP status. It closes the OpenRouter
-credential rail for the current dispatch, while preserving the receipt
+credential rail for the current run when the owner supplies its receipt index, while preserving the receipt
 evidence and allowing later eligible candidates on other rails. A 429
 `rate_limited` response remains a distinct model attempt failure. No
 account-wide balance cache or budget service is implied.
@@ -121,10 +121,10 @@ For applicable UI/UX judgment and front-facing design repair drafting, load
 `${CLAUDE_SKILL_DIR}/references/design-consultation.md` and request
 `design-consultant`. Opus 5.5 falls back to Sol 6.1 for this required review;
 only exhaustion of both candidates leaves required design coverage incomplete.
-Other roles follow the current candidate policy: Fable leads architecture
-and deep review with Astra as its immediate fallback; Opus 5.5 uses Sol 6.1
-as its immediate fallback and implements substantive changes; fast roles retain
-bounded mechanical work. Claude coding candidates can use Read/Glob/Grep;
+Other roles follow the current candidate policy: native bounded work uses the
+fast role, coordination/consequential judgment uses the stronger ordinary role,
+and difficult problems justify escalation. Applicable design retains its
+specialist and explicit prototype/user authority. Claude coding candidates can use Read/Glob/Grep;
 a bound write request also enables Edit/Write/Bash. Evidence-only Claude candidates,
 including the primary `design-consultant`, keep tools disabled. Browser evidence remains
 host-owned. Read-only Claude lanes cannot execute shell-based tests; those
@@ -144,3 +144,33 @@ terminal state and no later model dispatch is possible, load
 `${CLAUDE_SKILL_DIR}/references/terminal-report-contract.md`. Its shared
 renderer is the sole operator-facing identity projection. Never load or run it
 during routing, implementation, review, repair, synthesis, or merge decisions.
+
+## Economical dispatch and evidence reuse
+
+The existing `builder-fast` role includes settled bounded application code and
+tests when design, ownership, patterns and verifiable acceptance are clear.
+Workers receive relevant context; the coordinator owns integration/acceptance.
+Native fast-role service mode is separate from reasoning effort. Every Luna
+candidate requests Fast through the supported Codex configuration, including
+research/review/editorial and fallbacks. Unsupported/unavailable Fast closes
+that candidate/configuration; never silently serve Standard Luna. Private
+receipts distinguish requested, transmitted and explicitly confirmed mode.
+
+Pass `--run-receipt-index` pointing to this owner's existing ordered private
+`terminal-receipt-index.json` on each dispatch and human recommendation. Extend
+it after every settled attempt, including failed calls, before the next lane.
+Parallel lanes cannot reuse an in-flight failure: join the affected rail's first
+attempt before sending further work when availability is unknown. Read only
+indexed receipts from that exact run; no directory scanning or global cache.
+Confirmed credential/quota/insufficient-credit diagnoses close the affected
+rail; model/Fast faults close only that model/configuration. Generic error text,
+transient 429s, infrastructure faults and unavailable measurements never become
+confirmed run exclusions. Diagnose infrastructure and preserve useful partial
+output beside its failed receipt before switching/rebuilding. A new run uses a
+new index and inherits no exclusions. This reuses receipts, not a new service.
+
+Reuse exact-source verification/review evidence under its existing contracts.
+Changed relevant source, unresolved findings, missing proof or a concrete new
+question warrants an affected recheck; unchanged valid evidence does not warrant
+another model pass. Never rebind an old review to a repaired source or hide gaps.
+Fix every retained P1/P2/P3. The ordinary public disposition stays identity-free.

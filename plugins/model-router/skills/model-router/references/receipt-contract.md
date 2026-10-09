@@ -26,7 +26,8 @@ including `rate_limit_probe_no_response`, `rate_limit_response_malformed`,
 `provider_adapter_rejected`,
 `browser_transport_unavailable`, and
 `model_participant_unavailable`, and
-`provider_effort_evidence_unavailable`. They
+`provider_effort_evidence_unavailable`, `fast_mode_unsupported`,
+`fast_mode_unavailable`, and `fast_mode_probe_unavailable`. They
 never contain raw CLI/provider output, account identity, quota balances,
 credentials, prompts, or private paths.
 
@@ -61,3 +62,11 @@ to `render-terminal-report.sh`. That renderer projects only its closed field
 allowlist into operator JSON and Markdown. It never exposes prompts, outputs,
 provider bodies, arbitrary errors, credentials, endpoints, environments, or
 family-independence internals. No model dispatch may follow the projection.
+
+New private attempt/served `serviceMode` records contain `requested`,
+`transmitted`, `confirmed` and `evidence`. Luna requests Fast; confirmation is
+null without an explicit native event. Effort remains separate. Failure entries
+record `failureScope`, `failureConfirmed` and optional safe `partialOutput`
+basename. `reusedFailure: true` identifies skips based on the exact owner index;
+those skips are not attempts or served calls. Legacy missing fields are unknown.
+`--run-receipt-index` is an input binding, never an automatic filesystem search.

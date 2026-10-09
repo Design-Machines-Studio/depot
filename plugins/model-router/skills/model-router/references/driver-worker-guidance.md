@@ -12,26 +12,43 @@ Concrete identities here are operator-only; `role-policy.json` owns selection.
 
 | Work | Starting point | Escalation |
 |---|---|---|
-| Evidence gathering, release-readiness checks, routine planning and coordination | `research-fast`; GPT-6 Luna Medium in Codex | GPT-6.1 Sol Medium when evidence materially conflicts |
-| Mechanical/docs changes | `builder-fast`; Luna Low or Medium | Increase only for demonstrated difficulty |
-| Mechanical implementation with exact acceptance | `builder-fast`; Luna Low/Medium, High for extra care | GPT-6.1 Sol when judgment is needed |
-| Substantive UI, logic, integration and significant code changes | `builder-deep`; Opus 5.5 High | GPT-6.1 Sol, then Astra under current availability |
-| Unresolved architecture and deep code/architecture review | `architect` / `review-deep`; Fable High | GPT-6 Astra; later candidates follow current availability |
-| Standalone review orchestration | `review-coordinator`; GPT-6.1 Sol Medium | Astra for difficult judgment; do not repeat already valid reviews |
-| Applicable UI/UX judgment and front-facing design fixes | `design-consultant`; Opus 5.5 Medium, bounded to affected surfaces | GPT-6.1 Sol; coverage is incomplete only if both are unavailable |
-| Bounded inexpensive or specialized analysis | Eligible OpenRouter participant | Host retains tools, integration and verification unless transport proves otherwise |
+| Bounded evidence gathering and routine checks | `research-fast`; GPT-6 Luna Fast, Low/Medium | Sol when evidence materially conflicts |
+| Settled bounded application code and tests, including Go/Templ/Datastar | `builder-fast`; Luna Fast, Low/Medium (High with a reason) | Sol for unresolved/consequential judgment |
+| Coordination, harder implementation and consequential review | `builder-deep`, `architect`, `review-deep` or `review-coordinator`; GPT-6.1 Sol | Astra for a named difficult problem or justified escalation |
+| Applicable UI/UX design judgment and design repair | `design-consultant`; Opus 5.5, bounded affected surfaces | Sol; prototype and explicit user decisions remain authoritative |
+| Inexpensive or specialized analysis | Eligible OpenRouter participant | Host owns tools, integration and verification unless transport proves otherwise |
 
-Fable leads architecture and review; Opus/Sol implements. Luna remains useful
-for mechanical changes, bounded research and routine checks. Do not assign
-substantive work to a fast role merely because requirements are settled or
-weekly allowance is plentiful. Pipeline provides structure; it does not turn
-a weaker executor into a substitute for design judgment. These preferences
-reflect operator experience, not a new benchmark claim.
+Fable/Claude is not the ordinary first attempt for coding, architecture or code
+review. Preserve Opus for applicable design judgment and design fixes. One agent
+can do substantial settled work; file count/language/UI/integration alone never
+establishes difficulty. An explicit stronger starting role may reduce total cost;
+state the concrete reason instead of requiring a cheap failed attempt.
 
-Coordinator prompts invoke Pipeline for nontrivial implementation and select
-the existing run/fix entrypoint when artifacts already exist. Direct execution
-is reserved for low-impact mechanical edits. The required design role keeps
-its candidate identity and fallback contract under `design-consultation.md`.
+A generic Pipeline invocation chooses direct, lean or full. Direct settled
+low-impact work uses acceptance plus focused verification; bounded judgment uses
+a short plan and proportional independent review; uncertainty/consequence adds
+only useful research/planning/adversarial work. Preserve repository requirements,
+explicit full requests, tests, prototype/browser checks and all retained findings.
+New risk escalates the current run without discarding valid completed work.
+
+## Luna service mode
+
+Every Luna role and fallback uses native Codex Fast. The dispatcher requests
+`--config 'service_tier="fast"' --enable fast_mode --strict-config` separately
+from `model_reasoning_effort`; never infer inheritance, use prompt text as proof,
+or impose maximum reasoning. It checks native configuration support, records
+requested/transmitted mode and separate native-event confirmation when present.
+An unsupported/unavailable Fast configuration falls through to an eligible
+candidate; confirmed Standard output is not accepted as Luna Fast. Missing
+served-tier telemetry remains unavailable, never a fabricated confirmation.
+No global driver/context settings or other provider settings change.
+
+Verified against installed Codex 0.160.0 thread/turn serviceTier schemas and the
+Luna catalog’s Fast/priority tier on 2026-10-09. Official [configuration reference](https://learn.chatgpt.com/docs/config-file/config-reference)
+documents Fast mapping to priority; [speed documentation](https://learn.chatgpt.com/docs/agent-configuration/speed)
+explains availability and higher usage. Fast is an explicit operator requirement,
+not an assumption that it saves allowance. Ordinary effort is Low/Medium; High
+requires a reason. Concrete dispatch remains solely in role-policy.json.
 
 Do not add delegation automatically. For a small settled task, packet preparation,
 duplicate context and synthesis may cost more than direct execution. When useful,
@@ -90,7 +107,8 @@ never described as verified affordability even when the API credential and
 current balance make the rail attemptable.
 
 An OpenRouter `insufficient_credits` response confirmed by its validated
-receipt exhausts that paid rail for the current dispatch; continue to an
+receipt exhausts that paid rail for the current run when confirmed by its validated
+provider receipt; continue to an
 eligible native candidate without repeating OpenRouter models on the same
 credential. A 429 `rate_limited` response remains distinct. Missing token or
 cost measurements stay unavailable in the terminal receipt and never gate a

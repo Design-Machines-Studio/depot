@@ -154,7 +154,7 @@ Common questions mapped to the right skill:
 | ned | /depot-metrics | [record <skill> <outcome> | report | sync] | Track and report plugin usage metrics via ai-memory |
 | ned | /compound | [run-slug] | Run the codify loop over a session or run -- turn lessons into permanent encoded improvements |
 | openrouter | /openrouter | <prompt> [--model <slug>] | Direct OpenRouter invocation with model selection |
-| pipeline | /pipeline | [feature idea or feedback] | Full autonomous pipeline: assess, research, plan, prompt, review, execute, deliver |
+| pipeline | /pipeline | [feature idea or feedback] | Autonomous feature development and fixes with proportional workflow selection |
 | pipeline | /pipeline-assess | [area to assess or feature context] | Pre-plan assessment of current codebase and UX state |
 | pipeline | /pipeline-prompts | [path to plan file] | Generate execution prompts from an existing plan with overlap analysis |
 | pipeline | /pipeline-run | [path to manifest.json or prompts directory] | Execute generated prompts in worktrees with risk-tiered review gates |

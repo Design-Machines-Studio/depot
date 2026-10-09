@@ -116,10 +116,10 @@ require_text "$research" \
   'repository evidence plus any other available relevant sources.' \
   "repository evidence is sufficient for valid research"
 require_text "$research" \
-  'When an optional personal source is callable, continue using it for relevant' \
+  'Use callable personal sources only for relevant enrichment.' \
   "available personal research sources retain their current behavior"
 require_text "$research" \
-  'it. Only an explicit user request for an ai-memory or RAG operation makes an' \
+  'only for an explicitly requested personal-source operation.' \
   "explicit personal-source requests may report an unavailable capability"
 require_absent "$research" 'Call `mcp__ai-memory__search_entities` with a test query' \
   "research does not probe ai-memory by invoking it"

@@ -7,13 +7,6 @@ description: Current codebase state and UX baseline before planning changes -- a
 
 Evaluate the current state of a codebase area before planning changes. Unlike dm-review which reviews a diff, this reviews what exists -- architecture, patterns, tech debt, UX quality, and known issues.
 
-## When to Use
-
-- Before planning a new feature or iteration
-- When inheriting unfamiliar code
-- Before a major refactor
-- When the user says "assess," "what's the current state," or "review before planning"
-
 ## Input
 
 The user provides a feature idea, area description, or specific file paths. If vague, ask: "Which part of the codebase should I assess? Give me a feature area, directory, or file paths."
@@ -64,12 +57,13 @@ Determine what to assess based on the user's input:
 2. If a feature area described, identify the relevant directories and files
 3. If a project name given, use the project root
 
-Produce a file list of 5-20 key files to examine. Prioritize:
-- Entry points (handlers, controllers, routes)
-- Core logic (services, models, domain)
-- Templates/views
-- Configuration
-- Tests
+Inspect only the files needed to resolve behavior, acceptance, design,
+consequence/reversibility, coordination, patterns and verification. Existing
+acceptance can serve as the plan for settled low-impact work. Name the question
+another research/review stage would resolve; otherwise do not add that stage.
+Use the Pipeline command’s direct/lean/full selection, not file count, language,
+UI or integration labels. The current agent can perform a bounded assessment;
+no mandatory assessment roster or separate planning agent is implied.
 
 For rendered work, resolve declared prototype authority before target UX
 evaluation. Load `plugins/pipeline/references/prototype-authority.md` when its
@@ -80,14 +74,18 @@ commit, route, or authority declarations stop UI implementation with
 `human_help_required`; a source-proven missing counterpart is recorded and
 falls back to existing production patterns.
 
-### Phase 2: Parallel Assessment
+### Phase 2: Proportional Assessment
 
-Launch two agents simultaneously:
+The current agent assesses bounded settled work directly. Add a separate
+assessment specialist only for a named affected concern or independent work
+with a concrete advantage. Parallelize only genuinely independent scopes;
+a stage does not imply another participant.
 
-**Executor routing:** Default read-heavy assessment fan-out to Codex, with
-Claude as the local fallback when Codex is unavailable. This phase remains
-native by workload policy; configured-key availability does not broaden the
-bounded OpenRouter execution workload.
+**Executor routing:** Optional bounded evidence gathering requests
+`research-fast` with only needed capabilities and normalized effort through
+model-router. Conflicting or consequential judgment uses an appropriate
+stronger role. Never select a native transport or inherit the driver’s model.
+Workers receive relevant source, scope and the question to resolve.
 
 Resolve the coherent installed Pipeline bundle with `--plugin pipeline
 --minimum-version 1.36.1 --required-asset
@@ -119,14 +117,11 @@ Produce a **Current State Report** covering:
 
 **Skip rule (token budget):** if the feature's scope is entirely backend/logic -- none of the planned work touches templates, CSS, JS modules, or rendered pages -- skip the UX assessment. Log one line: `UX assessment: skipped (no UI/Integration surface detected).`
 
-Heuristic (applied on the user's feature description since the chunk classification does not yet exist in Phase 1):
+Resolve uncertain rendered applicability with targeted source inspection.
+Required UX/browser/prototype coverage remains required; an integration label
+alone does not create a UI assessment or three-viewport screenshot pass.
 
-- UI-touching if the description mentions: route, page, form, button, modal, dialog, screen, visual, layout, styling, accessibility, template, component, or any filename ending in `.templ`, `.twig`, `.html`, `.css`, `.jsx`, `.tsx`.
-- Backend-only if the description mentions only: handler, service, migration, schema, API, endpoint, background job, database, SQL, ETL, without any UI verbs above.
-
-When in doubt, run the UX assessment -- false positives are cheaper than missing a regression. But a strict backend-only assessment (e.g. "add a new migration column for vote_count") should NOT trigger 3-viewport screenshots.
-
-Run discovery whenever the feature is UI/integration work. Execute browser proof
+Run discovery whenever source evidence establishes affected rendered behavior. Execute browser proof
 when a dev server is detected or a URL is provided. Read
 `references/ux-assessment-protocol.md` for the full protocol. In summary:
 
@@ -184,14 +179,11 @@ Combine both reports into a single **Assessment Brief**. When running as part of
 - implementation mechanisms proposed by the user or an upstream prompt; and
 - future or conditional ideas.
 
-A proposed mechanism is not automatically a product requirement. Never silently discard an explicit request: when the smallest adequate solution would
-omit or replace a requested mechanism, carry the smaller alternative and the
-mechanism-preserving option through research to the combined discovery gate.
-Assessment may identify scope questions, conflicts, and alternatives, but it
-must not pause research. Only the combined discovery response updates Scope
-Intake and Project Alignment, rewrites the `keyRequirements` island with the
-approved scope, and makes that cache authoritative. Before then the island is
-provisional even though the file exists.
+Never silently discard an explicit request. Proposed mechanisms do not override authorized outcomes. Carry unresolved
+scope choices to discovery; preserve explicit upstream decisions. Persist the
+actual authority in Scope Intake, Project Alignment and `keyRequirements`;
+only unresolved scope stays provisional. Selected research proceeds without
+another approval pause.
 
 The brief is written as **HTML with a JSON data island**, not markdown -- assemble `templates/base.html` + `templates/sections/assessment.html` per `${CLAUDE_PLUGIN_ROOT}/plugins/pipeline/skills/promptcraft/references/templates/README.md`. The content outline below maps to the section's slots; the `keyRequirements`, `testPersonas`, `recentLessons`, and `baselineScreenshots` arrays also populate the `#pipeline-data` island so later phases read them with `extract-json-island.sh` instead of grepping prose. When prototype authority applies, add the compact optional `prototypeReference` object and affected-surface `prototypeParity` collection from `prototype-authority.md`; do not add a separate artifact or durable schema.
 
@@ -214,7 +206,7 @@ The brief is written as **HTML with a JSON data island**, not markdown -- assemb
 - Dependencies or ownership conflicts: [...]
 - Stale or unknown context: [...]
 
-## Key Requirements (provisional until the combined discovery response is persisted)
+## Key Requirements (record scope authority; unresolved entries stay provisional)
 1. [Requirement 1 verbatim]
 2. [Requirement 2 verbatim]
 3. [Requirement N verbatim]
@@ -238,17 +230,11 @@ with inspected evidence, or "No declared prototype".]
 [From Prior Lessons Check, or "No lessons file."]
 
 ## Baseline Screenshots
-[Render the saved baselines as an actual image gallery, NOT a text list of
-filenames. The whole point of HTML artifacts is that the human sees the
-screenshots inline. Use a `<div class="grid" style="--grid-min: 22rem;">` of
-`<figure class="stack">` blocks, each wrapping `<a href="baselines/<file>"><img
-src="baselines/<file>" alt="<route> at <viewport>" loading="lazy"
-style="width:100%;height:auto;border:1px solid;"></a>` plus a `<figcaption>`
-naming the route. Show the desktop 1440 shot per route; the mobile 375/320 files
-still go in the `baselineScreenshots` island array. If the required target is
-unavailable: "No baselines -- target unavailable; human_help_required." If the
-work has no UI/integration surface: "No baselines -- UX assessment not
-applicable."]
+[Show an actual image gallery using linked images and route/state/viewport
+captions, not filename lists. Show desktop 1440 per route; preserve mobile
+375/320 files in `baselineScreenshots`. Follow the saved-baseline reference for
+markup. Required target unavailable: blocked `human_help_required`; no rendered
+surface: assessment not applicable.]
 
 ## Key Findings
 - [Top 3-5 findings that should inform planning]
@@ -262,9 +248,8 @@ Save the brief to `plans/<feature-slug>/assessment.html` in the target project (
 
 ### Phase 4: Handoff
 
-If running as part of `/pipeline`, pass the provisional Assessment Brief and
-compact Project Alignment record directly to research without a human approval
-pause. If running standalone via `/pipeline-assess`, present it and stop.
+If running as part of `/pipeline`, pass relevant assessment/alignment to the
+next selected stage; research only for named unanswered questions. If running standalone via `/pipeline-assess`, present it and stop.
 
 ## Companion Skills
 

@@ -42,7 +42,8 @@ Resolve one coherent model-router bundle with Workflow Kernel and require
 `skills/model-router/references/role-dispatch.sh`,
 `skills/model-router/references/operator-recommendation.sh`,
 `skills/model-router/references/design-consultation.md`, the request schema,
-and role policy at minimum version `0.11.0`. When this invocation owns terminal reporting,
+`skills/model-router/references/native-fast-mode.sh` and
+`skills/model-router/references/run-availability.sh`, and role policy at minimum version `0.13.0`. When this invocation owns terminal reporting,
 require `skills/model-router/references/render-terminal-report.sh` from that
 same bundle. For each selected lane:
 
@@ -196,3 +197,11 @@ NOT-COVERED and COMMANDS-RUN; Kernel performs no Markdown parsing. Dispatch
 publication/measurement never proves inspection. Missing required patch/scope
 keeps a lane incomplete; absent auxiliary context limits dependent claims.
 Recovery preserves original source and unknown timestamps separately.
+
+Pass the enclosing owner's exact `--run-receipt-index` to each model-router
+dispatch and recommendation; extend it with every settled receipt, including
+failures. Reuse confirmed run-scoped unavailable rails and model/configuration
+faults through the router, never through provider-specific worker instructions.
+A transient limit or infrastructure failure requires diagnosis, not run-wide
+exclusion. Preserve partial output and valid exact-source evidence. Repeat only
+changed/missing/affected coverage or a concrete new question.

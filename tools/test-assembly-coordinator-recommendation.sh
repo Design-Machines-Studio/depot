@@ -93,19 +93,19 @@ assert grep -Fq 'browser evidence/setup gap' "$TMP/browser-required-prompt.md"
   --capability structured-output --effort medium --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/browser-required-recommendation.json"
 assert jq -e '
-  .recommendedStart.model == "claude-opus-5-5" and
-  .recommendedStart.harness == "Claude Code" and
+  .recommendedStart.model == "gpt-6.1-sol" and
+  .recommendedStart.harness == "Codex" and
   .recommendedStart.effort == "medium" and
-  .recommendedStart.fallback.model == "gpt-6.1-sol" and
-  (.recommendedStart.fallback | keys | length) == 3
+  .recommendedStart.fallback.model == "gpt-6-astra" and
+  (.recommendedStart.fallback | keys | length) == 4
 ' "$TMP/browser-required-recommendation.json"
 
 "$RECOMMEND" --role builder-deep --capability read-repository \
   --capability write-repository --capability tool-use --capability long-context \
   --capability structured-output --effort low --matrix-file "$MATRIX" \
   --availability-file "$TMP/healthy.json" --format json > "$TMP/builder.json"
-assert jq -e '.recommendedStart.model == "claude-opus-5-5" and .recommendedStart.harness == "Claude Code" and .recommendedStart.effort == "low"' "$TMP/builder.json"
-assert jq -e '.recommendedStart.fallback.model == "gpt-6.1-sol" and (.recommendedStart.fallback | keys | length) == 3' "$TMP/builder.json"
+assert jq -e '.recommendedStart.model == "gpt-6.1-sol" and .recommendedStart.harness == "Codex" and .recommendedStart.effort == "low"' "$TMP/builder.json"
+assert jq -e '.recommendedStart.fallback.model == "gpt-6-astra" and (.recommendedStart.fallback | keys | length) == 4' "$TMP/builder.json"
 assert jq -e '.recommendedStart.cost.label == "included subscription" and .recommendedStart.cost.apiEquivalent == null and .recommendedStart.cost.apiPrice == null' "$TMP/builder.json"
 
 "$RECOMMEND" --role review-fast --capability read-repository \
@@ -136,7 +136,7 @@ assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.effo
   --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
   --format json > "$TMP/publication-readiness.json"
 assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-6.1-sol"' "$TMP/publication-readiness.json"
-assert jq -e '.roles.architect[0].model == "fable" and .roles["builder-deep"][0].model == "claude-opus-5-5" and .roles["review-deep"][0].model == "fable"' "$POLICY"
+assert jq -e '.roles.architect[0].model == "gpt-6.1-sol" and .roles["builder-deep"][0].model == "gpt-6.1-sol" and .roles["review-deep"][0].model == "gpt-6.1-sol"' "$POLICY"
 assert jq -e 'all(.chunkKinds.logic,.chunkKinds.ui,.chunkKinds.integration; .executorRole == "builder-deep" and .executorEffort == "high")' "$PIPELINE_POLICY"
 
 # The ignored common-checkout profile can retire Opus without changing shared
@@ -219,6 +219,8 @@ for cli_dir in incoming override; do
 #!/usr/bin/env bash
 printf '%s\n' "$0" >> "$MODEL_ROUTER_CLI_LOG"
 case "${1:-}:${2:-}" in
+  features:list) printf "fast_mode stable true\n" ;;
+  exec:--help) printf -- "--strict-config\n" ;;
   login:status) printf '%s\n' 'Logged in using ChatGPT' ;;
   app-server:--stdio)
     initialized=0
@@ -295,9 +297,9 @@ assert grep -Fq '`executorCapabilities` are worker-only' "$COORDINATOR"
 assert grep -Fq 'requires supported' "$COORDINATOR"
 assert grep -Fq 'browser' "$COORDINATOR"
 assert grep -Fq 'acceptance.' "$COORDINATOR"
-assert grep -Fq 'add `tool-use`, `long-context`, or `structured-output` only when the' "$PROMPTCRAFT"
-assert grep -Fq 'using the closed routing override' "$PROMPTCRAFT"
-assert grep -Fq 'not rendered acceptance' "$PROMPTCRAFT"
+assert grep -Fq 'Add worker `tool-use`, `long-context` or `structured-output` only when' "$PROMPTCRAFT"
+assert grep -Fq '`bounded-settled-work` routing override' "$PROMPTCRAFT"
+assert grep -Fq 'Host browser evidence never adds worker `browser` capability.' "$PROMPTCRAFT"
 assert grep -Fq 'Host owns browser evidence;' "$PROMPT_TEMPLATE"
 assert grep -Fq 'A missing routed participant does not imply missing' "$PREFLIGHT"
 assert grep -Fq 'host browser tools.' "$PREFLIGHT"

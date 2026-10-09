@@ -567,10 +567,12 @@ model-router bundle:
 ```bash
 : "${WORKFLOW_KERNEL:?resolve workflow-kernel-launcher.sh first}"
 MODEL_ROUTER_BUNDLE_JSON=$("$WORKFLOW_KERNEL" resolve-plugin-bundle \
-  --plugin model-router --minimum-version 0.11.0 \
+  --plugin model-router --minimum-version 0.13.0 \
   --required-executable skills/model-router/references/role-dispatch.sh \
   --required-executable skills/model-router/references/operator-recommendation.sh \
   --required-executable skills/model-router/references/render-terminal-report.sh \
+  --required-asset skills/model-router/references/native-fast-mode.sh \
+  --required-asset skills/model-router/references/run-availability.sh \
   --required-asset skills/model-router/references/role-request-schema.json \
   --required-asset skills/model-router/references/role-policy.json)
 MODEL_ROUTER_BUNDLE_REF=$(printf '%s' "$MODEL_ROUTER_BUNDLE_JSON" | jq -r '.selected_root // empty')
@@ -588,12 +590,16 @@ ordered index. For owner `pipeline`, require the caller-supplied mode-`0700`
 private directory and existing ordered index, then extend rather than replace
 them so feedback iterations retain earlier attempts. Every successful
 live implementation or repair stores its content-free router receipt there,
-named by opaque receipt ID for terminal reporting. Phase 6 never passes those
+named by opaque receipt ID for terminal reporting. Include every settled failed
+receipt too, so subsequent lanes reuse confirmed unavailable rails. Join a first
+attempt on an unknown rail before fan-out; do not retry it independently per lane. Phase 6 never passes those
 implementation receipts or author-origin claims into reviewer eligibility.
 
 Maintain one cumulative implementation receipt set: append successful initial,
 replacement, validation/review/final-repair opaque IDs; never discard contributors
-or ask the operator for run-created IDs. Use it for terminal cost reporting only.
+or ask the operator for run-created IDs. Use identity only for terminal reporting. Confirmed run-scoped failure
+diagnoses may be consumed by model-router through the exact owner index; never
+copy concrete identities or failure receipts into worker/reviewer packets.
 Maintain `terminal-receipt-index.json` per `terminal-report-contract.md`, adding
 implementation/repair/nested review basenames in dispatch-start order (parallel
 joins use selected-lane order). Final review shares this private directory/index,
@@ -611,6 +617,7 @@ ROLE_ARGS=(--role "$EXECUTOR_ROLE" --effort "$EXECUTOR_EFFORT"
   --workflow-kernel "$WORKFLOW_KERNEL"
   --prompt-file "$WORKER_PROMPT" --output-file "$WORKER_OUTPUT"
   --receipt-file "$PRIVATE_ROUTER_RECEIPT"
+  --run-receipt-index "$(dirname "$PRIVATE_ROUTER_RECEIPT")/terminal-receipt-index.json"
   --repository-evidence-file "$COMPLETE_REPOSITORY_EVIDENCE"
   --contract-digest "$CONTRACT_DIGEST" --contract-revision "$CONTRACT_REVISION")
 if [ "${#EXECUTOR_CAPABILITIES[@]}" -gt 0 ]; then

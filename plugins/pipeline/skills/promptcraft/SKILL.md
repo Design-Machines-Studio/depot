@@ -51,28 +51,31 @@ A chunk is a logically complete unit (one feature aspect, one migration, one com
    - `integration`: prompt contains wiring verbs ("wire," "integrate," "connect") OR modifies route files / `main.go`
    - `config`: `.md`, `.json`, `.yaml`, `.toml`, docs, and unserved non-rendered planning HTML under `plans/**` (including `plans/**/work-paths.html`)
 
-   Then derive `executorRole`, `executorCapabilities`, and `executorEffort` from
-   `plugins/pipeline/references/routing-policy.json`:
-   - bounded config, docs, and mechanical work -> `builder-fast`;
-   - substantive logic, UI and integration, including implementation of an
-     exact prototype -> `builder-deep` at `high`; prototype evidence settles
-     requirements but does not remove implementation judgment;
-   - use a `bounded-mechanical-work` override for a genuinely mechanical edit
-     inside those file types; small file count alone is not enough;
-   - add `tool-use`, `long-context`, or `structured-output` only when the
-     worker actually requires that capability, using the closed routing override
-     when the policy default differs;
-   - `browser` requires worker interaction, not rendered acceptance. Host-owned
-     browser evidence never adds it to `executorCapabilities`.
+   Then derive `executorRole`, `executorCapabilities`, and `executorEffort`
+   from `plugins/pipeline/references/routing-policy.json`. Kind describes affected
+   surfaces; it does not establish complexity or model capability.
+   - Bounded settled application work, including Go/Templ/Datastar code and tests,
+     may use `builder-fast` when design, ownership, patterns and verifiable
+     acceptance are clear and consequence/reversibility support it.
+   - Unknown or consequential design, authorization/data decisions, ambiguous
+     debugging and broad integration judgment retain `builder-deep` defaults.
+   - For eligible settled work inside `logic`, `ui` or `integration`, record a
+     `bounded-settled-work` routing override with the concrete assessment.
+     Mechanical changes retain the existing `bounded-mechanical-work` reason.
+   - Add worker `tool-use`, `long-context` or `structured-output` only when
+     required. Host browser evidence never adds worker `browser` capability.
+   - Use low/medium for routine work, high for a justified bounded task needing
+     care; `max` requires named exceptional difficulty. Effort is independent
+     of service mode and never waives verification/review.
 
-   The driver owns design, integration and final review. `builder-fast` requires
-   mechanical scope, owned files and verifiable acceptance; `max` requires
-   named exceptional difficulty. Keep mechanical work lower. Use
-   `bounded-mechanical-work` only when true; unresolved judgment uses `builder-deep`.
-   Workers never inherit driver effort. Effort changes neither review lanes nor
-   verification. Validate this workflow hypothesis on real chunks.
+   The coordinator owns design decisions, integration and acceptance. Prefer
+   one substantial settled pass to many tiny workers; each receives relevant
+   evidence, owned paths and acceptance, not the full conversation. A stronger
+   starting role may have a concrete total-cost advantage; do not force a cheap
+   failure first. Explicit executor-role instructions remain authoritative.
 
-   Planning HTML is an explicit narrow exception to the `.html` UI trigger: a chunk containing only planning Markdown/JSON/YAML plus unserved `plans/**.html` artifacts remains `config` and `builder-fast`. If splitting separates offline planning artifacts from served UI or live-tool work, split it; mixed or uncertain product surfaces classify up: `ui` > `integration` > `logic` > `config`.
+   Planning HTML is an explicit narrow exception to the `.html` UI trigger: a chunk containing only planning Markdown/JSON/YAML plus unserved `plans/**.html` artifacts remains `config` and `builder-fast`. If splitting separates offline planning artifacts from served UI or live-tool work, split it; mixed product surfaces classify `ui` > `integration` > `logic` > `config` for
+   coverage only. This precedence does not select workflow depth or executor role.
 
    Then classify rendered-output applicability independently. Every new chunk
    MUST carry `renderedSurface: required|not_applicable` and a non-empty

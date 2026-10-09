@@ -7,10 +7,22 @@ required. This contract authorizes reviewed PR creation, but no merge, tag, rele
 publication, cache update, or global hook. Arbitrary GitHub PR creation outside
 an active supported task has no event trigger and remains uncovered.
 
+## Select review before entering
+
+Automatic closeout is not a mandatory full model roster. Pipeline selects the
+smallest sufficient workflow; ordinary bounded changes use quick review,
+consequential/security boundaries and explicit full requests retain full.
+A direct settled low-impact change may omit model review only when actual
+repository policy permits it. Existing publication producer requirements remain
+binding: do not invent an exemption or claim passing coverage without its
+required evidence. Tests, UI/prototype checks, all retained findings and source
+preservation remain required. A changed sensitive boundary escalates before
+review, regardless of whether a quick reviewer finds a defect.
+
 ## Enter once, preserve the owner
 
 After plan/prompt approval, implement, commit and push the candidate branch,
-and verify its remote head against the local candidate. Independently review,
+and verify its remote head against the local candidate. Perform applicable independent review,
 repair, recheck and preserve candidate source/browser evidence before opening
 a PR. An existing draft stays draft. PR-only CI is pending until a PR exists;
 it cannot be claimed passed from candidate checks. Record the repository/branch
@@ -51,7 +63,7 @@ Execute a needed action within the current logical owner. A new review uses
 one `dm-review-loop`; quick/full commands already
 delegate to that loop before lane dispatch. Existing passing coverage at an
 unchanged head means no duplicate model work. A rendered-only gap uses the
-existing visual path; a policy-permitted mechanical/docs exemption still runs
+existing visual path; a repository-permitted settled low-impact exemption still runs
 mandatory repository checks and reports the exemption accurately.
 
 `awaiting_ui` is nonterminal: provisional handoff retains the same owner,
