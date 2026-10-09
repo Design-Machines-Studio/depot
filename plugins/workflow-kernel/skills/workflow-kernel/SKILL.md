@@ -601,7 +601,7 @@ result still preserves available source files for recovery. A copy or
 verification error leaves every source file intact, and callers must not
 finish or remove the containing worktree.
 
-The retained evidence uses 200-file, 5 MiB whole-diagnostic bounds (>=0.26.2),
+The retained evidence uses 288-file, 6 MiB whole-diagnostic bounds (>=0.26.2),
 including all required source/history bindings, companions, receipts and report.
 See [the complete-package rationale](references/review-evidence-contract.md#bounded-retention-0262).
 Successful review owners call `owned-run-finish --outcome succeeded
