@@ -137,7 +137,7 @@ not a new user-facing keep/debug option:
 ```
 
 Retention deletes every other child of the exact-owned root, permits at most
-288 regular files and 6 MiB across the whole diagnostic directory, refuses
+384 regular files and 8 MiB across the whole diagnostic directory, refuses
 links or special files, and emits all four
 terminal fields:
 
@@ -149,7 +149,7 @@ cleanup_command
 ```
 
 The byte allowance covers the complete required package, not just each file.
-Kernel0.26.2 uses6MiB/288files. The complete required CLI-reviewed
+Kernel0.26.2 uses8MiB/384files. The complete required CLI-reviewed
 package measured185files/4,685,139bytes and exceeded both4MiB and160files.
 After the normal GitHub review reported three valid defects, the required
 affected/core rechecks produced246files/5,877,650bytes and exceeded both
@@ -182,3 +182,12 @@ revalidates required evidence for a successful review result, and returns its
 original cleanup receipt; it never appends another contribution or reruns a
 settled lane. A closeout retry after failure reads the exact retained copy and
 may add only matching source evidence or append-only authoritative receipts.
+
+The final required GitHub/caller rechecks produced an eligible complete package
+of 362 files and 8,080,697 bytes, including final coverage and every companion,
+source/history/transition binding, private receipt and report. Actual production
+preservation rejected both 6 MiB and 288 files. The bounded final allowance is
+8 MiB/384 files; 8 MiB is evaluated against this complete package, and 384 leaves
+room for the required final source transition (the previous measured transition
+added 11 files). Required evidence and original sealed bytes are unchanged.
+No digest, source, scope, provenance, path-safety or completeness check changes.

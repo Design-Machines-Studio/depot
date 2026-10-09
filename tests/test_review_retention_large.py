@@ -106,9 +106,9 @@ class LargeReviewRetentionTests(unittest.TestCase):
     def test_new_file_count_boundary_remains_bounded(self):
         directory = self.root / "count-boundary"
         directory.mkdir()
-        for index in range(288):
+        for index in range(384):
             (directory / f"evidence-{index}.json").write_bytes(b"{}\n")
-        self.assertEqual((288, 864), _bounded_diagnostic(directory))
+        self.assertEqual((384, 1152), _bounded_diagnostic(directory))
         original = self.snapshot(directory)
         (directory / "overflow.json").write_bytes(b"{}\n")
         with self.assertRaises(owned_run.BoundedDiagnosticLimitError):
@@ -162,7 +162,7 @@ class LargeReviewRetentionTests(unittest.TestCase):
         retained_run = self.snapshot(run.root)
         self.assertEqual(finished.to_dict(), ExactOwnedRun.open(run.root).finish("succeeded").to_dict())
         self.assertEqual(retained_run, self.snapshot(run.root))
-        print(f"FIXTURE required large package: {files}/288 files, {size}/6291456 bytes; all case declarations inspected; no live review claim.")
+        print(f"FIXTURE required large package: {files}/384 files, {size}/8388608 bytes; all case declarations inspected; no live review claim.")
 
     def test_four_to_five_mib_package_survives_upgrade_and_repeated_finish(self):
         self.assert_upgrade_survives(4, 10000, "five-mib-upgrade")
@@ -195,19 +195,19 @@ class LargeReviewRetentionTests(unittest.TestCase):
         self.assertEqual(first.to_dict(), ExactOwnedRun.open(run.root).finish("succeeded").to_dict())
         self.assertEqual(before, self.snapshot(evidence))
 
-    def test_complete_package_over_six_mib_fails_with_structured_reason(self):
+    def test_complete_package_over_eight_mib_fails_with_structured_reason(self):
         run, paths = self.large_run("required-too-large")
         first = self.preserve(run, paths)
         destination = Path(first["evidence_path"])
         before = self.snapshot(destination)
         # The required report contains one explanatory entry per inspected case.
-        # It pushes the complete package over 6 MiB; individual files still fit.
+        # It pushes the complete package over 8 MiB; individual files still fit.
         with paths["report"].open("a") as report:
-            for index in range(18000):
+            for index in range(30000):
                 report.write(f"Case {index:05d}: declared relative path is safe, mode is owner-only, link expectation is single; fixture declaration inspection passed. Expected case identity and cardinality match the declared fixture input.\n")
-        self.assertLess(paths["report"].stat().st_size, 6 * 1024 * 1024)
+        self.assertLess(paths["report"].stat().st_size, 8 * 1024 * 1024)
         self.assertGreater(first["bytes"] - len(before[Path("report.md")]) + paths["report"].stat().st_size,
-                           6 * 1024 * 1024)
+                           8 * 1024 * 1024)
         sources = self.snapshot(run.root)
         completed = subprocess.run(
             (sys.executable, "-m", "workflow_kernel", "preserve-review-evidence",
