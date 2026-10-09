@@ -171,3 +171,48 @@ mismatch, unsafe paths, conflicts and retention limits, using safe artifact-role
 filenames. Schema exits 2, incomplete/unsafe evidence 3, conflicts 6. Preserve
 safe available inputs and originals on failure. #165 report-link behavior stays
 unchanged.
+
+## Retained historical terminal validation (>=0.26.1)
+
+New assembly/preservation stay strict. Only `owned-run-finish --outcome succeeded`
+accepts `--historical-review-digests <existing-saved-inventory>` for an already
+retained exact-owned run. The option locates independently established bytes;
+fresh hashes, failed retention or schema changes grant no authority.
+
+The sole supported literal inventory SHA256 is
+`b33733a078242d51f12968fe57214d313b5f09e85c963268cc3f41db33328981`,
+for workflow `pipeline`, run `parity-1118-20261007-a`, repository
+`github.com/Design-Machines-Studio/assembly-baseplate`, original head
+`768532b154251d86ea585b730184629594e1ac5d`. This is a bounded recovery.
+
+Kernel verifies original owner metadata/CLEANUP, every saved digest, contained
+regular files without symlinks/hardlinks, complete reference closure, indexed
+receipts/report links and the shared original contract: lanes, output digests,
+finding/synthesis accounting and browser cases. Saved files cannot change or
+vanish. Diagnostic additions outside the frozen review scope remain allowed
+within existing retention limits; they grant no eligibility or coverage.
+
+The result adds `review_validation.validation: historical_compatibility` with
+original run/repository/head. It never approves current PR head
+`5c11779293aff6d08a9eea185331dbc1ff9dc844` or claims current source-bound
+coverage. Repeated validation returns unchanged evidence and the same result.
+After release/synchronization, the owner reruns only terminal validation:
+
+```sh
+"$WORKFLOW_KERNEL" owned-run-finish --run-root "$RETAINED_RUN_ROOT" \
+  --outcome succeeded --retain-diagnostics \
+  --historical-review-digests "$ORIGINAL_SAVED_INVENTORY"
+```
+
+Unknown fingerprints report the missing independent retention baseline. Keep
+retained evidence; use `assemble-review-evidence` recovery from existing outputs
+and actual source/inspection evidence, then strict preservation in a new
+exact-owned replay. Never fabricate versions, timestamps, inventories or
+inspection. Unknown execution times stay unknown; missing inspection stays
+incomplete. Do not preserve the historical original again.
+
+Terminal errors carry closed reasons, safe `artifact_role`, plain messages and
+one `next_action`; compatibility/missing/unsafe evidence exits 3, corruption or
+incomplete coverage exits 2. No arbitrary supplied paths/raw exceptions appear.
+Terminal cleanup uses the throwing validator; existing boolean callers stay
+strict.

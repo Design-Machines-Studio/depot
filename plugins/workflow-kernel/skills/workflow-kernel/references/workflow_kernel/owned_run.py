@@ -18,7 +18,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
 
-from ._files import LockHandle, PinnedDirectory, bind_durable_path
+from ._files import LockContentionError, LockHandle, PinnedDirectory, bind_durable_path
+
+
+class CorruptOwnedRunMetadataError(ValueError):
+    """Owner metadata bytes failed parsing or schema validation."""
 
 
 _METADATA = ".depot-owned-run.json"
@@ -127,7 +131,7 @@ def _load_metadata(root: Path) -> dict[str, object]:
                     break
                 total += len(chunk)
                 if total > _MAX_METADATA_BYTES:
-                    raise ValueError("owned run metadata too large")
+                    raise CorruptOwnedRunMetadataError("owned run metadata too large")
                 chunks.append(chunk)
             directory.require_identity(descriptor, _METADATA)
         finally:
@@ -135,7 +139,19 @@ def _load_metadata(root: Path) -> dict[str, object]:
     try:
         value = json.loads(b"".join(chunks).decode("utf-8"))
     except (UnicodeError, json.JSONDecodeError, RecursionError):
-        raise ValueError("invalid owned run metadata") from None
+        raise CorruptOwnedRunMetadataError("invalid owned run metadata") from None
+    try:
+        _validate_metadata_schema(value, root)
+    except (TypeError, ValueError):
+        raise CorruptOwnedRunMetadataError("invalid owned run metadata") from None
+    if _identity(root) != tuple(value["root_identity"]):
+        raise ValueError("owned run root identity changed")
+    if _identity(root.parent) != tuple(value["base_identity"]):
+        raise ValueError("owned run base identity changed")
+    return value
+
+
+def _validate_metadata_schema(value, root: Path) -> None:
     required = {
         "version", "workflow", "run_id", "root", "root_identity",
         "base_identity", "resources",
@@ -167,11 +183,6 @@ def _load_metadata(root: Path) -> dict[str, object]:
         if relative in seen:
             raise ValueError("duplicate owned run resource")
         seen.add(relative)
-    if _identity(root) != tuple(value["root_identity"]):
-        raise ValueError("owned run root identity changed")
-    if _identity(root.parent) != tuple(value["base_identity"]):
-        raise ValueError("owned run base identity changed")
-    return value
 
 
 def _remove_entry(path: Path) -> None:
@@ -218,6 +229,7 @@ class FinishReport:
     reason: str | None = None
     contains: str | None = None
     cleanup_command: str | None = None
+    review_validation: dict[str, object] | None = None
 
     def to_dict(self) -> dict[str, object]:
         result: dict[str, object] = {"status": self.status, "path": self.path}
@@ -227,6 +239,8 @@ class FinishReport:
             result["contains"] = self.contains
         if self.cleanup_command is not None:
             result["cleanup_command"] = self.cleanup_command
+        if self.review_validation is not None:
+            result["review_validation"] = self.review_validation
         return result
 
 
@@ -286,8 +300,21 @@ class ExactOwnedRun:
         return self._metadata["run_id"]
 
     @contextmanager
-    def _lock(self):
-        handle = LockHandle.acquire_bound(bind_durable_path(self.root / _LOCK))
+    def _lock(self, *, create: bool = True, review_closeout: bool = False):
+        try:
+            handle = LockHandle.acquire_bound(bind_durable_path(self.root / _LOCK), create=create)
+        except LockContentionError:
+            raise
+        except FileNotFoundError:
+            if not review_closeout:
+                raise
+            from .review_closeout import RetainedReviewValidationError
+            raise RetainedReviewValidationError("missing_evidence", "owner-metadata") from None
+        except OSError:
+            if not review_closeout:
+                raise
+            from .review_closeout import RetainedReviewValidationError
+            raise RetainedReviewValidationError("unsafe_path", "owner-metadata") from None
         try:
             yield handle
         finally:
@@ -468,40 +495,50 @@ class ExactOwnedRun:
     def finish(
         self, outcome: str, *, retain_diagnostics: bool = False,
         reason: str | None = None, contains: str | None = None,
+        historical_review_digests: str | Path | None = None,
     ) -> FinishReport:
         if outcome not in _OUTCOMES:
             raise ValueError("invalid owned run outcome")
-        with self._lock():
+        review = self.workflow in {"dm-review", "dm-review-loop", "pipeline", "pipeline-run"}
+        # Retained or historical review closeout must never recreate its lock.
+        preserved = review and (
+            historical_review_digests is not None or os.path.lexists(self.root / _CLEANUP)
+        )
+        with self._lock(create=not preserved, review_closeout=review):
             self._metadata = _load_metadata(self.root)
-            if os.path.lexists(self.root / _CLEANUP):
-                retained = self._existing_retention()
-                if outcome == "succeeded" and self.workflow in {
-                    "dm-review", "dm-review-loop", "pipeline", "pipeline-run",
-                }:
-                    from .review_closeout import has_preserved_review_evidence
-
-                    diagnostic = next((
-                        self.root / item["relative_path"]
-                        for item in self._metadata["resources"]
-                        if item["kind"] == "diagnostic"
-                    ), None)
-                    if diagnostic is None or not has_preserved_review_evidence(diagnostic):
-                        raise ValueError("retained review evidence is no longer valid")
-                return retained
-            if outcome == "succeeded" and self.workflow in {
-                "dm-review", "dm-review-loop", "pipeline", "pipeline-run",
-            }:
-                if not retain_diagnostics:
-                    raise ValueError("review evidence must be retained before successful cleanup")
-                from .review_closeout import has_preserved_review_evidence
-
+            retained = os.path.lexists(self.root / _CLEANUP)
+            from .review_closeout import (
+                validate_preserved_review_evidence, RetainedReviewValidationError,
+            )
+            if historical_review_digests is not None and (outcome != "succeeded" or not review or not retained):
+                raise RetainedReviewValidationError("historical_retention_required", "cleanup-receipt")
+            validation = None
+            if outcome == "succeeded" and review:
+                if not retained and not retain_diagnostics:
+                    raise RetainedReviewValidationError("retention_required")
                 diagnostic = next((
-                    self.root / item["relative_path"]
-                    for item in self._metadata["resources"]
+                    self.root / item["relative_path"] for item in self._metadata["resources"]
                     if item["kind"] == "diagnostic"
                 ), None)
-                if diagnostic is None or not has_preserved_review_evidence(diagnostic):
-                    raise ValueError("required review evidence is not durably validated")
+                if diagnostic is None:
+                    raise RetainedReviewValidationError("missing_evidence")
+                validation = validate_preserved_review_evidence(
+                    diagnostic, run=self, historical_review_digests=historical_review_digests,
+                )
+            if retained:
+                if outcome == "succeeded" and review:
+                    from .review_closeout import _terminal_read
+                    _terminal_read(self.root / _CLEANUP, self.root, "cleanup-receipt")
+                try:
+                    report = self._existing_retention()
+                except (OSError, TypeError, ValueError):
+                    if outcome == "succeeded" and review:
+                        raise RetainedReviewValidationError("corrupt_evidence", "cleanup-receipt") from None
+                    raise
+                if historical_review_digests is not None:
+                    from dataclasses import replace
+                    report = replace(report, review_validation=validation)
+                return report
             if retain_diagnostics:
                 return self._retain(reason or outcome, contains or "compact diagnostics")
             return self._remove_root()
