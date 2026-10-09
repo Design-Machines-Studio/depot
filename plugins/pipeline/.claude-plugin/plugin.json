@@ -9,7 +9,7 @@
   "pluginDependencies": {
     "dm-review": ">=1.88.0",
     "model-router": ">=0.13.0",
-    "workflow-kernel": ">=0.26.2"
+    "workflow-kernel": ">=0.27.0"
   },
   "optionalPluginDependencies": {
     "ned": ">=1.4.0",

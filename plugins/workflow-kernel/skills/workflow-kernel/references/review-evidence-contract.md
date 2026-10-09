@@ -249,3 +249,73 @@ Kernel dependency. Required repair/source-continuity evidence then measured
 386 files and 8,579,686 bytes; normal preservation rejected both 384 files and
 8 MiB. The final bounded allowance is 9 MiB/416 files, including room for the
 required finishing transition. Original bytes and validation remain strict.
+
+## Native Codex host provenance (>=0.27.0)
+
+`assemble-review-evidence` accepts a closed alternative lane `literal` object:
+
+```json
+{"output_ref":"review/recheck/security-output.md","native_trace_ref":"private/native-events.jsonl","native_index_ref":"private/native-index.json"}
+```
+
+Use actual T3 Code subagent host records. Retain the original private trace;
+bounded excerpts copy its selected JSONL lines exactly, in original ordinal
+order. A required bound index has exactly `schema_version:1`,
+`full_trace_digest`, `excerpt_digest`, `thread_id`, `original_line_numbers`
+and `original_ordinals`. The excerpt digest must match its exact bytes, the
+thread must match the session, and ordered line numbers equal ordinals plus one.
+The index is bounded to 64 KiB. The host independently byte-verifies and privately
+preserves the original full trace and its declared digest.
+
+Kernel validates structural witness and index consistency. It does not
+authenticate T3 origin or check the declared full-trace digest against the
+privately retained original. These are trusted host inputs, like existing
+router evidence; never describe structural acceptance as origin authentication.
+Never create router receipts for collaboration tool executions. The existing
+router literal variant and its validation are unchanged; retain every actual
+router receipt and its index for mixed runs.
+
+The native variant requires coherent session/parent/agent/turn identity, the
+assignment routing header, successful same-turn Git HEAD and clean-status observations,
+an exact completed AddFile/FileChange output, its paired exec patch/result, and subsequent
+assistant final answer and task completion. Encrypted assignment content stays
+opaque. Trace bytes are inert: commands, patches and model messages are never
+executed or interpreted as review findings. Existing declared inspection scope,
+source snapshots, recheck history, finding extraction and aggregate checks remain
+mandatory. Pairing requires a nonempty bounded call ID. Missing or mismatched
+witnesses block production coverage.
+
+For the exec witness, pass an inertly decodable literal AddFile patch with the
+absolute output path and exact content. Computed JavaScript patches and relative
+patch paths are not interpreted. Preserve unsupported original output/provenance
+as diagnostic evidence; a required affected recheck uses this supported form.
+
+Use standalone `git rev-parse HEAD` and `git status --short` (optional `rtk`
+or `rtk proxy` prefixes). The HEAD result contains exactly one hash and status
+is empty. Two closed historical read-only programs are also recognized:
+Git status/HEAD/diff-stat and bounded cache-asset lookup/remote/HEAD/status.
+Their output must prove one unambiguous HEAD and no dirty status. Arbitrary
+combined commands, printed or quoted command text, and conflicting HEAD
+observations do not establish source. A historical output lacking required
+evidence stays diagnostic; preserve it and inspect only genuinely required
+current changes rather than relabeling it.
+
+Only committed-source review is supported. Recovery binds the original observed
+commit; staged historical inspection remains supplemental evidence and cannot
+be relabeled as a later commit. Review new affected changes at a clean committed
+boundary. Native excerpts are bounded to 2 MiB, 4096 records and 512 KiB per
+record, within the unchanged whole-package retention allowance.
+
+The participant ID is `native-` plus the first 16 SHA256 hex characters of the
+actual host thread ID. Actual model/provider observations remain in the private
+trace. Missing or unclassified model identity uses the existing `not_reported`
+summary sentinel and unknown family; it never prevents otherwise evidenced
+inspection. Family classification reuses the existing normalizer. Neither
+thread token totals nor unreported charges become invented per-lane cost.
+
+Use the ordinary assembler and strict preservation afterward. A relocated
+exact-owned recovery copy may retain old companions under history and emit new
+canonical companions; original streams, seals, literals and source identities
+stay immutable. Recovery does not invoke a model or validate earlier consumer
+dispatch retroactively. Unit/native-format fixtures are development artifacts,
+never live inspection evidence.
