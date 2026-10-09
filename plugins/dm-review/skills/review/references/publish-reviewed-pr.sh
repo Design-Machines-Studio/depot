@@ -243,6 +243,7 @@ if [ "$OPERATION" = ready ]; then
     -f owner="$OWNER_NAME" -f name="$REPO_NAME" -F number="$NUMBER" > "$TEMP/feedback.json"
   jq -e --arg head "$HEAD" '.data.repository.pullRequest | .headRefOid==$head and .reviewThreads.pageInfo.hasNextPage==false and all(.reviewThreads.nodes[];.isResolved==true)' "$TEMP/feedback.json" >/dev/null || review_refuse 'actual PR feedback unsettled or incomplete'
   jq -e '.reviewDecision!="CHANGES_REQUESTED"' "$TEMP/pr.json" >/dev/null || review_refuse 'changes requested on PR'
+  jq -e '.reviewDecision!="REVIEW_REQUIRED"' "$TEMP/pr.json" >/dev/null || requirements_block 'required approving PR reviews are missing' 'settle the required PR review approval, then retry readiness.'
   # Settlement covers bodies/conversation/check evidence as well as threads.
   # Recollect once, then carry judgments only across byte-identical sources;
   # changed/new sources require host evaluation in this same owner, not a flag.

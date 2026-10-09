@@ -191,7 +191,7 @@ git -C "$REPO" ls-files --others --ignored --exclude-standard -z > "$TMP/ignored
 : > "$TMP/paths.jsonl"
 while IFS= read -r -d '' path; do
   relative "$path"
-  classification=disposable; reason=inactive-source; tracked=false; hash=missing
+  classification=disposable; reason=inactive-source; tracked=false; hash=missing; work_mode=missing
   if git -C "$REPO" cat-file -e "HEAD:$path" 2>/dev/null || git -C "$REPO" --literal-pathspecs ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then tracked=true; fi
   [ "$INACTIVE" = true ] || { classification=retained; reason=no-inactive-owner-proof; }
   [ "$CURRENT_UNFINISHED" = false ] || { classification=retained; reason=current-boundary-changed; }
@@ -203,8 +203,9 @@ while IFS= read -r -d '' path; do
   if ! path_safe "$path"; then classification=blocked; reason=symlink-path
   elif [ -d "$REPO/$path" ]; then classification=blocked; reason=directory-file-conflict
   elif [ -e "$REPO/$path" ] && [ ! -f "$REPO/$path" ]; then classification=blocked; reason=special-file
-  elif [ -f "$REPO/$path" ]; then hash="$(review_sha256 < "$REPO/$path")"; fi
-  jq -cn --arg p "$path" --arg c "$classification" --arg r "$reason" --arg h "$hash" --argjson t "$tracked" '{path:$p,classification:$c,reason:$r,hash:$h,tracked:$t}' >> "$TMP/paths.jsonl"
+  elif [ -f "$REPO/$path" ]; then hash="$(review_sha256 < "$REPO/$path")"; work_mode="$(review_stat mode "$REPO/$path")"; fi
+  index_hash="$(git -C "$REPO" --literal-pathspecs ls-files --stage -z -- "$path" | review_sha256)"
+  jq -cn --arg p "$path" --arg c "$classification" --arg r "$reason" --arg h "$hash" --arg m "$work_mode" --arg i "$index_hash" --argjson t "$tracked" '{path:$p,classification:$c,reason:$r,hash:$h,workMode:$m,indexHash:$i,tracked:$t}' >> "$TMP/paths.jsonl"
 done < "$TMP/changed"
 while IFS= read -r -d '' path; do
   relative "$path"
@@ -228,6 +229,17 @@ if [ "$MODE" = prepare ]; then
   jq -e 'all(.paths[]; .classification=="disposable" or (.tracked==false and (.reason|IN("secret-config","ignored-install-or-evidence"))))' "$TMP/plan.json" >/dev/null || refuse 'protected/current source remains; commit/push required repairs or coordinate owner'
   jq -j '.paths[] | select(.classification=="disposable") | .path,"\u0000"' "$TMP/plan.json" > "$TMP/dispose"
   while IFS= read -r -d '' path; do
+    # A successful whole-plan comparison does not authorize a later edit.
+    # Check each path's working bytes and index immediately before mutation.
+    [ "$(git -C "$REPO" rev-parse HEAD)" = "$HEAD" ] && path_safe "$path" || refuse 'checkout changed before disposal; inspect again'
+    hash=missing; work_mode=missing
+    if [ -e "$REPO/$path" ]; then
+      [ -f "$REPO/$path" ] || refuse 'path changed before disposal; inspect again'
+      hash="$(review_sha256 < "$REPO/$path")"
+      work_mode="$(review_stat mode "$REPO/$path")"
+    fi
+    index_hash="$(git -C "$REPO" --literal-pathspecs ls-files --stage -z -- "$path" | review_sha256)"
+    jq -e --arg p "$path" --arg h "$hash" --arg m "$work_mode" --arg i "$index_hash" '.paths[] | select(.path==$p) | .hash==$h and .workMode==$m and .indexHash==$i' "$TMP/plan.json" >/dev/null || refuse 'path changed before disposal; inspect again'
     if git -C "$REPO" cat-file -e "HEAD:$path" 2>/dev/null || git -C "$REPO" --literal-pathspecs ls-files --error-unmatch -- "$path" >/dev/null 2>&1; then
       git -C "$REPO" --literal-pathspecs restore --source=HEAD --staged --worktree -- "$path"
     else

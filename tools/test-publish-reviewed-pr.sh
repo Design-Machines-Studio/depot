@@ -509,6 +509,12 @@ fixture requested-changes
 export REVIEW_DECISION=CHANGES_REQUESTED
 reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
 unset REVIEW_DECISION
+fixture required-approval
+export REVIEW_DECISION=REVIEW_REQUIRED
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+assert grep -Fq 'required approving PR reviews are missing' "$TMP/rejected.out"
+assert sh -c '! grep -Fxq "## Ready to merge" "$1"' sh "$TMP/rejected.out"
+unset REVIEW_DECISION
 fixture absent-ci
 change_readiness '.readiness.checks += [{name:"missing required CI",stage:"pr",status:"pass",link:null}]'
 reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation

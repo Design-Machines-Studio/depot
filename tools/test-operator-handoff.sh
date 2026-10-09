@@ -188,7 +188,7 @@ assert bash -c '
   test "$(printf fixture | review_sha256)" = "$(printf fixture | shasum -a 256 | awk "{print \$1}")"
 ' bash "$CONTEXT" "$POINTER" "$RUN_ROOT"
 fi
-reject bash -c 'source "$1"; id() { printf "0\n"; }; review_private "$2"' bash "$CONTEXT" "$POINTER"
+reject bash -c 'source "$1"; foreign_uid=$(( $(review_stat uid "$2") + 1 )); id() { printf "%s\n" "$foreign_uid"; }; review_private "$2"' bash "$CONTEXT" "$POINTER"
 for path in "$REPO/./source.txt" "$REPO/../repository/source.txt" "$REPO//source.txt" "$REPO/source.txt/"; do
   reject bash -c 'source "$1"; review_safe_path "$2"' bash "$CONTEXT" "$path"
 done
