@@ -42,7 +42,8 @@ def fixture():
                       "required_evidence_refs": ["review/prompt.md"], "patch_ref": None},
         "inspected": {"paths": ["source.txt"], "basis": "repository",
                       "limitations": [], "missing_evidence_refs": []},
-        "literal": {"output_ref": OUTPUT_REF, "native_trace_ref": "review/synthetic-unit-trace.jsonl"},
+        "literal": {"output_ref": OUTPUT_REF, "native_trace_ref": "review/synthetic-unit-trace.jsonl",
+                    "native_index_ref": "review/synthetic-unit-index.json"},
         "result": {"status": "no_findings", "findings": [], "incomplete_reasons": []},
         # recovery exercises the production envelope shape, not provenance of
         # these authored unit fixtures; no fixture is published as live proof.
@@ -72,8 +73,8 @@ def fixture():
         ("event_msg", {
             "type": "item_completed", "thread_id": THREAD, "turn_id": TURN,
             "item": {"type": "CommandExecution", "status": "completed",
-                     "command": ["rtk git rev-parse HEAD"], "exit_code": 0,
-                     "stdout": HEAD + "\n", "stderr": ""},
+                     "command": ["/bin/bash", "-lc", "git status --short --branch && git rev-parse HEAD && git diff --stat " + HEAD + "..HEAD"], "exit_code": 0,
+                     "stdout": "## synthetic-unit-branch\n" + HEAD + "\n", "stderr": ""},
         }),
         ("response_item", {
             "type": "custom_tool_call", "name": "exec", "status": "completed",
@@ -105,11 +106,21 @@ def encoded(records):
     return b"".join(json.dumps(record, separators=(",", ":")).encode() + b"\n" for record in records)
 
 
+def index_for(records):
+    # Authored metadata exercises internal consistency, not original-host
+    # authenticity. The declared full-trace digest is not authenticated here.
+    return json.dumps({"schema_version": 1, "full_trace_digest": "sha256:" + "9" * 64,
+                       "excerpt_digest": "sha256:" + hashlib.sha256(encoded(records)).hexdigest(),
+                       "thread_id": THREAD, "original_ordinals": [r["ordinal"] for r in records],
+                       "original_line_numbers": [r["ordinal"] + 1 for r in records]}).encode()
+
+
 class NativeReviewTests(unittest.TestCase):
     def validate(self, records=None, value=None, output=OUTPUT):
         default_records, default_value = fixture()
-        return validate_native_output(encoded(default_records if records is None else records),
-                                      output, default_value if value is None else value)
+        records = default_records if records is None else records
+        return validate_native_output(encoded(records), output,
+                                      default_value if value is None else value, index_for(records))
 
     def test_valid_excerpt_derives_participant_and_reported_identity(self):
         row = self.validate()
@@ -176,13 +187,78 @@ class NativeReviewTests(unittest.TestCase):
             with self.subTest(field=field), self.assertRaises(ValueError):
                 self.validate(records, value)
 
-    def test_combined_source_command_retains_an_exact_sha_line(self):
+    def test_closed_legacy_git_program_proves_head_and_clean_status(self):
+        self.assertEqual(REVIEWER, self.validate()["reviewer"])
+
+    def test_standalone_head_requires_separate_same_turn_clean_status(self):
         records, value = fixture()
-        records[3]["payload"]["item"]["command"] = [
-            "rtk git status --short; rtk proxy git rev-parse --verify HEAD^{commit}"
-        ]
-        records[3]["payload"]["item"]["stdout"] = "unrelated diagnostic line\n" + HEAD + "\n"
+        records[3]["payload"]["item"].update(command=["/bin/bash", "-lc", "rtk proxy git rev-parse HEAD"], stdout=HEAD + "\n")
+        with self.assertRaises(ValueError): self.validate(records, value)
+        status = copy.deepcopy(records[3])
+        status["payload"]["item"].update(command=["/bin/bash", "-lc", "rtk proxy git status --short"], stdout="")
+        records.insert(4, status)
+        for i, record in enumerate(records): record["ordinal"] = i
         self.assertEqual(REVIEWER, self.validate(records, value)["reviewer"])
+        for field, replacement in (("stdout", " M source.txt\n"), ("exit_code", 1)):
+            changed = copy.deepcopy(records)
+            changed[4]["payload"]["item"][field] = replacement
+            with self.subTest(field=field), self.assertRaises(ValueError): self.validate(changed, value)
+        changed = copy.deepcopy(records)
+        changed[4]["payload"]["turn_id"] = OTHER
+        with self.assertRaises(ValueError): self.validate(changed, value)
+
+    def test_closed_asset_lookup_program_has_no_dirty_status_after_head(self):
+        records, value = fixture()
+        script = ("rtk rg --files /synthetic-unit/.codex/plugins/cache/depot"
+                  " | rtk rg 'runtime-resolution\\.md$|workflow-kernel.*SKILL\\.md$' | rtk head -30\n"
+                  "rtk git remote -v\nrtk git rev-parse HEAD\nrtk git status --short")
+        records[3]["payload"]["item"].update(command=["/bin/bash", "-lc", script],
+                                             stdout="/synthetic-unit/asset.md\norigin synthetic (fetch)\n" + HEAD + "\n")
+        self.assertEqual(REVIEWER, self.validate(records, value)["reviewer"])
+        records[3]["payload"]["item"]["stdout"] += " M source.txt\n"
+        with self.assertRaises(ValueError): self.validate(records, value)
+
+    def test_printed_quoted_control_and_multi_head_commands_cannot_rebind_source(self):
+        commands = ("printf '; git rev-parse HEAD;\\n%s\\n' " + HEAD,
+                    "rtk git rev-parse HEAD; rtk git rev-parse HEAD~1",
+                    "false && git rev-parse HEAD; echo " + HEAD,
+                    "echo 'git rev-parse HEAD'", "git rev-parse HEAD >/dev/null; echo " + HEAD,
+                    "git status --short; rtk proxy git rev-parse HEAD")
+        for command in commands:
+            for declared in (HEAD, "b" * 40):
+                records, value = fixture()
+                value["source"]["head"] = declared
+                records[3]["payload"]["item"].update(command=["/bin/bash", "-lc", command],
+                                                     stdout=HEAD + "\n" + "b" * 40 + "\n")
+                with self.subTest(command=command, declared=declared), self.assertRaises(ValueError): self.validate(records, value)
+        for stdout in (" M source.txt\n" + HEAD + "\n", "## branch\n M source.txt\n" + HEAD + "\n",
+                       "## branch\n" + HEAD + "\n" + "b" * 40 + "\n"):
+            records, value = fixture()
+            records[3]["payload"]["item"]["stdout"] = stdout
+            with self.subTest(stdout=stdout), self.assertRaises(ValueError): self.validate(records, value)
+
+    def test_missing_null_and_malformed_call_identity_never_pairs(self):
+        for replacement in (None, "", 5, True, "x" * 257, "bad id"):
+            records, value = fixture()
+            for i in (4, 6): records[i]["payload"]["call_id"] = replacement
+            with self.subTest(replacement=replacement), self.assertRaises(ValueError): self.validate(records, value)
+        records, value = fixture()
+        for i in (4, 6): del records[i]["payload"]["call_id"]
+        with self.assertRaises(ValueError): self.validate(records, value)
+
+    def test_required_index_binds_excerpt_actor_and_original_record_mapping(self):
+        records, value = fixture()
+        index = json.loads(index_for(records))
+        mutations = (("schema_version", True), ("full_trace_digest", "not-a-digest"),
+                     ("excerpt_digest", "sha256:" + "0" * 64), ("thread_id", OTHER),
+                     ("original_ordinals", list(reversed(index["original_ordinals"]))),
+                     ("original_line_numbers", [n + 1 for n in index["original_line_numbers"]]))
+        for field, replacement in mutations:
+            changed = dict(index, **{field: replacement})
+            with self.subTest(field=field), self.assertRaises(ValueError):
+                validate_native_output(encoded(records), OUTPUT, value, json.dumps(changed).encode())
+        for invalid in (b"{}", b"null", b"NaN", b" " * (64 * 1024 + 1)):
+            with self.assertRaises(ValueError): validate_native_output(encoded(records), OUTPUT, value, invalid)
 
     def test_source_identity_cannot_be_retargeted_by_envelope(self):
         records, value = fixture()
@@ -271,7 +347,7 @@ class NativeReviewTests(unittest.TestCase):
                    raw[:-5], raw + b"\n", b"[]\n", b"null\n", b'NaN\n')
         for trace in hostile:
             with self.subTest(trace_prefix=trace[:30]), self.assertRaises(ValueError):
-                validate_native_output(trace, OUTPUT, value)
+                validate_native_output(trace, OUTPUT, value, index_for(records))
         for ordinal in (-1, True, 0, 1.5):
             records, value = fixture()
             records[1]["ordinal"] = ordinal
@@ -283,7 +359,7 @@ class NativeReviewTests(unittest.TestCase):
     def test_record_and_byte_caps_reject_oversized_input(self):
         records, value = fixture()
         with self.assertRaises(ValueError):
-            validate_native_output(b" " * (2 * 1024 * 1024 + 1), OUTPUT, value)
+            validate_native_output(b" " * (2 * 1024 * 1024 + 1), OUTPUT, value, index_for(records))
         oversized = copy.deepcopy(records)
         oversized[1]["payload"]["padding"] = "x" * (512 * 1024)
         with self.assertRaises(ValueError): self.validate(oversized, value)
@@ -391,13 +467,14 @@ class MixedNativeRoutedIntakeTests(unittest.TestCase):
             "attempts": [{"status": "completed"}],
             "publication": {"output": "published"}, "transportStub": False,
         }
-        companion = validate_native_output(encoded(records), OUTPUT, native)
+        companion = validate_native_output(encoded(records), OUTPUT, native, index_for(records))
         companion.update(reviewer="synthetic-routed-unit", implemented_by="unit-router")
         dispatch_bytes = json.dumps(self.dispatch).encode()
         self.bound = {
             id(self.native_record): {
                 native["literal"]["native_trace_ref"]: encoded(records),
                 native["literal"]["output_ref"]: OUTPUT,
+                native["literal"]["native_index_ref"]: index_for(records),
             },
             id(self.current): {
                 self.current["input"]["literal"]["dispatch_receipt_ref"]: dispatch_bytes,

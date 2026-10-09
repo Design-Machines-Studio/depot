@@ -745,7 +745,7 @@ def validate_evidence_input(value: object, request: ReviewRequest) -> dict:
     }
     for key, expected in groups.items():
         actual = set(value[key]) if type(value[key]) is dict else set()
-        if key == "literal" and actual == {"output_ref", "native_trace_ref"}:
+        if key == "literal" and actual == {"output_ref", "native_trace_ref", "native_index_ref"}:
             expected = actual
         if key == "recheck":
             actual -= {"pending_transition_refs"}

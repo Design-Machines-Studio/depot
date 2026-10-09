@@ -1926,6 +1926,7 @@ def _validate_production_lane(root, record, receipts):
             return validate_native_output(
                 _bound_bytes(root, record, value["literal"]["native_trace_ref"]),
                 _bound_bytes(root, record, value["literal"]["output_ref"]), value,
+                _bound_bytes(root, record, value["literal"]["native_index_ref"]),
             )
         except (KeyError, TypeError, ValueError, UnicodeError, RecursionError):
             raise EvidenceAssemblyError("lane_validation", "incomplete_inspection") from None

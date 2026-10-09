@@ -12,10 +12,15 @@ from ._translation import reviewer_family_from_model
 
 
 _UUID = re.compile(r"[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}")
-_HEAD_COMMAND = re.compile(
-    r"(?:^|[;&\n])\s*(?:rtk\s+(?:proxy\s+)?)?git\s+rev-parse"
-    r"(?:\s+--verify)?\s+HEAD(?:\^\{commit\})?(?=$|\s*[;&\n])"
+_HEAD_COMMAND = re.compile(r"(?:rtk (?:proxy )?)?git rev-parse(?: --verify)? HEAD(?:\^\{commit\})?")
+_STATUS_COMMAND = re.compile(r"(?:rtk (?:proxy )?)?git status --(?:short|porcelain(?:=v1)?)")
+_CACHE_OBSERVATION = re.compile(
+    r"rtk rg --files /[A-Za-z0-9_./-]+/\.(?:claude|codex)/plugins/cache/depot"
+    + re.escape(" | rtk rg 'runtime-resolution\\.md$|workflow-kernel.*SKILL\\.md$' | rtk head -30\n"
+                "rtk git remote -v\nrtk git rev-parse HEAD\nrtk git status --short")
 )
+_COMMIT = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+_DIGEST = re.compile(r"sha256:[0-9a-f]{64}")
 _JSON_STRING = re.compile(r'"(?:[^"\\]|\\.)*"')
 
 
@@ -41,7 +46,40 @@ def _mapping(value):
     return value if type(value) is dict else {}
 
 
-def validate_native_output(trace_bytes, output_bytes, value):
+def _source_observation(command, stdout, base):
+    """Recognize closed read-only programs, never arbitrary shell substrings."""
+    if type(command) is not list or not all(type(x) is str for x in command) or type(stdout) is not str:
+        return None, None
+    if len(command) == 3 and command[0] in {"/bin/bash", "/usr/bin/bash", "bash"} and command[1] in {"-c", "-lc"}:
+        script = command[2]
+    elif len(command) == 1:
+        script = command[0]
+    else:
+        return None, None
+    lines = stdout.splitlines()
+    if _HEAD_COMMAND.fullmatch(script):
+        if len(lines) != 1 or _COMMIT.fullmatch(lines[0]) is None:
+            raise ValueError("ambiguous native source observation")
+        return lines[0], None
+    if _STATUS_COMMAND.fullmatch(script):
+        return None, stdout == ""
+    # Two historical observation programs remain recoverable. Their other
+    # commands cannot print a bare commit: status has a prefix, remote has a
+    # name/URL, asset lookup prints absolute paths, and diff-stat has columns.
+    git_batch = "git status --short --branch && git rev-parse HEAD && git diff --stat " + base + "..HEAD"
+    if script != git_batch and _CACHE_OBSERVATION.fullmatch(script) is None:
+        return None, None
+    hashes = [(i, line) for i, line in enumerate(lines) if _COMMIT.fullmatch(line)]
+    if len(hashes) != 1:
+        raise ValueError("ambiguous native source observation")
+    position, head = hashes[0]
+    clean = (position == 1 and lines[0].startswith("## ")) if script == git_batch else position == len(lines) - 1
+    if not clean:
+        raise ValueError("native source was not clean")
+    return head, True
+
+
+def validate_native_output(trace_bytes, output_bytes, value, index_bytes):
     """Require actual source, file-write and completion witnesses, never execute them.
 
     Excerpts may omit unrelated events, but retain original ordered host records.
@@ -65,6 +103,19 @@ def validate_native_output(trace_bytes, output_bytes, value):
         raise ValueError("invalid native host evidence")
     meta = sessions[0]
     thread, parent, agent = meta.get("id"), meta.get("parent_thread_id"), meta.get("agent_path")
+    if len(index_bytes) > 64 * 1024:
+        raise ValueError("invalid native extraction index")
+    index = json.loads(index_bytes, object_pairs_hook=_members, parse_constant=_invalid_constant)
+    fields = {"schema_version", "full_trace_digest", "excerpt_digest", "thread_id", "original_line_numbers", "original_ordinals"}
+    if (type(index) is not dict or set(index) != fields
+            or type(index["schema_version"]) is not int or index["schema_version"] != 1
+            or type(index["full_trace_digest"]) is not str or _DIGEST.fullmatch(index["full_trace_digest"]) is None
+            or index["excerpt_digest"] != "sha256:" + hashlib.sha256(trace_bytes).hexdigest()
+            or index["thread_id"] != thread
+            or index["original_ordinals"] != [r["ordinal"] for r in records]
+            or index["original_line_numbers"] != [r["ordinal"] + 1 for r in records]
+            or any(type(n) is not int for field in ("original_ordinals", "original_line_numbers") for n in index[field])):
+        raise ValueError("invalid native extraction index")
     spawn = _mapping(_mapping(_mapping(meta.get("source")).get("subagent")).get("thread_spawn"))
     if (meta.get("originator") != "T3 Code" or meta.get("thread_source") != "subagent"
             or not all(type(x) is str and _UUID.fullmatch(x) for x in (thread, parent))
@@ -105,20 +156,20 @@ def validate_native_output(trace_bytes, output_bytes, value):
     if len(contexts) != 1 or not assignments:
         raise ValueError("missing native assignment evidence")
     assignment_ordinal = min(r["ordinal"] for r in assignments)
-    source_seen = False
+    heads, statuses = [], []
     for record in before:
         payload, item = record["payload"], _mapping(record["payload"].get("item"))
-        command = item.get("command")
         if (record.get("type") == "event_msg" and payload.get("type") == "item_completed"
                 and record["ordinal"] > assignment_ordinal
                 and payload.get("thread_id") == thread and _turn(payload) == turn
                 and item.get("type") == "CommandExecution" and item.get("status") == "completed"
                 and type(item.get("exit_code")) is int and item["exit_code"] == 0
-                and type(command) is list and all(type(x) is str for x in command)
-                and any(_HEAD_COMMAND.search(x) for x in command)
-                and type(item.get("stdout")) is str
-                and value["source"]["head"] in item["stdout"].splitlines()):
-            source_seen = True
+                ):
+            head, clean = _source_observation(item.get("command"), item.get("stdout"), value["source"]["base"])
+            if head is not None:
+                heads.append(head)
+            if clean is not None:
+                statuses.append(clean)
     patch = "*** Add File: " + path + "\n" + "".join("+" + line + "\n" for line in text.splitlines())
     calls = []
     for record in before:
@@ -133,7 +184,10 @@ def validate_native_output(trace_bytes, output_bytes, value):
                 except ValueError:
                     continue
             if any(patch in literal for literal in strings):
-                calls.append(payload.get("call_id"))
+                call_id = payload.get("call_id")
+                if type(call_id) is not str or re.fullmatch(r"[A-Za-z0-9_-]{1,256}", call_id) is None:
+                    raise ValueError("invalid native call identity")
+                calls.append(call_id)
     results = [r for r in after if r.get("type") == "response_item"
                and r["payload"].get("type") == "custom_tool_call_output"
                and r["payload"].get("call_id") in calls]
@@ -142,7 +196,8 @@ def validate_native_output(trace_bytes, output_bytes, value):
               and r["payload"].get("phase") == "final_answer" and _turn(r["payload"]) == turn]
     completions = [r for r in after if r.get("type") == "event_msg"
                    and r["payload"].get("type") == "task_complete" and _turn(r["payload"]) == turn]
-    if not source_seen or len(calls) != 1 or len(results) != 1 or len(finals) != 1 or len(completions) != 1:
+    if (set(heads) != {value["source"]["head"]} or not statuses or statuses[-1] is not True
+            or len(calls) != 1 or len(results) != 1 or len(finals) != 1 or len(completions) != 1):
         raise ValueError("incomplete native host evidence")
     for record in (*results, *finals, *completions):
         payload = record["payload"]
@@ -177,6 +232,6 @@ def validate_native_output(trace_bytes, output_bytes, value):
             "attempted_provider": meta.get("model_provider") or "unknown",
             "implemented_by": "codex-collaboration", "provider": meta.get("model_provider") or "unknown",
             "model": model, "implementer_family": "unknown",
-            "reviewer_family": family, "resolution_reason": "actual-native-host-completion",
+            "reviewer_family": family, "resolution_reason": "native-host-witness-validated",
             "evidence_refs": [value["literal"]["output_ref"]], "raw_output_ref": "review/pending-output.json",
             "raw_output_digest": "sha256:" + "0" * 64, "finding_count": len(value["result"]["findings"])}
