@@ -179,6 +179,8 @@ settings.json, CLAUDE.md, and starter files for each project type. Replace all `
 
 **Note:** `block-bare-craft.sh` is the hook template in `references/hooks.md`. It blocks bare `php craft` and `composer` commands, requiring `ddev craft` and `ddev composer` instead.
 
+**Plugin hooks:** dm-review registers its review completion hook for SessionStart and Stop from its own plugin bundle. Keep each template's `pre-stop-check.sh` Stop entry and existing settings unchanged. Do not add the review hook to project `settings.json`.
+
 ---
 
 ## CLAUDE.md Templates
@@ -196,9 +198,12 @@ For Assembly Baseplate/Fixtures, also declare the Assembly prototype as the
 definitive HTML/Live Wires/component and Datastar interaction baseline, with
 source comparison and matched browser save/reload proof. Link existing
 prototype UX task/persona selection through dm-review’s `ui-case-selection.md`.
-Include status commands and the safe detached exact-head alternative when the
-feature branch is already checked out elsewhere; retain the maintained
-instance. Carry these same instructions into the generated AGENTS.md; do not create a second registry.
+Include status commands. For selected Assembly development checkouts, commit/push
+and verify the head, normally detach only the owned producer worktree, then
+select the branch before browser capture and complete preservation. Retain
+producer checkout/state and unfinished evidence until publication and cleanup. Foreign occupancy
+blocks until that owner's exact handoff; never detach/remove a foreign owner.
+Retain the maintained instance. Carry this into generated AGENTS.md; no second registry.
 
 ### go-templ-datastar
 
@@ -223,9 +228,13 @@ This file is the routing document for Claude Code. Critical rules live here; det
 - Status command: [existing exact command]
 - Rebuild/restart: [existing exact command or directly linked runbook]
 
-Use ordinary Git in the clean, available serving checkout to select the feature
-branch, or its exact detached commit when that branch is already checked out
-elsewhere. Preserve owned edits and fingerprint them for in-place review; name
+For selected Assembly development checkouts, commit/push and verify the head
+before normally detaching only the owned producer worktree. Select the branch
+before browser capture and complete preservation; retain producer checkout,
+state and unfinished evidence until publication and destructive cleanup. Foreign occupancy
+blocks until that owner's exact handoff; never detach/remove a foreign owner.
+For other Go projects, select the feature branch with ordinary Git.
+Preserve owned edits and fingerprint them for in-place review; name
 unrelated dirty or concurrent ownership collisions. Rebuild before claiming the
 new source is served. Keep the same domain, service, data and configuration.
 Check incompatible migrations before maintenance; never reset shared data.
@@ -596,9 +605,10 @@ This file is the routing document for Claude Code.
 - Status command: [existing exact command]
 - Rebuild/restart: [existing exact command or directly linked runbook]
 
-Use ordinary Git in the clean, available serving checkout to select the feature
-branch, or its exact detached commit when that branch is already checked out
-elsewhere. Preserve owned edits and fingerprint them for in-place review; name
+For Craft repositories only, use ordinary Git in the clean, available serving checkout
+to select the feature branch, or use the detached exact-head alternative when
+that branch is occupied elsewhere.
+Preserve owned edits and fingerprint them for in-place review; name
 unrelated dirty or concurrent ownership collisions. Rebuild before claiming the
 new source is served. Keep the same domain, service, data and configuration.
 Check incompatible migrations before maintenance; never reset shared data.

@@ -141,7 +141,7 @@ done < <(find "$ROOT/plugins/pipeline/agents" "$ROOT/plugins/dm-review/agents" "
 # concrete invocation instructions. OpenRouter's own transport cards remain in
 # its explicit provider allowlist above this orchestration boundary.
 while IFS= read -r card; do
-  if grep -Ein -- '(model tier|(^|[^[:alnum:]_])(opus|sonnet|haiku|fable|kimi)([^[:alnum:]_]|$)|deepseek/|qwen/|x-ai/|moonshotai/|gpt-[0-9]|claude-fable|codex exec|claude -p)' "$card" > "$TMP/card-leaks"; then
+  if grep -Ein -- '(model tier|(^|[^[:alnum:]_])(opus|sonnet|haiku|fable|kimi)([^[:alnum:]_]|$)|deepseek/|qwen/|x-ai/|moonshotai/|gpt-[0-9]|claude-fable|codex[[:space:]]+exec([^[:alnum:]_-]|$)|claude -p)' "$card" > "$TMP/card-leaks"; then
     sed -n '1,10p' "$TMP/card-leaks" >&2
     fail "concrete participant leaked into routed card: ${card#$ROOT/}"
   fi
@@ -256,6 +256,6 @@ grep -Fq 'role router unavailable' "$TMP/floor-error" || fail 'missing router re
 
 # Routing never weakens zero-deferral.
 grep -q 'Every retained P1, P2, and P3 finding is mandatory work' "$ROOT/plugins/dm-review/skills/review/SKILL.md" || fail 'dm-review zero-deferral missing'
-grep -q 'every retained P1/P2/P3 must be fixed and verified' "$ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md" || fail 'Pipeline zero-deferral missing'
+grep -q 'Fix/recheck every retained P1/P2/P3; no deferral.' "$ROOT/plugins/pipeline/agents/workflow/execution-orchestrator.md" || fail 'Pipeline zero-deferral missing'
 
 printf 'provider-neutral-routing: passed\n'

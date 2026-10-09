@@ -369,7 +369,7 @@ for active_command in \
   "$REPO_ROOT/plugins/dm-review/skills/dm-review-loop/SKILL.md"; do
   reject_text "$active_command" '--allow-defer-p3' "${active_command#$REPO_ROOT/} retires allow-defer-p3"
 done
-require_text "$pipeline_orchestrator" 'one **focused role review**' "Pipeline keeps focused proportional per-chunk review"
+require_text "$pipeline_orchestrator" 'One read-only `review-fast` participant, or `review-deep` for logic and' "Pipeline keeps focused proportional per-chunk review"
 require_text "$pipeline_orchestrator" 'validated final dm-review mode' "Pipeline runs the approved final review mode"
 require_text "$pipeline_orchestrator" 'Re-run only the affected lanes' "Pipeline verifies repairs with affected lanes"
 require_text "$pipeline_orchestrator" 'whole selected roster only when prior coverage was incomplete' "Pipeline limits repeated final-review fan-out"
@@ -395,10 +395,10 @@ for zero_deferral_surface in \
   reject_text "$zero_deferral_surface" 'P3 advisories' "${zero_deferral_surface#$REPO_ROOT/} rejects deferred P3 evidence"
   reject_text "$zero_deferral_surface" 'P3 stays advisory' "${zero_deferral_surface#$REPO_ROOT/} rejects clean-with-P3 policy"
 done
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.86.0"' "canonical dm-review version is 1.86.0"
-require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.86.0"' "generated dm-review version is 1.86.0"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.72.1"' "canonical Pipeline version is 1.72.1"
-require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.85.0"' "generated Pipeline dependency floor is current"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.87.0"' "canonical dm-review version is 1.87.0"
+require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.87.0"' "generated dm-review version is 1.87.0"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.73.0"' "canonical Pipeline version is 1.73.0"
+require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.87.0"' "generated Pipeline dependency floor is current"
 
 printf "Synthesis identity fixtures\n"
 base_id=$(fixture_finding_id \

@@ -8,7 +8,10 @@ Workflow Kernel.
 
 ## 1. Ref registry
 
-Every worktree and branch the automation creates is appended to the run's durable exact-resource registry **in the same creation action**, never reconstructed afterward from a glob. `kind` is one of `worktree`, `chunk-branch`, `review-branch`, `feature-branch`. Capture the entry status, registered-worktree set, and before state inside the exact-owned run root so completion compares against the baseline rather than demanding that pre-existing changes disappear.
+Register every created worktree/branch **in the same creation action**, never
+from globs. `kind`: `worktree|chunk-branch|review-branch|feature-branch`. Capture
+entry status, registered worktrees and before state in the exact-owned root;
+completion compares the baseline and preserves pre-existing changes.
 
 - **Nothing is deleted outside exact creation records.** Unregistered refs are foreign.
 - **Nothing registered is silently dropped.** Every registered ref appears in the final inventory with a disposition, even if that disposition is "kept".
@@ -22,8 +25,9 @@ it is foreign.
 
 ## 2. The cleanup phase is mandatory
 
-It runs on success, every failure/abort, and every user-gate answer before
-reporting. Exiting without it is a contract violation.
+Terminal cleanup runs before reporting on success/failure/abort. Provisional
+`awaiting_ui` retains owner resources for acceptance, repairs and actual ready;
+per-chunk eligible cleanup still runs. Skipping terminal cleanup violates this contract.
 
 Cleanup is plain in-process Git, never model-delegated. The host uses the same
 sequence for `EXIT`, `SIGINT`, and `SIGTERM`; a pre-execution abort records an
@@ -39,20 +43,78 @@ means incomplete delivery. Read-only review grants no repair authority. Keep
 runtime evidence in its existing artifact location; avoid unsolicited lessons.
 
 After the last UI repair, rebuild/recheck the maintained site and leave the
-reviewed feature branch or exact detached head available for the operator.
+reviewed feature branch available for the operator.
 Report `Preview: <domain> — <serving checkout> — <branch/head>` with existing
 browser/build proof or the concrete blocker. Never repoint the server to an
 implementation worktree, restore main by default or remove the serving folder.
 
+## Selected Assembly development source
+
+Standing disposal applies only to the selected canonical Assembly development
+checkout/dmXXX domain. Before mutation inspect its complete current
+owner/lease/handoff set; age, filenames, narrative completion and latest-run
+searches prove nothing. Unreadable or conflicting ownership blocks
+that checkout: name the missing release/record; never move the preview.
+
+Completed/inactive source leftovers are disposable even without per-file
+creation records. Preserve active owners, current unfinished repairs, required
+review evidence, .env/secrets, databases, uploads, persistent volumes and
+install-local configuration. Resolve protected paths from actual runbook/service
+bindings and containment, including extensionless and nested state. This exception
+never authorizes disposal in another repository or weakens resource ownership.
+
+Use `canonical-checkout.sh inspect|prepare|finish` from the coherent dm-review
+bundle with exact `--repository-root`, canonical `--repository`, and
+`--target-branch` and exact reviewed `--delivered-head` in every operation. `--binding-file` is private host-interpreted existing install
+evidence: `kind: assembly-development`, `repository`, physical `checkout`,
+existing `domain`, bounded tracked `sourceRanges` (`path,startLine,endLine`) and
+absolute `protectedPaths`. Include every relevant source/config/data binding;
+the helper checks containment/ranges, not prose semantics. Supply the current
+native `--current-context` and all exact `--owner-context` references from host
+ownership inspection. Complete native pointers with matching exact-owned
+metadata provide inactive handoff proof; active, malformed or missing records
+block. Other host leases use their existing release mechanism, never invented
+pointers. No pointer search or second registry.
+
+`inspect` inventories NUL-safe Git names in deduplicated files; `prepare`
+requires that private `--inspection` unchanged across source/index/owner/binding
+facts. `--keep-path` protects current-run changes; changed current boundaries
+are retained automatically. Restore/remove only individual literal disposable
+paths. Symlinks, directory/file conflicts and protected descendants block;
+no broad reset/clean/prune/force checkout. Ignored install/evidence stays protected.
+
+Commit, push and verify the exact delivered head before branch transfer.
+Pass this owner's exact `--implementation-root`; normal detach frees its branch
+without deleting the producer checkout, state or unfinished evidence. Browser
+preparation precedes complete preservation: select the branch in the canonical
+folder, capture required cases, then seal complete coverage before publication
+or destroying current review resources. Existing `--preservation` is optional
+and grants no disposal authority. Foreign occupancy names that
+owner's exact release action; never detach/remove a foreign owner. Keep unique
+history and receipts. Publish from the retained producer with its original state
+and approved `--feature-branch`; remove owned worktrees only after its last call.
+
+`finish` runs after final report/evidence writes on success, failure, abort and
+interruption. It checks clean source in both supplied checkouts, the reviewed
+branch/head and absence of each exact-owned `--residue-path` supplied from the
+existing cleanup inventory (including ignored artifacts and empty directories).
+Preserve evidence first. Read-only `finish` needs no disposable owner/binding
+state; mutation still requires it. Check used roots after last writes and before
+removal, then verify removed paths are absent.
+Pending cleanup means Not ready with paths and agent action. Keep the preview
+and source/assets/build/Fixture proof; Git/status/HTTP200 and fixtures cannot
+supply it. Live-domain proof follows publication/synchronization on the next
+approved Assembly run; source fixtures authorize no live cleanup.
+
 ## Final readiness
 
 When a run captures browser artifacts, load `browser-artifact-cleanup.md` before
-capture and apply it at closeout, including standalone visual review. Use exact
-owned paths and preserve linked evidence before removing disposable copies.
+capture and apply it at closeout, including standalone visual review. Preserve
+linked evidence before removing exact owned disposable copies.
 After all report/receipt writes, check every used checkout against its baseline.
 Deliver intentional changes and remove run-owned residue before reporting
 `Next chunk: ready`; otherwise name exact paths and blockers. Preserve foreign
-work and the running feature preview. A clean code verdict does not prove cleanup.
+work and the running feature preview. Code verdicts never prove cleanup.
 
 ## 3. Safe-to-delete decision table
 

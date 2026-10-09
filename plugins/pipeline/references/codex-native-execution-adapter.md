@@ -75,10 +75,32 @@ explicitly receipted replacement. Project rich feedback into kernel
 references.
 
 **Automatic closeout:** Load dm-review's `automatic-implementation-closeout.md`.
-Push and verify the integrated PR head, then continue through the existing final
-gate without another prompt or standalone loop. Repair pushes advance this owner
-and cause affected rechecks, never recursive review. Preserve final-head evidence
-before cleanup or report the exact blocker.
+After plan/prompt approval, commit/push and verify the candidate branch, then
+run the existing independent final review, repair and affected recheck before
+PR creation. Preserve the request's `terminalModelReportOwner` unchanged as
+`TERMINAL_MODEL_REPORT_OWNER`: `pipeline` defers both create and ready to the
+parent after mandatory caller verification; `pipeline-run` executes Step 4c's
+seams after its own corresponding checks. Return exact committed/pushed
+candidate, producer/readiness and preserved source/browser references without
+finishing the parent owner or starting another loop. Missing/invalid owner
+blocks publication. Use `publish-reviewed-pr.sh` with the exact caller arguments;
+never bypass it with bare `gh`. Keep PR-only CI
+pending until creation and keep the draft until actual final-head checks,
+feedback and required designer UI acceptance pass. Repair pushes advance this
+same owner, never a duplicate broad review. Pre-PR feedback is `not_applicable`;
+an unchanged covered head with zero findings waits for CI/feedback without
+invoking `review-next-action.sh`. Only actual source, supported finding or
+rendered automation gaps invoke the selector. Preserve final-head producer
+source/browser evidence before cleanup or report the exact blocker.
+
+The Codex root owner alone uses `review-owner-context.sh` bind after approval
+and phase at actual execution/check/UI/merge-wait/terminal boundaries. Pass the
+exact SessionStart context ref to worker packets as read-only context; workers
+never bind the parent session. Use native SessionStart/Stop input only. With
+hooks disabled/unavailable, report `hook activation unavailable`, omit binding
+and still execute the mandatory publication producer gate. Clear only the
+root's own completed binding before cleanup. `noMergeOnCompletion=true` is
+mandatory; missing or false legacy controls never authorize agent merge.
 
 **Review adapter:** Codex sessions do not expose a generic nested `Skill(skill="dm-review:review", ...)` callable. Use this risk-tiered contract in the current orchestrator context:
 
@@ -158,5 +180,16 @@ is deterministic Git executed by the orchestrator in-process. It is never
 delegated to model-router or any participant. Deleting refs is not a judgment
 task, and a worker sandbox cannot be trusted to report honestly which refs
 survived.
+
+For selected Assembly development checkouts, use the same
+`canonical-checkout.sh inspect/prepare/finish` policy as direct review, through
+`repo-cleanup-contract.md`. Preserve producer roots and receipts through their
+last calls; normal owned detach precedes required browser capture and complete
+preservation. `awaiting_ui` is nonterminal: retain the same owner, checkout,
+root/state, evidence and private index for acceptance and requested UI repairs.
+Resume executing/checking, refresh affected evidence and feedback, and complete
+actual ready before terminal model/cost generation or destructive cleanup.
+No new review loop or consumer restart; source-only work finishes normally
+after ready and owner alone merges. Finish checks follow final writes.
 
 The Codex adapter does not get a weaker gate than the Claude path. If `codex_native` cannot execute the cleanup phase, that is a pipeline-blocking failure, not a degradation.

@@ -5,6 +5,22 @@ description: Assembly governance application development with Go, Templ, and Dat
 
 # Assembly Development Skill
 
+## Development checkout closeout
+
+For an explicitly selected canonical development checkout/domain, use dm-review's
+`repo-cleanup-contract.md` and `canonical-checkout.sh inspect/prepare/finish`
+standing policy. Exact existing owner/lease/handoff evidence must prove old work
+inactive before tracked/untracked source disposal; per-file historical records
+are unnecessary. Preserve active/current work and actual install-local bindings.
+Deliver/cover repairs, preserve evidence, then release an owned implementation
+branch by normal detach and select the real reviewed branch in the canonical
+folder. Retain producer roots through their last calls. After final artifact
+writes, verify source cleanliness and exact-owned residue absence on every
+terminal path. Pending cleanup is Not ready; success reports Workspace: clean.
+Keep the established Fixture composition/domain and persistent resources.
+Source fixtures do not prove installed enforcement: after publication/sync, the
+next approved normal run must verify actual domain/source/assets/build identity.
+
 ## Docker Status
 !`docker compose ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || echo "Docker not running"`
 

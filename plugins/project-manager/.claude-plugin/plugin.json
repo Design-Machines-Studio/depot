@@ -1,7 +1,7 @@
 {
   "name": "project-manager",
   "description": "Project management: LT10 methodology, Notion-integrated sprint planning, and GitHub-native cross-repository Assembly coordination",
-  "version": "1.20.1",
+  "version": "1.20.2",
   "author": {
     "name": "Design Machines"
   },
@@ -13,7 +13,7 @@
   },
   "optionalPluginDependencies": {
     "model-router": ">=0.12.0",
-    "dm-review": ">=1.85.0",
+    "dm-review": ">=1.87.0",
     "workflow-kernel": ">=0.25.0"
   },
   "capabilities": {
@@ -22,30 +22,97 @@
         "id": "lt10",
         "name": "LT10 Methodology",
         "description": "Project management methodology based on Louder Than Ten principles for client services and creative agencies",
-        "triggers": ["how to estimate", "client scope creep", "burn rate", "ROM estimate", "when to use agile", "how to price a project", "project buffer", "RACI matrix", "write a SOW"],
-        "tags": ["project-management", "estimation", "scoping", "pricing", "methodology"]
+        "triggers": [
+          "how to estimate",
+          "client scope creep",
+          "burn rate",
+          "ROM estimate",
+          "when to use agile",
+          "how to price a project",
+          "project buffer",
+          "RACI matrix",
+          "write a SOW"
+        ],
+        "tags": [
+          "project-management",
+          "estimation",
+          "scoping",
+          "pricing",
+          "methodology"
+        ]
       },
       {
         "id": "planner",
         "name": "Sprint Planner",
         "description": "Explicit Notion-based personal and client sprint planning with Userback triage",
-        "mcpDependencies": ["notion", "ai-memory", "userback"],
-        "triggers": ["plan my Notion sprint", "personal sprint planning", "Notion todos", "run sprint-plan", "userback feedback", "content planning", "meeting prep", "sprint velocity"],
-        "tags": ["sprint-planning", "notion", "task-management", "userback", "velocity"]
+        "mcpDependencies": [
+          "notion",
+          "ai-memory",
+          "userback"
+        ],
+        "triggers": [
+          "plan my Notion sprint",
+          "personal sprint planning",
+          "Notion todos",
+          "run sprint-plan",
+          "userback feedback",
+          "content planning",
+          "meeting prep",
+          "sprint velocity"
+        ],
+        "tags": [
+          "sprint-planning",
+          "notion",
+          "task-management",
+          "userback",
+          "velocity"
+        ]
       },
       {
         "id": "assembly-coordinator",
         "name": "Assembly Planning Coordinator",
         "description": "GitHub-native cross-repository Assembly planning pulse, provider-neutral execution-role assignment, scope guard, and bounded independent plan comparison",
-        "triggers": ["fresh Assembly planning session", "Assembly Coordination Project", "next Assembly development chunk", "completed Assembly PR follow-up", "Fixture dependency planning", "bounded Pipeline prompt", "Assembly tooling scope creep", "compare Assembly plans", "independent planning opinion", "architect challenge sequence", "assign execution roles"],
-        "tags": ["assembly", "coordination", "github", "cross-repository", "scope-guard", "fixture-planning", "role-routing", "plan-comparison"]
+        "triggers": [
+          "fresh Assembly planning session",
+          "Assembly Coordination Project",
+          "next Assembly development chunk",
+          "completed Assembly PR follow-up",
+          "Fixture dependency planning",
+          "bounded Pipeline prompt",
+          "Assembly tooling scope creep",
+          "compare Assembly plans",
+          "independent planning opinion",
+          "architect challenge sequence",
+          "assign execution roles"
+        ],
+        "tags": [
+          "assembly",
+          "coordination",
+          "github",
+          "cross-repository",
+          "scope-guard",
+          "fixture-planning",
+          "role-routing",
+          "plan-comparison"
+        ]
       },
       {
         "id": "agent-message-board",
         "name": "Agent Message Board",
         "description": "Optional source-linked local message exchange between agent sessions",
-        "triggers": ["agent message board", "shared agent handoff", "cross-project agent message", "reply to an agent handoff", "read source-linked agent messages"],
-        "tags": ["agents", "coordination", "messages", "source-links"]
+        "triggers": [
+          "agent message board",
+          "shared agent handoff",
+          "cross-project agent message",
+          "reply to an agent handoff",
+          "read source-linked agent messages"
+        ],
+        "tags": [
+          "agents",
+          "coordination",
+          "messages",
+          "source-links"
+        ]
       }
     ],
     "agents": [],

@@ -126,6 +126,73 @@ PYEOF
   printf "  ${GREEN}OK${RESET}    Claude cache lookups include Codex fallbacks\n"
 }
 
+check_plugin_hooks() {
+  local result
+  result=$(REPO_ROOT="$REPO_ROOT" python3 << 'PYEOF'
+from pathlib import Path
+import json
+import os
+import re
+
+repo = Path(os.environ["REPO_ROOT"])
+# Lifecycle events both Claude Code and Codex deliver to plugin hooks.
+shared_events = {
+    "PreToolUse", "PostToolUse", "PermissionRequest", "PreCompact", "PostCompact",
+    "SessionStart", "SessionEnd", "UserPromptSubmit", "SubagentStart", "SubagentStop", "Stop",
+}
+# Both harnesses set CLAUDE_PLUGIN_ROOT for plugin hook commands.
+command_pattern = re.compile(r'^"\$\{CLAUDE_PLUGIN_ROOT\}/([A-Za-z0-9_./-]+)"( [a-z-]+)?$')
+issues = []
+
+for hooks_path in sorted((repo / "plugins").glob("*/hooks/hooks.json")):
+    plugin_dir = hooks_path.parent.parent
+    rel = hooks_path.relative_to(repo)
+    try:
+        config = json.loads(hooks_path.read_text())
+    except json.JSONDecodeError as error:
+        issues.append(f"{rel}: invalid JSON ({error})")
+        continue
+    events = config.get("hooks") if isinstance(config, dict) else None
+    if not isinstance(events, dict) or not events:
+        issues.append(f"{rel}: expected a non-empty hooks object")
+        continue
+    for event, groups in events.items():
+        if event not in shared_events:
+            issues.append(f"{rel}: {event} is not delivered by both Claude and Codex")
+        for group in groups if isinstance(groups, list) else [None]:
+            handlers = group.get("hooks") if isinstance(group, dict) else None
+            if not isinstance(handlers, list) or not handlers:
+                issues.append(f"{rel}: {event} group has no hooks list")
+                continue
+            for handler in handlers:
+                if not isinstance(handler, dict) or handler.get("type") != "command":
+                    issues.append(f"{rel}: {event} handler must be a command")
+                    continue
+                match = command_pattern.match(str(handler.get("command", "")))
+                if not match:
+                    issues.append(f"{rel}: {event} command must run a quoted ${{CLAUDE_PLUGIN_ROOT}} script")
+                    continue
+                script = plugin_dir / match.group(1)
+                if ".." in Path(match.group(1)).parts or not script.is_file() or not os.access(script, os.X_OK):
+                    issues.append(f"{rel}: {event} script {match.group(1)} is missing or not executable")
+
+for issue in issues:
+    print(issue)
+PYEOF
+)
+
+  if [ -n "$result" ]; then
+    while IFS= read -r issue; do
+      [ -z "$issue" ] && continue
+      printf "  ${RED}FAIL${RESET}  %s\n" "$issue"
+    done <<< "$result"
+    printf "  ${YELLOW}FIX${RESET}   Keep plugin hooks on shared events and point them at executable bundle scripts\n"
+    return 1
+  fi
+
+  printf "  ${GREEN}OK${RESET}    Plugin hooks use shared events and executable bundle scripts\n"
+}
+
 main() {
   local any_failed=0
 
@@ -144,6 +211,11 @@ main() {
 
   printf "\n${BOLD}Codex component paths:${RESET}\n"
   if ! check_codex_component_paths; then
+    any_failed=1
+  fi
+
+  printf "\n${BOLD}Plugin hooks:${RESET}\n"
+  if ! check_plugin_hooks; then
     any_failed=1
   fi
 

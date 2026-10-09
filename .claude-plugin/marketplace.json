@@ -69,7 +69,7 @@
     {
       "name": "project-manager",
       "source": "./plugins/project-manager",
-      "version": "1.20.1",
+      "version": "1.20.2",
       "author": {
         "name": "Design Machines"
       },
@@ -141,7 +141,7 @@
     {
       "name": "assembly",
       "source": "./plugins/assembly",
-      "version": "3.17.1",
+      "version": "3.17.2",
       "author": {
         "name": "Design Machines"
       },
@@ -236,7 +236,7 @@
     {
       "name": "project-scaffolder",
       "source": "./plugins/project-scaffolder",
-      "version": "1.10.2",
+      "version": "1.11.0",
       "author": {
         "name": "Design Machines"
       },
@@ -285,7 +285,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.86.0",
+      "version": "1.87.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -363,7 +363,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.72.1",
+      "version": "1.73.0",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
