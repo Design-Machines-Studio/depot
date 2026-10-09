@@ -73,6 +73,7 @@ def fixture():
         ("event_msg", {
             "type": "item_completed", "thread_id": THREAD, "turn_id": TURN,
             "item": {"type": "CommandExecution", "status": "completed",
+                     "cwd": "file:///synthetic-unit-repository",
                      "command": ["/bin/bash", "-lc", "git status --short --branch && git rev-parse HEAD && git diff --stat " + HEAD + "..HEAD"], "exit_code": 0,
                      "stdout": "## synthetic-unit-branch\n" + HEAD + "\n", "stderr": ""},
         }),
@@ -217,6 +218,45 @@ class NativeReviewTests(unittest.TestCase):
         self.assertEqual(REVIEWER, self.validate(records, value)["reviewer"])
         records[3]["payload"]["item"]["stdout"] += " M source.txt\n"
         with self.assertRaises(ValueError): self.validate(records, value)
+
+    def test_standalone_source_pair_requires_order_and_same_normalized_cwd(self):
+        def pair():
+            records, value = fixture()
+            records[3]["payload"]["item"].update(command=["/bin/bash", "-lc", "rtk proxy git rev-parse HEAD"], stdout=HEAD + "\n")
+            status = copy.deepcopy(records[3])
+            status["payload"]["item"].update(command=["/bin/bash", "-lc", "rtk proxy git status --short"], stdout="")
+            records.insert(4, status)
+            for i, r in enumerate(records): r["ordinal"] = i
+            return records, value
+        records, value = pair()
+        records[4]["payload"]["item"]["cwd"] = "file://localhost/synthetic-unit-repository/."
+        self.assertEqual(REVIEWER, self.validate(records, value)["reviewer"])
+        for cwd in ("file:///other-repository", None, "file:///synthetic-unit-repository/../other", "https://example.test/repo"):
+            records, value = pair()
+            records[4]["payload"]["item"]["cwd"] = cwd
+            with self.subTest(cwd=cwd), self.assertRaises(ValueError): self.validate(records, value)
+        records, value = pair()
+        records[3], records[4] = records[4], records[3]
+        for i, r in enumerate(records): r["ordinal"] = i
+        with self.assertRaises(ValueError): self.validate(records, value)
+        records, value = pair()
+        dirty = copy.deepcopy(records[4]);dirty["payload"]["item"]["stdout"] = " M source.txt\n"
+        records.insert(5, dirty)
+        for i, r in enumerate(records): r["ordinal"] = i
+        with self.assertRaises(ValueError): self.validate(records, value)
+
+    def test_conflicting_head_context_and_missing_combined_cwd_are_blocked(self):
+        records, value = fixture()
+        records[3]["payload"]["item"].pop("cwd")
+        with self.assertRaises(ValueError): self.validate(records, value)
+        for different in ("head", "cwd"):
+            records, value = fixture()
+            other = copy.deepcopy(records[3])
+            if different == "head": other["payload"]["item"]["stdout"] = "## branch\n" + "b" * 40 + "\n"
+            else: other["payload"]["item"]["cwd"] = "file:///other-repository"
+            records.insert(4, other)
+            for i, r in enumerate(records): r["ordinal"] = i
+            with self.subTest(different=different), self.assertRaises(ValueError): self.validate(records, value)
 
     def test_printed_quoted_control_and_multi_head_commands_cannot_rebind_source(self):
         commands = ("printf '; git rev-parse HEAD;\\n%s\\n' " + HEAD,

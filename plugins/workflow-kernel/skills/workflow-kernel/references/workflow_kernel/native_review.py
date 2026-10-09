@@ -6,6 +6,7 @@ import json
 import re
 from datetime import datetime
 from pathlib import PurePosixPath
+from urllib.parse import unquote, urlsplit
 
 from .redaction import contains_secret_shape
 from ._translation import reviewer_family_from_model
@@ -77,6 +78,19 @@ def _source_observation(command, stdout, base):
     if not clean:
         raise ValueError("native source was not clean")
     return head, True
+
+
+def _source_cwd(value):
+    """Compare recorded locations without accessing historical filesystems."""
+    if type(value) is not str:
+        raise ValueError("missing native source location")
+    parsed = urlsplit(value)
+    path = unquote(parsed.path)
+    if (parsed.scheme != "file" or parsed.netloc not in {"", "localhost"}
+            or parsed.query or parsed.fragment or not PurePosixPath(path).is_absolute()
+            or ".." in PurePosixPath(path).parts or any(ord(c) < 32 or ord(c) == 127 for c in path)):
+        raise ValueError("invalid native source location")
+    return str(PurePosixPath(path))
 
 
 def validate_native_output(trace_bytes, output_bytes, value, index_bytes):
@@ -166,10 +180,13 @@ def validate_native_output(trace_bytes, output_bytes, value, index_bytes):
                 and type(item.get("exit_code")) is int and item["exit_code"] == 0
                 ):
             head, clean = _source_observation(item.get("command"), item.get("stdout"), value["source"]["base"])
+            if head is None and clean is None:
+                continue
+            cwd = _source_cwd(item.get("cwd"))
             if head is not None:
-                heads.append(head)
+                heads.append((record["ordinal"], head, cwd, clean))
             if clean is not None:
-                statuses.append(clean)
+                statuses.append((record["ordinal"], cwd, clean))
     patch = "*** Add File: " + path + "\n" + "".join("+" + line + "\n" for line in text.splitlines())
     calls = []
     for record in before:
@@ -196,9 +213,15 @@ def validate_native_output(trace_bytes, output_bytes, value, index_bytes):
               and r["payload"].get("phase") == "final_answer" and _turn(r["payload"]) == turn]
     completions = [r for r in after if r.get("type") == "event_msg"
                    and r["payload"].get("type") == "task_complete" and _turn(r["payload"]) == turn]
-    if (set(heads) != {value["source"]["head"]} or not statuses or statuses[-1] is not True
+    if ({h[1] for h in heads} != {value["source"]["head"]} or len({h[2] for h in heads}) != 1
             or len(calls) != 1 or len(results) != 1 or len(finals) != 1 or len(completions) != 1):
         raise ValueError("incomplete native host evidence")
+    last_head = heads[-1]
+    same_source = [s for s in statuses if s[1] == last_head[2] and s[0] >= last_head[0]]
+    # Equality is allowed only for the closed combined observation, whose
+    # command/result proves both facts. Standalone status must follow HEAD.
+    if not same_source or same_source[-1][2] is not True:
+        raise ValueError("incomplete native clean-source evidence")
     for record in (*results, *finals, *completions):
         payload = record["payload"]
         if (payload.get("thread_id", thread) != thread
