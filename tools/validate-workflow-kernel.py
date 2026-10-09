@@ -107,6 +107,13 @@ BEHAVIORAL_CLI_CASES = {
         "--raw-findings", "<missing>", "--decisions", "<missing>",
         "--private-router-directory", "<missing>",
     ),
+    "project-review-evidence": (
+        "--run-root", "<missing>", "--repository-root", "<missing>",
+        "--request", "<missing>", "--receipts", "<missing>",
+        "--lane-receipts", "<missing>", "--raw-lane-outputs", "<missing>",
+        "--raw-findings", "<missing>", "--decisions", "<missing>",
+        "--private-router-directory", "<missing>",
+    ),
     "compare": ("--state-dir", "<state>", "--authoritative-receipts", "<missing>", "--output", "<output>"),
     "metrics": ("--events", "<missing>", "--output", "<output>"),
     "emit-observation-index": ("--input", "<missing>", "--output", "<output>"),
@@ -547,7 +554,7 @@ def check_cli(context):
         "generate-verification-profile",
         "observe-pipeline", "reconcile-legacy-browser", "observe-review",
         "export-review-contributions", "bind-review-source",
-        "preserve-review-evidence", "assemble-review-evidence",
+        "preserve-review-evidence", "project-review-evidence", "assemble-review-evidence",
         "compare", "metrics", "emit-observation-index", "run-cost-summary", "emit-cost-summary",
         "openrouter-usage",
         "lane-input-bytes", "record-attempt",
@@ -1005,6 +1012,11 @@ def check_cli(context):
             RuntimeCliTests(method).run(result)
             require(result.wasSuccessful(), f"{command} valid fixture execution failed")
             outcomes[command] = 0
+        from tests.test_review_retention_policy import ReviewRetentionPolicyTests
+        result = unittest.TestResult()
+        ReviewRetentionPolicyTests("test_projection_cli_and_growth_at_actual_copy_boundary").run(result)
+        require(result.wasSuccessful(), "projection CLI and actual copy boundary fixture failed")
+        outcomes["project-review-evidence"] = 0
         hostile_cases = (
             (
                 BehavioralContractTests,

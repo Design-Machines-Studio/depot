@@ -601,9 +601,14 @@ result still preserves available source files for recovery. A copy or
 verification error leaves every source file intact, and callers must not
 finish or remove the containing worktree.
 
-The retained evidence uses 288-file, 6 MiB whole-diagnostic bounds (>=0.26.2),
-including all required source/history bindings, companions, receipts and report.
-See [the complete-package rationale](references/review-evidence-contract.md#bounded-retention-0262).
+Validated required review evidence has a separate 32 MiB/1,024-file allowance
+(>=0.28.0). Disposable diagnostics keep the existing 9 MiB/416-file allowance.
+The larger allowance requires validated source-bound coverage and exact required
+reference closure, including history, receipts and all local report links.
+Use `project-review-evidence` with the same arguments as preservation during
+assembly and before final copying. Its read-only measurement is not coverage
+proof; preservation and terminal cleanup revalidate the actual package.
+See [the bounded policy](references/review-evidence-contract.md#bounded-retention-0280).
 Successful review owners call `owned-run-finish --outcome succeeded
 --retain-diagnostics`; the kernel revalidates the sealed request, coverage,
 lane receipts, raw outputs, and private router receipts before allowing the

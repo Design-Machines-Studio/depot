@@ -1,0 +1,189 @@
+{
+  "calls": [
+    {
+      "attempts": [
+        {
+          "billedCost": {
+            "provenance": "unavailable",
+            "status": "unavailable",
+            "usd": null
+          },
+          "billingMode": "paid-credits",
+          "duration": {
+            "seconds": 391,
+            "status": "measured"
+          },
+          "model": "gpt-6.1-sol",
+          "processExitStatus": null,
+          "provider": "openai",
+          "providerFailure": {
+            "failureKind": "unavailable",
+            "failureReason": "unavailable",
+            "httpStatus": null,
+            "processExitStatus": null,
+            "reasoningEffort": null,
+            "status": "not-requested",
+            "timeoutKind": "unavailable"
+          },
+          "requestedEffort": "high",
+          "result": "served",
+          "sequence": 1,
+          "served": true,
+          "serviceMode": {
+            "confirmed": "unavailable",
+            "requested": "unavailable",
+            "transmitted": "unavailable"
+          },
+          "tokens": {
+            "input": 2248817,
+            "output": 15691,
+            "provenance": "provider-receipt",
+            "status": "provider-reported",
+            "total": 2264508
+          },
+          "transmittedEffort": "high",
+          "transport": "codex-cli"
+        }
+      ],
+      "billingMode": "paid-credits",
+      "effectiveEffort": "high",
+      "fallback": false,
+      "matrixSnapshot": "openrouter:2026-09-23",
+      "normalizedEffort": "high",
+      "receiptId": "dispatch-e2a9f9dcae8fe995280fd005",
+      "requestedEffort": "high",
+      "role": "review-deep",
+      "transmittedEffort": "high"
+    },
+    {
+      "attempts": [
+        {
+          "billedCost": {
+            "provenance": "unavailable",
+            "status": "unavailable",
+            "usd": null
+          },
+          "billingMode": "paid-credits",
+          "duration": {
+            "seconds": 159,
+            "status": "measured"
+          },
+          "model": "gpt-6.1-sol",
+          "processExitStatus": null,
+          "provider": "openai",
+          "providerFailure": {
+            "failureKind": "unavailable",
+            "failureReason": "unavailable",
+            "httpStatus": null,
+            "processExitStatus": null,
+            "reasoningEffort": null,
+            "status": "not-requested",
+            "timeoutKind": "unavailable"
+          },
+          "requestedEffort": "high",
+          "result": "served",
+          "sequence": 1,
+          "served": true,
+          "serviceMode": {
+            "confirmed": "unavailable",
+            "requested": "unavailable",
+            "transmitted": "unavailable"
+          },
+          "tokens": {
+            "input": 1105452,
+            "output": 6240,
+            "provenance": "provider-receipt",
+            "status": "provider-reported",
+            "total": 1111692
+          },
+          "transmittedEffort": "high",
+          "transport": "codex-cli"
+        }
+      ],
+      "billingMode": "paid-credits",
+      "effectiveEffort": "high",
+      "fallback": false,
+      "matrixSnapshot": "openrouter:2026-09-23",
+      "normalizedEffort": "high",
+      "receiptId": "dispatch-41f3bc83c60efa22de881ece",
+      "requestedEffort": "high",
+      "role": "review-deep",
+      "transmittedEffort": "high"
+    },
+    {
+      "attempts": [
+        {
+          "billedCost": {
+            "provenance": "unavailable",
+            "status": "unavailable",
+            "usd": null
+          },
+          "billingMode": "paid-credits",
+          "duration": {
+            "seconds": 154,
+            "status": "measured"
+          },
+          "model": "gpt-6.1-sol",
+          "processExitStatus": null,
+          "provider": "openai",
+          "providerFailure": {
+            "failureKind": "unavailable",
+            "failureReason": "unavailable",
+            "httpStatus": null,
+            "processExitStatus": null,
+            "reasoningEffort": null,
+            "status": "not-requested",
+            "timeoutKind": "unavailable"
+          },
+          "requestedEffort": "high",
+          "result": "served",
+          "sequence": 1,
+          "served": true,
+          "serviceMode": {
+            "confirmed": "unavailable",
+            "requested": "unavailable",
+            "transmitted": "unavailable"
+          },
+          "tokens": {
+            "input": 955228,
+            "output": 6803,
+            "provenance": "provider-receipt",
+            "status": "provider-reported",
+            "total": 962031
+          },
+          "transmittedEffort": "high",
+          "transport": "codex-cli"
+        }
+      ],
+      "billingMode": "paid-credits",
+      "effectiveEffort": "high",
+      "fallback": false,
+      "matrixSnapshot": "openrouter:2026-09-23",
+      "normalizedEffort": "high",
+      "receiptId": "dispatch-f931ae3b54997d95040385ae",
+      "requestedEffort": "high",
+      "role": "review-deep",
+      "transmittedEffort": "high"
+    }
+  ],
+  "fullReport": "/home/ned/ai/depot-worktrees/review-retention-178/docs/review-retention-178-model-cost.json",
+  "matrixSnapshots": [
+    "openrouter:2026-09-23"
+  ],
+  "runStatus": "complete",
+  "schemaVersion": 1,
+  "summary": {
+    "deduplicatedReceipts": 3,
+    "duplicateReceiptObjects": 0,
+    "fallbacks": 0,
+    "ignoredReceiptReferences": 0,
+    "inputReceiptReferences": 3,
+    "measuredPaidCostUsd": null,
+    "paidCreditCalls": 3,
+    "subscriptionCalls": 0,
+    "unavailableCostCalls": 3,
+    "unavailableTokenCalls": 0,
+    "unmeasuredUsageOrCostCalls": 3,
+    "validReceiptObjects": 3
+  }
+}

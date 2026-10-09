@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "issue": 178,
+  "proof_level": "candidate-source-isolated-replay",
+  "prepared_main": "f471605e6507aa4d634907bae918f080c46056c8",
+  "consumer_head": "362b2207d9801193d179a4a8599df73c45aedfa5",
+  "candidate_versions": {
+    "workflow-kernel": "0.28.0",
+    "dm-review": "1.88.1"
+  },
+  "selected_lanes": 16,
+  "required_browser_cases": 5,
+  "recorded_projection": {
+    "files": 207,
+    "bytes": 9545604
+  },
+  "baseline_failure": {
+    "code": "evidence_limit_exceeded",
+    "details": {
+      "path": "review/evidence.json",
+      "reason": "retention_limit",
+      "stage": "preservation_input"
+    },
+    "message": "required review evidence failed validation"
+  },
+  "complete_projection": {
+    "bytes": 9639003,
+    "coverage_proof": false,
+    "files": 221,
+    "missing": [],
+    "retention": {
+      "diagnostic": {
+        "actual_bytes": 0,
+        "actual_files": 0,
+        "allowed_bytes": 9437184,
+        "allowed_files": 416
+      },
+      "required_review": {
+        "actual_bytes": 9639003,
+        "actual_files": 221,
+        "allowed_bytes": 33554432,
+        "allowed_files": 1024
+      }
+    },
+    "status": "projected",
+    "within_limits": true
+  },
+  "preservation": {
+    "bytes": 9639003,
+    "diagnostics": [],
+    "evidence_path": "/home/ned/.local/state/design-machines/depot/runs/dm-review-pr1162-20261009-resume-rcd880bz/diagnostic/review/repo-dd40a7abde7d-head-362b2207d9801193d179a4a8599df73c45aedfa5",
+    "failure_exit": 3,
+    "files": 221,
+    "missing": [],
+    "recovery_path": "/home/ned/.local/state/design-machines/depot/runs/dm-review-pr1162-20261009-resume-rcd880bz/diagnostic",
+    "status": "complete"
+  },
+  "terminal": {
+    "cleanup_command": "rm -rf -- /home/ned/.local/state/design-machines/depot/runs/dm-review-pr1162-20261009-resume-rcd880bz",
+    "contains": "compact diagnostics",
+    "path": "/home/ned/.local/state/design-machines/depot/runs/dm-review-pr1162-20261009-resume-rcd880bz",
+    "reason": "succeeded",
+    "schema_version": 1,
+    "status": "retained"
+  },
+  "repeat_preservation_exit": 0,
+  "repeat_terminal_identical": true,
+  "original_roots_byte_identical_since_initial_reproduction": true,
+  "original_inventory_sha256": "042960330c0d7d5d7aeaa71b66a6f1de5fd350b5c4c246800bf99d2453494774",
+  "retained_inventory_sha256": "8561731f4875e1bbd717bdf5046b7d7924d774b592e593a705068c41ca2f6bb7",
+  "runtime_source_inventory_sha256": "0445c5a2745549faf5b566008e88b2accb2a45d56d76da473c311ce66b0bdd0e",
+  "installed_consumer_retry_performed": false,
+  "plugin_release_published": false
+}

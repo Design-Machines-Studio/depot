@@ -26,7 +26,9 @@ from .dm_review_adapter import (
     translate_review_receipts,
 )
 from .owned_run import (
-    ExactOwnedRun, _MAX_DIAGNOSTIC_BYTES, _MAX_DIAGNOSTIC_FILES,
+    ExactOwnedRun, _MAX_REQUIRED_REVIEW_BYTES, _MAX_REQUIRED_REVIEW_FILES,
+    _MAX_DIAGNOSTIC_BYTES, _MAX_DIAGNOSTIC_FILES,
+    _diagnostic_inventory, _retention_projection, _require_retention_projection,
     _bounded_diagnostic, BoundedDiagnosticLimitError,
 )
 from .schema import (
@@ -145,15 +147,18 @@ def _regular_file(path: Path) -> bytes:
         value = os.fstat(descriptor)
         if not stat.S_ISREG(value.st_mode) or value.st_nlink != 1:
             raise ValueError("review evidence is not an owned regular file")
+        if value.st_size > _MAX_REQUIRED_REVIEW_BYTES:
+            raise BoundedDiagnosticLimitError(1, value.st_size, _MAX_REQUIRED_REVIEW_FILES,
+                                              _MAX_REQUIRED_REVIEW_BYTES, category="required_review")
         chunks = []
         total = 0
         while True:
-            chunk = os.read(descriptor, min(65536, _MAX_DIAGNOSTIC_BYTES + 1 - total))
+            chunk = os.read(descriptor, min(65536, _MAX_REQUIRED_REVIEW_BYTES + 1 - total))
             if not chunk:
                 break
             total += len(chunk)
-            if total > _MAX_DIAGNOSTIC_BYTES:
-                raise BoundedDiagnosticLimitError("review evidence exceeds bounded retention limits")
+            if total > _MAX_REQUIRED_REVIEW_BYTES:
+                raise BoundedDiagnosticLimitError(1, total, _MAX_REQUIRED_REVIEW_FILES, _MAX_REQUIRED_REVIEW_BYTES, category="required_review")
             chunks.append(chunk)
         final = os.fstat(descriptor)
         if (final.st_dev, final.st_ino) != (value.st_dev, value.st_ino):
@@ -524,9 +529,9 @@ _MARKDOWN_LINK = re.compile(r"!?\[[^\]]*\]\((<[^>]+>|[^)\s]+)(?:\s+[^)]*)?\)")
 _MARKDOWN_REFERENCE = re.compile(r"^[ \t]{0,3}\[[^\]]+\]:[ \t]*(<[^>]+>|\S+)", re.MULTILINE)
 
 
-def _validate_retained_report(scope: Path) -> None:
-    report = _regular_file(scope / "report.md").decode("utf-8")
-    root = scope.resolve(strict=True)
+def _report_references(report_path: Path) -> tuple[str, ...]:
+    report = _regular_file(report_path).decode("utf-8")
+    references = set()
 
     for match in (*_MARKDOWN_LINK.finditer(report), *_MARKDOWN_REFERENCE.finditer(report)):
         target = match.group(1)
@@ -552,6 +557,20 @@ def _validate_retained_report(scope: Path) -> None:
             )
         path = unquote(parsed.path) or "report.md"
         try:
+            reference = safe_reference(path)
+            if reference != path or reference.startswith(("sha256:", "url-sha256:")):
+                raise ValueError()
+        except (TypeError, ValueError):
+            reason = "review_report_link_escapes_scope" if Path(path).is_absolute() or ".." in Path(path).parts else "review_report_link_target_unsafe"
+            raise ReviewCloseoutValidationError(reason) from None
+        references.add(reference)
+    return tuple(sorted(references))
+
+
+def _validate_retained_report(scope: Path) -> None:
+    root = scope.resolve(strict=True)
+    for path in _report_references(scope / "report.md"):
+        try:
             linked = (scope / path).resolve(strict=True)
         except OSError:
             raise ReviewCloseoutValidationError(
@@ -566,11 +585,72 @@ def _validate_retained_report(scope: Path) -> None:
                 "review_report_link_escapes_scope",
             )
         try:
-            _regular_file(linked)
+            _regular_file(_source_path(scope / path, scope))
+        except BoundedDiagnosticLimitError:
+            raise
         except (OSError, ValueError):
             raise ReviewCloseoutValidationError(
                 "review_report_link_target_unsafe", path,
             ) from None
+
+
+def _required_retained_files(scope, request, documents, *, historical=False):
+    """Call only after the unchanged coverage, provenance and report validators."""
+    required = {"report.md"}
+    required.update("review/" + name + ".json" for name in (
+        "request", "authoritative-receipts", "review-lane-receipts",
+        "raw-lane-outputs", "raw-finding-inventory", "synthesis-decisions"))
+    required.update(ref for ref in required_review_evidence_references(
+        request, documents[1], documents[2], documents[3])
+        if not ref.startswith(("sha256:", "url-sha256:")))
+    if not historical:
+        required.update(_committed_references(documents[1], scope))
+    required.update(_report_references(scope / "report.md"))
+    index_ref = "receipts/private/router/terminal-receipt-index.json"
+    required.add(index_ref)
+    index = _load_json(scope / index_ref)
+    required.update("receipts/private/router/" + name for name in index["receiptFiles"])
+    return required
+
+
+def _project_preservation(run, recovery, destination, sources, router_source, *, eligible):
+    # Use the real diagnostic-relative namespace for every file and membership.
+    # A synthetic prefix could collide with an actual required reference.
+    scope_prefix = destination.relative_to(recovery).as_posix() + "/"
+    inventory = {scope_prefix + name: size for name, size in
+                 (_diagnostic_inventory(destination).items() if destination.exists() else ())}
+    for reference, source in sources.items():
+        inventory[scope_prefix + reference] = len(_regular_file(source))
+    required = {scope_prefix + reference for reference in sources} if eligible else set()
+    if router_source is not None:
+        try:
+            _validate_router_receipts(router_source)
+            prefix = scope_prefix + "receipts/private/router/"
+            for reference, size in _diagnostic_inventory(router_source).items():
+                if not reference.endswith(".json"):
+                    raise EvidenceAssemblyError("preservation_input", "invalid_evidence")
+                inventory[prefix + reference] = size
+            if eligible:
+                required.add(prefix + "terminal-receipt-index.json")
+                index = _load_json(router_source / "terminal-receipt-index.json")
+                required.update(prefix + name for name in index["receiptFiles"])
+        except FileNotFoundError as exc:
+            raise EvidenceAssemblyError("preservation_input", "missing_evidence", _relative_role(exc.filename, run.root)) from None
+        except BoundedDiagnosticLimitError:
+            raise
+        except (OSError, ValueError):
+            raise EvidenceAssemblyError("preservation_input", "invalid_evidence") from None
+    if recovery.exists():
+        superseded = []
+        review_root = recovery / "review"
+        if review_root.is_dir():
+            superseded = [path.relative_to(recovery).as_posix() + "/" for path in review_root.iterdir()
+                          if path != destination and path.is_dir() and
+                          (path.name == "unbound" or _REVIEW_SCOPE_RE.fullmatch(path.name))]
+        for reference, size in _diagnostic_inventory(recovery).items():
+            if not reference.startswith(scope_prefix) and not any(reference.startswith(old) for old in superseded):
+                inventory[reference] = size
+    return _retention_projection(inventory, required)
 
 
 def _validate_review_common_contract(
@@ -833,14 +913,11 @@ def _remove_superseded_review_scopes(
     for child in tuple(review_root.iterdir()):
         if child == destination:
             continue
-        if (
-            child.name != "unbound"
-            and _REVIEW_SCOPE_RE.fullmatch(child.name) is None
-        ):
-            raise ValueError("unexpected review recovery scope exists")
+        if child.name != "unbound" and _REVIEW_SCOPE_RE.fullmatch(child.name) is None:
+            continue  # Unrelated diagnostics remain bounded; never prune them.
         if child.is_symlink() or not child.is_dir():
             raise ValueError("superseded review scope is unsafe")
-        _bounded_diagnostic(child)
+        _check_evidence_bound(child)
         shutil.rmtree(child)
     _fsync_directory(review_root)
 
@@ -883,8 +960,13 @@ def _copy_router_tree(source: Path, target: Path) -> tuple[int, int]:
             copied = _copy_file(child, target / relative)
             files += 1
             size += copied
-            if files > _MAX_DIAGNOSTIC_FILES or size > _MAX_DIAGNOSTIC_BYTES:
-                raise BoundedDiagnosticLimitError("private router receipts exceed bounded retention limits")
+            # Only the complete-package validator knows all required membership
+            # (including report links). Copying has a combined workspace ceiling.
+            if files > _MAX_REQUIRED_REVIEW_FILES + _MAX_DIAGNOSTIC_FILES or size > _MAX_REQUIRED_REVIEW_BYTES + _MAX_DIAGNOSTIC_BYTES:
+                raise BoundedDiagnosticLimitError(files, size,
+                    _MAX_REQUIRED_REVIEW_FILES + _MAX_DIAGNOSTIC_FILES,
+                    _MAX_REQUIRED_REVIEW_BYTES + _MAX_DIAGNOSTIC_BYTES, category="package")
+
     if not (target / "terminal-receipt-index.json").is_file():
         raise ValueError("private router receipt index is missing")
     _validate_router_receipts(target)
@@ -948,6 +1030,7 @@ def _preserve_review_evidence_locked(
     decisions_path: str | Path | None = None,
     private_router_directory: str | Path | None = None,
     report_path: str | Path,
+    projection_only: bool = False,
 ) -> dict[str, object]:
     """Copy exact review evidence into the run's bounded diagnostic root.
 
@@ -1035,7 +1118,10 @@ def _preserve_review_evidence_locked(
     else:
         missing.append("private model-router receipts")
 
-    recovery = _diagnostic(run)
+    registered = next((item for item in run._metadata["resources"] if item["kind"] == "diagnostic"), None)
+    recovery = run.root / (registered["relative_path"] if registered else "diagnostic")
+    if registered is not None:
+        _diagnostic(run)  # Verify existing ownership; do not create for projection.
     request = None
     scope = "unbound"
     # A parseable request can already prove an exact repository/HEAD even when
@@ -1125,7 +1211,37 @@ def _preserve_review_evidence_locked(
             missing.append(exc.reason)
             diagnostics.append(exc.detail())
 
+    # Report links are required even when they are absent from lane bindings.
+    report_error = None
+    if "report.md" in sources:
+        if not _regular_file(sources["report.md"]).strip():
+            report_error = EvidenceAssemblyError("preservation_input", "invalid_evidence", "report.md")
+        for reference in _report_references(sources["report.md"]):
+            if reference in sources:
+                continue
+            for candidate in (evidence_source_root / reference, run.root / reference,
+                              repository / reference, recovery / "review" / scope / reference):
+                try:
+                    sources[reference] = _source_path(candidate, run.root, allow_repository=True, repository=repository)
+                    break
+                except (OSError, ValueError):
+                    continue
+            else:
+                report_error = ReviewCloseoutValidationError("review_report_link_missing", reference)
+
     destination = recovery / "review" / scope
+    # The same predicted union is measured before copying and again from the
+    # durable validated copy. Projection is observation, never copy authority.
+    projected = _project_preservation(run, recovery, destination, sources, router_source,
+                                     eligible=request is not None and not missing and report_error is None)
+    if projection_only:
+        return {"status": "projected", "coverage_proof": False, "retention": projected,
+                "files": sum(row["actual_files"] for row in projected.values()),
+                "bytes": sum(row["actual_bytes"] for row in projected.values()),
+                "missing": missing + ([getattr(report_error, "reason_code", "invalid_evidence")] if report_error else []), "within_limits": all(row["actual_files"] <= row["allowed_files"] and
+                    row["actual_bytes"] <= row["allowed_bytes"] for row in projected.values())}
+    _require_retention_projection(projected)
+    recovery = _diagnostic(run)
     parent = destination.parent
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix="review-stage-", dir=parent))
@@ -1173,14 +1289,21 @@ def _preserve_review_evidence_locked(
                 copied_files += 1
         if router_source is not None:
             try:
-                _copy_router_tree(router_source, staging / router_source.relative_to(run.root))
+                _copy_router_tree(router_source, staging / "receipts/private/router")
             except BoundedDiagnosticLimitError:
                 raise
             except FileNotFoundError as exc:
                 raise EvidenceAssemblyError("preservation_input", "missing_evidence", _relative_role(exc.filename, run.root)) from None
             except (OSError, ValueError):
                 raise EvidenceAssemblyError("preservation_input", "invalid_evidence") from None
-        copied_files, copied_bytes = _check_evidence_bound(staging, "preservation_input")
+        # Validate the exact staged package before granting required membership.
+        if not missing and request is not None and report_error is None:
+            _validate_preserved_review_evidence(recovery, run=run, scope_override=staging,
+                                                expected_source=(repository_identity, head))
+        else:
+            _bounded_diagnostic(staging)
+        inventory = _diagnostic_inventory(staging)
+        copied_files, copied_bytes = len(inventory), sum(inventory.values())
         if destination.exists():
             _merge_staged_evidence(staging, destination)
             shutil.rmtree(staging)
@@ -1188,6 +1311,8 @@ def _preserve_review_evidence_locked(
             _fsync_tree(staging)
             os.replace(staging, destination)
             _fsync_directory(parent)
+        if report_error is not None and not missing:
+            raise report_error
         if not missing and request is not None:
             # Re-read the durable copy before it can authorize cleanup.
             validate_review_source_coverage(
@@ -1211,6 +1336,7 @@ def _preserve_review_evidence_locked(
                 _regular_file(destination / reference)
             _validate_retained_report(destination)
             _remove_superseded_review_scopes(recovery / "review", destination)
+            validate_preserved_review_evidence(recovery, run=run)
     except Exception:
         if staging.exists():
             shutil.rmtree(staging, ignore_errors=True)
@@ -1265,7 +1391,8 @@ class RetainedReviewValidationError(ValueError):
         "review-request", "review-receipts", "lane-receipts", "lane-outputs", "finding-inventory",
         "synthesis-decisions", "review-coverage", "review-reference", "router-receipts", "review-report"})
 
-    def __init__(self, reason, role="retained-review", *, supported_historical=False):
+    def __init__(self, reason, role="retained-review", *, supported_historical=False, measurement=None):
+        self.measurement = measurement
         self.exit_code, self.code, message, self.next_action = self.REASONS[reason]
         if reason == "missing_source_provenance" and supported_historical:
             self.next_action = "Retry owned-run-finish with --historical-review-digests locating the original saved inventory."
@@ -1274,7 +1401,8 @@ class RetainedReviewValidationError(ValueError):
 
     def to_dict(self):
         return {"error": {"code": self.code, "message": str(self), "details": {
-            "reason": self.reason, "artifact_role": self.role, "next_action": self.next_action}}}
+            "reason": self.reason, "artifact_role": self.role, "next_action": self.next_action,
+            **(self.measurement or {})}}}
 
 
 def _terminal_read(path, root, role, *, document=False):
@@ -1283,8 +1411,8 @@ def _terminal_read(path, root, role, *, document=False):
         data = _regular_file(source)
     except FileNotFoundError:
         raise RetainedReviewValidationError("missing_evidence", role) from None
-    except BoundedDiagnosticLimitError:
-        raise RetainedReviewValidationError("retention_limit", role) from None
+    except BoundedDiagnosticLimitError as exc:
+        raise RetainedReviewValidationError("retention_limit", role, measurement=exc.measurement) from None
     except (OSError, TypeError, ValueError):
         raise RetainedReviewValidationError("unsafe_path", role) from None
     if not document:
@@ -1313,7 +1441,7 @@ def _historical_inventory(run, inventory_path):
         raise RetainedReviewValidationError("source_scope_mismatch", "owner-metadata")
     try:
         inventory = json.loads(data.decode("utf-8"), object_pairs_hook=_unique_members, parse_constant=_invalid_constant)
-        if type(inventory) is not dict or not inventory or len(inventory) > _MAX_DIAGNOSTIC_FILES:
+        if type(inventory) is not dict or not inventory or len(inventory) > _MAX_REQUIRED_REVIEW_FILES:
             raise ValueError()
         if not {".depot-owned-run.json", ".depot-owned-run.lock", "CLEANUP.txt"} <= inventory.keys():
             raise ValueError()
@@ -1339,6 +1467,12 @@ def _historical_inventory(run, inventory_path):
 
 
 def validate_preserved_review_evidence(diagnostic: Path, *, run=None, historical_review_digests=None):
+    return _validate_preserved_review_evidence(diagnostic, run=run,
+                                               historical_review_digests=historical_review_digests)
+
+
+def _validate_preserved_review_evidence(diagnostic: Path, *, run=None, historical_review_digests=None,
+                                       scope_override=None, expected_source=None):
     """Throw closed terminal reasons; historical authority is explicit and pinned."""
     inventory = None
     if historical_review_digests is not None:
@@ -1357,21 +1491,21 @@ def validate_preserved_review_evidence(diagnostic: Path, *, run=None, historical
             if resource is None or diagnostic != run.root / resource["relative_path"] or (info.st_dev, info.st_ino) != (resource["device"], resource["inode"]):
                 raise RetainedReviewValidationError("source_scope_mismatch", "owner-metadata")
         try:
-            _bounded_diagnostic(diagnostic)
+            _diagnostic_inventory(scope_override if scope_override is not None else diagnostic)
         except BoundedDiagnosticLimitError:
             raise
-        except ValueError:
+        except (OSError, ValueError):
             raise RetainedReviewValidationError("unsafe_path", role) from None
-        for path in diagnostic.rglob("*"):
-            if path.is_file() and path.stat().st_nlink != 1:
-                raise RetainedReviewValidationError("unsafe_path", role)
         review_root = diagnostic / "review"
         if review_root.is_symlink():
             raise RetainedReviewValidationError("unsafe_path", role)
-        scopes = [path for path in review_root.iterdir() if path.is_dir()]
+        scopes = [scope_override] if scope_override is not None else [
+            path for path in review_root.iterdir() if path.is_dir() and
+            (path.name == "unbound" or _REVIEW_SCOPE_RE.fullmatch(path.name))
+        ]
         if len(scopes) != 1 or not scopes[0].is_dir() or scopes[0].is_symlink():
             raise RetainedReviewValidationError("source_scope_mismatch", role)
-        scope = scopes[0]
+        scope = scope_override if scope_override is not None else scopes[0]
         names = ("request", "authoritative-receipts", "review-lane-receipts", "raw-lane-outputs", "raw-finding-inventory", "synthesis-decisions")
         roles = ("review-request", "review-receipts", "lane-receipts", "lane-outputs", "finding-inventory", "synthesis-decisions")
         documents = [_terminal_read(scope / "review" / (name + ".json"), diagnostic, artifact, document=True)
@@ -1380,8 +1514,10 @@ def validate_preserved_review_evidence(diagnostic: Path, *, run=None, historical
         request = ReviewRequest.from_mapping(documents[0])
         if request.source_repository is None or request.source_head is None or run is not None and request.run_id != run.run_id:
             raise RetainedReviewValidationError("source_scope_mismatch", role)
+        if expected_source is not None and (request.source_repository, request.source_head) != expected_source:
+            raise RetainedReviewValidationError("source_scope_mismatch", role)
         expected_scope = "repo-" + hashlib.sha256(request.source_repository.encode()).hexdigest()[:12] + "-head-" + request.source_head
-        if scope.name != expected_scope or inventory is not None and (request.source_repository, request.source_head) != (repository, head):
+        if scopes[0].name != expected_scope and scope_override is None or inventory is not None and (request.source_repository, request.source_head) != (repository, head):
             raise RetainedReviewValidationError("source_scope_mismatch", role)
         role = "review-coverage"
         if inventory is not None:
@@ -1407,12 +1543,22 @@ def validate_preserved_review_evidence(diagnostic: Path, *, run=None, historical
         if not _terminal_read(scope / "report.md", diagnostic, role).strip():
             raise RetainedReviewValidationError("corrupt_evidence", role)
         _validate_retained_report(scope)
+        required = _required_retained_files(scope, request, documents, historical=inventory is not None)
+        prefix = scope.relative_to(diagnostic).as_posix() + "/"
+        required = {prefix + name for name in required}
+        try:
+            measured = (_diagnostic_inventory(diagnostic) if scope_override is None else
+                        {prefix + name: size for name, size in _diagnostic_inventory(scope).items()})
+        except (OSError, ValueError):
+            raise RetainedReviewValidationError("unsafe_path", role) from None
+        projection = _retention_projection(measured, required)
+        _require_retention_projection(projection)
         if inventory is not None:
             # Semantic readers run after the first inventory pass. Reject any
             # replacement before returning historical compatibility success.
             _historical_inventory(run, historical_review_digests)
         return {"validation": "historical_compatibility" if inventory is not None else "source_bound",
-                "run_id": request.run_id, "source_repository": request.source_repository, "source_head": request.source_head}
+                "run_id": request.run_id, "source_repository": request.source_repository, "source_head": request.source_head, "retention": projection}
     except RetainedReviewValidationError:
         raise
     except EvidenceAssemblyError as exc:
@@ -1430,8 +1576,8 @@ def validate_preserved_review_evidence(diagnostic: Path, *, run=None, historical
         raise RetainedReviewValidationError(reason, role) from None
     except FileNotFoundError:
         raise RetainedReviewValidationError("missing_evidence", role) from None
-    except BoundedDiagnosticLimitError:
-        raise RetainedReviewValidationError("retention_limit", role) from None
+    except BoundedDiagnosticLimitError as exc:
+        raise RetainedReviewValidationError("retention_limit", role, measurement=exc.measurement) from None
     except OSError:
         raise RetainedReviewValidationError("unsafe_path", role) from None
     except (TypeError, ValueError):
@@ -1461,7 +1607,8 @@ class EvidenceAssemblyError(ValueError):
         "retention_limit": (3, "evidence_limit_exceeded"),
     }
 
-    def __init__(self, stage, reason, role="review/evidence.json"):
+    def __init__(self, stage, reason, role="review/evidence.json", *, measurement=None):
+        self.measurement = measurement
         if stage not in {"lane_input", "lane_validation", "aggregate_validation", "preservation_input", "retained_validation"} or reason not in self.REASONS:
             raise ValueError("invalid evidence diagnostic")
         self.stage, self.reason = stage, reason
@@ -1478,7 +1625,7 @@ class EvidenceAssemblyError(ValueError):
         super().__init__("required review evidence failed validation")
 
     def detail(self):
-        return {"stage": self.stage, "reason": self.reason, "path": self.role}
+        return {"stage": self.stage, "reason": self.reason, "path": self.role, **(self.measurement or {})}
 
     def to_dict(self):
         return {"error": {"code": self.code, "message": "required review evidence failed validation", "details": self.detail()}}
@@ -1488,6 +1635,13 @@ def preserve_review_evidence(**arguments):
     from .cli import _open_receipt_stream_lock
     import fcntl
     run = ExactOwnedRun.open(Path(arguments["run_root"]))
+    if arguments.get("projection_only"):
+        # No lock creation, diagnostic registration or writes. A concurrent
+        # producer may change this advisory snapshot; preservation rechecks it.
+        try:
+            return _preserve_review_evidence_locked(**arguments)
+        except BoundedDiagnosticLimitError as exc:
+            raise EvidenceAssemblyError("preservation_input", "retention_limit", measurement=exc.measurement) from None
     path = Path(arguments["receipts_path"])
     # Containment and symlinks must precede opening the shared lock.
     try:
@@ -1498,8 +1652,11 @@ def preserve_review_evidence(**arguments):
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)
         return _preserve_review_evidence_locked(**arguments)
-    except BoundedDiagnosticLimitError:
-        raise EvidenceAssemblyError("preservation_input", "retention_limit") from None
+    except BoundedDiagnosticLimitError as exc:
+        raise EvidenceAssemblyError("preservation_input", "retention_limit", measurement=exc.measurement) from None
+    except RetainedReviewValidationError as exc:
+        reason = exc.reason if exc.reason in EvidenceAssemblyError.REASONS else "invalid_evidence"
+        raise EvidenceAssemblyError("retained_validation", reason, measurement=exc.measurement) from None
     finally:
         os.close(descriptor)
 
@@ -1520,8 +1677,8 @@ def _evidence_bytes(root, reference, stage):
         return _regular_file(_source_path(root / reference, root))
     except FileNotFoundError:
         raise EvidenceAssemblyError(stage, "missing_evidence", reference) from None
-    except BoundedDiagnosticLimitError:
-        raise EvidenceAssemblyError(stage, "retention_limit") from None
+    except BoundedDiagnosticLimitError as exc:
+        raise EvidenceAssemblyError(stage, "retention_limit", measurement=exc.measurement) from None
     except (OSError, TypeError, ValueError):
         raise EvidenceAssemblyError(stage, "unsafe_path") from None
 
@@ -1575,9 +1732,13 @@ def _seal_evidence(root, role, value, *, literal=False):
 
 def _check_evidence_bound(directory, stage="retained_validation"):
     try:
-        return _bounded_diagnostic(directory)
-    except BoundedDiagnosticLimitError:
-        raise EvidenceAssemblyError(stage, "retention_limit") from None
+        inventory = _diagnostic_inventory(directory)
+        # An assembly workspace ceiling does not confer retained eligibility.
+        projection = _retention_projection(inventory, inventory)
+        _require_retention_projection(projection)
+        return len(inventory), sum(inventory.values())
+    except BoundedDiagnosticLimitError as exc:
+        raise EvidenceAssemblyError(stage, "retention_limit", measurement=exc.measurement) from None
     except (OSError, ValueError):
         raise EvidenceAssemblyError(stage, "unsafe_path") from None
 

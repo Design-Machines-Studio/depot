@@ -160,8 +160,7 @@ host owns supported repair judgments.
 Append is the commit point. Retry reconstructs missing derived companions
 without dispatch. Conflicting fixed files cannot be replaced: use a new
 exact-owned replay with the original committed stream/history. Preservation
-reads the same locked snapshot and retains referenced history within existing
-416-file/9 MiB limits. Optional contribution writers use that lock too;
+reads the same locked snapshot and retains referenced history under the separate validated-required and diagnostic bounds below. Optional contribution writers use that lock too;
 economics and observations never settle or revoke required coverage.
 
 Closed failure stages are `lane_input`, `lane_validation`,
@@ -172,23 +171,58 @@ filenames. Schema exits 2, incomplete/unsafe evidence 3, conflicts 6. Preserve
 safe available inputs and originals on failure. #165 report-link behavior stays
 unchanged.
 
-## Bounded retention (>=0.26.2)
+## Bounded retention (>=0.28.0)
 
-The 9 MiB (9,437,184-byte) allowance bounds the sum of regular-file bytes
-across the whole diagnostic directory. It is not merely a per-file cap;
-assembly, preservation staging and terminal revalidation retain their existing
-bound checks. Every digest, source, scope, provenance,
-path safety and completeness validator remain unchanged.
+Required review evidence is bounded to **32 MiB (33,554,432 bytes) / 1,024
+files**. Disposable diagnostics retain **9 MiB (9,437,184 bytes) / 416 files**.
+These are separate aggregate allowances, not per-file permissions. Both count
+regular-file bytes without compression. The existing exact-owned diagnostic
+child stores both; no new storage, registry or migration is introduced.
 
-The measured PR173 complete required package projection is 112 files and
-2,856,643 bytes. It includes the final coverage record, request, four companions,
-authoritative receipt stream, every committed source/history/transition binding,
-private router receipts/index and report. The `review/evidence` subtree alone
-is 96 files and 2,721,881 bytes. Removing its 592,768 duplicate snapshot/literal
-bytes alone would still leave the complete package above the former 2 MiB
-allowance. That original package fits4MiB and128files. The final-head integration with its required affected documentation/test rechecks measures144files and3,941,061bytes. Actual preservation still failed the128file bound, so the first separately measured count limit rose to160. The completed affected CLI security/test rechecks then produced an eligible current-head package of185files and4,685,139bytes, including its final coverage record and all companions. Actual preservation rejected both4MiB and160files. The first final source transition preserved196files/4,935,164bytes under5MiB/200files. Normal GitHub review then reported three valid defects. Their required affected/core Codex rechecks produced a complete eligible246-file/5,877,650-byte package; actual preservation rejected both5MiB and200files. The preceding bounded allowance was6MiB/288files, leaving bounded room for the required finishing source transition without changing evidence or validation. The earlier measured transition added11files, so256files would leave inadequate room for that step. These bounded
-allowance changes preserve original bytes without compression or a new storage mechanism. New coverage bindings may reuse validated source-seal references directly. Existing committed bindings are reused byte-for-byte on assembly retries; original seals and lane records are never rewritten. These figures describe the supplied read-only
-projection, not a successful consumer preservation run.
+Only a package passing the existing source, scope, digest, provenance,
+completeness, receipt and report checks receives required membership. Kernel
+computes the exact set: six canonical review documents, report, selected
+lane/browser references, every committed source/history/transition binding,
+indexed private router receipts and index, and every local report link.
+Identical references count once. Unindexed router files and unrelated additions
+remain diagnostics, even inside a review-looking directory. A filename or
+caller assertion never grants the larger retained allowance. Incomplete
+preservation retains available inputs only under the diagnostic bound.
+
+The allowance uses recent complete packages, not a near-fit increase for one
+consumer: PR173 grew from 246 files / 5,877,650 bytes to 362 / 8,080,697 and
+386 / 8,579,686 after required review repairs and source continuity. PR1162
+measures 207 / 9,545,604 before final report links. A 32 MiB ceiling provides
+about three times this observed byte usage; 1,024 files provides more than twice
+the largest observed count. This permits ordinary finishing evidence and
+several affected rechecks while keeping finite storage. Earlier 2/4/5/6/8/9 MiB
+shared-limit repairs repeatedly ran out after useful work. Original sealed
+bytes are never rewritten or dropped to fit.
+
+`project-review-evidence` accepts exactly the preservation arguments. Call it
+while assembling evidence (with the available companions and provisional
+report) and again after the final report's evidence links settle. It emits
+`status: projected`, `coverage_proof: false`, `within_limits`, whole-package
+`files`/`bytes`, `missing`, and separate `retention` measurements with
+`actual_bytes`, `actual_files`, `allowed_bytes`, `allowed_files`. It creates no
+lock, diagnostic directory, metadata or copy. Missing early coverage remains
+explicit and receives no larger allowance. Projection may race a producer and
+never authorizes later copying: the preservation boundary rereads, validates,
+measures and checks its exact staged bytes, then validates the durable copy.
+
+Assembly uses the same required ceiling for its temporary evidence workspace;
+this resource ceiling is not retained coverage authority. Preservation applies
+the exact required/diagnostic partition before copying and again after byte
+verification. Retained revalidation and owned-run finish use that same
+partition before deleting sources. Errors include measured and allowed byte/file
+counts, category and one next action, without rejected paths or credentials.
+Keep originals and request a bounded policy repair if required evidence exceeds
+the ceiling; move only unrelated diagnostics. Never prune required history.
+
+Supported existing schema-1/schema-2 records and pinned historical retention
+remain readable. Retries reuse identical sealed references and source inventories
+through the existing helpers. Source or report growth is remeasured; interrupted
+copying keeps originals and removes only task-owned staging.
 
 ## Retained historical terminal validation (>=0.26.1)
 
@@ -247,7 +281,7 @@ No digest, source, scope, provenance, path-safety or completeness check changes.
 Release verification found PR172's digest race and repaired it in the existing
 Kernel dependency. Required repair/source-continuity evidence then measured
 386 files and 8,579,686 bytes; normal preservation rejected both 384 files and
-8 MiB. The final bounded allowance is 9 MiB/416 files, including room for the
+8 MiB. The historical shared allowance was 9 MiB/416 files, including room for the
 required finishing transition. Original bytes and validation remain strict.
 
 ## Native Codex host provenance (>=0.27.0)
@@ -304,7 +338,7 @@ Only committed-source review is supported. Recovery binds the original observed
 commit; staged historical inspection remains supplemental evidence and cannot
 be relabeled as a later commit. Review new affected changes at a clean committed
 boundary. Native excerpts are bounded to 2 MiB, 4096 records and 512 KiB per
-record, within the unchanged whole-package retention allowance.
+record, within the validated-required package allowance.
 
 The participant ID is `native-` plus the first 16 SHA256 hex characters of the
 actual host thread ID. Actual model/provider observations remain in the private

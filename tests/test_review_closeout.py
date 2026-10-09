@@ -224,10 +224,10 @@ class ReviewCloseoutTests(unittest.TestCase):
 
     def test_actual_preservation_limits_are_closed_and_atomic(self):
         from tests import KERNEL_REFERENCES
-        from workflow_kernel.owned_run import _MAX_DIAGNOSTIC_BYTES, _MAX_DIAGNOSTIC_FILES
+        from workflow_kernel.owned_run import _MAX_DIAGNOSTIC_BYTES, _MAX_DIAGNOSTIC_FILES, _MAX_REQUIRED_REVIEW_BYTES
         from workflow_kernel.review_closeout import has_preserved_review_evidence
 
-        for kind in ("staging_files", "staging_bytes", "router_files", "router_bytes", "single_file_bytes"):
+        for kind in ("router_files", "router_bytes", "single_file_bytes"):
             for prior in (False, True):
                 with self.subTest(kind=kind, prior=prior):
                     run, paths = self.make_run(run_id=f"limit-{kind.replace('_', '-')}-{int(prior)}")
@@ -238,15 +238,13 @@ class ReviewCloseoutTests(unittest.TestCase):
                     if not prior:
                         shutil.rmtree(destination)
                     if kind.endswith("files"):
-                        count = (_MAX_DIAGNOSTIC_FILES - first["files"] + 1
-                                 if kind == "staging_files" else _MAX_DIAGNOSTIC_FILES + 1)
+                        count = _MAX_DIAGNOSTIC_FILES + 1
                         for index in range(count):
                             (paths["router"] / f"extra-{index}.json").write_text("{}")
                     elif kind == "single_file_bytes":
-                        paths["report"].write_bytes(b"x" * (_MAX_DIAGNOSTIC_BYTES + 1))
+                        paths["report"].write_bytes(b"x" * (_MAX_REQUIRED_REVIEW_BYTES + 1))
                     else:
-                        size = (_MAX_DIAGNOSTIC_BYTES - first["bytes"] + 1
-                                if kind == "staging_bytes" else _MAX_DIAGNOSTIC_BYTES + 1)
+                        size = _MAX_DIAGNOSTIC_BYTES + 1
                         for index, amount in enumerate((size // 2, size - size // 2)):
                             (paths["router"] / f"extra-{index}.json").write_bytes(b"{}" + b" " * (amount - 2))
                     source_bytes = {p.relative_to(run.root): p.read_bytes()
@@ -265,12 +263,14 @@ class ReviewCloseoutTests(unittest.TestCase):
                     )
                     self.assertEqual(3, completed.returncode, completed.stderr)
                     self.assertEqual("", completed.stdout)
-                    self.assertEqual({"error": {
-                        "code": "evidence_limit_exceeded",
-                        "message": "required review evidence failed validation",
-                        "details": {"stage": "preservation_input", "reason": "retention_limit",
-                                    "path": "review/evidence.json"},
-                    }}, json.loads(completed.stderr))
+                    error = json.loads(completed.stderr)["error"]
+                    self.assertEqual("evidence_limit_exceeded", error["code"])
+                    detail = error["details"]
+                    self.assertEqual("preservation_input", detail["stage"])
+                    self.assertEqual("retention_limit", detail["reason"])
+                    self.assertTrue(detail["actual_bytes"] > detail["allowed_bytes"] or
+                                    detail["actual_files"] > detail["allowed_files"])
+                    self.assertTrue(detail["next_action"])
                     self.assertFalse(list(destination.parent.glob("review-stage-*")))
                     self.assertEqual(prior, destination.exists())
                     if prior:
@@ -926,6 +926,12 @@ class ReviewCloseoutTests(unittest.TestCase):
         finished = ExactOwnedRun.open(run.root).finish("succeeded", retain_diagnostics=True)
         self.assertEqual("retained", finished.status)
         self.assertTrue((evidence / "report.md").is_file())
+        snapshot = {p.relative_to(evidence): p.read_bytes() for p in evidence.rglob("*") if p.is_file()}
+        for _ in range(2):
+            self.assertEqual("complete", self.preserve(run, paths)["status"])
+            self.assertEqual(snapshot, {p.relative_to(evidence): p.read_bytes()
+                                        for p in evidence.rglob("*") if p.is_file()})
+        self.assertFalse((evidence / "diagnostic").exists())
 
     def test_aggregate_only_head_rewrite_cannot_relabel_old_lane_output(self):
         run, paths = self.make_run("dm-review", "rechecked")

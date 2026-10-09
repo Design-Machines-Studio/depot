@@ -121,7 +121,7 @@ class ReleaseValidatorTests(unittest.TestCase):
             "generate-verification-profile",
             "observe-pipeline", "reconcile-legacy-browser", "observe-review",
             "export-review-contributions", "bind-review-source",
-            "preserve-review-evidence", "assemble-review-evidence",
+            "preserve-review-evidence", "project-review-evidence", "assemble-review-evidence",
             "compare", "metrics", "emit-observation-index", "run-cost-summary", "emit-cost-summary",
             "resolve-plugin-asset",
             "openrouter-usage",
