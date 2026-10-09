@@ -168,8 +168,19 @@ Never bypass with bare `gh`:
 ```
 <!-- reviewed-pr-direct:end -->
 
-`request-review` uses these arguments/guard after source checks, starting draft CI once.
-`ready` requires actual CI, approvals, feedback and UI acceptance:
+Start PR checks after source validation:
+
+<!-- reviewed-pr-direct-request:start -->
+```bash
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
+  --operation request-review --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --feature-branch "${FEATURE_BRANCH:?approved featureBranch required}" \
+  --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT" \
+  --pr "$REVIEW_PR_URL"
+```
+<!-- reviewed-pr-direct-request:end -->
+
+Wait for actual CI, approvals, feedback and UI acceptance before readiness:
 
 <!-- reviewed-pr-direct-ready:start -->
 ```bash
