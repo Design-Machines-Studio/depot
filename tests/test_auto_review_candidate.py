@@ -281,7 +281,7 @@ esac
         return match.group(1)
 
     def publish(self, caller, operation="create"):
-        marker = f"reviewed-pr-{caller}" + ("-ready" if operation == "ready" else "")
+        marker = f"reviewed-pr-{caller}" + ({"ready": "-ready", "request-review": "-request"}.get(operation, ""))
         return subprocess.run(["bash", "-euc", self.snippet(caller, marker)],
                               env=self.env, capture_output=True, text=True, timeout=30)
 
@@ -293,6 +293,26 @@ esac
         if no_gh:
             self.assertEqual("", self.log.read_text())
         return result
+
+    def test_actual_callers_request_review_with_existing_owner_guards(self):
+        for caller in self.CALLERS:
+            with self.subTest(caller=caller):
+                self.prepare(caller, "request-review")
+                requested = self.publish(caller, "request-review")
+                self.assertEqual(0, requested.returncode, requested.stdout + requested.stderr)
+                self.assertIn("pr ready", self.log.read_text())
+                self.assertIn("Not ready", requested.stdout)
+                self.log.write_text("")
+                if caller == "full":
+                    self.env["TERMINAL_MODEL_REPORT_OWNER"] = "pipeline"
+                    deferred = self.publish(caller, "request-review")
+                    self.assertEqual(0, deferred.returncode, deferred.stderr)
+                    self.assertEqual("", self.log.read_text())
+                    self.env["TERMINAL_MODEL_REPORT_OWNER"] = "pipeline-run"
+                elif caller == "lean":
+                    self.env["CALLER_VERIFICATION_PASSED"] = "false"
+                    self.reject(caller, "request-review")
+                    self.env["CALLER_VERIFICATION_PASSED"] = "true"
 
     def test_actual_callers_publish_after_same_owner_detached_transfer(self):
         for caller in self.CALLERS:
@@ -322,7 +342,7 @@ esac
                     if operation == "ready":
                         self.facts["readiness"]["feedbackSettled"] = True
                         self.save_facts()
-                    marker = f"reviewed-pr-{caller}" + ("-ready" if operation == "ready" else "")
+                    marker = f"reviewed-pr-{caller}" + ({"ready": "-ready", "request-review": "-request"}.get(operation, ""))
                     self.assertIn('--feature-branch "${FEATURE_BRANCH:?approved featureBranch required}"',
                                   self.snippet(caller, marker))
                     result = self.publish(caller, operation)

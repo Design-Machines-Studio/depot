@@ -745,6 +745,8 @@ def validate_evidence_input(value: object, request: ReviewRequest) -> dict:
     }
     for key, expected in groups.items():
         actual = set(value[key]) if type(value[key]) is dict else set()
+        if key == "literal" and actual == {"output_ref", "native_trace_ref"}:
+            expected = actual
         if key == "recheck":
             actual -= {"pending_transition_refs"}
         if type(value[key]) is not dict or actual != expected:
@@ -795,6 +797,10 @@ def validate_evidence_input(value: object, request: ReviewRequest) -> dict:
     if result["status"] != "incomplete" and (result["incomplete_reasons"] or inspected["missing_evidence_refs"] or not set(requested["paths"]) <= set(inspected["paths"])):
         raise ValueError("incomplete required inspection")
     provenance = value["provenance"]
+    if "native_trace_ref" in value["literal"] and (
+        provenance["kind"] == "synthetic_test" or source["worktree_ref"] is not None
+    ):
+        raise ValueError("native evidence requires committed production source")
     if provenance["kind"] not in {"live", "recovery", "synthetic_test"}:
         raise ValueError("invalid evidence provenance")
     if provenance["executed_at"] is not None:

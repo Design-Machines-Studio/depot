@@ -125,3 +125,6 @@ Source-bound review producers require `>=0.26.0`. Load
 lane/coverage evidence.
 
 Historical closeout: [>=0.26.1](review-evidence-contract.md#retained-historical-terminal-validation-0261).
+
+Native T3 Codex host-event lane provenance requires >=0.27.0; use the closed
+variant in [review-evidence-contract.md](review-evidence-contract.md#native-codex-host-provenance-0270).

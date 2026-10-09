@@ -1407,6 +1407,10 @@ def validate_preserved_review_evidence(diagnostic: Path, *, run=None, historical
         if not _terminal_read(scope / "report.md", diagnostic, role).strip():
             raise RetainedReviewValidationError("corrupt_evidence", role)
         _validate_retained_report(scope)
+        if inventory is not None:
+            # Semantic readers run after the first inventory pass. Reject any
+            # replacement before returning historical compatibility success.
+            _historical_inventory(run, historical_review_digests)
         return {"validation": "historical_compatibility" if inventory is not None else "source_bound",
                 "run_id": request.run_id, "source_repository": request.source_repository, "source_head": request.source_head}
     except RetainedReviewValidationError:
@@ -1916,6 +1920,15 @@ def _validate_production_lane(root, record, receipts):
     value = record["input"]
     if value["provenance"]["kind"] == "synthetic_test":
         raise EvidenceAssemblyError("lane_validation", "incomplete_inspection")
+    if "native_trace_ref" in value["literal"]:
+        from .native_review import validate_native_output
+        try:
+            return validate_native_output(
+                _bound_bytes(root, record, value["literal"]["native_trace_ref"]),
+                _bound_bytes(root, record, value["literal"]["output_ref"]), value,
+            )
+        except (KeyError, TypeError, ValueError, UnicodeError, RecursionError):
+            raise EvidenceAssemblyError("lane_validation", "incomplete_inspection") from None
     dispatch_ref = value["literal"]["dispatch_receipt_ref"]
     dispatch_bytes = _bound_bytes(root, record, dispatch_ref)
     dispatch = _evidence_json_from_bytes(dispatch_bytes)
@@ -1937,7 +1950,9 @@ def _validate_production_lane(root, record, receipts):
         if row.get("stage") != "review_lane_evidence":
             continue
         original = _read_source_record(root, row["authoritative_receipt"], "lane")
-        original_ref = original["input"]["literal"]["dispatch_receipt_ref"]
+        original_ref = original["input"]["literal"].get("dispatch_receipt_ref")
+        if original_ref is None:
+            continue  # Native host witnesses have their own exact source/output binding.
         if original_ref in original["bindings"] and (
                 _byte_digest(_bound_bytes(root, original, original_ref)) == _byte_digest(dispatch_bytes)
                 and original["source_snapshot"] != record["source_snapshot"]):
@@ -1993,6 +2008,8 @@ def _aggregate_documents(root, request, value, receipts, target, repository, *, 
                 _validate_recheck(root, item["input"], chain[index - 1], item["source_snapshot"], request.required_lanes, repository, worktree)
         _transition_chain(root, selected["transition_refs"], record["source_snapshot"], target, selected["lane"], request.required_lanes, repository, worktree)
         if test_harness:
+            if "native_trace_ref" in extraction["literal"]:
+                raise EvidenceAssemblyError("lane_validation", "incomplete_inspection")
             companion = _lane_companion(
                 _evidence_json_from_bytes(_bound_bytes(root, record, extraction["literal"]["companion_ref"])),
                 _evidence_json_from_bytes(_bound_bytes(root, record, extraction["literal"]["dispatch_receipt_ref"])), extraction,
@@ -2244,7 +2261,7 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
             eligible = not (set(missing) & required) and value["result"]["status"] != "incomplete"
             if value["source"]["worktree_ref"] is not None and not live:
                 raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
-            if value["literal"]["companion_ref"] in bindings:
+            if value["literal"].get("companion_ref") in bindings:
                 companion = _evidence_json_from_bytes(_bound_bytes(root, {"bindings": bindings}, value["literal"]["companion_ref"]))
                 if value["literal"]["dispatch_receipt_ref"] in bindings:
                     companion = _lane_companion(companion,

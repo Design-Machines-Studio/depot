@@ -59,6 +59,8 @@ review_repository() {
   remote="${remote%.git}"
   case "$remote" in
     git@github.com:*) remote="${remote#git@github.com:}" ;;
+    ssh://git@github.com/*) remote="${remote#ssh://git@github.com/}" ;;
+    ssh://git@github.com:22/*) remote="${remote#ssh://git@github.com:22/}" ;;
     https://github.com/*) remote="${remote#https://github.com/}" ;;
     *) review_refuse 'canonical repository unavailable' ;;
   esac

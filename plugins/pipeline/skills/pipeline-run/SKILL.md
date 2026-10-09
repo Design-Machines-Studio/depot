@@ -18,10 +18,9 @@ argument-hint: "[path to manifest.json or prompts directory]"
 
 # Pipeline Run
 
-Execute a set of generated prompts autonomously in worktrees with focused role
-review for ordinary chunks, sensitive-path escalation, and the approved final
-review mode. This is the execution engine -- it creates or reuses branches, runs
-subagents, reviews, fixes, merges, and delivers a clean feature branch.
+Execute generated prompts in worktrees with focused role review, sensitive-path
+escalation and the approved final review mode. Create or reuse branches, run
+subagents, review, fix, merge and deliver a clean feature branch.
 
 ## Human-Facing Completion
 
@@ -37,18 +36,18 @@ the exact blocker, the smallest operator action, and the preserved resumable
 location. Normally stay within roughly 250 words, except for required P1/P2/P3
 findings or a real blocker.
 
-Do not repeat `Steps Completed`, concrete routing accounting, cleanup inventory, every
-evaluation receipt, raw review output, or a default action menu in visible chat.
-Those facts remain in the established artifacts. Put one recommended action
-before any genuinely live alternatives.
+Keep `Steps Completed`, routing accounting, cleanup inventory, evaluation receipts
+and raw review output in the artifacts. Give one recommended action before any
+live alternatives.
 
 ## Input
 
 <manifest_path> #$ARGUMENTS </manifest_path>
 
-If the path above is empty, check for `manifest.json` files matching `plans/*/manifest.json`. If found, ask which manifest to execute. If none found, ask: "Provide a path to manifest.json, or run `/pipeline-prompts` first to generate one."
+If empty, check `plans/*/manifest.json`. Ask which manifest to execute if found;
+otherwise ask: "Provide manifest.json, or run `/pipeline-prompts` first."
 
-If a directory was provided instead of a manifest file, look for `manifest.json` inside it.
+For a directory, use its `manifest.json`.
 
 ## Pre-Flight Checks
 

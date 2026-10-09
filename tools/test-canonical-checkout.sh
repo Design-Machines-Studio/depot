@@ -92,6 +92,36 @@ assert test "$INDEX_BOUNDARY" != "$(boundary "$REPO")"
 inspect
 assert jq -e 'any(.paths[]; .reason=="current-boundary-changed" and .classification=="retained")' "$TMP/inspect.json"
 git -C "$REPO" restore --source=HEAD --staged -- 'source with spaces'
+# Inject actual edits after the whole-plan comparison succeeds, before disposal.
+for late_edit in worktree index mode; do
+  inspect
+  reject "$HELPER_BASH" -c '
+    helper="$1"; repo="$2"; edit="$3"; shift 3
+    cmp() {
+      command cmp "$@" || return "$?"
+      case "${3:-}" in */current.json)
+        if [ "$edit" = mode ]; then chmod +x "$repo/-leading"
+        else printf "late repair\n" > "$repo/-leading"; fi
+        if [ "$edit" = index ]; then
+          git -C "$repo" add -- -leading
+          printf "stale\n" > "$repo/-leading"
+        fi ;;
+      esac
+    }
+    source "$helper" prepare "$@"
+  ' bash "$HELPER" "$REPO" "$late_edit" "${args[@]}" --inspection "$TMP/inspect.json"
+  assert grep -Fq 'path changed before disposal' "$TMP/rejected.out"
+  if [ "$late_edit" = index ]; then
+    assert test "$(git -C "$REPO" show ':-leading')" = 'late repair'
+    assert test "$(cat "$REPO/-leading")" = stale
+    git -C "$REPO" restore --source=HEAD --staged -- -leading
+  elif [ "$late_edit" = mode ]; then
+    assert test -x "$REPO/-leading"
+    assert test "$(cat "$REPO/-leading")" = stale
+    chmod 600 "$REPO/-leading"
+  else assert test "$(cat "$REPO/-leading")" = 'late repair'; fi
+  printf 'stale\n' > "$REPO/-leading"
+done
 inspect
 assert prepare
 assert test "$(cat "$REPO/deleted source")" = 'deleted original'

@@ -91,6 +91,14 @@ fi
 assert grep -q 'hook activation unavailable' "$TMP/bind.out"
 
 # SessionStart supplies only the exact current-session pointer.
+for remote in ssh://git@github.com/Fixture/consumer.git ssh://git@github.com:22/Fixture/consumer.git; do
+  git -C "$REPO" remote set-url origin "$remote"
+  hook session-start "$TMP/start.json"
+  assert jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' "$TMP/out"
+done
+git -C "$REPO" remote set-url origin ssh://git@github.com.evil/Fixture/consumer.git
+assert silent session-start "$TMP/start.json"
+git -C "$REPO" remote set-url origin https://github.com/Fixture/consumer.git
 hook session-start "$TMP/start.json"
 assert jq -e '.hookSpecificOutput.hookEventName == "SessionStart"' "$TMP/out"
 POINTER="$(jq -r '.hookSpecificOutput.additionalContext | split(" ")[3] | rtrimstr(".")' "$TMP/out")"

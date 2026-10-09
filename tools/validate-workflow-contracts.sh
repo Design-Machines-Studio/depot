@@ -2094,6 +2094,8 @@ require_text "$REPO_ROOT/tests/test_auto_review_candidate.py" 'test_standalone_p
 for caller in direct full lean; do
   case "$caller" in direct) surface="$auto_closeout" ;; full) surface="$orchestrator" ;; lean) surface="$pipeline_cmd" ;; esac
   require_text "$surface" "<!-- reviewed-pr-$caller:start -->" "$caller invokes the creation seam"
+  require_text "$surface" "<!-- reviewed-pr-$caller-request:start -->" "$caller starts actual PR checks"
+  require_text "$surface" '--operation request-review --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT"' "$caller invokes the review request seam"
   require_text "$surface" "<!-- reviewed-pr-$caller-ready:start -->" "$caller invokes the ready seam"
   require_text "$surface" '--operation create --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT"' "$caller uses exact create arguments"
   require_text "$surface" '--operation ready --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT"' "$caller uses exact ready arguments"

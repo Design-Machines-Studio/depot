@@ -1018,16 +1018,14 @@ In the compact Step 6 summary, state `noMergeOnCompletion=true` in **Branch or P
 and use dm-review's designer handoff for required UI acceptance or owner
 merge as **Recommended next action**. Never request routine backend-code review.
 
-After Steps 4/4b pass, standalone `pipeline-run` invokes these seams.
-For parent-owned `pipeline`, defer both operations and return exact candidate,
-producer/readiness and preserved source/browser references. The parent runs
-mandatory caller verification before publication and refreshes invalidated
-evidence after repairs under this same owner. Pending PR-only CI blocks ready,
-not draft creation. Inputs follow `automatic-implementation-closeout.md`;
-Retain `FEATURE_BRANCH`, bound earlier to approved manifest `featureBranch`,
-and `$REVIEW_ROOT` after transfer; never rediscover from detached HEAD. Copy
-manifest `baseBranch` to readiness `approvedBase`; local/origin resolution
-preserves review source base/head, never infers GitHub-default approval.
+After Steps 4/4b, standalone `pipeline-run` publishes. Parent-owned `pipeline`
+defers publication, returning candidate, producer/readiness and preserved
+source/browser references for mandatory caller verification. Repairs refresh
+invalidated evidence under this owner. Pending PR-only CI blocks ready, not
+creation. Use `automatic-implementation-closeout.md` inputs. Retain approved
+manifest `FEATURE_BRANCH`/`$REVIEW_ROOT` after transfer; never recover from detached
+HEAD. Set readiness `approvedBase` from manifest `baseBranch`, preserving source
+base/head; GitHub defaults grant no approval.
 
 <!-- reviewed-pr-full:start -->
 ```bash
@@ -1044,8 +1042,25 @@ esac
 ```
 <!-- reviewed-pr-full:end -->
 
-After actual PR checks, feedback settlement and required designer UI acceptance
-pass at the final head, use the same producer gate for draft-to-ready:
+Start PR checks after source validation:
+
+<!-- reviewed-pr-full-request:start -->
+```bash
+case "${TERMINAL_MODEL_REPORT_OWNER:?validated caller owner required}" in
+pipeline) printf '%s\n' 'Publication deferred to parent caller verification.' ;;
+pipeline-run)
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
+  --operation request-review --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --feature-branch "${FEATURE_BRANCH:?approved featureBranch required}" \
+  --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT" \
+  --pr "$REVIEW_PR_URL"
+;;
+*) exit 2 ;;
+esac
+```
+<!-- reviewed-pr-full-request:end -->
+
+Wait for actual CI, approvals, feedback and UI acceptance before readiness:
 
 <!-- reviewed-pr-full-ready:start -->
 ```bash
@@ -1063,10 +1078,9 @@ esac
 ```
 <!-- reviewed-pr-full-ready:end -->
 
-No bare `gh` may bypass this seam. Settle actual PR-triggered CI and external
-feedback independently. Keep the existing draft while final-head checks or
-required designer UI acceptance remain. Fix supported feedback automatically,
-push and recheck affected evidence under this logical owner. Supported
+No bare `gh` may bypass this seam. Final-head checks, feedback and designer UI
+acceptance gate readiness. Fix supported feedback, push and recheck affected
+evidence under this owner. Supported
 exact-owned replay handles conflicting fixed companions; never rewrite preserved
 history. A repair push never starts a duplicate broad review.
 

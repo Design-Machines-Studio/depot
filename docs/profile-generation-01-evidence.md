@@ -1,10 +1,12 @@
 # PROFILE-GENERATION-01 evidence
 
-Draft PR #175 provides `generate-verification-profile` in Kernel 0.27.0 and Pipeline 1.73.1 integration with Kernel >=0.27.0. Generation prepares and reloads an authoritative plan; it proves no browser execution. Baseplate remains paused. Source validation and settled review outputs do not supply the missing final native-review provenance intake.
+Draft PR #175 provides `generate-verification-profile` in Kernel 0.27.0 and Pipeline 1.73.1 integration with Kernel >=0.27.0. Generation prepares and reloads an authoritative plan; it proves no browser execution. Baseplate remains paused. Kernel 0.27.0 now supplies a closed native host-event provenance variant so original committed-source outputs can be recovered through the supported assembler.
 
 ## SIMPLICITY-CHECK
 
 One CLI handler delegates discovery to ProjectPersonaAdapter. Explicit task selection runs before expansion; exact case selection retains declared primitives and required flags. Existing parsers, identities, origin digests, serialization, safe publication, reload and immutable binding are reused. There is no second discovery implementation, new profile schema, browser service, runbook parser or application sweep. Pipeline now compares all required acceptance dimensions, including mobile, before dispatch.
+
+Native recovery adds one bounded host-event validator to the existing assembler. Routed receipts, source snapshots, inspection, history, contribution accounting and retention keep their existing owners and rules.
 
 ## Integration and versions
 
@@ -13,10 +15,10 @@ Recorded order remains **#172 → #174 → #173 → #175**. Refreshed reviewed h
 | PR | Exact source | Preserved behavior |
 | --- | --- | --- |
 | [172](https://github.com/Design-Machines-Studio/depot/pull/172) | ff171bae66a51ad20acbaa40d89d0183cf4d05fb | Pinned historical retained-review compatibility; new reviews remain strict |
-| [174](https://github.com/Design-Machines-Studio/depot/pull/174) | f1c1a3a9fc58618642987604101078ecdb88a222 | Whole-package 5 MiB / 200-file bounds; existing source references reused without seal rewriting |
-| [173](https://github.com/Design-Machines-Studio/depot/pull/173) | d1aca4ef2320569d9840b42191e3550b97a822f9 | Readiness/publication and maintained-checkout behavior; exact 172/174 ancestors |
+| [174](https://github.com/Design-Machines-Studio/depot/pull/174) | 6c87b5eaf010e9d3b52c409dd68c627eb36aa8a9 | Final whole-package 9 MiB / 416-file bounds; source references reused without seal rewriting |
+| [173](https://github.com/Design-Machines-Studio/depot/pull/173) | 2f27d0fa143453952da623e774daa3e2b1ea16a1 | Final readiness/publication and maintained-checkout repairs; exact reviewed dependency ancestors |
 
-Normal Git merge preserves those commits and source changes. #175 retains later Kernel 0.27.0/Pipeline 1.73.1; Pipeline also preserves dm-review>=1.87.0. dm-review's Kernel>=0.26.2 floor and all other owner versions remain intact. Generated manifests/aliases and dependency graph are regenerated from canonical sources. No owner branch, primary checkout or consumer work was rewritten.
+Those PRs merged in order on 2026-10-09. Main is 424f42ff30614ac98a2ec765bc4a06e40918d936. A normal merge into #175 preserves their commits, late historical-digest race protection and readiness repairs. Kernel 0.26.2/Pipeline 1.73.0 are already released; this branch's generation command still requires its later unpublished versions. #175 retains later Kernel 0.27.0/Pipeline 1.73.1; Pipeline also preserves dm-review>=1.87.0. dm-review's Kernel>=0.26.2 floor and all other owner versions remain intact. Generated manifests/aliases and dependency graph are regenerated from canonical sources. No owner branch, primary checkout or consumer work was rewritten.
 
 ## Exact preservation diagnosis
 
@@ -28,9 +30,11 @@ That correction alone cannot establish final coverage. The last committed reques
 
 All six native literal outputs and their hashes remain unchanged. Actual private Codex host JSONL traces were recovered for the three agents, recording parent/agent thread identities, actual model/effort, timestamps, task assignments, tool executions and returned results. Their derived index is explicitly host-trace evidence; it is not a router receipt. Each agent covered two affected lanes with shared context. Native usage/cost is not inferred from routing metadata.
 
-**Specific Kernel gap:** existing lane input requires `dispatch_receipt_ref` and `companion_ref`; production validation requires an actual served router dispatch, attempts, published output and non-stub transport. It has no accepted alternative for T3 `collaboration.spawn_agent/followup_task` completion events. Six separate failed routed attempts have served: null and cannot represent native success. PR #172's sole historical pin is a different Baseplate run; PR #174's larger bounds do not add provenance support. PR #173 used real role-dispatch codex-cli receipts, not collaboration-native outputs.
+**Native provenance repair:** the former production contract required an actual router dispatch plus companion. Kernel 0.27.0 now accepts the closed `literal={output_ref,native_trace_ref}` variant in the same assembler. It validates actual T3 subagent session/parent/turn identity, assignment header, original committed Git HEAD observation, exact successful AddFile/FileChange bytes, paired exec patch/result, final answer and task completion. Encrypted assignments remain opaque; commands and patches are never executed. Unknown identity/cost stays unavailable. Existing router validation, source/inspection/history rules, contribution accounting and retention remain strict. No new command, review framework or schema redesign was added.
 
-The smallest repair is a closed actual host-event provenance variant in the existing lane producer, binding agent, source/inspection scope, output bytes and actual completion while preserving unknown fields and all existing router checks. It was handed to Kernel ownership through the board. No router receipts, source seals, successful final coverage or terminal completion were manufactured. Settled lanes were not restarted. Supported final coverage/preservation remains blocked until that intake accepts the preserved evidence.
+Exact selected original JSONL lines form bounded inert excerpts; their line numbers and complete original trace digests are retained. The full private traces and literal outputs stay unchanged. The candidate launcher recovered all six committed-source native rechecks and assembled complete seven-lane coverage at their original source, **53298592**. Strict preservation passed with 126 files / 2,219,185 bytes; an identical retry preserved every retained hash. Initial P1/P2/P3 repairs and the stale-log discard remain bound to actual evidence. This replay invokes no model and does not approve newer source or earlier consumer dispatch.
+
+The historical integration inspections recorded staged trees 62615245/c8f85fe1, not later commit f4dc2f36. They remain supplemental evidence and are never relabeled. New intake/merged-source changes receive only the required affected reviews at a clean committed boundary before final source-bound assembly, strict preservation and its immutable repeat. Final current-head receipts are linked from the PR; candidate proof remains separate from installed proof.
 
 ## Complete Baseplate declaration-tree diagnosis
 
@@ -87,7 +91,7 @@ Preserve the diagnostic run/profile/immutable binding. Only an identical complet
 
 ## NOT-COVERED
 
-- Supported final native-review intake/aggregate/preservation remains blocked by the specific Kernel gap above. An archive is not a successful final producer seal.
+- Historical staged-tree native inspections remain supplemental. Original committed-source recovery cannot approve the new intake implementation; affected current-source reviews and complete strict preservation are separately required.
 - No normal exact-source full-tree passing consumer canary, consumer declaration repair, new consumer binding, browser execution, application repair, review restart, serving-checkout change or shared-data change occurred.
 - Native macOS, publication/tags, Claude/Codex synchronization and installed-consumer proof remain separate. Original evidence and consumer Issue/PR state are unchanged. Project 1 update: None.
 
@@ -100,7 +104,7 @@ Preserve the diagnostic run/profile/immutable binding. Only an identical complet
 
 ## Remaining delivery and consumer steps
 
-1. Kernel ownership supplies the supported actual host-native evidence intake. Recover settled outputs, assemble final source-bound transitions/coverage and preserve/repeat the complete package. Recheck only newly affected source. Keep this PR draft until its readiness evidence is complete.
-2. Owner merges in 172 → 174 → 173 → 175 order. Run release preflight on combined main; publish required workflow-kernel-v0.27.0 and pipeline-v1.73.1 tags under the repository release procedure. These versions are reserved source, not published releases.
+1. Judge source readiness only from complete current-head review, supported assembly/preservation and immutable-repeat receipts linked from #175. Older recovery proof grants no current-head approval. Preserve original evidence and settled lanes; resolve affected findings before marking this draft ready.
+2. The owner merges #175 after the already merged #172 → #174 → #173 dependencies. Run release preflight on combined main; publish required workflow-kernel-v0.27.0 and pipeline-v1.73.1 tags under the repository release procedure. These versions are reserved source, not published releases.
 3. Refresh Claude marketplace and update workflow-kernel@depot/pipeline@depot. Refresh/restart independent Desktop Cowork caches where used. Use supported Codex marketplace upgrade and plugin-add paths; confirm coherent required versions in each harness. Never edit installed caches.
 4. Baseplate owner fixes the two declared list fields and reconciles viewport authority with approved 16-case acceptance. After required plugins are published and installed, run the normal installed full-tree generation/reload path, prepare a new plan/run, and bind its complete approved contract. Only then may its owner resume authorized consumer work. Baseplate remains paused until all these conditions hold.

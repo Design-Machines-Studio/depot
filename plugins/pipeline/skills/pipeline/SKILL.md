@@ -507,12 +507,10 @@ checks and the requirements cross-check pass. Only then set
 source changes, failed or missing checks and refresh affected producer evidence.
 Full mode reuses its deferred candidate under the same owner, never a new loop.
 Never use bare `gh` to create or ready a PR.
-Use `automatic-implementation-closeout.md`'s closed inputs. Bind `FEATURE_BRANCH`
-from approved plan `featureBranch` for Lean (no manifest), or retain Full's
-approved manifest binding. Keep it and `$REVIEW_ROOT` after transfer; never
-rediscover from detached HEAD. Copy approved `baseBranch` to readiness
-`approvedBase`; local/origin resolution preserves source base/head, never
-infers GitHub-default approval:
+Use `automatic-implementation-closeout.md`'s inputs. Bind `FEATURE_BRANCH` to
+approved plan `featureBranch` (Lean) or manifest (Full). Retain it and
+`$REVIEW_ROOT` after transfer; detached HEAD cannot recover ownership. Set
+`approvedBase` from approved `baseBranch`, preserving source base/head:
 
 <!-- reviewed-pr-lean:start -->
 ```bash
@@ -524,8 +522,20 @@ infers GitHub-default approval:
 ```
 <!-- reviewed-pr-lean:end -->
 
-After actual PR checks, feedback settlement and required designer UI acceptance
-pass at the final head, use the same producer gate for draft-to-ready:
+Start PR checks:
+
+<!-- reviewed-pr-lean-request:start -->
+```bash
+[ "${CALLER_VERIFICATION_PASSED:-false}" = true ] || exit 3
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
+  --operation request-review --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --feature-branch "${FEATURE_BRANCH:?approved featureBranch required}" \
+  --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT" \
+  --pr "$REVIEW_PR_URL"
+```
+<!-- reviewed-pr-lean-request:end -->
+
+CI, approvals, feedback and UI acceptance gate readiness:
 
 <!-- reviewed-pr-lean-ready:start -->
 ```bash
@@ -538,15 +548,14 @@ pass at the final head, use the same producer gate for draft-to-ready:
 ```
 <!-- reviewed-pr-lean-ready:end -->
 
-PR-only CI stays pending until creation. Collect final-head CI/feedback
-independently; fix defects, push, recheck affected evidence and refresh readiness
-under this owner. Draft waits for checks/feedback/designer UI acceptance.
+Collect final-head PR CI/feedback; fix defects, push, recheck affected evidence
+and refresh readiness under this owner. Checks, feedback and designer UI
+acceptance gate merge readiness.
 `noMergeOnCompletion=true` in both modes; missing/false legacy values grant no merge.
 
-Separate feedback from review: pre-PR is `not_applicable`, never claimed
-settled. At an unchanged covered head with zero retained findings, CI/feedback
-waits do not invoke the selector or dispatch reviewers. Invoke it only for
-actual source, new supported finding or rendered automation gaps:
+Pre-PR feedback is `not_applicable`. At an unchanged covered head without
+retained findings, CI/feedback waits dispatch nothing. Invoke the selector only
+for source, supported findings or rendered automation gaps:
 
 <!-- review-gap-lean:start -->
 ```bash

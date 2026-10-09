@@ -161,7 +161,7 @@ Append is the commit point. Retry reconstructs missing derived companions
 without dispatch. Conflicting fixed files cannot be replaced: use a new
 exact-owned replay with the original committed stream/history. Preservation
 reads the same locked snapshot and retains referenced history within existing
-200-file/5 MiB limits. Optional contribution writers use that lock too;
+416-file/9 MiB limits. Optional contribution writers use that lock too;
 economics and observations never settle or revoke required coverage.
 
 Closed failure stages are `lane_input`, `lane_validation`,
@@ -174,7 +174,7 @@ unchanged.
 
 ## Bounded retention (>=0.26.2)
 
-The 5 MiB (5,242,880-byte) allowance bounds the sum of regular-file bytes
+The 9 MiB (9,437,184-byte) allowance bounds the sum of regular-file bytes
 across the whole diagnostic directory. It is not merely a per-file cap;
 assembly, preservation staging and terminal revalidation retain their existing
 bound checks. Every digest, source, scope, provenance,
@@ -186,7 +186,7 @@ authoritative receipt stream, every committed source/history/transition binding,
 private router receipts/index and report. The `review/evidence` subtree alone
 is 96 files and 2,721,881 bytes. Removing its 592,768 duplicate snapshot/literal
 bytes alone would still leave the complete package above the former 2 MiB
-allowance. That original package fits4MiB and128files. The final-head integration with its required affected documentation/test rechecks measures144files and3,941,061bytes. Actual preservation still failed the128file bound, so the first separately measured count limit rose to160. The completed affected CLI security/test rechecks then produced an eligible current-head package of185files and4,685,139bytes, including its final coverage record and all companions. Actual preservation rejected both4MiB and160files. The final bounded allowance is5MiB/200files; it leaves room for the repair’s own source transition without changing required evidence or validation. These bounded
+allowance. That original package fits4MiB and128files. The final-head integration with its required affected documentation/test rechecks measures144files and3,941,061bytes. Actual preservation still failed the128file bound, so the first separately measured count limit rose to160. The completed affected CLI security/test rechecks then produced an eligible current-head package of185files and4,685,139bytes, including its final coverage record and all companions. Actual preservation rejected both4MiB and160files. The first final source transition preserved196files/4,935,164bytes under5MiB/200files. Normal GitHub review then reported three valid defects. Their required affected/core Codex rechecks produced a complete eligible246-file/5,877,650-byte package; actual preservation rejected both5MiB and200files. The preceding bounded allowance was6MiB/288files, leaving bounded room for the required finishing source transition without changing evidence or validation. The earlier measured transition added11files, so256files would leave inadequate room for that step. These bounded
 allowance changes preserve original bytes without compression or a new storage mechanism. New coverage bindings may reuse validated source-seal references directly. Existing committed bindings are reused byte-for-byte on assembly retries; original seals and lane records are never rewritten. These figures describe the supplied read-only
 projection, not a successful consumer preservation run.
 
@@ -234,3 +234,62 @@ one `next_action`; compatibility/missing/unsafe evidence exits 3, corruption or
 incomplete coverage exits 2. No arbitrary supplied paths/raw exceptions appear.
 Terminal cleanup uses the throwing validator; existing boolean callers stay
 strict.
+
+The final required GitHub/caller rechecks produced an eligible complete package
+of 362 files and 8,080,697 bytes, including final coverage and every companion,
+source/history/transition binding, private receipt and report. Actual production
+preservation rejected both 6 MiB and 288 files. The bounded final allowance is
+8 MiB/384 files; 8 MiB is evaluated against this complete package, and 384 leaves
+room for the required final source transition (the previous measured transition
+added 11 files). Required evidence and original sealed bytes are unchanged.
+No digest, source, scope, provenance, path-safety or completeness check changes.
+
+Release verification found PR172's digest race and repaired it in the existing
+Kernel dependency. Required repair/source-continuity evidence then measured
+386 files and 8,579,686 bytes; normal preservation rejected both 384 files and
+8 MiB. The final bounded allowance is 9 MiB/416 files, including room for the
+required finishing transition. Original bytes and validation remain strict.
+
+## Native Codex host provenance (>=0.27.0)
+
+`assemble-review-evidence` accepts a closed alternative lane `literal` object:
+
+```json
+{"output_ref":"review/recheck/security-output.md","native_trace_ref":"private/native-events.jsonl"}
+```
+
+Use actual T3 Code subagent host records. Retain the original private trace;
+bounded excerpts copy its selected JSONL lines exactly, in original ordinal
+order. Preserve an extraction index with original trace digest and line numbers.
+Never create router receipts for collaboration tool executions. The existing
+router literal variant and its validation are unchanged; retain every actual
+router receipt and its index for mixed runs.
+
+The native variant requires coherent session/parent/agent/turn identity, the
+assignment routing header, a successful same-turn Git HEAD observation, an exact
+completed AddFile/FileChange output, its paired exec patch/result, and subsequent
+assistant final answer and task completion. Encrypted assignment content stays
+opaque. Trace bytes are inert: commands, patches and model messages are never
+executed or interpreted as review findings. Existing declared inspection scope,
+source snapshots, recheck history, finding extraction and aggregate checks remain
+mandatory. Missing or mismatched witnesses block production coverage.
+
+Only committed-source review is supported. Recovery binds the original observed
+commit; staged historical inspection remains supplemental evidence and cannot
+be relabeled as a later commit. Review new affected changes at a clean committed
+boundary. Native excerpts are bounded to 2 MiB, 4096 records and 512 KiB per
+record, within the unchanged whole-package retention allowance.
+
+The participant ID is `native-` plus the first 16 SHA256 hex characters of the
+actual host thread ID. Actual model/provider observations remain in the private
+trace. Missing or unclassified model identity uses the existing `not_reported`
+summary sentinel and unknown family; it never prevents otherwise evidenced
+inspection. Family classification reuses the existing normalizer. Neither
+thread token totals nor unreported charges become invented per-lane cost.
+
+Use the ordinary assembler and strict preservation afterward. A relocated
+exact-owned recovery copy may retain old companions under history and emit new
+canonical companions; original streams, seals, literals and source identities
+stay immutable. Recovery does not invoke a model or validate earlier consumer
+dispatch retroactively. Unit/native-format fixtures are development artifacts,
+never live inspection evidence.

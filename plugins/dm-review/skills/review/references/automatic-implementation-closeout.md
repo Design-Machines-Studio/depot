@@ -168,8 +168,19 @@ Never bypass with bare `gh`:
 ```
 <!-- reviewed-pr-direct:end -->
 
-After actual PR checks, feedback settlement and required designer UI acceptance
-pass at the final head, use the same producer gate for draft-to-ready:
+Start PR checks after source validation:
+
+<!-- reviewed-pr-direct-request:start -->
+```bash
+"$DM_REVIEW_BUNDLE_ROOT/skills/review/references/publish-reviewed-pr.sh" \
+  --operation request-review --repository-root "$REVIEW_ROOT" --run-root "$REVIEW_RUN_ROOT" \
+  --feature-branch "${FEATURE_BRANCH:?approved featureBranch required}" \
+  --producer-input "$REVIEW_PRODUCER_INPUT" --readiness-input "$REVIEW_READINESS_INPUT" \
+  --pr "$REVIEW_PR_URL"
+```
+<!-- reviewed-pr-direct-request:end -->
+
+Wait for actual CI, approvals, feedback and UI acceptance before readiness:
 
 <!-- reviewed-pr-direct-ready:start -->
 ```bash
@@ -183,7 +194,7 @@ pass at the final head, use the same producer gate for draft-to-ready:
 
 Register the returned PR with the host when supported. Collect actual PR CI/
 feedback; fix supported defects, push and recheck affected source/browser under
-this owner. Keep draft while CI, feedback or designer acceptance remains;
+this owner. Keep merge readiness blocked while CI, feedback or designer acceptance remains;
 unchanged UI acceptance needs bounded non-impact proof. Deliver dm-review's
 `operator-handoff.sh`: tested behavior, checks, preview tasks/acceptance and owner
 merge. Never ask for backend-code review or create-PR approval. Preserve

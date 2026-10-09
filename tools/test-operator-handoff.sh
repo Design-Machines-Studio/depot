@@ -130,6 +130,15 @@ git -C "$REPO" init -q
 git -C "$REPO" config user.name Fixture
 git -C "$REPO" config user.email fixture@example.test
 git -C "$REPO" remote add origin https://github.com/Fixture/consumer.git
+for remote in ssh://git@github.com/Fixture/consumer.git ssh://git@github.com:22/Fixture/consumer.git; do
+  git -C "$REPO" remote set-url origin "$remote"
+  assert bash -c 'source "$1"; test "$(review_repository "$2")" = Fixture/consumer' bash "$CONTEXT" "$REPO"
+done
+for remote in ssh://git@github.com.evil/Fixture/consumer.git ssh://git@github.com:2222/Fixture/consumer.git; do
+  git -C "$REPO" remote set-url origin "$remote"
+  reject bash -c 'source "$1"; review_repository "$2"' bash "$CONTEXT" "$REPO"
+done
+git -C "$REPO" remote set-url origin https://github.com/Fixture/consumer.git
 printf '.workflow-kernel/\n' > "$REPO/.gitignore"
 printf 'fixture\n' > "$REPO/source.txt"
 git -C "$REPO" add .
@@ -188,7 +197,7 @@ assert bash -c '
   test "$(printf fixture | review_sha256)" = "$(printf fixture | shasum -a 256 | awk "{print \$1}")"
 ' bash "$CONTEXT" "$POINTER" "$RUN_ROOT"
 fi
-reject bash -c 'source "$1"; id() { printf "0\n"; }; review_private "$2"' bash "$CONTEXT" "$POINTER"
+reject bash -c 'source "$1"; foreign_uid=$(( $(review_stat uid "$2") + 1 )); id() { printf "%s\n" "$foreign_uid"; }; review_private "$2"' bash "$CONTEXT" "$POINTER"
 for path in "$REPO/./source.txt" "$REPO/../repository/source.txt" "$REPO//source.txt" "$REPO/source.txt/"; do
   reject bash -c 'source "$1"; review_safe_path "$2"' bash "$CONTEXT" "$path"
 done
