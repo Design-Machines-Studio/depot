@@ -137,7 +137,7 @@ not a new user-facing keep/debug option:
 ```
 
 Retention deletes every other child of the exact-owned root, permits at most
-384 regular files and 8 MiB across the whole diagnostic directory, refuses
+416 regular files and 9 MiB across the whole diagnostic directory, refuses
 links or special files, and emits all four
 terminal fields:
 
@@ -149,7 +149,7 @@ cleanup_command
 ```
 
 The byte allowance covers the complete required package, not just each file.
-Kernel0.26.2 uses8MiB/384files. The complete required CLI-reviewed
+Kernel0.26.2 uses9MiB/416files. The complete required CLI-reviewed
 package measured185files/4,685,139bytes and exceeded both4MiB and160files.
 After the normal GitHub review reported three valid defects, the required
 affected/core rechecks produced246files/5,877,650bytes and exceeded both
@@ -191,3 +191,9 @@ preservation rejected both 6 MiB and 288 files. The bounded final allowance is
 room for the required final source transition (the previous measured transition
 added 11 files). Required evidence and original sealed bytes are unchanged.
 No digest, source, scope, provenance, path-safety or completeness check changes.
+
+Release verification found PR172's digest race and repaired it in the existing
+Kernel dependency. Required repair/source-continuity evidence then measured
+386 files and 8,579,686 bytes; normal preservation rejected both 384 files and
+8 MiB. The final bounded allowance is 9 MiB/416 files, including room for the
+required finishing transition. Original bytes and validation remain strict.

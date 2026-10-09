@@ -161,7 +161,7 @@ Append is the commit point. Retry reconstructs missing derived companions
 without dispatch. Conflicting fixed files cannot be replaced: use a new
 exact-owned replay with the original committed stream/history. Preservation
 reads the same locked snapshot and retains referenced history within existing
-384-file/8 MiB limits. Optional contribution writers use that lock too;
+416-file/9 MiB limits. Optional contribution writers use that lock too;
 economics and observations never settle or revoke required coverage.
 
 Closed failure stages are `lane_input`, `lane_validation`,
@@ -174,7 +174,7 @@ unchanged.
 
 ## Bounded retention (>=0.26.2)
 
-The 8 MiB (8,388,608-byte) allowance bounds the sum of regular-file bytes
+The 9 MiB (9,437,184-byte) allowance bounds the sum of regular-file bytes
 across the whole diagnostic directory. It is not merely a per-file cap;
 assembly, preservation staging and terminal revalidation retain their existing
 bound checks. Every digest, source, scope, provenance,
@@ -243,3 +243,9 @@ preservation rejected both 6 MiB and 288 files. The bounded final allowance is
 room for the required final source transition (the previous measured transition
 added 11 files). Required evidence and original sealed bytes are unchanged.
 No digest, source, scope, provenance, path-safety or completeness check changes.
+
+Release verification found PR172's digest race and repaired it in the existing
+Kernel dependency. Required repair/source-continuity evidence then measured
+386 files and 8,579,686 bytes; normal preservation rejected both 384 files and
+8 MiB. The final bounded allowance is 9 MiB/416 files, including room for the
+required finishing transition. Original bytes and validation remain strict.
