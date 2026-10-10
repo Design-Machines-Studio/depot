@@ -171,6 +171,19 @@ outstanding PR work. `ready` validates actual checks, approvals, feedback and UI
 acceptance at that same head, including non-draft PRs. Repeats never retrigger
 review; non-draft state alone never authorizes merge.
 
+`ready` reads classic branch-protection contexts and every page of effective
+ruleset contexts. An App-bound classic context is matched by its GitHub-returned
+App node ID against `check_run.app.node_id`; a ruleset integration ID is matched
+to `check_run.app.id`. It reads all exact-head check-run pages, verifies the
+returned head and identities, and chooses the newest `started_at` result for
+each context and required App. That result must be completed with conclusion
+`success`. Missing, mismatched, pending, failed, cancelled, skipped, malformed,
+or incompletely paginated results stop readiness before GitHub mutation. The
+helper compares opaque node IDs and database IDs only as returned by GitHub; it
+does not derive an identity from an App slug or encode an opaque ID. Unbound
+contexts continue through GitHub's required-check results, and optional skipped
+checks remain visible without counting as required review evidence.
+
 GitHub identity helpers accept HTTPS, SCP-style SSH and URL-form SSH at the
 default host/port. Lookalike hosts stay unavailable.
 
