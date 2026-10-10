@@ -173,7 +173,7 @@ unchanged.
 
 ## Bounded retention (>=0.28.0)
 
-Required review evidence is bounded to **32 MiB (33,554,432 bytes) / 1,024
+Since 0.28.1, required review evidence is bounded to **128 MiB (134,217,728 bytes) / 1,024
 files**. Disposable diagnostics retain **9 MiB (9,437,184 bytes) / 416 files**.
 These are separate aggregate allowances, not per-file permissions. Both count
 regular-file bytes without compression. The existing exact-owned diagnostic
@@ -189,15 +189,15 @@ remain diagnostics, even inside a review-looking directory. A filename or
 caller assertion never grants the larger retained allowance. Incomplete
 preservation retains available inputs only under the diagnostic bound.
 
-The allowance uses recent complete packages, not a near-fit increase for one
-consumer: PR173 grew from 246 files / 5,877,650 bytes to 362 / 8,080,697 and
-386 / 8,579,686 after required review repairs and source continuity. PR1162
-measures 207 / 9,545,604 before final report links. A 32 MiB ceiling provides
-about three times this observed byte usage; 1,024 files provides more than twice
-the largest observed count. This permits ordinary finishing evidence and
-several affected rechecks while keeping finite storage. Earlier 2/4/5/6/8/9 MiB
-shared-limit repairs repeatedly ran out after useful work. Original sealed
-bytes are never rewritten or dropped to fit.
+The 32 MiB allowance in 0.28.0 covered the earlier 9.5 MB package, but
+Baseplate #1118 now retains 42,625,283 bytes in 54 assembly files. Six distinct
+literal inputs are 6–8 MB each; no byte-identical duplicates can be removed.
+The 128 MiB ceiling provides about three times that observed workspace size
+for remaining lanes, source continuity and final report links. It remains a
+finite per-run storage limit, not a promise that every future package will fit.
+Diagnostic and file-count limits are unchanged. Original sealed bytes are
+never rewritten or dropped to fit. Resume the existing producer with 0.28.1;
+a larger allowance never grants missing review coverage or clears other gates.
 
 `project-review-evidence` accepts exactly the preservation arguments. Call it
 while assembling evidence (with the available companions and provisional

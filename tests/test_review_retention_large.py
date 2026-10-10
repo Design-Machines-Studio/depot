@@ -200,14 +200,19 @@ class LargeReviewRetentionTests(unittest.TestCase):
         first = self.preserve(run, paths)
         destination = Path(first["evidence_path"])
         before = self.snapshot(destination)
-        # The required report contains one explanatory entry per inspected case.
-        # It pushes the complete package over 32 MiB; individual files still fit.
-        with paths["report"].open("a") as report:
-            for index in range(155000):
-                report.write(f"Case {index:05d}: declared relative path is safe, mode is owner-only, link expectation is single; fixture declaration inspection passed. Expected case identity and cardinality match the declared fixture input.\n")
-        self.assertLess(paths["report"].stat().st_size, 32 * 1024 * 1024)
+        # Individual report fits; its complete required package exceeds the bound.
+        limit = owned_run._MAX_REQUIRED_REVIEW_BYTES
+        with paths["report"].open("wb") as report:
+            report.write(b"# Required case evidence\n")
+            chunk = b"Required case inspected; original source retained.\n" * 16384
+            remaining = limit - 1024 * 1024 - report.tell()
+            while remaining:
+                piece = chunk[:remaining]
+                report.write(piece)
+                remaining -= len(piece)
+        self.assertLess(paths["report"].stat().st_size, limit)
         self.assertGreater(first["bytes"] - len(before[Path("report.md")]) + paths["report"].stat().st_size,
-                           32 * 1024 * 1024)
+                           limit)
         sources = self.snapshot(run.root)
         completed = subprocess.run(
             (sys.executable, "-m", "workflow_kernel", "preserve-review-evidence",
@@ -228,7 +233,7 @@ class LargeReviewRetentionTests(unittest.TestCase):
         detail = error["details"]
         self.assertEqual("preservation_input", detail["stage"])
         self.assertEqual("retention_limit", detail["reason"])
-        self.assertEqual(32 * 1024 * 1024, detail["allowed_bytes"])
+        self.assertEqual(limit, detail["allowed_bytes"])
         self.assertGreater(detail["actual_bytes"], detail["allowed_bytes"])
         self.assertTrue(detail["next_action"])
         self.assertFalse(list(destination.parent.glob("review-stage-*")))

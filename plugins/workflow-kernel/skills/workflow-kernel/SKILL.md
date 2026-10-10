@@ -601,8 +601,8 @@ result still preserves available source files for recovery. A copy or
 verification error leaves every source file intact, and callers must not
 finish or remove the containing worktree.
 
-Validated required review evidence has a separate 32 MiB/1,024-file allowance
-(>=0.28.0). Disposable diagnostics keep the existing 9 MiB/416-file allowance.
+Validated required review evidence has a separate 128 MiB/1,024-file allowance
+since 0.28.1. Disposable diagnostics keep the existing 9 MiB/416-file allowance.
 The larger allowance requires validated source-bound coverage and exact required
 reference closure, including history, receipts and all local report links.
 Use `project-review-evidence` with the same arguments as preservation during
