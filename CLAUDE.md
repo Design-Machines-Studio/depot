@@ -96,6 +96,12 @@ Before publishing or tagging a release, run the preflight. It is read-only and p
 ./tools/check-release-preflight.sh
 ```
 
+For pre-publication source/tag checks, use `--source-only`. This retains all
+source, tag, remote collision and authentication checks, but explicitly defers
+installed-cache verification. Run the default check after publication and cache
+synchronization to verify installation. Never use source-only success as proof
+that installed consumers have the release.
+
 It verifies a clean tree, marketplace/plugin version sync, Codex shim freshness,
 that every plugin changed since its last tag has been bumped, installed Codex
 plugin versions against the canonical marketplace, remote branches for

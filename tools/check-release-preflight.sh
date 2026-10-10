@@ -28,6 +28,7 @@
 # USAGE
 #   ./tools/check-release-preflight.sh            # all checks
 #   ./tools/check-release-preflight.sh --no-net   # skip remote branch and auth probes
+#   ./tools/check-release-preflight.sh --source-only # pre-publication; installation unverified
 
 # Deliberately no `set -e`: we want every check to run and report, not abort on
 # the first failure. `set -u` and pipefail are safe and wanted.
@@ -67,7 +68,14 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT" || exit 2
 
 SKIP_NET=0
-[ "${1:-}" = "--no-net" ] && SKIP_NET=1
+SOURCE_ONLY=0
+for argument in "$@"; do
+  case "$argument" in
+    --no-net) SKIP_NET=1 ;;
+    --source-only) SOURCE_ONLY=1 ;;
+    *) printf 'Unknown release preflight argument: %s\n' "$argument" >&2; exit 2 ;;
+  esac
+done
 
 failures=0
 pass() { printf "  OK    %s\n" "$1"; }
@@ -442,7 +450,11 @@ print(f"OK|{checked} installed Codex plugin(s) checked against {sys.argv[2]}")
 fi
 }
 
-check_codex_cache_freshness
+if [ "$SOURCE_ONLY" -eq 1 ]; then
+  skip "source-only publication preflight; installed Codex cache verification deferred until after publication and sync"
+else
+  check_codex_cache_freshness
+fi
 
 # --------------------------------------------------------------------------
 # 7. Cross-lane equal-bump guard

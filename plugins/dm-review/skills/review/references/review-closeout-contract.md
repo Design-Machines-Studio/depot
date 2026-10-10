@@ -37,7 +37,7 @@ resolve in the retained scope; use `review/<artifact>` or `browser/<artifact>`
 and returned `evidence_path`. Only `status: complete` supports `CLEAN` or source
 worktree removal. The copy contains the request, authoritative coverage,
 selected outputs and literal receipts, synthesis artifacts, report, real
-private router receipts, and required evidence references. Kernel >=0.28.0 bounds validated required evidence to 1,024 files / 32 MiB,
+private router receipts, and required evidence references. Kernel >=0.28.1 bounds validated required evidence to 1,024 files / 128 MiB,
 separately from disposable diagnostics at 416 files / 9 MiB, outside product
 repositories. Kernel derives required membership from validated coverage,
 committed history, indexed receipts and local report links. Unindexed or

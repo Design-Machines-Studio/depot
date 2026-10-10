@@ -801,7 +801,7 @@ selective_allowlist="$REPO_ROOT/plugins/dm-review/skills/review/references/selec
 require_text "$review_skill" "references/selective-lane-allowlist.md" "review receiver loads the allowlist contract only when the input is present"
 require_text "$selective_allowlist" "never relax this equality check to a subset check" "allowlist contract requires exact selected_full_set equality"
 require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.28.0"' "dm-review requires separate validated review retention and projection"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.28.1"' "dm-review requires separate validated review retention and projection"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.27.0"' "pipeline requires supported verification profile generation"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.88.0"' "pipeline requires the current reviewed-publication contract"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"model-router": ">=0.13.0"' "dm-review requires review recommendation routing"

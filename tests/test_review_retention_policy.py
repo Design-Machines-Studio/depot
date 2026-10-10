@@ -149,6 +149,8 @@ class ReviewRetentionPolicyTests(unittest.TestCase):
         self.assertEqual(first.to_dict(), run.finish("succeeded").to_dict())
         self.assertTrue(extra.exists())
 
+    @mock.patch.object(owned_run, "_MAX_REQUIRED_REVIEW_BYTES", 32 * 1024 * 1024)
+    @mock.patch.object(review_closeout, "_MAX_REQUIRED_REVIEW_BYTES", 32 * 1024 * 1024)
     def test_router_copy_accepts_both_finite_allowances(self):
         run, paths = self.make_run(run_id="router-separated")
         indexed = paths["router"] / "security.json"
@@ -237,3 +239,33 @@ class ReviewRetentionPolicyTests(unittest.TestCase):
                 self.assertEqual(data, (run.root / ref).read_bytes())
         self.assertFalse(list((run.root / "diagnostic/review").glob("review-stage-*")))
         self.assertEqual("complete", self.preserve(run, paths)["status"])
+
+    def test_large_review_history_preserves_and_revalidates_without_more_diagnostics(self):
+        run, paths = self.make_run(run_id="large-history-1118")
+        proof = run.root / "review/large-history.txt"
+        # 48 MiB: above the observed 42,625,283-byte assembly and old ceiling.
+        with proof.open("wb") as output:
+            for _ in range(48):
+                output.write(b"x" * (1024 * 1024))
+        paths["report"].write_text("# Review\n[Required history](review/large-history.txt)\n")
+        projection = self.project(run, paths)
+        self.assertTrue(projection["within_limits"])
+        result = self.preserve(run, paths)
+        self.assertEqual("complete", result["status"])
+        self.assertEqual(projection["bytes"], result["bytes"])
+        self.assertEqual("complete", self.preserve(run, paths)["status"])
+        first = run.finish("succeeded", retain_diagnostics=True)
+        self.assertEqual(first.to_dict(), run.finish("succeeded").to_dict())
+        self.assertEqual(9 * 1024 * 1024, owned_run._MAX_DIAGNOSTIC_BYTES)
+        self.assertEqual(1024, owned_run._MAX_REQUIRED_REVIEW_FILES)
+
+    def test_required_byte_boundary_is_inclusive_and_overflow_is_actionable(self):
+        limit = owned_run._MAX_REQUIRED_REVIEW_BYTES
+        projection = owned_run._retention_projection({"proof": limit}, {"proof"})
+        owned_run._require_retention_projection(projection)
+        projection = owned_run._retention_projection({"proof": limit + 1}, {"proof"})
+        with self.assertRaises(owned_run.BoundedDiagnosticLimitError) as caught:
+            owned_run._require_retention_projection(projection)
+        self.assertEqual("required_review", caught.exception.measurement["category"])
+        self.assertEqual(limit, caught.exception.measurement["allowed_bytes"])
+        self.assertEqual(limit + 1, caught.exception.measurement["actual_bytes"])
