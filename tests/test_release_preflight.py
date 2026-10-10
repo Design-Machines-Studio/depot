@@ -161,7 +161,7 @@ class ReleasePreflightTests(unittest.TestCase):
 
     def _run_preflight(
         self, *, no_net=False, codex="fresh", git_fail=None, git_mutate=None,
-        home_override=None, env_overrides=None,
+        home_override=None, env_overrides=None, source_only=False,
     ):
         codex_path = self.bin / "codex"
         if codex == "unavailable":
@@ -202,6 +202,8 @@ class ReleasePreflightTests(unittest.TestCase):
         argv = [str(self.script)]
         if no_net:
             argv.append("--no-net")
+        if source_only:
+            argv.append("--source-only")
         return subprocess.run(
             argv, cwd=self.repo, env=env, text=True,
             stdout=subprocess.PIPE, stderr=subprocess.PIPE,
@@ -283,6 +285,31 @@ class ReleasePreflightTests(unittest.TestCase):
             if path.is_file()
         }
         return refs, fetch_head_bytes, objects
+
+    def test_source_only_defers_installation_without_hiding_scope(self):
+        self._git("push", "-q", "origin", "HEAD:refs/heads/main")
+        self._git("--git-dir", str(self.origin), "symbolic-ref", "HEAD", "refs/heads/main")
+        result = self._run_preflight(source_only=True, codex="stale")
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("installed Codex cache verification deferred", result.stdout)
+        self.assertNotIn("Codex cache freshness:", result.stdout)
+        self.assertIn("Push auth:", result.stdout)
+        self.assertIn("Cross-lane version bumps:", result.stdout)
+
+    def test_source_only_still_rejects_dirty_source(self):
+        (self.repo / "untracked.txt").write_text("pending work")
+        result = self._run_preflight(source_only=True, codex="stale")
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_source_only_still_rejects_unbumped_plugin(self):
+        self._commit_plugin_change(("alpha",), "1.0.0", "unbumped change")
+        result = self._run_preflight(source_only=True, no_net=True, codex="stale")
+        self.assertNotEqual(result.returncode, 0)
+
+    def test_source_only_still_rejects_unreachable_origin(self):
+        result = self._run_preflight(source_only=True, codex="stale")
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("cannot reach or authenticate to origin", result.stdout)
 
     def test_fresh_codex_cache_passes(self):
         result = self._run_preflight(no_net=True, codex="fresh")
