@@ -264,7 +264,7 @@ elif kernel.get("pluginDependencies", {}) or kernel.get("optionalPluginDependenc
 consumer_floors = {
     "assembly": ">=0.17.0",
     "pipeline": ">=0.27.0",
-    "dm-review": ">=0.28.0",
+    "dm-review": ">=0.28.1",
 }
 
 for consumer, expected in consumer_floors.items():
