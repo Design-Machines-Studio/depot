@@ -211,13 +211,14 @@ if [ "$OPERATION" = ready ]; then
   # rules via GitHub's effective-branch endpoint, including every REST page.
   # https://docs.github.com/en/graphql/reference/branches
   # https://docs.github.com/en/rest/repos/rules#get-rules-for-a-branch
-  gh api graphql -f query='query($owner:String!,$name:String!,$ref:String!){repository(owner:$owner,name:$name){ref(qualifiedName:$ref){name branchProtectionRule{requiresStatusChecks requiredStatusChecks{context app{id}}}}}}' \
+  gh api graphql -f query='query($owner:String!,$name:String!,$ref:String!){repository(owner:$owner,name:$name){ref(qualifiedName:$ref){name branchProtectionRule{requiresStatusChecks requiredStatusChecks{context app{id databaseId}}}}}}' \
     -f owner="$OWNER_NAME" -f name="$REPO_NAME" -f ref="refs/heads/$BASE" > "$TEMP/protection.json" || requirements_block 'classic protection lookup failed' 'restore GitHub metadata access and retry publication.'
   jq -e --arg base "$BASE" '
     (.errors==null or .errors==[]) and (.data.repository.ref | type=="object" and .name==$base and has("branchProtectionRule") and
       (.branchProtectionRule | .==null or (type=="object" and (.requiresStatusChecks|type=="boolean") and has("requiredStatusChecks") and
         (if .requiresStatusChecks then (.requiredStatusChecks|type=="array") else (.requiredStatusChecks==null or (.requiredStatusChecks|type=="array")) end) and
-        all(.requiredStatusChecks[]?; (.context|type=="string" and length>0) and has("app") and (.app==null or (.app.id|type=="string" and length>0))))))
+      all(.requiredStatusChecks[]?; (.context|type=="string" and length>0) and has("app") and
+        (.app==null or (.app|type=="object" and (.id|type=="string" and length>0) and (.databaseId|type=="number" and .>0 and floor==.)))))))
   ' "$TEMP/protection.json" >/dev/null || requirements_block 'classic protection metadata malformed or incomplete' 'obtain complete base-branch protection metadata and retry publication.'
   BASE_ENCODED="$(jq -rn --arg base "$BASE" '$base|@uri')"
   gh api --paginate --slurp "repos/$REPOSITORY/rules/branches/$BASE_ENCODED?per_page=100" > "$TEMP/rules.json" || requirements_block 'applicable ruleset lookup failed' 'restore GitHub rules metadata access and retry publication.'
@@ -231,11 +232,33 @@ if [ "$OPERATION" = ready ]; then
   ' "$TEMP/rules.json" >/dev/null || requirements_block 'applicable rules metadata malformed or incomplete' 'obtain all complete effective base-branch rules pages and retry publication.'
   UNMAPPED="$(jq -c '[.[][] | select(.type | IN("required_status_checks","creation","update","deletion","required_linear_history","required_signatures","pull_request","non_fast_forward","commit_message_pattern","commit_author_email_pattern","committer_email_pattern","branch_name_pattern","file_path_restriction","max_file_path_length","file_extension_restriction","max_file_size") | not)] | first // empty' "$TEMP/rules.json")"
   [ -z "$UNMAPPED" ] || requirements_block "unmappable applicable requirement $UNMAPPED" 'verify this ruleset requirement against source-bound GitHub results through a supported mapping before retrying publication.'
-  jq '[.data.repository.ref.branchProtectionRule | select(.requiresStatusChecks==true) | .requiredStatusChecks[] | {name:.context,app:.app}]' "$TEMP/protection.json" > "$TEMP/configured.json"
-  jq --slurpfile classic "$TEMP/configured.json" '$classic[0] + [.[][] | select(.type=="required_status_checks") | .parameters.required_status_checks[] | {name:.context,app:.integration_id}]' "$TEMP/rules.json" > "$TEMP/update.json"
+  jq '[.data.repository.ref.branchProtectionRule | select(.requiresStatusChecks==true) | .requiredStatusChecks[] |
+    {name:.context,binding:(if .app==null then "unbound" else "node" end),app_node_id:(.app.id // null),app_database_id:(.app.databaseId // null)}]' \
+    "$TEMP/protection.json" > "$TEMP/configured.json"
+  jq --slurpfile classic "$TEMP/configured.json" '$classic[0] + [.[][] | select(.type=="required_status_checks") | .parameters.required_status_checks[] |
+    {name:.context,binding:(if .integration_id==null then "unbound" else "database" end),app_node_id:null,app_database_id:(.integration_id // null)}]' \
+    "$TEMP/rules.json" > "$TEMP/update.json"
   mv -- "$TEMP/update.json" "$TEMP/configured.json"
-  UNMAPPED="$(jq -c '[.[]|select(.app!=null)] | first // empty' "$TEMP/configured.json")"
-  [ -z "$UNMAPPED" ] || requirements_block "app-bound required check cannot be mapped from gh check rows: $UNMAPPED" 'verify the required GitHub App identity through a supported source-bound check mapping before retrying publication.'
+  UNBOUND_COUNT="$(jq '[.[]|select(.binding=="unbound")]|length' "$TEMP/configured.json")"
+  BOUND_COUNT="$(jq '[.[]|select(.binding!="unbound")]|length' "$TEMP/configured.json")"
+  printf '[]\n' > "$TEMP/check-runs.json"
+  if [ "$BOUND_COUNT" -gt 0 ]; then
+    gh api --paginate --slurp "repos/$REPOSITORY/commits/$HEAD/check-runs?filter=all&per_page=100" > "$TEMP/check-run-pages.json" || requirements_block 'exact-head check-run lookup failed' 'restore GitHub check results access and retry publication.'
+    jq -e --arg head "$HEAD" '
+      type=="array" and length>0 and all(.[]; type=="object" and (.total_count|type=="number" and .>=0 and floor==.) and (.check_runs|type=="array")) and
+      ([.[].total_count] as $counts | all($counts[]; .==$counts[0])) and
+      ([.[]|.check_runs[]] as $runs | ($runs|length)==(.[0].total_count) and all($runs[];
+        (.id|type=="number" and .>0 and floor==.) and (.name|type=="string" and length>0) and
+        (.head_sha|type=="string" and test("^[0-9a-f]{40}$")) and (.status|IN("queued","in_progress","completed")) and
+        (.conclusion==null or (.conclusion|IN("success","failure","neutral","cancelled","skipped","timed_out","action_required","stale","startup_failure"))) and
+        (.started_at|type=="string" and test("^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$")) and
+        (.html_url|type=="string" and startswith("https://github.com/")) and
+        (.app|type=="object" and (.id|type=="number" and .>0 and floor==.) and (.node_id|type=="string" and length>0))
+      ))
+    ' "$TEMP/check-run-pages.json" >/dev/null || requirements_block 'exact-head check-run pages or identity data malformed/incomplete' 'obtain complete authenticated check-run results with valid App identities and retry publication.'
+    jq -e --arg head "$HEAD" 'all(.[]|.check_runs[]; .head_sha==$head)' "$TEMP/check-run-pages.json" >/dev/null || requirements_block "check-run result head does not match required candidate head $HEAD" 'refresh check runs for the exact current PR head and retry publication.'
+    jq '[.[]|.check_runs[]]' "$TEMP/check-run-pages.json" > "$TEMP/check-runs.json"
+  fi
   gh pr checks "$PR" --repo "$REPOSITORY" --json name,bucket,link > "$TEMP/checks.json" || requirements_block 'actual PR checks lookup failed' 'restore GitHub check results access and retry publication.'
   jq -e 'type=="array" and length>0 and all(.[];
     (.name|type=="string" and length>0) and (.bucket|IN("pass","fail","pending","skipping","cancel")) and
@@ -247,13 +270,50 @@ if [ "$OPERATION" = ready ]; then
     # configuration above must also be empty; lookup errors never prove none.
     printf "no required checks reported on the '%s' branch\n" "$BRANCH" > "$TEMP/no-required.err"
     [ "$required_rc" -eq 1 ] && [ ! -s "$TEMP/required.json" ] && cmp -s "$TEMP/required.err" "$TEMP/no-required.err" || requirements_block 'required PR checks lookup failed' 'restore GitHub required-check results access and retry publication.'
-    jq -e 'length==0' "$TEMP/configured.json" >/dev/null || requirements_block 'configured required check has not reported' 'run the missing required base-branch check on this PR head and retry publication.'
+    [ "$UNBOUND_COUNT" -eq 0 ] || requirements_block 'configured unbound required check has not reported' 'run the missing required base-branch check on this PR head and retry publication.'
     printf '[]\n' > "$TEMP/required.json"
   else
-    jq -e 'type=="array" and all(.[]; (.name|type=="string" and length>0) and .bucket=="pass" and (.link|type=="string" and length>0))' "$TEMP/required.json" >/dev/null || review_refuse 'required PR checks failed, pending, skipped or missing'
+    jq -e 'type=="array" and all(.[]; (.name|type=="string" and length>0) and (.bucket|IN("pass","fail","pending","skipping","cancel")) and (.link|type=="string" and length>0))' "$TEMP/required.json" >/dev/null || requirements_block 'required PR check results malformed' 'obtain complete required check results and retry publication.'
   fi
-  jq -e --slurpfile required "$TEMP/required.json" 'all(.[]; .name as $name | any($required[0][]; .name==$name and .bucket=="pass"))' "$TEMP/configured.json" >/dev/null || requirements_block 'configured required check missing from passing required results' 'run the missing required base-branch check on this PR head and retry publication.'
-  jq -e --slurpfile actual "$TEMP/checks.json" 'all(.[]; . as $required | any($actual[0][]; .name==$required.name and .bucket==$required.bucket and .link==$required.link))' "$TEMP/required.json" >/dev/null || review_refuse 'required PR check absent from actual PR'
+  printf '[]\n' > "$TEMP/mapped-required.json"
+  while IFS= read -r requirement; do
+    CONTEXT="$(jq -r .name <<< "$requirement")"
+    BINDING="$(jq -r .binding <<< "$requirement")"
+    if [ "$BINDING" = unbound ]; then
+      jq -e --arg context "$CONTEXT" --slurpfile required "$TEMP/required.json" 'any($required[0][]; .name==$context and .bucket=="pass")' "$TEMP/configured.json" >/dev/null || requirements_block "unbound required check '$CONTEXT' is missing or not passing at head $HEAD" 'run or repair the required check on this PR head and retry publication.'
+      MATCH="$(jq -c --arg context "$CONTEXT" --slurpfile required "$TEMP/required.json" '[ $required[0][]|select(.name==$context and .bucket=="pass") ]|first' "$TEMP/configured.json")"
+    else
+      if [ "$BINDING" = node ]; then
+        APP_ID="$(jq -r .app_node_id <<< "$requirement")"
+        MATCHES="$(jq -c --arg context "$CONTEXT" --arg app "$APP_ID" '[.[]|select(.name==$context and .app.node_id==$app)]' "$TEMP/check-runs.json")"
+        if [ "$(jq 'length' <<< "$MATCHES")" -eq 0 ]; then
+          OTHER_APPS="$(jq -c --arg context "$CONTEXT" '[.[]|select(.name==$context)|{id:.app.id,node_id:.app.node_id}]|unique' "$TEMP/check-runs.json")"
+          [ "$OTHER_APPS" = '[]' ] && requirements_block "required context '$CONTEXT' has no exact-head result for App node $APP_ID (head $HEAD)" 'run the required App check on this exact PR head and retry publication.'
+          requirements_block "required context '$CONTEXT' returned only different App identities for required App node $APP_ID: $OTHER_APPS" 'restore the required App check on this exact PR head and retry publication.'
+        fi
+      else
+        APP_ID="$(jq -r .app_database_id <<< "$requirement")"
+        MATCHES="$(jq -c --arg context "$CONTEXT" --argjson app "$APP_ID" '[.[]|select(.name==$context and .app.id==$app)]' "$TEMP/check-runs.json")"
+        if [ "$(jq 'length' <<< "$MATCHES")" -eq 0 ]; then
+          OTHER_APPS="$(jq -c --arg context "$CONTEXT" '[.[]|select(.name==$context)|.app.id]|unique' "$TEMP/check-runs.json")"
+          [ "$OTHER_APPS" = '[]' ] && requirements_block "required context '$CONTEXT' has no exact-head result for App database ID $APP_ID (head $HEAD)" 'run the required App check on this exact PR head and retry publication.'
+          requirements_block "required context '$CONTEXT' returned only different App identities for required App database ID $APP_ID: $OTHER_APPS" 'restore the required App check on this exact PR head and retry publication.'
+        fi
+      fi
+      MATCH="$(jq -c 'sort_by(.started_at,.id)|last' <<< "$MATCHES")"
+      STATUS="$(jq -r 'if .status!="completed" then "pending ("+.status+")" elif .conclusion=="success" then "pass" elif .conclusion=="skipped" then "skipped" elif .conclusion=="cancelled" then "cancelled" else "failed ("+(.conclusion // "missing conclusion")+")" end' <<< "$MATCH")"
+      [ "$STATUS" = pass ] || requirements_block "required context '$CONTEXT' for App $APP_ID is $STATUS at head $HEAD" 'complete or repair the latest required App check on this exact PR head and retry publication.'
+      MATCH="$(jq -cn --arg name "$CONTEXT" --arg link "$(jq -r .html_url <<< "$MATCH")" '{name:$name,bucket:"pass",link:$link}')"
+    fi
+    jq --argjson row "$MATCH" '. + [$row]' "$TEMP/mapped-required.json" > "$TEMP/required-next.json"
+    mv -- "$TEMP/required-next.json" "$TEMP/mapped-required.json"
+  done < <(jq -c '.[]' "$TEMP/configured.json")
+  mv -- "$TEMP/mapped-required.json" "$TEMP/required.json"
+  jq -e --slurpfile actual "$TEMP/checks.json" --slurpfile configured "$TEMP/configured.json" '
+    all(.[]; . as $required | if ([ $configured[0][]|select(.name==$required.name and .binding!="unbound")]|length)>0 then
+      any($actual[0][]; .name==$required.name and .bucket=="pass")
+    else any($actual[0][]; .name==$required.name and .bucket==$required.bucket and .link==$required.link) end)
+  ' "$TEMP/required.json" >/dev/null || review_refuse 'required PR check absent from actual PR'
   jq -e --slurpfile actual "$TEMP/checks.json" 'all(.checks[]|select(.stage=="pr"); .name as $name | any($actual[0][]; .name==$name))' "$TEMP/handoff.json" >/dev/null || review_refuse 'required PR check absent from actual PR'
   gh api graphql -f query='query($owner:String!,$name:String!,$number:Int!){repository(owner:$owner,name:$name){pullRequest(number:$number){headRefOid reviewThreads(first:100){nodes{isResolved} pageInfo{hasNextPage}}}}}' \
     -f owner="$OWNER_NAME" -f name="$REPO_NAME" -F number="$NUMBER" > "$TEMP/feedback.json"

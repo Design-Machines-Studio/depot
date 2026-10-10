@@ -55,7 +55,35 @@ if [ "$1" = api ] && [[ "$*" != *graphql* ]]; then
       [ "${INTAKE_MODE:-complete}" != partial ] || exit 1
       jq -cn --arg body "${FEEDBACK_COMMENT:-}" '[[{id:82,html_url:"https://github.com/Fixture/consumer/pull/42#issuecomment-82",user:{login:"fixture"},created_at:"2026-10-08T00:00:00Z",updated_at:"2026-10-08T00:00:00Z",body:$body}]]'; exit 0 ;;
     *check-suites\?*) printf '{"total_count":0}\n'; exit 0 ;;
-    *check-runs\?*) printf '[{"check_runs":[]}]\n'; exit 0 ;;
+    *check-runs\?*)
+      case "${CHECK_RUNS_MODE:-empty}" in
+        unavailable)
+          if [ "${DM_REVIEW_TEST_MODE:-0}" = 1 ]; then
+            jq -cn --arg head "$PR_HEAD" '{total_count:1,check_runs:[{id:10,name:"actual CI",head_sha:$head,status:"completed",conclusion:"success",started_at:"2026-10-08T00:00:00Z",html_url:"https://github.com/Fixture/consumer/runs/10",app:{id:123,node_id:"node-app-1"}}]}' | jq -s .
+          else printf 'API unavailable\n' >&2; exit 1; fi ;;
+        empty) printf '[{"total_count":0,"check_runs":[]}]\n' ;;
+        incomplete) jq -cn --arg head "$PR_HEAD" '{total_count:2,check_runs:[{id:1,name:"actual CI",head_sha:$head,status:"completed",conclusion:"success",started_at:"2026-10-08T00:00:00Z",html_url:"https://github.com/Fixture/consumer/runs/1",app:{id:123,node_id:"node-app-1"}}]}' | jq -s . ;;
+        malformed-app) jq -cn --arg head "$PR_HEAD" '{total_count:1,check_runs:[{id:1,name:"actual CI",head_sha:$head,status:"completed",conclusion:"success",started_at:"2026-10-08T00:00:00Z",html_url:"https://github.com/Fixture/consumer/runs/1",app:{id:"123",node_id:"node-app-1"}}]}' | jq -s . ;;
+        wrong-head) jq -cn '{total_count:1,check_runs:[{id:1,name:"actual CI",head_sha:"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",status:"completed",conclusion:"success",started_at:"2026-10-08T00:00:00Z",html_url:"https://github.com/Fixture/consumer/runs/1",app:{id:123,node_id:"node-app-1"}}]}' | jq -s . ;;
+        wrong-app) jq -cn --arg head "$PR_HEAD" '{total_count:1,check_runs:[{id:1,name:"actual CI",head_sha:$head,status:"completed",conclusion:"success",started_at:"2026-10-08T00:00:00Z",html_url:"https://github.com/Fixture/consumer/runs/1",app:{id:999,node_id:"node-app-other"}}]}' | jq -s . ;;
+        pass|pending|failed|cancelled|skipped|startup-failure|duplicates-fail|duplicates-pending|duplicates-pass|second-page)
+          jq -cn --arg head "$PR_HEAD" --arg mode "${CHECK_RUNS_MODE}" '
+            def run($id;$started;$status;$conclusion;$app): {id:$id,name:"actual CI",head_sha:$head,status:$status,conclusion:$conclusion,started_at:$started,
+              html_url:("https://github.com/Fixture/consumer/runs/"+($id|tostring)),app:$app};
+            {total_count:(if $mode=="duplicates-fail" or $mode=="duplicates-pending" or $mode=="duplicates-pass" or $mode=="second-page" then 2 else 1 end),
+             check_runs:(if $mode=="pass" or $mode=="pending" or $mode=="failed" or $mode=="cancelled" or $mode=="skipped" or $mode=="startup-failure" then
+               [run(10;"2026-10-08T00:00:00Z";(if $mode=="pending" then "in_progress" else "completed" end);
+                 (if $mode=="pass" then "success" elif $mode=="pending" then null elif $mode=="failed" then "failure" elif $mode=="cancelled" then "cancelled" elif $mode=="startup-failure" then "startup_failure" else "skipped" end);{id:123,node_id:"node-app-1"})]
+              elif $mode=="duplicates-fail" then
+               [run(10;"2026-10-08T00:00:00Z";"completed";"success";{id:123,node_id:"node-app-1"}),run(11;"2026-10-08T00:01:00Z";"completed";"failure";{id:123,node_id:"node-app-1"})]
+              elif $mode=="duplicates-pending" then
+               [run(10;"2026-10-08T00:00:00Z";"completed";"success";{id:123,node_id:"node-app-1"}),run(11;"2026-10-08T00:01:00Z";"in_progress";null;{id:123,node_id:"node-app-1"})]
+              elif $mode=="duplicates-pass" then
+               [run(10;"2026-10-08T00:00:00Z";"completed";"failure";{id:123,node_id:"node-app-1"}),run(11;"2026-10-08T00:01:00Z";"completed";"success";{id:123,node_id:"node-app-1"})]
+              else [run(10;"2026-10-08T00:00:00Z";"completed";"success";{id:999,node_id:"node-app-other"}),run(11;"2026-10-08T00:01:00Z";"completed";"success";{id:123,node_id:"node-app-1"})] end)} |
+            if $mode=="second-page" then [{total_count:2,check_runs:[.check_runs[0]]},{total_count:2,check_runs:[.check_runs[1]]}] else [.] end' ;;
+      esac
+      exit 0 ;;
   esac
 fi
 case "$1 ${2:-}" in
@@ -98,7 +126,7 @@ case "$1 ${2:-}" in
         {data:{repository:{ref:{name:(if $mode=="wrong-base" then "foreign" else $base end),
           branchProtectionRule:(if $mode=="none" then null else
             {requiresStatusChecks:($mode!="empty"),requiredStatusChecks:(if $mode=="empty" then [] else
-              [{context:(if $mode=="absent" then "missing CI" else "actual CI" end),app:(if $mode=="app-bound" then {id:"App1"} else null end)}] end)} end)}}}} |
+              [{context:(if $mode=="absent" then "missing CI" else "actual CI" end),app:(if $mode=="app-bound" then {id:"node-app-1",databaseId:123} else null end)}] end)} end)}}}} |
         if $mode=="partial-error" then .errors=[{message:"not accessible"}] else . end'
     else
       jq -cn --arg head "$PR_HEAD" '{data:{repository:{pullRequest:{headRefOid:$head,reviewThreads:{nodes:[{isResolved:(env.UNRESOLVED!="true")}],pageInfo:{hasNextPage:(env.MORE_THREADS=="true")}}}}}}'
@@ -489,20 +517,51 @@ assert grep -Fq 'base main: unmappable applicable requirement' "$TMP/rejected.ou
 assert grep -Fq '.github/workflows/required.yml' "$TMP/rejected.out"
 assert test "$(grep -o 'Next action:' "$TMP/rejected.out" | wc -l | tr -d ' ')" = 1
 unset PR_BUCKET REQUIRED_MODE RULES_MODE CLASSIC_MODE
-for classic in lookup-failure malformed incomplete partial-error wrong-base app-bound absent; do
+for classic in lookup-failure malformed incomplete partial-error wrong-base absent; do
   fixture "classic-$classic"
   export CLASSIC_MODE="$classic" REQUIRED_MODE=none PR_BUCKET=skipping
   reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
   assert grep -Fq 'Next action:' "$TMP/rejected.out"
   unset CLASSIC_MODE REQUIRED_MODE PR_BUCKET
 done
-for rules in lookup-failure malformed incomplete missing-parameters unknown app-bound absent second-page; do
+for rules in lookup-failure malformed incomplete missing-parameters unknown absent second-page; do
   fixture "rules-$rules"
   export CLASSIC_MODE=none RULES_MODE="$rules" REQUIRED_MODE=none PR_BUCKET=skipping
   reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
   assert grep -Fq 'Next action:' "$TMP/rejected.out"
   unset CLASSIC_MODE RULES_MODE REQUIRED_MODE PR_BUCKET
 done
+# App-bound contexts use their GitHub-returned identities and exact-head run
+# results. Classic protection compares opaque node IDs; rulesets compare their
+# numeric integration IDs. Matching names and GitHub slugs do not establish it.
+fixture classic-app-bound
+export CLASSIC_MODE=app-bound CHECK_RUNS_MODE=pass
+settle_feedback
+assert publish ready --pr https://github.com/Fixture/consumer/pull/42
+unset CLASSIC_MODE CHECK_RUNS_MODE
+fixture ruleset-app-bound
+export CLASSIC_MODE=none RULES_MODE=app-bound CHECK_RUNS_MODE=pass
+settle_feedback
+assert publish ready --pr https://github.com/Fixture/consumer/pull/42
+unset CLASSIC_MODE RULES_MODE CHECK_RUNS_MODE
+fixture paginated-app-bound
+export CLASSIC_MODE=app-bound CHECK_RUNS_MODE=second-page
+settle_feedback
+assert publish ready --pr https://github.com/Fixture/consumer/pull/42
+unset CLASSIC_MODE CHECK_RUNS_MODE
+for result in wrong-app wrong-head empty pending failed cancelled skipped startup-failure duplicates-fail duplicates-pending incomplete malformed-app unavailable; do
+  fixture "app-bound-$result"
+  export CLASSIC_MODE=app-bound CHECK_RUNS_MODE="$result"
+  settle_feedback
+  reject_publish ready --pr https://github.com/Fixture/consumer/pull/42; no_mutation
+  assert sh -c 'grep -Fq "required context" "$1" || grep -Fq "check-run" "$1"' sh "$TMP/rejected.out"
+  unset CLASSIC_MODE CHECK_RUNS_MODE
+done
+fixture app-bound-newest-success
+export CLASSIC_MODE=app-bound CHECK_RUNS_MODE=duplicates-pass
+settle_feedback
+assert publish ready --pr https://github.com/Fixture/consumer/pull/42
+unset CLASSIC_MODE CHECK_RUNS_MODE
 # Reported passing required results must cover configuration, not just each
 # other. A passing classic check cannot hide an absent organization requirement.
 fixture missing-rules-required-with-reported-check
