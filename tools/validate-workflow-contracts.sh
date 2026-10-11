@@ -1796,6 +1796,25 @@ require_text "$full_lane_dispatch" 'remain unresolved in the materialized prompt
 
 printf "\ncontext budget:\n"
 
+design_consultation="$REPO_ROOT/plugins/model-router/skills/model-router/references/design-consultation.md"
+driver_worker_guidance="$REPO_ROOT/plugins/model-router/skills/model-router/references/driver-worker-guidance.md"
+require_text "$design_consultation" 'load the available `claude-design` skill before' "design work loads the named skill before judgment or execution"
+require_text "$design_consultation" 'Prompt-only participants receive those excerpts' "design instructions reach participants without filesystem tools"
+require_text "$design_consultation" 'never claim it was used' "missing design skill cannot become false coverage"
+require_text "$driver_worker_guidance" 'design-consultation.md#required-design-skill' "bounded workers link the shared design-skill contract"
+if ! python3 - "$orchestrator" <<'PY'
+import sys
+from pathlib import Path
+source = Path(sys.argv[1]).read_text()
+pre_dispatch = source.split('### 3d: Dispatch Implementation Subagent', 1)[1].split('# selected-root-dispatch:start', 1)[0]
+assert 'Before design builder dispatch' in pre_dispatch
+assert 'in `WORKER_PROMPT`, including replacements' in pre_dispatch
+print('  OK    design skill instructions enter initial/replacement packets before builder dispatch')
+PY
+then
+  failures=1
+fi
+
 context_budget="$REPO_ROOT/tools/fixtures/workflow-context-budget.json"
 if [ ! -f "$context_budget" ]; then
   printf "  FAIL  missing %s\n" "${context_budget#$REPO_ROOT/}"

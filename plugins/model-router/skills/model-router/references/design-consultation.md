@@ -1,5 +1,32 @@
 # Bounded design participation
 
+## Required design skill
+
+For every design-related task, load the available `claude-design` skill before
+design judgment or execution and apply its relevant instructions. This includes
+research, planning, implementation and review of interface, interaction, visual,
+layout, typography and design-system choices. Use the native skill loader for a
+built-in skill; read `SKILL.md` when file-backed. Resolve the actual skill through
+the host's catalog rather than guessing a cache path or substituting a similarly
+named skill. A host without direct access obtains the actual instructions from
+an available native Claude session for its participant packet. If the skill
+cannot be loaded, report that coverage gap and request its
+source; never claim it was used.
+
+The lead loads it once and supplies the relevant instructions and source to
+each bounded design participant. Prompt-only participants receive those excerpts
+in their packet; do not grant extra tools merely to load a skill. Include the
+approved requirements, prototype and actual browser evidence needed for the
+question. Skill use assists judgment and execution without changing model-router
+selection, account settings, tool permissions or publication authority. Explicit
+user decisions, approved prototypes and required accessibility, functional and
+browser checks remain authoritative. Reuse still-valid design evidence.
+
+Anthropic documents `/design` as the native Claude Code entry point in its
+[Claude Design guide](https://support.claude.com/en/articles/14604416-get-started-with-claude-design).
+That command's existence does not prove the skill was loaded in a worker or that
+its current transport can execute design tools. Record actual use separately.
+
 Prefer Opus 5.5 for applicable UI/UX judgment and front-facing design repair
 drafting. `design-consultant` routes to `claude-opus-5-5` over native Claude,
 then `gpt-6.1-sol` over Codex when Opus is unavailable. Validate the identity of

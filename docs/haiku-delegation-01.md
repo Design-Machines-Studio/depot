@@ -13,6 +13,21 @@ Consumers link to it; role-policy.json alone owns concrete selection. No new
 service, benchmark framework, mandatory cross-family gate or approval gate was
 added. OpenRouter allowance/budget and native Codex Fast behavior are retained.
 
+Every design-related task now requires `claude-design` assistance for judgment
+and execution under the [shared design contract](../plugins/model-router/skills/model-router/references/design-consultation.md#required-design-skill).
+The lead loads the actual built-in skill through the native loader (or reads its
+file-backed instructions) and supplies relevant excerpts to bounded participants.
+This preserves user/prototype authority, required checks and existing specialist
+routing without extending worker permissions.
+
+On 2026-10-11 a native subscription `research-fast` participant inspected the
+local installation read-only. It found the built-in `/design` command in Claude
+Code 2.1.296, but no accessible `claude-design` skill instructions. Anthropic's
+[guide](https://support.claude.com/en/articles/14604416-get-started-with-claude-design)
+documents `/design` in Claude Code. This verifies an entry point, not successful
+skill loading or design execution in this host. No skill contract was invented,
+no design tool permissions were expanded and no account settings were changed.
+
 ## Evidence and overlap
 
 Official sources checked on 2026-10-11: [release](https://www.anthropic.com/claude-haiku-5-5),
@@ -121,6 +136,12 @@ strong judgment roles, source-bound evidence reuse, required browser/prototype
 checks where applicable, fallback receipts, commit/push and owned cleanup. Use
 only existing subscription capacity. Installed adoption is not proven by this
 source PR.
+
+The design adoption canary must also load the actual built-in `claude-design`
+skill in a fresh Claude session, retain its source/version or runtime receipt,
+and verify that its relevant instructions reach a bounded design judgment and
+execution packet. Check the approved prototype and required browser cases.
+Report unavailable loading or tools as a gap, not completed skill coverage.
 
 No consumer repositories, historical prompts or installed caches were edited.
 Current scaffolder templates already link to the shared role policy and preserve

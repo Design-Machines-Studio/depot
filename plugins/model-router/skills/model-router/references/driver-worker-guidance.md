@@ -12,6 +12,10 @@ completion efficiency. Do not require a predictable cheap-model failure first.
 Speed matters when it reduces total delivery cost; no model name guarantees it.
 Concrete identities here are operator-only; `role-policy.json` owns selection.
 
+Every design-related task uses `claude-design` for judgment and execution under
+the [shared design-skill contract](design-consultation.md#required-design-skill).
+Include its relevant instructions in bounded design-worker packets.
+
 | Work | Starting point | Escalation |
 |---|---|---|
 | Narrow file discovery, extraction, supplied-log analysis and classification | `research-fast`; Haiku 5.5 when its live canary supports the required capability, then existing Luna Fast and Sol fallbacks; Low/Medium | Sol when evidence materially conflicts |
