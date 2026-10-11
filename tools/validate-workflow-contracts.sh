@@ -804,8 +804,8 @@ require_text "$selective_allowlist" "Any validation failure discards the entire 
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.28.1"' "dm-review requires separate validated review retention and projection"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.27.0"' "pipeline requires supported verification profile generation"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.88.0"' "pipeline requires the current reviewed-publication contract"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"model-router": ">=0.13.0"' "dm-review requires review recommendation routing"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"model-router": ">=0.13.0"' "pipeline requires the current routing runtime"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"model-router": ">=0.14.0"' "dm-review requires review recommendation routing"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"model-router": ">=0.14.0"' "pipeline requires the current routing runtime"
 require_text "$review_skill" 'Implementation origin is not a coverage field or eligibility condition.' "dm-review makes implementation origin ineligible as a review filter"
 require_text "$review_skill" 'never request, infer, or pass implementation-origin declarations' "dm-review never collects implementation origin for lane routing"
 require_text "$orchestrator" 'one cumulative implementation receipt set' "Pipeline keeps implementation receipts for terminal reporting"
@@ -1796,6 +1796,25 @@ require_text "$full_lane_dispatch" 'remain unresolved in the materialized prompt
 
 printf "\ncontext budget:\n"
 
+design_consultation="$REPO_ROOT/plugins/model-router/skills/model-router/references/design-consultation.md"
+driver_worker_guidance="$REPO_ROOT/plugins/model-router/skills/model-router/references/driver-worker-guidance.md"
+require_text "$design_consultation" 'load the available `claude-design` skill before' "design work loads the named skill before judgment or execution"
+require_text "$design_consultation" 'Prompt-only participants receive those excerpts' "design instructions reach participants without filesystem tools"
+require_text "$design_consultation" 'never claim it was used' "missing design skill cannot become false coverage"
+require_text "$driver_worker_guidance" 'design-consultation.md#required-design-skill' "bounded workers link the shared design-skill contract"
+if ! python3 - "$orchestrator" <<'PY'
+import sys
+from pathlib import Path
+source = Path(sys.argv[1]).read_text()
+pre_dispatch = source.split('### 3d: Dispatch Implementation Subagent', 1)[1].split('# selected-root-dispatch:start', 1)[0]
+assert 'Before design builder dispatch' in pre_dispatch
+assert 'in `WORKER_PROMPT`, including replacements' in pre_dispatch
+print('  OK    design skill instructions enter initial/replacement packets before builder dispatch')
+PY
+then
+  failures=1
+fi
+
 context_budget="$REPO_ROOT/tools/fixtures/workflow-context-budget.json"
 if [ ! -f "$context_budget" ]; then
   printf "  FAIL  missing %s\n" "${context_budget#$REPO_ROOT/}"
@@ -2141,8 +2160,8 @@ require_text "$publication" 'integration_id // null' "ruleset integration IDs re
 require_text "$publication" 'startup_failure' "GitHub check startup failure is rejected as an unsuccessful result"
 require_text "$REPO_ROOT/tools/test-publish-reviewed-pr.sh" 'duplicates-pending' "publication fixtures reject newer pending App attempts"
 require_text "$REPO_ROOT/tools/test-publish-reviewed-pr.sh" 'wrong-app' "publication fixtures reject same-name results from a different App"
-require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.88.3"' "dm-review patch version is bumped"
-require_text "$REPO_ROOT/.claude-plugin/marketplace.json" '"version": "1.88.3"' "canonical marketplace matches dm-review version"
+require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.88.4"' "dm-review patch version is bumped"
+require_text "$REPO_ROOT/.claude-plugin/marketplace.json" '"version": "1.88.4"' "canonical marketplace matches dm-review version"
 require_text "$handoff" 'Candidate verification results are missing.' "PR checks alone cannot settle candidate verification"
 require_text "$handoff" '**Agent next action:** ' "Not ready names one agent action"
 require_absent "$handoff" 'exact-owned' "designer output uses ordinary cleanup wording"

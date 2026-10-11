@@ -605,12 +605,15 @@ implementation/repair/nested review basenames in dispatch-start order (parallel
 joins use selected-lane order). Final review shares this private directory/index,
 suppresses its report and never consumes origin for eligibility.
 
-**Step 3d.1 -- Dispatch the role.** Materialize the worker prompt, a fresh output
-path, and a private receipt path within the run-private router registry. Build
+Before design builder dispatch, follow model-router's `design-consultation.md`;
+inline `claude-design` instructions and source in `WORKER_PROMPT`, including replacements.
+
+**Step 3d.1 -- Dispatch the role.** Materialize the worker prompt, fresh output
+and private receipt paths in the run-private router registry. Build
 argv as an array. Resolve `ROLE_DISPATCH`, `WORKFLOW_KERNEL`, `WORKER_PROMPT`,
 `WORKER_OUTPUT`, `PRIVATE_ROUTER_RECEIPT` and `COMPLETE_REPOSITORY_EVIDENCE` to
 absolute paths before changing directory. Dispatch from `CHUNK_ROOT` in a
-subshell so the orchestrator's own working directory stays unchanged:
+subshell to preserve the orchestrator's working directory:
 
 ```bash
 ROLE_ARGS=(--role "$EXECUTOR_ROLE" --effort "$EXECUTOR_EFFORT"

@@ -534,45 +534,7 @@ transport_eligibility() {
       fi
       ;;
     claude-cli)
-      state="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.state // "unknown"')"
-      auth_mode="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.authMode // .claude.auth_mode // "unknown"')"
-      plan="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.plan // "unknown"')"
-      fable_state="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.fable // .claude.fableAvailability // "unknown"')"
-      observed="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.rateLimitsObserved // false')"
-      sdk_observed="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.agentSdkRateLimitsObserved // false')"
-      paid="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.paidCreditsEnabled // empty')"
-      [ -n "$paid" ] || paid="$PAID_CLAUDE_CREDITS"
-      [ "$state" != unavailable ] && [ "$auth_mode" = subscription ] || return 1
-      if [ "$model" = fable ]; then
-        case "$fable_state" in exhausted|unavailable) return 1 ;; esac
-      fi
-      case "$plan" in
-        max|pro|team-premium|enterprise-premium|included|unknown)
-          if [ "$sdk_observed" = true ] &&
-             [ "$(printf '%s' "$AVAILABILITY" | jq -r '.claude.allowances.agent_sdk.state // "unknown"')" = ok ]; then
-            five="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.allowances.agent_sdk.windows.five_hour.remaining_pct // 0')"
-            weekly="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.allowances.agent_sdk.windows.weekly.remaining_pct // 0')"
-            awk -v a="$five" -v b="$weekly" -v t="$THRESHOLD" 'BEGIN{exit !(a>t && b>t)}' || return 1
-            BILLING_MODE="included-subscription"
-            ALLOWANCE_WINDOW="agent-sdk"
-          elif [ "$observed" = true ]; then
-            five="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.windows.five_hour.remaining_pct // .claude.fiveHourRemainingPct // 0')"
-            weekly="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.windows.weekly.remaining_pct // .claude.weeklyRemainingPct // 0')"
-            awk -v a="$five" -v b="$weekly" -v t="$THRESHOLD" 'BEGIN{exit !(a>t && b>t)}' || return 1
-            BILLING_MODE="included-subscription"
-            ALLOWANCE_WINDOW="interactive"
-          else
-            BILLING_MODE="subscription-headroom-unknown"
-            ALLOWANCE_WINDOW="unknown"
-          fi
-          ;;
-        credits-only)
-          [ "$paid" = true ] || return 1
-          BILLING_MODE="paid-credits"
-          ALLOWANCE_WINDOW="paid-credits"
-          ;;
-        *) return 1 ;;
-      esac
+      claude_candidate_eligibility "$model" "$(jq -r '.billing' <<< "$candidate")" || return 1
       ;;
     openrouter)
       if [ "$OPENROUTER_BUNDLE_STATE" != resolved ]; then
@@ -686,10 +648,16 @@ invoke_candidate() {
       ATTEMPT_TRANSMITTED_EFFORT="$effective"
       ATTEMPT_EFFORT_STATUS="transmitted"
       ATTEMPT_EFFORT_EVIDENCE="native-cli-argument"
-      result_json="$(invoke_native_sanitized "${argv[@]}" < "$prompt_copy" 2>>"$PRIVATE_LOG")" || { rc=$?; rm -f "$prompt_copy"; return "$rc"; }
+      result_json="$(invoke_native_sanitized env -u ANTHROPIC_API_KEY -u ANTHROPIC_AUTH_TOKEN \
+        -u ANTHROPIC_BASE_URL -u CLAUDE_CODE_USE_BEDROCK -u CLAUDE_CODE_USE_VERTEX \
+        -u CLAUDE_CODE_USE_FOUNDRY "${argv[@]}" < "$prompt_copy" 2>>"$PRIVATE_LOG")" || rc=$?
       rm -f "$prompt_copy"
-      printf '%s' "$result_json" | jq -r '.result // empty' > "$TRANSPORT_OUTPUT" || return 1
       printf '%s' "$result_json" > "$PROVIDER_RECEIPT"
+      printf '%s' "$result_json" | jq -r '.result // empty' > "$TRANSPORT_OUTPUT" || return 1
+      if jq -e '.is_error == true' "$PROVIDER_RECEIPT" >/dev/null 2>&1; then
+        [ "$rc" -ne 0 ] || rc=77
+      fi
+      [ "$rc" -eq 0 ] || return "$rc"
       ;;
     openrouter)
       root="$OPENROUTER_BUNDLE_ROOT"
@@ -793,10 +761,11 @@ invoke_native_sanitized() {
     -u OPENROUTER_BUNDLE_RESOLVED "$@"
 }
 
-CANDIDATES="$(jq -c --arg role "$ROLE" '.roles[$role][]' "$POLICY")"
+CANDIDATES="$(jq -c --arg role "$ROLE" '.roles[$role][] | select(.enabled != false)' "$POLICY")"
 REQUESTED_CANDIDATE="$(printf '%s\n' "$CANDIDATES" | sed -n '1p')"
 while IFS= read -r candidate; do
   [ -n "$candidate" ] || continue
+  jq -e ".enabled != false" <<< "$candidate" >/dev/null || continue
   candidate_has_capabilities "$candidate" >/dev/null || continue
   family="$(printf '%s' "$candidate" | jq -r '.family')"
   if printf '%s' "$EXCLUDED_FAMILIES" | jq -e --arg family "$family" 'index($family) != null' >/dev/null; then
@@ -1006,6 +975,18 @@ while IFS= read -r candidate; do
       commit_json="$(jq -c 'if (.commit | type) == "string" and (.commit | length) > 0 then .commit else null end' "$PROVIDER_RECEIPT")"
       files_changed_json="$(jq -c 'if (.filesChanged | type) == "string" then .filesChanged else null end' "$PROVIDER_RECEIPT")"
     fi
+    if [ "$transport" = claude-cli ]; then
+      # Native list-price counters are not measured subscription charges.
+      cost_json=null
+      cost_provenance=unavailable
+      if ! jq -e '(.usage | type) == "object" and
+        all([.usage.input_tokens,.usage.output_tokens][]; type == "number" and . >= 0 and . == floor) and
+        all([.usage.cache_read_input_tokens,.usage.cache_creation_input_tokens][];
+          . == null or (type == "number" and . >= 0 and . == floor))' "$PROVIDER_RECEIPT" >/dev/null 2>&1; then
+        usage_json=null
+        token_provenance=unavailable
+      fi
+    fi
     if [ "$WRITE_REQUEST" -eq 1 ] && [ "$commit_json" = null ]; then
       commit_json="$(jq -Rn --arg commit "${CURRENT_HEAD:-}" '$commit')"
     fi
@@ -1091,6 +1072,14 @@ $(cat "$NATIVE_STDERR")"
   native_code="$(jq -Rr 'fromjson? | select(.type == "error" or .type == "turn.failed") | (.error // .) | .code // empty' "$PRIVATE_LOG" | tail -1)"
   if [ "$transport" = codex-cli ]; then
     case "$native_code" in
+      model_not_found|model_not_available) reason=provider_model_unavailable; failure_scope=model; failure_confirmed=true ;;
+      not_authenticated|authentication_failed) reason=authentication-unavailable; failure_scope=rail; failure_confirmed=true ;;
+    esac
+  fi
+  if [ "$transport" = claude-cli ] && jq -e '.is_error == true' "$PROVIDER_RECEIPT" >/dev/null 2>&1; then
+    claude_code="$(jq -r '.error.code // .error_code // empty' "$PROVIDER_RECEIPT" 2>/dev/null)"
+    case "$claude_code" in
+      usage_limit_reached|quota_exceeded) reason=rate_limit_exhausted; failure_scope=rail; failure_confirmed=true ;;
       model_not_found|model_not_available) reason=provider_model_unavailable; failure_scope=model; failure_confirmed=true ;;
       not_authenticated|authentication_failed) reason=authentication-unavailable; failure_scope=rail; failure_confirmed=true ;;
     esac

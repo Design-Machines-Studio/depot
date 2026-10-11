@@ -135,7 +135,7 @@ assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.effo
   --capability tool-use --capability structured-output --effort medium \
   --matrix-file "$MATRIX" --availability-file "$TMP/healthy.json" \
   --format json > "$TMP/publication-readiness.json"
-assert jq -e '.recommendedStart.model == "gpt-6-luna" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-6.1-sol"' "$TMP/publication-readiness.json"
+assert jq -e '.recommendedStart.model == "claude-haiku-5-5" and .recommendedStart.effort == "medium" and .recommendedStart.fallback.model == "gpt-6-luna"' "$TMP/publication-readiness.json"
 assert jq -e '.roles.architect[0].model == "gpt-6.1-sol" and .roles["builder-deep"][0].model == "gpt-6.1-sol" and .roles["review-deep"][0].model == "gpt-6.1-sol"' "$POLICY"
 assert jq -e 'all(.chunkKinds.logic,.chunkKinds.ui,.chunkKinds.integration; .executorRole == "builder-deep" and .executorEffort == "high")' "$PIPELINE_POLICY"
 

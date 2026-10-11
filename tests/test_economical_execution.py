@@ -154,8 +154,15 @@ print(json.dumps({"type":"turn.completed","service_tier":"priority","usage":{"in
         return [json.loads(line) for line in self.calls.read_text().splitlines()]
 
     def test_every_luna_role_transmits_fast_and_separate_effort(self):
-        roles = [role for role, rows in self.policy["roles"].items() if rows[0]["model"] == "gpt-6-luna"]
+        roles = [role for role, rows in self.policy["roles"].items()
+                 if any(row["model"] == "gpt-6-luna" for row in rows)]
         self.assertEqual(set(roles), {"builder-fast", "review-fast", "research-fast", "editorial"})
+        # Exercise every Luna candidate, including research's economical fallback.
+        # This disposable fixture has only a Codex CLI; never invoke live Claude.
+        for row in self.policy["roles"]["research-fast"]:
+            if row["transport"] == "claude-cli":
+                row["enabled"] = False
+        (self.router / "role-policy.json").write_text(json.dumps(self.policy))
         for role in roles:
             receipt = self.dispatch(role, role)
             self.assertEqual(receipt["served"]["model"], "gpt-6-luna")

@@ -1,0 +1,962 @@
+{
+  "task": "HAIKU-DELEGATION-01",
+  "sourceBase": "9b47c73475180d444230a0f4678a2d2cdb1ee363",
+  "evaluationKind": "small canary, not a statistically reliable benchmark",
+  "attemptsPerModelTask": 1,
+  "lead": "same GPT-6.1 Sol lead, high effort, for both models",
+  "workerEffort": "medium",
+  "order": "sequential Haiku then Luna for A, B and C; order not randomized",
+  "scoring": "Identity-free outputs and fixed acceptance tests before joining the identity map; human lead sees the order, so not a fully blinded study.",
+  "tokenAccounting": "Raw native counters remain separate by transport. Reasoning is a subset of output where reported. Codex cached input is included in input; Claude cache reads/writes are separate from input. Failed B2 tokens, lead preparation/acceptance tokens and full completion cost are unavailable.",
+  "wallAccounting": "Measured dispatcher wall time includes availability probing and transport orchestration. Host fixture setup, acceptance/review and lead effort were performed but not separately timed.",
+  "subscription": "Native Claude subscription auth confirmed; local observed extra usage disabled. No API model calls, paid-credit enabling, account upgrade or global settings changes. Unknown allowance remains unknown. List-price cost is not a measured subscription charge.",
+  "fixture": {
+    "progress.go": "package progress\n\nfunc Progress(done, total int) int {\n if total <= 0 || done <= 0 { return 0 }\n if done >= total { return 100 }\n return done * 100 / total\n}\n",
+    "progress.templ": "package progress\nimport \"strconv\"\n\ntempl MemberProgress(done, total int) {\n <progress max=\"100\" value={ strconv.Itoa(Progress(done, total)) } aria-label=\"Membership progress\"></progress>\n}\n",
+    "clamp.go": "package progress\n\nfunc Clamp(n int) int {\n if n < 0 { return 0 }\n if n > 100 { return 100 }\n return n\n}\n",
+    "acceptanceTests": "package progress\nimport \"testing\"\nfunc TestProgress(t *testing.T) { for _,c:=range []struct{done,total,want int}{{1,4,25},{2,3,66},{0,4,0},{-1,4,0},{1,0,0},{1,-4,0},{4,4,100},{6,4,100},{3,10,30},{9,10,90}} { if got:=Progress(c.done,c.total);got!=c.want {t.Errorf(\"Progress(%d,%d)=%d want %d\",c.done,c.total,got,c.want)} } }\n"
+  },
+  "results": [
+    {
+      "slot": "A1",
+      "task": "A",
+      "requestedModel": "claude-haiku-5-5",
+      "attempts": 1,
+      "exitStatus": 0,
+      "workerWallSeconds": 16.55,
+      "accepted": true,
+      "missedDefects": null,
+      "falseFindings": null,
+      "acceptanceTestStatus": null,
+      "repairsRequired": 0,
+      "leadWork": "packet, disposable fixture, identity-free acceptance and receipt inspection",
+      "leadTokens": null,
+      "measuredChargeUsd": null,
+      "workerOutput": {
+        "sources": [
+          {
+            "path": "progress.go",
+            "line": 3,
+            "explanation": "Progress(done, total int) int calculates membership progress as a percentage. It returns 0 when total <= 0 or done <= 0, 100 when done >= total, and otherwise done*100/total (integer division), at lines 4-6."
+          },
+          {
+            "path": "progress.templ",
+            "line": 4,
+            "explanation": "templ MemberProgress(done, total int) is the template that renders membership progress. It declares the same done and total inputs as Progress."
+          },
+          {
+            "path": "progress.templ",
+            "line": 5,
+            "explanation": "Renders a <progress max=\"100\"> element whose value is strconv.Itoa(Progress(done, total)), with aria-label=\"Membership progress\". This is where the calculated value is rendered."
+          },
+          {
+            "path": "clamp.go",
+            "line": 3,
+            "explanation": "Clamp(n int) int limits a value to the 0-100 range. It is in the same package but is not called by Progress or MemberProgress, so it is not on the membership progress path."
+          }
+        ],
+        "testsRun": [],
+        "browserChecked": false
+      },
+      "routerReceipt": {
+        "schemaVersion": 1,
+        "receiptId": "dispatch-3dd4578436cdad026f65bcba",
+        "probeSource": "live",
+        "transportStub": false,
+        "requested": {
+          "role": "research-fast",
+          "capabilities": [
+            "read-repository",
+            "structured-output",
+            "tool-use"
+          ],
+          "effort": "medium",
+          "independenceReceiptIds": [],
+          "humanAuthored": false,
+          "candidate": {
+            "model": "claude-haiku-5-5",
+            "provider": "anthropic",
+            "transport": "claude-cli"
+          }
+        },
+        "contract_digest": null,
+        "revision": null,
+        "participantId": "participant-3dd45784",
+        "attempts": [
+          {
+            "model": "claude-haiku-5-5",
+            "servedIdentity": "claude-haiku-5-5",
+            "provider": "anthropic",
+            "transport": "claude-cli",
+            "billingMode": "subscription-headroom-unknown",
+            "requestedEffort": "medium",
+            "normalizedEffort": "medium",
+            "transmittedEffort": "medium",
+            "effortStatus": "transmitted",
+            "effortEvidence": "native-cli-argument",
+            "providerReceiptStatus": "not-requested",
+            "outcome": "served",
+            "durationSeconds": 11,
+            "serviceMode": null,
+            "availability": "attemptable",
+            "availabilityReason": "attemptable"
+          }
+        ],
+        "served": {
+          "model": "claude-haiku-5-5",
+          "servedIdentity": "claude-haiku-5-5",
+          "provider": "anthropic",
+          "transport": "claude-cli",
+          "family": "anthropic",
+          "billingMode": "subscription-headroom-unknown",
+          "allowanceWindow": "unknown",
+          "durationSeconds": 11,
+          "tokens": {
+            "input_tokens": 6,
+            "cache_creation_input_tokens": 207174,
+            "cache_read_input_tokens": 263782,
+            "output_tokens": 1312,
+            "output_tokens_details": {
+              "thinking_tokens": 270
+            },
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 207174,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "global",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 522,
+                "cache_read_input_tokens": 201035,
+                "cache_creation_input_tokens": 741,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 741
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard",
+            "fallback_credit": null
+          },
+          "tokenProvenance": "provider-receipt",
+          "billedCostUsd": null,
+          "costProvenance": "unavailable",
+          "commit": null,
+          "filesChanged": null,
+          "serviceMode": null,
+          "availability": "attemptable",
+          "availabilityReason": "attemptable"
+        },
+        "normalizedEffort": "medium",
+        "effectiveEffort": "medium",
+        "transmittedEffort": "medium",
+        "effortTransmission": {
+          "status": "transmitted",
+          "evidence": "native-cli-argument",
+          "modelReasoningMeasurement": null
+        },
+        "effortNormalized": false,
+        "fallback": false,
+        "fallbackReason": "none",
+        "matrixSnapshot": "openrouter:2026-09-23",
+        "publication": {
+          "output": "published"
+        },
+        "familyIndependence": {
+          "required": false,
+          "humanAuthored": false,
+          "excludedFamilies": [],
+          "passed": true
+        }
+      },
+      "promptSha256": "19f6b3e1b7e077673e42a4ab6ab0d83d253d469cc8f3e13f3439e1ad8e5c76c6",
+      "fixtureInitialHead": "85aecb9cf111e7fe2fef2123062215a7bd9d51d5",
+      "repairSource": null,
+      "repairTestsPass": null,
+      "runtimeSha256": {
+        "role-dispatch.sh": "89d8562789c106f4b020fbfd8087b370fbe19bb8f97321e689d1ef4b1f18c5c5",
+        "role-policy.json": "8e9f4aaa016263c3905625804a53ad2bbf5798b1526dfa63dae99b280fc0d94c",
+        "run-availability.sh": "79ba9900b7e9789d48ff98047b301c55fe58c607a00bc67ae97e5dfcb530b43d"
+      }
+    },
+    {
+      "slot": "A2",
+      "task": "A",
+      "requestedModel": "gpt-6-luna",
+      "attempts": 1,
+      "exitStatus": 0,
+      "workerWallSeconds": 15.62,
+      "accepted": true,
+      "missedDefects": null,
+      "falseFindings": null,
+      "acceptanceTestStatus": null,
+      "repairsRequired": 0,
+      "leadWork": "packet, disposable fixture, identity-free acceptance and receipt inspection",
+      "leadTokens": null,
+      "measuredChargeUsd": null,
+      "workerOutput": {
+        "sources": [
+          {
+            "path": "progress.go",
+            "line": 3,
+            "explanation": "Progress calculates membership progress as a percentage, handling empty, nonpositive, and completed totals."
+          },
+          {
+            "path": "progress.templ",
+            "line": 4,
+            "explanation": "MemberProgress renders the calculated percentage in a progress element labeled \u201cMembership progress\u201d."
+          }
+        ],
+        "testsRun": [],
+        "browserChecked": false
+      },
+      "routerReceipt": {
+        "schemaVersion": 1,
+        "receiptId": "dispatch-bf7bccbd66b71e637977a75d",
+        "probeSource": "live",
+        "transportStub": false,
+        "requested": {
+          "role": "research-fast",
+          "capabilities": [
+            "read-repository",
+            "structured-output",
+            "tool-use"
+          ],
+          "effort": "medium",
+          "independenceReceiptIds": [],
+          "humanAuthored": false,
+          "candidate": {
+            "model": "gpt-6-luna",
+            "provider": "openai",
+            "transport": "codex-cli"
+          }
+        },
+        "contract_digest": null,
+        "revision": null,
+        "participantId": "participant-bf7bccbd",
+        "attempts": [
+          {
+            "model": "gpt-6-luna",
+            "servedIdentity": "unknown",
+            "provider": "openai",
+            "transport": "codex-cli",
+            "billingMode": "included-subscription",
+            "requestedEffort": "medium",
+            "normalizedEffort": "medium",
+            "transmittedEffort": "medium",
+            "effortStatus": "transmitted",
+            "effortEvidence": "native-cli-config",
+            "providerReceiptStatus": "not-requested",
+            "outcome": "served",
+            "durationSeconds": 11,
+            "serviceMode": {
+              "requested": "fast",
+              "transmitted": "fast",
+              "confirmed": null,
+              "evidence": "native-cli-config"
+            },
+            "availability": "available",
+            "availabilityReason": "available"
+          }
+        ],
+        "served": {
+          "model": "gpt-6-luna",
+          "servedIdentity": "unknown",
+          "provider": "openai",
+          "transport": "codex-cli",
+          "family": "openai",
+          "billingMode": "included-subscription",
+          "allowanceWindow": "codex",
+          "durationSeconds": 11,
+          "tokens": {
+            "input_tokens": 87795,
+            "cached_input_tokens": 74752,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 338,
+            "reasoning_output_tokens": 45,
+            "total_tokens": 88133
+          },
+          "tokenProvenance": "provider-receipt",
+          "billedCostUsd": null,
+          "costProvenance": "unavailable",
+          "commit": null,
+          "filesChanged": null,
+          "serviceMode": {
+            "requested": "fast",
+            "transmitted": "fast",
+            "confirmed": null,
+            "evidence": "native-cli-config"
+          },
+          "availability": "available",
+          "availabilityReason": "available"
+        },
+        "normalizedEffort": "medium",
+        "effectiveEffort": "medium",
+        "transmittedEffort": "medium",
+        "effortTransmission": {
+          "status": "transmitted",
+          "evidence": "native-cli-config",
+          "modelReasoningMeasurement": null
+        },
+        "effortNormalized": false,
+        "fallback": false,
+        "fallbackReason": "none",
+        "matrixSnapshot": "openrouter:2026-09-23",
+        "publication": {
+          "output": "published"
+        },
+        "familyIndependence": {
+          "required": false,
+          "humanAuthored": false,
+          "excludedFamilies": [],
+          "passed": true
+        }
+      },
+      "promptSha256": "19f6b3e1b7e077673e42a4ab6ab0d83d253d469cc8f3e13f3439e1ad8e5c76c6",
+      "fixtureInitialHead": "f33ffb7d2b4554f6dfbeb21df0382e438a4101f4",
+      "repairSource": null,
+      "repairTestsPass": null,
+      "runtimeSha256": {
+        "role-dispatch.sh": "89d8562789c106f4b020fbfd8087b370fbe19bb8f97321e689d1ef4b1f18c5c5",
+        "role-policy.json": "b9adb156fc317334cf6f042b70e6700df32da747d71b434c07045a1177406362",
+        "run-availability.sh": "79ba9900b7e9789d48ff98047b301c55fe58c607a00bc67ae97e5dfcb530b43d"
+      }
+    },
+    {
+      "slot": "B1",
+      "task": "B",
+      "requestedModel": "claude-haiku-5-5",
+      "attempts": 1,
+      "exitStatus": 0,
+      "workerWallSeconds": 30.11,
+      "accepted": true,
+      "missedDefects": null,
+      "falseFindings": null,
+      "acceptanceTestStatus": 0,
+      "repairsRequired": 0,
+      "leadWork": "packet, disposable fixture, identity-free acceptance and receipt inspection",
+      "leadTokens": null,
+      "measuredChargeUsd": null,
+      "workerOutput": {
+        "changedFiles": [
+          "progress.go"
+        ],
+        "testsRun": [
+          "go vet ./... (passed)",
+          "go test ./... (passed; the repo has no test files, so it reported [no test files])",
+          "ad-hoc table test in a temp copy outside the repo (passed): 1/4\u219225, 2/3\u219266, 1/3\u219233, 99/100\u219299, zero/negative done or total\u21920, done>=total\u2192100, MaxInt-1/MaxInt\u219299, MaxInt/2/MaxInt\u219249"
+        ],
+        "browserChecked": false,
+        "explanation": "Progress used done/total*100, which is integer division first, so 1/4 returned 0. It now computes done*100/total in 128 bits with math/bits (Mul64 and Div64), so large counts cannot overflow. Zero or negative totals and non-positive done return 0, and done>=total returns 100. The signature and progress.templ are unchanged. Committed as 60739e1 with only progress.go. The commit has no Co-Authored-By line because the user's COMMS.md says never to add co-authors. gofmt -l still flags progress.go because the file uses space indentation like the original, so I kept that style. The ad-hoc test file was not added to the repo."
+      },
+      "routerReceipt": {
+        "schemaVersion": 1,
+        "receiptId": "dispatch-c35152e0658477fec22d0dcc",
+        "probeSource": "live",
+        "transportStub": false,
+        "requested": {
+          "role": "builder-fast",
+          "capabilities": [
+            "read-repository",
+            "structured-output",
+            "tool-use",
+            "write-repository"
+          ],
+          "effort": "medium",
+          "independenceReceiptIds": [],
+          "humanAuthored": false,
+          "candidate": {
+            "model": "claude-haiku-5-5",
+            "provider": "anthropic",
+            "transport": "claude-cli"
+          }
+        },
+        "contract_digest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+        "revision": 1,
+        "participantId": "participant-c35152e0",
+        "attempts": [
+          {
+            "model": "claude-haiku-5-5",
+            "servedIdentity": "claude-haiku-5-5",
+            "provider": "anthropic",
+            "transport": "claude-cli",
+            "billingMode": "subscription-headroom-unknown",
+            "requestedEffort": "medium",
+            "normalizedEffort": "medium",
+            "transmittedEffort": "medium",
+            "effortStatus": "transmitted",
+            "effortEvidence": "native-cli-argument",
+            "providerReceiptStatus": "not-requested",
+            "outcome": "served",
+            "durationSeconds": 25,
+            "serviceMode": null,
+            "availability": "attemptable",
+            "availabilityReason": "attemptable"
+          }
+        ],
+        "served": {
+          "model": "claude-haiku-5-5",
+          "servedIdentity": "claude-haiku-5-5",
+          "provider": "anthropic",
+          "transport": "claude-cli",
+          "family": "anthropic",
+          "billingMode": "subscription-headroom-unknown",
+          "allowanceWindow": "unknown",
+          "durationSeconds": 25,
+          "tokens": {
+            "input_tokens": 10,
+            "cache_creation_input_tokens": 272777,
+            "cache_read_input_tokens": 434303,
+            "output_tokens": 4058,
+            "output_tokens_details": {
+              "thinking_tokens": 2128
+            },
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 272777,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "global",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 393,
+                "cache_read_input_tokens": 207924,
+                "cache_creation_input_tokens": 502,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 502
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard",
+            "fallback_credit": null
+          },
+          "tokenProvenance": "provider-receipt",
+          "billedCostUsd": null,
+          "costProvenance": "unavailable",
+          "commit": "60739e1554fb3be5ae48dd9c8f9b50cd48c6b6f8",
+          "filesChanged": null,
+          "serviceMode": null,
+          "availability": "attemptable",
+          "availabilityReason": "attemptable"
+        },
+        "normalizedEffort": "medium",
+        "effectiveEffort": "medium",
+        "transmittedEffort": "medium",
+        "effortTransmission": {
+          "status": "transmitted",
+          "evidence": "native-cli-argument",
+          "modelReasoningMeasurement": null
+        },
+        "effortNormalized": false,
+        "fallback": false,
+        "fallbackReason": "none",
+        "matrixSnapshot": "openrouter:2026-09-23",
+        "publication": {
+          "output": "published"
+        },
+        "familyIndependence": {
+          "required": false,
+          "humanAuthored": false,
+          "excludedFamilies": [],
+          "passed": true
+        }
+      },
+      "promptSha256": "1f028dbcce65e173cf0048f535fbf186212335ea574a110185c72f8e55b63345",
+      "fixtureInitialHead": "0abad7dce29bab13911b897ce4c6040b171a5e16",
+      "repairSource": "package progress\n\nimport \"math/bits\"\n\n// Progress returns the whole-number percentage of done out of total, truncated.\n// done*100 is computed in 128 bits so large counts cannot overflow.\nfunc Progress(done, total int) int {\n if total <= 0 || done <= 0 { return 0 }\n if done >= total { return 100 }\n hi, lo := bits.Mul64(uint64(done), 100)\n q, _ := bits.Div64(hi, lo, uint64(total))\n return int(q)\n}\n",
+      "repairTestsPass": true,
+      "runtimeSha256": {
+        "role-dispatch.sh": "89d8562789c106f4b020fbfd8087b370fbe19bb8f97321e689d1ef4b1f18c5c5",
+        "role-policy.json": "68854b42b812e566e074624b72642154dd2ff7a415b6300ea1576c9bd14d6f9c",
+        "run-availability.sh": "79ba9900b7e9789d48ff98047b301c55fe58c607a00bc67ae97e5dfcb530b43d"
+      }
+    },
+    {
+      "slot": "B2",
+      "task": "B",
+      "requestedModel": "gpt-6-luna",
+      "attempts": 1,
+      "exitStatus": 76,
+      "workerWallSeconds": 22.98,
+      "accepted": false,
+      "missedDefects": null,
+      "falseFindings": null,
+      "acceptanceTestStatus": 0,
+      "repairsRequired": 1,
+      "leadWork": "packet, disposable fixture, identity-free acceptance and receipt inspection",
+      "leadTokens": null,
+      "measuredChargeUsd": null,
+      "workerOutput": {
+        "changedFiles": [
+          "progress.go"
+        ],
+        "testsRun": [
+          "rtk go test ./... (reported: No tests found)"
+        ],
+        "browserChecked": false,
+        "explanation": "Fixed Progress with overflow-safe integer arithmetic. Could not commit: the fixture\u2019s .git directory is read-only, so git add failed."
+      },
+      "routerReceipt": {
+        "schemaVersion": 1,
+        "receiptId": "dispatch-59572f2a3089f8c3cab20598",
+        "probeSource": "live",
+        "transportStub": false,
+        "requested": {
+          "role": "builder-fast",
+          "capabilities": [
+            "read-repository",
+            "structured-output",
+            "tool-use",
+            "write-repository"
+          ],
+          "effort": "medium",
+          "independenceReceiptIds": [],
+          "humanAuthored": false,
+          "candidate": {
+            "model": "gpt-6-luna",
+            "provider": "openai",
+            "transport": "codex-cli"
+          }
+        },
+        "participantId": "participant-59572f2a",
+        "attempts": [
+          {
+            "model": "gpt-6-luna",
+            "servedIdentity": "unknown",
+            "provider": "openai",
+            "transport": "codex-cli",
+            "billingMode": "included-subscription",
+            "requestedEffort": "medium",
+            "normalizedEffort": "medium",
+            "transmittedEffort": "medium",
+            "effortStatus": "transmitted",
+            "effortEvidence": "native-cli-config",
+            "providerReceiptStatus": "not-requested",
+            "providerFailureEvidence": null,
+            "processExitStatus": 79,
+            "outcome": "failed",
+            "reason": "repository-mutated-on-failed-attempt",
+            "durationSeconds": 18,
+            "availability": "available",
+            "availabilityReason": "available",
+            "failureScope": "none",
+            "failureConfirmed": false,
+            "serviceMode": {
+              "requested": "fast",
+              "transmitted": "fast",
+              "confirmed": null,
+              "evidence": "native-cli-config"
+            },
+            "partialOutput": "receipt.json.partial-1.txt"
+          }
+        ],
+        "served": null,
+        "normalizedEffort": null,
+        "effectiveEffort": null,
+        "transmittedEffort": null,
+        "effortTransmission": {
+          "status": "unavailable",
+          "evidence": "unavailable",
+          "modelReasoningMeasurement": null
+        },
+        "effortNormalized": false,
+        "fallback": true,
+        "fallbackReason": "repository-mutated-on-failed-attempt",
+        "matrixSnapshot": "openrouter:2026-09-23",
+        "familyIndependence": {
+          "required": false,
+          "humanAuthored": false,
+          "excludedFamilies": [],
+          "passed": false
+        }
+      },
+      "promptSha256": "1f028dbcce65e173cf0048f535fbf186212335ea574a110185c72f8e55b63345",
+      "fixtureInitialHead": "8ebe25f96164e2300503692725e2839b72d5f591",
+      "repairSource": "package progress\n\nimport \"math/bits\"\n\nfunc Progress(done, total int) int {\n\tif total <= 0 || done <= 0 {\n\t\treturn 0\n\t}\n\tif done >= total {\n\t\treturn 100\n\t}\n\n\thi, lo := bits.Mul64(uint64(done), 100)\n\tpercentage, _ := bits.Div64(hi, lo, uint64(total))\n\treturn int(percentage)\n}\n",
+      "repairTestsPass": true,
+      "completionGap": "The native Codex workspace-write sandbox denied git add to .git. Correct Go repair and independent tests passed; commit and routed completion failed. Infrastructure gap, not a missed defect.",
+      "runtimeSha256": {
+        "role-dispatch.sh": "89d8562789c106f4b020fbfd8087b370fbe19bb8f97321e689d1ef4b1f18c5c5",
+        "role-policy.json": "b80dfa1ca9a039c1e9732f83bf08d4c77020cead2232a15c761f8d8bff6d7198",
+        "run-availability.sh": "79ba9900b7e9789d48ff98047b301c55fe58c607a00bc67ae97e5dfcb530b43d"
+      }
+    },
+    {
+      "slot": "C1",
+      "task": "C",
+      "requestedModel": "claude-haiku-5-5",
+      "attempts": 1,
+      "exitStatus": 0,
+      "workerWallSeconds": 17.73,
+      "accepted": true,
+      "missedDefects": 0,
+      "falseFindings": 0,
+      "acceptanceTestStatus": null,
+      "repairsRequired": 0,
+      "leadWork": "packet, disposable fixture, identity-free acceptance and receipt inspection",
+      "leadTokens": null,
+      "measuredChargeUsd": null,
+      "workerOutput": {
+        "findings": [
+          {
+            "path": "progress.go",
+            "line": 6,
+            "severity": "P1",
+            "reason": "Integer division now happens before the multiplication. For any 0 < done < total, done / total is 0, so Progress returns 0 for every in-progress value. The original done * 100 / total returned the correct percentage.",
+            "reproduction": "Call Progress(50, 100). Patched code computes 50/100 = 0, then 0*100 = 0. Original code returns 50. Also Progress(1, 3) returns 0 instead of 33."
+          }
+        ],
+        "testsRun": [],
+        "browserChecked": false
+      },
+      "routerReceipt": {
+        "schemaVersion": 1,
+        "receiptId": "dispatch-4d4f613cae85701719664e91",
+        "probeSource": "live",
+        "transportStub": false,
+        "requested": {
+          "role": "research-fast",
+          "capabilities": [
+            "read-repository",
+            "structured-output",
+            "tool-use"
+          ],
+          "effort": "medium",
+          "independenceReceiptIds": [],
+          "humanAuthored": false,
+          "candidate": {
+            "model": "claude-haiku-5-5",
+            "provider": "anthropic",
+            "transport": "claude-cli"
+          }
+        },
+        "contract_digest": null,
+        "revision": null,
+        "participantId": "participant-4d4f613c",
+        "attempts": [
+          {
+            "model": "claude-haiku-5-5",
+            "servedIdentity": "claude-haiku-5-5",
+            "provider": "anthropic",
+            "transport": "claude-cli",
+            "billingMode": "subscription-headroom-unknown",
+            "requestedEffort": "medium",
+            "normalizedEffort": "medium",
+            "transmittedEffort": "medium",
+            "effortStatus": "transmitted",
+            "effortEvidence": "native-cli-argument",
+            "providerReceiptStatus": "not-requested",
+            "outcome": "served",
+            "durationSeconds": 13,
+            "serviceMode": null,
+            "availability": "attemptable",
+            "availabilityReason": "attemptable"
+          }
+        ],
+        "served": {
+          "model": "claude-haiku-5-5",
+          "servedIdentity": "claude-haiku-5-5",
+          "provider": "anthropic",
+          "transport": "claude-cli",
+          "family": "anthropic",
+          "billingMode": "subscription-headroom-unknown",
+          "allowanceWindow": "unknown",
+          "durationSeconds": 13,
+          "tokens": {
+            "input_tokens": 4,
+            "cache_creation_input_tokens": 206650,
+            "cache_read_input_tokens": 149121,
+            "output_tokens": 1328,
+            "output_tokens_details": {
+              "thinking_tokens": 1023
+            },
+            "server_tool_use": {
+              "web_search_requests": 0,
+              "web_fetch_requests": 0
+            },
+            "service_tier": "standard",
+            "cache_creation": {
+              "ephemeral_1h_input_tokens": 206650,
+              "ephemeral_5m_input_tokens": 0
+            },
+            "inference_geo": "global",
+            "iterations": [
+              {
+                "input_tokens": 2,
+                "output_tokens": 368,
+                "cache_read_input_tokens": 149121,
+                "cache_creation_input_tokens": 51454,
+                "cache_creation": {
+                  "ephemeral_5m_input_tokens": 0,
+                  "ephemeral_1h_input_tokens": 51454
+                },
+                "type": "message"
+              }
+            ],
+            "speed": "standard",
+            "fallback_credit": null
+          },
+          "tokenProvenance": "provider-receipt",
+          "billedCostUsd": null,
+          "costProvenance": "unavailable",
+          "commit": null,
+          "filesChanged": null,
+          "serviceMode": null,
+          "availability": "attemptable",
+          "availabilityReason": "attemptable"
+        },
+        "normalizedEffort": "medium",
+        "effectiveEffort": "medium",
+        "transmittedEffort": "medium",
+        "effortTransmission": {
+          "status": "transmitted",
+          "evidence": "native-cli-argument",
+          "modelReasoningMeasurement": null
+        },
+        "effortNormalized": false,
+        "fallback": false,
+        "fallbackReason": "none",
+        "matrixSnapshot": "openrouter:2026-09-23",
+        "publication": {
+          "output": "published"
+        },
+        "familyIndependence": {
+          "required": false,
+          "humanAuthored": false,
+          "excludedFamilies": [],
+          "passed": true
+        }
+      },
+      "promptSha256": "260a918e3abcc702bc4492b816f0c0b5fbfa9a7e055e92ab4fcf0d1594be8e95",
+      "fixtureInitialHead": "e3e4302e3a2489c111b2e89ac8fc5501f709c5d5",
+      "repairSource": null,
+      "repairTestsPass": null,
+      "runtimeSha256": {
+        "role-dispatch.sh": "89d8562789c106f4b020fbfd8087b370fbe19bb8f97321e689d1ef4b1f18c5c5",
+        "role-policy.json": "8e9f4aaa016263c3905625804a53ad2bbf5798b1526dfa63dae99b280fc0d94c",
+        "run-availability.sh": "79ba9900b7e9789d48ff98047b301c55fe58c607a00bc67ae97e5dfcb530b43d"
+      }
+    },
+    {
+      "slot": "C2",
+      "task": "C",
+      "requestedModel": "gpt-6-luna",
+      "attempts": 1,
+      "exitStatus": 0,
+      "workerWallSeconds": 14.52,
+      "accepted": true,
+      "missedDefects": 0,
+      "falseFindings": 0,
+      "acceptanceTestStatus": null,
+      "repairsRequired": 0,
+      "leadWork": "packet, disposable fixture, identity-free acceptance and receipt inspection",
+      "leadTokens": null,
+      "measuredChargeUsd": null,
+      "workerOutput": {
+        "findings": [
+          {
+            "path": "progress.go",
+            "line": 6,
+            "severity": "P2",
+            "reason": "Integer division happens before multiplication, so every positive value below the total produces 0. The rendered membership progress bar stays empty until completion.",
+            "reproduction": "Call Progress(1, 2): it returns 0 instead of 50. Any 0 < done < total has the same result."
+          }
+        ],
+        "testsRun": [],
+        "browserChecked": false
+      },
+      "routerReceipt": {
+        "schemaVersion": 1,
+        "receiptId": "dispatch-9cbd71beb4225490722953dd",
+        "probeSource": "live",
+        "transportStub": false,
+        "requested": {
+          "role": "research-fast",
+          "capabilities": [
+            "read-repository",
+            "structured-output",
+            "tool-use"
+          ],
+          "effort": "medium",
+          "independenceReceiptIds": [],
+          "humanAuthored": false,
+          "candidate": {
+            "model": "gpt-6-luna",
+            "provider": "openai",
+            "transport": "codex-cli"
+          }
+        },
+        "contract_digest": null,
+        "revision": null,
+        "participantId": "participant-9cbd71be",
+        "attempts": [
+          {
+            "model": "gpt-6-luna",
+            "servedIdentity": "unknown",
+            "provider": "openai",
+            "transport": "codex-cli",
+            "billingMode": "included-subscription",
+            "requestedEffort": "medium",
+            "normalizedEffort": "medium",
+            "transmittedEffort": "medium",
+            "effortStatus": "transmitted",
+            "effortEvidence": "native-cli-config",
+            "providerReceiptStatus": "not-requested",
+            "outcome": "served",
+            "durationSeconds": 9,
+            "serviceMode": {
+              "requested": "fast",
+              "transmitted": "fast",
+              "confirmed": null,
+              "evidence": "native-cli-config"
+            },
+            "availability": "available",
+            "availabilityReason": "available"
+          }
+        ],
+        "served": {
+          "model": "gpt-6-luna",
+          "servedIdentity": "unknown",
+          "provider": "openai",
+          "transport": "codex-cli",
+          "family": "openai",
+          "billingMode": "included-subscription",
+          "allowanceWindow": "codex",
+          "durationSeconds": 9,
+          "tokens": {
+            "input_tokens": 88389,
+            "cached_input_tokens": 64512,
+            "cache_write_input_tokens": 0,
+            "output_tokens": 369,
+            "reasoning_output_tokens": 112,
+            "total_tokens": 88758
+          },
+          "tokenProvenance": "provider-receipt",
+          "billedCostUsd": null,
+          "costProvenance": "unavailable",
+          "commit": null,
+          "filesChanged": null,
+          "serviceMode": {
+            "requested": "fast",
+            "transmitted": "fast",
+            "confirmed": null,
+            "evidence": "native-cli-config"
+          },
+          "availability": "available",
+          "availabilityReason": "available"
+        },
+        "normalizedEffort": "medium",
+        "effectiveEffort": "medium",
+        "transmittedEffort": "medium",
+        "effortTransmission": {
+          "status": "transmitted",
+          "evidence": "native-cli-config",
+          "modelReasoningMeasurement": null
+        },
+        "effortNormalized": false,
+        "fallback": false,
+        "fallbackReason": "none",
+        "matrixSnapshot": "openrouter:2026-09-23",
+        "publication": {
+          "output": "published"
+        },
+        "familyIndependence": {
+          "required": false,
+          "humanAuthored": false,
+          "excludedFamilies": [],
+          "passed": true
+        }
+      },
+      "promptSha256": "260a918e3abcc702bc4492b816f0c0b5fbfa9a7e055e92ab4fcf0d1594be8e95",
+      "fixtureInitialHead": "3bdafcc20f2734bdcd0f9bce5450744018cbf303",
+      "repairSource": null,
+      "repairTestsPass": null,
+      "runtimeSha256": {
+        "role-dispatch.sh": "89d8562789c106f4b020fbfd8087b370fbe19bb8f97321e689d1ef4b1f18c5c5",
+        "role-policy.json": "b9adb156fc317334cf6f042b70e6700df32da747d71b434c07045a1177406362",
+        "run-availability.sh": "79ba9900b7e9789d48ff98047b301c55fe58c607a00bc67ae97e5dfcb530b43d"
+      }
+    }
+  ],
+  "preflight": {
+    "case": "research-claim-source-map",
+    "helper": "tools/run-native-depot-role-benchmark.sh",
+    "purpose": "Exact native served identity and JSON extraction, not the A/B/C comparison",
+    "receipt": {
+      "schemaVersion": 2,
+      "requestedModel": "claude-haiku-5-5",
+      "modelCandidates": [
+        "claude-haiku-5-5"
+      ],
+      "responseModel": "claude-haiku-5-5",
+      "responseModelProvenance": "modelUsage-unique-max-output-tokens",
+      "primaryModelProvenance": "modelUsage-unique-max-output-tokens",
+      "servingProvider": "firstParty",
+      "servingProviderProvenance": "modelUsage",
+      "transport": "claude-cli",
+      "billingMode": "included-subscription",
+      "effort": "medium",
+      "outcome": "success",
+      "failureKind": null,
+      "usage": {
+        "prompt_tokens": 2,
+        "completion_tokens": 447,
+        "reasoning_tokens": null,
+        "cache_read_tokens": 0,
+        "cache_creation_tokens": 67939,
+        "cost": null
+      },
+      "primaryModelUsage": {
+        "model": "claude-haiku-5-5",
+        "usage": {
+          "inputTokens": 1397,
+          "outputTokens": 746,
+          "cacheReadInputTokens": 0,
+          "cacheCreationInputTokens": 67939,
+          "webSearchRequests": 0,
+          "costUSD": 0.0141005,
+          "contextWindow": 1000000,
+          "maxOutputTokens": 128000,
+          "thinkingTokens": 567,
+          "canonicalModel": "claude-haiku-5-5",
+          "provider": "firstParty",
+          "costBasis": "list"
+        },
+        "outputTokens": 746
+      },
+      "ancillaryModelUsage": [],
+      "identityAmbiguous": false,
+      "fallbackUsed": null,
+      "fallbackProvenance": "not_available",
+      "fallbackAmbiguous": false,
+      "fallbackReportedValues": [],
+      "attemptedModel": null,
+      "attemptedModels": [],
+      "attemptProvenance": "not_available",
+      "tokenProvenance": "native-cli",
+      "costProvenance": "subscription-no-call-cost-reported",
+      "benchmark": {
+        "suiteId": "depot-role-v2",
+        "caseId": "research-claim-source-map",
+        "role": "research-fast",
+        "workload": "quality"
+      },
+      "ambiguity_resolved": true,
+      "ambiguity_summary": "Explicit response identity is primary; otherwise complete modelUsage output counters may establish a unique positive maximum, while malformed fields and contradictions fail closed."
+    }
+  }
+}

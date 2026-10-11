@@ -117,9 +117,10 @@ small local preference for retiring a candidate such as `opus`; it filters both
 dispatch and human recommendation without changing shared policy or retrying an
 exhausted Claude rail.
 
-For applicable UI/UX judgment and front-facing design repair drafting, load
-`${CLAUDE_SKILL_DIR}/references/design-consultation.md` and request
-`design-consultant`. Opus 5.5 falls back to Sol 6.1 for this required review;
+For every design-related task, load
+`${CLAUDE_SKILL_DIR}/references/design-consultation.md` for required
+`claude-design` use. Applicable UI/UX judgment and front-facing design repair
+drafting request `design-consultant`. Opus 5.5 falls back to Sol 6.1 for this required review;
 only exhaustion of both candidates leaves required design coverage incomplete.
 Other roles follow the current candidate policy: native bounded work uses the
 fast role, coordination/consequential judgment uses the stronger ordinary role,
@@ -146,6 +147,8 @@ renderer is the sole operator-facing identity projection. Never load or run it
 during routing, implementation, review, repair, synthesis, or merge decisions.
 
 ## Economical dispatch and evidence reuse
+
+Follow `references/driver-worker-guidance.md#bounded-delegation-contract`.
 
 The existing `builder-fast` role includes settled bounded application code and
 tests when design, ownership, patterns and verifiable acceptance are clear.
