@@ -128,20 +128,10 @@ candidate_status() {
       fi
       ;;
     claude-cli)
-      auth="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.authMode // .claude.auth_mode // "unknown"')"
-      state="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.state // "unknown"')"
-      plan="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.plan // "unknown"')"
-      paid="$(printf '%s' "$AVAILABILITY" | jq -r '.claude.paidCreditsEnabled // empty')"
-      [ -n "$paid" ] || paid="$PAID_CLAUDE_CREDITS"
-      [ "$auth" = subscription ] || { printf unavailable; return; }
-      if [ "$model" = fable ] && printf '%s' "$AVAILABILITY" | jq -e '.claude.fable == "exhausted" or .claude.fable == "unavailable"' >/dev/null; then
-        printf unavailable
-      elif [ "$plan" = credits-only ]; then
-        if [ "$paid" = true ] && [ "$state" != unavailable ]; then printf attemptable
-        else printf unavailable
-        fi
+      if claude_candidate_eligibility "$model" "$(jq -r '.billing' <<< "$candidate")"; then
+        printf '%s' "$ELIGIBILITY_REASON"
       else
-        case "$state" in ok) printf available ;; unavailable) printf unavailable ;; *) printf unknown ;; esac
+        printf unavailable
       fi
       ;;
     openrouter)
@@ -157,6 +147,7 @@ load_run_failures || usage
 CANDIDATES='[]'
 while IFS= read -r candidate; do
   [ -n "$candidate" ] || continue
+  jq -e ".enabled != false" <<< "$candidate" >/dev/null || continue
   candidate_model="$(printf '%s' "$candidate" | jq -r '.model')"
   candidate_transport="$(printf '%s' "$candidate" | jq -r '.transport')"
   [ -z "$(run_failure_reason "$candidate_transport" "$candidate_model")" ] || continue

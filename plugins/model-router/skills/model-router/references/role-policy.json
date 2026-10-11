@@ -60,6 +60,7 @@
       {"model": "qwen/qwen3.8-max", "provider": "openrouter", "transport": "openrouter", "family": "qwen", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output", "independent-family"]}
     ],
     "research-fast": [
+      {"model": "claude-haiku-5-5", "servedIdentities": ["claude-haiku-5-5"], "provider": "anthropic", "transport": "claude-cli", "family": "anthropic", "billing": "included-subscription", "enabled": true, "capabilities": ["read-repository", "tool-use", "structured-output"]},
       {"model": "gpt-6-luna", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output"], "serviceMode": "fast"},
       {"model": "gpt-6.1-sol", "provider": "openai", "transport": "codex-cli", "family": "openai", "billing": "included-subscription", "capabilities": ["read-repository", "tool-use", "long-context", "structured-output"]},
       {"model": "google/gemini-3.7-flash", "provider": "openrouter", "transport": "openrouter", "family": "google", "billing": "api", "capabilities": ["read-repository", "long-context", "structured-output"]}

@@ -22,6 +22,8 @@ This pipeline takes ideas to clean feature branches; Codex runs its installed wo
 
 ## Mode Selection
 
+Narrow questions avoid full Pipeline. Follow [lead/worker policy](https://github.com/Design-Machines-Studio/depot/blob/main/plugins/model-router/skills/model-router/references/driver-worker-guidance.md#bounded-delegation-contract).
+
 A generic `/pipeline` authorizes selection of the smallest sufficient path.
 Honor an explicit full-workflow or named-review request. Before dispatch,
 assess acceptance clarity, settled design, consequence and reversibility,

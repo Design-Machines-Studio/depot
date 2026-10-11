@@ -68,6 +68,8 @@ architecture without a demonstrated current consumer.
 
 ### Phase 3: Focused Research
 
+Follow [bounded delegation policy](../../../model-router/skills/model-router/references/driver-worker-guidance.md#bounded-delegation-contract).
+
 Research only named unanswered questions. The current agent can resolve a
 bounded question directly. Add a specialist only for affected concerns and
 parallelize only independent work with a concrete advantage. Workers receive

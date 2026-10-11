@@ -279,9 +279,9 @@ if dm_review_floor != ">=1.88.0":
     errors.append("pipeline must require dm-review >=1.88.0")
 
 router_floors = {
-    "dm-review": ("pluginDependencies", ">=0.13.0"),
-    "pipeline": ("pluginDependencies", ">=0.13.0"),
-    "project-manager": ("optionalPluginDependencies", ">=0.13.0"),
+    "dm-review": ("pluginDependencies", ">=0.14.0"),
+    "pipeline": ("pluginDependencies", ">=0.14.0"),
+    "project-manager": ("optionalPluginDependencies", ">=0.14.0"),
 }
 for consumer, (dependency_kind, expected) in router_floors.items():
     manifest = manifests.get(consumer)

@@ -147,6 +147,8 @@ during routing, implementation, review, repair, synthesis, or merge decisions.
 
 ## Economical dispatch and evidence reuse
 
+Follow `references/driver-worker-guidance.md#bounded-delegation-contract`.
+
 The existing `builder-fast` role includes settled bounded application code and
 tests when design, ownership, patterns and verifiable acceptance are clear.
 Workers receive relevant context; the coordinator owns integration/acceptance.

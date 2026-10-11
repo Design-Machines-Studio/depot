@@ -74,7 +74,7 @@ check 'declared native aliases bind to exact approved served identities' jq -e '
   all(.roles[][]; if has("servedIdentities") then
     .transport == "claude-cli" and (.servedIdentities | type) == "array" and
     (.servedIdentities | length) == 1 and
-    all(.servedIdentities[]; test("^claude-(opus-5-5|fable-5)$"))
+    all(.servedIdentities[]; test("^claude-(opus-5-5|fable-5|haiku-5-5)$"))
   else true end)' "$POLICY"
 
 check 'security head is isolated from ordinary roles' jq -e '

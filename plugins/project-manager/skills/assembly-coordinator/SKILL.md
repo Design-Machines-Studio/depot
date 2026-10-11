@@ -213,7 +213,7 @@ Every prompt must state:
 - terminal handoff, including what must remain unmerged or unchanged.
 - `executorRole`, `executorCapabilities`, and `executorEffort` for every
   implementation or review lane. Start with `research-fast` at `medium` for evidence gathering, release-readiness
-  checks and routine planning; `builder-fast` for bounded settled application implementation and tests;
+  evidence checks; keep substantive planning and design with the capable lead; `builder-fast` for bounded settled application implementation and tests;
   `builder-deep` for unresolved or consequential implementation judgment; and the matching review role. Use `architect` for unresolved
   architecture, `review-deep` for architectural/code judgment, and
   `design-consultant` for applicable design review. File count alone is not a
@@ -242,6 +242,8 @@ The prompt must not call a direct provider command or contain a concrete
 routing override. Its role request is resolved later by model-router.
 
 ### Lowest-capable planning
+
+Follow [lead/worker policy](../../../model-router/skills/model-router/references/driver-worker-guidance.md#bounded-delegation-contract).
 
 Optimize total completion cost: correctness, completeness, defect/rework risk,
 latency, maintainer time and tokens including repeated context, retries and review.
@@ -272,7 +274,7 @@ a source PR alone does not update other planning threads.
 
 Whenever this coordinator produces an implementation or review copy-paste
 prompt, resolve one coherent model-router bundle through Workflow Kernel at
-minimum version `0.13.0`, requiring
+minimum version `0.14.0`, requiring
 `skills/model-router/references/operator-recommendation.sh`, `role-policy.json`,
 `availability-probe.sh`, `native-fast-mode.sh` and `run-availability.sh`. Resolve the current OpenRouter
 `model-matrix.json` through Workflow Kernel without changing it. Invoke the

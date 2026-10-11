@@ -52,6 +52,8 @@ suppresses its own report.
 
 ## Review Tiers
 
+Follow [lead/worker and evidence-reuse policy](../../../model-router/skills/model-router/references/driver-worker-guidance.md#bounded-delegation-contract).
+
 Default to the cheapest tier that fits.
 
 | When | Tier | What runs |
@@ -566,7 +568,7 @@ gap.
 
 ### Phase 4: Parallel Agent Launch
 
-In **both modes**, before dispatching any lane, load `${CLAUDE_SKILL_DIR}/references/reviewer-prompt-template.md` and build every reviewer prompt from that common contract. Launch every selected lane in one message.
+In **both modes**, before dispatching any lane, load `${CLAUDE_SKILL_DIR}/references/reviewer-prompt-template.md` and build every reviewer prompt from that common contract. Launch selected lanes in modest batches under the shared concurrency policy.
 
 In **quick** mode, dispatch only the selected core/triggered lanes through their
 mapped roles. Give the two core judgment lanes the full diff and slice each
@@ -762,6 +764,6 @@ See `${CLAUDE_SKILL_DIR}/references/agent-registry.md` for the complete catalog.
 ## Notes
 
 - Agent definitions are read at runtime from the depot; if the exact path is inaccessible (remote install), search by file name.
-- Maximum 16 parallel agents (full mode, all triggers). Ordinary quick mode has 2 core lanes plus triggered UI/build/domain lanes.
+- Default to two workers; batch extra lanes. Justify more concurrency. Settle unknown availability first and serialize shared mutations. Retain all applicable core and triggered lanes.
 - Routed agent cards inherit participant selection from the caller's role request.
 - The consolidator and memory recorder run after all review agents complete, never in parallel.

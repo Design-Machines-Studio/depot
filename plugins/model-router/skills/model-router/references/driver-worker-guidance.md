@@ -1,9 +1,11 @@
 # Main driver and bounded workers
 
-Human-facing policy, updated 2026-10-07. Optimize total completion cost:
+Human-facing policy, updated 2026-10-11. Optimize total completion cost:
 input (including repeated cached context), output/reasoning, retries, integration
-and review, defects/rework, elapsed time and maintainer attention. Start with the
-lowest capable model for the whole job, not the cheapest token price. A stronger
+and review, defects/rework, elapsed time and maintainer attention. A capable lead owns task understanding, meaningful design decisions,
+integration, acceptance and final review judgment. Use economical workers for
+bounded questions with independently checkable results. Token price alone does
+not establish economical completion. A stronger
 model, including Astra as the initial choice, is justified by task-specific
 uncertainty or evidence that it improves correctness, completeness or total
 completion efficiency. Do not require a predictable cheap-model failure first.
@@ -12,14 +14,16 @@ Concrete identities here are operator-only; `role-policy.json` owns selection.
 
 | Work | Starting point | Escalation |
 |---|---|---|
-| Bounded evidence gathering and routine checks | `research-fast`; GPT-6 Luna Fast, Low/Medium | Sol when evidence materially conflicts |
+| Narrow file discovery, extraction, supplied-log analysis and classification | `research-fast`; Haiku 5.5 when its live canary supports the required capability, then existing Luna Fast and Sol fallbacks; Low/Medium | Sol when evidence materially conflicts |
 | Settled bounded application code and tests, including Go/Templ/Datastar | `builder-fast`; Luna Fast, Low/Medium (High with a reason) | Sol for unresolved/consequential judgment |
 | Coordination, harder implementation and consequential review | `builder-deep`, `architect`, `review-deep` or `review-coordinator`; GPT-6.1 Sol | Astra for a named difficult problem or justified escalation |
 | Applicable UI/UX design judgment and design repair | `design-consultant`; Opus 5.5, bounded affected surfaces | Sol; prototype and explicit user decisions remain authoritative |
 | Inexpensive or specialized analysis | Eligible OpenRouter participant | Host owns tools, integration and verification unless transport proves otherwise |
 
-Fable/Claude is not the ordinary first attempt for coding, architecture or code
-review. Preserve Opus for applicable design judgment and design fixes. One agent
+Haiku is a narrow research/extraction candidate, not general feature ownership
+or consequential review judgment. Builder-fast and review-fast continue to
+start on Luna Fast pending comparative evidence. Fable/Claude is not the
+ordinary first attempt for coding, architecture or code review. Preserve Opus for applicable design judgment and design fixes. One agent
 can do substantial settled work; file count/language/UI/integration alone never
 establishes difficulty. An explicit stronger starting role may reduce total cost;
 state the concrete reason instead of requiring a cheap failed attempt.
@@ -30,6 +34,79 @@ a short plan and proportional independent review; uncertainty/consequence adds
 only useful research/planning/adversarial work. Preserve repository requirements,
 explicit full requests, tests, prototype/browser checks and all retained findings.
 New risk escalates the current run without discarding valid completed work.
+
+## Bounded delegation contract
+
+Prefer deterministic search, scripts and test runners for mechanical work. Do
+not dispatch a worker merely to wrap a command. A narrow read-only question does
+not trigger full Pipeline planning. The lead can answer directly when preparing
+and integrating a worker would cost more than the task.
+
+Each worker packet contains one clear question, relevant source-bound evidence,
+owned files when writing, objective acceptance criteria, and a bounded result
+format: answer/findings, source paths and lines, actions actually performed,
+uncertainty and remaining checks. Keep necessary context; omit whole transcripts
+and unrelated inventory. Routine workers start at low/medium effort. Higher
+effort needs a task-specific reason. Mechanical implementation remains eligible
+for builder-fast when settled patterns and independently specified tests make
+success objectively verifiable. Workers do not own general feature design.
+
+The lead collects shared GitHub/API evidence once and reuses that exact snapshot
+across workers. The lead owns changes to maintained checkouts, shared serving
+bindings, integration and publication. Workers write only their assigned files
+in task-owned isolated checkouts. Use two concurrent workers by default for two
+maintainers, fewer for dependent tasks or unknown rail availability. A concrete
+independent workload may justify more. Never parallelize shared mutations or
+send duplicate API requests. Settle the first unknown-availability attempt before
+sending more work on that account, then reuse its run-local failure receipt.
+
+A worker's completion is evidence for its bounded task, not tests, browser
+coverage or review approval. Cite only commands and checks actually performed.
+Read-only Claude tools are Read/Glob/Grep; Bash tests remain lead-owned. Browser
+interaction remains host-owned for every current routed transport. The lead
+runs independent acceptance and owns the final review judgment. Substantive
+changes retain proportional independent review, automatic review-and-repair,
+all retained P1/P2/P3 repairs, prototype/user authority, required browser checks,
+commit/push and exact owned cleanup.
+
+Reuse valid exact-source tests and review evidence. Changes or a concrete new
+question require affected rechecks, not an entire review to try another model.
+A different model family may provide a useful second opinion. It is not a new
+mandatory gate, and missing implementation-origin receipts never block ordinary
+review. Existing selected coverage and explicit independence requests still apply.
+
+## Haiku release and activation evidence
+
+The fixed identity is `claude-haiku-5-5`, with no dated alias. Official effort
+supports low, medium, high, xhigh and max. Router requests remain
+low|medium|high|max, transmitted unchanged to native Claude. Start short worker
+requests at low/medium; do not carry Codex Fast or context settings into Claude.
+Use native Claude subscription access only for this candidate. Do not enable
+paid credits, upgrade accounts, add a direct API transport or route Anthropic
+through OpenRouter. Unknown quota remains unknown and permits one bounded
+attempt after subscription authentication; confirmed failures reuse the existing
+run-local receipts and fall back across providers.
+
+The API price per million input/output tokens is $0.10/$0.50 for a request with
+at most 100,000 input tokens and $0.50/$2.50 above that threshold. All input
+counts toward the threshold, including cache reads/writes. The higher tier prices
+the whole request, not only excess tokens. Five-minute cache writes/read prices
+are $0.125/$0.01, or $0.625/$0.05 above the threshold; one-hour writes are
+$0.20/$1.00. These are API prices, not subscription charges. Claude list-price
+`total_cost_usd`/`costUSD` is not a measured subscription charge. Keep cached
+input, output/reasoning and unavailable measurements distinct. A shorter packet
+can reduce repeated input, but do not claim savings without accepted-work data.
+The new tokenizer also prevents comparing old token counts as equivalent work.
+
+Sources verified 2026-10-11: [release](https://www.anthropic.com/claude-haiku-5-5),
+[migration](https://platform.claude.com/docs/en/models/haiku-5-5/migration-guide),
+[effort](https://platform.claude.com/docs/en/build-with-claude/effort) and
+[pricing](https://platform.claude.com/docs/en/about-claude/pricing).
+[HAIKU-DELEGATION-01 evidence](https://github.com/Design-Machines-Studio/depot/blob/main/docs/haiku-delegation-01.md)
+records live capability limits and the small matched canary. Published model
+benchmarks and the linked video are not local benchmark proof. Unproven
+capabilities/default changes remain inactive; `enabled: false` in role policy
+excludes a candidate from both recommendation and dispatch.
 
 ## Luna service mode
 
