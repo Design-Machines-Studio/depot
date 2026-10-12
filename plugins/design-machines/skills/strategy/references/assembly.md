@@ -2,33 +2,39 @@
 
 ## What Assembly Is
 
-A bespoke operations system for worker cooperatives. Custom-built for each organization. Not an off-the-shelf product. Not a SaaS subscription. Something the co-op owns and can run forever.
+A governance system configured to each worker co-op's bylaws. Assembly is in beta, selling and installing. Check ai-memory entity "Assembly" for release dates and current state.
 
 ## Architecture
 
+Governance and Atlas are shipped fixtures on Baseplate. Check ai-memory entity "Assembly" for release dates and current install state.
+
 ```
-Assembly (product line -- DM-005/WORKS)
-├── Baseplate -- the core application starter
-│   Every co-op starts from the same Baseplate.
-│   Authentication, navigation, member profiles, basic settings.
-│
-├── Fixtures -- the modules that bolt on
-│   No two co-ops have the same Fixtures configuration.
-│   ├── Governance
-│   │   Meeting minutes, resolutions, proposals, decision tracking.
-│   ├── Members
-│   │   Team directory, roles, onboarding flows, member lifecycle.
-│   ├── Equity
-│   │   Share ledger, Internal Capital Accounts, patronage tracking.
-│   ├── Compensation
-│   │   Factor-based salary framework. Location, experience, capacity.
-│   └── Documentation
-│       SOPs, manuals, knowledge base, policy version control.
-│
-└── [Client Name] -- whatever the co-op calls theirs
-    The co-op names their finished system. The name is theirs, not ours.
-    Each co-op names their own install.
+Assembly (product line)
+├── Baseplate: core application starter, including the thread primitive
+├── Fixtures: modules that bolt on
+│   ├── Governance: shipped; proposals, decisions, decision log
+│   ├── Atlas: shipped; network view for federations and incubators
+│   ├── Discussions: prototyped, shipping next; included with Baseplate
+│   ├── Money: prototyped, after Discussions; bank-balance forecasting
+│   └── Switchboard: fixture for entitlements and the operator model
+└── [Client Name]: each co-op names its own install
 ```
+
+Baseplate provides authentication, navigation, member profiles and basic settings. Each co-op has its own fixture configuration.
+
+Atlas shows member organisations, people and positions counts, a head-office map and configurable stat cards. Networks can manually add non-Assembly co-ops, invite them and merge their records when they connect.
+
+Discussions is forum-style and topic-first, with no upvotes or direct messages. Its thread primitive lives in Baseplate so proposals can have discussions without the fixture. Money forecasts bank balances from near to far and checks forecast accuracy against actuals with minimal data entry. It is not accounting.
+
+Meetings and the minute book will likely become separate fixtures later. Members, Equity, Compensation and Documentation are unbuilt as separate fixtures. Baseplate already holds member identity and profiles.
+
+### Installs
+
+- **Design Machines** is the internal install where the team runs its own governance.
+- **Assembly Hall** (`hall.asmbly.app`) is the shared community install for partners. It is the demo, the feedback channel and the place partners meet each other.
+- **Demo** is a separate install that resets nightly.
+
+Community lives in Assembly Hall. The former DM-019 community service is retired from strategy; check ai-memory for the retirement history.
 
 ## Naming Logic
 
@@ -59,23 +65,9 @@ Assembly (product line -- DM-005/WORKS)
 | Database | SQLite (modular) | One DB per module, simple deployment, portable |
 | Templates | Templ | Go-native HTML templating, type-safe |
 
-## Module Tiers
+## Integration Boundary
 
-**MVP Tier** (Essential for pilot):
-- Members module (profiles, classes, lifecycle)
-- Governance module (basic decisions, meetings)
-- Records & Compliance (statutory registers)
-- Calendar & Reminders (annual rhythm)
-
-**Core Tier** (Standard implementation):
-- Equity module (shares, ICAs, redemption)
-- Documentation (policies, version control)
-- Advanced Governance (proposals, workflows)
-
-**Advanced Tier** (Full implementation):
-- Compensation (factor-based salary framework)
-- Real-time features (live voting, collaboration via Datastar)
-- Integrations (financial systems, partner tools)
+ATProto sign-in is a paid integration behind the organisation-identity seam. Keep integration work separate from governance discovery and the Install. A partner pays for a prerequisite integration before Design Machines builds it. Check ai-memory for current requests and funding state.
 
 ## The "Journey Through a Year" Paradigm
 
@@ -94,20 +86,10 @@ Co-op governance isn't a dashboard you check occasionally. It's a rhythm.
 | What Others Do | What Assembly Does |
 |----------------|-------------------|
 | Generic tools forced into co-op shapes | Purpose-built for cooperative governance |
-| Enterprise solutions priced for large co-ops | Accessible to small co-ops ($5K-50K) |
+| Enterprise solutions priced for large co-ops | Grant-sized Install, annual Plan and additional Fixtures; figures in ai-memory |
 | Software you install and figure out | Consultation + training + bespoke system |
 | Compliance-feeling bureaucratic interfaces | Designed to feel good, simple, expressive |
 | Static request-response interfaces | Real-time collaboration, live voting, instant updates |
-
-## Existing Assets
-
-| Asset | Status |
-|-------|--------|
-| Notion prototype (14 database tables) | Complete -- ran a real co-op for 4 years |
-| Video walkthroughs (4 Loom recordings) | Complete |
-| Module architecture (tiers defined) | Complete |
-| Live Wires frontend CSS | Beta |
-| Requirements checklist (150+ items, 8 modules) | Complete |
 
 ## Design Principles
 
@@ -117,12 +99,8 @@ Co-op governance isn't a dashboard you check occasionally. It's a rhythm.
 4. **Inhabited interfaces**: Living rhythm, not archived snapshots
 5. **Decolonial language**: Solidarity economy terminology for members, legal compliance for regulators
 
-## Distribution Model
+## Distribution and Hosting
 
-Assembly follows the **ONCE model** (37signals) -- clients buy and own their install. Three-phase rollout:
+Assembly is closed and source-available under licence to the right partners. It is not open source. A future fixture marketplace would sell Design Machines fixtures with at most a few vetted partners. It is not a current priority.
 
-1. **Phase 0 (Pilot)**: Manual Docker deploy. All fixtures compiled in, toggled at runtime. Design Machines deploys directly.
-2. **Phase 1 (Self-Updating)**: Static registry with signed binaries. One-click updates. Lightweight Mothership dashboard.
-3. **Phase 2 (Platform)**: Builder service compiles per-client binaries. Fixture marketplace. License management.
-
-Full specification: `docs/DISTRIBUTION.md`, `docs/PILOT-SCOPE.md`, `docs/UPDATE-FLOW.md` in the Assembly repo.
+White-label managed hosting is fulfilled by hosting partners such as Arcustech and Cantrust. The host answers for the server; Design Machines answers for the app. Self-hosting is undecided. Confirm the hosting arrangement before go-live; check ai-memory for partner agreements and current hosting state.

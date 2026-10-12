@@ -38,7 +38,7 @@ Marker is always optional. DM-003 works alone. DM-003/WORKS adds clarity. The nu
 | DM-002 | "AI or Bust(ed)" | /FLOOR | Dot All 2024 |
 | DM-003 | Live Wires | /WORKS | Beta |
 | DM-004 | The Northern Star | /PLATE | Demo site |
-| DM-005 | Assembly | /WORKS | Prototype |
+| DM-005 | Assembly | /WORKS | Beta, selling and installing |
 
 ## Reserved Numbers
 
@@ -59,7 +59,6 @@ Storytelling device, not just bookkeeping.
 
 | Code | Name | Category | What |
 |------|------|----------|------|
-| DM-006 | Co-op Health Check | /WORKS | Diagnostic tool for co-op governance |
 | DM-007 | Content Modeling Guide | /PRESS | Paid PDF on CMS content architecture |
 | DM-008 | Live Wires Premium Templates | /PLATE | Editorial website starters |
 | DM-009 | Rate Calculator | /WORKS | Agency pricing tool (Nimber extract) |

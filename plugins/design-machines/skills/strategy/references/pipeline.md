@@ -12,6 +12,13 @@ Current pipeline details (specific clients, meeting dates, contact info) are sto
 | Co-op developers | Ongoing | Bundled services |
 | Provincial/national federations | Ongoing | Grants, referrals |
 | Credit unions | Future | Funders AND potential clients |
+| Shared community install (Assembly Hall) | Ongoing | Partners evaluate, give feedback and see each other there. Invite before pitching. |
+
+## Sales Motion
+
+Chris books meetings and makes introductions with the one-page offer in hand. Trav runs discovery and closes. Brian runs the CRM and Assembly Hall onboarding.
+
+Offer federations the Network package first. Offer single co-ops the Install. The next step after any conversation is a 45-minute discovery call. Current contacts, deals and next steps live in ai-memory.
 
 ## Go-to-Market: The Trojan Horse
 
@@ -33,9 +40,8 @@ Lead with internal operations, not public-facing design. Co-ops get funding for 
 4. At least one "I didn't know we needed to do that" moment
 5. Documentable as case study
 6. Generates referral to at least one other co-op
+7. Documented in Assembly Hall, not in a side channel.
 
-## What "Good Enough" Means for Pilot
+## What an Install Needs Before Go-Live
 
-**Doesn't need**: Full backend, all five Fixtures, Datastar real-time, mobile app, financial integration
-
-**Does need**: Beautiful governance interface, "journey through a year" working, meeting/decision tracking, the emotional proof that governance can feel good
+Governance and Atlas are shipped. Before go-live, map bylaws to decision types, invite members, put the first real proposal in the system and confirm Plan hosting with the hosting partner.

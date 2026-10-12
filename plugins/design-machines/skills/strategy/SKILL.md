@@ -1,6 +1,6 @@
 ---
 name: strategy
-description: Design Machines business strategy, product positioning, catalog system, Assembly architecture, partnerships, revenue model, brand language, and design system (color palette, GT Standard typography, token architecture). Use when working on DM business planning, product naming, pricing, client conversations, partnership coordination, marketing copy, catalog entries, visual identity, color decisions, or any strategic decision about Design Machines OÜ. Also use when preparing for client calls, writing proposals, discussing competition among co-op governance tools, making pricing decisions, choosing colors or type for DM properties, or when context about Travis Gertz's positioning and target market is needed. Trigger this skill even for casual mentions of DM pricing, naming decisions, the DM catalog, partner names (Chris, Mario, Ben, Rachel), specific co-op clients (TACO, Solid State), grant funding questions, DM color palette, GT Standard font, purple-800, gold-400, scheme classes, or any reference to the conversion funnel between Live Wires and Assembly. If the user mentions anything about Design Machines as a business -- finances, runway, positioning, partnerships, brand, design system, colors, go-to-market -- this skill has the context.
+description: Design Machines business strategy, product positioning, catalog system, Assembly architecture, partnerships, revenue model, brand language, and design system (color palette, GT Standard typography, token architecture). Use when working on DM business planning, product naming, pricing, client conversations, partnership coordination, marketing copy, catalog entries, visual identity, color decisions, or any strategic decision about Design Machines OÜ. Also use when preparing for client calls, writing proposals, discussing competition among co-op governance tools, making pricing decisions, choosing colors or type for DM properties, or when context about Travis Gertz's positioning and target market is needed. Trigger this skill even for casual mentions of DM pricing, naming decisions, the DM catalog, partner names (Chris, Mario, Ben, Rachel), specific co-op clients (Solid State), Assembly Hall, founding partner terms, Network package, Install / Plan / Fixtures pricing structure, Discussions fixture, grant funding questions, DM color palette, GT Standard font, purple-800, gold-400, scheme classes, or any reference to the conversion funnel between Live Wires and Assembly. If the user mentions anything about Design Machines as a business -- finances, runway, positioning, partnerships, brand, design system, colors, go-to-market -- this skill has the context.
 ---
 
 # Design Machines Strategy Skill
@@ -45,7 +45,7 @@ Landing lines: *"Your bylaws stop being paperwork." · "The rules run the system
 
 | Code | Name | Type | Status | What It Does |
 |------|------|------|--------|--------------|
-| DM-005 | **Assembly** | Works | Prototype | Bespoke governance OS for worker co-ops |
+| DM-005 | **Assembly** | Works | Beta, selling and installing | Bespoke governance OS for worker co-ops |
 | DM-003 | **Live Wires** | Works | Beta | Typography-first CSS framework for editorial web |
 | -- | **Nimber** | Works | Legacy/Future | Rate setting & estimation for agencies |
 
@@ -53,18 +53,33 @@ Landing lines: *"Your bylaws stop being paperwork." · "The rules run the system
 
 ### Assembly Architecture
 
+Governance and Atlas shipped on a fresh Baseplate release in early October 2026. Check ai-memory entity "Assembly" for release dates and current install state.
+
 ```
 Assembly (product line)
-├── Baseplate -- core application starter (every co-op starts here)
-├── Fixtures -- modules that bolt on
-│   ├── Governance (meetings, resolutions, proposals, decisions)
-│   ├── Members (directory, roles, onboarding, lifecycle)
-│   ├── Equity (shares, ICAs, patronage, redemption)
-│   ├── Compensation (factor-based salary framework)
-│   └── Documentation (SOPs, manuals, knowledge base)
-└── [Client Name] -- whatever the co-op calls theirs
-    └── Each co-op names their own install
+├── Baseplate: core application starter, including the thread primitive
+├── Fixtures: modules that bolt on
+│   ├── Governance: shipped; proposals, decisions, decision log
+│   ├── Atlas: shipped; network view for federations and incubators
+│   ├── Discussions: prototyped, shipping next; included with Baseplate
+│   ├── Money: prototyped, after Discussions; bank-balance forecasting
+│   └── Switchboard: fixture for entitlements and the operator model
+└── [Client Name]: each co-op names its own install
 ```
+
+Atlas shows member organisations, people and positions counts, a head-office map and configurable stat cards. Networks can manually add non-Assembly co-ops, invite them and merge their records when they connect.
+
+Discussions is forum-style and topic-first, with no upvotes or direct messages. Its thread primitive lives in Baseplate so proposals can have discussions without the fixture. Money forecasts bank balances from near to far and checks forecast accuracy against actuals with minimal data entry. It is not accounting.
+
+Meetings and the minute book will likely become separate fixtures later. Members, Equity, Compensation and Documentation are unbuilt as separate fixtures. Baseplate already holds member identity and profiles.
+
+### Installs
+
+- **Design Machines** is the internal install where the team runs its own governance.
+- **Assembly Hall** (`hall.asmbly.app`) is the shared community install for partners. It is the demo, the feedback channel and the place partners meet each other.
+- **Demo** is a separate install that resets nightly.
+
+The Local (DM-019, Matrix) is retired from strategy as of October 2026. Community lives in Assembly Hall.
 
 **Naming logic:**
 - **Assembly** = factory assembly (making things) + democratic assembly (deciding things)
@@ -74,6 +89,10 @@ Assembly (product line)
 
 **Tech stack:** Go backend + Datastar (real-time SSE) + Live Wires CSS + SQLite (modular) + Templ templates
 
+**Distribution:** Closed, source-available under licence to the right partners, not open source. A future fixture marketplace would sell Design Machines fixtures with at most a few vetted partners. It is not a current priority.
+
+**Hosting:** White-label managed hosting is fulfilled by hosting partners (Arcustech, Cantrust). The host answers for the server; Design Machines answers for the app. Partner arrangements remain to be agreed; self-hosting is undecided. Check ai-memory for their current status.
+
 ### Live Wires Positioning
 
 "The CSS framework built for content-heavy websites, where typography comes first, class names make sense to editors, and prototypes evolve into production code."
@@ -82,7 +101,7 @@ Key differentiators vs Tailwind: semantic classes, typography-first, no utility 
 
 ### The Conversion Funnel
 
-Designer uses Live Wires -> encounters labor/AI content -> learns about co-ops -> becomes Assembly client. Products catch at craft level, co-op work catches at values level.
+Live Wires and labour content -> Assembly Hall (see the product, meet the partners) -> co-op exposure -> Assembly client. Assembly Hall is both the community and the demo. Products catch at craft level, co-op work catches at values level.
 
 ---
 
@@ -99,7 +118,7 @@ Inspired by Factory Records' FAC numbering. Everything is a release. A CSS frame
 | DM-002 | "AI or Bust(ed)" | /FLOOR | Dot All 2024 |
 | DM-003 | Live Wires | /WORKS | Beta |
 | DM-004 | The Northern Star | /PLATE | Demo site |
-| DM-005 | Assembly | /WORKS | Prototype |
+| DM-005 | Assembly | /WORKS | Beta, selling and installing |
 
 ### Category Markers
 
@@ -152,9 +171,31 @@ Admin debt functions like technical debt for governance. Bylaws drift from how t
 
 ## Revenue Model
 
-### Project-Based Engagements
+### Install / Plan / Fixtures
 
-Assembly projects cover Discovery + Design, Implementation, and Training phases with optional maintenance retainers. Pricing details are stored in ai-memory -- search for "Assembly" or check `${CLAUDE_SKILL_DIR}/references/revenue.md`.
+- **Install:** One-time, per co-op and grant-sized. Includes discovery, configuration to bylaws, onboarding, training and the first year of Plan.
+- **Plan:** Annual. Includes managed hosting, updates, support and an Assembly Hall seat. Uses a sliding scale by member count.
+- **Fixtures:** One-time, per additional fixture. Discussions is included with Baseplate.
+
+### Network and Partner Packages
+
+**Network package:** Atlas plus a block of Installs for federations, incubators and co-op developers. The per-co-op rate drops with volume. Staff training lets the network onboard its own co-ops. This is the lead offer for the primary audience.
+
+**Partner work:** Hourly work quoted as fixed blocks for governance discovery, facilitation, fixture customisation and integration spikes such as ATProto sign-in. A partner pays for prerequisite integration work before it is built.
+
+### Founding Partner Terms
+
+A limited number of early installs receive a discount and a Plan price lock in exchange for named obligations: go live by an agreed date, give monthly feedback in Assembly Hall and provide a case study. Networks also commit to a minimum number of member co-ops live within 90 days. The discount is a trade, not a favour. List price applies otherwise.
+
+### Collaborator Revenue Split
+
+The team decides its revenue split by consensus in the Design Machines install. Three shapes are under discussion: connector fee plus delivery rate; Cooperation Ledger points; reseller through a federation. None is decided yet. Prices, discount limits, deadlines and split figures live in ai-memory entities "Design Machines" and "Assembly". The reference holds structure, not approved prices.
+
+### Sales Motion
+
+Chris books meetings and makes introductions with the one-page offer in hand. Trav runs discovery and closes. Brian runs the CRM and Assembly Hall onboarding.
+
+The next step after any conversation is a 45-minute discovery call.
 
 ### Funding Sources
 
@@ -265,7 +306,7 @@ Full palette, token maps, scheme inventory, product assignments, and accessibili
 
 ## Competitive Landscape
 
-**What co-ops actually use today:** Spreadsheets, Google Docs, Notion (if technical), generic tools (Monday, Asana), paper, nothing at all, expensive custom solutions ($50K+).
+**What co-ops actually use today:** Spreadsheets, Google Docs, Notion (if technical), generic tools (Monday, Asana), paper, nothing at all, expensive custom solutions (check ai-memory for current cost comparisons).
 
 **The real competition:** Cobbled-together free tools plus hope.
 
@@ -281,8 +322,8 @@ Design Machines operates as a system of interdependent feedback loops. When maki
 
 | Loop | Name | Mechanism | Current State |
 |------|------|-----------|---------------|
-| R1 | Product-Adoption | Assembly improves -> co-ops run better -> success stories -> more co-ops adopt -> revenue + feedback -> Assembly improves | **Not yet turning.** TACO prototype is the first turn of the crank. |
-| R2 | Solidarity Ecosystem | Solid State incubates -> creates demand for governance tools -> Assembly gets pilots -> governance health validates incubation -> pipeline grows | **Active but pre-revenue.** Relationships strong, no money flowing yet. |
+| R1 | Product-Adoption | Assembly improves -> co-ops run better -> success stories -> more co-ops adopt -> revenue + feedback -> Assembly improves | **Not yet turning.** The first paid network deal through a co-op developer or federation starts R1. Atlas makes network value visible on day one. TACO dissolved in June 2026; check ai-memory for the history. |
+| R2 | Solidarity Ecosystem | Solid State incubates -> creates demand for governance tools -> Assembly gets pilots -> governance health validates incubation -> pipeline grows | **Active but pre-revenue.** Assembly Hall is the physical location of this loop. Partners meet, evaluate and give feedback there. Check ai-memory for current relationships and revenue state. |
 | R3 | Propaganda | Co-ops succeed using Assembly -> visible proof co-ops work -> more people consider conversion -> larger sector -> more demand | **Dormant.** Needs R1's first turn before it can start. |
 | R4 | Knowledge | Systems thinking library -> informs governance design patterns -> better loops encoded in Assembly -> pilot data -> deeper understanding | **Active.** RAG library indexed, research informing product design. |
 
@@ -290,7 +331,7 @@ Design Machines operates as a system of interdependent feedback loops. When maki
 
 | Loop | Name | Mechanism | Current State |
 |------|------|-----------|---------------|
-| B1 | Investment Window | Personal savings depleting monthly. No external income. Window determines how many turns R1 gets. Check ai-memory entity "Design Machines OÜ" for current burn rate, runway, and grant status. | **Amber.** Controlled investment, not crisis. |
+| B1 | Investment Window | Revenue determines how many turns R1 gets. Check ai-memory entity "Design Machines" for figures, burn rate, runway and funding status. | **Red.** Savings were depleted by late September 2026. Revenue is the constraint on everything. |
 | B2 | Complexity vs Adoption | Governance requirements demand features -> complexity increases -> adoption friction. Countered by design principles: compliance as byproduct, let formality emerge, be easier than the workaround. | **Managed.** Design principles are the lever. |
 
 ### Archetype Warnings
@@ -301,19 +342,22 @@ Three systems archetypes from the DM library (Senge, Meadows, Kelly) that apply 
 
 **Growth and Underinvestment (Senge):** Investing in infrastructure before the growth signal is real. Don't over-engineer the baseplate before TACO is live and giving real feedback. Extract abstractions from what you've learned, not from what you assume. **Test:** "Has a real pilot validated this need, or am I building for a future that doesn't exist yet?"
 
+**Additional test:** "Is there a partner waiting for this in Assembly Hall, or am I building it for a partner I imagine?"
+
 **Shifting the Burden (Senge/Meadows):** The symptomatic solution (freelance income) undermines the fundamental solution (Assembly revenue). Every hour on freelance is an hour not shipping the prototype that generates its own revenue. **Test:** "Does this income source compete with or complement Assembly development time?"
 
 ### Priority Sequencing (from systems analysis)
 
 All loops wait on R1's first complete turn. The sequencing:
 
-1. **TACO prototype ships** -> proves the model
-2. **TACO pays something** (grant-sized $2-4K CAD) -> first revenue
-3. **Second pilot** (Solid State or another co-op from pipeline) -> doubles feedback + revenue
-4. **Cooperators grant lands** (timing unknown) -> extends runway
-5. **R1 starts compounding** -> feeds R2 (ecosystem), R3 (propaganda), R4 (knowledge)
+1. Decide the price sheet and revenue split in the Design Machines install.
+2. Put the one-page offer in every partner's hands.
+3. Sign the first network deal with a deposit.
+4. Ship Discussions v1 in Assembly Hall.
+5. Publish product-weighted launch content and run the partner livestream.
+6. Sign the second network or federation deal. Then R1 compounds.
 
-Sprint time allocation during this phase: **80% TACO prototype, 10% pipeline warmth, 10% build-process content.**
+Sprint time allocation: **selling first; one timeboxed product build at a time (currently Discussions v1, 2 to 3 weeks); 3 to 10 hours a week on content, product-weighted until the first installs are live.** Check ai-memory for current priorities and dates.
 
 ### Leverage Points (Meadows' hierarchy, applied to DM)
 
@@ -344,7 +388,7 @@ When making a strategic decision, search the RAG with the relevant archetype or 
 
 **Reference files** contain stable structural knowledge: pricing tiers, engagement phases, brand language rules, catalog architecture, partner archetypes. These rarely change.
 
-**ai-memory** contains dynamic state: current pipeline status, active financial runway, specific meeting dates, recent decisions, relationship updates. Search for entity names like "Design Machines OÜ", "Assembly", partner names, or client names.
+**ai-memory** contains dynamic state: current pipeline status, active financial runway, specific meeting dates, recent decisions, relationship updates. Read the October 12, 2026 observations on "Design Machines", "Assembly", "Atmosphere", "Solid State", "Chris Galloway", "Brian Richards" and "BC Co-op Association" for the source of this update. Search those entities for current figures, dates, decisions and pipeline state.
 
 When in doubt: check the reference file first (faster, always available), then ai-memory for current state.
 
@@ -357,7 +401,7 @@ When in doubt: check the reference file first (faster, always available), then a
 | **social-media** | ghostwriter | Platform-specific content distribution |
 | **governance** | council | Co-op domain knowledge for client conversations |
 | **decolonial-language** | council | Terminology positions (patronage refunds not dividends; surpluses not profits; member capital not equity) referenced from the strategy skill's positioning sections |
-| **development** | assembly | Technical Assembly architecture discussions |
+| **development** | assembly | Anything about what a fixture actually does today, and technical Assembly architecture |
 | **livewires** | live-wires | Live Wires framework positioning and technical details |
 
 ## Reference Files
