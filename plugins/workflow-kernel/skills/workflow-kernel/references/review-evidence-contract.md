@@ -171,6 +171,144 @@ filenames. Schema exits 2, incomplete/unsafe evidence 3, conflicts 6. Preserve
 safe available inputs and originals on failure. #165 report-link behavior stays
 unchanged.
 
+## Host verification and recovery (>=0.29.0)
+
+These operations extend the existing producer and sealed evidence directory.
+They add no ledger, dispatcher, runtime execution or retention allowance.
+
+### Host verification
+
+An ordinary lane may use exactly
+`literal: {"output_ref":"review/host-output.md","host_receipt_ref":"review/host.json"}`.
+Set `reviewer: host-verification`, `inspected.basis: host_evidence`, no findings,
+and explicit limitations. The companion identifies `implemented_by:
+deterministic-host`; its model is unreported and families unknown because no
+model ran. This settles only the declared executed scope, never code judgment.
+
+The host envelope has exactly these fields:
+
+```json
+{
+  "schema_version": 1,
+  "lane": "tests/build",
+  "source": {"repository":"github.com/owner/repo","head":"<target-sha>","paths":["src/input.go"]},
+  "source_snapshots": {"<target-sha>":"review/evidence/source-sha256-<digest>.json","<execution-sha>":"review/evidence/source-sha256-<digest>.json"},
+  "commands": [{"receipt_ref":"review/result.json","plan_ref":"review/plan.json","lane_id":"go-focused"}],
+  "artifacts": {"review/result.log":"sha256:<literal-byte-digest>"},
+  "limitations": ["Compilation and selected tests only; no code judgment."]
+}
+```
+
+Retain the actual Kernel `repository_verification_plan` and
+`repository_verification_result`, unchanged. The producer checks the plan
+digest, argv/command digest, input digest, closure/profile/repository scope,
+exact selected result and exit status. It does not execute argv. Missing
+results remain incomplete; nonzero or unpassed results cannot settle coverage.
+Source seals must match actual Git trees during assembly. Each requested path
+must exist and have identical content/mode at the command's recorded execution
+head and target head. Changes elsewhere grant no additional verification.
+An execution plan including an unknown working tree cannot establish this
+committed-source variant. Seal reconstruction records explicitly as current
+recovery data; they do not prove a historical clean working tree or container
+mount. Original execution receipts remain trusted host inputs, not authenticated
+origin proofs.
+
+For a direct host command, set `plan_ref: null`. Its receipt has exactly the
+dm-review command envelope's `schemaVersion`, `lane`, `commandArgv`,
+`exitStatus`, `result`, `stdoutTail`, `stderrTail`, plus the execution-observed
+`sourceRepository`, `sourceHead`, `sourcePaths`. Stream tails stay bounded to
+8,192 UTF-8 bytes. Set `lane_id` to its literal `lane`. Capture source fields
+when the host executes the command; never invent them during recovery.
+
+### Derived companions and source reconstruction
+
+Create a new exact-owned replay and copy retained inputs there byte-for-byte.
+Inventory/hash originals before starting and verify again after success,
+failure or interruption. Do not mutate installed caches or historical streams.
+Then run:
+
+```sh
+"$WORKFLOW_KERNEL" recover-review-evidence \
+  --run-root "$RECOVERY_ROOT" --repository-root "$REVIEW_ROOT" \
+  --input "$RECOVERY_ROOT/review/recovery-input.json"
+```
+
+Companion input has exactly:
+
+```json
+{
+  "schema_version": 1,
+  "operation": "companions",
+  "lane": "pattern-recognition-specialist",
+  "dispatch_receipt_ref": "history/private-router/original.json",
+  "output_ref": "history/original-output.md",
+  "findings": [],
+  "source_witness_ref": null,
+  "recovered_at": "2026-10-12T00:00:00Z"
+}
+```
+
+Supply the actual retained raw-shaped findings when present. The new structured
+output preserves finding IDs/content and derives the anonymous participant from
+the dispatch. It never adopts a lane-name reviewer or contradictory
+`not_reported` identity. Exact model/provider/transport remain private. Checks
+require coherent published served dispatch/attempt/participant/effort facts and
+reject stubs. Legacy absent effort transmission stays unavailable. The derived
+completion contains only the router's existing public fields.
+
+Returned `record_ref`, `companion_ref` and `raw_output_ref` are sealed companions.
+The recovery record retains derivation input refs, literal byte hashes, separate
+`recovered_at` and null `executed_at`. Repeating identical input/time is
+deterministic. Original records and outputs never change. Failed/interrupted
+seals grant no authority; retry with identical inputs. Sealing detects later
+output alteration; old content-free dispatch receipts cannot independently
+authenticate their original pairing with an output. The host must supply that
+authentic retained pair. Structural validation is not origin authentication.
+
+A lane consuming derived companions adds `recovery_ref` to the ordinary router
+literal group and uses the derived participant identity/findings. Without an
+original source witness it commits **incomplete** with
+`missing: ["historical_source_witness"]`, regardless of a later clean delivery.
+It also emits `fresh_verification_request` with the exact lane, repository,
+base/head and declared paths, explicitly reusing prior findings/decisions.
+Authentic original source observations may close the gap without new judgment;
+otherwise confirm only that source scope in an isolated checkout.
+The supported optional witness has exactly `schema_version:1`, `repository`,
+original `head`, actual inspected `paths`, `assignment_ref`, `head_ref`, and
+`status_ref`. Retain original assignment bytes and actual successful Git HEAD
+and empty clean-status output from that inspection. These are trusted host
+records; neither reconstructed Git trees nor a later observation qualifies.
+Recovery checks their exact source/scope and binds their bytes separately.
+
+Source input instead has exactly `schema_version:1`, `operation:source`,
+`base`, nonempty unique `heads`, and `recovered_at`. It seals each current
+commit-tree reconstruction and exact binary base/head diff, returning explicit
+`historical_worktree_state: unknown`, `historical_assignment: unknown` and
+`coverage_proof: false`. Use these source seals/diffs with the existing
+receiver-confirmed selection and transition schemas. Unknown earlier state
+never becomes known through ancestry, a clean delivery or current reconstruction.
+
+For unrecoverable source attribution, retain original findings and decisions,
+and request only current-source confirmation for the missing judgment lanes.
+Fresh production evidence must have its own assignment, actual source boundary,
+receipt and literal output. Old incomplete lanes stay diagnostic, outside
+eligible `history_refs`; do not restamp them. A coverage resolution may add
+exactly `historical_findings_ref` and `historical_decisions_ref` to its existing
+three fields. The selected **live**, clean-result verification lane must bind
+both unchanged inventories in `provenance.source_refs`, inspect each retained
+finding's path, and bind `repair_ref` in `recheck.repair_refs`. Every retained
+historical finding owned by that lane needs one resolution; discarded judgments
+remain in the original decision document. This verifies repairs now without
+claiming what the earlier reviewer inspected. Ordinary recheck/resolution and
+unaffected-source transition rules remain unchanged. Affected changes still
+require proper inspection; source-less diagnostics cannot establish reuse.
+
+Finish with ordinary assembly, projection and strict preservation at the actual
+candidate head. A derived companion, reconstructed tree or passing host lane
+alone cannot produce complete coverage. Keep incomplete authoritative recovery
+and originals intact; never terminal-clean them to force success. The pinned
+historical #1118 exception remains unchanged and does not apply to other runs.
+
 ## Bounded retention (>=0.28.0)
 
 Since 0.28.1, required review evidence is bounded to **128 MiB (134,217,728 bytes) / 1,024

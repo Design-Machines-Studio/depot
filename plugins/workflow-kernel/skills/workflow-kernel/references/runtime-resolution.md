@@ -124,6 +124,9 @@ Source-bound review producers require `>=0.26.0`. Load
 [review-evidence-contract.md](review-evidence-contract.md) only when assembling
 lane/coverage evidence.
 
+Deterministic host imports and retained companion/source recovery require
+`>=0.29.0`. Source development is not installed consumer proof.
+
 Historical closeout: [>=0.26.1](review-evidence-contract.md#retained-historical-terminal-validation-0261).
 
 Native T3 Codex host-event lane provenance requires >=0.27.0; use the closed

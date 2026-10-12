@@ -96,6 +96,7 @@ BEHAVIORAL_CLI_CASES = {
     "observe-review": ("--request", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
     "export-review-contributions": ("--request", "<missing>", "--decisions", "<missing>", "--raw-findings", "<missing>", "--lane-receipts", "<missing>", "--raw-lane-outputs", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>", "--output", "<output>"),
     "assemble-review-evidence": ("--run-root", "<missing>", "--repository-root", "<missing>", "--request", "<missing>", "--receipts", "<missing>", "--input", "<missing>"),
+    "recover-review-evidence": ("--run-root", "<missing>", "--repository-root", "<missing>", "--input", "<missing>"),
     "bind-review-source": (
         "--run-root", "<missing>", "--repository-root", "<missing>",
         "--request", "<missing>",
@@ -555,6 +556,7 @@ def check_cli(context):
         "observe-pipeline", "reconcile-legacy-browser", "observe-review",
         "export-review-contributions", "bind-review-source",
         "preserve-review-evidence", "project-review-evidence", "assemble-review-evidence",
+        "recover-review-evidence",
         "compare", "metrics", "emit-observation-index", "run-cost-summary", "emit-cost-summary",
         "openrouter-usage",
         "lane-input-bytes", "record-attempt",
@@ -815,6 +817,12 @@ def check_cli(context):
         producer_fixture.setUp()
         try:
             producer_run, producer_paths = producer_fixture.prepare()
+            recovery_input = producer_run.root / "review/reconstruction-input.json"
+            producer_head = json.loads(producer_paths["request"].read_text())["source_head"]
+            recovery_input.write_text(json.dumps({"schema_version": 1, "operation": "source", "base": producer_head,
+                "heads": [producer_head], "recovered_at": "2026-01-01T00:00:00Z"}) + "\n")
+            successful("recover-review-evidence", "--run-root", producer_run.root,
+                       "--repository-root", producer_fixture.repo, "--input", recovery_input)
             successful("assemble-review-evidence", "--run-root", producer_run.root,
                        "--repository-root", producer_fixture.repo,
                        "--request", producer_paths["request"], "--receipts", producer_paths["receipts"],

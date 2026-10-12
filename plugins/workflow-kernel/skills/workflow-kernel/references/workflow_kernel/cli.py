@@ -1475,6 +1475,17 @@ def command_observe_review(args):
     return 0
 
 
+def command_recover_review_evidence(args):
+    from .review_closeout import EvidenceAssemblyError, recover_review_evidence
+    try:
+        result = recover_review_evidence(run_root=args.run_root, repository_root=args.repository_root, input_path=args.input)
+    except EvidenceAssemblyError as exc:
+        _emit(exc.to_dict(), sys.stderr)
+        return exc.exit_code
+    _emit(result)
+    return 0
+
+
 def command_assemble_review_evidence(args):
     from .review_closeout import EvidenceAssemblyError, assemble_review_evidence
     try:
@@ -4223,6 +4234,11 @@ def parser():
         assemble_review.add_argument("--" + argument, required=True)
     assemble_review.add_argument("--test-harness", action="store_true", help="explicit disposable synthetic fixture boundary")
     assemble_review.set_defaults(handler=command_assemble_review_evidence)
+
+    recovery = commands.add_parser("recover-review-evidence", help="derive retained dispatch companions or reconstruct commit sources without coverage")
+    for argument in ("run-root", "repository-root", "input"):
+        recovery.add_argument("--" + argument, required=True)
+    recovery.set_defaults(handler=command_recover_review_evidence)
 
     for name in ("preserve-review-evidence", "project-review-evidence"):
         preserve_review = commands.add_parser(name, help="preserve required review evidence or project its size without writes")
