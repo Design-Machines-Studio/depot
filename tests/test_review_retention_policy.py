@@ -225,7 +225,7 @@ class ReviewRetentionPolicyTests(unittest.TestCase):
         with self.assertRaises(review_closeout.EvidenceAssemblyError) as caught:
             self.preserve(run, paths)
         self.assertEqual("required_review", caught.exception.measurement["category"])
-        self.assertEqual(1024, caught.exception.measurement["allowed_files"])
+        self.assertEqual(2048, caught.exception.measurement["allowed_files"])
         self.assertEqual(before, self.bytes(run.root))
 
     def test_interrupted_copy_preserves_sources_and_retries(self):
@@ -257,7 +257,7 @@ class ReviewRetentionPolicyTests(unittest.TestCase):
         first = run.finish("succeeded", retain_diagnostics=True)
         self.assertEqual(first.to_dict(), run.finish("succeeded").to_dict())
         self.assertEqual(9 * 1024 * 1024, owned_run._MAX_DIAGNOSTIC_BYTES)
-        self.assertEqual(1024, owned_run._MAX_REQUIRED_REVIEW_FILES)
+        self.assertEqual(2048, owned_run._MAX_REQUIRED_REVIEW_FILES)
 
     def test_required_byte_boundary_is_inclusive_and_overflow_is_actionable(self):
         limit = owned_run._MAX_REQUIRED_REVIEW_BYTES

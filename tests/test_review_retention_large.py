@@ -116,14 +116,13 @@ class LargeReviewRetentionTests(unittest.TestCase):
         for path, data in original.items():
             self.assertEqual(data, (directory / path).read_bytes())
 
-    def test_former_two_mib_bound_rejects_the_required_large_fixture(self):
+    def test_former_two_mib_workspace_bound_rejects_the_required_large_fixture(self):
         # Prove this fixture exercises the repaired aggregate limit: both
         # required files fit 2 MiB, but assembly could not commit their lane.
-        with mock.patch.object(owned_run, "_MAX_REQUIRED_REVIEW_BYTES", 2 * 1024 * 1024), \
-                mock.patch.object(review_closeout, "_MAX_REQUIRED_REVIEW_BYTES", 2 * 1024 * 1024):
+        with mock.patch.object(review_closeout, "_MAX_ASSEMBLY_WORKSPACE_BYTES", 2 * 1024 * 1024):
             with self.assertRaises(review_closeout.EvidenceAssemblyError) as caught:
                 self.large_run("former-bound")
-        self.assertEqual("retention_limit", caught.exception.reason)
+        self.assertEqual("workspace_limit", caught.exception.reason)
         self.assertEqual(3, caught.exception.exit_code)
         roots = list(self.state.iterdir())
         self.assertEqual(1, len(roots))

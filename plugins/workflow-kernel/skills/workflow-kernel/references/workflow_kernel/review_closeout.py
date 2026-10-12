@@ -38,6 +38,12 @@ from ._translation import safe_reference
 from .redaction import contains_secret_shape
 
 
+# Assembly includes uncommitted inputs and partial history; final retention
+# measures only the validated required closure and disposable diagnostics.
+_MAX_ASSEMBLY_WORKSPACE_FILES = 4096
+_MAX_ASSEMBLY_WORKSPACE_BYTES = 128 * 1024 * 1024
+
+
 _REVIEW_WORKFLOWS = frozenset({"dm-review", "dm-review-loop", "pipeline", "pipeline-run"})
 _HEAD_RE = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
 _REVIEW_SCOPE_RE = re.compile(r"repo-[0-9a-f]{12}-head-(?:[0-9a-f]{40}|[0-9a-f]{64})")
@@ -1606,6 +1612,7 @@ class EvidenceAssemblyError(ValueError):
         "unsafe_path": (3, "unsafe_payload"),
         "append_conflict": (6, "state_conflict"),
         "retention_limit": (3, "evidence_limit_exceeded"),
+        "workspace_limit": (3, "evidence_limit_exceeded"),
     }
 
     def __init__(self, stage, reason, role="review/evidence.json", *, measurement=None):
@@ -1697,7 +1704,6 @@ def _byte_digest(data):
 
 
 def _seal_evidence(root, role, value, *, literal=False):
-    from .cli import _write_json
     data = value if literal else (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode()
     digest = _byte_digest(data) if literal else _document_digest(value)
     reference = "review/evidence/" + role + "-" + digest.replace(":", "-") + (".bin" if literal else ".json")
@@ -1712,34 +1718,47 @@ def _seal_evidence(root, role, value, *, literal=False):
         if _evidence_bytes(root, reference, "retained_validation") != data:
             raise EvidenceAssemblyError("retained_validation", "append_conflict")
     else:
+        from ._files import _OwnedResourceScope, bind_durable_path
         target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-        if literal:
-            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-            try:
-                with os.fdopen(descriptor, "wb") as stream:
-                    stream.write(data)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-            except Exception:
-                target.unlink(missing_ok=True)
-                raise
-        else:
-            _write_json(target, value)
-        _fsync_directory(target.parent)
+        _check_evidence_bound(target.parent, additional_files=1, additional_bytes=len(data))
+        # Publish only complete bytes. Reuse the pinned-directory temporary
+        # scope so exceptions and interruption cannot leave a truncated seal.
+        with _OwnedResourceScope() as owned:
+            directory = owned.pin(bind_durable_path(target))
+            descriptor, temporary = directory.create_temporary(target.name + ".tmp-", ".bin")
+            owned.own_temporary(descriptor, temporary)
+            pending = memoryview(data)
+            while pending:
+                count = os.write(descriptor, pending)
+                if count <= 0:
+                    raise OSError("evidence write made no progress")
+                pending = pending[count:]
+            os.fsync(descriptor)
+            directory.require_identity(descriptor, temporary)
+            directory.require_absent(target.name)
+            directory.replace(temporary, target.name)
+            owned.disown_temporary()
+            directory.require_identity(descriptor, target.name)
+            directory.fsync()
     if _evidence_bytes(root, reference, "retained_validation") != data:
         raise EvidenceAssemblyError("retained_validation", "digest_mismatch")
     return reference
 
 
-def _check_evidence_bound(directory, stage="retained_validation"):
+def _check_evidence_bound(directory, stage="retained_validation", *,
+                          additional_files=0, additional_bytes=0):
     try:
-        inventory = _diagnostic_inventory(directory)
-        # An assembly workspace ceiling does not confer retained eligibility.
-        projection = _retention_projection(inventory, inventory)
-        _require_retention_projection(projection)
+        inventory = _diagnostic_inventory(directory, maximum_files=_MAX_ASSEMBLY_WORKSPACE_FILES)
+        files, size = len(inventory) + additional_files, sum(inventory.values()) + additional_bytes
+        if files > _MAX_ASSEMBLY_WORKSPACE_FILES or size > _MAX_ASSEMBLY_WORKSPACE_BYTES:
+            raise BoundedDiagnosticLimitError(files, size, _MAX_ASSEMBLY_WORKSPACE_FILES,
+                _MAX_ASSEMBLY_WORKSPACE_BYTES, category="assembly_workspace")
         return len(inventory), sum(inventory.values())
     except BoundedDiagnosticLimitError as exc:
-        raise EvidenceAssemblyError(stage, "retention_limit", measurement=exc.measurement) from None
+        measurement = dict(exc.measurement, category="assembly_workspace",
+            allowed_files=_MAX_ASSEMBLY_WORKSPACE_FILES, allowed_bytes=_MAX_ASSEMBLY_WORKSPACE_BYTES,
+            next_action="Keep original evidence; request a bounded assembly workspace policy repair.")
+        raise EvidenceAssemblyError(stage, "workspace_limit", measurement=measurement) from None
     except (OSError, ValueError):
         raise EvidenceAssemblyError(stage, "unsafe_path") from None
 
@@ -2571,7 +2590,7 @@ def _fresh_source_confirmation(value, missing):
     }}
 
 
-def assemble_review_evidence(*, run_root, repository_root, request_path, receipts_path, input_path, test_harness=False):
+def _assemble_review_evidence(*, run_root, repository_root, request_path, receipts_path, input_path, test_harness=False):
     """One locked read/validate/seal/append transaction; append is the commit."""
     import fcntl
     from datetime import datetime, timezone
@@ -2608,6 +2627,8 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
             require_secret_safe_contribution_inputs(raw_value)
         except (TypeError, ValueError, RecursionError):
             raise EvidenceAssemblyError("lane_input", "invalid_evidence") from None
+        if (root / "review/evidence").exists():
+            _check_evidence_bound(root / "review/evidence")
         _seal_evidence(root, "extraction", raw_value)
         if type(raw_value) is dict and raw_value.get("operation") == "lane" and type(raw_value.get("source")) is dict:
             source = raw_value["source"]
@@ -2787,3 +2808,11 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
         raise EvidenceAssemblyError("lane_validation", "invalid_evidence") from None
     finally:
         os.close(descriptor)
+
+
+def assemble_review_evidence(*, run_root, repository_root, request_path, receipts_path,
+                             input_path, test_harness=False):
+    """Assemble within a finite workspace; final retention remains independent."""
+    return _assemble_review_evidence(run_root=run_root, repository_root=repository_root,
+        request_path=request_path, receipts_path=receipts_path, input_path=input_path,
+        test_harness=test_harness)
