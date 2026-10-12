@@ -643,3 +643,5 @@ is introduced. The runtime remains stdlib-only. See the canonical Project Manage
 [board skill](../plugins/project-manager/skills/agent-message-board/SKILL.md),
 [delivery contract](../plugins/project-manager/skills/agent-message-board/references/delivery.md),
 and [consumer instructions](../plugins/project-manager/skills/agent-message-board/references/consumer-instructions.md).
+
+Workflow Kernel 0.30.0 supports an explicit caller-approved, exact run/repository/PR/head-bound assembly workspace file-count exception. It preserves byte, diagnostic, retained-evidence and all source/publication gates; see `plugins/workflow-kernel/skills/workflow-kernel/references/review-evidence-contract.md`.

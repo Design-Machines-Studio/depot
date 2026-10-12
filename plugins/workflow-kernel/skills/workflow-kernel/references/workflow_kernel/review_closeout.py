@@ -10,6 +10,7 @@ import shutil
 import stat
 import subprocess
 import tempfile
+from contextvars import ContextVar
 from dataclasses import replace
 from pathlib import Path
 from typing import Mapping
@@ -36,6 +37,10 @@ from .schema import (
 )
 from ._translation import safe_reference
 from .redaction import contains_secret_shape
+
+
+_ASSEMBLY_FILE_EXCEPTION = ContextVar("review_assembly_file_exception", default=None)
+_MAX_ASSEMBLY_EXCEPTION_FILES = 4096
 
 
 _REVIEW_WORKFLOWS = frozenset({"dm-review", "dm-review-loop", "pipeline", "pipeline-run"})
@@ -1733,9 +1738,13 @@ def _seal_evidence(root, role, value, *, literal=False):
 
 def _check_evidence_bound(directory, stage="retained_validation"):
     try:
-        inventory = _diagnostic_inventory(directory)
+        exception = _ASSEMBLY_FILE_EXCEPTION.get()
+        limit = exception[1] if exception is not None and directory.resolve(strict=True) == exception[0] else None
+        inventory = _diagnostic_inventory(directory, maximum_files=limit)
         # An assembly workspace ceiling does not confer retained eligibility.
         projection = _retention_projection(inventory, inventory)
+        if limit is not None:
+            projection["required_review"]["allowed_files"] = limit
         _require_retention_projection(projection)
         return len(inventory), sum(inventory.values())
     except BoundedDiagnosticLimitError as exc:
@@ -2571,7 +2580,7 @@ def _fresh_source_confirmation(value, missing):
     }}
 
 
-def assemble_review_evidence(*, run_root, repository_root, request_path, receipts_path, input_path, test_harness=False):
+def _assemble_review_evidence(*, run_root, repository_root, request_path, receipts_path, input_path, test_harness=False):
     """One locked read/validate/seal/append transaction; append is the commit."""
     import fcntl
     from datetime import datetime, timezone
@@ -2787,3 +2796,74 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
         raise EvidenceAssemblyError("lane_validation", "invalid_evidence") from None
     finally:
         os.close(descriptor)
+
+
+def assemble_review_evidence(*, run_root, repository_root, request_path, receipts_path,
+                             input_path, test_harness=False, file_count_exception=None):
+    """Apply one explicit caller-approved workspace count bound, never retention authority."""
+    if file_count_exception is None:
+        return _assemble_review_evidence(run_root=run_root, repository_root=repository_root,
+            request_path=request_path, receipts_path=receipts_path, input_path=input_path,
+            test_harness=test_harness)
+    try:
+        if test_harness:
+            raise ValueError("production exception cannot be used in a test harness")
+        run = ExactOwnedRun.open(Path(run_root))
+        repository = Path(repository_root).resolve(strict=True)
+        request_file = _source_path(request_path, run.root)
+        receipts_file = _source_path(receipts_path, run.root)
+        root = request_file.parent.parent
+        if receipts_file.parent != request_file.parent or request_file.parent.name != "review":
+            raise ValueError("exception requires one bound assembly scope")
+        if root != run.root:
+            registered = next((r for r in run._metadata["resources"] if r["kind"] == "diagnostic"), None)
+            if registered is None or root.parent != run.root / registered["relative_path"] / "review" or _REVIEW_SCOPE_RE.fullmatch(root.name) is None:
+                raise ValueError("unregistered assembly scope")
+        exception_path = _source_path(file_count_exception, run.root)
+        reference = exception_path.relative_to(run.root).as_posix()
+        payload = _evidence_bytes(run.root, reference, "lane_input")
+        exception = _evidence_json_from_bytes(payload)
+        fields = {"schema_version", "repository", "run_id", "source_head", "pull_request_url",
+                  "max_files", "approval_ref", "approval_digest"}
+        if type(exception) is not dict or set(exception) != fields or type(exception["schema_version"]) is not int or exception["schema_version"] != 1:
+            raise ValueError("invalid exception fields")
+        count = exception["max_files"]
+        if type(count) is not int or not _MAX_REQUIRED_REVIEW_FILES < count <= _MAX_ASSEMBLY_EXCEPTION_FILES:
+            raise ValueError("invalid exception bound")
+        request = ReviewRequest.from_mapping(_evidence_json(root, request_file.relative_to(root).as_posix(), "lane_input"))
+        identity, head = source_identity(repository)
+        if (exception["repository"] != identity or exception["source_head"] != head
+                or request.source_repository != identity or request.source_head != head
+                or exception["run_id"] != run.run_id or request.run_id != run.run_id):
+            raise ValueError("exception source scope mismatch")
+        slug = identity.removeprefix("github.com/")
+        if not identity.startswith("github.com/") or type(exception["pull_request_url"]) is not str or re.fullmatch(re.escape("https://github.com/" + slug + "/pull/") + r"[1-9][0-9]*", exception["pull_request_url"]) is None:
+            raise ValueError("exception PR scope mismatch")
+        approval_bytes = _evidence_bytes(run.root, exception["approval_ref"], "lane_input")
+        if exception["approval_digest"] != "sha256:" + hashlib.sha256(approval_bytes).hexdigest():
+            raise ValueError("exception approval digest mismatch")
+        approval = _evidence_json_from_bytes(approval_bytes)
+        shared = {k: exception[k] for k in ("repository", "run_id", "source_head", "pull_request_url", "max_files")}
+        expected = dict(shared, schema_version=1, scope="assembly_workspace_file_count_only")
+        if type(approval) is not dict or set(approval) != set(expected) | {"user_authorization"} or any(type(approval[k]) is not type(v) or approval[k] != v for k, v in expected.items()) or type(approval["user_authorization"]) is not str or not approval["user_authorization"].strip():
+            raise ValueError("exception approval scope mismatch")
+        directory = root / "review/evidence"
+        directory.mkdir(parents=True, exist_ok=True)
+        # Symlinks and foreign directories still fail the ordinary inventory and source checks.
+        if directory.is_symlink():
+            raise ValueError("unsafe evidence directory")
+        token = _ASSEMBLY_FILE_EXCEPTION.set((directory.resolve(strict=True), count))
+    except (OSError, TypeError, ValueError, KeyError):
+        raise EvidenceAssemblyError("lane_input", "invalid_evidence") from None
+    try:
+        _check_evidence_bound(directory)
+        result = _assemble_review_evidence(run_root=run_root, repository_root=repository_root,
+            request_path=request_path, receipts_path=receipts_path, input_path=input_path,
+            test_harness=test_harness)
+        _check_evidence_bound(directory)
+        result["assembly_file_count_exception"] = {"reference": reference,
+            "digest": "sha256:" + hashlib.sha256(payload).hexdigest(), "max_files": count,
+            "approval_digest": exception["approval_digest"], "retention_limits_unchanged": True}
+        return result
+    finally:
+        _ASSEMBLY_FILE_EXCEPTION.reset(token)

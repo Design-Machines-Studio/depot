@@ -1492,7 +1492,7 @@ def command_assemble_review_evidence(args):
         result = assemble_review_evidence(
             run_root=args.run_root, repository_root=args.repository_root,
             request_path=args.request, receipts_path=args.receipts, input_path=args.input,
-            test_harness=args.test_harness,
+            test_harness=args.test_harness, file_count_exception=getattr(args, "file_count_exception", None),
         )
     except EvidenceAssemblyError as exc:
         _emit(exc.to_dict(), sys.stderr)
@@ -4233,6 +4233,7 @@ def parser():
     for argument in ("run-root", "repository-root", "request", "receipts", "input"):
         assemble_review.add_argument("--" + argument, required=True)
     assemble_review.add_argument("--test-harness", action="store_true", help="explicit disposable synthetic fixture boundary")
+    assemble_review.add_argument("--file-count-exception", help="owned caller-approved task/source-bound assembly workspace count exception")
     assemble_review.set_defaults(handler=command_assemble_review_evidence)
 
     recovery = commands.add_parser("recover-review-evidence", help="derive retained dispatch companions or reconstruct commit sources without coverage")

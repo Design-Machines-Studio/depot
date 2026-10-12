@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, strict existing Docker resource-registry validation, bounded cross-harness observation indexes, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.26.2
+version: 0.30.0
 ---
 
 # Workflow Kernel
@@ -631,6 +631,11 @@ supported launch paths. It does not establish automatic visibility for all runs.
 
 
 ## Required review evidence producer
+
+Version 0.30.0 adds an explicit caller-approved, exact task/run/source-bound
+`assemble-review-evidence --file-count-exception <owned-json>` workspace count
+bound. It changes no byte, diagnostic, retention, source or publication gate.
+See the [count exception contract](references/review-evidence-contract.md#caller-approved-assembly-count-exception-0300).
 
 Version 0.29.0 adds deterministic host lane imports and
 `recover-review-evidence --run-root <owned-root> --repository-root <checkout>

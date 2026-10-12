@@ -214,11 +214,14 @@ class BoundedDiagnosticLimitError(ValueError):
         )
 
 
-def _diagnostic_inventory(path: Path) -> dict[str, int]:
+def _diagnostic_inventory(path: Path, *, maximum_files=None) -> dict[str, int]:
     """Measure regular files without reading payloads or following links."""
     inventory = {}
     size = 0
-    maximum_files = _MAX_REQUIRED_REVIEW_FILES + _MAX_DIAGNOSTIC_FILES
+    if maximum_files is None:
+        maximum_files = _MAX_REQUIRED_REVIEW_FILES + _MAX_DIAGNOSTIC_FILES
+    elif type(maximum_files) is not int or maximum_files < 1 or maximum_files > 4096:
+        raise ValueError("invalid inventory count bound")
     if path.is_symlink() or not path.is_dir():
         raise ValueError("diagnostic root is unsafe")
     for current, directories, names in os.walk(path, followlinks=False, onerror=_inventory_error):

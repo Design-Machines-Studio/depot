@@ -496,3 +496,36 @@ canonical companions; original streams, seals, literals and source identities
 stay immutable. Recovery does not invoke a model or validate earlier consumer
 dispatch retroactively. Unit/native-format fixtures are development artifacts,
 never live inspection evidence.
+
+
+## Caller-approved assembly count exception (>=0.30.0)
+
+`assemble-review-evidence --file-count-exception <owned-json>` permits one
+explicit count bound for one run, GitHub repository, PR URL and exact current
+source head. The caller must have actual user authority; the local record is
+provenance, not a permission system. No command obtains approval or infers it
+from a file. Without this option the existing 1,024-file workspace bound applies.
+
+The closed JSON fields are `schema_version:1`, `repository` (the full Git remote
+identity, e.g. `github.com/owner/repository`), `run_id`, `source_head`,
+`pull_request_url`, `max_files` (integer 1,025–4,096), `approval_ref` (safe
+relative reference beneath the same owned run), and `approval_digest`
+(`sha256:` plus the exact approval file's SHA-256).
+
+The approval has exactly `schema_version:1`, the same five repository/run/head/
+PR/count fields, `scope:"assembly_workspace_file_count_only"`, and a nonempty
+`user_authorization` containing the actual authorization source. Both files must
+be regular contained files in the owned run. Mismatched heads, runs, repository,
+PR, approval bytes, unknown fields, booleans as counts, synthetic test-harness
+mode, symlinks and unsafe references fail closed. Binding is validated before
+assembly mutates evidence. The exception applies only to the selected evidence
+workspace directory and is cleared even if assembly fails.
+
+The result records the input and approval digests and the explicit count bound.
+All existing source, scope, literal, provenance, receipt, browser, path and digest
+checks still run. The 128 MiB byte limit is unchanged. Projection, preservation,
+diagnostic bounds and terminal cleanup retain their standard limits. This
+workspace exception is never retained coverage or retention authority; a caller
+with a separately authorized retention exception must still preserve the full
+package and satisfy all remaining review and publication gates. Originals must
+not be pruned or relabelled to obtain coverage.
