@@ -10,7 +10,6 @@ import shutil
 import stat
 import subprocess
 import tempfile
-from contextvars import ContextVar
 from dataclasses import replace
 from pathlib import Path
 from typing import Mapping
@@ -39,8 +38,10 @@ from ._translation import safe_reference
 from .redaction import contains_secret_shape
 
 
-_ASSEMBLY_FILE_EXCEPTION = ContextVar("review_assembly_file_exception", default=None)
-_MAX_ASSEMBLY_EXCEPTION_FILES = 4096
+# Assembly includes uncommitted inputs and partial history; final retention
+# measures only the validated required closure and disposable diagnostics.
+_MAX_ASSEMBLY_WORKSPACE_FILES = 4096
+_MAX_ASSEMBLY_WORKSPACE_BYTES = 128 * 1024 * 1024
 
 
 _REVIEW_WORKFLOWS = frozenset({"dm-review", "dm-review-loop", "pipeline", "pipeline-run"})
@@ -1611,6 +1612,7 @@ class EvidenceAssemblyError(ValueError):
         "unsafe_path": (3, "unsafe_payload"),
         "append_conflict": (6, "state_conflict"),
         "retention_limit": (3, "evidence_limit_exceeded"),
+        "workspace_limit": (3, "evidence_limit_exceeded"),
     }
 
     def __init__(self, stage, reason, role="review/evidence.json", *, measurement=None):
@@ -1702,7 +1704,6 @@ def _byte_digest(data):
 
 
 def _seal_evidence(root, role, value, *, literal=False):
-    from .cli import _write_json
     data = value if literal else (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode()
     digest = _byte_digest(data) if literal else _document_digest(value)
     reference = "review/evidence/" + role + "-" + digest.replace(":", "-") + (".bin" if literal else ".json")
@@ -1717,38 +1718,47 @@ def _seal_evidence(root, role, value, *, literal=False):
         if _evidence_bytes(root, reference, "retained_validation") != data:
             raise EvidenceAssemblyError("retained_validation", "append_conflict")
     else:
+        from ._files import _OwnedResourceScope, bind_durable_path
         target.parent.mkdir(parents=True, mode=0o700, exist_ok=True)
-        if literal:
-            descriptor = os.open(target, os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0), 0o600)
-            try:
-                with os.fdopen(descriptor, "wb") as stream:
-                    stream.write(data)
-                    stream.flush()
-                    os.fsync(stream.fileno())
-            except Exception:
-                target.unlink(missing_ok=True)
-                raise
-        else:
-            _write_json(target, value)
-        _fsync_directory(target.parent)
+        _check_evidence_bound(target.parent, additional_files=1, additional_bytes=len(data))
+        # Publish only complete bytes. Reuse the pinned-directory temporary
+        # scope so exceptions and interruption cannot leave a truncated seal.
+        with _OwnedResourceScope() as owned:
+            directory = owned.pin(bind_durable_path(target))
+            descriptor, temporary = directory.create_temporary(target.name + ".tmp-", ".bin")
+            owned.own_temporary(descriptor, temporary)
+            pending = memoryview(data)
+            while pending:
+                count = os.write(descriptor, pending)
+                if count <= 0:
+                    raise OSError("evidence write made no progress")
+                pending = pending[count:]
+            os.fsync(descriptor)
+            directory.require_identity(descriptor, temporary)
+            directory.require_absent(target.name)
+            directory.replace(temporary, target.name)
+            owned.disown_temporary()
+            directory.require_identity(descriptor, target.name)
+            directory.fsync()
     if _evidence_bytes(root, reference, "retained_validation") != data:
         raise EvidenceAssemblyError("retained_validation", "digest_mismatch")
     return reference
 
 
-def _check_evidence_bound(directory, stage="retained_validation"):
+def _check_evidence_bound(directory, stage="retained_validation", *,
+                          additional_files=0, additional_bytes=0):
     try:
-        exception = _ASSEMBLY_FILE_EXCEPTION.get()
-        limit = exception[1] if exception is not None and directory.resolve(strict=True) == exception[0] else None
-        inventory = _diagnostic_inventory(directory, maximum_files=limit)
-        # An assembly workspace ceiling does not confer retained eligibility.
-        projection = _retention_projection(inventory, inventory)
-        if limit is not None:
-            projection["required_review"]["allowed_files"] = limit
-        _require_retention_projection(projection)
+        inventory = _diagnostic_inventory(directory, maximum_files=_MAX_ASSEMBLY_WORKSPACE_FILES)
+        files, size = len(inventory) + additional_files, sum(inventory.values()) + additional_bytes
+        if files > _MAX_ASSEMBLY_WORKSPACE_FILES or size > _MAX_ASSEMBLY_WORKSPACE_BYTES:
+            raise BoundedDiagnosticLimitError(files, size, _MAX_ASSEMBLY_WORKSPACE_FILES,
+                _MAX_ASSEMBLY_WORKSPACE_BYTES, category="assembly_workspace")
         return len(inventory), sum(inventory.values())
     except BoundedDiagnosticLimitError as exc:
-        raise EvidenceAssemblyError(stage, "retention_limit", measurement=exc.measurement) from None
+        measurement = dict(exc.measurement, category="assembly_workspace",
+            allowed_files=_MAX_ASSEMBLY_WORKSPACE_FILES, allowed_bytes=_MAX_ASSEMBLY_WORKSPACE_BYTES,
+            next_action="Keep original evidence; request a bounded assembly workspace policy repair.")
+        raise EvidenceAssemblyError(stage, "workspace_limit", measurement=measurement) from None
     except (OSError, ValueError):
         raise EvidenceAssemblyError(stage, "unsafe_path") from None
 
@@ -2617,6 +2627,8 @@ def _assemble_review_evidence(*, run_root, repository_root, request_path, receip
             require_secret_safe_contribution_inputs(raw_value)
         except (TypeError, ValueError, RecursionError):
             raise EvidenceAssemblyError("lane_input", "invalid_evidence") from None
+        if (root / "review/evidence").exists():
+            _check_evidence_bound(root / "review/evidence")
         _seal_evidence(root, "extraction", raw_value)
         if type(raw_value) is dict and raw_value.get("operation") == "lane" and type(raw_value.get("source")) is dict:
             source = raw_value["source"]
@@ -2799,71 +2811,8 @@ def _assemble_review_evidence(*, run_root, repository_root, request_path, receip
 
 
 def assemble_review_evidence(*, run_root, repository_root, request_path, receipts_path,
-                             input_path, test_harness=False, file_count_exception=None):
-    """Apply one explicit caller-approved workspace count bound, never retention authority."""
-    if file_count_exception is None:
-        return _assemble_review_evidence(run_root=run_root, repository_root=repository_root,
-            request_path=request_path, receipts_path=receipts_path, input_path=input_path,
-            test_harness=test_harness)
-    try:
-        if test_harness:
-            raise ValueError("production exception cannot be used in a test harness")
-        run = ExactOwnedRun.open(Path(run_root))
-        repository = Path(repository_root).resolve(strict=True)
-        request_file = _source_path(request_path, run.root)
-        receipts_file = _source_path(receipts_path, run.root)
-        root = request_file.parent.parent
-        if receipts_file.parent != request_file.parent or request_file.parent.name != "review":
-            raise ValueError("exception requires one bound assembly scope")
-        if root != run.root:
-            registered = next((r for r in run._metadata["resources"] if r["kind"] == "diagnostic"), None)
-            if registered is None or root.parent != run.root / registered["relative_path"] / "review" or _REVIEW_SCOPE_RE.fullmatch(root.name) is None:
-                raise ValueError("unregistered assembly scope")
-        exception_path = _source_path(file_count_exception, run.root)
-        reference = exception_path.relative_to(run.root).as_posix()
-        payload = _evidence_bytes(run.root, reference, "lane_input")
-        exception = _evidence_json_from_bytes(payload)
-        fields = {"schema_version", "repository", "run_id", "source_head", "pull_request_url",
-                  "max_files", "approval_ref", "approval_digest"}
-        if type(exception) is not dict or set(exception) != fields or type(exception["schema_version"]) is not int or exception["schema_version"] != 1:
-            raise ValueError("invalid exception fields")
-        count = exception["max_files"]
-        if type(count) is not int or not _MAX_REQUIRED_REVIEW_FILES < count <= _MAX_ASSEMBLY_EXCEPTION_FILES:
-            raise ValueError("invalid exception bound")
-        request = ReviewRequest.from_mapping(_evidence_json(root, request_file.relative_to(root).as_posix(), "lane_input"))
-        identity, head = source_identity(repository)
-        if (exception["repository"] != identity or exception["source_head"] != head
-                or request.source_repository != identity or request.source_head != head
-                or exception["run_id"] != run.run_id or request.run_id != run.run_id):
-            raise ValueError("exception source scope mismatch")
-        slug = identity.removeprefix("github.com/")
-        if not identity.startswith("github.com/") or type(exception["pull_request_url"]) is not str or re.fullmatch(re.escape("https://github.com/" + slug + "/pull/") + r"[1-9][0-9]*", exception["pull_request_url"]) is None:
-            raise ValueError("exception PR scope mismatch")
-        approval_bytes = _evidence_bytes(run.root, exception["approval_ref"], "lane_input")
-        if exception["approval_digest"] != "sha256:" + hashlib.sha256(approval_bytes).hexdigest():
-            raise ValueError("exception approval digest mismatch")
-        approval = _evidence_json_from_bytes(approval_bytes)
-        shared = {k: exception[k] for k in ("repository", "run_id", "source_head", "pull_request_url", "max_files")}
-        expected = dict(shared, schema_version=1, scope="assembly_workspace_file_count_only")
-        if type(approval) is not dict or set(approval) != set(expected) | {"user_authorization"} or any(type(approval[k]) is not type(v) or approval[k] != v for k, v in expected.items()) or type(approval["user_authorization"]) is not str or not approval["user_authorization"].strip():
-            raise ValueError("exception approval scope mismatch")
-        directory = root / "review/evidence"
-        directory.mkdir(parents=True, exist_ok=True)
-        # Symlinks and foreign directories still fail the ordinary inventory and source checks.
-        if directory.is_symlink():
-            raise ValueError("unsafe evidence directory")
-        token = _ASSEMBLY_FILE_EXCEPTION.set((directory.resolve(strict=True), count))
-    except (OSError, TypeError, ValueError, KeyError):
-        raise EvidenceAssemblyError("lane_input", "invalid_evidence") from None
-    try:
-        _check_evidence_bound(directory)
-        result = _assemble_review_evidence(run_root=run_root, repository_root=repository_root,
-            request_path=request_path, receipts_path=receipts_path, input_path=input_path,
-            test_harness=test_harness)
-        _check_evidence_bound(directory)
-        result["assembly_file_count_exception"] = {"reference": reference,
-            "digest": "sha256:" + hashlib.sha256(payload).hexdigest(), "max_files": count,
-            "approval_digest": exception["approval_digest"], "retention_limits_unchanged": True}
-        return result
-    finally:
-        _ASSEMBLY_FILE_EXCEPTION.reset(token)
+                             input_path, test_harness=False):
+    """Assemble within a finite workspace; final retention remains independent."""
+    return _assemble_review_evidence(run_root=run_root, repository_root=repository_root,
+        request_path=request_path, receipts_path=receipts_path, input_path=input_path,
+        test_harness=test_harness)

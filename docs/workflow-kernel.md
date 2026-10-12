@@ -644,4 +644,4 @@ is introduced. The runtime remains stdlib-only. See the canonical Project Manage
 [delivery contract](../plugins/project-manager/skills/agent-message-board/references/delivery.md),
 and [consumer instructions](../plugins/project-manager/skills/agent-message-board/references/consumer-instructions.md).
 
-Workflow Kernel 0.30.0 supports an explicit caller-approved, exact run/repository/PR/head-bound assembly workspace file-count exception. It preserves byte, diagnostic, retained-evidence and all source/publication gates; see `plugins/workflow-kernel/skills/workflow-kernel/references/review-evidence-contract.md`.
+Workflow Kernel 0.30.0 separates assembly workspace limits (4,096 files / 128 MiB) from final required retention (2,048 files / 128 MiB). Pre-PR and existing-PR workflows use the same command without an approval file. Prospective limits, atomic seals and idempotent retries preserve authentic evidence; source, ownership, integrity and publication gates remain strict. See the [evidence contract](../plugins/workflow-kernel/skills/workflow-kernel/references/review-evidence-contract.md) and [PR 187 recovery and release handoff](pr187-workspace-recovery.md).

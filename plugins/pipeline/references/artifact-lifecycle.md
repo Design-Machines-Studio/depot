@@ -207,3 +207,15 @@ The inventory is mandatory in every receipt, including fix-pass receipts that cr
 ## Gitignore Enforcement
 
 See `gitignore-template.md` for canonical entries. The execution-orchestrator's Step 0d enforces these entries at the start of every run -- no passive suggestions.
+
+## Review workspace and final retention
+
+Pipeline requires Kernel >=0.30.0 for ordinary pre-PR and existing-PR review
+assembly. Its temporary evidence workspace is finite: 4,096 files / 128 MiB.
+Final required retention separately allows 2,048 files / 128 MiB; disposable
+diagnostics remain 416 files / 9 MiB. Use the standard assembler, projection
+and preservation commands in the shared
+[closeout contract](../../dm-review/skills/review/references/review-closeout-contract.md).
+A successful workspace write does not establish retained coverage. Keep all
+required history and authentic partial files; do not repeat passing judgment,
+build or browser work to reduce storage.

@@ -316,8 +316,8 @@ historical #1118 exception remains unchanged and does not apply to other runs.
 
 ## Bounded retention (>=0.28.0)
 
-Since 0.28.1, required review evidence is bounded to **128 MiB (134,217,728 bytes) / 1,024
-files**. Disposable diagnostics retain **9 MiB (9,437,184 bytes) / 416 files**.
+Since 0.30.0, required review evidence is bounded to **128 MiB (134,217,728 bytes) / 2,048
+files**. Version 0.28.1 used the same byte allowance with 1,024 files. Disposable diagnostics retain **9 MiB (9,437,184 bytes) / 416 files**.
 These are separate aggregate allowances, not per-file permissions. Both count
 regular-file bytes without compression. The existing exact-owned diagnostic
 child stores both; no new storage, registry or migration is introduced.
@@ -338,8 +338,8 @@ literal inputs are 6–8 MB each; no byte-identical duplicates can be removed.
 The 128 MiB ceiling provides about three times that observed workspace size
 for remaining lanes, source continuity and final report links. It remains a
 finite per-run storage limit, not a promise that every future package will fit.
-Diagnostic and file-count limits are unchanged. Original sealed bytes are
-never rewritten or dropped to fit. Resume the existing producer with 0.28.1;
+That 0.28.1 byte repair kept diagnostic and file-count limits unchanged. Original sealed bytes are
+never rewritten or dropped to fit. Current workspace/closure recovery requires 0.30.0;
 a larger allowance never grants missing review coverage or clears other gates.
 
 `project-review-evidence` accepts exactly the preservation arguments. Call it
@@ -353,7 +353,7 @@ explicit and receives no larger allowance. Projection may race a producer and
 never authorizes later copying: the preservation boundary rereads, validates,
 measures and checks its exact staged bytes, then validates the durable copy.
 
-Assembly uses the same required ceiling for its temporary evidence workspace;
+Assembly has a separate finite workspace ceiling since 0.30.0;
 this resource ceiling is not retained coverage authority. Preservation applies
 the exact required/diagnostic partition before copying and again after byte
 verification. Retained revalidation and owned-run finish use that same
@@ -498,34 +498,40 @@ dispatch retroactively. Unit/native-format fixtures are development artifacts,
 never live inspection evidence.
 
 
-## Caller-approved assembly count exception (>=0.30.0)
+## Assembly workspace (>=0.30.0)
 
-`assemble-review-evidence --file-count-exception <owned-json>` permits one
-explicit count bound for one run, GitHub repository, PR URL and exact current
-source head. The caller must have actual user authority; the local record is
-provenance, not a permission system. No command obtains approval or infers it
-from a file. Without this option the existing 1,024-file workspace bound applies.
+The ordinary assembly and recovery commands allow 4,096 workspace files and
+128 MiB. This counts all seals, uncommitted partial files and shared source
+inventories. The previously observed consumer workspaces exceeded 1,024 files
+while remaining below the byte limit. The finite count ceiling leaves room for
+literal inputs, linked rechecks and final aggregate assembly; it is never a
+per-consumer exception or final storage entitlement.
 
-The closed JSON fields are `schema_version:1`, `repository` (the full Git remote
-identity, e.g. `github.com/owner/repository`), `run_id`, `source_head`,
-`pull_request_url`, `max_files` (integer 1,025–4,096), `approval_ref` (safe
-relative reference beneath the same owned run), and `approval_digest`
-(`sha256:` plus the exact approval file's SHA-256).
+Pre-PR and existing-PR workflows use identical commands. No PR URL, approval
+record or count override is required. Exact-owned run, repository, source head,
+provenance, literal bytes, receipt and reference-integrity checks remain strict.
+The unreleased PR-bound exception has been removed.
 
-The approval has exactly `schema_version:1`, the same five repository/run/head/
-PR/count fields, `scope:"assembly_workspace_file_count_only"`, and a nonempty
-`user_authorization` containing the actual authorization source. Both files must
-be regular contained files in the owned run. Mismatched heads, runs, repository,
-PR, approval bytes, unknown fields, booleans as counts, synthetic test-harness
-mode, symlinks and unsafe references fail closed. Binding is validated before
-assembly mutates evidence. The exception applies only to the selected evidence
-workspace directory and is cleared even if assembly fails.
+Each new seal is checked against the prospective workspace count and bytes
+before publication, and existing byte-identical seals are reused. Pinned atomic
+temporary writes keep a partial literal from becoming an authoritative seal.
+Identical retries reuse partial records without changing their first assembly
+time. Uncommitted files confer no coverage. Original sealed and partial history
+remains untouched. Workspace errors report `workspace_limit` and category
+`assembly_workspace`, independently of final `retention_limit` measurements.
 
-The result records the input and approval digests and the explicit count bound.
-All existing source, scope, literal, provenance, receipt, browser, path and digest
-checks still run. The 128 MiB byte limit is unchanged. Projection, preservation,
-diagnostic bounds and terminal cleanup retain their standard limits. This
-workspace exception is never retained coverage or retention authority; a caller
-with a separately authorized retention exception must still preserve the full
-package and satisfy all remaining review and publication gates. Originals must
-not be pruned or relabelled to obtain coverage.
+Projection, preservation and terminal cleanup still validate the actual
+required closure and partition. Their allowances are 2,048 required files /
+128 MiB and 416 diagnostic files / 9 MiB. Passing workspace assembly alone
+never proves final preservation or installed-consumer readiness. Required
+history, private receipts and local report links stay in the final closure;
+never prune or relabel evidence to fit.
+
+Final required retention was initially kept at 1,024 files. The complete
+Governance candidate closure then measured 1,754 required files / 89,773,652
+bytes, with no missing evidence and no unrelated diagnostics. Workspace success
+therefore exposed a distinct final count failure. Version 0.30.0 raises only the
+finite required-file allowance to 2,048; 128 MiB bytes and 416 files / 9 MiB
+diagnostics remain unchanged. The additional closure consists of authentic
+history, linked metadata corrections, source/patch seals, literal evidence and
+indexed private receipts. No consumer name participates in runtime policy.

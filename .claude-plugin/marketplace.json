@@ -285,7 +285,7 @@
     {
       "name": "dm-review",
       "source": "./plugins/dm-review",
-      "version": "1.89.0",
+      "version": "1.89.1",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"
@@ -363,7 +363,7 @@
     {
       "name": "pipeline",
       "source": "./plugins/pipeline",
-      "version": "1.74.1",
+      "version": "1.74.2",
       "author": {
         "name": "Design Machines",
         "url": "https://designmachines.studio"

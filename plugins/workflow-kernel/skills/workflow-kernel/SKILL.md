@@ -601,8 +601,8 @@ result still preserves available source files for recovery. A copy or
 verification error leaves every source file intact, and callers must not
 finish or remove the containing worktree.
 
-Validated required review evidence has a separate 128 MiB/1,024-file allowance
-since 0.28.1. Disposable diagnostics keep the existing 9 MiB/416-file allowance.
+Validated required review evidence has a separate 128 MiB/2,048-file allowance
+since 0.30.0 (the 0.28.1 allowance was 1,024 files). Disposable diagnostics keep the existing 9 MiB/416-file allowance.
 The larger allowance requires validated source-bound coverage and exact required
 reference closure, including history, receipts and all local report links.
 Use `project-review-evidence` with the same arguments as preservation during
@@ -632,10 +632,11 @@ supported launch paths. It does not establish automatic visibility for all runs.
 
 ## Required review evidence producer
 
-Version 0.30.0 adds an explicit caller-approved, exact task/run/source-bound
-`assemble-review-evidence --file-count-exception <owned-json>` workspace count
-bound. It changes no byte, diagnostic, retention, source or publication gate.
-See the [count exception contract](references/review-evidence-contract.md#caller-approved-assembly-count-exception-0300).
+Version 0.30.0 separates the finite assembly workspace (4,096 files / 128 MiB)
+from final required retention (2,048 files / 128 MiB). Pre-PR and existing-PR
+assembly use the same ordinary command; no PR URL or approval file is required.
+Prospective checks and atomic seals preserve authentic files across failed retries.
+See the [workspace contract](references/review-evidence-contract.md#assembly-workspace-0300).
 
 Version 0.29.0 adds deterministic host lane imports and
 `recover-review-evidence --run-root <owned-root> --repository-root <checkout>
