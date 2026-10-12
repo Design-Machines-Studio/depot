@@ -45,11 +45,18 @@ class ReviewRecoveryTests(unittest.TestCase):
         run, paths = self.make_run()
         lane = json.loads(paths["input"].read_text())
         head, source_ref = self.source(run, paths)
+        lane["lane"] = "go-build-verifier"
+        request = json.loads(paths["request"].read_text())
+        request["required_lanes"] = [lane["lane"]]
+        self.write(run, "review/request.json", request)
+        coverage = json.loads(paths["coverage_input"].read_text())
+        coverage["selection"][0]["lane"] = lane["lane"]
+        self.write(run, "review/coverage-input.json", coverage)
         receipt = {"schemaVersion": 1, "lane": "check", "commandArgv": ["./tools/verify"],
             "exitStatus": 0, "result": "passed", "stdoutTail": "passed", "stderrTail": "",
             "sourceRepository": lane["source"]["repository"], "sourceHead": head, "sourcePaths": ["source.txt"]}
         self.write(run, "review/host-command.json", receipt)
-        envelope = {"schema_version": 1, "lane": "security", "source": {
+        envelope = {"schema_version": 1, "lane": lane["lane"], "source": {
             "repository": lane["source"]["repository"], "head": head, "paths": ["source.txt"]},
             "source_snapshots": {head: source_ref},
             "commands": [{"receipt_ref": "review/host-command.json", "plan_ref": None, "lane_id": "check"}],
@@ -138,6 +145,16 @@ class ReviewRecoveryTests(unittest.TestCase):
             lane["pass_id"] = change
             with self.assertRaises(EvidenceAssemblyError): self.assemble(run, paths, lane)
 
+    def test_host_cannot_complete_judgment_lanes(self):
+        for judgment in ("security", "security-auditor", "pattern-recognition-specialist", "code-simplicity-reviewer"):
+            run, paths, lane, envelope, _ = self.host()
+            lane["lane"], envelope["lane"] = judgment, judgment
+            request = json.loads(paths["request"].read_text())
+            request["required_lanes"] = [judgment]
+            self.write(run, "review/request.json", request)
+            self.write(run, "review/host.json", envelope)
+            with self.assertRaises(EvidenceAssemblyError): self.assemble(run, paths, lane)
+
     def router(self):
         run, paths = self.make_run()
         dispatch_ref = "receipts/private/router/recovered.json"
@@ -145,7 +162,7 @@ class ReviewRecoveryTests(unittest.TestCase):
             "publication": {"output": "published"}, "transportStub": False, "probeSource": "live", "fallback": False,
             "requested": {"role": "review-deep", "effort": "high", "capabilities": ["read-repository", "structured-output"], "humanAuthored": False},
             "served": {"model": "gpt-6.1-sol", "provider": "openai", "transport": "codex-cli", "family": "openai"},
-            "attempts": [{"model": "gpt-6.1-sol", "provider": "openai", "transport": "codex-cli", "outcome": "served",
+            "attempts": [{"model": "gpt-6.1-sol", "provider": "openai", "transport": "codex-cli", "outcome": "served", "requestedEffort": "high", "normalizedEffort": "high",
                 "effortStatus": "transmitted", "transmittedEffort": "high"}],
             "normalizedEffort": "high", "effectiveEffort": "high", "transmittedEffort": "high",
             "effortTransmission": {"status": "transmitted"},
@@ -183,7 +200,7 @@ class ReviewRecoveryTests(unittest.TestCase):
         with self.assertRaises(EvidenceAssemblyError): self.assemble(run, paths, lane)
 
     def test_forged_or_contradictory_dispatch_fails_without_changing_inputs(self):
-        for change in ("participant", "served", "family", "effort", "stub", "publication", "legacy-identity"):
+        for change in ("participant", "served", "family", "effort", "stub", "publication", "legacy-identity", "requested-effort", "normalized-effort", "excluded-family", "independence-required"):
             with self.subTest(change=change):
                 run, _, value, dispatch = self.router()
                 if change == "participant": dispatch["participantId"] = "security"
@@ -192,11 +209,53 @@ class ReviewRecoveryTests(unittest.TestCase):
                 elif change == "effort": dispatch["transmittedEffort"] = "low"
                 elif change == "stub": dispatch["transportStub"] = True
                 elif change == "legacy-identity": dispatch["served"]["provider"] = "not_reported"
+                elif change == "requested-effort": dispatch["attempts"][0]["requestedEffort"] = "low"
+                elif change == "normalized-effort": dispatch["attempts"][0]["normalizedEffort"] = "low"
+                elif change == "excluded-family": dispatch["familyIndependence"]["excludedFamilies"] = ["openai"]
+                elif change == "independence-required":
+                    dispatch["familyIndependence"]["required"] = True
+                    dispatch["requested"]["independenceReceiptIds"] = []
                 else: dispatch["publication"]["output"] = "pending"
                 path = self.write(run, value["dispatch_receipt_ref"], dispatch)
                 before = path.read_bytes()
                 with self.assertRaises(EvidenceAssemblyError): self.recover(run, value)
                 self.assertEqual(before, path.read_bytes())
+
+    def test_recovery_retries_reject_altered_output_and_dispatch(self):
+        for target in ("output_ref", "dispatch_receipt_ref"):
+            run, _, value, dispatch = self.router()
+            first = self.recover(run, value)
+            original_record = (run.root / first["record_ref"]).read_bytes()
+            if target == "output_ref": (run.root / value[target]).write_text("altered output\n")
+            else:
+                dispatch["served"]["durationSeconds"] = 999
+                self.write(run, value[target], dispatch)
+            for timestamp in (value["recovered_at"], "2026-10-12T00:01:00Z"):
+                value["recovered_at"] = timestamp
+                with self.assertRaises(EvidenceAssemblyError): self.recover(run, value)
+            self.assertEqual(original_record, (run.root / first["record_ref"]).read_bytes())
+
+    def test_legacy_absent_effort_fields_remain_unavailable(self):
+        run, _, value, dispatch = self.router()
+        dispatch.pop("effortTransmission")
+        dispatch.pop("transmittedEffort")
+        for key in ("requestedEffort", "normalizedEffort", "transmittedEffort", "effortStatus"):
+            dispatch["attempts"][0].pop(key)
+        self.write(run, value["dispatch_receipt_ref"], dispatch)
+        result = self.recover(run, value)
+        public = json.loads((run.root / result["companion_ref"]).read_text())
+        self.assertIsNone(public["transmittedEffort"])
+        self.assertEqual("unavailable", public["effortStatus"])
+
+    def test_legacy_lane_name_cannot_override_reported_dispatch_identity(self):
+        run, paths = self.make_run()
+        lane = json.loads(paths["input"].read_text())
+        dispatch_ref = lane["literal"]["dispatch_receipt_ref"]
+        dispatch = json.loads((run.root / dispatch_ref).read_text())
+        dispatch["participantId"] = "reviewer-" + "a" * 8
+        self.write(run, dispatch_ref, dispatch)
+        lane["pass_id"] = "known-identity"
+        with self.assertRaises(EvidenceAssemblyError): self.assemble(run, paths, lane)
 
     def test_authentic_source_witness_preserves_recovered_lane(self):
         run, paths, value, _ = self.router()

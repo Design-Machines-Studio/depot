@@ -1754,6 +1754,12 @@ def _seal_record(root, role, value):
                 candidate = _read_seal(root, reference, role)
             except EvidenceAssemblyError:
                 continue  # Uncommitted partial files never confer coverage.
+            if role == "recovery" and candidate.get("input", {}).get("dispatch_receipt_ref") == value["input"]["dispatch_receipt_ref"] and candidate.get("input", {}).get("output_ref") == value["input"]["output_ref"]:
+                for original in (value["input"]["dispatch_receipt_ref"], value["input"]["output_ref"]):
+                    if candidate["bindings"][original]["digest"] != value["bindings"][original]["digest"]:
+                        raise EvidenceAssemblyError("lane_validation", "digest_mismatch")
+                if candidate["input"] == value["input"] and candidate != value:
+                    raise EvidenceAssemblyError("lane_validation", "append_conflict")
             if {k: v for k, v in candidate.items() if k != "assembled_at"} == {k: v for k, v in value.items() if k != "assembled_at"}:
                 return reference
     return _seal_evidence(root, role, value)
@@ -2273,6 +2279,8 @@ def _validate_production_lane(root, record, receipts, repository=None):
             or dispatch.get("publication") != {"output": "published"}
             or dispatch.get("transportStub") is not False):
         raise EvidenceAssemblyError("lane_validation", "incomplete_inspection")
+    if dispatch.get("participantId") is not None and dispatch["participantId"] != value["reviewer"]:
+        raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
     companion = _lane_companion(
         _evidence_json_from_bytes(_bound_bytes(root, record, value["literal"]["companion_ref"])),
         dispatch, value,

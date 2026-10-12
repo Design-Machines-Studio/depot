@@ -184,6 +184,8 @@ Set `reviewer: host-verification`, `inspected.basis: host_evidence`, no findings
 and explicit limitations. The companion identifies `implemented_by:
 deterministic-host`; its model is unreported and families unknown because no
 model ran. This settles only the declared executed scope, never code judgment.
+Only the current deterministic slots `go-build-verifier` and `tests/build`
+accept this variant. Judgment lane IDs are rejected.
 
 The host envelope has exactly these fields:
 
@@ -261,7 +263,10 @@ The recovery record retains derivation input refs, literal byte hashes, separate
 `recovered_at` and null `executed_at`. Repeating identical input/time is
 deterministic. Original records and outputs never change. Failed/interrupted
 seals grant no authority; retry with identical inputs. Sealing detects later
-output alteration; old content-free dispatch receipts cannot independently
+alteration on recovery retries too: the same retained dispatch/output pair
+cannot acquire different byte bindings, even with a new recovery timestamp.
+An identical recovery input cannot produce a conflicting companion.
+Old content-free dispatch receipts cannot independently
 authenticate their original pairing with an output. The host must supply that
 authentic retained pair. Structural validation is not origin authentication.
 

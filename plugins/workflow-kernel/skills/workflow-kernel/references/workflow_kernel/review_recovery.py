@@ -11,6 +11,10 @@ import re
 from .dm_review_adapter import _LANE_FIELDS, required_text
 from .verification_contract import digest
 
+# The current dm-review deterministic slots. Judgment IDs cannot opt in by
+# changing a receipt's basis or adding a "no judgment" limitation.
+HOST_VERIFICATION_LANES = frozenset({"go-build-verifier", "tests/build"})
+
 
 def public_completion(dispatch, output_ref):
     """Project only facts reported by a coherent published private dispatch."""
@@ -27,6 +31,11 @@ def public_completion(dispatch, output_ref):
     successful = [row for row in attempts if type(row) is dict and row.get("outcome") == "served"]
     if len(successful) != 1 or attempts[-1] != successful[0]:
         raise ValueError("contradictory dispatch")
+    attempt = successful[0]
+    for reported, expected in ((attempt.get("requestedEffort"), requested.get("effort")),
+                               (attempt.get("normalizedEffort"), dispatch.get("normalizedEffort"))):
+        if reported is not None and expected is not None and reported != expected:
+            raise ValueError("contradictory dispatch effort")
     for key in ("model", "provider", "transport"):
         required_text(served.get(key), key)
         if served[key] == "not_reported" or served[key] != successful[0].get(key):
@@ -52,6 +61,13 @@ def public_completion(dispatch, output_ref):
             or independence.get("humanAuthored") != requested["humanAuthored"]
             or type(dispatch.get("fallback")) is not bool):
         raise ValueError("invalid dispatch independence")
+    if served["family"] in independence["excludedFamilies"]:
+        raise ValueError("contradictory dispatch independence")
+    if "required" in independence and "independenceReceiptIds" in requested:
+        if (type(requested["independenceReceiptIds"]) is not list
+                or type(independence["required"]) is not bool
+                or independence["required"] != bool(requested["independenceReceiptIds"] or requested["humanAuthored"])):
+            raise ValueError("contradictory dispatch independence")
     if type(requested.get("capabilities")) is not list or not requested["capabilities"]:
         raise ValueError("invalid dispatch capabilities")
     return {
@@ -97,7 +113,8 @@ def host_completion(envelope, value, load_json, load_bytes, snapshot):
     from .verification_contract import byte_digest
     host_references(envelope)
     source = envelope["source"]
-    if (envelope["lane"] != value["lane"] or value["reviewer"] != "host-verification"
+    if (value["lane"] not in HOST_VERIFICATION_LANES
+            or envelope["lane"] != value["lane"] or value["reviewer"] != "host-verification"
             or value["inspected"]["basis"] != "host_evidence"
             or value["result"]["findings"] or value["source"]["worktree_ref"] is not None
             or source["repository"] != value["source"]["repository"]
