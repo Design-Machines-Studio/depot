@@ -317,7 +317,7 @@ historical #1118 exception remains unchanged and does not apply to other runs.
 ## Bounded retention (>=0.28.0)
 
 Since 0.30.1, required review evidence is bounded to **192 MiB (201,326,592 bytes) / 2,048
-files**. Version 0.28.1 used the same byte allowance with 1,024 files. Disposable diagnostics retain **9 MiB (9,437,184 bytes) / 416 files**.
+files**. Version 0.28.1 allowed 128 MiB with 1,024 files. Disposable diagnostics retain **9 MiB (9,437,184 bytes) / 416 files**.
 These are separate aggregate allowances, not per-file permissions. Both count
 regular-file bytes without compression. The existing exact-owned diagnostic
 child stores both; no new storage, registry or migration is introduced.
