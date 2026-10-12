@@ -2387,17 +2387,37 @@ def _aggregate_documents(root, request, value, receipts, target, repository, *, 
     _validate_finding_result_sources(request, documents["review/review-lane-receipts.json"], documents["review/raw-lane-outputs.json"], documents["review/raw-finding-inventory.json"], documents["review/synthesis-decisions.json"])
     prior_sources = {f["source_finding_id"] for selected in value["selection"] for ref in selected["history_refs"] for f in _record(root, ref, receipts)["input"]["result"]["findings"]}
     historical = {}
-    for resolution in value["resolutions"]:
-        if "historical_findings_ref" not in resolution:
-            continue
-        verification = _record(root, resolution["verification_record_ref"], receipts)
+    historical_inputs = []
+    for selected in value["selection"]:
+        verification = _record(root, selected["record_ref"], receipts)
+        inventories, decision_sets = [], []
+        for reference in verification["input"]["provenance"]["source_refs"]:
+            payload = _bound_bytes(root, verification, reference)
+            try:
+                document = _evidence_json_from_bytes(payload)
+            except EvidenceAssemblyError:
+                continue  # Assignments and observations need not be JSON.
+            if type(document) is not dict:
+                continue
+            if document.get("artifact_role") == "raw_finding_inventory":
+                inventories.append((reference, document))
+            elif document.get("artifact_role") == "synthesis_decisions":
+                decision_sets.append((reference, document))
+        # Discover obligations from sealed inputs, independently of resolution
+        # rows: deleting every row must not hide retained historical findings.
+        for reference, inventory in inventories:
+            matches = [ref for ref, decisions in decision_sets if decisions.get("run_id") == inventory.get("run_id")]
+            if len(matches) != 1:
+                raise EvidenceAssemblyError("aggregate_validation", "missing_source_provenance")
+            historical_inputs.append((selected["record_ref"], (reference, matches[0])))
+    for verification_ref, refs in historical_inputs:
+        verification = _record(root, verification_ref, receipts)
         extraction = verification["input"]
-        refs = (resolution["historical_findings_ref"], resolution["historical_decisions_ref"])
         if (not set(refs) <= set(extraction["provenance"]["source_refs"])
                 or extraction["provenance"]["kind"] != "live"
                 or extraction["result"]["status"] != "no_findings"
                 or extraction["lane"] not in request.required_lanes
-                or not any(row["record_ref"] == resolution["verification_record_ref"] for row in value["selection"])):
+                or not any(row["record_ref"] == verification_ref for row in value["selection"])):
             raise EvidenceAssemblyError("aggregate_validation", "missing_source_provenance")
         inventory = _evidence_json_from_bytes(_bound_bytes(root, verification, refs[0]))
         decisions = _evidence_json_from_bytes(_bound_bytes(root, verification, refs[1]))
@@ -2422,7 +2442,7 @@ def _aggregate_documents(root, request, value, receipts, target, repository, *, 
                 raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
             if decision["finding_disposition"] != "retained" or decision["lane"] != extraction["lane"]:
                 continue
-            origin = (extraction["lane"], resolution["verification_record_ref"], *refs)
+            origin = (extraction["lane"], verification_ref, *refs)
             if decision["finding_path"] not in extraction["inspected"]["paths"] or (identifier in prior_sources and historical.get(identifier) != origin):
                 raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
             prior_sources.add(identifier)
@@ -2433,7 +2453,9 @@ def _aggregate_documents(root, request, value, receipts, target, repository, *, 
     for resolution in resolutions.values():
         verification = _record(root, resolution["verification_record_ref"], receipts)
         if "historical_findings_ref" in resolution:
-            if (historical.get(resolution["source_finding_id"], (None,))[0] != verification["input"]["lane"]
+            if (historical.get(resolution["source_finding_id"]) != (
+                    verification["input"]["lane"], resolution["verification_record_ref"],
+                    resolution["historical_findings_ref"], resolution["historical_decisions_ref"])
                     or resolution["repair_ref"] not in verification["input"]["recheck"]["repair_refs"]):
                 raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
             if _evidence_bytes(root, resolution["repair_ref"], "aggregate_validation") != _bound_bytes(root, verification, resolution["repair_ref"]):

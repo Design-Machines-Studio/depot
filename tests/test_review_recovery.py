@@ -296,7 +296,7 @@ class ReviewRecoveryTests(unittest.TestCase):
         self.assertEqual("current dirty source\n", (self.repo / "source.txt").read_text())
 
     def test_fresh_confirmation_resolves_diagnostic_history_without_relabelling(self):
-        for mutation in (None, "unknown-source", "missing-resolution", "wrong-path", "wrong-decision"):
+        for mutation in (None, "unknown-source", "missing-resolution", "no-resolutions", "missing-decisions", "wrong-path", "wrong-decision", "discarded-only"):
             with self.subTest(mutation=mutation):
                 run, paths = self.make_run()
                 lane = json.loads(paths["input"].read_text())
@@ -308,19 +308,23 @@ class ReviewRecoveryTests(unittest.TestCase):
                 second = dict(finding, source_finding_id="historical-2")
                 findings = [finding, second]
                 decisions = [dict(row, finding_disposition="retained") for row in findings]
+                if mutation == "discarded-only":
+                    decisions = [dict(row, finding_disposition="discarded") for row in findings]
                 if mutation == "wrong-decision": decisions[0]["finding_root_cause"] = "contradictory"
                 self.write(run, "history/findings.json", {"schema_version": 1, "artifact_role": "raw_finding_inventory", "run_id": "historical", "findings": findings})
                 self.write(run, "history/decisions.json", {"schema_version": 1, "artifact_role": "synthesis_decisions", "source_finding_count": len(findings), "run_id": "historical", "decisions": decisions})
                 (run.root / "review/repairs.md").write_text("Current source confirms historical repairs.\n")
                 lane["provenance"]["source_refs"] += ["history/findings.json", "history/decisions.json"]
+                if mutation == "missing-decisions": lane["provenance"]["source_refs"].remove("history/decisions.json")
                 lane["recheck"]["repair_refs"] = ["review/repairs.md"]
                 if mutation == "unknown-source": lane["provenance"]["kind"] = "recovery"
                 result = self.assemble(run, paths, lane)
                 resolutions = [{"source_finding_id": row["source_finding_id"], "repair_ref": "review/repairs.md", "verification_record_ref": result["record_ref"],
                     "historical_findings_ref": "history/findings.json", "historical_decisions_ref": "history/decisions.json"} for row in findings]
                 if mutation == "missing-resolution": resolutions.pop()
+                if mutation in {"no-resolutions", "missing-decisions", "discarded-only"}: resolutions = []
                 before = (run.root / "history/findings.json").read_bytes()
-                if mutation:
+                if mutation not in {None, "discarded-only"}:
                     with self.assertRaises(EvidenceAssemblyError): self.coverage(run, paths, result["record_ref"], resolutions)
                 else:
                     self.assertEqual("complete", self.coverage(run, paths, result["record_ref"], resolutions)["status"])
