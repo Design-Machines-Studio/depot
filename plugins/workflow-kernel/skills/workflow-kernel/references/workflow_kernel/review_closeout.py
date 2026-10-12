@@ -1599,6 +1599,7 @@ class EvidenceAssemblyError(ValueError):
         "missing_evidence": (3, "missing_evidence"),
         "incomplete_inspection": (3, "missing_evidence"),
         "missing_source_provenance": (3, "missing_evidence"),
+        "host_verification_failed": (3, "required_verification_failed"),
         "invalid_evidence": (2, "invalid_schema"),
         "digest_mismatch": (3, "unsafe_payload"),
         "source_scope_mismatch": (3, "unsafe_payload"),
@@ -1753,6 +1754,12 @@ def _seal_record(root, role, value):
                 candidate = _read_seal(root, reference, role)
             except EvidenceAssemblyError:
                 continue  # Uncommitted partial files never confer coverage.
+            if role == "recovery" and candidate.get("input", {}).get("dispatch_receipt_ref") == value["input"]["dispatch_receipt_ref"] and candidate.get("input", {}).get("output_ref") == value["input"]["output_ref"]:
+                for original in (value["input"]["dispatch_receipt_ref"], value["input"]["output_ref"]):
+                    if candidate["bindings"][original]["digest"] != value["bindings"][original]["digest"]:
+                        raise EvidenceAssemblyError("lane_validation", "digest_mismatch")
+                if candidate["input"] == value["input"] and candidate != value:
+                    raise EvidenceAssemblyError("lane_validation", "append_conflict")
             if {k: v for k, v in candidate.items() if k != "assembled_at"} == {k: v for k, v in value.items() if k != "assembled_at"}:
                 return reference
     return _seal_evidence(root, role, value)
@@ -1864,12 +1871,25 @@ def _lane_bindings(root, value, previous=None):
                   *value["requested"]["evidence_refs"], *value["provenance"]["source_refs"],
                   *value["recheck"]["repair_refs"]}
     references.update(f["evidence_ref"] for f in value["result"]["findings"])
+    if "host_receipt_ref" in value["literal"]:
+        from .review_recovery import host_references
+        try:
+            references.update(host_references(_evidence_json(root, value["literal"]["host_receipt_ref"], "lane_input")))
+        except (KeyError, TypeError, ValueError):
+            raise EvidenceAssemblyError("lane_input", "invalid_evidence") from None
+    semantic_missing = []
+    if "recovery_ref" in value["literal"]:
+        recovery = _read_seal(root, value["literal"]["recovery_ref"], "recovery")
+        references.update(binding["retained_ref"] for binding in recovery["bindings"].values())
+        references.add(recovery["raw_output_ref"])
+        if recovery["input"]["source_witness_ref"] is None:
+            semantic_missing.append("historical_source_witness")
     if source["worktree_ref"]:
         references.add(source["worktree_ref"])
     if value["recheck"]["selection_ref"]:
         references.add(value["recheck"]["selection_ref"])
     references.update(_transition_references(root, value["recheck"].get("pending_transition_refs", [])))
-    bindings, missing = {}, []
+    bindings, missing = {}, semantic_missing
     for reference in sorted(references):
         try:
             data = _evidence_bytes(root, reference, "lane_input")
@@ -2076,11 +2096,170 @@ def _lane_companion(companion, dispatch, value):
     return row
 
 
-def _validate_production_lane(root, record, receipts):
+def _validate_recovered_companion(root, record, dispatch, *, require_source=True):
+    from .review_recovery import public_completion
+    value = record["input"]
+    recovery = _evidence_json_from_bytes(_bound_bytes(root, record, value["literal"]["recovery_ref"]))
+    if value["literal"]["recovery_ref"] != "review/evidence/recovery-" + _document_digest(recovery).replace(":", "-") + ".json":
+        raise EvidenceAssemblyError("lane_validation", "digest_mismatch")
+    if (type(recovery) is not dict or set(recovery) != {"schema_version", "input", "bindings", "companion_ref", "raw_output_ref", "executed_at", "recovered_at"}
+            or recovery["schema_version"] != 1 or recovery["executed_at"] is not None):
+        raise EvidenceAssemblyError("lane_validation", "invalid_evidence")
+    inputs = recovery["input"]
+    if inputs["lane"] != value["lane"] or recovery["companion_ref"] != value["literal"]["companion_ref"]:
+        raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
+    for field in ("dispatch_receipt_ref", "output_ref"):
+        if inputs[field] != value["literal"][field]:
+            raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
+        if _byte_digest(_bound_bytes(root, record, inputs[field])) != recovery["bindings"][inputs[field]]["digest"]:
+            raise EvidenceAssemblyError("lane_validation", "digest_mismatch")
+    companion = _evidence_json_from_bytes(_bound_bytes(root, record, recovery["companion_ref"]))
+    try:
+        if companion != public_completion(dispatch, inputs["output_ref"]):
+            raise ValueError("contradictory companion")
+    except (KeyError, TypeError, ValueError):
+        raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch") from None
+    expected_raw = {"reviewer": value["reviewer"], "lane": value["lane"], "findings": [dict(f, reviewer=value["reviewer"]) for f in inputs["findings"]]}
+    if (_evidence_json_from_bytes(_bound_bytes(root, record, recovery["raw_output_ref"])) != expected_raw
+            or value["result"]["findings"] != expected_raw["findings"]):
+        raise EvidenceAssemblyError("lane_validation", "digest_mismatch")
+    witness_ref = inputs["source_witness_ref"]
+    if witness_ref is None:
+        if require_source:
+            raise EvidenceAssemblyError("lane_validation", "missing_source_provenance")
+        return False
+    witness = _evidence_json_from_bytes(_bound_bytes(root, recovery, witness_ref))
+    if (type(witness) is not dict or set(witness) != {"schema_version", "repository", "head", "paths", "assignment_ref", "head_ref", "status_ref"}
+            or witness["schema_version"] != 1 or witness["repository"] != value["source"]["repository"]
+            or witness["head"] != value["source"]["head"] or witness["paths"] != value["requested"]["paths"]
+            or value["source"]["worktree_ref"] is not None):
+        raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
+    if (_bound_bytes(root, recovery, witness["head_ref"]).decode().strip() != witness["head"]
+            or _bound_bytes(root, recovery, witness["status_ref"]).strip()
+            or not _bound_bytes(root, recovery, witness["assignment_ref"]).strip()):
+        raise EvidenceAssemblyError("lane_validation", "missing_source_provenance")
+    return True
+
+
+def recover_review_evidence(*, run_root, repository_root, input_path):
+    """Seal derived companions or current commit reconstructions; grant no coverage."""
+    from datetime import datetime, timezone
+    from .review_recovery import public_completion
+    from .dm_review_adapter import require_secret_safe_contribution_inputs
+    run = ExactOwnedRun.open(Path(run_root))
+    root, repository = run.root, Path(repository_root).resolve(strict=True)
+    if run.workflow not in _REVIEW_WORKFLOWS:
+        raise EvidenceAssemblyError("lane_input", "unsafe_path")
+    try:
+        path = _source_path(input_path, root)
+        value = _evidence_json(root, path.relative_to(root).as_posix(), "lane_input")
+        require_secret_safe_contribution_inputs(value)
+        if type(value) is not dict or type(value.get("recovered_at")) is not str:
+            raise ValueError("invalid recovery timestamp")
+        timestamp = datetime.fromisoformat(value["recovered_at"].replace("Z", "+00:00"))
+        if timestamp.tzinfo is None or timestamp > datetime.now(timezone.utc) or type(value["schema_version"]) is not int or value["schema_version"] != 1:
+            raise ValueError("invalid recovery")
+        operation = value["operation"]
+        fields = {"schema_version", "operation", "recovered_at"}
+        fields |= ({"lane", "dispatch_receipt_ref", "output_ref", "findings", "source_witness_ref"}
+                   if operation == "companions" else {"base", "heads"} if operation == "source" else set())
+        if set(value) != fields:
+            raise ValueError("invalid recovery")
+        _seal_evidence(root, "recovery-input", value)
+        if operation == "source":
+            if type(value["heads"]) is not list or not value["heads"] or len(value["heads"]) > 64 or len(set(value["heads"])) != len(value["heads"]):
+                raise ValueError("invalid recovery heads")
+            identity, _ = source_identity(repository)
+            base = _source_snapshot(repository, value["base"])
+            base_ref = _seal_evidence(root, "source", base)
+            results = []
+            for head in value["heads"]:
+                source = _source_snapshot(repository, head)
+                source_ref = _seal_evidence(root, "source", source)
+                patch_ref = _seal_evidence(root, "literal", _git_patch(repository, value["base"], head), literal=True)
+                record = {"schema_version": 1, "repository": identity, "base": value["base"], "head": head,
+                          "base_snapshot_ref": base_ref, "source_snapshot_ref": source_ref, "patch_ref": patch_ref,
+                          "historical_worktree_state": "unknown", "historical_assignment": "unknown", "recovered_at": value["recovered_at"]}
+                results.append({"head": head, "source_snapshot_ref": source_ref,
+                                "patch_ref": patch_ref, "record_ref": _seal_record(root, "reconstruction", record)})
+            _check_evidence_bound(root / "review/evidence")
+            return {"status": "reconstructed", "coverage_proof": False, "historical_worktree_state": "unknown", "sources": results}
+        if operation != "companions":
+            raise ValueError("invalid recovery operation")
+        output = _evidence_bytes(root, value["output_ref"], "lane_input")
+        if not output.strip():
+            raise ValueError("missing literal output")
+        dispatch = _evidence_json(root, value["dispatch_receipt_ref"], "lane_input")
+        companion = public_completion(dispatch, value["output_ref"])
+        required_text(value["lane"], "lane")
+        if type(value["findings"]) is not list:
+            raise ValueError("invalid recovery findings")
+        findings = []
+        for finding in value["findings"]:
+            if type(finding) is not dict or set(finding) != _RAW_FINDING_FIELDS or finding["lane"] != value["lane"] or finding["evidence_ref"] != value["output_ref"]:
+                raise ValueError("invalid recovery finding")
+            for field in _RAW_FINDING_FIELDS:
+                required_text(finding[field], field)
+            findings.append(dict(finding, reviewer=companion["participantId"]))
+        references = {value["dispatch_receipt_ref"], value["output_ref"]}
+        witness_ref = value["source_witness_ref"]
+        if witness_ref is not None:
+            references.add(witness_ref)
+            witness = _evidence_json(root, witness_ref, "lane_input")
+            references.update(witness[field] for field in ("assignment_ref", "head_ref", "status_ref"))
+        bindings = {}
+        for ref in sorted(references):
+            data = _evidence_bytes(root, ref, "lane_input")
+            bindings[ref] = {"retained_ref": _seal_evidence(root, "literal", data, literal=True), "digest": _byte_digest(data)}
+        companion_ref = _seal_evidence(root, "completion", companion)
+        raw = {"reviewer": companion["participantId"], "lane": value["lane"], "findings": findings}
+        raw_ref = _seal_evidence(root, "recovered-output", raw)
+        record = {"schema_version": 1, "input": value, "bindings": bindings,
+                  "companion_ref": companion_ref, "raw_output_ref": raw_ref,
+                  "executed_at": None, "recovered_at": value["recovered_at"]}
+        ref = _seal_record(root, "recovery", record)
+        _check_evidence_bound(root / "review/evidence")
+        return {"status": "derived", "coverage_proof": False, "source_witness": "unknown" if witness_ref is None else "supplied",
+                "record_ref": ref, "companion_ref": companion_ref, "raw_output_ref": raw_ref, "participant_id": companion["participantId"]}
+    except (KeyError, TypeError, ValueError, OSError, UnicodeError) as exc:
+        if isinstance(exc, EvidenceAssemblyError):
+            raise
+        raise EvidenceAssemblyError("lane_input", "invalid_evidence") from None
+
+
+def _validate_production_lane(root, record, receipts, repository=None):
     """Recheck original sealed provenance and dispatch before granting coverage."""
     value = record["input"]
     if value["provenance"]["kind"] == "synthetic_test":
         raise EvidenceAssemblyError("lane_validation", "incomplete_inspection")
+    if "host_receipt_ref" in value["literal"]:
+        from .review_recovery import host_completion
+        try:
+            envelope = _evidence_json_from_bytes(_bound_bytes(root, record, value["literal"]["host_receipt_ref"]))
+            def snapshot(head):
+                ref = envelope["source_snapshots"][head]
+                data = _bound_bytes(root, record, ref)
+                source = _evidence_json_from_bytes(data)
+                if ref != "review/evidence/source-" + _document_digest(source).replace(":", "-") + ".json":
+                    raise ValueError("host source altered")
+                _resolve_snapshot(root, source, head=head)
+                if repository is not None and source != _source_snapshot(repository, head):
+                    raise ValueError("host source altered")
+                if head == value["source"]["head"] and source != record["source_snapshot"]:
+                    raise ValueError("host source mismatch")
+                return source
+            return host_completion(
+                envelope, value,
+                lambda ref: _evidence_json_from_bytes(_bound_bytes(root, record, ref)),
+                lambda ref: _bound_bytes(root, record, ref),
+                snapshot,
+            )
+        except (KeyError, TypeError, ValueError) as exc:
+            reasons = {"host verification failed": "host_verification_failed", "host source changed": "source_scope_mismatch",
+                       "host scope mismatch": "source_scope_mismatch", "host source mismatch": "source_scope_mismatch",
+                       "host artifact altered": "digest_mismatch", "host source altered": "digest_mismatch",
+                       "missing host source evidence": "missing_source_provenance"}
+            raise EvidenceAssemblyError("lane_validation", reasons.get(str(exc), "incomplete_inspection")) from None
     if "native_trace_ref" in value["literal"]:
         from .native_review import validate_native_output
         try:
@@ -2100,10 +2279,14 @@ def _validate_production_lane(root, record, receipts):
             or dispatch.get("publication") != {"output": "published"}
             or dispatch.get("transportStub") is not False):
         raise EvidenceAssemblyError("lane_validation", "incomplete_inspection")
+    if dispatch.get("participantId") is not None and dispatch["participantId"] != value["reviewer"]:
+        raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
     companion = _lane_companion(
         _evidence_json_from_bytes(_bound_bytes(root, record, value["literal"]["companion_ref"])),
         dispatch, value,
     )
+    if "recovery_ref" in value["literal"]:
+        _validate_recovered_companion(root, record, dispatch)
     if (companion["model"] != dispatch["served"].get("model")
             or companion["provider"] != dispatch["served"].get("provider")
             or companion["reviewer_family"] != dispatch["served"].get("family")):
@@ -2157,7 +2340,7 @@ def _aggregate_documents(root, request, value, receipts, target, repository, *, 
                 raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
         for item in chain:
             if not test_harness:
-                companion = _validate_production_lane(root, item, receipts)
+                companion = _validate_production_lane(root, item, receipts, repository)
             recheck = item["input"]["recheck"]
             refs = _transition_references(root, recheck.get("pending_transition_refs", []))
             if recheck["selection_ref"]:
@@ -2203,11 +2386,81 @@ def _aggregate_documents(root, request, value, receipts, target, repository, *, 
     _validate_lane_source_coverage(request, documents["review/review-lane-receipts.json"], documents["review/raw-lane-outputs.json"])
     _validate_finding_result_sources(request, documents["review/review-lane-receipts.json"], documents["review/raw-lane-outputs.json"], documents["review/raw-finding-inventory.json"], documents["review/synthesis-decisions.json"])
     prior_sources = {f["source_finding_id"] for selected in value["selection"] for ref in selected["history_refs"] for f in _record(root, ref, receipts)["input"]["result"]["findings"]}
+    historical = {}
+    historical_inputs = []
+    for selected in value["selection"]:
+        verification = _record(root, selected["record_ref"], receipts)
+        inventories, decision_sets = [], []
+        for reference in verification["input"]["provenance"]["source_refs"]:
+            payload = _bound_bytes(root, verification, reference)
+            try:
+                document = _evidence_json_from_bytes(payload)
+            except EvidenceAssemblyError:
+                continue  # Assignments and observations need not be JSON.
+            if type(document) is not dict:
+                continue
+            if document.get("artifact_role") == "raw_finding_inventory":
+                inventories.append((reference, document))
+            elif document.get("artifact_role") == "synthesis_decisions":
+                decision_sets.append((reference, document))
+        # Discover obligations from sealed inputs, independently of resolution
+        # rows: deleting every row must not hide retained historical findings.
+        for reference, inventory in inventories:
+            matches = [ref for ref, decisions in decision_sets if decisions.get("run_id") == inventory.get("run_id")]
+            if len(matches) != 1:
+                raise EvidenceAssemblyError("aggregate_validation", "missing_source_provenance")
+            historical_inputs.append((selected["record_ref"], (reference, matches[0])))
+    for verification_ref, refs in historical_inputs:
+        verification = _record(root, verification_ref, receipts)
+        extraction = verification["input"]
+        if (not set(refs) <= set(extraction["provenance"]["source_refs"])
+                or extraction["provenance"]["kind"] != "live"
+                or extraction["result"]["status"] != "no_findings"
+                or extraction["lane"] not in request.required_lanes
+                or not any(row["record_ref"] == verification_ref for row in value["selection"])):
+            raise EvidenceAssemblyError("aggregate_validation", "missing_source_provenance")
+        inventory = _evidence_json_from_bytes(_bound_bytes(root, verification, refs[0]))
+        decisions = _evidence_json_from_bytes(_bound_bytes(root, verification, refs[1]))
+        if (type(inventory) is not dict or inventory.get("artifact_role") != "raw_finding_inventory"
+                or type(decisions) is not dict or decisions.get("artifact_role") != "synthesis_decisions"
+                or inventory.get("schema_version") != 1 or decisions.get("schema_version") != 1
+                or inventory.get("run_id") != decisions.get("run_id")
+                or type(inventory.get("findings")) is not list or type(decisions.get("decisions")) is not list
+                or decisions.get("source_finding_count") != len(inventory["findings"])
+                or len(decisions["decisions"]) != len(inventory["findings"])):
+            raise EvidenceAssemblyError("aggregate_validation", "invalid_evidence")
+        for finding in inventory["findings"]:
+            if type(finding) is not dict or set(finding) != _RAW_FINDING_FIELDS:
+                raise EvidenceAssemblyError("aggregate_validation", "invalid_evidence")
+        raw = {row["source_finding_id"]: row for row in inventory["findings"]}
+        if len(raw) != len(inventory["findings"]) or len({row["source_finding_id"] for row in decisions["decisions"]}) != len(raw):
+            raise EvidenceAssemblyError("aggregate_validation", "invalid_evidence")
+        for decision in decisions["decisions"]:
+            identifier = decision["source_finding_id"]
+            if (decision.get("finding_disposition") not in {"retained", "merged", "discarded"}
+                    or identifier not in raw or any(decision.get(field) != raw[identifier].get(field) for field in _RAW_FINDING_FIELDS)):
+                raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
+            if decision["finding_disposition"] != "retained" or decision["lane"] != extraction["lane"]:
+                continue
+            origin = (extraction["lane"], verification_ref, *refs)
+            if decision["finding_path"] not in extraction["inspected"]["paths"] or (identifier in prior_sources and historical.get(identifier) != origin):
+                raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
+            prior_sources.add(identifier)
+            historical[identifier] = origin
     resolutions = {row["source_finding_id"]: row for row in value["resolutions"]}
     if len(resolutions) != len(value["resolutions"]) or set(resolutions) != prior_sources:
         raise EvidenceAssemblyError("aggregate_validation", "incomplete_inspection")
     for resolution in resolutions.values():
         verification = _record(root, resolution["verification_record_ref"], receipts)
+        if "historical_findings_ref" in resolution:
+            if (historical.get(resolution["source_finding_id"]) != (
+                    verification["input"]["lane"], resolution["verification_record_ref"],
+                    resolution["historical_findings_ref"], resolution["historical_decisions_ref"])
+                    or resolution["repair_ref"] not in verification["input"]["recheck"]["repair_refs"]):
+                raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
+            if _evidence_bytes(root, resolution["repair_ref"], "aggregate_validation") != _bound_bytes(root, verification, resolution["repair_ref"]):
+                raise EvidenceAssemblyError("aggregate_validation", "digest_mismatch")
+            continue
         if verification["input"]["recheck"]["prior_record_ref"] is None or resolution["repair_ref"] not in verification["input"]["recheck"]["repair_refs"]:
             raise EvidenceAssemblyError("aggregate_validation", "source_scope_mismatch")
         owner = next((selected for selected in value["selection"] if any(
@@ -2306,6 +2559,18 @@ def _review_receipt_context(request):
     return context
 
 
+def _fresh_source_confirmation(value, missing):
+    if "historical_source_witness" not in missing:
+        return {}
+    return {"fresh_verification_request": {
+        "lane": value["lane"], "repository": value["source"]["repository"],
+        "base": value["source"]["base"], "head": value["source"]["head"],
+        "paths": value["requested"]["paths"], "reuse_prior_findings_and_decisions": True,
+        "reason": "historical_source_witness_missing",
+        "next_action": "Supply authentic original source observations or confirm only this lane's declared source scope in an isolated checkout.",
+    }}
+
+
 def assemble_review_evidence(*, run_root, repository_root, request_path, receipts_path, input_path, test_harness=False):
     """One locked read/validate/seal/append transaction; append is the commit."""
     import fcntl
@@ -2389,8 +2654,9 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
                 for original in previous[1]["bindings"]:
                     _bound_bytes(root, previous[1], original)
                 if not test_harness and previous[1]["eligible"]:
-                    _validate_production_lane(root, _record(root, previous[0], receipts), receipts)
-                return {"status": "complete" if previous[1]["eligible"] else "incomplete", "record_ref": previous[0], "reused": True, "missing": missing}
+                    _validate_production_lane(root, _record(root, previous[0], receipts), receipts, repository)
+                return {"status": "complete" if previous[1]["eligible"] else "incomplete", "record_ref": previous[0], "reused": True, "missing": missing,
+                        **_fresh_source_confirmation(value, missing)}
             live = value["provenance"]["kind"] != "recovery"
             repository_identity, head = source_identity(repository)
             if repository_identity != request.source_repository or live and head != request.source_head:
@@ -2413,6 +2679,9 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
                 if worktree is None or worktree not in bindings or _bound_bytes(root, {"bindings": bindings}, worktree) != _working_patch(repository, request.source_head):
                     raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
             required = {value["source"]["request_ref"], *value["literal"].values(), *value["requested"]["required_evidence_refs"]}
+            if "host_receipt_ref" in value["literal"]:
+                from .review_recovery import host_references
+                required.update(host_references(_evidence_json(root, value["literal"]["host_receipt_ref"], "lane_input")))
             patch_ref = value["requested"]["patch_ref"]
             if patch_ref is not None and patch_ref in bindings and _bound_bytes(root, {"bindings": bindings}, patch_ref) != _git_patch(repository, value["source"]["base"], request.source_head, value["requested"]["paths"]):
                 raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
@@ -2434,8 +2703,13 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
                 bound_request = _evidence_json_from_bytes(_bound_bytes(root, {"bindings": bindings}, value["source"]["request_ref"]))
                 if ReviewRequest.from_mapping(bound_request) != request:
                     raise EvidenceAssemblyError("lane_validation", "source_scope_mismatch")
-                if not test_harness:
-                    _validate_production_lane(root, {"input": value, "bindings": bindings, "source_snapshot": snapshot}, receipts)
+                if "recovery_ref" in value["literal"]:
+                    dispatch = _evidence_json_from_bytes(_bound_bytes(root, {"bindings": bindings}, value["literal"]["dispatch_receipt_ref"]))
+                    eligible = _validate_recovered_companion(root, {"input": value, "bindings": bindings}, dispatch, require_source=False)
+                    if not eligible and "historical_source_witness" not in missing:
+                        missing.append("historical_source_witness")
+                if eligible and not test_harness:
+                    _validate_production_lane(root, {"input": value, "bindings": bindings, "source_snapshot": snapshot}, receipts, repository)
                 if not _bound_bytes(root, {"bindings": bindings}, value["literal"]["output_ref"]).strip():
                     eligible = False
             record = {"schema_version": 2, "input": value, "input_digest": _document_digest(value), "request": request.to_dict(), "source_snapshot": {"snapshot_ref": _seal_evidence(root, "source", snapshot)}, "source_content": source_content, "bindings": bindings, "eligible": eligible, "missing": missing, "assembled_at": now}
@@ -2445,6 +2719,7 @@ def assemble_review_evidence(*, run_root, repository_root, request_path, receipt
             _check_evidence_bound(root / "review/evidence")
             _append_receipts_locked(receipt_file, "assemble-review-evidence", [body], run.run_id, now)
             return {"status": body["status"], "record_ref": reference, "reused": False, "missing": missing,
+                    **_fresh_source_confirmation(value, missing),
                     "diagnostics": [] if eligible else (
                         [EvidenceAssemblyError("lane_input", "missing_evidence", ref).detail() for ref in sorted(set(missing) & required)]
                         or [{"stage": "lane_validation", "reason": "incomplete_inspection", "path": "review/evidence.json"}]), "proof_level": "synthetic" if test_harness else value["provenance"]["kind"]}

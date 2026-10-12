@@ -1,6 +1,6 @@
 {
   "name": "workflow-kernel",
-  "version": "0.28.1",
+  "version": "0.29.0",
   "description": "Neutral deterministic run-state, tiered repository verification planning, behavioral contracts, bounded cross-harness observation indexes, replay, recovery, strict resource-registry validation, exact-owned cleanup, contribution receipts, shadow observation, attempt economics, and a small local agent message board for Design Machines workflows.",
   "author": {
     "name": "Design Machines",
@@ -27,6 +27,8 @@
           "inspect workflow-kernel state",
           "diagnose a corrupt run ledger",
           "recover workflow run state",
+          "recover retained review companions",
+          "import deterministic host verification",
           "emit a cross-harness observation index",
           "plan tiered repository verification",
           "clean exact-owned workflow resources",

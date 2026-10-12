@@ -632,6 +632,15 @@ supported launch paths. It does not establish automatic visibility for all runs.
 
 ## Required review evidence producer
 
+Version 0.29.0 adds deterministic host lane imports and
+`recover-review-evidence --run-root <owned-root> --repository-root <checkout>
+--input <closed-envelope>`. It derives companions from authentic retained
+dispatch/output bytes or reconstructs commit trees/diffs as current recovery
+data. Neither grants historical source testimony. Unknown source stays
+incomplete; current source confirmation may explicitly resolve preserved
+historical findings without relabelling old records. Use the
+[host and recovery contract](references/review-evidence-contract.md#host-verification-and-recovery-0290).
+
 Version 0.26.0 adds `assemble-review-evidence --run-root <owned-root>
 --repository-root <checkout> --request <bound-request> --receipts <stream>
 --input <closed-envelope>`. Read `references/review-evidence-contract.md` for exact

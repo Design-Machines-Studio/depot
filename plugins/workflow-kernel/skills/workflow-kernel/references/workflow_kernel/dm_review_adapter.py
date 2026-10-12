@@ -725,11 +725,15 @@ def validate_evidence_input(value: object, request: ReviewRequest) -> dict:
         _evidence_list(value["required_case_refs"], references=True)
         required_text(value["occurred_at"], "occurred at")
         for resolution in value["resolutions"]:
-            if type(resolution) is not dict or set(resolution) != {"source_finding_id", "repair_ref", "verification_record_ref"}:
+            fields = {"source_finding_id", "repair_ref", "verification_record_ref"}
+            if type(resolution) is not dict or set(resolution) not in (fields, fields | {"historical_findings_ref", "historical_decisions_ref"}):
                 raise ValueError("invalid finding resolution")
             required_text(resolution["source_finding_id"], "source finding")
             safe_reference(resolution["repair_ref"])
             safe_reference(resolution["verification_record_ref"])
+            if "historical_findings_ref" in resolution:
+                safe_reference(resolution["historical_findings_ref"])
+                safe_reference(resolution["historical_decisions_ref"])
         return value
     if value["lane"] not in request.required_lanes or type(value["attempt"]) is not int or value["attempt"] < 1:
         raise ValueError("invalid evidence identity")
@@ -746,6 +750,11 @@ def validate_evidence_input(value: object, request: ReviewRequest) -> dict:
     for key, expected in groups.items():
         actual = set(value[key]) if type(value[key]) is dict else set()
         if key == "literal" and actual == {"output_ref", "native_trace_ref", "native_index_ref"}:
+            expected = actual
+        if key == "literal" and actual in (
+            {"output_ref", "host_receipt_ref"},
+            {"output_ref", "dispatch_receipt_ref", "companion_ref", "recovery_ref"},
+        ):
             expected = actual
         if key == "recheck":
             actual -= {"pending_transition_refs"}
