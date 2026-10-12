@@ -85,13 +85,13 @@ class ReviewWorkspaceExceptionTests(unittest.TestCase):
         self.assertFalse(caught.exception.measurement["measurement_complete"])
         for p in directory.iterdir(): p.unlink()
         big = directory / "big"
-        with big.open("wb") as f: f.truncate(134217728)
-        self.assertEqual((1, 134217728), review._check_evidence_bound(directory))
+        with big.open("wb") as f: f.truncate(201326592)
+        self.assertEqual((1, 201326592), review._check_evidence_bound(directory))
         with big.open("ab") as f: f.write(b"x")
         with self.assertRaises(review.EvidenceAssemblyError) as caught:
             review._check_evidence_bound(directory)
         self.assertEqual("assembly_workspace", caught.exception.measurement["category"])
-        self.assertEqual(134217729, caught.exception.measurement["actual_bytes"])
+        self.assertEqual(201326593, caught.exception.measurement["actual_bytes"])
 
     def test_failure_retries_do_not_grow_full_workspace(self):
         run, paths, kwargs = self.setup_case(); directory = run.root / "review/evidence"
@@ -163,10 +163,10 @@ class ReviewWorkspaceExceptionTests(unittest.TestCase):
         with self.assertRaises(review.EvidenceAssemblyError): review.assemble_review_evidence(**kwargs)
 
     def test_final_required_exact_and_one_over_bounded_limits(self):
-        for files, size, valid in ((2048,134217728,True),(2049,1,False),(1,134217729,False)):
+        for files, size, valid in ((2048,201326592,True),(2049,1,False),(1,201326593,False)):
             # Mechanical boundary oracle; integration failure is proved above.
             projection = {"required_review": {"actual_files":files,"actual_bytes":size,
-                           "allowed_files":2048,"allowed_bytes":134217728}}
+                           "allowed_files":2048,"allowed_bytes":201326592}}
             if valid: owned_run._require_retention_projection(projection)
             else:
                 with self.assertRaises(owned_run.BoundedDiagnosticLimitError):

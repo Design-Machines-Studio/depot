@@ -37,13 +37,13 @@ resolve in the retained scope; use `review/<artifact>` or `browser/<artifact>`
 and returned `evidence_path`. Only `status: complete` supports `CLEAN` or source
 worktree removal. The copy contains the request, authoritative coverage,
 selected outputs and literal receipts, synthesis artifacts, report, real
-private router receipts, and required evidence references. Kernel >=0.30.0 bounds validated required evidence to 2,048 files / 128 MiB,
+private router receipts, and required evidence references. Kernel >=0.30.1 bounds validated required evidence to 2,048 files / 192 MiB,
 separately from disposable diagnostics at 416 files / 9 MiB, outside product
 repositories. Kernel derives required membership from validated coverage,
 committed history, indexed receipts and local report links. Unindexed or
 unrelated additions keep the diagnostic allowance.
 
-Assembly has a separate finite workspace ceiling of 4,096 files / 128 MiB.
+Assembly has a separate finite workspace ceiling of 4,096 files / 192 MiB.
 Pre-PR and existing-PR flows use the ordinary assembler; no PR URL or approval
 record is required. Workspace success does not grant final retention or coverage.
 
