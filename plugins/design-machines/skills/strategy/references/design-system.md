@@ -285,7 +285,9 @@ Each DM product has a primary color treatment derived from the shared palette.
 - **Documentation:** `.scheme-light` with purple-800 headings
 - **All color schemes** are defined by Live Wires and consumed by DM sites
 
-### The Local (Matrix network)
+### Retired community palette assignment (DM-019)
+
+This assignment is historical. The former community service is retired from strategy; community lives in Assembly Hall.
 
 - **Hero scheme:** `.scheme-blue` (blue-800 bg) -- communication/infrastructure
 - **Primary accent:** Blue-500 for links and interactive elements
