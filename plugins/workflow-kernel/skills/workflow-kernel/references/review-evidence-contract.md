@@ -1,5 +1,68 @@
 # Source-bound review evidence (>=0.26.0)
 
+## Changed preservation directory (0.30.2)
+
+`owned_directory_changed` means a recorded directory was replaced. A matching
+pathname is not ownership proof. Keep the run, registration history and evidence.
+Do not rewrite device/inode fields, relabel receipts or clean the replacement.
+
+For an active review owner whose registered diagnostic directory is now a
+different **real** directory, extend the existing recovery command with this
+closed envelope in a new run-owned input file:
+
+```json
+{
+  "schema_version": 1,
+  "operation": "preservation-destination",
+  "recovered_at": "2026-10-13T00:00:00Z",
+  "request_ref": "review/terminal-request.json",
+  "original_registration": {
+    "kind": "diagnostic",
+    "relative_path": "gallery-evidence-final",
+    "device": 31,
+    "inode": 20375636
+  }
+}
+```
+
+Copy `original_registration` exactly from that owner's existing metadata; use
+the actual source-bound request and recovery timestamp. Then invoke:
+
+```sh
+"$WORKFLOW_KERNEL" recover-review-evidence \
+  --run-root "$REVIEW_RUN_ROOT" --repository-root "$REVIEW_ROOT" \
+  --input "$REVIEW_RUN_ROOT/review/destination-recovery.json"
+```
+
+The command validates the unchanged run/repository/HEAD binding and uses the
+existing exclusive owner lock to append one fresh `review-preservation`
+registration. All old resource records remain unchanged. It adopts no old or
+replacement directory and copies no unverified evidence. Retries reuse the one
+active destination. Interruption before commit can leave an empty inert allocation;
+retry without deleting originals. Interruption after commit reuses that destination.
+Missing directories, links, escaped paths, terminal owners, mismatched registrations
+and replaced recovery destinations are unsupported and remain rejected.
+
+Retry `project-review-evidence` and strict `preserve-review-evidence` with the
+same explicit final producer inputs. They select the fresh destination, validate
+existing sealed source digests and required coverage independently, and leave
+original bytes intact. Recovery itself reports `coverage_proof: false`.
+Unsealed files with no historical digest remain unverified historical evidence;
+hashing a copy now proves only copy fidelity. Do not substitute a stale report,
+invent source testimony or silently replace producer inputs.
+
+Cleanup checks every still-present registered directory. Changed registrations
+block cleanup, including retained-success cleanup; recovery never grants deletion
+authority over a replacement or its containing root. Keep that root and report the
+blocked cleanup separately from successful preservation. Exact absence of ordinary
+disposable children remains compatible with existing cleanup retries.
+
+Browser runners use `owned-run-browser-output` after registering a stable
+`raw-output` parent. Its returned `path` is an unregistered `playwright` child
+that the runner may recreate. The shared dm-review browser-target contract owns
+the actual harness configuration instructions; a runner never receives a registered
+parent as `outputDir` or a diagnostic/preservation directory.
+
 
 `assemble-review-evidence` constructs required evidence. dm-review owns
 extraction from `reviewer-output-contract.md`, inspection judgments, selection,

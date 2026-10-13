@@ -25,6 +25,18 @@ class CorruptOwnedRunMetadataError(ValueError):
     """Owner metadata bytes failed parsing or schema validation."""
 
 
+class ChangedOwnedDirectoryError(ValueError):
+    """A recorded path no longer names the directory the owner created."""
+
+    exit_code = 3
+
+    def to_dict(self):
+        return {"error": {"code": "owned_directory_changed",
+            "message": "A registered directory changed identity; its replacement is not owned.",
+            "details": {"reason": "registered_directory_changed", "next_action":
+                "Keep original records and evidence. Use recover-review-evidence with operation preservation-destination for an active review owner, then retry projection and preservation. Cleanup remains blocked for replaced directories."}}}
+
+
 _METADATA = ".depot-owned-run.json"
 _LOCK = ".depot-owned-run.lock"
 _CLEANUP = "CLEANUP.txt"
@@ -33,7 +45,7 @@ _IDENTIFIER = re.compile(r"[a-z0-9][a-z0-9._-]{0,127}")
 _RELATIVE_SEGMENT = re.compile(r"[A-Za-z0-9_][A-Za-z0-9._-]{0,127}")
 _KINDS = frozenset({
     "temporary-directory", "temporary-repository", "cache", "raw-output",
-    "diagnostic",
+    "diagnostic", "review-preservation",
 })
 _OUTCOMES = frozenset({
     "succeeded", "failed", "blocked", "cancelled", "interrupted",
@@ -185,6 +197,11 @@ def _validate_metadata_schema(value, root: Path) -> None:
         if relative in seen:
             raise ValueError("duplicate owned run resource")
         seen.add(relative)
+    destinations = [r for r in value["resources"] if r["kind"] == "review-preservation"]
+    if len(destinations) > 1 or any(
+        len(_safe_relative(r["relative_path"]).parts) != 1 for r in destinations
+    ):
+        raise ValueError("invalid review preservation destination")
 
 
 def _remove_entry(path: Path) -> None:
@@ -377,42 +394,46 @@ class ExactOwnedRun:
             handle.release()
 
     def create_path(self, kind: str, relative_path: str) -> Path:
-        if kind not in _KINDS:
+        with self._lock():
+            return self._create_path_locked(kind, relative_path)
+
+    def _create_path_locked(self, kind: str, relative_path: str) -> Path:
+        if kind not in _KINDS or kind == "review-preservation":
             raise ValueError("invalid owned path kind")
         relative = _safe_relative(relative_path)
-        with self._lock():
-            metadata = _load_metadata(self.root)
-            if kind == "diagnostic" and (
-                len(relative.parts) != 1
-                or any(item["kind"] == "diagnostic" for item in metadata["resources"])
-            ):
-                raise ValueError("owned run permits one top-level diagnostic path")
-            path = self.root / relative
-            parent = path.parent
-            if parent != self.root:
-                parent_value = parent.resolve(strict=True)
-                if not parent_value.is_relative_to(self.root) or parent.is_symlink():
-                    raise ValueError("owned path escapes run root")
-            if os.path.lexists(path):
-                raise FileExistsError(str(path))
-            path.mkdir(mode=0o700)
-            value = os.lstat(path)
-            resource = {
-                "kind": kind, "relative_path": str(relative),
-                "device": value.st_dev, "inode": value.st_ino,
-            }
-            metadata["resources"].append(resource)
-            try:
-                _atomic_metadata(self.root, metadata)
-            except Exception:
-                _remove_entry(path)
-                raise
-            self._metadata = metadata
-            return path
+        metadata = _load_metadata(self.root)
+        if kind == "diagnostic" and (
+            len(relative.parts) != 1
+            or any(item["kind"] == "diagnostic" for item in metadata["resources"])
+        ):
+            raise ValueError("owned run permits one top-level diagnostic path")
+        path = self.root / relative
+        parent = path.parent
+        if parent != self.root:
+            parent_value = parent.resolve(strict=True)
+            if not parent_value.is_relative_to(self.root) or parent.is_symlink():
+                raise ValueError("owned path escapes run root")
+        if os.path.lexists(path):
+            raise FileExistsError(str(path))
+        path.mkdir(mode=0o700)
+        value = os.lstat(path)
+        resource = {
+            "kind": kind, "relative_path": str(relative),
+            "device": value.st_dev, "inode": value.st_ino,
+        }
+        metadata["resources"].append(resource)
+        try:
+            _atomic_metadata(self.root, metadata)
+        except Exception:
+            _remove_entry(path)
+            raise
+        self._metadata = metadata
+        return path
+
 
     def record_path(self, kind: str, relative_path: str) -> Path:
         """Record an already-created child inside this invocation's fresh root."""
-        if kind not in _KINDS:
+        if kind not in _KINDS or kind == "review-preservation":
             raise ValueError("invalid owned path kind")
         relative = _safe_relative(relative_path)
         with self._lock():
@@ -438,6 +459,80 @@ class ExactOwnedRun:
             _atomic_metadata(self.root, metadata)
             self._metadata = metadata
             return path
+
+    def registered_directory(self, resource) -> Path:
+        """Check every component before using a registration as authority."""
+        path = self.root
+        for segment in _safe_relative(resource["relative_path"]).parts:
+            path = path / segment
+            _identity(path)  # lstat: intermediate links never grant containment.
+        if _identity(path) != (resource["device"], resource["inode"]):
+            raise ChangedOwnedDirectoryError()
+        return path
+
+    def preservation_resource(self):
+        return next((r for r in self._metadata["resources"] if r["kind"] == "review-preservation"),
+                    next((r for r in self._metadata["resources"] if r["kind"] == "diagnostic"), None))
+
+    def recover_preservation_destination(self, original):
+        """Append fresh ownership; never adopt or rebind the replaced directory."""
+        with self._lock(create=False):
+            self._metadata = _load_metadata(self.root)
+            if self.workflow not in {"pipeline", "pipeline-run", "dm-review", "dm-review-loop"} or os.path.lexists(self.root / _CLEANUP):
+                raise ValueError("recovery requires an active review owner")
+            diagnostic = next((r for r in self._metadata["resources"] if r["kind"] == "diagnostic"), None)
+            if diagnostic != original:
+                raise ValueError("recovery registration does not match")
+            try:
+                self.registered_directory(diagnostic)
+            except ChangedOwnedDirectoryError:
+                pass
+            else:
+                raise ValueError("recovery requires a changed diagnostic directory")
+            existing = self.preservation_resource()
+            if existing["kind"] == "review-preservation":
+                return self.registered_directory(existing)
+            # An interrupted pre-commit allocation is an inert empty directory,
+            # never an active destination. Retrying can safely allocate afresh.
+            with PinnedDirectory.open(self.root, tuple(self._metadata["root_identity"])) as directory:
+                path = Path(tempfile.mkdtemp(prefix="review-preservation-", dir=self.root))
+                device, inode = _identity(path)
+                directory.revalidate()
+                metadata = dict(self._metadata, resources=self._metadata["resources"] + [{
+                    "kind": "review-preservation", "relative_path": path.name,
+                    "device": device, "inode": inode,
+                }])
+                _atomic_metadata(self.root, metadata)
+                self._metadata = metadata
+                return path
+
+    def browser_output(self, relative_path):
+        """Return a runner-owned child of a stable recorded raw-output parent."""
+        relative = _safe_relative(relative_path)
+        with self._lock(create=False):
+            metadata = _load_metadata(self.root)
+            self._metadata = metadata
+            parent = next((r for r in metadata["resources"] if r["relative_path"] == str(relative)), None)
+            if parent is None or parent["kind"] != "raw-output":
+                raise ValueError("browser output requires a registered raw-output parent")
+            path = self.registered_directory(parent) / "playwright"
+            if any((self.root / r["relative_path"]).is_relative_to(path) for r in metadata["resources"]):
+                raise ValueError("browser output would replace a registered directory")
+            if os.path.lexists(path):
+                _identity(path)
+            else:
+                path.mkdir(mode=0o700)
+            self.registered_directory(parent)
+            return path
+
+    def _require_cleanup_identities(self):
+        for resource in self._metadata["resources"]:
+            try:
+                self.registered_directory(resource)
+            except FileNotFoundError:
+                # A removed disposable child grants no authority over a
+                # replacement. Existing retry cleanup tolerates exact absence.
+                continue
 
     def _remove_root(self) -> FinishReport:
         metadata = _load_metadata(self.root)
@@ -572,6 +667,7 @@ class ExactOwnedRun:
         )
         with self._lock(create=not preserved, review_closeout=review):
             self._metadata = _load_metadata(self.root)
+            self._require_cleanup_identities()
             retained = os.path.lexists(self.root / _CLEANUP)
             from .review_closeout import (
                 validate_preserved_review_evidence, RetainedReviewValidationError,

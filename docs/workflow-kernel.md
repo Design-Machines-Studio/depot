@@ -1,5 +1,10 @@
 # Workflow Kernel
 
+Kernel 0.30.2 preserves registered directory history during review destination
+recovery and rejects cleanup of replaced directories. It prepares browser output
+in a runner-owned child. See the
+[supported recovery procedure](../plugins/workflow-kernel/skills/workflow-kernel/references/review-evidence-contract.md#changed-preservation-directory-0302).
+
 Workflow Kernel is Depot's neutral, dependency-free mechanics plugin for
 durable workflow state, replay, shadow comparison, verification evidence,
 bounded cross-harness observation indexes, and owned-resource cleanup. Pipeline and dm-review depend on it, while the kernel

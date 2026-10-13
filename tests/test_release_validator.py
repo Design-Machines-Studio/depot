@@ -134,7 +134,7 @@ class ReleaseValidatorTests(unittest.TestCase):
             "plan-reconcile",
             "plan-verification", "run-verification",
             "owned-run-start", "owned-run-create", "owned-run-finish",
-            "owned-run-exec",
+            "owned-run-exec", "owned-run-browser-output",
         }
         self.assertEqual(set(VALIDATOR.BEHAVIORAL_CLI_CASES), expected)
         self.assertEqual(set(VALIDATOR.SUCCESSFUL_CLI_COMMANDS), expected)

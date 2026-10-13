@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, strict existing Docker resource-registry validation, bounded cross-harness observation indexes, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.30.1
+version: 0.30.2
 ---
 
 # Workflow Kernel
@@ -570,6 +570,13 @@ repository before integrating an orchestrator.
 
 
 ## Review evidence closeout
+
+Version 0.30.2 adds a safe `owned_directory_changed` diagnostic and the existing
+recovery command's `preservation-destination` operation. It appends fresh
+destination ownership without changing old registrations or trusting replacement
+contents. Cleanup stays blocked for changed directories. Browser output uses the
+`owned-run-browser-output` child helper. Read the
+[directory recovery contract](references/review-evidence-contract.md#changed-preservation-directory-0302).
 
 dm-review, dm-review-loop, Pipeline, and pipeline-run use one owner for the
 final review closeout. Before reviewer dispatch, the owner calls

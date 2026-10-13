@@ -91,7 +91,7 @@ review_owner_validate() {
     .root_identity==$rootid and .base_identity==$baseid and
     (.resources|type=="array" and all(.[];
       (keys|sort)==(["kind","relative_path","device","inode"]|sort) and
-      (.kind|IN("temporary-directory","temporary-repository","cache","raw-output","diagnostic")) and
+      (.kind|IN("temporary-directory","temporary-repository","cache","raw-output","diagnostic","review-preservation")) and
       (.relative_path|type=="string" and test("^[A-Za-z0-9_][A-Za-z0-9_./-]*$") and (split("/")|all(.[];. != ".." and . != "." and . != ""))) and
       (.device|type=="number") and (.inode|type=="number")))
   ' "$metadata" >/dev/null || review_refuse 'exact-owned metadata mismatch'
