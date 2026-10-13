@@ -87,6 +87,7 @@ BEHAVIORAL_CLI_CASES = {
     "bind-prediction": ("--type", "pipeline", "--manifest", "<missing>", "--prediction-receipts", "<missing>", "--state-dir", "<state>"),
     "bind-verification-contract": ("--state-dir", "<state>", "--contract", "<missing>"),
     "generate-verification-profile": ("--project-root", "<missing>", "--output", "<output>"),
+    "owned-run-browser-output": ("--run-root", "<missing>", "--relative-path", "browser"),
     "observe-pipeline": ("--manifest", "<missing>", "--receipts", "<missing>", "--state-dir", "<state>"),
     "reconcile-legacy-browser": (
         "--events", "<missing>", "--target-sequence", "1",
@@ -553,6 +554,7 @@ def check_cli(context):
         "decide-validation-retry", "bind-prediction",
         "bind-verification-contract",
         "generate-verification-profile",
+        "owned-run-browser-output",
         "observe-pipeline", "reconcile-legacy-browser", "observe-review",
         "export-review-contributions", "bind-review-source",
         "preserve-review-evidence", "project-review-evidence", "assemble-review-evidence",
