@@ -394,38 +394,42 @@ class ExactOwnedRun:
             handle.release()
 
     def create_path(self, kind: str, relative_path: str) -> Path:
+        with self._lock():
+            return self._create_path_locked(kind, relative_path)
+
+    def _create_path_locked(self, kind: str, relative_path: str) -> Path:
         if kind not in _KINDS or kind == "review-preservation":
             raise ValueError("invalid owned path kind")
         relative = _safe_relative(relative_path)
-        with self._lock():
-            metadata = _load_metadata(self.root)
-            if kind == "diagnostic" and (
-                len(relative.parts) != 1
-                or any(item["kind"] == "diagnostic" for item in metadata["resources"])
-            ):
-                raise ValueError("owned run permits one top-level diagnostic path")
-            path = self.root / relative
-            parent = path.parent
-            if parent != self.root:
-                parent_value = parent.resolve(strict=True)
-                if not parent_value.is_relative_to(self.root) or parent.is_symlink():
-                    raise ValueError("owned path escapes run root")
-            if os.path.lexists(path):
-                raise FileExistsError(str(path))
-            path.mkdir(mode=0o700)
-            value = os.lstat(path)
-            resource = {
-                "kind": kind, "relative_path": str(relative),
-                "device": value.st_dev, "inode": value.st_ino,
-            }
-            metadata["resources"].append(resource)
-            try:
-                _atomic_metadata(self.root, metadata)
-            except Exception:
-                _remove_entry(path)
-                raise
-            self._metadata = metadata
-            return path
+        metadata = _load_metadata(self.root)
+        if kind == "diagnostic" and (
+            len(relative.parts) != 1
+            or any(item["kind"] == "diagnostic" for item in metadata["resources"])
+        ):
+            raise ValueError("owned run permits one top-level diagnostic path")
+        path = self.root / relative
+        parent = path.parent
+        if parent != self.root:
+            parent_value = parent.resolve(strict=True)
+            if not parent_value.is_relative_to(self.root) or parent.is_symlink():
+                raise ValueError("owned path escapes run root")
+        if os.path.lexists(path):
+            raise FileExistsError(str(path))
+        path.mkdir(mode=0o700)
+        value = os.lstat(path)
+        resource = {
+            "kind": kind, "relative_path": str(relative),
+            "device": value.st_dev, "inode": value.st_ino,
+        }
+        metadata["resources"].append(resource)
+        try:
+            _atomic_metadata(self.root, metadata)
+        except Exception:
+            _remove_entry(path)
+            raise
+        self._metadata = metadata
+        return path
+
 
     def record_path(self, kind: str, relative_path: str) -> Path:
         """Record an already-created child inside this invocation's fresh root."""

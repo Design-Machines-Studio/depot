@@ -1011,9 +1011,11 @@ def _validate_router_receipts(directory: Path) -> None:
             raise ValueError("private router receipt is invalid")
 
 
-def _diagnostic(run: ExactOwnedRun) -> Path:
+def _diagnostic(run: ExactOwnedRun, *, owner_locked=False) -> Path:
     registered = run.preservation_resource()
     if registered is None:
+        if owner_locked:
+            return run._create_path_locked("diagnostic", "diagnostic")
         return run.create_path("diagnostic", "diagnostic")
     return run.registered_directory(registered)
 
@@ -1241,7 +1243,7 @@ def _preserve_review_evidence_locked(
                 "missing": missing + ([getattr(report_error, "reason_code", "invalid_evidence")] if report_error else []), "within_limits": all(row["actual_files"] <= row["allowed_files"] and
                     row["actual_bytes"] <= row["allowed_bytes"] for row in projected.values())}
     _require_retention_projection(projected)
-    recovery = _diagnostic(run)
+    recovery = _diagnostic(run, owner_locked=True)
     parent = destination.parent
     parent.mkdir(mode=0o700, parents=True, exist_ok=True)
     staging = Path(tempfile.mkdtemp(prefix="review-stage-", dir=parent))
@@ -1637,7 +1639,6 @@ def preserve_review_evidence(**arguments):
     run = ExactOwnedRun.open(Path(arguments["run_root"]))
     if arguments.get("projection_only"):
         return _preserve_review_evidence_receipt_locked(**arguments)
-    _diagnostic(run)
     with run._lock(create=False):
         return _preserve_review_evidence_receipt_locked(**arguments)
 
