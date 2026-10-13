@@ -72,6 +72,14 @@ Allowed kinds are `temporary-directory`, `temporary-repository`, `cache`,
 register or overwrite a pre-existing path. All are nested beneath the one
 fresh run root. Use the returned exact path rather than reconstructing it.
 
+Browser runners prepare their recreatable output with `owned-run-browser-output`
+under a recorded raw-output parent. Read the
+[review recovery contract](review-evidence-contract.md#changed-preservation-directory-0302)
+for directory identity failures. The recovery-only `review-preservation` kind
+appends a fresh destination while retaining the original records. It is not
+available through `owned-run-create` or `record_path` and never authorizes
+cleanup of replacements. Cleanup validates all still-present registrations.
+
 Executable adapters that run one bounded argv command use `owned-run-exec`.
 It places the exact root in `DEPOT_EXACT_RUN_ROOT`, forwards `SIGINT`/`SIGTERM`
 to the child's process group, reconciles the root, prints the terminal JSON,

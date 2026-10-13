@@ -1012,16 +1012,10 @@ def _validate_router_receipts(directory: Path) -> None:
 
 
 def _diagnostic(run: ExactOwnedRun) -> Path:
-    registered = next((
-        item for item in run._metadata["resources"] if item["kind"] == "diagnostic"
-    ), None)
+    registered = run.preservation_resource()
     if registered is None:
         return run.create_path("diagnostic", "diagnostic")
-    path = run.root / registered["relative_path"]
-    value = os.lstat(path)
-    if (value.st_dev, value.st_ino) != (registered["device"], registered["inode"]):
-        raise ValueError("review recovery directory identity changed")
-    return path
+    return run.registered_directory(registered)
 
 
 def _preserve_review_evidence_locked(
@@ -1124,7 +1118,7 @@ def _preserve_review_evidence_locked(
     else:
         missing.append("private model-router receipts")
 
-    registered = next((item for item in run._metadata["resources"] if item["kind"] == "diagnostic"), None)
+    registered = run.preservation_resource()
     recovery = run.root / (registered["relative_path"] if registered else "diagnostic")
     if registered is not None:
         _diagnostic(run)  # Verify existing ownership; do not create for projection.
@@ -1492,7 +1486,7 @@ def _validate_preserved_review_evidence(diagnostic: Path, *, run=None, historica
         if not diagnostic.is_dir():
             raise RetainedReviewValidationError("missing_evidence", role)
         if run is not None:
-            resource = next((item for item in run._metadata["resources"] if item["kind"] == "diagnostic"), None)
+            resource = run.preservation_resource()
             info = diagnostic.stat()
             if resource is None or diagnostic != run.root / resource["relative_path"] or (info.st_dev, info.st_ino) != (resource["device"], resource["inode"]):
                 raise RetainedReviewValidationError("source_scope_mismatch", "owner-metadata")
@@ -1640,6 +1634,15 @@ class EvidenceAssemblyError(ValueError):
 
 
 def preserve_review_evidence(**arguments):
+    run = ExactOwnedRun.open(Path(arguments["run_root"]))
+    if arguments.get("projection_only"):
+        return _preserve_review_evidence_receipt_locked(**arguments)
+    _diagnostic(run)
+    with run._lock(create=False):
+        return _preserve_review_evidence_receipt_locked(**arguments)
+
+
+def _preserve_review_evidence_receipt_locked(**arguments):
     from .cli import _open_receipt_stream_lock
     import fcntl
     run = ExactOwnedRun.open(Path(arguments["run_root"]))
@@ -2164,6 +2167,7 @@ def recover_review_evidence(*, run_root, repository_root, input_path):
     """Seal derived companions or current commit reconstructions; grant no coverage."""
     from datetime import datetime, timezone
     from .review_recovery import public_completion
+    from ._files import LockContentionError
     from .dm_review_adapter import require_secret_safe_contribution_inputs
     run = ExactOwnedRun.open(Path(run_root))
     root, repository = run.root, Path(repository_root).resolve(strict=True)
@@ -2181,9 +2185,22 @@ def recover_review_evidence(*, run_root, repository_root, input_path):
         operation = value["operation"]
         fields = {"schema_version", "operation", "recovered_at"}
         fields |= ({"lane", "dispatch_receipt_ref", "output_ref", "findings", "source_witness_ref"}
-                   if operation == "companions" else {"base", "heads"} if operation == "source" else set())
+                   if operation == "companions" else {"base", "heads"} if operation == "source" else
+                   {"request_ref", "original_registration"} if operation == "preservation-destination" else set())
         if set(value) != fields:
             raise ValueError("invalid recovery")
+        if operation == "preservation-destination":
+            # Source and exact owner remain unchanged. This operation grants
+            # neither review coverage nor authority over replacement contents.
+            request_ref = value["request_ref"]
+            request = ReviewRequest.from_mapping(_evidence_json(root, request_ref, "lane_input"))
+            identity, head = source_identity(repository)
+            if request.run_id != run.run_id or (request.source_repository, request.source_head) != (identity, head):
+                raise EvidenceAssemblyError("lane_input", "source_scope_mismatch")
+            destination = run.recover_preservation_destination(value["original_registration"])
+            return {"status": "destination_ready", "coverage_proof": False,
+                    "path": str(destination), "run_id": run.run_id, "workflow": run.workflow,
+                    "cleanup_authority": "original_registrations_only"}
         _seal_evidence(root, "recovery-input", value)
         if operation == "source":
             if type(value["heads"]) is not list or not value["heads"] or len(value["heads"]) > 64 or len(set(value["heads"])) != len(value["heads"]):
@@ -2240,6 +2257,8 @@ def recover_review_evidence(*, run_root, repository_root, input_path):
         _check_evidence_bound(root / "review/evidence")
         return {"status": "derived", "coverage_proof": False, "source_witness": "unknown" if witness_ref is None else "supplied",
                 "record_ref": ref, "companion_ref": companion_ref, "raw_output_ref": raw_ref, "participant_id": companion["participantId"]}
+    except LockContentionError:
+        raise EvidenceAssemblyError("lane_input", "append_conflict") from None
     except (KeyError, TypeError, ValueError, OSError, UnicodeError) as exc:
         if isinstance(exc, EvidenceAssemblyError):
             raise
@@ -2612,9 +2631,10 @@ def _assemble_review_evidence(*, run_root, repository_root, request_path, receip
     if receipt_file.parent.name == "review" and request_file.parent == receipt_file.parent:
         root = receipt_file.parent.parent
         if root != run.root:
-            registered = next((item for item in run._metadata["resources"] if item["kind"] == "diagnostic"), None)
+            registered = run.preservation_resource()
             if registered is None or root.parent != run.root / registered["relative_path"] / "review" or _REVIEW_SCOPE_RE.fullmatch(root.name) is None:
                 raise EvidenceAssemblyError("retained_validation", "unsafe_path")
+            run.registered_directory(registered)
     descriptor = _open_receipt_stream_lock(receipt_file)
     try:
         fcntl.flock(descriptor, fcntl.LOCK_EX)

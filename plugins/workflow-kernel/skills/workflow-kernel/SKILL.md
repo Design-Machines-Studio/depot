@@ -571,6 +571,13 @@ repository before integrating an orchestrator.
 
 ## Review evidence closeout
 
+Version 0.30.2 adds a safe `owned_directory_changed` diagnostic and the existing
+recovery command's `preservation-destination` operation. It appends fresh
+destination ownership without changing old registrations or trusting replacement
+contents. Cleanup stays blocked for changed directories. Browser output uses the
+`owned-run-browser-output` child helper. Read the
+[directory recovery contract](references/review-evidence-contract.md#changed-preservation-directory-0302).
+
 dm-review, dm-review-loop, Pipeline, and pipeline-run use one owner for the
 final review closeout. Before reviewer dispatch, the owner calls
 `bind-review-source` on the already materialized request. It writes

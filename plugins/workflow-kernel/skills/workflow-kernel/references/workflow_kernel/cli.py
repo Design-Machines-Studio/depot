@@ -1476,10 +1476,11 @@ def command_observe_review(args):
 
 
 def command_recover_review_evidence(args):
+    from .owned_run import ChangedOwnedDirectoryError
     from .review_closeout import EvidenceAssemblyError, recover_review_evidence
     try:
         result = recover_review_evidence(run_root=args.run_root, repository_root=args.repository_root, input_path=args.input)
-    except EvidenceAssemblyError as exc:
+    except (EvidenceAssemblyError, ChangedOwnedDirectoryError) as exc:
         _emit(exc.to_dict(), sys.stderr)
         return exc.exit_code
     _emit(result)
@@ -1502,6 +1503,7 @@ def command_assemble_review_evidence(args):
 
 
 def command_preserve_review_evidence(args):
+    from .owned_run import ChangedOwnedDirectoryError
     from .review_closeout import (
         ReviewCloseoutValidationError, EvidenceAssemblyError, preserve_review_evidence,
     )
@@ -1524,6 +1526,9 @@ def command_preserve_review_evidence(args):
         _emit(exc.to_dict(), sys.stderr)
         return EXIT_INVALID
     except EvidenceAssemblyError as exc:
+        _emit(exc.to_dict(), sys.stderr)
+        return exc.exit_code
+    except ChangedOwnedDirectoryError as exc:
         _emit(exc.to_dict(), sys.stderr)
         return exc.exit_code
     _emit(result)
@@ -4022,8 +4027,21 @@ def command_owned_run_create(args):
     return 0
 
 
+def command_owned_run_browser_output(args):
+    from .owned_run import ExactOwnedRun, ChangedOwnedDirectoryError
+    try:
+        run = ExactOwnedRun.open(Path(args.run_root))
+        path = run.browser_output(args.relative_path)
+    except ChangedOwnedDirectoryError as exc:
+        _emit(exc.to_dict(), sys.stderr)
+        return exc.exit_code
+    _emit({"schema_version": 1, "path": str(path), "run_root": str(run.root),
+           "registered_parent": str(path.parent)})
+    return 0
+
+
 def command_owned_run_finish(args):
-    from .owned_run import CorruptOwnedRunMetadataError, ExactOwnedRun
+    from .owned_run import CorruptOwnedRunMetadataError, ExactOwnedRun, ChangedOwnedDirectoryError
     from .review_closeout import RetainedReviewValidationError
 
     root = Path(os.path.abspath(args.run_root))
@@ -4046,7 +4064,7 @@ def command_owned_run_finish(args):
             reason=args.reason, contains=args.contains,
             historical_review_digests=args.historical_review_digests,
         )
-    except RetainedReviewValidationError as exc:
+    except (RetainedReviewValidationError, ChangedOwnedDirectoryError) as exc:
         _emit(exc.to_dict(), sys.stderr)
         return exc.exit_code
     _emit({"schema_version": 1, **report.to_dict()})
@@ -4510,6 +4528,11 @@ def parser():
     )
     owned_create.add_argument("--relative-path", required=True)
     owned_create.set_defaults(handler=command_owned_run_create)
+
+    browser_output = commands.add_parser("owned-run-browser-output", help="prepare an unregistered Playwright child beneath a stable raw-output parent")
+    browser_output.add_argument("--run-root", required=True)
+    browser_output.add_argument("--relative-path", required=True)
+    browser_output.set_defaults(handler=command_owned_run_browser_output)
 
     owned_finish = commands.add_parser(
         "owned-run-finish",

@@ -254,6 +254,27 @@ attempt into `dev_server_unavailable`.
 
 ## Ownership and cleanup
 
+### Playwright output directories
+
+Use Workflow Kernel >=0.30.2 to prepare the runner output. Create a registered
+`raw-output` parent once with `owned-run-create`, then call the retry-safe helper:
+
+```sh
+"$WORKFLOW_KERNEL" owned-run-browser-output \
+  --run-root "$REVIEW_RUN_ROOT" --relative-path browser-evidence
+```
+
+Pass its returned `path` to the actual harness's `outputDir` setting and JSON
+reporter destination. For a harness using `GALLERY_EVIDENCE`, set that variable
+to this child path. The helper returns `<registered-parent>/playwright`; only
+the parent is registered. Playwright removes and recreates `outputDir` on each
+run, so giving it a registered parent destroys the owner's directory identity.
+Keep separate attempt parents when previous output is still required evidence.
+The helper refuses changed parents, links, and children containing registrations.
+Do not register its runner child or use it as the review preservation destination.
+Retained results can establish the effective output configuration; a missing
+shell wrapper remains unknown and is never reconstructed as historical proof.
+
 Inventory before creation. A suitable target that was already running is
 `pre-existing`: do not register or clean it. Rebuild/restart only through the
 established-checkout procedure when required to serve the reviewed source. This
