@@ -1,7 +1,7 @@
 ---
 name: workflow-kernel
 description: Use for workflow-state validation and replay, strict existing Docker resource-registry validation, bounded cross-harness observation indexes, or when asked to batch repository tests, select and execute focused/full verification lanes, or use Workflow Kernel pipeline/review mechanics.
-version: 0.30.2
+version: 0.30.3
 ---
 
 # Workflow Kernel
@@ -608,8 +608,8 @@ result still preserves available source files for recovery. A copy or
 verification error leaves every source file intact, and callers must not
 finish or remove the containing worktree.
 
-Validated required review evidence has a separate 192 MiB/2,048-file allowance
-since 0.30.1 (the 0.28.1 allowance was 1,024 files). Disposable diagnostics keep the existing 9 MiB/416-file allowance.
+Validated required review evidence has a separate 1 GiB/2,048-file allowance
+since 0.30.3 (the 0.28.1 allowance was 1,024 files). Disposable diagnostics keep the existing 9 MiB/416-file allowance.
 The larger allowance requires validated source-bound coverage and exact required
 reference closure, including history, receipts and all local report links.
 Use `project-review-evidence` with the same arguments as preservation during
@@ -639,8 +639,8 @@ supported launch paths. It does not establish automatic visibility for all runs.
 
 ## Required review evidence producer
 
-Version 0.30.1 allows a finite assembly workspace (4,096 files / 192 MiB)
-and final required retention (2,048 files / 192 MiB). Pre-PR and existing-PR
+Version 0.30.3 allows a finite assembly workspace (4,096 files / 1 GiB)
+and final required retention (2,048 files / 1 GiB). Pre-PR and existing-PR
 assembly use the same ordinary command; no PR URL or approval file is required.
 Prospective checks and atomic seals preserve authentic files across failed retries.
 See the [workspace contract](references/review-evidence-contract.md#assembly-workspace-0300).

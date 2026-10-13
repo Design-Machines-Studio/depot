@@ -9,8 +9,8 @@ from workflow_kernel import owned_run, review_closeout as review
 
 
 MIB = 1024 * 1024
-SUPPORTED = 129 * MIB
-BOUND = 192 * MIB
+SUPPORTED = 257 * MIB
+BOUND = 1024 * MIB
 
 
 class ReviewEvidenceSizeTests(unittest.TestCase):
@@ -30,7 +30,7 @@ class ReviewEvidenceSizeTests(unittest.TestCase):
             return hashlib.file_digest(stream, "sha256").hexdigest()
 
     def test_supported_package_assembles_copies_preserves_and_finishes(self):
-        run, paths = self.make_run(run_id="supported-129-mib")
+        run, paths = self.make_run(run_id="supported-257-mib")
         # A report-linked fixture artifact is required by the existing closure
         # contract. It is neither a fabricated live lane nor a count override.
         ref = "review/evidence/large-proof.bin"
@@ -46,7 +46,7 @@ class ReviewEvidenceSizeTests(unittest.TestCase):
             request_path=paths["request"], receipts_path=paths["receipts"],
             input_path=paths["coverage_input"])
         self.assertEqual("complete", assembled["status"])
-        self.assertGreater(review._check_evidence_bound(proof.parent)[1], 128 * MIB)
+        self.assertGreater(review._check_evidence_bound(proof.parent)[1], 192 * MIB)
         self.assertEqual(SUPPORTED, len(review._regular_file(proof)))
         result = self.preserve(run, paths)
         self.assertEqual("complete", result["status"], result)
@@ -56,7 +56,7 @@ class ReviewEvidenceSizeTests(unittest.TestCase):
         retained = review.validate_preserved_review_evidence(
             run.root / "diagnostic", run=owned_run.ExactOwnedRun.open(run.root))
         row = retained["retention"]["required_review"]
-        self.assertGreater(row["actual_bytes"], 128 * MIB)
+        self.assertGreater(row["actual_bytes"], 192 * MIB)
         self.assertLess(row["actual_bytes"], BOUND)
         self.assertEqual(BOUND, row["allowed_bytes"])
         self.assertEqual(2048, row["allowed_files"])
@@ -106,19 +106,19 @@ class ReviewEvidenceSizeTests(unittest.TestCase):
         self.assertEqual(before, self.digest(proof))
 
     def test_intermediate_router_copy_accepts_supported_bytes(self):
-        run, paths = self.make_run(run_id="router-129-mib")
+        run, paths = self.make_run(run_id="router-257-mib")
         # JSON whitespace makes a valid inert diagnostic file for the helper;
         # required/diagnostic membership is checked separately by retention.
         large = paths["router"] / "large.json"
         with large.open("wb") as stream:
             stream.write(b"{}"); block = b" " * MIB
-            for _ in range(129):
+            for _ in range(257):
                 stream.write(block)
         before = self.digest(large)
         target = self.root / "router-copy"
         files, size = review._copy_router_tree(paths["router"], target)
         self.assertEqual(3, files)
-        self.assertGreater(size, 128 * MIB)
+        self.assertGreater(size, 192 * MIB)
         self.assertLess(size, BOUND)
         self.assertEqual(before, self.digest(target / large.name))
         # Unindexed bytes still cannot borrow required membership.

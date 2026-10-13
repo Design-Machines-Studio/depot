@@ -379,7 +379,7 @@ historical #1118 exception remains unchanged and does not apply to other runs.
 
 ## Bounded retention (>=0.28.0)
 
-Since 0.30.1, required review evidence is bounded to **192 MiB (201,326,592 bytes) / 2,048
+Since 0.30.3, required review evidence is bounded to **1 GiB (1,073,741,824 bytes) / 2,048
 files**. Version 0.28.1 allowed 128 MiB with 1,024 files. Disposable diagnostics retain **9 MiB (9,437,184 bytes) / 416 files**.
 These are separate aggregate allowances, not per-file permissions. Both count
 regular-file bytes without compression. The existing exact-owned diagnostic
@@ -402,7 +402,7 @@ The 128 MiB ceiling provides about three times that observed workspace size
 for remaining lanes, source continuity and final report links. It remains a
 finite per-run storage limit, not a promise that every future package will fit.
 That 0.28.1 byte repair kept diagnostic and file-count limits unchanged. Original sealed bytes are
-never rewritten or dropped to fit. Current byte-limit recovery requires 0.30.1;
+never rewritten or dropped to fit. Current byte-limit recovery requires 0.30.3;
 a larger allowance never grants missing review coverage or clears other gates.
 
 `project-review-evidence` accepts exactly the preservation arguments. Call it
@@ -564,7 +564,7 @@ never live inspection evidence.
 ## Assembly workspace (>=0.30.0)
 
 The ordinary assembly and recovery commands allow 4,096 workspace files and
-192 MiB since 0.30.1 (128 MiB in 0.30.0). This counts all seals, uncommitted partial files and shared source
+1 GiB since 0.30.3 (192 MiB in 0.30.1; 128 MiB in 0.30.0). This counts all seals, uncommitted partial files and shared source
 inventories. The previously observed consumer workspaces exceeded 1,024 files
 while remaining below the byte limit. The finite count ceiling leaves room for
 literal inputs, linked rechecks and final aggregate assembly; it is never a
@@ -585,7 +585,7 @@ remains untouched. Workspace errors report `workspace_limit` and category
 
 Projection, preservation and terminal cleanup still validate the actual
 required closure and partition. Their allowances are 2,048 required files /
-192 MiB and 416 diagnostic files / 9 MiB. Passing workspace assembly alone
+1 GiB and 416 diagnostic files / 9 MiB. Passing workspace assembly alone
 never proves final preservation or installed-consumer readiness. Required
 history, private receipts and local report links stay in the final closure;
 never prune or relabel evidence to fit.
@@ -610,3 +610,12 @@ the same required byte constant and finite combined package allowance.
 All ownership, safe-path, digest, immutable-history and coverage checks remain
 required. Candidate size handling does not establish complete coverage or
 installed consumer readiness; release and normal installation are still needed.
+
+Version 0.30.3 uses a practical 1 GiB ceiling for both assembly and required
+retention. The #1190 continuation grew beyond 192 MiB to at least 204,796,090
+bytes in 1,111 files before final evidence was complete. Repeated small cap
+increases blocked ordinary rechecks. This ceiling gives room for continuation
+history without changing file counts, diagnostics, membership or validation.
+It is a per-run storage guard, not a target, a model context limit or permission
+to gather unnecessary evidence. Keep authentic history; do not rerun settled
+reviews merely to construct a smaller package.
