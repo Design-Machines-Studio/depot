@@ -398,7 +398,7 @@ done
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"version": "1.89.3"' "canonical dm-review version is 1.89.3"
 require_text "$REPO_ROOT/plugins/dm-review/.codex-plugin/plugin.json" '"version": "1.89.3"' "generated dm-review version is 1.89.3"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"version": "1.74.4"' "canonical Pipeline version is 1.74.4"
-require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.88.0"' "generated Pipeline dependency floor is current"
+require_text "$REPO_ROOT/plugins/pipeline/.codex-plugin/plugin.json" '"dm-review": ">=1.89.3"' "generated Pipeline dependency floor is current"
 
 printf "Synthesis identity fixtures\n"
 base_id=$(fixture_finding_id \

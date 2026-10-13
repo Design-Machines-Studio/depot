@@ -803,7 +803,7 @@ require_text "$selective_allowlist" "never relax this equality check to a subset
 require_text "$selective_allowlist" "Any validation failure discards the entire selective input and dispatches the unfiltered recomputed selected full set. Never drop invalid members and honor the remainder." "allowlist contract fails open without partially honoring invalid input"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.30.2"' "dm-review requires bounded pre-PR workspace and final closure recovery"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"workflow-kernel": ">=0.30.2"' "pipeline requires bounded pre-PR workspace and final closure recovery"
-require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.88.0"' "pipeline requires the current reviewed-publication contract"
+require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"dm-review": ">=1.89.3"' "pipeline requires the current reviewed-publication contract"
 require_text "$REPO_ROOT/plugins/dm-review/.claude-plugin/plugin.json" '"model-router": ">=0.14.0"' "dm-review requires review recommendation routing"
 require_text "$REPO_ROOT/plugins/pipeline/.claude-plugin/plugin.json" '"model-router": ">=0.14.0"' "pipeline requires the current routing runtime"
 require_text "$review_skill" 'Implementation origin is not a coverage field or eligibility condition.' "dm-review makes implementation origin ineligible as a review filter"
