@@ -1636,11 +1636,16 @@ class EvidenceAssemblyError(ValueError):
 
 
 def preserve_review_evidence(**arguments):
+    from ._files import LockContentionError
+
     run = ExactOwnedRun.open(Path(arguments["run_root"]))
     if arguments.get("projection_only"):
         return _preserve_review_evidence_receipt_locked(**arguments)
-    with run._lock(create=False):
-        return _preserve_review_evidence_receipt_locked(**arguments)
+    try:
+        with run._lock(create=False):
+            return _preserve_review_evidence_receipt_locked(**arguments)
+    except LockContentionError:
+        raise EvidenceAssemblyError("preservation_input", "append_conflict") from None
 
 
 def _preserve_review_evidence_receipt_locked(**arguments):

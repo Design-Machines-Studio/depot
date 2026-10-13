@@ -91,6 +91,26 @@ class ReviewDirectoryRecoveryTests(unittest.TestCase):
                 self.recover(run, input_path)
             self.assertEqual("append_conflict", raised.exception.reason)
 
+    def test_cli_preservation_contention_is_retryable_and_leaves_evidence_intact(self):
+        run, paths = self.make_run(workflow="pipeline")
+        env = dict(os.environ, PYTHONPATH=str(KERNEL_REFERENCES))
+        arguments = ["--run-root", run.root, "--repository-root", self.repo]
+        for flag, key in (("request", "request"), ("receipts", "receipts"),
+                          ("lane-receipts", "lane_receipts"), ("raw-lane-outputs", "raw_lane_outputs"),
+                          ("raw-findings", "raw_findings"), ("decisions", "decisions"),
+                          ("private-router-directory", "router"), ("report", "report")):
+            arguments.extend(("--" + flag, paths[key]))
+        before = {p.relative_to(run.root): p.read_bytes() for p in run.root.rglob("*") if p.is_file()}
+        with run._lock(create=False):
+            result = subprocess.run((sys.executable, "-m", "workflow_kernel", "preserve-review-evidence", *map(str, arguments)),
+                                    env=env, capture_output=True, text=True, timeout=30)
+        self.assertEqual(6, result.returncode, result.stderr)
+        error = json.loads(result.stderr)["error"]
+        self.assertEqual("state_conflict", error["code"])
+        self.assertEqual("append_conflict", error["details"]["reason"])
+        self.assertEqual(before, {p.relative_to(run.root): p.read_bytes() for p in run.root.rglob("*") if p.is_file()})
+        self.assertEqual("complete", self.preserve(run, paths)["status"])
+
     def test_symlink_escape_missing_and_unreplaced_directories_rejected(self):
         for mutation in ("symlink", "missing", "restored", "wrong-registration", "wrong-source"):
             with self.subTest(mutation=mutation):
