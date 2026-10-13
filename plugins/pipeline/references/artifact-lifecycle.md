@@ -210,9 +210,9 @@ See `gitignore-template.md` for canonical entries. The execution-orchestrator's 
 
 ## Review workspace and final retention
 
-Pipeline requires Kernel >=0.30.1 for ordinary pre-PR and existing-PR review
-assembly. Its temporary evidence workspace is finite: 4,096 files / 192 MiB.
-Final required retention separately allows 2,048 files / 192 MiB; disposable
+Pipeline requires Kernel >=0.30.3 for ordinary pre-PR and existing-PR review
+assembly. Its temporary evidence workspace is finite: 4,096 files / 1 GiB.
+Final required retention separately allows 2,048 files / 1 GiB; disposable
 diagnostics remain 416 files / 9 MiB. Use the standard assembler, projection
 and preservation commands in the shared
 [closeout contract](../../dm-review/skills/review/references/review-closeout-contract.md).

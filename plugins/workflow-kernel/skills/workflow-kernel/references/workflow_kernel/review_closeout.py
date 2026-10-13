@@ -41,7 +41,7 @@ from .redaction import contains_secret_shape
 # Assembly includes uncommitted inputs and partial history; final retention
 # measures only the validated required closure and disposable diagnostics.
 _MAX_ASSEMBLY_WORKSPACE_FILES = 4096
-_MAX_ASSEMBLY_WORKSPACE_BYTES = 192 * 1024 * 1024
+_MAX_ASSEMBLY_WORKSPACE_BYTES = 1024 * 1024 * 1024
 
 
 _REVIEW_WORKFLOWS = frozenset({"dm-review", "dm-review-loop", "pipeline", "pipeline-run"})
