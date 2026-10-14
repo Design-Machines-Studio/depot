@@ -280,7 +280,7 @@ if dm_review_floor != ">=1.89.4":
 
 router_floors = {
     "dm-review": ("pluginDependencies", ">=0.14.0"),
-    "pipeline": ("pluginDependencies", ">=0.14.0"),
+    "pipeline": ("pluginDependencies", ">=0.14.1"),
     "project-manager": ("optionalPluginDependencies", ">=0.14.0"),
 }
 for consumer, (dependency_kind, expected) in router_floors.items():

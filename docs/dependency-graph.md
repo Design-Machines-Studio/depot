@@ -77,7 +77,7 @@ graph LR
 | model-router | workflow-kernel | optional | `>=0.17.0` |
 | ned | superpowers | optional | `>=1.0.0` |
 | pipeline | dm-review | required | `>=1.89.4` |
-| pipeline | model-router | required | `>=0.14.0` |
+| pipeline | model-router | required | `>=0.14.1` |
 | pipeline | workflow-kernel | required | `>=0.30.3` |
 | pipeline | ned | optional | `>=1.4.0` |
 | pipeline | design-machines | optional | `>=1.3.0` |
