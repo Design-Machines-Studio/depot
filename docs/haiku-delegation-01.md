@@ -13,12 +13,13 @@ Consumers link to it; role-policy.json alone owns concrete selection. No new
 service, benchmark framework, mandatory cross-family gate or approval gate was
 added. OpenRouter allowance/budget and native Codex Fast behavior are retained.
 
-Every design-related task now requires `claude-design` assistance for judgment
-and execution under the [shared design contract](../plugins/model-router/skills/model-router/references/design-consultation.md#required-design-skill).
-The lead loads the actual built-in skill through the native loader (or reads its
-file-backed instructions) and supplies relevant excerpts to bounded participants.
-This preserves user/prototype authority, required checks and existing specialist
-routing without extending worker permissions.
+Design work uses `claude-design` when its actual instructions are available,
+under the [shared design contract](../plugins/model-router/skills/model-router/references/design-consultation.md#optional-design-skill).
+Otherwise the existing design consultant uses its own judgment and supplied
+evidence. Do not request pasted text, another session or another agent to obtain
+optional instructions. Explicit named-skill requirements remain unmet when the
+instructions cannot be obtained. User/prototype authority, Live Wires,
+accessibility, functionality, browser checks and tool permissions remain binding.
 
 On 2026-10-11 a native subscription `research-fast` participant inspected the
 local installation read-only. It found the built-in `/design` command in Claude
@@ -137,11 +138,11 @@ checks where applicable, fallback receipts, commit/push and owned cleanup. Use
 only existing subscription capacity. Installed adoption is not proven by this
 source PR.
 
-The design adoption canary must also load the actual built-in `claude-design`
-skill in a fresh Claude session, retain its source/version or runtime receipt,
-and verify that its relevant instructions reach a bounded design judgment and
-execution packet. Check the approved prototype and required browser cases.
-Report unavailable loading or tools as a gap, not completed skill coverage.
+The later design canary must check both available instructions and unavailable
+instructions. Retain the actual source when used; otherwise verify consultation
+continues without retrieval requests or a false skill-use claim. Check prototype
+parity and required browser cases. A task explicitly requiring the unavailable
+skill must still report that unmet requirement.
 
 No consumer repositories, historical prompts or installed caches were edited.
 Current scaffolder templates already link to the shared role policy and preserve

@@ -279,7 +279,7 @@ if dm_review_floor != ">=1.89.4":
     errors.append("pipeline must require dm-review >=1.89.4")
 
 router_floors = {
-    "dm-review": ("pluginDependencies", ">=0.14.0"),
+    "dm-review": ("pluginDependencies", ">=0.14.1"),
     "pipeline": ("pluginDependencies", ">=0.14.1"),
     "project-manager": ("optionalPluginDependencies", ">=0.14.0"),
 }
