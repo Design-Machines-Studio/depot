@@ -132,6 +132,7 @@ if [ "$1" = api ] && [[ "$*" != *graphql* ]]; then
   esac
 fi
 case "$1 ${2:-}" in
+  'pr list') printf '[]\n' ;;
   'pr create') printf 'https://github.com/Fixture/consumer/pull/42\n' ;;
   'pr ready') ;;
   'pr view') jq -cn --arg head "$PR_HEAD" --arg base "${PR_BASE:-main}" '{headRefOid:$head,headRefName:"candidate",baseRefName:$base,state:"OPEN",isDraft:true,reviewDecision:env.REVIEW_DECISION}' ;;
