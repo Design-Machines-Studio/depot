@@ -411,12 +411,12 @@ if [ "$OPERATION" = create ] || [ "$OPERATION" = draft ]; then
   # Query by owned branch without a base filter: a changed base must block,
   # rather than hiding an existing PR and creating a duplicate.
   gh pr list --repo "$REPOSITORY" --head "$BRANCH" --state open --limit 2 \
-    --json url,headRefOid,headRefName,baseRefName,isCrossRepository,isDraft > "$TEMP/existing.json"
+    --json url,headRefOid,headRefName,baseRefName,isCrossRepository,isDraft,title > "$TEMP/existing.json"
   jq -e 'type=="array" and length<=1' "$TEMP/existing.json" >/dev/null || review_refuse 'ambiguous existing branch PRs'
   if jq -e 'length==1' "$TEMP/existing.json" >/dev/null; then
     jq -e --arg head "$HEAD" --arg branch "$BRANCH" --arg base "$BASE" --arg prefix "https://github.com/$REPOSITORY/pull/" '
       .[0] | .headRefOid==$head and .headRefName==$branch and .baseRefName==$base and .isCrossRepository==false and
-      (.isDraft|type=="boolean") and (.url|startswith($prefix) and (ltrimstr($prefix)|test("^[0-9]+$")))
+      (.isDraft|type=="boolean") and (.title|type=="string") and (.url|startswith($prefix) and (ltrimstr($prefix)|test("^[0-9]+$")))
     ' "$TEMP/existing.json" >/dev/null || review_refuse 'existing PR differs from owned candidate repository/head/base'
     [ "$OPERATION" != draft ] || jq -e '.[0].isDraft==true' "$TEMP/existing.json" >/dev/null || review_refuse 'early publication cannot rewrite a non-draft PR'
     PR="$(jq -r '.[0].url' "$TEMP/existing.json")"
@@ -425,7 +425,12 @@ if [ "$OPERATION" = create ] || [ "$OPERATION" = draft ]; then
   check_local_branch
   [ "$(remote_branch_head)" = "$HEAD" ] || review_refuse 'remote candidate changed during PR lookup'
   if [ -n "$PR" ]; then
-    gh pr edit "$PR" --repo "$REPOSITORY" --body-file "$TEMP/handoff.md"
+    EDIT_ARGS=(--repo "$REPOSITORY" --body-file "$TEMP/handoff.md")
+    # Promote our generated placeholder; preserve a user-supplied title.
+    if [ "$OPERATION" = create ] && jq -e --arg title "Draft: $BRANCH" '.[0].title==$title' "$TEMP/existing.json" >/dev/null; then
+      EDIT_ARGS+=(--title "$(jq -r .target "$TEMP/handoff.json")")
+    fi
+    gh pr edit "$PR" "${EDIT_ARGS[@]}"
     printf '%s\n' "$PR"
   else
     TITLE="Draft: $BRANCH"

@@ -90,7 +90,7 @@ fi
 case "$1 ${2:-}" in
   'pr list')
     if [ -f "$DM_REVIEW_DEVELOPMENT_TEST_ROOT/existing-pr" ]; then
-      jq -cn --arg head "${EXISTING_HEAD:-$PR_HEAD}" --arg base "${EXISTING_BASE:-main}" --argjson cross "${EXISTING_CROSS:-false}" '[{url:"https://github.com/Fixture/consumer/pull/42",headRefOid:$head,headRefName:"candidate",baseRefName:$base,isDraft:true,isCrossRepository:$cross}]'
+      jq -cn --arg head "${EXISTING_HEAD:-$PR_HEAD}" --arg base "${EXISTING_BASE:-main}" --argjson cross "${EXISTING_CROSS:-false}" --arg title "${EXISTING_TITLE:-Draft: candidate}" '[{title:$title,url:"https://github.com/Fixture/consumer/pull/42",headRefOid:$head,headRefName:"candidate",baseRefName:$base,isDraft:true,isCrossRepository:$cross}]'
     else printf '[]\n'; fi ;;
   'pr edit')
     for ((i=1;i<=$#;i++)); do if [ "${!i}" = --body-file ]; then j=$((i+1)); cp "${!j}" "$DM_REVIEW_DEVELOPMENT_TEST_ROOT/public-body.md"; fi; done ;;
@@ -291,9 +291,18 @@ assert test "$(cat "$RUN_ROOT/original-diagnostic/original.txt")" = 'original by
 rmdir "$RUN_ROOT/replaced"
 mv "$RUN_ROOT/original-diagnostic" "$RUN_ROOT/replaced"
 assert publish create
+assert grep -Fq -- '--title Vetted candidate' "$GH_LOG"
 assert publish ready --pr https://github.com/Fixture/consumer/pull/42
 assert test "$(grep -c '^pr create ' "$GH_LOG")" = 1
 assert test -f "$RUN_ROOT/review/review-lane-receipts.json"
+
+fixture early-custom-title; early_facts
+assert publish draft
+: > "$GH_LOG"
+export EXISTING_TITLE='Reviewed user title'
+assert publish create
+assert sh -c '! grep -F -- "--title" "$1"' sh "$GH_LOG"
+unset EXISTING_TITLE
 
 fixture candidate
 rm -f -- "$TMP/review-started"

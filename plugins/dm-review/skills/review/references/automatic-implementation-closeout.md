@@ -157,7 +157,8 @@ completed checks, pending review/acceptance/CI/feedback, export and cleanup stat
 and next action. Full local details stay in retained evidence.
 
 Retry under the same owner: a matching open draft is reused and its summary
-refreshed. A foreign head/base/repository or ambiguous match blocks. Do not
+refreshed. Strict `create` promotes only its generated `Draft: <branch>` title
+to the reviewed target; custom titles are preserved. A foreign head/base/repository or ambiguous match blocks. Do not
 repeat settled reviewers after a repair push: update affected proof only.
 Preservation failure retains original evidence and resources. Recover through
 Depot’s `docs/review-directory-recovery.md` and the existing Kernel recovery contract, then
