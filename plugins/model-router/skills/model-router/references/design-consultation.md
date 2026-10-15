@@ -1,26 +1,30 @@
 # Bounded design participation
 
-## Required design skill
+## Optional design skill
 
-For every design-related task, load the available `claude-design` skill before
-design judgment or execution and apply its relevant instructions. This includes
-research, planning, implementation and review of interface, interaction, visual,
-layout, typography and design-system choices. Use the native skill loader for a
-built-in skill; read `SKILL.md` when file-backed. Resolve the actual skill through
-the host's catalog rather than guessing a cache path or substituting a similarly
-named skill. A host without direct access obtains the actual instructions from
-an available native Claude session for its participant packet. If the skill
-cannot be loaded, report that coverage gap and request its
-source; never claim it was used.
+For design-related work, use `claude-design` when its actual instructions are
+available through the current host's catalog or an already supplied source.
+Load it once and include only relevant instructions and their source in bounded
+participant packets. Never guess a cache path or claim an unavailable skill was
+used. Prompt-only participants receive those excerpts without extra tool access.
 
-The lead loads it once and supplies the relevant instructions and source to
-each bounded design participant. Prompt-only participants receive those excerpts
-in their packet; do not grant extra tools merely to load a skill. Include the
-approved requirements, prototype and actual browser evidence needed for the
-question. Skill use assists judgment and execution without changing model-router
-selection, account settings, tool permissions or publication authority. Explicit
-user decisions, approved prototypes and required accessibility, functional and
-browser checks remain authoritative. Reuse still-valid design evidence.
+If the skill is absent or unreadable, continue with `design-consultant` using
+its own design judgment and the supplied source/browser evidence. Missing skill
+text alone is not missing design coverage and does not block dispatch, repair,
+review or publication. Do not ask the user to paste the skill, start a native
+Claude session, or dispatch another agent merely to retrieve its instructions.
+Record actual skill use accurately once in the existing report; no new receipt
+or schema is needed. If the user explicitly requires that specific skill for
+this task, report that unmet requirement without claiming it was used.
+
+The design participant must still inspect the affected layout, spacing,
+typography, hierarchy, interaction states and save behavior against the approved
+prototype and Live Wires conventions. Give concrete findings, the smallest
+adequate change and verification cases. This is design judgment, not permission
+to invent a replacement UI. Explicit user decisions, approved prototypes and
+required accessibility, functional and browser checks remain authoritative.
+Reuse still-valid design evidence. Skill availability does not change model
+selection, account settings, tool permissions or publication authority.
 
 Anthropic documents `/design` as the native Claude Code entry point in its
 [Claude Design guide](https://support.claude.com/en/articles/14604416-get-started-with-claude-design).

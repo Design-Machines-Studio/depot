@@ -66,7 +66,7 @@ graph LR
 | dm-review | live-wires | required | `>=1.8.0` |
 | dm-review | ghostwriter | required | `>=3.7.0` |
 | dm-review | council | required | `>=1.5.0` |
-| dm-review | model-router | required | `>=0.14.0` |
+| dm-review | model-router | required | `>=0.14.1` |
 | dm-review | workflow-kernel | required | `>=0.30.3` |
 | dm-review | ned | optional | `>=1.4.0` |
 | dm-review | superpowers | optional | `>=1.0.0` |
@@ -77,7 +77,7 @@ graph LR
 | model-router | workflow-kernel | optional | `>=0.17.0` |
 | ned | superpowers | optional | `>=1.0.0` |
 | pipeline | dm-review | required | `>=1.89.4` |
-| pipeline | model-router | required | `>=0.14.0` |
+| pipeline | model-router | required | `>=0.14.1` |
 | pipeline | workflow-kernel | required | `>=0.30.3` |
 | pipeline | ned | optional | `>=1.4.0` |
 | pipeline | design-machines | optional | `>=1.3.0` |

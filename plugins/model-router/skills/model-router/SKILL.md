@@ -117,9 +117,9 @@ small local preference for retiring a candidate such as `opus`; it filters both
 dispatch and human recommendation without changing shared policy or retrying an
 exhausted Claude rail.
 
-For every design-related task, load
-`${CLAUDE_SKILL_DIR}/references/design-consultation.md` for required
-`claude-design` use. Applicable UI/UX judgment and front-facing design repair
+For design work, follow
+`${CLAUDE_SKILL_DIR}/references/design-consultation.md`.
+Applicable UI/UX judgment and front-facing design repair
 drafting request `design-consultant`. Opus 5.5 falls back to Sol 6.1 for this required review;
 only exhaustion of both candidates leaves required design coverage incomplete.
 Other roles follow the current candidate policy: native bounded work uses the
