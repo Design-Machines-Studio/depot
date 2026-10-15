@@ -21,6 +21,7 @@ git -C "$REPO" config user.name Fixture
 git -C "$REPO" config user.email fixture@example.test
 git -C "$REPO" remote add origin https://github.com/Fixture/consumer.git
 printf '.workflow-kernel/\n.claude/\n' > "$REPO/.gitignore"
+printf 'Early draft allowed after candidate tests; full review/export/CI/feedback required before ready.\n' > "$REPO/PUBLICATION.md"
 printf 'reviewed source\n' > "$REPO/source.txt"
 printf '<p>unchanged UI</p>\n' > "$REPO/ui.html"
 git -C "$REPO" add .
@@ -87,7 +88,16 @@ if [ "$1" = api ] && [[ "$*" != *graphql* ]]; then
   esac
 fi
 case "$1 ${2:-}" in
-  'pr create') printf 'https://github.com/Fixture/consumer/pull/42\n' ;;
+  'pr list')
+    if [ -f "$DM_REVIEW_DEVELOPMENT_TEST_ROOT/existing-pr" ]; then
+      jq -cn --arg head "${EXISTING_HEAD:-$PR_HEAD}" --arg base "${EXISTING_BASE:-main}" --argjson cross "${EXISTING_CROSS:-false}" '[{url:"https://github.com/Fixture/consumer/pull/42",headRefOid:$head,headRefName:"candidate",baseRefName:$base,isDraft:true,isCrossRepository:$cross}]'
+    else printf '[]\n'; fi ;;
+  'pr edit')
+    for ((i=1;i<=$#;i++)); do if [ "${!i}" = --body-file ]; then j=$((i+1)); cp "${!j}" "$DM_REVIEW_DEVELOPMENT_TEST_ROOT/public-body.md"; fi; done ;;
+  'pr create')
+    touch "$DM_REVIEW_DEVELOPMENT_TEST_ROOT/existing-pr"
+    for ((i=1;i<=$#;i++)); do if [ "${!i}" = --body-file ]; then j=$((i+1)); cp "${!j}" "$DM_REVIEW_DEVELOPMENT_TEST_ROOT/public-body.md"; fi; done
+    printf 'https://github.com/Fixture/consumer/pull/42\n' ;;
   'pr ready') touch "$DM_REVIEW_DEVELOPMENT_TEST_ROOT/review-started" ;;
   'pr view')
     if [ -n "${MOVE_BRANCH_TO:-}" ]; then "$REAL_GIT" -C "$DM_REVIEW_DEVELOPMENT_TEST_ROOT/repository" update-ref refs/heads/candidate "$MOVE_BRANCH_TO"; fi
@@ -155,7 +165,7 @@ chmod +x "$TMP/bin/git" "$TMP/bin/gh"
 export DM_REVIEW_DEVELOPMENT_TEST_ROOT="$TMP"
 
 fixture() {
-  rm -f -- "$TMP/review-started"
+  rm -f -- "$TMP/review-started" "$TMP/existing-pr"
   local id="$1" kind="${2:-live}" browser="${3:-false}" assembly
   RUN_ROOT="$("$WORKFLOW_KERNEL" owned-run-start --workflow pipeline --run-id "$id" --base "$TMP/runs" | jq -r .path)"
   STATE="$REPO/.workflow-kernel/runs/$id"; mkdir -p "$STATE"
@@ -223,8 +233,67 @@ reject_publish() {
   pass=$((pass+1))
 }
 no_gh() { assert test ! -s "$GH_LOG"; }
-no_mutation() { assert sh -c '! grep -E "^pr (create|ready)" "$1"' sh "$GH_LOG"; }
+no_mutation_log() { ! grep -E "^pr (create|ready|edit)" "$1"; }
+no_mutation() { assert no_mutation_log "$GH_LOG"; }
 change_readiness() { jq "$1" "$READINESS" > "$TMP/update.json"; mv "$TMP/update.json" "$READINESS"; }
+
+printf 'pr edit https://github.com/Fixture/consumer/pull/42\n' > "$TMP/mutation.log"
+if no_mutation_log "$TMP/mutation.log" >/dev/null; then echo 'FAIL: edit escaped mutation guard'; exit 1; fi
+pass=$((pass+1))
+
+early_facts() {
+  change_readiness '.draft={allowed:true,policySource:"PUBLICATION.md",requiredChecks:["candidate tests"],publicContentReviewed:true,exportStatus:"pending",cleanupStatus:"pending"} | .readiness.feedbackSettled=false | .readiness.detail="/private/CREDENTIAL_SENTINEL"'
+}
+fixture early-missing
+early_facts
+rm "$RUN_ROOT/review/review-lane-receipts.json"
+publish draft > "$TMP/early.out"
+assert grep -Fq "$PR_HEAD" "$TMP/public-body.md"
+assert grep -Fq 'candidate tests: passed' "$TMP/public-body.md"
+assert grep -Fq 'Evidence export: pending' "$TMP/public-body.md"
+assert sh -c '! grep -E "CREDENTIAL_SENTINEL|/tmp/|private/router|source_snapshot|Ready to merge" "$1"' sh "$TMP/public-body.md"
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42
+reject_publish request-review --pr https://github.com/Fixture/consumer/pull/42
+assert test "$(grep -c '^pr create ' "$GH_LOG")" = 1
+assert publish draft
+assert test "$(grep -c '^pr create ' "$GH_LOG")" = 1
+assert grep -Fq 'pr edit https://github.com/Fixture/consumer/pull/42' "$GH_LOG"
+for mutation in '.draft.allowed=false' '.draft.publicContentReviewed=false' '.draft.policySource="absent.md"' '.readiness.checks[0].status="fail"' '.readiness.checks[0].status="pending"' '.owner.run_id="foreign"' '.owner.repository="Foreign/repository"' '.approvedBase="refs/tags/foreign"'; do
+  fixture "early-reject-$pass";early_facts; change_readiness "$mutation"
+  reject_publish draft; no_gh
+done
+fixture early-dirty;early_facts
+printf 'dirty\n' >> "$REPO/source.txt"
+reject_publish draft; no_gh
+git -C "$REPO" restore source.txt
+fixture early-stale;early_facts
+export REMOTE_HEAD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+reject_publish draft; no_gh
+unset REMOTE_HEAD
+for field in EXISTING_BASE EXISTING_HEAD EXISTING_CROSS; do
+  fixture "early-existing-$pass";early_facts; touch "$TMP/existing-pr"
+  case "$field" in EXISTING_BASE) export EXISTING_BASE=foreign ;; EXISTING_HEAD) export EXISTING_HEAD=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa ;; EXISTING_CROSS) export EXISTING_CROSS=true ;; esac
+  reject_publish draft; no_mutation; unset "$field"
+done
+# A replaced registered diagnostic still blocks preservation. Draft does not
+# mutate it; restoring the original identity allows strict evidence reuse.
+fixture early-export-failed;early_facts
+"$WORKFLOW_KERNEL" owned-run-create --run-root "$RUN_ROOT" --kind diagnostic --relative-path replaced >/dev/null
+printf 'original bytes\n' > "$RUN_ROOT/replaced/original.txt"
+mv "$RUN_ROOT/replaced" "$RUN_ROOT/original-diagnostic"
+mkdir "$RUN_ROOT/replaced"
+change_readiness '.draft.exportStatus="failed" | .draft.cleanupStatus="failed"'
+reject_publish create; no_gh
+assert publish draft
+assert grep -Fq 'Evidence export: failed. Cleanup: failed.' "$TMP/public-body.md"
+reject_publish ready --pr https://github.com/Fixture/consumer/pull/42
+assert test "$(cat "$RUN_ROOT/original-diagnostic/original.txt")" = 'original bytes'
+rmdir "$RUN_ROOT/replaced"
+mv "$RUN_ROOT/original-diagnostic" "$RUN_ROOT/replaced"
+assert publish create
+assert publish ready --pr https://github.com/Fixture/consumer/pull/42
+assert test "$(grep -c '^pr create ' "$GH_LOG")" = 1
+assert test -f "$RUN_ROOT/review/review-lane-receipts.json"
 
 fixture candidate
 rm -f -- "$TMP/review-started"
@@ -363,7 +432,7 @@ for operation in create ready; do
   git -C "$REPO" tag candidate "$INITIAL_HEAD"
   assert publish "$operation" ${extra[@]+"${extra[@]}"} --feature-branch candidate
   git -C "$REPO" tag -d candidate >/dev/null
-  assert grep -Eq "^pr $operation " "$GH_LOG"
+  if [ "$operation" = create ]; then assert grep -Eq "^pr (create|edit) " "$GH_LOG"; else assert grep -Eq "^pr ready " "$GH_LOG"; fi
   : > "$GH_LOG"
   git -C "$REPO" update-ref refs/heads/candidate "$INITIAL_HEAD"
   reject_publish "$operation" ${extra[@]+"${extra[@]}"} --feature-branch candidate; no_gh

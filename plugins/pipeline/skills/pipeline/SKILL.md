@@ -553,7 +553,8 @@ checks and the requirements cross-check pass. Only then set
 `CALLER_VERIFICATION_PASSED=true` for the exact candidate head; reset it on
 source changes, failed or missing checks and refresh affected producer evidence.
 Full mode reuses its deferred candidate under the same owner, never a new loop.
-Never use bare `gh` to create or ready a PR.
+Publish through this helper.
+Early draft: `automatic-implementation-closeout.md`.
 Use `automatic-implementation-closeout.md`'s inputs. Bind `FEATURE_BRANCH` to
 the direct receipt’s `Task controls` (Direct), approved plan `featureBranch`
 (Lean), or manifest (Full). Retain it and

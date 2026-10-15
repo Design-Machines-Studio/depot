@@ -22,7 +22,8 @@ review, regardless of whether a quick reviewer finds a defect.
 ## Enter once, preserve the owner
 
 After plan/prompt approval, implement, commit and push the candidate branch,
-and verify its remote head against the local candidate. Perform applicable independent review,
+and verify its remote head against the local candidate. An explicitly authorized
+early draft may use the checkpoint below. Perform applicable independent review,
 repair, recheck and preserve candidate source/browser evidence before opening
 a PR. An existing draft stays draft. PR-only CI is pending until a PR exists;
 it cannot be claimed passed from candidate checks. Record the repository/branch
@@ -70,7 +71,7 @@ mandatory repository checks and reports the exemption accurately.
 checkout, root/state and unfinished evidence/private index. Requested repairs
 resume executing/checking; acceptance and actual ready precede terminal
 model/cost generation and destructive cleanup. Complete preservation still
-gates publication and destroying review resources; owner alone merges.
+gates reviewed publication, readiness and evidence destruction; owner alone merges.
 
 ## Native session pointer (root owner only)
 
@@ -132,6 +133,40 @@ search newest runs, invent a session ID, rewrite evidence or add a Kernel API.
 When native hooks are disabled/unavailable or no exact SessionStart context
 exists, report `hook activation unavailable`, omit binding honestly and still
 run the mandatory pre-PR producer gate below.
+
+## Optional early draft
+
+For authorized early feedback, use `publish-reviewed-pr.sh --operation draft`
+with the same repository, run, approved feature branch and readiness inputs.
+No producer input is required. Existing `create`, `request-review` and `ready`
+remain strict. An early draft is never completed review or merge readiness.
+
+The existing readiness envelope additionally carries `draft`:
+`{allowed,policySource,requiredChecks,publicContentReviewed,exportStatus,cleanupStatus}`.
+The owner reads the actual repository publication policy, including explicit task
+instructions: `allowed=true` must reflect that policy, never override a veto.
+`policySource` names a tracked repository policy file read at this head;
+`requiredChecks` lists its nonempty set of basic publication checks. Record every
+required candidate check with its actual final-head passing result in
+`readiness.checks`; missing, failed or pending required basic checks block.
+The helper does not execute arbitrary policy commands or infer test success.
+`publicContentReviewed=true` confirms the check names are safe public labels.
+Export is `pending|failed`; cleanup is `clean|pending|failed`. Never put paths,
+credentials or raw errors in labels. The public body states the exact head,
+completed checks, pending review/acceptance/CI/feedback, export and cleanup status,
+and next action. Full local details stay in retained evidence.
+
+Retry under the same owner: a matching open draft is reused and its summary
+refreshed. A foreign head/base/repository or ambiguous match blocks. Do not
+repeat settled reviewers after a repair push: update affected proof only.
+Preservation failure retains original evidence and resources. Recover through
+Depot’s `docs/review-directory-recovery.md` and the existing Kernel recovery contract, then
+reuse valid review evidence. Early draft never grants cleanup authority.
+
+Some checks exclude drafts. Only after the existing strict candidate gate passes,
+use `request-review` to start those checks. This supported transition is not merge
+readiness; collect actual GitHub results, acceptance and feedback with `ready`.
+No branch protection, security coverage or retained P1/P2/P3 repair is waived.
 
 ## Publish only the reviewed candidate
 

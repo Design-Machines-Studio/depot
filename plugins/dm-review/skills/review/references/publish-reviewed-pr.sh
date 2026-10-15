@@ -26,7 +26,7 @@ while [ "$#" -gt 0 ]; do
   SEEN="$SEEN$1 "
   shift 2
 done
-case "$OPERATION:$PR" in create:) ;; ready:https://github.com/*/pull/*|request-review:https://github.com/*/pull/*) ;; *) exit 2 ;; esac
+case "$OPERATION:$PR" in draft:|create:) ;; ready:https://github.com/*/pull/*|request-review:https://github.com/*/pull/*) ;; *) exit 2 ;; esac
 # Source-development fixtures alone may supply two mocked tools. Fixed PATH
 # still governs every other dependency and the real Kernel producer. This is
 # deliberately restricted to a private disposable Fixture/consumer checkout;
@@ -52,11 +52,13 @@ if [ -z "${DM_REVIEW_DEVELOPMENT_TEST_ROOT:-}" ]; then
   case "$GH_HOST_BIN" in /*) [ -x "$GH_HOST_BIN" ] || review_refuse 'host GitHub CLI unavailable' ;; *) review_refuse 'host GitHub CLI unavailable' ;; esac
   case "$GH_HOST_BIN" in "$REPO"/*|"$RUN_ROOT"/*) review_refuse 'GitHub CLI must come from the host, outside reviewed source and run evidence' ;; esac
 fi
-for file in "$PRODUCER" "$READINESS"; do
+INPUTS=("$READINESS")
+[ "$OPERATION" = draft ] || INPUTS+=("$PRODUCER")
+for file in "${INPUTS[@]}"; do
   review_safe_path "$file"
   [ -f "$file" ] && [ -r "$file" ] && [ "$(review_stat links "$file")" = 1 ] || review_refuse 'missing or unsafe publication input'
 done
-jq -e 'type=="object" and ((keys-["feedback"])|sort)==(["approvedBase","owner","readiness","uiNonImpact"]|sort) and
+jq -e 'type=="object" and ((keys-["feedback","draft"])|sort)==(["approvedBase","owner","readiness","uiNonImpact"]|sort) and
   (.approvedBase|type=="string" and length>0 and length<=1024 and (test("[\u0000-\u001f\u007f]")|not))' "$READINESS" >/dev/null || exit 2
 OWNER="$(jq -c .owner "$READINESS")"
 review_owner_validate "$OWNER" "$REPO"
@@ -80,9 +82,45 @@ case "$BASE_REF" in
 esac
 git -C "$REPO" check-ref-format "refs/heads/$BASE" || review_refuse 'invalid approved base branch'
 git -C "$REPO" rev-parse --verify "$BASE_REF^{commit}" >/dev/null || review_refuse 'approved base is not a commit branch'
-if [ "$OPERATION" != create ]; then
+if [ "$OPERATION" != create ] && [ "$OPERATION" != draft ]; then
   [[ "$PR" =~ ^https://github.com/$REPOSITORY/pull/[0-9]+$ ]] || review_refuse 'foreign PR'
 fi
+TEMP="$(mktemp -d "${TMPDIR:-/tmp}/publish-reviewed-pr.XXXXXX")"
+trap 'rm -rf -- "$TEMP"' EXIT
+if [ "$OPERATION" = draft ]; then
+HEAD="$(git -C "$REPO" rev-parse HEAD)"
+[ -z "$(git -C "$REPO" status --porcelain)" ] || review_refuse 'dirty candidate source'
+jq -e --arg head "$HEAD" '.readiness.finalHead==$head' "$READINESS" >/dev/null || review_refuse 'caller readiness facts are stale'
+  # Owner records the actual repository policy and completed basic checks.
+  # No producer, reviewer, export or cleanup is run by this checkpoint.
+  jq -e '
+    .draft | type=="object" and
+    (keys|sort)==(["allowed","policySource","requiredChecks","publicContentReviewed","exportStatus","cleanupStatus"]|sort) and
+    .allowed==true and .publicContentReviewed==true and
+    (.policySource|type=="string" and test("^[A-Za-z0-9_./-]+$") and (split("/")|all(.[];.!=".." and .!="." and .!=""))) and
+    (.requiredChecks|type=="array" and length>0 and length== (unique|length) and all(.[];type=="string" and test("^[A-Za-z0-9][A-Za-z0-9 ._/-]{0,119}$"))) and
+    (.exportStatus|IN("pending","failed")) and (.cleanupStatus|IN("clean","pending","failed"))
+  ' "$READINESS" >/dev/null || review_refuse 'early draft policy or public summary not approved'
+  POLICY="$(jq -r .draft.policySource "$READINESS")"
+  review_safe_path "$REPO/$POLICY"
+  [ -f "$REPO/$POLICY" ] && [ "$(git -C "$REPO" cat-file -t "$HEAD:$POLICY")" = blob ] || review_refuse 'repository publication policy source missing'
+  jq -e '
+    .draft.requiredChecks as $required | .readiness.checks as $checks |
+    ($checks|type=="array") and
+    all($required[]; . as $name | any($checks[]; .name==$name and .stage=="candidate" and .status=="pass" and .required!=false)) and
+    all($checks[]; if .stage=="candidate" and .required!=false then (.status=="pass" and (.name as $name | $required|index($name)!=null)) else true end)
+  ' "$READINESS" >/dev/null || review_refuse 'required basic publication checks failed or missing'
+  # Only explicitly public-reviewed check labels leave the machine. Never
+  # interpolate reports, evidence paths, errors, findings or private receipts.
+  jq -r --arg head "$HEAD" '
+    "## Draft — not ready to merge", "", "Exact source head: `"+$head+"`.", "",
+    "Completed basic publication checks:", (.draft.requiredChecks[]|"- "+.+": passed."), "",
+    "Pending: full source/security review and retained P1/P2/P3 repairs, browser acceptance where applicable, actual required CI, and external feedback.",
+    "Evidence export: "+.draft.exportStatus+". Cleanup: "+.draft.cleanupStatus+".",
+    "Original evidence and ownership remain retained; this draft grants no cleanup or merge authority.", "",
+    "Next action: complete or recover review, acceptance and evidence export under the same owner; reuse settled reviewers. Use request-review only after its strict candidate gate passes to start draft-excluded checks, then verify actual GitHub results and feedback with ready."
+  ' "$READINESS" > "$TEMP/handoff.md"
+else
 FIELDS=(request receipts lane-receipts raw-lane-outputs raw-findings decisions private-router-directory report)
 jq -e --argjson fields "$(printf '%s\n' "${FIELDS[@]}" | jq -R . | jq -s .)" '
   type=="object" and (keys|sort)==($fields|sort) and
@@ -112,10 +150,7 @@ fi
 # the exact dependency launcher; its own resolver validates the runtime bundle.
 [[ "$WORKFLOW_KERNEL" = */workflow-kernel/skills/workflow-kernel/references/workflow-kernel-launcher.sh ||
    "$WORKFLOW_KERNEL" = */workflow-kernel/*/skills/workflow-kernel/references/workflow-kernel-launcher.sh ]] || review_refuse 'invalid Kernel launcher'
-TEMP="$(mktemp -d "${TMPDIR:-/tmp}/publish-reviewed-pr.XXXXXX")"
-trap 'rm -rf -- "$TEMP"' EXIT
-# This is the coverage authority. No gh call occurs before complete production
-# evidence succeeds, even if the caller says CLEAN, green or accepted.
+# Strict operations retain the existing producer coverage authority.
 "$WORKFLOW_KERNEL" "${ARGV[@]}" > "$TEMP/production.json" || review_refuse 'required producer validation failed'
 jq -e '.status=="complete"' "$TEMP/production.json" >/dev/null || review_refuse 'required producer coverage incomplete'
 DECISIONS="$(jq -r .decisions "$PRODUCER")"
@@ -162,6 +197,7 @@ else
   jq '.checks |= map(select(.stage=="candidate"))' "$TEMP/handoff.json" > "$TEMP/candidate-handoff.json"
   "$HERE/operator-handoff.sh" --gate candidate "$TEMP/candidate-handoff.json" > "$TEMP/handoff.md" || { cat "$TEMP/handoff.md"; exit 3; }
 fi
+fi
 # The approved manifest/task supplies the branch after canonical transfer;
 # the original detached producer still owns the state and source evidence.
 ATTACHED="$(git -C "$REPO" symbolic-ref --quiet HEAD)" || ATTACHED=
@@ -184,7 +220,7 @@ remote_branch_head() {
 check_local_branch
 REMOTE_HEAD="$(remote_branch_head)" || review_refuse 'remote candidate unavailable'
 [ "$REMOTE_HEAD" = "$HEAD" ] || review_refuse 'local and remote candidate heads differ'
-if [ "$OPERATION" != create ]; then
+if [ "$OPERATION" != create ] && [ "$OPERATION" != draft ]; then
   gh pr view "$PR" --repo "$REPOSITORY" --json headRefOid,headRefName,baseRefName,state,isDraft,reviewDecision > "$TEMP/pr.json"
   jq -e --arg head "$HEAD" --arg branch "$BRANCH" '.headRefOid==$head and .headRefName==$branch and .state=="OPEN" and (.isDraft|type=="boolean")' "$TEMP/pr.json" >/dev/null || review_refuse 'actual PR head/state differs'
   jq -e --arg base "$BASE" '.baseRefName==$base' "$TEMP/pr.json" >/dev/null || review_refuse 'actual PR base differs from approved base; restore the approved PR target and retry publication'
@@ -371,8 +407,31 @@ fi
 [ "$(git -C "$REPO" rev-parse HEAD)" = "$HEAD" ] && [ -z "$(git -C "$REPO" status --porcelain)" ] || review_refuse 'candidate changed during publication'
 check_local_branch
 [ "$(remote_branch_head)" = "$HEAD" ] || review_refuse 'remote candidate changed during publication'
-if [ "$OPERATION" = create ]; then
-  gh pr create --repo "$REPOSITORY" --head "$BRANCH" --base "$BASE" --draft --title "$(jq -r .target "$TEMP/handoff.json")" --body-file "$TEMP/handoff.md"
+if [ "$OPERATION" = create ] || [ "$OPERATION" = draft ]; then
+  # Query by owned branch without a base filter: a changed base must block,
+  # rather than hiding an existing PR and creating a duplicate.
+  gh pr list --repo "$REPOSITORY" --head "$BRANCH" --state open --limit 2 \
+    --json url,headRefOid,headRefName,baseRefName,isCrossRepository,isDraft > "$TEMP/existing.json"
+  jq -e 'type=="array" and length<=1' "$TEMP/existing.json" >/dev/null || review_refuse 'ambiguous existing branch PRs'
+  if jq -e 'length==1' "$TEMP/existing.json" >/dev/null; then
+    jq -e --arg head "$HEAD" --arg branch "$BRANCH" --arg base "$BASE" --arg prefix "https://github.com/$REPOSITORY/pull/" '
+      .[0] | .headRefOid==$head and .headRefName==$branch and .baseRefName==$base and .isCrossRepository==false and
+      (.isDraft|type=="boolean") and (.url|startswith($prefix) and (ltrimstr($prefix)|test("^[0-9]+$")))
+    ' "$TEMP/existing.json" >/dev/null || review_refuse 'existing PR differs from owned candidate repository/head/base'
+    [ "$OPERATION" != draft ] || jq -e '.[0].isDraft==true' "$TEMP/existing.json" >/dev/null || review_refuse 'early publication cannot rewrite a non-draft PR'
+    PR="$(jq -r '.[0].url' "$TEMP/existing.json")"
+  fi
+  [ "$(git -C "$REPO" rev-parse HEAD)" = "$HEAD" ] && [ -z "$(git -C "$REPO" status --porcelain)" ] || review_refuse 'candidate changed during PR lookup'
+  check_local_branch
+  [ "$(remote_branch_head)" = "$HEAD" ] || review_refuse 'remote candidate changed during PR lookup'
+  if [ -n "$PR" ]; then
+    gh pr edit "$PR" --repo "$REPOSITORY" --body-file "$TEMP/handoff.md"
+    printf '%s\n' "$PR"
+  else
+    TITLE="Draft: $BRANCH"
+    [ "$OPERATION" != create ] || TITLE="$(jq -r .target "$TEMP/handoff.json")"
+    gh pr create --repo "$REPOSITORY" --head "$BRANCH" --base "$BASE" --draft --title "$TITLE" --body-file "$TEMP/handoff.md"
+  fi
 else
   if jq -e '.isDraft' "$TEMP/final-pr.json" >/dev/null; then gh pr ready "$PR" --repo "$REPOSITORY"; fi
 fi

@@ -48,3 +48,11 @@ The three-layer ambiguity defence added in v1.10.0 leaves an audit trail. Inspec
 - **Receipt flag** -- chunk receipts may include `ambiguity_resolved: true` with a one-line summary. Cross-check against the commit trailers.
 - **If trailers or the flag are present,** review the chosen path. If the chosen interpretation conflicts with what the user actually wanted, this is a Phase 7 gap -- fix inline on the feature branch, then re-run `/dm-review-quick` on the affected chunk.
 - **If neither signal is present,** either the chunks were unambiguous OR the subagents silently picked. The plan-adversary's scope review should have caught the latter at Phase 5; if you suspect it didn't, sample one or two chunks' rendered output against the approved Key Requirements before approving merge.
+
+For an explicitly authorized early draft, call dm-review's existing publisher
+with `--operation draft` and its documented policy/basic-check inputs in
+`automatic-implementation-closeout.md`. This optional checkpoint may precede
+review, browser acceptance or export completion. It does not set
+`CALLER_VERIFICATION_PASSED`, replace the strict create/request-review/ready
+sequence, dispatch reviewers again, or finish the owner. Retain and recover
+original evidence; later verify actual GitHub checks and feedback.

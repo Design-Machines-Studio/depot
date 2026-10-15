@@ -1037,6 +1037,8 @@ manifest `FEATURE_BRANCH`/`$REVIEW_ROOT` after transfer; never recover from deta
 HEAD. Set readiness `approvedBase` from manifest `baseBranch`, preserving source
 base/head; GitHub defaults grant no approval.
 
+Early draft: `automatic-implementation-closeout.md`.
+
 <!-- reviewed-pr-full:start -->
 ```bash
 case "${TERMINAL_MODEL_REPORT_OWNER:?validated caller owner required}" in

@@ -318,3 +318,9 @@ bounds. Missing/unsafe inputs produce closed stage/reason diagnostics; lexical
 containment and symlinks are checked before absence. Preserve safe available
 inputs and all originals on failure. Nested reviews return evidence; only the
 existing creator finishes the root.
+
+An authorized early draft may precede this complete export through the existing
+publisher's `draft` operation; see `automatic-implementation-closeout.md`.
+It cannot finish this owner, destroy evidence, start draft-excluded checks,
+or satisfy reviewed-create/ready/merge. Keep failures and original evidence
+recoverable, and reuse settled lanes during supported recovery.
